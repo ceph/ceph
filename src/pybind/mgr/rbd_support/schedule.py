@@ -473,15 +473,17 @@ class Schedules:
         self.save(level_spec, schedule)
 
     def find(self, pool_id, namespace, image_id=None):
-        levels = [None, pool_id, namespace]
+        levels = [pool_id, namespace]
         if image_id:
             levels.append(image_id)
-
-        while levels:
-            level_spec_id = "/".join(levels[1:])
-            if level_spec_id in self.schedules:
-                return self.schedules[level_spec_id]
-            del levels[-1]
+        nr_levels = len(levels)
+        while nr_levels >= 0:
+            # an empty spec id implies global schedule
+            level_spec_id = "/".join(levels[:nr_levels])
+            found = self.schedules.get(level_spec_id)
+            if found is not None:
+                return found
+            nr_levels -= 1
         return None
 
     def intersects(self, level_spec):
