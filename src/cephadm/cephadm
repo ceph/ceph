@@ -952,6 +952,7 @@ def port_in_use(ctx, port_num):
     # type: (CephadmContext, int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
     logger.info('Verifying port %d ...' % port_num)
+
     def _port_in_use(af: socket.AddressFamily, address: str) -> bool:
         try:
             s = socket.socket(af, socket.SOCK_STREAM)
@@ -3889,8 +3890,10 @@ def command_bootstrap(ctx):
             out = cli(['mgr', 'dump'])
         j = json.loads(out)
         epoch = j['epoch']
+
         # wait for mgr to have it
         logger.info('Waiting for the mgr to restart...')
+
         def mgr_has_latest_epoch():
             # type: () -> bool
             try:
