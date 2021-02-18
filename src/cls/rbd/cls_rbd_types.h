@@ -1113,6 +1113,21 @@ struct ImageSnapshotSpec {
 
   void dump(ceph::Formatter *f) const;
 
+  inline bool operator==(const ImageSnapshotSpec& rhs) const {
+    return pool == rhs.pool &&
+           image_id == rhs.image_id &&
+           snap_id == rhs.snap_id;
+  }
+  inline bool operator<(const ImageSnapshotSpec& rhs) const {
+    if (pool != rhs.pool) {
+      return pool < rhs.pool;
+    }
+    if (image_id != rhs.image_id) {
+      return image_id < rhs.image_id;
+    }
+    return snap_id < rhs.snap_id;
+  }
+
   static void generate_test_instances(std::list<ImageSnapshotSpec *> &o);
 };
 WRITE_CLASS_ENCODER(ImageSnapshotSpec);
