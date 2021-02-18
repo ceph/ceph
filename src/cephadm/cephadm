@@ -3077,9 +3077,11 @@ class CephContainer:
 @infer_image
 def command_version(ctx):
     # type: (CephadmContext) -> int
-    out = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run()
-    print(out.strip())
-    return 0
+    c = CephContainer(ctx, ctx.image, 'ceph', ['--version'])
+    out, err, ret = call(ctx, c.run_cmd(), desc=c.entrypoint)
+    if not ret:
+        print(out.strip())
+    return ret
 
 ##################################
 
