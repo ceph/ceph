@@ -39,4 +39,4 @@ versions of Ceph.
     Cephadm CLI <../mgr/orchestrator>
     Client Setup <client-setup>
     troubleshooting
-    concepts
+    Cephadm Feature Planning <../dev/cephadm/index>
