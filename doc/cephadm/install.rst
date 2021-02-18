@@ -209,37 +209,10 @@ its status with:
 
   ceph status
 
+Adding Hosts
+============
 
-Add hosts to the cluster
-========================
-
-To add each new host to the cluster, perform two steps:
-
-#. Install the cluster's public SSH key in the new host's root user's ``authorized_keys`` file:
-
-   .. prompt:: bash #
-
-    ssh-copy-id -f -i /etc/ceph/ceph.pub root@*<new-host>*
-
-   For example:
-
-   .. prompt:: bash #
-
-      ssh-copy-id -f -i /etc/ceph/ceph.pub root@host2
-      ssh-copy-id -f -i /etc/ceph/ceph.pub root@host3
-
-#. Tell Ceph that the new node is part of the cluster:
-
-   .. prompt:: bash #
-
-     ceph orch host add *newhost*
-
-   For example:
-
-   .. prompt:: bash #
-
-     ceph orch host add host2
-     ceph orch host add host3
+Next, add all hosts to the cluster by following :ref:`cephadm-adding-hosts`.
 
 
 .. _deploy_additional_monitors:
