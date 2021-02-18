@@ -339,16 +339,14 @@ class CephadmConfigChecks:
         """Build a map of service -> service metadata"""
         service_map: Dict[str, Optional[Dict[str, str]]] = {}
 
-        # If we have the mgr bindings in place, we can create a map
-        if hasattr(self.mgr, '_ceph_get_server'):
-            for server in self.mgr.list_servers():
-                for service in server.get('services', []):
-                    service_map.update(
-                        {
-                            f"{service['type']}.{service['id']}":
-                            self.mgr.get_metadata(service['type'], service['id'])
-                        }
-                    )
+        for server in self.mgr.list_servers():
+            for service in server.get('services', []):
+                service_map.update(
+                    {
+                        f"{service['type']}.{service['id']}":
+                        self.mgr.get_metadata(service['type'], service['id'])
+                    }
+                )
         return service_map
 
     def _check_kernel_lsm(self) -> None:
