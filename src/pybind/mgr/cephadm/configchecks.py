@@ -511,6 +511,9 @@ class CephadmConfigChecks:
                     speed_copy = subnet_data.speed_map.copy()
                     del speed_copy[speed_ptr]
                     for bad_speed in speed_copy:
+                        if bad_speed > speed_ptr:
+                            # skip speed is better than most...it can stay!
+                            continue
                         for h in speed_copy[bad_speed]:
                             host = HostFacts()
                             host.load_facts(self.mgr.cache.facts[h])
