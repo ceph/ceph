@@ -312,7 +312,7 @@ class Module(MgrModule):
             # sleep
             sleep_interval = self.sleep_interval or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
-            ret = self.event.wait(sleep_interval)
+            self.event.wait(sleep_interval)
             self.event.clear()
 
     def shutdown(self) -> None:
@@ -659,7 +659,7 @@ class Module(MgrModule):
                 return self.remote(plugin_name, 'predict_life_expectancy', devid=devid)
             else:
                 return -1, '', f'{plugin_name} is not available'
-        except:
+        except Exception:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
     def predict_all_devices(self) -> Tuple[int, str, str]:
@@ -675,7 +675,7 @@ class Module(MgrModule):
                 return self.remote(plugin_name, 'predict_all_devices')
             else:
                 return -1, '', f'{plugin_name} is not available'
-        except:
+        except Exception:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
     def get_recent_device_metrics(self, devid: str, min_sample: str) -> Dict[str, Dict[str, Any]]:
