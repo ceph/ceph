@@ -3204,6 +3204,24 @@ int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->exec(oid, "rbd", "group_snap_remove", inbl, outbl);
 }
 
+void group_snap_unlink(librados::ObjectWriteOperation *op,
+                       const std::string &group_snap_id,
+                       const cls::rbd::ImageSnapshotSpec &image_snap) {
+  bufferlist bl;
+  encode(group_snap_id, bl);
+  encode(image_snap, bl);
+  op->exec("rbd", "group_snap_unlink", bl);
+}
+
+int group_snap_unlink(librados::IoCtx *ioctx, const std::string &oid,
+                      const std::string &group_snap_id,
+                      const cls::rbd::ImageSnapshotSpec &image_snap) {
+  librados::ObjectWriteOperation op;
+  group_snap_unlink(&op, group_snap_id, image_snap);
+
+  return ioctx->operate(oid, &op);
+}
+
 int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
                          const std::string &snap_id,
                          cls::rbd::GroupSnapshot *snapshot) {

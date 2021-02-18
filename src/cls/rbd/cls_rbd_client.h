@@ -687,6 +687,12 @@ int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
                    const cls::rbd::GroupSnapshot &snapshot);
 int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
                       const std::string &snap_id);
+void group_snap_unlink(librados::ObjectWriteOperation *op,
+                       const std::string &group_snap_id,
+                       const cls::rbd::ImageSnapshotSpec &image_snap);
+int group_snap_unlink(librados::IoCtx *ioctx, const std::string &oid,
+                      const std::string &group_snap_id,
+                      const cls::rbd::ImageSnapshotSpec &image_snap);
 int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
                          const std::string &snap_id,
                          cls::rbd::GroupSnapshot *snapshot);
