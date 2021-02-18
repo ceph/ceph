@@ -3561,6 +3561,7 @@ def create_mgr(
 
     # wait for the service to become available
     logger.info('Waiting for mgr to start...')
+
     def is_mgr_available():
         # type: () -> bool
         timeout = ctx.timeout if ctx.timeout else 60  # seconds
