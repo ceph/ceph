@@ -167,6 +167,9 @@ static inline void get_v2_qs_map(const req_info& info,
     if (k.find("x-amz-meta-") == /* offset */ 0) {
       rgw_add_amz_meta_header(qs_map, k, elt.second);
     }
+    if (k == "x-amz-security-token") {
+      qs_map[k] = elt.second;
+    }
   }
 }
 
