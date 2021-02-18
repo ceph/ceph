@@ -25,7 +25,7 @@ HEALTH_MESSAGES = {
 MAX_SAMPLES = 500
 
 
-def get_ata_wear_level(data: Dict[Any,Any]) -> Optional[float]:
+def get_ata_wear_level(data: Dict[Any, Any]) -> Optional[float]:
     """
     Extract wear level (as float) from smartctl -x --json output for SATA SSD
     """
@@ -38,7 +38,7 @@ def get_ata_wear_level(data: Dict[Any,Any]) -> Optional[float]:
     return None
 
 
-def get_nvme_wear_level(data: Dict[Any,Any]) -> Optional[float]:
+def get_nvme_wear_level(data: Dict[Any, Any]) -> Optional[float]:
     """
     Extract wear level (as float) from smartctl -x --json output for NVME SSD
     """
