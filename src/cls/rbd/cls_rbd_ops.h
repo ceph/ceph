@@ -170,6 +170,7 @@ constexpr auto image_group_remove = ClsMethod<RdWrTag, ClassId>("image_group_rem
 constexpr auto image_group_get = ClsMethod<RdTag, ClassId>("image_group_get");
 constexpr auto group_snap_set = ClsMethod<RdWrTag, ClassId>("group_snap_set");
 constexpr auto group_snap_remove = ClsMethod<RdWrTag, ClassId>("group_snap_remove");
+constexpr auto group_snap_unlink = ClsMethod<RdWrTag, ClassId>("group_snap_unlink");
 constexpr auto group_snap_get_by_id = ClsMethod<RdTag, ClassId>("group_snap_get_by_id");
 constexpr auto group_snap_list = ClsMethod<RdTag, ClassId>("group_snap_list");
 constexpr auto group_snap_list_order = ClsMethod<RdTag, ClassId>("group_snap_list_order");
