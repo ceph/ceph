@@ -131,3 +131,90 @@ Many hosts can be added at once using
 This can be combined with service specifications (below) to create a cluster spec
 file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
 also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+
+SSH Configuration
+=================
+
+Cephadm uses SSH to connect to remote hosts.  SSH uses a key to authenticate
+with those hosts in a secure way.
+
+
+Default behavior
+----------------
+
+Cephadm stores an SSH key in the monitor that is used to
+connect to remote hosts.  When the cluster is bootstrapped, this SSH
+key is generated automatically and no additional configuration
+is necessary.
+
+A *new* SSH key can be generated with::
+
+  ceph cephadm generate-key
+
+The public portion of the SSH key can be retrieved with::
+
+  ceph cephadm get-pub-key
+
+The currently stored SSH key can be deleted with::
+
+  ceph cephadm clear-key
+
+You can make use of an existing key by directly importing it with::
+
+  ceph config-key set mgr/cephadm/ssh_identity_key -i <key>
+  ceph config-key set mgr/cephadm/ssh_identity_pub -i <pub>
+
+You will then need to restart the mgr daemon to reload the configuration with::
+
+  ceph mgr fail
+
+Configuring a different SSH user
+----------------------------------
+
+Cephadm must be able to log into all the Ceph cluster nodes as an user
+that has enough privileges to download container images, start containers
+and execute commands without prompting for a password. If you do not want
+to use the "root" user (default option in cephadm), you must provide
+cephadm the name of the user that is going to be used to perform all the
+cephadm operations. Use the command::
+
+  ceph cephadm set-user <user>
+
+Prior to running this the cluster ssh key needs to be added to this users
+authorized_keys file and non-root users must have passwordless sudo access.
+
+
+Customizing the SSH configuration
+---------------------------------
+
+Cephadm generates an appropriate ``ssh_config`` file that is
+used for connecting to remote hosts.  This configuration looks
+something like this::
+
+  Host *
+  User root
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+
+There are two ways to customize this configuration for your environment:
+
+#. Import a customized configuration file that will be stored
+   by the monitor with::
+
+     ceph cephadm set-ssh-config -i <ssh_config_file>
+
+   To remove a customized SSH config and revert back to the default behavior::
+
+     ceph cephadm clear-ssh-config
+
+#. You can configure a file location for the SSH configuration file with::
+
+     ceph config set mgr mgr/cephadm/ssh_config_file <path>
+
+   We do *not recommend* this approach.  The path name must be
+   visible to *any* mgr daemon, and cephadm runs all daemons as
+   containers. That means that the file either need to be placed
+   inside a customized container image for your deployment, or
+   manually distributed to the mgr data directory
+   (``/var/lib/ceph/<cluster-fsid>/mgr.<id>`` on the host, visible at
+   ``/var/lib/ceph/mgr/ceph-<id>`` from inside the container).
