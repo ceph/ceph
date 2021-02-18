@@ -19,6 +19,7 @@ import random
 import tempfile
 import multiprocessing.pool
 import subprocess
+from prettytable import PrettyTable
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -33,6 +34,8 @@ from mgr_module import MgrModule, HandleCommandResult, Option
 from mgr_util import create_self_signed_cert
 import secrets
 import orchestrator
+from orchestrator.module import to_format, Format
+
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import GenericSpec
@@ -55,6 +58,7 @@ from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
 from .utils import forall_hosts, cephadmNoImage
+from .configchecks import CephadmConfigChecks
 
 try:
     import remoto
@@ -457,6 +461,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.template = TemplateMgr(self)
 
         self.requires_post_actions: Set[str] = set()
+
+        self.config_checker = CephadmConfigChecks(self)
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
@@ -1075,6 +1081,94 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         cfg = self._get_exporter_config()
         return 0, json.dumps(cfg, indent=2), ""
+
+    @orchestrator._cli_read_command('cephadm config-check ls')
+    def _config_checks_list(self, format: Format = Format.plain) -> HandleCommandResult:
+        """List the available configuration checks and their current state"""
+
+        if format not in [Format.plain, Format.json, Format.json_pretty]:
+            return HandleCommandResult(
+                retval=1,
+                stderr="Requested format is not supported when listing configuration checks"
+            )
+
+        if format in [Format.json, Format.json_pretty]:
+            return HandleCommandResult(
+                stdout=to_format(self.config_checker.health_checks,
+                                 format,
+                                 many=True,
+                                 cls=None))
+
+        # plain formatting
+        table = PrettyTable(
+            ['NAME',
+             'HEALTHCHECK',
+             'STATUS',
+             'DESCRIPTION'
+             ], border=False)
+        table.align['NAME'] = 'l'
+        table.align['HEALTHCHECK'] = 'l'
+        table.align['STATUS'] = 'l'
+        table.align['DESCRIPTION'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for c in self.config_checker.health_checks:
+            table.add_row((
+                c.name,
+                c.healthcheck_name,
+                c.status,
+                c.description,
+            ))
+
+        return HandleCommandResult(stdout=table.get_string())
+
+    @orchestrator._cli_read_command('cephadm config-check status')
+    def _config_check_status(self) -> HandleCommandResult:
+        """Show whether the configuration checker feature is enabled/disabled"""
+        status = self.get_module_option('config_checks_enabled')
+        return HandleCommandResult(stdout="Enabled" if status else "Disabled")
+
+    @orchestrator._cli_write_command('cephadm config-check enable')
+    def _config_check_enable(self, check_name: str) -> HandleCommandResult:
+        """Enable a specific configuration check"""
+        if not self._config_check_valid(check_name):
+            return HandleCommandResult(retval=1, stderr="Invalid check name")
+
+        err, msg = self._update_config_check(check_name, 'enabled')
+        if err:
+            return HandleCommandResult(
+                retval=err,
+                stderr=f"Failed to enable check '{check_name}' : {msg}")
+
+        return HandleCommandResult(stdout="ok")
+
+    @orchestrator._cli_write_command('cephadm config-check disable')
+    def _config_check_disable(self, check_name: str) -> HandleCommandResult:
+        """Disable a specific configuration check"""
+        if not self._config_check_valid(check_name):
+            return HandleCommandResult(retval=1, stderr="Invalid check name")
+
+        err, msg = self._update_config_check(check_name, 'disabled')
+        if err:
+            return HandleCommandResult(retval=err, stderr=f"Failed to disable check '{check_name}': {msg}")
+
+        return HandleCommandResult(stdout="ok")
+
+    def _config_check_valid(self, check_name: str) -> bool:
+        return check_name in [chk.name for chk in self.config_checker.health_checks]
+
+    def _update_config_check(self, check_name: str, status: str) -> Tuple[int, str]:
+        checks_raw = self.get_store('config_checks')
+        if not checks_raw:
+            return 1, "config_checks setting is not available"
+
+        checks = json.loads(checks_raw)
+        checks.update({
+            check_name: status
+        })
+        self.log.info(f"updated config check '{check_name}' : {status}")
+        self.set_store('config_checks', json.dumps(checks))
+        return 0, ""
 
     class ExtraCephConf(NamedTuple):
         conf: str
