@@ -2254,7 +2254,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
 
     if daemon_type in Ceph.daemons:
         if fsid:
-            run_path = os.path.join('/var/run/ceph', fsid);
+            run_path = os.path.join('/var/run/ceph', fsid)
             if os.path.exists(run_path):
                 mounts[run_path] = '/var/run/ceph:z'
             log_dir = get_log_dir(fsid, ctx.log_dir)
@@ -4785,7 +4785,7 @@ def command_adopt(ctx):
 
     # call correct adoption
     if daemon_type in Ceph.daemons:
-        command_adopt_ceph(ctx, daemon_type, daemon_id, fsid);
+        command_adopt_ceph(ctx, daemon_type, daemon_id, fsid)
     elif daemon_type == 'prometheus':
         command_adopt_prometheus(ctx, daemon_id, fsid)
     elif daemon_type == 'grafana':
