@@ -1674,31 +1674,28 @@ PeeringState::select_replicated_primary(
       !primary->second.is_incomplete() &&
       primary->second.last_update >=
         auth_log_shard->second.log_tail) {
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        primary->second.stats.stats.sum.num_objects_missing;
-      auto auth_version = auth_log_shard->second.last_update.version;
-      auto primary_version = primary->second.last_update.version;
-      if (auth_version > primary_version) {
-        approx_missing_objects += auth_version - primary_version;
-      } else {
-        approx_missing_objects += primary_version - auth_version;
-      }
-      if ((uint64_t)approx_missing_objects >
-          force_auth_primary_missing_objects) {
-        primary = auth_log_shard;
-        ss << "up_primary: " << up_primary << ") has approximate "
-           << approx_missing_objects
-           << "(>" << force_auth_primary_missing_objects <<") "
-           << "missing objects, osd." << auth_log_shard_id
-           << " selected as primary instead"
-           << std::endl;
-      } else {
-        ss << "up_primary: " << up_primary << ") selected as primary"
-           << std::endl;
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      primary->second.stats.stats.sum.num_objects_missing;
+    auto auth_version = auth_log_shard->second.last_update.version;
+    auto primary_version = primary->second.last_update.version;
+    if (auth_version > primary_version) {
+      approx_missing_objects += auth_version - primary_version;
     } else {
-      ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
+      approx_missing_objects += primary_version - auth_version;
+    }
+    if ((uint64_t)approx_missing_objects >
+        force_auth_primary_missing_objects) {
+      primary = auth_log_shard;
+      ss << "up_primary: " << up_primary << ") has approximate "
+         << approx_missing_objects
+         << "(>" << force_auth_primary_missing_objects <<") "
+         << "missing objects, osd." << auth_log_shard_id
+         << " selected as primary instead"
+         << std::endl;
+    } else {
+      ss << "up_primary: " << up_primary << ") selected as primary"
+         << std::endl;
     }
   } else {
     ceph_assert(!auth_log_shard->second.is_incomplete());
@@ -2204,21 +2201,15 @@ void PeeringState::choose_async_recovery_ec(
     // past the authoritative last_update the same as those equal to it.
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        shard_info.stats.stats.sum.num_objects_missing;
-      if (auth_version > candidate_version) {
-        approx_missing_objects += auth_version - candidate_version;
-      }
-      if (static_cast<uint64_t>(approx_missing_objects) >
-         cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.emplace(approx_missing_objects, shard_i);
-      }
-    } else {
-      if (auth_version > candidate_version &&
-          (auth_version - candidate_version) > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.insert(make_pair(auth_version - candidate_version, shard_i));
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects) >
+       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -2264,28 +2255,17 @@ void PeeringState::choose_async_recovery_replicated(
     // logs plus historical missing objects as the cost of recovery
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        shard_info.stats.stats.sum.num_objects_missing;
-      if (auth_version > candidate_version) {
-        approx_missing_objects += auth_version - candidate_version;
-      } else {
-        approx_missing_objects += candidate_version - auth_version;
-      }
-      if (static_cast<uint64_t>(approx_missing_objects)  >
-         cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.emplace(approx_missing_objects, shard_i);
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
     } else {
-      size_t approx_entries;
-      if (auth_version > candidate_version) {
-        approx_entries = auth_version - candidate_version;
-      } else {
-        approx_entries = candidate_version - auth_version;
-      }
-      if (approx_entries > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.insert(make_pair(approx_entries, shard_i));
-      }
+      approx_missing_objects += candidate_version - auth_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects)  >
+       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
