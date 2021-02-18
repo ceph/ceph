@@ -130,23 +130,18 @@ class BaseConfig:
 class CephadmContext:
 
     def __init__(self):
-
         self.__dict__["_args"] = None
         self.__dict__["_conf"] = BaseConfig()
-
 
     def set_args(self, args: argparse.Namespace) -> None:
         self._conf.set_from_args(args)
         self._args = args
 
-
     def has_function(self) -> bool:
         return "func" in self._args
 
-
     def __contains__(self, name: str) -> bool:
         return hasattr(self, name)
-
 
     def __getattr__(self, name: str) -> Any:
         if "_conf" in self.__dict__ and hasattr(self._conf, name):
@@ -2752,7 +2747,6 @@ def deploy_daemon_units(
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
 
-
 class Firewalld(object):
     def __init__(self, ctx):
         # type: (CephadmContext) -> None
@@ -3809,7 +3803,6 @@ def finish_bootstrap_config(
         logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
 
-
     with open(ctx.output_config, 'w') as f:
         f.write(config)
     logger.info('Wrote config to %s' % ctx.output_config)
@@ -3846,7 +3839,6 @@ def command_bootstrap(ctx):
                 os.makedirs(dirname, 0o755)
             except PermissionError:
                 raise Error(f"Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.")
-
 
     if not ctx.skip_prepare_host:
         command_prepare_host(ctx)
@@ -6250,7 +6242,6 @@ class HostFacts():
             if self.interfaces[iface]["iftype"] == 'physical':
                 phys_devs.append(iface)
         return len(phys_devs)
-
 
     def _get_mem_data(self, field_name):
         # type: (str) -> int
