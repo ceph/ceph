@@ -8765,6 +8765,66 @@ int group_snap_remove(cls_method_context_t hctx,
 }
 
 /**
+ * Unlink image snapshot from group snapshot.
+ *
+ * Input:
+ * @param id Snapshot id
+ * @param image_snap ImageSnapshotSpec
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_snap_unlink(cls_method_context_t hctx,
+		      bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "group_snap_unlink");
+  std::string group_snap_id;
+  cls::rbd::ImageSnapshotSpec image_snap;
+  try {
+    auto iter = in->cbegin();
+    decode(group_snap_id, iter);
+    decode(image_snap, iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string group_snap_key = group::snap_key(group_snap_id);
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, group_snap_key, &bl);
+  if (r < 0) {
+    return r;
+  }
+  cls::rbd::GroupSnapshot group_snap;
+  auto iter = bl.cbegin();
+  try {
+    decode(group_snap, iter);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("error decoding snapshot: %s", group_snap_id.c_str());
+    return -EIO;
+  }
+  if (group_snap.state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+    CLS_LOG(20, "snap %s not complete", group_snap_id.c_str());
+    return -ENOENT;
+  }
+
+  auto &snaps = group_snap.snaps;
+  snaps.erase(std::remove(snaps.begin(), snaps.end(), image_snap), snaps.end());
+
+  if (snaps.empty()) {
+    CLS_LOG(20, "group_snap_unlink: removing snapshot with key %s",
+            group_snap_key.c_str());
+    r = cls_cxx_map_remove_key(hctx, group_snap_key);
+  } else {
+    CLS_LOG(20, "group_snap_unlink: updating snapshot with key %s",
+            group_snap_key.c_str());
+    bl.clear();
+    encode(group_snap, bl);
+    r = cls_cxx_map_set_val(hctx, group_snap_key, &bl);
+  }
+  return r;
+}
+
+/**
  * Get group's snapshot by id.
  *
  * Input:
@@ -9538,6 +9598,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_image_group_get;
   cls_method_handle_t h_group_snap_set;
   cls_method_handle_t h_group_snap_remove;
+  cls_method_handle_t h_group_snap_unlink;
   cls_method_handle_t h_group_snap_get_by_id;
   cls_method_handle_t h_group_snap_list;
   cls_method_handle_t h_group_snap_list_order;
@@ -9711,6 +9772,7 @@ CLS_INIT(rbd)
   cls.register_cxx_method(method::image_group_get, image_group_get, &h_image_group_get);
   cls.register_cxx_method(method::group_snap_set, group_snap_set, &h_group_snap_set);
   cls.register_cxx_method(method::group_snap_remove, group_snap_remove, &h_group_snap_remove);
+  cls.register_cxx_method(method::group_snap_unlink, group_snap_unlink, &h_group_snap_unlink);
   cls.register_cxx_method(method::group_snap_get_by_id, group_snap_get_by_id, &h_group_snap_get_by_id);
   cls.register_cxx_method(method::group_snap_list, group_snap_list, &h_group_snap_list);
   cls.register_cxx_method(method::group_snap_list_order, group_snap_list_order, &h_group_snap_list_order);
