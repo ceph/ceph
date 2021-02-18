@@ -146,7 +146,7 @@ class Module(MgrModule):
             self.interval = 0
             self.proxy = ''
             self.channel_basic = True
-            self.channel_indent = False
+            self.channel_ident = False
             self.channel_crash = True
             self.channel_device = True
 
