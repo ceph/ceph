@@ -1,7 +1,7 @@
 import enum
 import errno
 import json
-from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union
+from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence
 import re
 import datetime
 
@@ -20,7 +20,8 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec
+    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, \
+    GenericSpec
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -326,10 +327,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
         s = HostSpec(hostname=hostname, addr=addr, labels=labels, status=_status)
-        completion = self.add_host(s)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+
+        return self._apply_misc([s], False, Format.plain)
 
     @_cli_write_command('orch host rm')
     def _remove_host(self, hostname: str) -> HandleCommandResult:
@@ -758,20 +757,7 @@ Examples:
                     spec.preview_only = True
                 dg_specs.append(spec)
 
-            completion = self.apply(dg_specs)
-            self._orchestrator_wait([completion])
-            raise_if_exception(completion)
-            out = completion.result_str()
-            if dry_run:
-                completion = self.plan(dg_specs)
-                self._orchestrator_wait([completion])
-                raise_if_exception(completion)
-                data = completion.result
-                if format == Format.plain:
-                    out = generate_preview_tables(data, True)
-                else:
-                    out = to_format(data, format, many=True, cls=None)
-            return HandleCommandResult(stdout=out)
+            return self._apply_misc(dg_specs, dry_run, format)
 
         if all_available_devices:
             if unmanaged is None:
@@ -785,20 +771,7 @@ Examples:
                     preview_only=dry_run
                 )
             ]
-            # This acts weird when abstracted to a function
-            completion = self.apply(dg_specs)
-            self._orchestrator_wait([completion])
-            raise_if_exception(completion)
-            out = completion.result_str()
-            if dry_run:
-                completion = self.plan(dg_specs)
-                self._orchestrator_wait([completion])
-                data = completion.result
-                if format == Format.plain:
-                    out = generate_preview_tables(data, True)
-                else:
-                    out = to_format(data, format, many=True, cls=None)
-            return HandleCommandResult(stdout=out)
+            return self._apply_misc(dg_specs, dry_run, format)
 
         return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
@@ -875,10 +848,10 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch daemon add')
-    def _daemon_add_misc(self,
-                         daemon_type: Optional[ServiceType] = None,
-                         placement: Optional[str] = None,
-                         inbuf: Optional[str] = None) -> HandleCommandResult:
+    def daemon_add_misc(self,
+                        daemon_type: Optional[ServiceType] = None,
+                        placement: Optional[str] = None,
+                        inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add daemon(s)"""
         usage = f"""Usage:
     ceph orch daemon add -i <json_file>
@@ -892,6 +865,11 @@ Usage:
                 raise OrchestratorValidationError(usage)
             placement_spec = PlacementSpec.from_string(placement)
             spec = ServiceSpec(daemon_type.value, placement=placement_spec)
+
+        return self._daemon_add_misc(spec)
+
+    def _daemon_add_misc(self, spec: ServiceSpec) -> HandleCommandResult:
+        daemon_type = ServiceType(spec.service_type)
 
         if daemon_type == ServiceType.mon:
             completion = self.add_mon(spec)
@@ -941,11 +919,7 @@ Usage:
             service_id=fs_name,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_mds(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add rgw')
     def _rgw_add(self,
@@ -968,11 +942,7 @@ Usage:
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_rgw(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add nfs')
     def _nfs_add(self,
@@ -991,11 +961,7 @@ Usage:
             namespace=namespace,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_nfs(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add iscsi')
     def _iscsi_add(self,
@@ -1017,11 +983,7 @@ Usage:
             trusted_ip_list=trusted_ip_list,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_iscsi(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch')
     def _service_action(self, action: ServiceAction, service_name: str) -> HandleCommandResult:
@@ -1081,13 +1043,13 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch apply')
-    def _apply_misc(self,
-                    service_type: Optional[ServiceType] = None,
-                    placement: Optional[str] = None,
-                    dry_run: bool = False,
-                    format: Format = Format.plain,
-                    unmanaged: bool = False,
-                    inbuf: Optional[str] = None) -> HandleCommandResult:
+    def apply_misc(self,
+                   service_type: Optional[ServiceType] = None,
+                   placement: Optional[str] = None,
+                   dry_run: bool = False,
+                   format: Format = Format.plain,
+                   unmanaged: bool = False,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
         """Update the size or placement for a service or apply a large yaml spec"""
         usage = """Usage:
   ceph orch apply -i <yaml spec> [--dry-run]
@@ -1109,7 +1071,9 @@ Usage:
                 raise OrchestratorValidationError(usage)
             specs = [ServiceSpec(service_type.value, placement=placementspec,
                                  unmanaged=unmanaged, preview_only=dry_run)]
+        return self._apply_misc(specs, dry_run, format)
 
+    def _apply_misc(self, specs: Sequence[GenericSpec], dry_run: bool, format: Format) -> HandleCommandResult:
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -1143,21 +1107,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run)
-
-        completion = self.apply_mds(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        out = completion.result_str()
-        if dry_run:
-            completion_plan = self.plan([spec])
-            self._orchestrator_wait([completion_plan])
-            raise_if_exception(completion_plan)
-            data = completion_plan.result
-            if format == Format.plain:
-                out = preview_table_services(data)
-            else:
-                out = to_format(data, format, many=True, cls=None)
-        return HandleCommandResult(stdout=out)
+        return self._apply_misc([spec], dry_run, format)
 
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
@@ -1186,20 +1136,7 @@ Usage:
             preview_only=dry_run
         )
 
-        completion = self.apply_rgw(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        out = completion.result_str()
-        if dry_run:
-            completion_plan = self.plan([spec])
-            self._orchestrator_wait([completion_plan])
-            raise_if_exception(completion_plan)
-            data = completion_plan.result
-            if format == Format.plain:
-                out = preview_table_services(data)
-            else:
-                out = to_format(data, format, many=True, cls=None)
-        return HandleCommandResult(stdout=out)
+        return self._apply_misc([spec], dry_run, format)
 
     @_cli_write_command('orch apply nfs')
     def _apply_nfs(self,
@@ -1224,20 +1161,7 @@ Usage:
             preview_only=dry_run
         )
 
-        completion = self.apply_nfs(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        out = completion.result_str()
-        if dry_run:
-            completion_plan = self.plan([spec])
-            self._orchestrator_wait([completion_plan])
-            raise_if_exception(completion_plan)
-            data = completion_plan.result
-            if format == Format.plain:
-                out = preview_table_services(data)
-            else:
-                out = to_format(data, format, many=True, cls=None)
-        return HandleCommandResult(stdout=out)
+        return self._apply_misc([spec], dry_run, format)
 
     @_cli_write_command('orch apply iscsi')
     def _apply_iscsi(self,
@@ -1265,20 +1189,7 @@ Usage:
             preview_only=dry_run
         )
 
-        completion = self.apply_iscsi(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        out = completion.result_str()
-        if dry_run:
-            completion_plan = self.plan([spec])
-            self._orchestrator_wait([completion_plan])
-            raise_if_exception(completion_plan)
-            data = completion_plan.result
-            if format == Format.plain:
-                out = preview_table_services(data)
-            else:
-                out = to_format(data, format, many=True, cls=None)
-        return HandleCommandResult(stdout=out)
+        return self._apply_misc([spec], dry_run, format)
 
     @_cli_write_command('orch set backend')
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:
