@@ -174,13 +174,7 @@ After you add an OSD to Ceph, the OSD is in your configuration. However,
 it is not yet running. The OSD is ``down`` and ``in``. You must start
 your new OSD before it can begin receiving data. You may use
 ``service ceph`` from your admin host or start the OSD from its host
-machine.
-
-For Ubuntu Trusty use Upstart. ::
-
-	sudo start ceph-osd id={osd-num}
-
-For all other distros use systemd. ::
+machine::
 
 	sudo systemctl start ceph-osd@{osd-num}
 
