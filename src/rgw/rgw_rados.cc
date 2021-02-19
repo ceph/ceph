@@ -4727,10 +4727,11 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled, con
 
   for (iter = buckets.begin(); iter != buckets.end(); ++iter) {
     rgw_bucket& bucket = *iter;
-    if (enabled)
+    if (enabled) {
       ldpp_dout(dpp, 20) << "enabling bucket name=" << bucket.name << dendl;
-    else
+    } else {
       ldpp_dout(dpp, 20) << "disabling bucket name=" << bucket.name << dendl;
+    }
 
     RGWBucketInfo info;
     map<string, bufferlist> attrs;
@@ -5455,10 +5456,11 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       }
     }
   }
-  if (s->obj_tag.length())
+  if (s->obj_tag.length()) {
     ldpp_dout(dpp, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
-  else
+  } else {
     ldpp_dout(dpp, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
+  }
 
   /* an object might not be olh yet, but could have olh id tag, so we should set it anyway if
    * it exist, and not only if is_olh() returns true
