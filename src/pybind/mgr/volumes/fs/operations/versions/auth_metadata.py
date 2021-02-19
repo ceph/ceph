@@ -18,7 +18,7 @@ class AuthMetadataError(Exception):
 class AuthMetadataManager(object):
 
     # Current version
-    version = 5
+    version = 6
 
     # Filename extensions for meta files.
     META_FILE_EXT = ".meta"
@@ -141,7 +141,7 @@ class AuthMetadataManager(object):
         decode the metadata, and 'version', the AuthMetadataManager version
         that encoded the metadata.
         """
-        data['compat_version'] = 1
+        data['compat_version'] = 6
         data['version'] = self.version
         return self._metadata_set(self._auth_metadata_path(auth_id), data)
 
