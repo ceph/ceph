@@ -142,7 +142,7 @@ class CephadmContext:
         if "_conf" in self.__dict__ and hasattr(self._conf, name):
             return getattr(self._conf, name)
         elif "_args" in self.__dict__ and hasattr(self._args, name):
-            return getattr(self._args, name)        
+            return getattr(self._args, name)
         else:
             return super().__getattribute__(name)
 
@@ -1622,7 +1622,7 @@ def infer_config(func):
                         name = daemon['name']
                         break
             if name:
-                config = '/var/lib/ceph/{}/{}/config'.format(ctx.fsid, 
+                config = '/var/lib/ceph/{}/{}/config'.format(ctx.fsid,
                                                              name)
         if config:
             logger.info('Inferring config %s' % config)
@@ -2521,7 +2521,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
                 deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id,
                                     c, osd_fsid=osd_fsid)
             else:
-                raise RuntimeError("attempting to deploy a daemon without a container image") 
+                raise RuntimeError("attempting to deploy a daemon without a container image")
 
     if not os.path.exists(data_dir + '/unit.created'):
         with open(data_dir + '/unit.created', 'w') as f:
@@ -3210,7 +3210,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
     """
 
     rc = 0
-    versions = set() 
+    versions = set()
     errors = []
     subnet_list = subnets.split(',')
     for subnet in subnet_list:
@@ -3331,7 +3331,7 @@ def prepare_mon_addresses(
 def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
     cluster_network = ""
     ipv6_cluster_network = False
-    # the cluster network may not exist on this node, so all we can do is 
+    # the cluster network may not exist on this node, so all we can do is
     # validate that the address given is valid ipv4 or ipv6 subnet
     if ctx.cluster_network:
         rc, versions, err_msg = check_subnet(ctx.cluster_network)
@@ -5775,7 +5775,7 @@ class Zypper(Packager):
         self.install(['podman'])
 
 
-def create_packager(ctx: CephadmContext, 
+def create_packager(ctx: CephadmContext,
                     stable=None, version=None, branch=None, commit=None):
     distro, distro_version, distro_codename = get_distro()
     if distro in YumDnf.DISTRO_NAMES:
@@ -6418,7 +6418,7 @@ class CephadmCache:
         self.host = {}
         self.lock = RLock()
     
-    @property 
+    @property
     def health(self):
         return {
             "started_epoch_secs": self.started_epoch_secs,
@@ -6533,7 +6533,7 @@ td,th {{
         """Handle *all* GET requests"""
 
         if self.path == '/':
-            # provide a html response if someone hits the root url, to document the 
+            # provide a html response if someone hits the root url, to document the
             # available api endpoints
             return self._fetch_root()
         elif self.path in CephadmDaemonHandler.valid_routes:
@@ -6563,7 +6563,7 @@ td,th {{
                 if tasks['daemons'] == 'inactive':
                     status_code = 204
             elif u == 'disks':
-                data = json.dumps(self.server.cephadm_cache.disks)    
+                data = json.dumps(self.server.cephadm_cache.disks)
                 if tasks['disks'] == 'inactive':
                     status_code = 204
             elif u == 'host':
@@ -6611,7 +6611,7 @@ class CephadmDaemon():
     def __init__(self, ctx: CephadmContext, fsid, daemon_id=None, port=None):
         self.ctx = ctx
         self.fsid = fsid
-        self.daemon_id = daemon_id 
+        self.daemon_id = daemon_id
         if not port:
             self.port = CephadmDaemon.default_port
         else:
@@ -6746,7 +6746,7 @@ class CephadmDaemon():
                             "scrape_timestamp": s_time,
                             "scrape_duration_secs": elapsed,
                             "scrape_errors": errors,
-                            "data": data,                    
+                            "data": data,
                         }
                     )
                     logger.debug(f"completed host-facts scrape - {elapsed}s")
@@ -6756,7 +6756,7 @@ class CephadmDaemon():
         logger.info("host-facts thread stopped")
 
     def _scrape_ceph_volume(self, refresh_interval=15):
-        # we're invoking the ceph_volume command, so we need to set the args that it 
+        # we're invoking the ceph_volume command, so we need to set the args that it
         # expects to use
         self.ctx.command = "inventory --format=json".split()
         self.ctx.fsid = self.fsid
@@ -6784,7 +6784,7 @@ class CephadmDaemon():
                 else:
                     elapsed = time.time() - s_time
 
-                    # if the call to ceph-volume returns junk with the 
+                    # if the call to ceph-volume returns junk with the
                     # json, it won't parse
                     stdout = stream.getvalue()
 
@@ -6805,7 +6805,7 @@ class CephadmDaemon():
                             "scrape_timestamp": s_time,
                             "scrape_duration_secs": elapsed,
                             "scrape_errors": errors,
-                            "data": data, 
+                            "data": data,
                         }
                     )
                     
@@ -6875,7 +6875,7 @@ class CephadmDaemon():
     def reload(self, *args):
         """reload -HUP received
         
-        This is a placeholder function only, and serves to provide the hook that could 
+        This is a placeholder function only, and serves to provide the hook that could
         be exploited later if the exporter evolves to incorporate a config file
         """
         logger.info("Reload request received - ignoring, no action needed")
@@ -6942,7 +6942,7 @@ class CephadmDaemon():
     @property
     def unit_run(self):
         
-        return """set -e 
+        return """set -e
 {py3} {bin_path} exporter --fsid {fsid} --id {daemon_id} --port {port} &""".format(
             py3=shutil.which('python3'),
             bin_path=self.binary_path,
@@ -6991,7 +6991,7 @@ WantedBy=ceph-{fsid}.target
                 f.write(config[filename])
 
         # When __file__ is <stdin> we're being invoked over remoto via the orchestrator, so
-        # we pick up the file from where the orchestrator placed it - otherwise we'll 
+        # we pick up the file from where the orchestrator placed it - otherwise we'll
         # copy it to the binary location for this cluster
         if not __file__ == '<stdin>':
             shutil.copy(__file__,
@@ -7713,7 +7713,7 @@ def _get_parser():
         help='cluster FSID')
     parser_maintenance.add_argument(
         "maintenance_action",
-        type=str, 
+        type=str,
         choices=['enter', 'exit'],
         help="Maintenance action - enter maintenance, or exit maintenance")
     parser_maintenance.set_defaults(func=command_maintenance)
