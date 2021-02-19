@@ -380,6 +380,8 @@ class CephFSVolumeClient(object):
                 # VMeta update looks clean. Ceph auth update must have been
                 # clean.
                 if vol_meta['auths'][auth_id] == want_auth:
+                    auth_meta['subvolumes'][volume]['dirty'] = False
+                    self._auth_metadata_set(auth_id, auth_meta)
                     continue
 
                 readonly = access_level == 'r'
