@@ -1151,6 +1151,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         err, msg = self._update_config_check(check_name, 'disabled')
         if err:
             return HandleCommandResult(retval=err, stderr=f"Failed to disable check '{check_name}': {msg}")
+        else:
+            # drop any outstanding raised healthcheck for this check
+            config_check = self.config_checker.lookup_check(check_name)
+            if config_check:
+                if config_check.healthcheck_name in self.health_checks:
+                    self.health_checks.pop(config_check.healthcheck_name, None)
+                    self.set_health_checks(self.health_checks)
+            else:
+                self.log.error(
+                    f"Unable to resolve a check name ({check_name}) to a healthcheck definition?")
 
         return HandleCommandResult(stdout="ok")
 
