@@ -666,7 +666,7 @@ class LocalKernelMount(KernelMount):
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+    def mount(self, mntopts=[], check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
@@ -678,9 +678,6 @@ class LocalKernelMount(KernelMount):
 
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = "/"
-        # TODO: don't call setupfs() from within mount()
-        if createfs:
-            self.setupfs(name=self.cephfs_name)
 
         opts = 'norequire_active_mds'
         if self.client_id:
@@ -800,7 +797,7 @@ class LocalFuseMount(FuseMount):
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+    def mount(self, mntopts=[], check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
@@ -809,10 +806,6 @@ class LocalFuseMount(FuseMount):
             self.setup_netns()
         else:
             self.using_namespace = False
-
-        # TODO: don't call setupfs() from within mount()
-        if createfs:
-            self.setupfs(name=self.cephfs_name)
 
         stderr = StringIO()
         try:

@@ -395,7 +395,7 @@ class CephFSMount(object):
         args = ['sudo', 'ip', 'link', 'set', 'brx.{0}'.format(self.nsid), 'up']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
-    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+    def mount(self, mntopts=[], check_status=True, **kwargs):
         """
         kwargs expects its members to be same as the arguments accepted by
         self.update_attrs().
@@ -469,22 +469,19 @@ class CephFSMount(object):
         2. Run update_attrs().
         3. Run mount().
 
-        Accepts arguments of self.mount() and self.update_attrs() with 2 exceptions -
-        1. Accepts wait too which can be True or False.
-        2. The default value of createfs is False.
+        Accepts arguments of self.mount() and self.update_attrs() with 1
+        exception: wait accepted too which can be True or False.
         """
         self.umount_wait()
         assert not self.mounted
 
         mntopts = kwargs.pop('mntopts', [])
-        createfs = kwargs.pop('createfs', False)
         check_status = kwargs.pop('check_status', True)
         wait = kwargs.pop('wait', True)
 
         self.update_attrs(**kwargs)
 
-        retval = self.mount(mntopts=mntopts, createfs=createfs,
-                            check_status=check_status)
+        retval = self.mount(mntopts=mntopts, check_status=check_status)
         # avoid this scenario (again): mount command might've failed and
         # check_status might have silenced the exception, yet we attempt to
         # wait which might lead to an error.
