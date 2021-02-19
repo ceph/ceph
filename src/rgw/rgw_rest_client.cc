@@ -187,7 +187,9 @@ void RGWHTTPSimpleRequest::get_out_headers(map<string, string> *pheaders)
   out_headers.clear();
 }
 
-static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, const string& region, RGWEnv& env, req_info& info)
+static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key,
+                        const string& region, const string& service,
+                        RGWEnv& env, req_info& info)
 {
   /* don't sign if no key is provided */
   if (key.key.empty()) {
@@ -204,7 +206,7 @@ static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, const 
 
   rgw::auth::s3::AWSSignerV4 signer(dpp);
 
-  auto sigv4_data = signer.prepare(key.id, region, info, true);
+  auto sigv4_data = signer.prepare(key.id, region, service, info, true);
   auto sigv4_headers = sigv4_data.signature_factory(dpp, key.key, sigv4_data);
 
   for (auto& entry : sigv4_headers) {
@@ -227,46 +229,67 @@ static string extract_region_name(string&& s)
 }
 
 
-static std::optional<string> identify_region(CephContext *cct, const string& host)
+static bool identify_scope(CephContext *cct,
+                           const string& host,
+                           string *region,
+                           string *service)
 {
   if (!boost::algorithm::ends_with(host, "amazonaws.com")) {
     ldout(cct, 20) << "NOTICE: cannot identify region for connection to: " << host << dendl;
-    return std::nullopt;
+    return false;
   }
 
   vector<string> vec;
 
   get_str_vec(host, ".", vec);
 
+  *service = "s3"; /* default */
+
   for (auto iter = vec.begin(); iter != vec.end(); ++iter) {
     auto& s = *iter;
     if (s == "s3" ||
         s == "execute-api") {
+      if (s == "execute-api") {
+        *service = s;
+      }
       ++iter;
       if (iter == vec.end()) {
         ldout(cct, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
-        return std::nullopt;
+        return false;
       }
       auto& next = *iter;
       if (next == "amazonaws") {
-        return "us-east-1";
+        *region = "us-east-1";
+        return true;
       }
-      return next;
+      *region = next;
+      return true;
     } else if (boost::algorithm::starts_with(s, "s3-")) {
-      return extract_region_name(std::move(s));
+      *region = extract_region_name(std::move(s));
+      return true;
     }
   }
 
-  return std::nullopt;
+  return false;
 }
 
-static string region_from_api_name(CephContext *cct, const string& host, std::optional<string> api_name)
+static void scope_from_api_name(CephContext *cct,
+                                const string& host,
+                                std::optional<string> api_name,
+                                string *region,
+                                string *service)
 {
-  if (!api_name) {
-    api_name = identify_region(cct, host);
+  if (api_name) {
+    *region = *api_name;
+    *service = "s3";
+    return;
   }
-#warning need to be period->api_name instead of rgw_zonegroup
-  return api_name.value_or(cct->_conf->rgw_zonegroup);
+
+  if (!identify_scope(cct, host, region, service)) {
+    *region = cct->_conf->rgw_zonegroup;
+    *service = "s3";
+    return;
+  }
 }
 
 int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
@@ -299,14 +322,17 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     new_env.set("HTTP_CONTENT_MD5", content_md5);
   }
 
-  string region = region_from_api_name(cct, host, api_name);
+  string region;
+  string service;
+
+  scope_from_api_name(cct, host, api_name, &region, &service);
 
   const char *maybe_payload_hash = info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
   if (maybe_payload_hash) {
     new_env.set("HTTP_X_AMZ_CONTENT_SHA256", maybe_payload_hash);
   }
 
-  int ret = sign_request(this, key, region, new_env, new_info);
+  int ret = sign_request(this, key, region, service, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
@@ -475,7 +501,7 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
                                       const string& resource, const param_vec_t& params,
                                       std::optional<string> api_name)
 {
-  region = region_from_api_name(cct, host, api_name);
+  scope_from_api_name(cct, host, api_name, &region, &service);
 
   string params_str;
   map<string, string>& args = new_info->args.get_params();
@@ -592,7 +618,7 @@ void RGWRESTGenerateHTTPHeaders::set_content(const bufferlist& bl)
 
 int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key)
 {
-  int ret = sign_request(this, key, region, *new_env, *new_info);
+  int ret = sign_request(this, key, region, service, *new_env, *new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
