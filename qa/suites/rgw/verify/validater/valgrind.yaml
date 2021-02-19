@@ -5,7 +5,6 @@ os_version: "8.0"
 overrides:
   install:
     ceph:
-#      flavor: notcmalloc
       #debuginfo: true
   ceph:
     conf:
