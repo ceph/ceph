@@ -288,8 +288,12 @@ class Prepare(object):
                 msg = ('{} is already prepared but not as '
                       'requested'.format(self.args.data))
                 terminal.error(msg)
-            logger.info(msg)
-            return False
+        else:   # we have some used and some unused devs
+            msg = 'some block devs are already used by Ceph'
+            terminal.error(msg)
+
+        logger.info(msg)
+        return False
 
     def safe_prepare(self, args=None):
         """
