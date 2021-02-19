@@ -25,9 +25,9 @@ TIME_WEEK = TIME_DAYS * 7
 class Module(MgrModule):
     MODULE_OPTIONS = [
         Option(name='sleep_interval',
-               default=str(600)),
+               default=600),
         Option(name='predict_interval',
-               default=str(86400)),
+               default=86400),
         Option(name='predictor_model',
                default='prophetstor')
     ]
@@ -89,7 +89,7 @@ class Module(MgrModule):
                 if not last_predicted:
                     next_predicted = now
                 else:
-                    predicted_frequency = int(self.predict_interval) or 86400
+                    predicted_frequency = self.predict_interval or 86400
                     seconds = (last_predicted - datetime.datetime.utcfromtimestamp(0)).total_seconds()
                     seconds -= seconds % predicted_frequency
                     seconds += predicted_frequency
@@ -106,7 +106,7 @@ class Module(MgrModule):
                     last_predicted = now
                     self.set_store('last_predicted', last_predicted.strftime(TIME_FORMAT))
 
-            sleep_interval = int(self.sleep_interval) or 60
+            sleep_interval = self.sleep_interval or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             self._event.wait(sleep_interval)
             self._event.clear()
