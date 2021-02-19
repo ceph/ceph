@@ -3,7 +3,6 @@ diskprediction with local predictor
 """
 import json
 import datetime
-import _strptime
 from threading import Event
 import time
 
@@ -15,11 +14,11 @@ from mgr_module import MgrModule, CommandResult
 #  from .predictor import get_diskfailurepredictor_path
 #
 # in a command thread.  See https://tracker.ceph.com/issues/42764
-import scipy
+import scipy # noqa: ignore=F401
 
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
-TIME_DAYS = 24*60*60
+TIME_DAYS = 24 * 60 * 60
 TIME_WEEK = TIME_DAYS * 7
 
 
@@ -194,7 +193,7 @@ class Module(MgrModule):
                     # get normalized smart values
                     if attr.get('value') is not None:
                         dev_smart['smart_%s_normalized' % attr.get('id')] = \
-                                    attr.get('value')
+                            attr.get('value')
                 # add power on hours manually if not available in smart attributes
                 if s_val.get('power_on_time', {}).get('hours') is not None:
                     dev_smart['smart_9_raw'] = int(s_val['power_on_time']['hours'])

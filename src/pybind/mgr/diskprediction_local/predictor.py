@@ -27,7 +27,6 @@ import pickle
 import logging
 
 import numpy as np
-from scipy import stats
 
 
 def get_diskfailurepredictor_path():
@@ -113,7 +112,7 @@ class RHDiskFailurePredictor(object):
         # get the attributes that were used to train model for current manufacturer
         try:
             model_smart_attr = self.model_context[manufacturer]
-        except KeyError as e:
+        except KeyError:
             RHDiskFailurePredictor.LOGGER.debug(
                 "No context (SMART attributes on which model has been trained) found for manufacturer: {}".format(
                     manufacturer
@@ -127,7 +126,7 @@ class RHDiskFailurePredictor(object):
             struc_dtypes = [(attr, np.float64) for attr in model_smart_attr]
             values = [tuple(day[attr] for attr in model_smart_attr) for day in disk_days]
             disk_days_sa = np.array(values, dtype=struc_dtypes)
-        except KeyError as e:
+        except KeyError:
             RHDiskFailurePredictor.LOGGER.debug(
                 "Mismatch in SMART attributes used to train model and SMART attributes available"
             )
@@ -136,7 +135,7 @@ class RHDiskFailurePredictor(object):
         # view structured array as 2d array for applying rolling window transforms
         # do not include capacity_bytes in this. only use smart_attrs
         disk_days_attrs = disk_days_sa[[attr for attr in model_smart_attr if 'smart_' in attr]]\
-                            .view(np.float64).reshape(disk_days_sa.shape + (-1,))
+            .view(np.float64).reshape(disk_days_sa.shape + (-1,))
 
         # featurize n (6 to 12) days data - mean,std,coefficient of variation
         # current model is trained on 6 days of data because that is what will be
@@ -146,20 +145,19 @@ class RHDiskFailurePredictor(object):
         roll_window_size = 6
 
         # rolling means generator
-        gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0) \
-                for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
+        gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0)
+               for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
         means = np.vstack(gen)
 
         # rolling stds generator
-        gen = (disk_days_attrs[i: i + roll_window_size, ...].std(axis=0, ddof=1) \
-                for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
+        gen = (disk_days_attrs[i: i + roll_window_size, ...].std(axis=0, ddof=1)
+               for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
         stds = np.vstack(gen)
 
         # coefficient of variation
         cvs = stds / means
         cvs[np.isnan(cvs)] = 0
-        featurized = np.hstack((
-                                means,
+        featurized = np.hstack((means,
                                 stds,
                                 cvs,
                                 disk_days_sa['user_capacity'][: disk_days_attrs.shape[0] - roll_window_size + 1].reshape(-1, 1)
