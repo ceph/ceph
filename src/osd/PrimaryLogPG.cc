@@ -10081,11 +10081,10 @@ void PrimaryLogPG::cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
 struct C_gather : public Context {
   PrimaryLogPGRef pg;
   hobject_t oid;
-  PrimaryLogPG::OpContext *ctx;
   epoch_t last_peering_reset;
   OSDOp *osd_op;
-  C_gather(PrimaryLogPG *pg_, hobject_t oid_, PrimaryLogPG::OpContext *ctx_, epoch_t lpr_, OSDOp *osd_op_) :
-    pg(pg_), oid(oid_), ctx(ctx_), last_peering_reset(lpr_), osd_op(osd_op_) {}
+  C_gather(PrimaryLogPG *pg_, hobject_t oid_, epoch_t lpr_, OSDOp *osd_op_) :
+    pg(pg_), oid(oid_), last_peering_reset(lpr_), osd_op(osd_op_) {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
@@ -10099,6 +10098,7 @@ struct C_gather : public Context {
       return;
     }
     osd_op->rval = r;
+    PrimaryLogPG::OpContext *ctx = p->second.ctx;
     pg->cls_gather_ops.erase(p);
     pg->execute_ctx(ctx);
   }
@@ -10135,7 +10135,7 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
     dout(10) << __func__ << " src=" << oid << ", tgt=" << soid << dendl;
   }
 
-  C_gather *fin = new C_gather(this, soid, ctx, get_last_peering_reset(), &(*ctx->ops)[ctx->current_osd_subop_num]);
+  C_gather *fin = new C_gather(this, soid, get_last_peering_reset(), &(*ctx->ops)[ctx->current_osd_subop_num]);
   gather.set_finisher(new C_OnFinisher(fin,
 				       osd->get_objecter_finisher(get_pg_shard())));
   gather.activate();
