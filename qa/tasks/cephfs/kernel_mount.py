@@ -34,17 +34,12 @@ class KernelMount(CephFSMount):
         self.inst = None
         self.addr = None
 
-    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+    def mount(self, mntopts=[], check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
         self.setup_netns()
 
-        # TODO: don't call setupfs() from within mount(), since it's
-        # absurd. The proper order should be: create FS first and then
-        # call mount().
-        if createfs:
-            self.setupfs(name=self.cephfs_name)
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = '/'
 
