@@ -116,52 +116,6 @@ static void get_gmt_date_str(string& date_str)
   date_str = buffer;
 }
 
-int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const char *resource, optional_yield y)
-{
-  method = _method;
-  string new_url = url;
-  string new_resource = resource;
-
-  if (new_url[new_url.size() - 1] == '/' && resource[0] == '/') {
-    new_url = new_url.substr(0, new_url.size() - 1);
-  } else if (resource[0] != '/') {
-    new_resource = "/";
-    new_resource.append(resource);
-  }
-  new_url.append(new_resource);
-  url = new_url;
-
-  string date_str;
-  get_new_date_str(date_str);
-  headers.push_back(pair<string, string>("HTTP_DATE", date_str));
-
-  string canonical_header;
-  meta_map_t meta_map;
-  map<string, string> sub_resources;
-
-  rgw_create_s3_canonical_header(method.c_str(), NULL, NULL, date_str.c_str(),
-				 meta_map, meta_map, url.c_str(), sub_resources,
-				 canonical_header);
-
-  string digest;
-  try {
-    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
-  } catch (int ret) {
-    return ret;
-  }
-
-  string auth_hdr = "AWS " + key.id + ":" + digest;
-
-  ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
-
-  headers.push_back(pair<string, string>("AUTHORIZATION", auth_hdr));
-  int r = process(y);
-  if (r < 0)
-    return r;
-
-  return status;
-}
-
 int RGWHTTPSimpleRequest::send_data(void *ptr, size_t len, bool* pause)
 {
   if (!send_iter)
@@ -286,7 +240,8 @@ static std::optional<string> identify_region(CephContext *cct, const string& hos
 
   for (auto iter = vec.begin(); iter != vec.end(); ++iter) {
     auto& s = *iter;
-    if (s == "s3") {
+    if (s == "s3" ||
+        s == "execute-api") {
       ++iter;
       if (iter == vec.end()) {
         ldout(cct, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
@@ -671,23 +626,23 @@ void RGWRESTStreamS3PutObj::send_init(rgw::sal::RGWObject* obj)
   url = headers_gen.get_url();
 }
 
-int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send)
+void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs)
 {
   headers_gen.set_obj_attrs(rgw_attrs);
 
-  return send_ready(key, send);
+  send_ready(key);
 }
 
-int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
-                                      RGWAccessControlPolicy& policy, bool send)
+void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
+                                       RGWAccessControlPolicy& policy)
 {
   headers_gen.set_http_attrs(http_attrs);
   headers_gen.set_policy(policy);
 
-  return send_ready(key, send);
+  send_ready(key);
 }
 
-int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, bool send)
+void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key)
 {
   headers_gen.sign(key);
 
@@ -696,20 +651,12 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, bool send)
   }
 
   out_cb = new RGWRESTStreamOutCB(this);
-
-  if (send) {
-    int r = RGWHTTP::send(this);
-    if (r < 0)
-      return r;
-  }
-
-  return 0;
 }
 
-int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
+void RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
   send_init(obj);
-  return send_ready(key, attrs, send);
+  send_ready(key, attrs);
 }
 
 void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
@@ -1064,14 +1011,3 @@ int RGWHTTPStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
   }
   return send_size;
 }
-
-class StreamIntoBufferlist : public RGWGetDataCB {
-  bufferlist& bl;
-public:
-  explicit StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
-    bl.claim_append(inbl);
-    return bl_len;
-  }
-};
-
