@@ -1929,17 +1929,17 @@ TEST_F(OSDMapTest, BUG_48884)
     JSONParser parser2;
     parser2.parse(bucket.c_str(), static_cast<int>(bucket.size()));
     auto* obj = parser2.find_obj("name");
-    if (obj->get_data_val().str.compare("localrack") == 0) {
+    if (obj->get_data().compare("localrack") == 0) {
       obj = parser2.find_obj("kb");
-      ASSERT_EQ(obj->get_data_val().str, "3904");
+      ASSERT_EQ(obj->get_data(), "3904");
       obj = parser2.find_obj("kb_used");
-      ASSERT_EQ(obj->get_data_val().str, "3512");
+      ASSERT_EQ(obj->get_data(), "3512");
       obj = parser2.find_obj("kb_used_omap");
-      ASSERT_EQ(obj->get_data_val().str, "384");
+      ASSERT_EQ(obj->get_data(), "384");
       obj = parser2.find_obj("kb_used_meta");
-      ASSERT_EQ(obj->get_data_val().str, "384");
+      ASSERT_EQ(obj->get_data(), "384");
       obj = parser2.find_obj("kb_avail");
-      ASSERT_EQ(obj->get_data_val().str, "384");
+      ASSERT_EQ(obj->get_data(), "384");
     }
   }
 }
