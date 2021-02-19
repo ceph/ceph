@@ -5224,9 +5224,9 @@ def command_rm_cluster(ctx):
          verbosity=CallVerbosity.DEBUG)
 
     # rm units
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
                       '/ceph-%s@.service' % ctx.fsid])
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
                       '/ceph-%s.target' % ctx.fsid])
     call_throws(ctx, ['rm', '-rf',
                       ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
@@ -5234,7 +5234,7 @@ def command_rm_cluster(ctx):
     call_throws(ctx, ['rm', '-rf', ctx.data_dir + '/' + ctx.fsid])
     # rm logs
     call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
-    call_throws(ctx, ['rm', '-rf', ctx.log_dir +
+    call_throws(ctx, ['rm', '-rf', ctx.log_dir +  # noqa: W504
                       '/*.wants/ceph-%s@*' % ctx.fsid])
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
@@ -6409,9 +6409,8 @@ class HostFacts():
         """Return the attributes of this HostFacts object as json"""
         data = {
             k: getattr(self, k) for k in dir(self)
-            if not k.startswith('_') and
-            isinstance(getattr(self, k),
-                       (float, int, str, list, dict, tuple))
+            if not k.startswith('_')
+            and isinstance(getattr(self, k), (float, int, str, list, dict, tuple))
         }
         return json.dumps(data, indent=2, sort_keys=True)
 
