@@ -495,7 +495,8 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 }
 
 string gen_v4_scope(const ceph::real_time& timestamp,
-                    const string& region)
+                    const string& region,
+                    const string& service)
 {
 
   auto sec = real_clock::to_time_t(timestamp);
@@ -507,8 +508,8 @@ string gen_v4_scope(const ceph::real_time& timestamp,
   auto mon = bt.tm_mon + 1;
   auto day = bt.tm_mday;
 
-  return fmt::format(FMT_STRING("{:d}{:02d}{:02d}/{:s}/s3/aws4_request"),
-                     year, mon, day, region);
+  return fmt::format(FMT_STRING("{:d}{:02d}{:02d}/{:s}/{:s}/aws4_request"),
+                     year, mon, day, region, service);
 }
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)

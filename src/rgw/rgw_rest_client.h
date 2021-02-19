@@ -80,6 +80,7 @@ class RGWRESTGenerateHTTPHeaders : public DoutPrefix {
   RGWEnv *new_env;
   req_info *new_info;
   string region;
+  string service;
   string method;
   string url;
   string resource;

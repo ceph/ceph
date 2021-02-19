@@ -5200,6 +5200,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
 AWSSignerV4::prepare_result_t
 AWSSignerV4::prepare(const std::string& access_key_id,
                      const string& region,
+                     const string& service,
                      const req_info& info,
                      bool s3_op) const
 {
@@ -5214,7 +5215,7 @@ AWSSignerV4::prepare(const std::string& access_key_id,
 
   std::string date = ceph::to_iso_8601_no_separators(timestamp, ceph::iso_8601_format::YMDhms);
 
-  std::string credential_scope = gen_v4_scope(timestamp, region);
+  std::string credential_scope = gen_v4_scope(timestamp, region, service);
 
   extra_headers["x-amz-date"] = date;
   auto iter = info.x_meta_map.find("x-amz-content-sha256");

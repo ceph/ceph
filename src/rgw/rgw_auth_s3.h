@@ -467,7 +467,8 @@ int parse_v4_credentials(const req_info& info,                     /* in */
                          const DoutPrefixProvider *dpp);         /* in */
 
 string gen_v4_scope(const ceph::real_time& timestamp,
-                    const string& region);
+                    const string& region,
+                    const string& service);
 
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
 {
