@@ -1329,8 +1329,7 @@ private:
           const struct iovec *iov, int iovcnt);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                  unsigned iovcnt, int64_t offset,
-                                 bool write, bool clamp_to_int,
-                                 std::unique_lock<ceph::mutex> &cl);
+                                 bool write, bool clamp_to_int);
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);

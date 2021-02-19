@@ -10083,8 +10083,10 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 
 int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
 				   unsigned iovcnt, int64_t offset, bool write,
-				   bool clamp_to_int, std::unique_lock<ceph::mutex> &cl)
+				   bool clamp_to_int)
 {
+    std::unique_lock cl(client_lock);
+
 #if defined(__linux__) && defined(O_PATH)
     if (fh->flags & O_PATH)
         return -CEPHFS_EBADF;
@@ -10143,8 +10145,7 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     if (!fh)
       return -CEPHFS_EBADF;
 
-    std::scoped_lock cl(client_lock);
-    return _preadv_pwritev_locked(fh.get(), iov, iovcnt, offset, write, true, cl);
+    return _preadv_pwritev_locked(fh.get(), iov, iovcnt, offset, write, true);
 }
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
@@ -14196,8 +14197,7 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
 
-  std::unique_lock cl(client_lock);
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false, cl);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
 }
 
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
@@ -14206,8 +14206,7 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
 
-  std::unique_lock cl(client_lock);
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false, cl);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
 }
 
 int Client::ll_flush(Fh *fh)
