@@ -32,7 +32,6 @@ def _mock_run(obj):
 @pytest.fixture
 def exporter():
     with mock.patch('cephadm.CephadmDaemon.daemon_path', _daemon_path()), \
-       mock.patch('cephadm.CephadmDaemon.can_run', return_value=True), \
        mock.patch('cephadm.CephadmDaemon.run', _mock_run), \
        mock.patch('cephadm.CephadmDaemon._scrape_host_facts', _mock_scrape_host):
 

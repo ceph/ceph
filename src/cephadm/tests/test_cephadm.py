@@ -484,9 +484,17 @@ iMN28C2bKGao5UHvdER1rGy7
         assert os.path.exists(os.path.join(os.getcwd(), 'key'))
         assert os.path.exists(os.path.join(os.getcwd(), 'token'))
 
-    def test_can_run(self, exporter):
-        assert exporter.can_run
-    
+    @mock.patch('socket.socket.bind', lambda *_: True)
+    def test_can_run(self, exporter, fs):
+        for file in (
+            f'{exporter.daemon_path}/crt',
+            f'{exporter.daemon_path}/key',
+            f'{exporter.daemon_path}/token',
+            exporter.binary_path,
+        ):
+            fs.create_file(file)
+        assert exporter.can_run, exporter.errors
+
     def test_token_valid(self, exporter):
         assert exporter.token == self.token
 

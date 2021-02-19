@@ -6563,6 +6563,8 @@ class CephadmDaemon():
             self.errors.append(f"Certificate file '{CephadmDaemon.crt_name}' is missing from {self.daemon_path}")
         if self.token == "Unknown":
             self.errors.append(f"Authentication token '{CephadmDaemon.token_name}' is missing from {self.daemon_path}")
+        if not os.path.isfile(self.binary_path):
+            self.errors.append(f'cephadm binary {self.binary_path} not a file.')
         return len(self.errors) == 0
 
     @staticmethod
