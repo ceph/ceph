@@ -6,7 +6,6 @@ os_type: ubuntu
 overrides:
   install:
     ceph:
-#      flavor: notcmalloc
   ceph:
     conf:
       global:
