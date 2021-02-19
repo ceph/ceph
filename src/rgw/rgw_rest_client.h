@@ -163,6 +163,13 @@ public:
 
   /* finish streaming writes */
   void finish_write();
+
+  int complete_request(optional_yield y,
+                       string *etag = nullptr,
+                       real_time *mtime = nullptr,
+                       uint64_t *psize = nullptr,
+                       map<string, string> *pattrs = nullptr,
+                       map<string, string> *pheaders = nullptr);
 };
 
 class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
@@ -184,13 +191,6 @@ public:
   int send_request(RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
   int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
 
-  int complete_request(optional_yield y,
-                       string *etag = nullptr,
-                       real_time *mtime = nullptr,
-                       uint64_t *psize = nullptr,
-                       map<string, string> *pattrs = nullptr,
-                       map<string, string> *pheaders = nullptr);
-
   void add_params(param_vec_t *params);
 
 private:
@@ -210,7 +210,9 @@ public:
 		param_vec_t *_params, std::optional<std::string> _api_name) : RGWRESTStreamRWRequest(_cct, "HEAD", _url, _cb, _headers, _params, _api_name) {}
 };
 
-class RGWRESTStreamS3PutObj : public RGWRESTStreamRWRequest {
+class RGWRESTStreamS3PutObj : public RGWHTTPStreamRWRequest {
+  std::optional<string> api_name;
+  HostStyle host_style;
   RGWGetDataCB *out_cb;
   RGWEnv new_env;
   req_info new_info;
@@ -218,7 +220,8 @@ class RGWRESTStreamS3PutObj : public RGWRESTStreamRWRequest {
 public:
   RGWRESTStreamS3PutObj(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
 		param_vec_t *_params, std::optional<std::string> _api_name,
-                HostStyle _host_style) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params, _api_name, _host_style),
+                HostStyle _host_style) : RGWHTTPStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params),
+                api_name(_api_name), host_style(_host_style),
                 out_cb(NULL), new_info(cct, &new_env), headers_gen(_cct, &new_env, &new_info) {}
   ~RGWRESTStreamS3PutObj() override;
 
@@ -228,7 +231,7 @@ public:
                   RGWAccessControlPolicy& policy);
   void send_ready(RGWAccessKey& key);
 
-  void put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs);
+  void put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, map<string, bufferlist>& attrs);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };
