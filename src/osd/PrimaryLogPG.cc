@@ -10089,7 +10089,7 @@ struct C_gather : public Context {
     if (r == -ECANCELED)
       return;
     std::scoped_lock locker{*pg};
-    map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = pg->cls_gather_ops.find(oid);
+    auto p = pg->cls_gather_ops.find(oid);
     if (p == pg->cls_gather_ops.end()) {
       // op was cancelled
       return;
