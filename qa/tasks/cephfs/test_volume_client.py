@@ -734,10 +734,10 @@ vc.disconnect()
         # for different volumes, versioning details, etc.
         expected_auth_metadata = {
             "version": 2,
-            "compat_version": 1,
+            "compat_version": 6,
             "dirty": False,
             "tenant_id": "tenant1",
-            "volumes": {
+            "subvolumes": {
                 "groupid/volumeid": {
                     "dirty": False,
                     "access_level": "rw"
@@ -1148,7 +1148,7 @@ vc.disconnect()
         # for different volumes, versioning details, etc.
         expected_auth_metadata = {
             "version": 2,
-            "compat_version": 1,
+            "compat_version": 6,
             "dirty": False,
             "tenant_id": "tenant",
             "subvolumes": {
@@ -1298,7 +1298,7 @@ vc.disconnect()
         # for different volumes, versioning details, etc.
         expected_auth_metadata = {
             "version": 2,
-            "compat_version": 1,
+            "compat_version": 6,
             "dirty": False,
             "tenant_id": "tenant1",
             "subvolumes": {
@@ -1467,7 +1467,7 @@ vc.disconnect()
         # for different volumes, versioning details, etc.
         expected_auth_metadata = {
             "version": 2,
-            "compat_version": 1,
+            "compat_version": 6,
             "dirty": False,
             "tenant_id": "tenant1",
             "subvolumes": {

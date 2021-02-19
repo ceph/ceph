@@ -216,6 +216,7 @@ CEPHFSVOLUMECLIENT_VERSION_HISTORY = """
     * 3 - Allow volumes to be created without RADOS namespace isolation
     * 4 - Added get_object_and_version, put_object_versioned method to CephFSVolumeClient
     * 5 - Disallow authorize API for users not created by CephFSVolumeClient
+    * 6 - The 'volumes' key in auth-metadata-file is changed to 'subvolumes'.
 """
 
 
@@ -239,7 +240,7 @@ class CephFSVolumeClient(object):
     """
 
     # Current version
-    version = 5
+    version = 6
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
@@ -900,7 +901,7 @@ class CephFSVolumeClient(object):
         decode the metadata, and 'version', the CephFSVolumeClient version
         that encoded the metadata.
         """
-        data['compat_version'] = 1
+        data['compat_version'] = 6
         data['version'] = self.version
         return self._metadata_set(self._auth_metadata_path(auth_id), data)
 
