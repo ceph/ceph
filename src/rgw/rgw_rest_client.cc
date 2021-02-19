@@ -653,7 +653,7 @@ void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key)
   out_cb = new RGWRESTStreamOutCB(this);
 }
 
-void RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs)
+void RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, map<string, bufferlist>& attrs)
 {
   send_init(obj);
   send_ready(key, attrs);
@@ -831,7 +831,7 @@ int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
   return 0;
 }
 
-int RGWRESTStreamRWRequest::complete_request(optional_yield y,
+int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
                                              string *etag,
                                              real_time *mtime,
                                              uint64_t *psize,

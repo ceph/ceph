@@ -166,7 +166,7 @@ int RGWRESTConn::put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_para
   return 0;
 }
 
-int RGWRESTConn::put_obj_async_init(const rgw_user& uid, rgw::sal::RGWObject* obj, uint64_t obj_size,
+int RGWRESTConn::put_obj_async_init(const rgw_user& uid, rgw::sal::RGWObject* obj,
                                     map<string, bufferlist>& attrs,
                                     RGWRESTStreamS3PutObj **req)
 {
@@ -178,7 +178,7 @@ int RGWRESTConn::put_obj_async_init(const rgw_user& uid, rgw::sal::RGWObject* ob
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
   RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, api_name, host_style);
-  wr->put_obj_init(key, obj, obj_size, attrs);
+  wr->put_obj_init(key, obj, attrs);
   *req = wr;
   return 0;
 }

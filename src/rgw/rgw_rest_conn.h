@@ -146,7 +146,7 @@ public:
 
   /* async requests */
   int put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
-  int put_obj_async_init(const rgw_user& uid, rgw::sal::RGWObject* obj, uint64_t obj_size,
+  int put_obj_async_init(const rgw_user& uid, rgw::sal::RGWObject* obj,
                          map<string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, string& etag,
                        ceph::real_time *mtime, optional_yield y);
