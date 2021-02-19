@@ -242,6 +242,13 @@ class CephadmConfigChecks:
                 else:
                     self.log.debug("config_checks match module definition")
 
+    def lookup_check(self, key_value: str, key_name: str = 'name') -> Optional[CephadmCheckDefinition]:
+
+        for c in self.health_checks:
+            if getattr(c, key_name) == key_value:
+                return c
+        return None
+
     @property
     def defined_checks(self) -> int:
         return len(self.health_checks)
