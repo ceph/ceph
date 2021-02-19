@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_MIRROR_SNAPSHOT_UNLINK_PEER_REQUEST_H
 
 #include "include/buffer.h"
+#include "include/rados/librados.hpp"
 
 #include <string>
 #include <set>
@@ -52,10 +53,10 @@ private:
    *    |    no newer mirror
    *    |    snap exists)
    *    |
-   *    |\---------------> REMOVE_SNAPSHOT
-   *    |   (last peer and    |
-   *    |    newer mirror     |
-   *    |    snap exists)     |
+   *    |\---------------> UNLINK_GROUP_SNAPSHOT
+   *    |   (last peer and    |     (skip if not group snapshot)
+   *    |    newer mirror     v
+   *    |    snap exists)  REMOVE_SNAPSHOT
    *    |                     |
    *    |(peer not found)     |
    *    v                     |
@@ -70,6 +71,7 @@ private:
   Context *m_on_finish;
 
   bool m_newer_mirror_snapshots = false;
+  librados::IoCtx m_group_io_ctx;
 
   void refresh_image();
   void handle_refresh_image(int r);
@@ -79,6 +81,9 @@ private:
 
   void notify_update();
   void handle_notify_update(int r);
+
+  void unlink_group_snapshot();
+  void handle_unlink_group_snapshot(int r);
 
   void remove_snapshot();
   void handle_remove_snapshot(int r);

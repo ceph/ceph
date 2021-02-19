@@ -97,7 +97,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
   if ((mirror_ns->mirror_peer_uuids.count(m_mirror_peer_uuid) == 0) ||
       (mirror_ns->mirror_peer_uuids.size() <= 1U && m_newer_mirror_snapshots)) {
     m_image_ctx->image_lock.unlock_shared();
-    remove_snapshot();
+    unlink_group_snapshot();
     return;
   }
   m_image_ctx->image_lock.unlock_shared();
@@ -161,7 +161,7 @@ void UnlinkPeerRequest<I>::handle_notify_update(int r) {
 }
 
 template <typename I>
-void UnlinkPeerRequest<I>::remove_snapshot() {
+void UnlinkPeerRequest<I>::unlink_group_snapshot() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
 
@@ -195,6 +195,72 @@ void UnlinkPeerRequest<I>::remove_snapshot() {
                    << "snap_id=" << m_snap_id << ": "
                    << "mirror_peer_uuid=" << m_mirror_peer_uuid << ", "
                    << "mirror_peer_uuids=" << info.mirror_peer_uuids << dendl;
+    finish(0);
+    return;
+  }
+
+  if (!info.group_spec.is_valid()) {
+    remove_snapshot();
+    return;
+  }
+
+  r = util::create_ioctx(m_image_ctx->md_ctx, "group", info.group_spec.pool_id,
+                         {}, &m_group_io_ctx);
+  if (r < 0) {
+    remove_snapshot();
+    return;
+  }
+
+  librados::ObjectWriteOperation op;
+  cls::rbd::ImageSnapshotSpec image_snap = {m_image_ctx->md_ctx.get_id(),
+                                            m_image_ctx->id, m_snap_id};
+  librbd::cls_client::group_snap_unlink(&op, info.group_snap_id, image_snap);
+  auto aio_comp = create_rados_callback<
+      UnlinkPeerRequest<I>,
+      &UnlinkPeerRequest<I>::handle_unlink_group_snapshot>(this);
+  r = m_group_io_ctx.aio_operate(
+      util::group_header_name(info.group_spec.group_id), aio_comp, &op);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void UnlinkPeerRequest<I>::handle_unlink_group_snapshot(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to unlink group snapshot: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+  remove_snapshot();
+}
+
+template <typename I>
+void UnlinkPeerRequest<I>::remove_snapshot() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << dendl;
+
+  cls::rbd::SnapshotNamespace snap_namespace;
+  std::string snap_name;
+  int r = 0;
+  {
+    std::shared_lock image_locker{m_image_ctx->image_lock};
+
+    auto snap_info = m_image_ctx->get_snap_info(m_snap_id);
+    if (!snap_info) {
+      r = -ENOENT;
+    } else {
+      snap_namespace = snap_info->snap_namespace;
+      snap_name = snap_info->name;
+    }
+  }
+
+  if (r == -ENOENT) {
+    ldout(cct, 15) << "failed to locate snapshot " << m_snap_id << dendl;
     finish(0);
     return;
   }
