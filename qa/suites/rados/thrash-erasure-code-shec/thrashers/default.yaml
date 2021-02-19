@@ -17,3 +17,5 @@ tasks:
     chance_pgnum_shrink: 1
     chance_pgpnum_fix: 1
     min_in: 8
+    chance_bluestore_reshard: 1
+    bluestore_new_sharding: random
