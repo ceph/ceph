@@ -6,7 +6,7 @@ import datetime
 from threading import Event
 import time
 
-from mgr_module import MgrModule, CommandResult
+from mgr_module import CommandResult, MgrModule, Option
 
 # Importing scipy early appears to avoid a future deadlock when
 # we try to do
@@ -24,18 +24,12 @@ TIME_WEEK = TIME_DAYS * 7
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {
-            'name': 'sleep_interval',
-            'default': str(600),
-        },
-        {
-            'name': 'predict_interval',
-            'default': str(86400),
-        },
-        {
-            'name': 'predictor_model',
-            'default': 'prophetstor',
-        },
+        Option(name='sleep_interval',
+               default=str(600)),
+        Option(name='predict_interval',
+               default=str(86400)),
+        Option(name='predictor_model',
+               default='prophetstor')
     ]
 
     COMMANDS = []
