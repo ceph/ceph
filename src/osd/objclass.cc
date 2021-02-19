@@ -740,7 +740,7 @@ int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, b
     results->clear();
   } else {
     GatherFinisher *gf = (GatherFinisher*)op_finisher;
-    *results = gf->src_obj_buffs;
+    *results = std::move(gf->src_obj_buffs);
     r = gf->osd_op->rval;
   }
   return r;
