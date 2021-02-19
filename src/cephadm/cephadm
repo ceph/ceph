@@ -3225,7 +3225,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
         except ValueError as e:
             rc = 1
             errors.append(f"{subnet} invalid: {str(e)}")
-    
+
     return rc, list(versions), ", ".join(errors)
 
 
@@ -3324,7 +3324,7 @@ def prepare_mon_addresses(
         if not mon_network:
             raise Error('Failed to infer CIDR network for mon ip %s; pass '
                         '--skip-mon-network to configure it later' % base_ip)
-    
+
     return (addr_arg, ipv6, mon_network)
 
 
@@ -3749,7 +3749,7 @@ def finish_bootstrap_config(
     if mon_network:
         logger.info(f"Setting mon public_network to {mon_network}")
         cli(['config', 'set', 'mon', 'public_network', mon_network])
-    
+
     if cluster_network:
         logger.info(f"Setting cluster_network to {cluster_network}")
         cli(['config', 'set', 'global', 'cluster_network', cluster_network])
@@ -4166,12 +4166,12 @@ def command_deploy(ctx):
         if not daemon_ports:
             logger.info("cephadm-exporter will use default port ({})".format(CephadmDaemon.default_port))
             daemon_ports = [CephadmDaemon.default_port]
-           
+
         CephadmDaemon.validate_config(config_js)
-        
+
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
                       uid, gid, ports=daemon_ports)
-    
+
     else:
         raise Error('daemon type {} not implemented in command_deploy function'
                     .format(daemon_type))
@@ -6340,7 +6340,7 @@ class HostFacts():
 
         if ret:
             return ret
-        
+
         return {
             "type": "None",
             "description": "Linux Security Module framework is not available"
@@ -6417,7 +6417,7 @@ class CephadmCache:
         self.daemons = {}
         self.host = {}
         self.lock = RLock()
-    
+
     @property
     def health(self):
         return {
@@ -6474,7 +6474,7 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
         @classmethod
         def authorize(cls, f):
             """Implement a basic token check.
-            
+
             The token is installed at deployment time and must be provided to
             ensure we only respond to callers who know our token i.e. mgr
             """
@@ -6485,7 +6485,7 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
                     return
                 f(self, *args, **kwargs)
             return wrapper
-    
+
     def _help_page(self):
         return """<!DOCTYPE html>
 <html>
@@ -6586,7 +6586,7 @@ td,th {{
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({"message": bad_request_msg}).encode('utf-8'))
-    
+
     def log_message(self, format, *args):
         rqst = " ".join(str(a) for a in args)
         logger.info(f"client:{self.address_string()} [{self.log_date_time_string()}] {rqst}")
@@ -6630,7 +6630,7 @@ class CephadmDaemon():
 
         if not config or not all([k_name in config for k_name in CephadmDaemon.config_requirements]):
             raise Error(f"config must contain the following fields : {reqs}")
-        
+
         if not all([isinstance(config[k_name], str) for k_name in CephadmDaemon.config_requirements]):
             errors.append(f"the following fields must be strings: {reqs}")
 
@@ -6652,7 +6652,7 @@ class CephadmDaemon():
                     raise ValueError
             except (TypeError, ValueError):
                 errors.append("port must be an integer > 1024")
-        
+
         if errors:
             raise Error("Parameter errors : {}".format(", ".join(errors)))
 
@@ -6717,7 +6717,7 @@ class CephadmDaemon():
         exception_encountered = False
 
         while True:
-            
+
             if self.stop or exception_encountered:
                 break
 
@@ -6750,7 +6750,7 @@ class CephadmDaemon():
                         }
                     )
                     logger.debug(f"completed host-facts scrape - {elapsed}s")
-            
+
             time.sleep(CephadmDaemon.loop_delay)
             ctr += CephadmDaemon.loop_delay
         logger.info("host-facts thread stopped")
@@ -6808,11 +6808,11 @@ class CephadmDaemon():
                             "data": data,
                         }
                     )
-                    
+
                     logger.debug(f"completed ceph-volume scrape - {elapsed}s")
             time.sleep(CephadmDaemon.loop_delay)
             ctr += CephadmDaemon.loop_delay
-        
+
         logger.info("ceph-volume thread stopped")
 
     def _scrape_list_daemons(self, refresh_interval=20):
@@ -6821,13 +6821,13 @@ class CephadmDaemon():
         while True:
             if self.stop or exception_encountered:
                 break
-            
+
             if ctr >= refresh_interval:
                 ctr = 0
                 logger.debug("executing list-daemons scrape")
                 errors = []
                 s_time = time.time()
-                
+
                 try:
                     # list daemons should ideally be invoked with a fsid
                     data = list_daemons(self.ctx)
@@ -6850,7 +6850,7 @@ class CephadmDaemon():
                         }
                     )
                     logger.debug(f"completed list-daemons scrape - {elapsed}s")
-            
+
             time.sleep(CephadmDaemon.loop_delay)
             ctr += CephadmDaemon.loop_delay
         logger.info("list-daemons thread stopped")
@@ -6874,7 +6874,7 @@ class CephadmDaemon():
 
     def reload(self, *args):
         """reload -HUP received
-        
+
         This is a placeholder function only, and serves to provide the hook that could
         be exploited later if the exporter evolves to incorporate a config file
         """
@@ -6901,7 +6901,7 @@ class CephadmDaemon():
 
         host_facts = self._create_thread(self._scrape_host_facts, 'host', 5)
         self.workers.append(host_facts)
-        
+
         daemons = self._create_thread(self._scrape_list_daemons, 'daemons', 20)
         self.workers.append(daemons)
 
@@ -6918,7 +6918,7 @@ class CephadmDaemon():
         self.http_server.token = self.token
         server_thread = self._create_thread(self.http_server.serve_forever, 'http_server')
         logger.info(f"https server listening on {self.http_server.server_address[0]}:{self.http_server.server_port}")
-        
+
         ctr = 0
         while server_thread.is_alive():
             if self.stop:
@@ -6938,10 +6938,10 @@ class CephadmDaemon():
             ctr += CephadmDaemon.loop_delay
 
         logger.info("Main http server thread stopped")
-    
+
     @property
     def unit_run(self):
-        
+
         return """set -e
 {py3} {bin_path} exporter --fsid {fsid} --id {daemon_id} --port {port} &""".format(
             py3=shutil.which('python3'),
@@ -7009,7 +7009,7 @@ WantedBy=ceph-{fsid}.target
             os.rename(
                 os.path.join(self.ctx.unit_dir, f"{self.unit_name}.new"),
                 os.path.join(self.ctx.unit_dir, self.unit_name))
-        
+
         call_throws(self.ctx, ['systemctl', 'daemon-reload'])
         call(self.ctx, ['systemctl', 'stop', self.unit_name],
              verbosity=CallVerbosity.DEBUG)
@@ -7061,7 +7061,7 @@ def command_exporter(ctx: CephadmContext):
 
     if ctx.fsid not in os.listdir(ctx.data_dir):
         raise Error(f"cluster fsid '{ctx.fsid}' not found in '{ctx.data_dir}'")
-            
+
     exporter.run()
 
 ##################################
@@ -7084,7 +7084,7 @@ def command_maintenance(ctx: CephadmContext):
         raise Error('must pass --fsid to specify cluster')
 
     target = f"ceph-{ctx.fsid}.target"
-    
+
     if ctx.maintenance_action.lower() == 'enter':
         logger.info("Requested to place host into maintenance")
         if systemd_target_state(target):
