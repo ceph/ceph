@@ -310,6 +310,13 @@ class TestConfigCheck:
         assert out
         assert len(out) == len(checker.health_checks)
 
+    def test_lookup_check(self, mgr):
+        checker = CephadmConfigChecks(mgr)
+        check = checker.lookup_check('osd_mtu_size')
+        logger.debug(json.dumps(check.to_json()))
+        assert check
+        assert check.healthcheck_name == "CEPHADM_CHECK_MTU"
+
     def test_old_checks_removed(self, mgr):
         mgr.datastore.update({
             "config_checks": '{"bogus_one": "enabled", "bogus_two": "enabled", '
