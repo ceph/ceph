@@ -405,7 +405,6 @@ class RGWRadosStore : public RGWStore {
               RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::RGWObject> _head_obj,
               const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
-    virtual RGWCtl* get_ctl(void) override { return rados->pctl; }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
     virtual int delete_raw_obj(const rgw_raw_obj& obj) override;
     virtual int delete_raw_obj_aio(const rgw_raw_obj& obj, Completions* aio) override;

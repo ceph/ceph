@@ -173,7 +173,6 @@ class RGWStore {
               RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::RGWObject> _head_obj,
               const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual RGWLC* get_rgwlc(void) = 0;
-    virtual RGWCtl* get_ctl(void) = 0;
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
     virtual int delete_raw_obj(const rgw_raw_obj& obj) = 0;
     virtual int delete_raw_obj_aio(const rgw_raw_obj& obj, Completions* aio) = 0;
