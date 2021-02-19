@@ -314,3 +314,22 @@ p.breathe-sectiondef-title {
     font-weight: bold;
     border-bottom: thin solid #5E6A71;
 }
+
+.columns-2,
+.columns-3 {
+    display: flex;
+}
+
+.columns-2 > div,
+.columns-3 > div {
+    flex: 1;
+    padding: 0 10px 10px 0;
+}
+
+.columns-2 > div {
+    width: 50%;
+}
+
+.columns-3 > div {
+    width: 33.33%;
+}
