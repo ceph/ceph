@@ -96,50 +96,55 @@ Suites Inventory
 The ``suites`` directory of the `ceph/qa sub-directory`_ contains all the
 integration tests for all the Ceph components.
 
-`ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
-  install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
+.. list-table:: **Suites**
 
-`dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
-  get a machine, do nothing and return success (commonly used to
-  verify that the integration testing infrastructure works as expected)
+  * - **Component**
+    - **Function**
 
-`fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
-  test CephFS mounted using FUSE
+  * - `ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
+    - install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
 
-`kcephfs <https://github.com/ceph/ceph/tree/master/qa/suites/kcephfs>`_
-  test CephFS mounted using kernel
+  * - `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
+    - get a machine, do nothing and return success (commonly used to verify
+      that the integration testing infrastructure works as expected)
 
-`krbd <https://github.com/ceph/ceph/tree/master/qa/suites/krbd>`_
-  test the RBD kernel module
+  * - `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
+    - test CephFS mounted using FUSE
 
-`multimds <https://github.com/ceph/ceph/tree/master/qa/suites/multimds>`_
-  test CephFS with multiple MDSs
+  * - `kcephfs <https://github.com/ceph/ceph/tree/master/qa/suites/kcephfs>`_
+    - test CephFS mounted using kernel
 
-`powercycle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_
-  verify the Ceph cluster behaves when machines are powered off
-  and on again
+  * - `krbd <https://github.com/ceph/ceph/tree/master/qa/suites/krbd>`_
+    - test the RBD kernel module
 
-`rados <https://github.com/ceph/ceph/tree/master/qa/suites/rados>`_
-  run Ceph clusters including OSDs and MONs, under various conditions of
-  stress
+  * - `multimds <https://github.com/ceph/ceph/tree/master/qa/suites/multimds>`_
+    - test CephFS with multiple MDSs
 
-`rbd <https://github.com/ceph/ceph/tree/master/qa/suites/rbd>`_
-  run RBD tests using actual Ceph clusters, with and without qemu
+  * - `powercycle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_
+    - verify the Ceph cluster behaves when machines are powered off and on
+      again
 
-`rgw <https://github.com/ceph/ceph/tree/master/qa/suites/rgw>`_
-  run RGW tests using actual Ceph clusters
+  * - `rados <https://github.com/ceph/ceph/tree/master/qa/suites/rados>`_
+    - run Ceph clusters including OSDs and MONs, under various conditions of
+      stress
 
-`smoke <https://github.com/ceph/ceph/tree/master/qa/suites/smoke>`_
-  run tests that exercise the Ceph API with an actual Ceph cluster
+  * - `rbd <https://github.com/ceph/ceph/tree/master/qa/suites/rbd>`_
+    - run RBD tests using actual Ceph clusters, with and without qemu
 
-`teuthology <https://github.com/ceph/ceph/tree/master/qa/suites/teuthology>`_
-  verify that teuthology can run integration tests, with and without OpenStack
+  * - `rgw <https://github.com/ceph/ceph/tree/master/qa/suites/rgw>`_
+    - run RGW tests using actual Ceph clusters
 
-`upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_
-  for various versions of Ceph, verify that upgrades can happen
-  without disrupting an ongoing workload
+  * - `smoke <https://github.com/ceph/ceph/tree/master/qa/suites/smoke>`_
+    - run tests that exercise the Ceph API with an actual Ceph cluster
 
-`ceph-deploy man page`_
+  * - `teuthology <https://github.com/ceph/ceph/tree/master/qa/suites/teuthology>`_ 
+    - verify that teuthology can run integration tests, with and without OpenStack
+
+  * - `upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_
+    - for various versions of Ceph, verify that upgrades can happen without disrupting an ongoing workload
+
+  * - `ceph-deploy man page`_
+    - Exactly what it says on the tin.
 
 teuthology-describe
 -------------------
