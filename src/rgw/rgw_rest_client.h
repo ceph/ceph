@@ -65,7 +65,6 @@ public:
                        param_vec_t *_headers, param_vec_t *_params,
                        std::optional<std::string> _api_name) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params), api_name(_api_name) {}
 
-  int execute(RGWAccessKey& key, const char *method, const char *resource, optional_yield y);
   int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 };
 
@@ -224,12 +223,12 @@ public:
   ~RGWRESTStreamS3PutObj() override;
 
   void send_init(rgw::sal::RGWObject* obj);
-  int send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send);
-  int send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
-                 RGWAccessControlPolicy& policy, bool send);
-  int send_ready(RGWAccessKey& key, bool send);
+  void send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs);
+  void send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
+                  RGWAccessControlPolicy& policy);
+  void send_ready(RGWAccessKey& key);
 
-  int put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
+  void put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };

@@ -979,7 +979,7 @@ public:
 
     RGWAccessControlPolicy policy;
 
-    r->send_ready(target->conn->get_key(), new_attrs, policy, false);
+    r->send_ready(target->conn->get_key(), new_attrs, policy);
   }
 
   void handle_headers(const map<string, string>& headers) {
