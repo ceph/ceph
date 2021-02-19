@@ -32,8 +32,6 @@ class Module(MgrModule):
                default='prophetstor')
     ]
 
-    COMMANDS = []
-
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         # options
@@ -58,10 +56,6 @@ class Module(MgrModule):
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
-
-    def handle_command(self, _, cmd):
-        self.log.debug('handle_command cmd: %s', cmd)
-        raise NotImplementedError(cmd['prefix'])
 
     def self_test(self):
         self.log.debug('self_test enter')
