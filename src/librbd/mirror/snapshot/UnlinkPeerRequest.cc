@@ -103,7 +103,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
       have_newer_mirror_snapshot) {
     if (m_allow_remove) {
       m_image_ctx->image_lock.unlock_shared();
-      remove_snapshot(snap_namespace, snap_name);
+      unlink_group_snapshot(snap_namespace, snap_name);
       return;
     } else {
       ldout(cct, 15) << "skipping removal of snapshot: snap_id=" << m_snap_id
@@ -185,6 +185,57 @@ void UnlinkPeerRequest<I>::handle_notify_update(int r) {
   }
 
   refresh_image();
+}
+
+template <typename I>
+void UnlinkPeerRequest<I>::unlink_group_snapshot(
+    const cls::rbd::SnapshotNamespace& snap_namespace,
+    const std::string& snap_name) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << dendl;
+
+  auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(&snap_namespace);
+  if (!info->group_spec.is_valid()) {
+    remove_snapshot(snap_namespace, snap_name);
+    return;
+  }
+
+  int r = util::create_ioctx(m_image_ctx->md_ctx, "group", info->group_spec.pool_id,
+      {}, &m_group_io_ctx);
+  if (r < 0) {
+    remove_snapshot(snap_namespace, snap_name);
+    return;
+  }
+
+  librados::ObjectWriteOperation op;
+  cls::rbd::ImageSnapshotSpec image_snap = {m_image_ctx->md_ctx.get_id(),
+                                            m_image_ctx->id, m_snap_id};
+  librbd::cls_client::group_snap_unlink(&op, info->group_snap_id, image_snap);
+  auto ctx = new LambdaContext([this, snap_namespace, snap_name](int r) {
+      handle_unlink_group_snapshot(snap_namespace, snap_name, r);
+    });
+  auto aio_comp = create_rados_callback(ctx);
+  r = m_group_io_ctx.aio_operate(
+      util::group_header_name(info->group_spec.group_id), aio_comp, &op);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void UnlinkPeerRequest<I>::handle_unlink_group_snapshot(
+    const cls::rbd::SnapshotNamespace& snap_namespace,
+    const std::string& snap_name, int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to unlink group snapshot: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+  remove_snapshot(snap_namespace, snap_name);
 }
 
 template <typename I>

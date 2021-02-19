@@ -6,6 +6,7 @@
 
 #include "include/buffer.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "include/rados/librados.hpp"
 
 #include <string>
 #include <set>
@@ -55,10 +56,10 @@ private:
    *    |    no newer mirror
    *    |    snap exists)
    *    |
-   *    |\---------------> REMOVE_SNAPSHOT
-   *    |   (last peer and    |
-   *    |    newer mirror     |
-   *    |    snap exists)     |
+   *    |\---------------> UNLINK_GROUP_SNAPSHOT
+   *    |   (last peer and    |     (skip if not group snapshot)
+   *    |    newer mirror     v
+   *    |    snap exists)  REMOVE_SNAPSHOT
    *    |                     |
    *    |(peer not found)     |
    *    v                     |
@@ -72,6 +73,7 @@ private:
   std::string m_mirror_peer_uuid;
   bool m_allow_remove;
   Context *m_on_finish;
+  librados::IoCtx m_group_io_ctx;
 
   void refresh_image();
   void handle_refresh_image(int r);
@@ -81,6 +83,12 @@ private:
 
   void notify_update();
   void handle_notify_update(int r);
+
+  void unlink_group_snapshot(const cls::rbd::SnapshotNamespace& snap_namespace,
+                             const std::string& snap_name);
+  void handle_unlink_group_snapshot(
+      const cls::rbd::SnapshotNamespace& snap_namespace,
+      const std::string& snap_name, int r);
 
   void remove_snapshot(const cls::rbd::SnapshotNamespace& snap_namespace,
                        const std::string& snap_name);
