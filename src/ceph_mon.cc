@@ -26,6 +26,7 @@
 #include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/MonClient.h"
+#include "mon/ConfigMonitor.h"
 
 #include "msg/Messenger.h"
 
@@ -533,6 +534,25 @@ int main(int argc, const char **argv)
     dout(0) << argv[0] << ": created monfs at " << g_conf()->mon_data 
 	    << " for " << g_conf()->name << dendl;
     return 0;
+  }
+
+  // preload config from mon store
+  {
+    dout(0) << argv[0] << ": loading mon config from store" << dendl;
+    MonitorDBStore store(g_conf()->mon_data);
+
+    ostringstream oss;
+    int r = store.open(oss);
+    if (r >= 0) {
+      // FIXME: it's possible (but annoying) to load up the latest osdmap so that
+      // crush-based config masks can be applied
+      OSDMap osdmap;
+      ConfigMonitor::bootstrap_mon_config(&store, osdmap);
+      store.close();
+    } else {
+      derr << argv[0] << ": failed to open store to bootstrap mon config: " << oss.str()
+	   << dendl;
+    }
   }
 
   err = check_mon_data_exists();

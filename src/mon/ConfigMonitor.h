@@ -55,4 +55,7 @@ public:
   void check_sub(MonSession *s);
   void check_sub(Subscription *sub);
   void check_all_subs();
+
+  static void bootstrap_mon_config(MonitorDBStore *store,
+				   const OSDMap& osdmap);
 };

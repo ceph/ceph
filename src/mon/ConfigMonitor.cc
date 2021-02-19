@@ -775,6 +775,68 @@ void ConfigMonitor::on_active()
 {
 }
 
+void ConfigMonitor::bootstrap_mon_config(MonitorDBStore *store,
+					 const OSDMap& osdmap)
+{
+  map<string,string> crush_location;
+  osdmap.crush->get_full_location(g_conf()->host, &crush_location);
+
+  ConfigMap config_map;
+
+  KeyValueDB::Iterator it = store->get_iterator(KEY_PREFIX);
+  it->lower_bound(KEY_PREFIX);
+  while (it->valid() &&
+	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
+    string key = it->key().substr(KEY_PREFIX.size());
+    string value = it->value().to_str();
+
+    auto last_slash = key.rfind('/');
+    string name;
+    string who;
+    if (last_slash == std::string::npos) {
+      name = key;
+    } else if (auto mgrpos = key.find("/mgr/"); mgrpos != std::string::npos) {
+      name = key.substr(mgrpos + 1);
+      who = key.substr(0, mgrpos);
+    } else {
+      name = key.substr(last_slash + 1);
+      who = key.substr(0, last_slash);
+    }
+
+    const Option *opt = g_conf().find_option(name);
+    if (opt) {
+      string err;
+      (void)opt->pre_validate(&value, &err);
+      MaskedOption mopt(opt);
+      mopt.raw_value = value;
+      string section_name;
+      if (who.size() &&
+	  !ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+	// bad mask
+      } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	// ignore
+      } else {
+	Section *section = &config_map.global;;
+	if (section_name.size() && section_name != "global") {
+	  if (section_name.find('.') != std::string::npos) {
+	    section = &config_map.by_id[section_name];
+	  } else {
+	    section = &config_map.by_type[section_name];
+	  }
+	}
+	section->options.insert(make_pair(name, std::move(mopt)));
+      }
+    }
+    it->next();
+  }
+  auto out = config_map.generate_entity_map(
+      g_conf()->name,
+      crush_location,
+      osdmap.crush.get(),
+      string{}); // no device class
+  g_conf().set_mon_vals(g_ceph_context, out, nullptr);
+}
+
 void ConfigMonitor::load_config()
 {
   std::map<std::string,std::string> renamed_pacific = {
