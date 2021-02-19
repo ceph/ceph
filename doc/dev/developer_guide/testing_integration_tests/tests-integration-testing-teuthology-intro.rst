@@ -143,9 +143,6 @@ integration tests for all the Ceph components.
   * - `upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_
     - for various versions of Ceph, verify that upgrades can happen without disrupting an ongoing workload
 
-  * - `ceph-deploy man page`_
-    - Exactly what it says on the tin.
-
 teuthology-describe
 -------------------
 
