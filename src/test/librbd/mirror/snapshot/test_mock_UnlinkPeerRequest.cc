@@ -106,6 +106,34 @@ public:
       .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
+  void expect_create_ioctx(MockTestImageCtx &mock_image_ctx,
+                           librados::MockTestMemIoCtxImpl **io_ctx_impl) {
+    *io_ctx_impl = &get_mock_io_ctx(mock_image_ctx.md_ctx);
+    auto rados_client = (*io_ctx_impl)->get_mock_rados_client();
+
+    EXPECT_CALL(*rados_client, create_ioctx(_, _))
+      .WillOnce(DoAll(GetReference(*io_ctx_impl), Return(*io_ctx_impl)));
+  }
+
+  void expect_unlink_group_snapshot(MockTestImageCtx &mock_image_ctx,
+                                    const std::string &group_id,
+                                    const std::string &group_snap_id,
+                                    const cls::rbd::ImageSnapshotSpec &image_snap,
+                                    int r) {
+    using ceph::encode;
+    bufferlist bl;
+    encode(group_snap_id, bl);
+    encode(image_snap, bl);
+
+    librados::MockTestMemIoCtxImpl *mock_io_ctx_impl;
+    expect_create_ioctx(mock_image_ctx, &mock_io_ctx_impl);
+
+    EXPECT_CALL(*mock_io_ctx_impl,
+                exec(util::group_header_name(group_id), _, StrEq("rbd"),
+                     StrEq("group_snap_unlink"), ContentsEqual(bl), _, _, _))
+      .WillOnce(Return(r));
+  }
+
   void expect_remove_snapshot(MockTestImageCtx &mock_image_ctx,
                               uint64_t snap_id, int r) {
     EXPECT_CALL(*mock_image_ctx.operations, snap_remove(_, _, _))
@@ -208,6 +236,39 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, RemoveSnapshotNotAllowed) {
   C_SaferCond ctx;
   auto req = new MockUnlinkPeerRequest(&mock_image_ctx, snap_id, "peer_uuid",
                                        false, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, UnlinkGroupSnapshot) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  cls::rbd::MirrorSnapshotNamespace ns{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer_uuid"},
+    "", CEPH_NOSNAP};
+  ns.group_spec = {"group_id", mock_image_ctx.md_ctx.get_id()};
+  ns.group_snap_id = "group_snap_id";
+  auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
+  ns.mirror_peer_uuids = {"peer_uuid"};
+  snap_create(mock_image_ctx, ns, "mirror_snap2");
+
+  expect_get_snap_info(mock_image_ctx, snap_id);
+
+  InSequence seq;
+
+  expect_is_refresh_required(mock_image_ctx, true);
+  expect_refresh_image(mock_image_ctx, 0);
+  expect_unlink_group_snapshot(mock_image_ctx, "group_id", "group_snap_id",
+                               {ictx->md_ctx.get_id(), ictx->id, snap_id}, 0);
+  expect_remove_snapshot(mock_image_ctx, snap_id, 0);
+
+  C_SaferCond ctx;
+  auto req = new MockUnlinkPeerRequest(&mock_image_ctx, snap_id, "peer_uuid",
+                                       true, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
