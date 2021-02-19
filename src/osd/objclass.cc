@@ -736,7 +736,7 @@ int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, b
       op_finisher = op_finisher_it->second.get();
     }
   }
-  if (op_finisher == NULL) {
+  if (op_finisher == nullptr) {
     results->clear();
   } else {
     GatherFinisher *gf = (GatherFinisher*)op_finisher;
