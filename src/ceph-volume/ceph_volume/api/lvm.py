@@ -1165,7 +1165,6 @@ def get_device_lvs(device, name_prefix=''):
     return [Volume(**lv) for lv in lvs if lv['lv_name'] and
             lv['lv_name'].startswith(name_prefix)]
 
-
 def get_lvs_from_path(devpath):
     lvs = []
     if os.path.isabs(devpath):
@@ -1176,3 +1175,15 @@ def get_lvs_from_path(devpath):
             lvs = get_lvs(filters={'path': devpath})
 
     return lvs
+
+def get_lv_by_fullname(full_name):
+    """
+    returns LV by the specified LV's full name (formatted as vg_name/lv_name)
+    """
+    try:
+        vg_name, lv_name = full_name.split('/')
+        res_lv = get_single_lv(filters={'lv_name': lv_name,
+                                        'vg_name': vg_name})
+    except ValueError:
+        res_lv = None
+    return res_lv
