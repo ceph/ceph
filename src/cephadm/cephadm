@@ -1422,7 +1422,7 @@ def call_timeout(ctx, command, timeout):
 
     try:
         return subprocess.call(command, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
+    except subprocess.TimeoutExpired:
         raise_timeout(command, timeout)
 
 ##################################
@@ -2502,7 +2502,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid)
         mon_dir = get_data_dir(fsid, ctx.data_dir, 'mon', daemon_id)
         log_dir = get_log_dir(fsid, ctx.log_dir)
-        out = CephContainer(
+        CephContainer(
             ctx,
             image=ctx.image,
             entrypoint='/usr/bin/ceph-mon',
@@ -3622,7 +3622,7 @@ def prepare_ssh(
         logger.info('Adding key to %s@localhost\'s authorized_keys...' % ctx.ssh_user)
         try:
             s_pwd = pwd.getpwnam(ctx.ssh_user)
-        except KeyError as e:
+        except KeyError:
             raise Error('Cannot find uid/gid for ssh-user: %s' % (ctx.ssh_user))
         ssh_uid = s_pwd.pw_uid
         ssh_gid = s_pwd.pw_gid
@@ -3925,7 +3925,7 @@ def command_bootstrap(ctx):
         # necessary
         try:
             out = cli(['mgr', 'stat'])
-        except Exception as e:
+        except Exception:
             out = cli(['mgr', 'dump'])
         j = json.loads(out)
         epoch = j['epoch']
@@ -5310,8 +5310,6 @@ def command_check_host(ctx: CephadmContext) -> None:
 
 
 def command_prepare_host(ctx: CephadmContext) -> None:
-    container_path = ctx.container_path
-
     logger.info('Verifying podman|docker is present...')
     pkg = None
     try:
@@ -5536,7 +5534,7 @@ class Apt(Packager):
         logger.info('Attempting podman install...')
         try:
             self.install(['podman'])
-        except Error as e:
+        except Error:
             logger.info('Podman did not work.  Falling back to docker...')
             self.install(['docker.io'])
 
@@ -5840,7 +5838,7 @@ def command_add_repo(ctx: CephadmContext):
     if ctx.version:
         try:
             (x, y, z) = ctx.version.split('.')
-        except Exception as e:
+        except Exception:
             raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
 
     pkg = create_packager(ctx, stable=ctx.release,
