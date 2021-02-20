@@ -153,8 +153,14 @@ struct request_context_t {
   }
 
   bool check_magic() const {
-    // todo
-    return true;
+    auto ret = magic == NBD_REQUEST_MAGIC;
+    if (!ret) {
+      logger().error(
+	"Invalid magic {} should be {}",
+	magic,
+	NBD_REQUEST_MAGIC);
+    }
+    return ret;
   }
 
   uint32_t get_command() const {
@@ -168,6 +174,11 @@ struct request_context_t {
   seastar::future<> read_request(seastar::input_stream<char> &in) {
     return in.read_exactly(sizeof(struct nbd_request)
     ).then([this, &in](auto buf) {
+      if (buf.size() < sizeof(struct nbd_request)) {
+	throw std::system_error(
+	  std::make_error_code(
+	    std::errc::connection_reset));
+      }
       auto p = buf.get();
       magic = seastar::consume_be<uint32_t>(p);
       type = seastar::consume_be<uint32_t>(p);
@@ -178,6 +189,12 @@ struct request_context_t {
       logger().debug(
         "Got request, magic {}, type {}, from {}, len {}",
 	magic, type, from, len);
+
+      if (!check_magic()) {
+       throw std::system_error(
+	 std::make_error_code(
+	   std::errc::invalid_argument));
+      }
 
       if (has_input_buffer()) {
 	return in.read_exactly(len).then([this](auto buf) {
