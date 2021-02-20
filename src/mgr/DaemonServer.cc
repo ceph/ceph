@@ -868,6 +868,129 @@ void DaemonServer::log_access_denied(
         "#client-authentication";
 }
 
+int DaemonServer::_check_offlines_pgs(
+  const set<int>& osds,
+  const OSDMap& osdmap,
+  const PGMap& pgmap,
+  int *out_touched_pgs)
+{
+  int touched_pgs = 0;
+  int dangerous_pgs = 0;
+  for (const auto& q : pgmap.pg_stat) {
+    set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
+    bool found = false;
+    if (q.second.state & PG_STATE_DEGRADED) {
+      for (auto& anm : q.second.avail_no_missing) {
+	if (osds.count(anm.osd)) {
+	  found = true;
+	  continue;
+	}
+	if (anm.osd != CRUSH_ITEM_NONE) {
+	  pg_acting.insert(anm.osd);
+	}
+      }
+    } else {
+      for (auto& a : q.second.acting) {
+	if (osds.count(a)) {
+	  found = true;
+	  continue;
+	}
+	if (a != CRUSH_ITEM_NONE) {
+	  pg_acting.insert(a);
+	}
+      }
+    }
+    if (!found) {
+      continue;
+    }
+    touched_pgs++;
+    const pg_pool_t *pi = osdmap.get_pg_pool(q.first.pool());
+    if (!pi) {
+      ++dangerous_pgs; // pool is creating or deleting
+      continue;
+    }
+    if (!(q.second.state & PG_STATE_ACTIVE)) {
+      ++dangerous_pgs;
+      continue;
+    }
+    if (pg_acting.size() < pi->min_size) {
+      ++dangerous_pgs;
+    }
+  }
+  dout(20) << osds << " -> " << dangerous_pgs << "/" << touched_pgs
+	   << " dangerous/touched" << dendl;
+  *out_touched_pgs = touched_pgs;
+  return dangerous_pgs;
+}
+
+int DaemonServer::_maximize_ok_to_stop_set(
+  const set<int>& orig_osds,
+  unsigned max,
+  const OSDMap& osdmap,
+  const PGMap& pgmap,
+  int *out_touched_pgs,
+  set<int> *out_osds)
+{
+  dout(20) << "orig_osds " << orig_osds << " max " << max << dendl;
+  *out_osds = orig_osds;
+  int r = _check_offlines_pgs(orig_osds, osdmap, pgmap, out_touched_pgs);
+  if (r > 0) {
+    return r;
+  }
+  if (orig_osds.size() == max) {
+    // already at max
+    return 0;
+  }
+
+  // semi-arbitrarily start with the first osd in the set
+  set<int> osds = orig_osds;
+  int parent = *osds.begin();
+  set<int> children;
+
+  while (true) {
+    // identify the next parent
+    r = osdmap.crush->get_immediate_parent_id(parent, &parent);
+    if (r < 0) {
+      return 0;  // just go with what we have so far!
+    }
+
+    // get candidate additions that are beneath this point in the tree
+    children.clear();
+    r = osdmap.crush->get_all_children(parent, &children);
+    if (r < 0) {
+      return 0;  // just go with what we have so far!
+    }
+    dout(20) << "  parent " << parent << " children " << children << dendl;
+
+    // try adding in more osds
+    int failed = 0;  // how many children we failed to add to our set
+    for (auto o : children) {
+      if (o >= 0 && osdmap.is_up(o) && osds.count(o) == 0) {
+	osds.insert(o);
+	int touched;
+	r = _check_offlines_pgs(osds, osdmap, pgmap, &touched);
+	if (r > 0) {
+	  osds.erase(o);
+	  ++failed;
+	  continue;
+	}
+	*out_osds = osds;
+	*out_touched_pgs = touched;
+	if (osds.size() == max) {
+	  dout(20) << " hit max" << dendl;
+	  return 0;  // yay, we hit the max
+	}
+      }
+    }
+
+    if (failed) {
+      // we hit some failures; go with what we have
+      dout(20) << " hit some peer failures" << dendl;
+      return 0;
+    }
+  }
+}
+
 bool DaemonServer::_handle_command(
   std::shared_ptr<CommandContext>& cmdctx)
 {
@@ -1594,6 +1717,11 @@ bool DaemonServer::_handle_command(
     vector<string> ids;
     cmd_getval(cmdctx->cmdmap, "ids", ids);
     set<int> osds;
+    int64_t max = 1;
+    cmd_getval(cmdctx->cmdmap, "max", max);
+    if (max < (int)osds.size()) {
+      max = osds.size();
+    }
     int r;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	r = osdmap.parse_osd_id_list(ids, &osds, &ss);
@@ -1606,6 +1734,7 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(r, ss);
       return true;
     }
+    set<int> out_osds;
     int touched_pgs = 0;
     int dangerous_pgs = 0;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
@@ -1615,51 +1744,11 @@ bool DaemonServer::_handle_command(
 	  r = -EAGAIN;
 	  return;
 	}
-	for (const auto& q : pg_map.pg_stat) {
-          set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
-	  bool found = false;
-	  if (q.second.state & PG_STATE_DEGRADED) {
-	    for (auto& anm : q.second.avail_no_missing) {
-	      if (osds.count(anm.osd)) {
-		found = true;
-		continue;
-	      }
-	      if (anm.osd != CRUSH_ITEM_NONE) {
-		pg_acting.insert(anm.osd);
-	      }
-	    }
-	  } else {
-	    for (auto& a : q.second.acting) {
-	      if (osds.count(a)) {
-		found = true;
-		continue;
-	      }
-	      if (a != CRUSH_ITEM_NONE) {
-		pg_acting.insert(a);
-	      }
-	    }
-	  }
-	  if (!found) {
-	    continue;
-	  }
-	  touched_pgs++;
-
-	  const pg_pool_t *pi = osdmap.get_pg_pool(q.first.pool());
-	  if (!pi) {
-	    ++dangerous_pgs; // pool is creating or deleting
-            continue;
-	  }
-
-	  if (!(q.second.state & PG_STATE_ACTIVE)) {
-	    ++dangerous_pgs;
-	    continue;
-	  }
-          if (pg_acting.size() < pi->min_size) {
-            ++dangerous_pgs;
-          }
-        }
+	dangerous_pgs = _maximize_ok_to_stop_set(
+	  osds, max, osdmap, pg_map,
+	  &touched_pgs, &out_osds);
       });
-    if (r) {
+    if (r < 0) {
       cmdctx->reply(r, ss);
       return true;
     }
@@ -1669,11 +1758,21 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(-EBUSY, ss);
       return true;
     }
-    ss << "OSD(s) " << osds << " are ok to stop without reducing"
+    ss << "These OSD(s) are ok to stop without reducing"
        << " availability or risking data, provided there are no other concurrent failures"
        << " or interventions." << std::endl;
     ss << touched_pgs << " PGs are likely to be"
        << " degraded (but remain available) as a result.";
+    if (!f) {
+      f.reset(Formatter::create("json"));
+    }
+    f->open_array_section("osds");
+    for (auto o : out_osds) {
+      f->dump_int("osd", o);
+    }
+    f->close_section();
+    f->flush(cmdctx->odata);
+    cmdctx->odata.append("\n");
     cmdctx->reply(0, ss);
     return true;
   } else if (prefix == "pg force-recovery" ||
