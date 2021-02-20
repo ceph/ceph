@@ -678,8 +678,8 @@ class OSDRemovalQueue(object):
                 if not osd.purge():
                     raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
 
-            if not osd.exists:
-                continue
+            #if not osd.exists:
+            #    continue
             assert osd.fullname is not None
             assert osd.hostname is not None
             CephadmServe(self.mgr)._remove_daemon(osd.fullname, osd.hostname)
