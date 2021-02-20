@@ -15,6 +15,7 @@ from mgr_module import CommandResult, MgrModule, Option
 #
 # in a command thread.  See https://tracker.ceph.com/issues/42764
 import scipy # noqa: ignore=F401
+from .predictor import Predictor, get_diskfailurepredictor_path
 
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
@@ -136,23 +137,13 @@ class Module(MgrModule):
             self.log.error('failed to get device %s health data due to %s', devid, str(e))
 
         # initialize appropriate disk failure predictor model
-        from .predictor import get_diskfailurepredictor_path
-        if self.predictor_model == 'prophetstor':
-            from .predictor import PSDiskFailurePredictor
-            obj_predictor = PSDiskFailurePredictor()
-            ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
-            if ret is not None:
-                self.log.error('Error initializing predictor')
-                return predicted_result
-        elif self.predictor_model == 'redhat':
-            from .predictor import RHDiskFailurePredictor
-            obj_predictor = RHDiskFailurePredictor()
-            ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
-            if ret is not None:
-                self.log.error('Error initializing predictor')
-                return predicted_result
-        else:
+        obj_predictor = Predictor.create(self.predictor_model)
+        if obj_predictor is None:
             self.log.error('invalid value received for MODULE_OPTIONS.predictor_model')
+            return predicted_result
+        ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+        if ret is not None:
+            self.log.error('Error initializing predictor')
             return predicted_result
 
         if len(health_data) >= 6:

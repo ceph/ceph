@@ -275,13 +275,14 @@ class CephMgrCommands(Directive):
         mock_imports += ['OpenSSL',
                          'jwt',
                          'bcrypt',
-                         'scipy',
                          'jsonpatch',
                          'rook.rook_client',
                          'rook.rook_client.ceph',
                          'rook.rook_client._helper',
                          'cherrypy=3.2.3']
-
+        # make diskprediction_local happy
+        mock_imports += ['numpy',
+                         'scipy']
         # make restful happy
         mock_imports += ['pecan',
                          'pecan.rest',
