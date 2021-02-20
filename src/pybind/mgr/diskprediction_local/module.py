@@ -141,9 +141,10 @@ class Module(MgrModule):
         if obj_predictor is None:
             self.log.error('invalid value received for MODULE_OPTIONS.predictor_model')
             return predicted_result
-        ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
-        if ret is not None:
-            self.log.error('Error initializing predictor')
+        try:
+            obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+        except Exception as e:
+            self.log.error('Error initializing predictor: %s', e)
             return predicted_result
 
         if len(health_data) >= 6:
