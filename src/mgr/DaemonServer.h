@@ -99,6 +99,19 @@ private:
 
   void _prune_pending_service_map();
 
+  int _check_offlines_pgs(
+    const set<int>& osds,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    int *out_touched_pgs);
+  int _maximize_ok_to_stop_set(
+    const set<int>& orig_osds,
+    unsigned max,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    int *out_touched_pgs,
+    set<int> *out_osds);
+
   utime_t started_at;
   std::atomic<bool> pgmap_ready;
   std::set<int32_t> reported_osds;
