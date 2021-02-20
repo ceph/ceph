@@ -35,7 +35,24 @@ def get_diskfailurepredictor_path():
     return dir_path
 
 
-class RHDiskFailurePredictor(object):
+class Predictor:
+    @classmethod
+    def create(cls, name: str) -> Optional['Predictor']:
+        if name == 'prophetstor':
+            return PSDiskFailurePredictor()
+        elif name == 'redhat':
+            return RHDiskFailurePredictor()
+        else:
+            return None
+
+    def initialize(self, model_dir: str) -> str:
+        raise NotImplementedError()
+
+    def predict(self, dataset: Sequence[DevSmartT]) -> str:
+        raise NotImplementedError()
+
+
+class RHDiskFailurePredictor(Predictor):
     """Disk failure prediction module developed at Red Hat
 
     This class implements a disk failure prediction module.
@@ -229,7 +246,7 @@ class RHDiskFailurePredictor(object):
         return RHDiskFailurePredictor.PREDICTION_CLASSES[pred_class_id]
 
 
-class PSDiskFailurePredictor(object):
+class PSDiskFailurePredictor(Predictor):
     """Disk failure prediction developed at ProphetStor
 
     This class implements a disk failure prediction module.
