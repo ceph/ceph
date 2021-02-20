@@ -1214,7 +1214,8 @@ env | sort
 
 mkdir build
 cd build
-%cmake .. \
+cmake .. \
+    -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
     -DCMAKE_INSTALL_LOCALSTATEDIR:PATH=%{_localstatedir} \
