@@ -216,9 +216,10 @@ class CreateSnapshotRequests:
                 pool_id, namespace, image_id, comp.get_return_value()))
 
         if comp.get_return_value() < 0:
-            self.log.error(
-                "error when opening {}/{}/{}: {}".format(
-                    pool_id, namespace, image_id, comp.get_return_value()))
+            if comp.get_return_value() != -errno.ENOENT:
+                self.log.error(
+                    "error when opening {}/{}/{}: {}".format(
+                        pool_id, namespace, image_id, comp.get_return_value()))
             self.finish(image_spec)
             return
 
@@ -249,9 +250,10 @@ class CreateSnapshotRequests:
                 pool_id, namespace, image_id, comp.get_return_value(), mode))
 
         if comp.get_return_value() < 0:
-            self.log.error(
-                "error when getting mirror mode for {}/{}/{}: {}".format(
-                    pool_id, namespace, image_id, comp.get_return_value()))
+            if comp.get_return_value() != -errno.ENOENT:
+                self.log.error(
+                    "error when getting mirror mode for {}/{}/{}: {}".format(
+                        pool_id, namespace, image_id, comp.get_return_value()))
             self.close_image(image_spec, image)
             return
 
@@ -289,9 +291,18 @@ class CreateSnapshotRequests:
                 pool_id, namespace, image_id, comp.get_return_value(), info))
 
         if comp.get_return_value() < 0:
-            self.log.error(
-                "error when getting mirror info for {}/{}/{}: {}".format(
-                    pool_id, namespace, image_id, comp.get_return_value()))
+            if comp.get_return_value() != -errno.ENOENT:
+                self.log.error(
+                    "error when getting mirror info for {}/{}/{}: {}".format(
+                        pool_id, namespace, image_id, comp.get_return_value()))
+            self.close_image(image_spec, image)
+            return
+
+        if not info['primary']:
+            self.log.debug(
+                "CreateSnapshotRequests.handle_get_mirror_info: {}/{}/{}: {}".format(
+                    pool_id, namespace, image_id,
+                    "is not primary"))
             self.close_image(image_spec, image)
             return
 
@@ -323,7 +334,8 @@ class CreateSnapshotRequests:
             "CreateSnapshotRequests.handle_create_snapshot for {}/{}/{}: r={}, snap_id={}".format(
                 pool_id, namespace, image_id, comp.get_return_value(), snap_id))
 
-        if comp.get_return_value() < 0:
+        if comp.get_return_value() < 0 and \
+           comp.get_return_value() != -errno.ENOENT:
             self.log.error(
                 "error when creating snapshot for {}/{}/{}: {}".format(
                     pool_id, namespace, image_id, comp.get_return_value()))
@@ -528,7 +540,9 @@ class MirrorSnapshotScheduleHandler:
                     [(x['id'], x['name']) for x in filter(
                         lambda x: x['id'] in mirror_images,
                         rbd.RBD().list2(ioctx))])
-                for image_id in mirror_images:
+                for image_id, info in mirror_images.items():
+                    if not info['primary']:
+                        continue
                     image_name = image_names.get(image_id)
                     if not image_name:
                         continue
