@@ -2451,20 +2451,27 @@ public:
     context->find_object(oid, &src_value, snap); 
     context->find_object(oid_tgt, &tgt_value);
 
-    uint32_t max_len = src_value.most_recent_gen()->get_length(src_value.most_recent());
+    uint32_t max_len = 0;
+    if (src_value.deleted()) {
+      /* just random length to check ENOENT */
+      max_len = context->max_size;
+    } else {
+      max_len = src_value.most_recent_gen()->get_length(src_value.most_recent());
+    }
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
       get_rand_off_len(offset, length, max_len);
     } else if (src_value.version != 0 && !src_value.deleted()) {
       op.assert_version(src_value.version);
       get_rand_off_len(offset, length, max_len);
+    } else if (src_value.deleted()) {
+      offset = 0;
+      length = max_len;
     }
     tgt_offset = offset;
 
     string target_oid;
-    if (!oid_tgt.empty()) {
-      target_oid = context->prefix+oid_tgt;
-    } else {
+    if (!src_value.deleted() && oid_tgt.empty()) {
       bufferlist bl;
       int r = context->io_ctx.read(context->prefix+oid, bl, length, offset);
       ceph_assert(r > 0);
@@ -2473,11 +2480,13 @@ public:
       ceph_assert(r == 0);
       target_oid = fp_oid;
       tgt_offset = 0;
+    } else {
+      target_oid = context->prefix+oid_tgt;
     }
 
     cout << num << ": " << "set_chunk oid " << oid << " offset: " << offset
 	  << " length: " << length <<  " target oid " << target_oid
-	  << " offset: " << tgt_offset << std::endl;
+	  << " offset: " << tgt_offset << " snap " << snap << std::endl;
 
     op.set_chunk(offset, length, context->low_tier_io_ctx, 
 		 target_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
@@ -2507,6 +2516,8 @@ public:
 	} else if (r == -ENOENT && context->oid_set_chunk_tgt_pool.find(oid_tgt) != 
 		  context->oid_set_chunk_tgt_pool.end()) {
 	  cout << num << ": get expected ENOENT tgt oid " << oid_tgt << std::endl;
+	} else if (r == -ERANGE && src_value.deleted()) {
+	  cout << num << ":  got expected ERANGE (src dne)" << std::endl;
 	} else if (r == -EOPNOTSUPP) {
 	  cout << "Range is overlapped: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
 		<< r << " offset: " << offset << " length: " << length <<  std::endl;
@@ -2763,6 +2774,7 @@ public:
   librados::ObjectWriteOperation op;
   string oid;
   std::shared_ptr<int> in_use;
+  ObjectDesc src_value;
 
   TierPromoteOp(int n,
 	       RadosTestContext *context,
@@ -2779,6 +2791,8 @@ public:
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
+
+    context->find_object(oid, &src_value); 
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2805,6 +2819,8 @@ public:
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
       // sucess
+    } else if (r == -ENOENT && src_value.deleted()) {
+      cout << num << ":  got expected ENOENT (src dne)" << std::endl;
     } else {
       ceph_abort_msg("shouldn't happen");
     }
@@ -2834,6 +2850,8 @@ public:
   string oid;
   std::shared_ptr<int> in_use;
   int snap;
+  ObjectDesc src_value;
+
 
   TierFlushOp(int n,
 	       RadosTestContext *context,
@@ -2893,6 +2911,8 @@ public:
       // sucess
     } else if (r == -EBUSY) {
       // could fail if snap is not oldest
+    } else if (r == -ENOENT) {
+      // could fail if obj is removed
     } else {
       ceph_abort_msg("shouldn't happen");
     }
