@@ -8,6 +8,14 @@
 
 #include "common/debug.h"
 
+using std::list;
+using std::map;
+using std::pair;
+using std::string;
+using std::vector;
+
+using ceph::real_time;
+
 using namespace librados;
 
 const string BucketIndexShardsManager::KEY_VALUE_SEPARATOR = "#";
@@ -29,7 +37,7 @@ public:
       try {
         auto iter = outbl.cbegin();
         decode((*data), iter);
-      } catch (buffer::error& err) {
+      } catch (ceph::buffer::error& err) {
         r = -EIO;
       }
     }
@@ -42,14 +50,14 @@ public:
 void BucketIndexAioManager::do_completion(int id) {
   std::lock_guard l{lock};
 
-  map<int, librados::AioCompletion*>::iterator iter = pendings.find(id);
+  auto iter = pendings.find(id);
   ceph_assert(iter != pendings.end());
   completions[id] = iter->second;
   pendings.erase(iter);
 
   // If the caller needs a list of finished objects, store them
   // for further processing
-  map<int, string>::iterator miter = pending_objs.find(id);
+  auto miter = pending_objs.find(id);
   if (miter != pending_objs.end()) {
     completion_objs[id] = miter->second;
     pending_objs.erase(miter);
@@ -71,11 +79,11 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   }
 
   // Clear the completed AIOs
-  map<int, librados::AioCompletion*>::iterator iter = completions.begin();
+  auto iter = completions.begin();
   for (; iter != completions.end(); ++iter) {
     int r = iter->second->get_return_value();
     if (objs && r == 0) { /* update list of successfully completed objs */
-      map<int, string>::iterator liter = completion_objs.find(iter->first);
+      auto liter = completion_objs.find(iter->first);
       if (liter != completion_objs.end()) {
         (*objs)[liter->first] = liter->second;
       }
@@ -210,6 +218,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
 void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const cls_rgw_obj_key& start_obj,
                             const std::string& filter_prefix,
+                            const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
                             rgw_cls_list_ret* result)
@@ -218,28 +227,38 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
   rgw_cls_list_op call;
   call.start_obj = start_obj;
   call.filter_prefix = filter_prefix;
+  call.delimiter = delimiter;
   call.num_entries = num_entries;
   call.list_versions = list_versions;
   encode(call, in);
 
-  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
+  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
+	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
 }
 
-static bool issue_bucket_list_op(librados::IoCtx& io_ctx, const string& oid,
+static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
+				 const string& oid,
 				 const cls_rgw_obj_key& start_obj,
 				 const string& filter_prefix,
-				 uint32_t num_entries, bool list_versions,
+				 const string& delimiter,
+				 uint32_t num_entries,
+				 bool list_versions,
 				 BucketIndexAioManager *manager,
-				 rgw_cls_list_ret *pdata) {
+				 rgw_cls_list_ret *pdata)
+{
   librados::ObjectReadOperation op;
-  cls_rgw_bucket_list_op(op, start_obj, filter_prefix,
+  cls_rgw_bucket_list_op(op,
+			 start_obj, filter_prefix, delimiter,
                          num_entries, list_versions, pdata);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
 int CLSRGWIssueBucketList::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, oid, start_obj, filter_prefix, num_entries, list_versions, &manager, &result[shard_id]);
+  return issue_bucket_list_op(io_ctx, oid,
+			      start_obj, filter_prefix, delimiter,
+			      num_entries, list_versions, &manager,
+			      &result[shard_id]);
 }
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
@@ -298,7 +317,7 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -347,7 +366,7 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
   auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -577,15 +596,19 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
 
 int CLSRGWIssueGetDirHeader::issue_op(int shard_id, const string& oid)
 {
-  cls_rgw_obj_key nokey;
-  return issue_bucket_list_op(io_ctx, oid, nokey, "", 0, false, &manager, &result[shard_id]);
+  cls_rgw_obj_key empty_key;
+  string empty_prefix;
+  string empty_delimiter;
+  return issue_bucket_list_op(io_ctx, oid,
+			      empty_key, empty_prefix, empty_delimiter,
+			      0, false, &manager, &result[shard_id]);
 }
 
 static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager)
 {
   bufferlist in;
   librados::ObjectWriteOperation op;
-  op.exec("rgw", "bi_log_resync", in);
+  op.exec(RGW_CLASS, RGW_BI_LOG_RESYNC, in);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
@@ -598,7 +621,7 @@ static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const string& oid, Bucket
 {
   bufferlist in;
   librados::ObjectWriteOperation op;
-  op.exec("rgw", "bi_log_stop", in);
+  op.exec(RGW_CLASS, RGW_BI_LOG_STOP, in);
   return manager->aio_operate(io_ctx, oid, &op); 
 }
 
@@ -619,7 +642,7 @@ public:
     try {
       auto iter = outbl.cbegin();
       decode(ret, iter);
-    } catch (buffer::error& err) {
+    } catch (ceph::buffer::error& err) {
       r = -EIO;
     }
 
@@ -636,7 +659,7 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB 
   ObjectReadOperation op;
   GetDirHeaderCompletion *cb = new GetDirHeaderCompletion(ctx);
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, cb);
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   int r = io_ctx.aio_operate(oid, c, &op, NULL);
   c->release();
   if (r < 0)
@@ -675,7 +698,7 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
       *is_truncated = result.truncated;
 
     usage = result.usage;
-  } catch (buffer::error& e) {
+  } catch (ceph::buffer::error& e) {
     return -EINVAL;
   }
 
@@ -774,7 +797,7 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
   try {
     auto iter = out.cbegin();
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -806,7 +829,7 @@ int cls_rgw_lc_get_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
   try {
     auto iter = out.cbegin();
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
   head = ret.head;
@@ -824,7 +847,8 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
   return r;
 }
 
-int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker, pair<string, int>& entry)
+int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker,
+			      cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_get_next_entry_op call;
@@ -838,7 +862,7 @@ int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker, 
   try {
     auto iter = out.cbegin();
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
   entry = ret.entry;
@@ -846,7 +870,8 @@ int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker, 
  return r;
 }
 
-int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid, const pair<string, int>& entry)
+int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid,
+			const cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_rm_entry_op call;
@@ -856,7 +881,8 @@ int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid, const pair<string, int
  return r;
 }
 
-int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid, const pair<string, int>& entry)
+int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid,
+			 const cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_set_entry_op call;
@@ -866,7 +892,8 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid, const pair<string, in
   return r;
 }
 
-int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid, const std::string& marker, rgw_lc_entry_t& entry)
+int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid,
+			 const std::string& marker, cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_get_entry_op call{marker};;
@@ -881,7 +908,7 @@ int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid, const std::string& ma
   try {
     auto iter = out.cbegin();
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -892,7 +919,7 @@ int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid, const std::string& ma
 int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
                     const string& marker,
                     uint32_t max_entries,
-                    map<string, int>& entries)
+                    vector<cls_rgw_lc_entry>& entries)
 {
   bufferlist in, out;
   cls_rgw_lc_list_entries_op op;
@@ -912,12 +939,15 @@ int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
   try {
     auto iter = out.cbegin();
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
-  entries.insert(ret.entries.begin(),ret.entries.end());
 
- return r;
+  std::sort(std::begin(ret.entries), std::end(ret.entries),
+	    [](const cls_rgw_lc_entry& a, const cls_rgw_lc_entry& b)
+	      { return a.bucket < b.bucket; });
+  entries = std::move(ret.entries);
+  return r;
 }
 
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
@@ -926,7 +956,7 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_resha
   cls_rgw_reshard_add_op call;
   call.entry = entry;
   encode(call, in);
-  op.exec("rgw", "reshard_add", in);
+  op.exec(RGW_CLASS, RGW_RESHARD_ADD, in);
 }
 
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
@@ -937,7 +967,7 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
   call.marker = marker;
   call.max = max;
   encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "reshard_list", in, out);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_RESHARD_LIST, in, out);
   if (r < 0)
     return r;
 
@@ -945,7 +975,7 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
   auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -961,7 +991,7 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
   cls_rgw_reshard_get_op call;
   call.entry = entry;
   encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "reshard_get", in, out);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_RESHARD_GET, in, out);
   if (r < 0)
     return r;
 
@@ -969,7 +999,7 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
   auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -986,7 +1016,7 @@ void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_re
   call.bucket_name = entry.bucket_name;
   call.bucket_id = entry.bucket_id;
   encode(call, in);
-  op.exec("rgw", "reshard_remove", in);
+  op.exec(RGW_CLASS, RGW_RESHARD_REMOVE, in);
 }
 
 int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
@@ -996,7 +1026,7 @@ int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   cls_rgw_set_bucket_resharding_op call;
   call.entry = entry;
   encode(call, in);
-  return io_ctx.exec(oid, "rgw", "set_bucket_resharding", in, out);
+  return io_ctx.exec(oid, RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in, out);
 }
 
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
@@ -1004,7 +1034,7 @@ int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
   bufferlist in, out;
   cls_rgw_clear_bucket_resharding_op call;
   encode(call, in);
-  return io_ctx.exec(oid, "rgw", "clear_bucket_resharding", in, out);
+  return io_ctx.exec(oid, RGW_CLASS, RGW_CLEAR_BUCKET_RESHARDING, in, out);
 }
 
 int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
@@ -1013,7 +1043,7 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   bufferlist in, out;
   cls_rgw_get_bucket_resharding_op call;
   encode(call, in);
-  int r= io_ctx.exec(oid, "rgw", "get_bucket_resharding", in, out);
+  int r= io_ctx.exec(oid, RGW_CLASS, RGW_GET_BUCKET_RESHARDING, in, out);
   if (r < 0)
     return r;
 
@@ -1021,7 +1051,7 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -1036,7 +1066,7 @@ void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
   cls_rgw_guard_bucket_resharding_op call;
   call.ret_err = ret_err;
   encode(call, in);
-  op.exec("rgw", "guard_bucket_resharding", in);
+  op.exec(RGW_CLASS, RGW_GUARD_BUCKET_RESHARDING, in);
 }
 
 static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
@@ -1047,7 +1077,7 @@ static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx, const string& o
   call.entry = entry;
   encode(call, in);
   librados::ObjectWriteOperation op;
-  op.exec("rgw", "set_bucket_resharding", in);
+  op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 

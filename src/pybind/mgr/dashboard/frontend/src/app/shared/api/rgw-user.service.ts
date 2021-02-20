@@ -1,16 +1,15 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, of as observableOf } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { catchError, mapTo, mergeMap } from 'rxjs/operators';
 
 import { cdEncode } from '../decorators/cd-encode';
-import { ApiModule } from './api.module';
 
 @cdEncode
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class RgwUserService {
   private url = 'api/rgw/user';
@@ -56,7 +55,7 @@ export class RgwUserService {
     return this.http.get(`${this.url}/${uid}/quota`);
   }
 
-  create(args: object) {
+  create(args: Record<string, any>) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
@@ -64,7 +63,7 @@ export class RgwUserService {
     return this.http.post(this.url, null, { params: params });
   }
 
-  update(uid: string, args: object) {
+  update(uid: string, args: Record<string, any>) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
@@ -72,7 +71,7 @@ export class RgwUserService {
     return this.http.put(`${this.url}/${uid}`, null, { params: params });
   }
 
-  updateQuota(uid: string, args: object) {
+  updateQuota(uid: string, args: Record<string, string>) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
@@ -84,7 +83,7 @@ export class RgwUserService {
     return this.http.delete(`${this.url}/${uid}`);
   }
 
-  createSubuser(uid: string, args: object) {
+  createSubuser(uid: string, args: Record<string, string>) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
@@ -110,7 +109,7 @@ export class RgwUserService {
     return this.http.delete(`${this.url}/${uid}/capability`, { params: params });
   }
 
-  addS3Key(uid: string, args: object) {
+  addS3Key(uid: string, args: Record<string, string>) {
     let params = new HttpParams();
     params = params.append('key_type', 's3');
     _.keys(args).forEach((key) => {
@@ -132,10 +131,13 @@ export class RgwUserService {
    * @return {Observable<boolean>}
    */
   exists(uid: string): Observable<boolean> {
-    return this.enumerate().pipe(
-      mergeMap((resp: string[]) => {
-        const index = _.indexOf(resp, uid);
-        return observableOf(-1 !== index);
+    return this.get(uid).pipe(
+      mapTo(true),
+      catchError((error: Event) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableOf(false);
       })
     );
   }

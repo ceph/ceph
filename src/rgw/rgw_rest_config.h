@@ -13,9 +13,10 @@
  *
  */
 
-#ifndef RGW_REST_CONFIG_H
-#define RGW_REST_CONFIG_H
+#pragma once
 
+#include "rgw_auth_s3.h"
+#include "rgw_rest.h"
 #include "rgw_zone.h"
 
 class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
@@ -25,13 +26,13 @@ public:
   explicit RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(_old_format) {}
   ~RGWOp_ZoneGroupMap_Get() override {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission(optional_yield) override {
+    return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override {
     if (old_format) {
@@ -47,13 +48,13 @@ class RGWOp_ZoneConfig_Get : public RGWRESTOp {
 public:
   RGWOp_ZoneConfig_Get() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission(optional_yield) override {
+    return check_caps(s->user->get_caps());
   }
-  void execute() override {} /* store already has the info we need, just need to send response */
+  void execute(optional_yield) override {} /* store already has the info we need, just need to send response */
   void send_response() override ;
   const char* name() const override {
     return "get_zone_config";
@@ -64,7 +65,7 @@ class RGWHandler_Config : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get() override;
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*, optional_yield) override {
     return 0;
   }
 public:
@@ -78,11 +79,10 @@ public:
   RGWRESTMgr_Config() = default;
   ~RGWRESTMgr_Config() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *,
+			       struct req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Config(auth_registry);
   }
 };
-
-#endif /* RGW_REST_CONFIG_H */

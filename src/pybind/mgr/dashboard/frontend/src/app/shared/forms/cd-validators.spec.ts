@@ -3,7 +3,7 @@ import { FormControl, Validators } from '@angular/forms';
 
 import { of as observableOf } from 'rxjs';
 
-import { FormHelper } from '../../../testing/unit-test-helper';
+import { FormHelper } from '~/testing/unit-test-helper';
 import { CdFormGroup } from './cd-form-group';
 import { CdValidators } from './cd-validators';
 
@@ -11,9 +11,9 @@ describe('CdValidators', () => {
   let formHelper: FormHelper;
   let form: CdFormGroup;
 
-  const expectValid = (value) => formHelper.expectValidChange('x', value);
-  const expectPatternError = (value) => formHelper.expectErrorChange('x', value, 'pattern');
-  const updateValidity = (controlName) => form.get(controlName).updateValueAndValidity();
+  const expectValid = (value: any) => formHelper.expectValidChange('x', value);
+  const expectPatternError = (value: any) => formHelper.expectErrorChange('x', value, 'pattern');
+  const updateValidity = (controlName: string) => form.get(controlName).updateValueAndValidity();
 
   beforeEach(() => {
     form = new CdFormGroup({
@@ -117,7 +117,7 @@ describe('CdValidators', () => {
   });
 
   describe('uuid validator', () => {
-    const expectUuidError = (value) =>
+    const expectUuidError = (value: string) =>
       formHelper.expectErrorChange('x', value, 'invalidUuid', true);
     beforeEach(() => {
       form.get('x').setValidators(CdValidators.uuid());
@@ -249,6 +249,8 @@ describe('CdValidators', () => {
   describe('requiredIf', () => {
     beforeEach(() => {
       form = new CdFormGroup({
+        a: new FormControl(''),
+        b: new FormControl('xyz'),
         x: new FormControl(true),
         y: new FormControl('abc'),
         z: new FormControl('')
@@ -302,7 +304,7 @@ describe('CdValidators', () => {
     });
 
     it('should error because of successful condition', () => {
-      const conditionFn = (value) => {
+      const conditionFn = (value: string) => {
         return value === 'abc';
       };
       // Define prereqs that force the validator to validate the value of
@@ -316,15 +318,81 @@ describe('CdValidators', () => {
       );
       expect(validatorFn(form.get('y'))).toEqual({ required: true });
     });
+
+    it('should process extended prerequisites (1)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: '!empty' }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (2)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: '!empty' }
+      });
+      expect(validatorFn(form.get('b'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (3)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: 'minLength', arg1: 2 }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (4)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        z: { op: 'empty' }
+      });
+      expect(validatorFn(form.get('a'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (5)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        z: { op: 'empty' }
+      });
+      expect(validatorFn(form.get('y'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (6)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: 'empty' }
+      });
+      expect(validatorFn(form.get('z'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (7)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: 'minLength', arg1: 4 }
+      });
+      expect(validatorFn(form.get('z'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (8)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        x: { op: 'equal', arg1: true }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (9)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        b: { op: '!equal', arg1: 'abc' }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
   });
 
   describe('custom validation', () => {
     beforeEach(() => {
       form = new CdFormGroup({
-        x: new FormControl(3, CdValidators.custom('odd', (x) => x % 2 === 1)),
+        x: new FormControl(
+          3,
+          CdValidators.custom('odd', (x: number) => x % 2 === 1)
+        ),
         y: new FormControl(
           5,
-          CdValidators.custom('not-dividable-by-x', (y) => {
+          CdValidators.custom('not-dividable-by-x', (y: number) => {
             const x = (form && form.get('x').value) || 1;
             return y % x !== 0;
           })
@@ -352,8 +420,8 @@ describe('CdValidators', () => {
         y: new FormControl(5)
       });
       CdValidators.validateIf(form.get('x'), () => ((form && form.get('y').value) || 0) > 10, [
-        CdValidators.custom('min', (x) => x < 7),
-        CdValidators.custom('max', (x) => x > 12)
+        CdValidators.custom('min', (x: number) => x < 7),
+        CdValidators.custom('max', (x: number) => x > 12)
       ]);
       formHelper = new FormHelper(form);
     });
@@ -524,6 +592,167 @@ describe('CdValidators', () => {
       );
       // The validator must fail because the value of control 'z' is empty.
       expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+  });
+
+  describe('dimmlessBinary validators', () => {
+    const i18nMock = (a: string, b: { value: string }) => a.replace('{{value}}', b.value);
+
+    beforeEach(() => {
+      form = new CdFormGroup({
+        x: new FormControl('2 KiB', [CdValidators.binaryMin(1024), CdValidators.binaryMax(3072)])
+      });
+      formHelper = new FormHelper(form);
+    });
+
+    it('should not raise exception an exception for valid change', () => {
+      formHelper.expectValidChange('x', '2.5 KiB');
+    });
+
+    it('should not raise minimum error', () => {
+      formHelper.expectErrorChange('x', '0.5 KiB', 'binaryMin');
+      expect(form.get('x').getError('binaryMin')(i18nMock)).toBe(
+        'Size has to be at least 1 KiB or more'
+      );
+    });
+
+    it('should not raise maximum error', () => {
+      formHelper.expectErrorChange('x', '4 KiB', 'binaryMax');
+      expect(form.get('x').getError('binaryMax')(i18nMock)).toBe(
+        'Size has to be at most 3 KiB or less'
+      );
+    });
+  });
+
+  describe('passwordPolicy', () => {
+    let valid: boolean;
+    let callbackCalled: boolean;
+
+    const fakeUserService = {
+      validatePassword: () => {
+        return observableOf({ valid: valid, credits: 17, valuation: 'foo' });
+      }
+    };
+
+    beforeEach(() => {
+      callbackCalled = false;
+      form = new CdFormGroup({
+        x: new FormControl(
+          '',
+          null,
+          CdValidators.passwordPolicy(
+            fakeUserService,
+            () => 'admin',
+            () => {
+              callbackCalled = true;
+            }
+          )
+        )
+      });
+      formHelper = new FormHelper(form);
+    });
+
+    it('should not error because of empty input', () => {
+      expectValid('');
+      expect(callbackCalled).toBeTruthy();
+    });
+
+    it('should not error because password matches the policy', fakeAsync(() => {
+      valid = true;
+      formHelper.setValue('x', 'abc', true);
+      tick(500);
+      formHelper.expectValid('x');
+    }));
+
+    it('should error because password does not match the policy', fakeAsync(() => {
+      valid = false;
+      formHelper.setValue('x', 'xyz', true);
+      tick(500);
+      formHelper.expectError('x', 'passwordPolicy');
+    }));
+
+    it('should call the callback function', fakeAsync(() => {
+      formHelper.setValue('x', 'xyz', true);
+      tick(500);
+      expect(callbackCalled).toBeTruthy();
+    }));
+
+    describe('sslCert validator', () => {
+      beforeEach(() => {
+        form.get('x').setValidators(CdValidators.sslCert());
+      });
+
+      it('should not error because of empty input', () => {
+        expectValid('');
+      });
+
+      it('should accept SSL certificate', () => {
+        expectValid(
+          '-----BEGIN CERTIFICATE-----\n' +
+            'MIIC1TCCAb2gAwIBAgIJAM33ZCMvOLVdMA0GCSqGSIb3DQEBBQUAMBoxGDAWBgNV\n' +
+            '...\n' +
+            '3Ztorm2A5tFB\n' +
+            '-----END CERTIFICATE-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL certificate (1)', () => {
+        expectPatternError(
+          'MIIC1TCCAb2gAwIBAgIJAM33ZCMvOLVdMA0GCSqGSIb3DQEBBQUAMBoxGDAWBgNV\n' +
+            '...\n' +
+            '3Ztorm2A5tFB\n' +
+            '-----END CERTIFICATE-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL certificate (2)', () => {
+        expectPatternError(
+          '-----BEGIN CERTIFICATE-----\n' +
+            'MIIC1TCCAb2gAwIBAgIJAM33ZCMvOLVdMA0GCSqGSIb3DQEBBQUAMBoxGDAWBgNV\n'
+        );
+      });
+    });
+
+    describe('sslPrivKey validator', () => {
+      beforeEach(() => {
+        form.get('x').setValidators(CdValidators.sslPrivKey());
+      });
+
+      it('should not error because of empty input', () => {
+        expectValid('');
+      });
+
+      it('should accept SSL private key', () => {
+        expectValid(
+          '-----BEGIN RSA PRIVATE KEY-----\n' +
+            'MIIEpQIBAAKCAQEA5VwkMK63D7AoGJVbVpgiV3XlEC1rwwOEpHPZW9F3ZW1fYS1O\n' +
+            '...\n' +
+            'SA4Jbana77S7adg919vNBCLWPAeoN44lI2+B1Ub5DxSnOpBf+zKiScU=\n' +
+            '-----END RSA PRIVATE KEY-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL private key (1)', () => {
+        expectPatternError(
+          'MIIEpQIBAAKCAQEA5VwkMK63D7AoGJVbVpgiV3XlEC1rwwOEpHPZW9F3ZW1fYS1O\n' +
+            '...\n' +
+            'SA4Jbana77S7adg919vNBCLWPAeoN44lI2+B1Ub5DxSnOpBf+zKiScU=\n' +
+            '-----END RSA PRIVATE KEY-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL private key (2)', () => {
+        expectPatternError(
+          '-----BEGIN RSA PRIVATE KEY-----\n' +
+            'MIIEpQIBAAKCAQEA5VwkMK63D7AoGJVbVpgiV3XlEC1rwwOEpHPZW9F3ZW1fYS1O\n' +
+            '...\n' +
+            'SA4Jbana77S7adg919vNBCLWPAeoN44lI2+B1Ub5DxSnOpBf+zKiScU=\n'
+        );
+      });
     });
   });
 });

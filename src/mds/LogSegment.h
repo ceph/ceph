@@ -32,7 +32,7 @@ class CDir;
 class CInode;
 class CDentry;
 class MDSRank;
-struct MDSlaveUpdate;
+struct MDPeerUpdate;
 
 class LogSegment {
  public:
@@ -52,7 +52,16 @@ class LogSegment {
   {}
 
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
-
+  void purge_inodes_finish(interval_set<inodeno_t>& inos){
+    purge_inodes.subtract(inos);
+    if (NULL != purged_cb &&
+	purge_inodes.empty())
+      purged_cb->complete(0);
+  }
+  void set_purged_cb(MDSContext* c){
+    ceph_assert(purged_cb == NULL);
+    purged_cb = c;
+  }
   void wait_for_expiry(MDSContext *c)
   {
     ceph_assert(c != NULL);
@@ -74,12 +83,13 @@ class LogSegment {
   elist<CInode*>  dirty_dirfrag_nest;
   elist<CInode*>  dirty_dirfrag_dirfragtree;
 
-  elist<MDSlaveUpdate*> slave_updates{0}; // passed to begin() manually
-
   set<CInode*> truncating_inodes;
+  interval_set<inodeno_t> purge_inodes;
+  MDSContext* purged_cb = nullptr;
 
   map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
-  set<metareqid_t> uncommitted_masters;
+  set<metareqid_t> uncommitted_leaders;
+  set<metareqid_t> uncommitted_peers;
   set<dirfrag_t> uncommitted_fragments;
 
   // client request ids

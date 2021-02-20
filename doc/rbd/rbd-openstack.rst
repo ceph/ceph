@@ -4,10 +4,10 @@
 
 .. index:: Ceph Block Device; OpenStack
 
-You may use Ceph Block Device images with OpenStack through ``libvirt``, which
-configures the QEMU interface to ``librbd``. Ceph stripes block device images as
-objects across the cluster, which means that large Ceph Block Device images have
-better performance than a standalone server!
+You can attach Ceph Block Device images to OpenStack instances through ``libvirt``,
+which configures the QEMU interface to ``librbd``. Ceph stripes block volumes
+across multiple OSDs within the cluster, which means that large volumes can
+realize better performance than local drives on a standalone server!
 
 To use Ceph Block Devices with OpenStack, you must install QEMU, ``libvirt``,
 and OpenStack first. We recommend using a separate physical node for your
@@ -16,7 +16,9 @@ quad-core processor. The following diagram depicts the OpenStack/Ceph
 technology stack.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                    OpenStack                      |
             +---------------------------------------------------+
             |                     libvirt                       |
@@ -54,10 +56,13 @@ Three parts of OpenStack integrate with Ceph's block devices:
   every virtual machine inside Ceph directly without using Cinder, which is
   advantageous because it allows you to perform maintenance operations easily
   with the live-migration process. Additionally, if your hypervisor dies it is
-  also convenient to trigger ``nova evacuate`` and  run the virtual machine
-  elsewhere almost seamlessly.
+  also convenient to trigger ``nova evacuate`` and reinstate the virtual machine
+  elsewhere almost seamlessly. In doing so,
+  :ref:`exclusive locks <rbd-exclusive-locks>` prevent multiple
+  compute nodes from concurrently accessing the guest disk.
 
-You can use OpenStack Glance to store images in a Ceph Block Device, and you
+
+You can use OpenStack Glance to store images as Ceph Block Devices, and you
 can use Cinder to boot a VM using a copy-on-write clone of an image.
 
 The instructions below detail the setup for Glance, Cinder and Nova, although
@@ -73,9 +78,9 @@ while running VMs using a local disk, or vice versa.
 Create a Pool
 =============
 
-By default, Ceph block devices use the ``rbd`` pool. You may use any available
-pool. We recommend creating a pool for Cinder and a pool for Glance. Ensure
-your Ceph cluster is running, then create the pools. ::
+By default, Ceph block devices live within the ``rbd`` pool. You may use any
+suitable pool by specifying it explicitly. We recommend creating a pool for
+Cinder and a pool for Glance. Ensure your Ceph cluster is running, then create the pools. ::
 
     ceph osd pool create volumes
     ceph osd pool create images
@@ -128,9 +133,9 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
-    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images'
-    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd-read-only pool=images'
-    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups'
+    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images' mgr 'profile rbd pool=images'
+    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=volumes, profile rbd pool=vms'
+    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups' mgr 'profile rbd pool=backups'
 
 Add the keyrings for ``client.cinder``, ``client.glance``, and
 ``client.cinder-backup`` to the appropriate nodes and change their ownership::
@@ -304,25 +309,26 @@ authenticating with the Ceph cluster. ::
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
-These two flags are also used by the Nova ephemeral backend.
+These two flags are also used by the Nova ephemeral back end.
 
 
 Configuring Nova
 ----------------
 
-In order to boot all the virtual machines directly into Ceph, you must
+In order to boot virtual machines directly from Ceph volumes, you must
 configure the ephemeral backend for Nova.
 
-It is recommended to enable the RBD cache in your Ceph configuration file
-(enabled by default since Giant). Moreover, enabling the admin socket
-brings a lot of benefits while troubleshooting. Having one socket
-per virtual machine using a Ceph block device will help investigating performance and/or wrong behaviors.
+It is recommended to enable the RBD cache in your Ceph configuration file; this
+has been enabled by default since the Giant release. Moreover, enabling the
+client admin socket allows the collection of metrics and can be invaluable
+for troubleshooting.
 
-This socket can be accessed like this::
+This socket can be accessed on the hypvervisor (Nova compute) node::
 
     ceph daemon /var/run/ceph/ceph-client.cinder.19195.32310016.asok help
 
-Now on every compute nodes edit your Ceph configuration file::
+To enable RBD cache and admin sockets, ensure that on each hypervisor's
+``ceph.conf`` contains::
 
     [client]
         rbd cache = true
@@ -331,7 +337,7 @@ Now on every compute nodes edit your Ceph configuration file::
         log file = /var/log/qemu/qemu-guest-$pid.log
         rbd concurrent management ops = 20
 
-Configure the permissions of these paths::
+Configure permissions for these directories::
 
     mkdir -p /var/run/ceph/guests/ /var/log/qemu/
     chown qemu:libvirtd /var/run/ceph/guests /var/log/qemu/
@@ -339,15 +345,15 @@ Configure the permissions of these paths::
 Note that user ``qemu`` and group ``libvirtd`` can vary depending on your system.
 The provided example works for RedHat based systems.
 
-.. tip:: If your virtual machine is already running you can simply restart it to get the socket
+.. tip:: If your virtual machine is already running you can simply restart it to enable the admin socket
 
 
 Restart OpenStack
 =================
 
 To activate the Ceph block device driver and load the block device pool name
-into the configuration, you must restart OpenStack. Thus, for Debian based
-systems execute these commands on the appropriate nodes::
+into the configuration, you must restart the related OpenStack services.
+For Debian based systems execute these commands on the appropriate nodes::
 
     sudo glance-control api restart
     sudo service nova-compute restart
@@ -378,7 +384,7 @@ You can use `qemu-img`_ to convert from one format to another. For example::
     qemu-img convert -f qcow2 -O raw precise-cloudimg.img precise-cloudimg.raw
 
 When Glance and Cinder are both using Ceph block devices, the image is a
-copy-on-write clone, so it can create a new volume quickly. In the OpenStack
+copy-on-write clone, so new volumes are created quickly. In the OpenStack
 dashboard, you can boot from that volume by performing the following steps:
 
 #. Launch a new instance.

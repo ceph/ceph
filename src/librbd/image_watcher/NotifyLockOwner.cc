@@ -62,7 +62,7 @@ void NotifyLockOwner::handle_notify(int r) {
         return;
       }
       lock_owner_responded = true;
-      response.claim(it.second);
+      response = std::move(it.second);
     }
   }
 

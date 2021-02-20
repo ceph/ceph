@@ -1,4 +1,4 @@
-mock; python_version <= '3.3'
-pytest<4
+pytest
 pytest-cov
 pytest-instafail
+pyfakefs

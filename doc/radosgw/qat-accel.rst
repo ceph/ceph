@@ -38,8 +38,8 @@ The driver package can be downloaded from `Intel Quickassist Technology`_.
 2. The implementation for QAT based encryption is directly base on QAT API which
    is included the driver package. But QAT support for compression depends on
    QATzip project, which is a user space library which builds on top of the QAT
-   API. QATZip can support several compression algorithm, including deflate,
-   snappy, lz4, etc..
+   API. Currently, QATzip speeds up gzip compression and decompression at the
+   time of writing.
 
 See `QATzip`_.
 
@@ -62,10 +62,10 @@ As mentioned above, QAT support for compression is based on QATzip library in
 user space, which is designed to take full advantage of the performance provided
 by QuickAssist Technology. Unlike QAT based encryption, QAT based compression
 is supported through a tool class for QAT acceleration rather than a compressor
-plugin. The common tool class will be shared among zip, snappy, lz4 compressor
-plugins, and can transparently accelerate the existing compression types. So
-user is allowed to use it to speed up the existing compression types as long as
-the QAT hardware is available and QAT is capable to handle them.
+plugin. The common tool class can transparently accelerate the existing compression
+types, but only zlib compressor can be supported at the time of writing. So
+user is allowed to use it to speed up zlib compressor as long as the QAT
+hardware is available and QAT is capable to handle it.
 
 Configuration
 =============

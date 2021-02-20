@@ -31,7 +31,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Formatter.h"
-
+#include "common/pretty_binary.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_kstore
@@ -44,6 +44,21 @@
   * refcounted extents (for efficient clone)
 
  */
+
+using std::list;
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+using ceph::JSONFormatter;
 
 const string PREFIX_SUPER = "S"; // field -> value
 const string PREFIX_COLL = "C"; // collection name -> (nothing)
@@ -89,10 +104,10 @@ static void append_escaped(const string &in, string *out)
 {
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i <= '#') {
+    if ((unsigned char)*i <= '#') {
       snprintf(hexbyte, sizeof(hexbyte), "#%02x", (uint8_t)*i);
       out->append(hexbyte);
-    } else if (*i >= '~') {
+    } else if ((unsigned char)*i >= '~') {
       snprintf(hexbyte, sizeof(hexbyte), "~%02x", (uint8_t)*i);
       out->append(hexbyte);
     } else {
@@ -118,57 +133,6 @@ static int decode_escaped(const char *p, string *out)
     }
   }
   return p - orig_p;
-}
-
-// some things we encode in binary (as le32 or le64); print the
-// resulting key strings nicely
-static string pretty_binary_string(const string& in)
-{
-  char buf[10];
-  string out;
-  out.reserve(in.length() * 3);
-  enum { NONE, HEX, STRING } mode = NONE;
-  unsigned from = 0, i;
-  for (i=0; i < in.length(); ++i) {
-    if ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-	(mode == HEX && in.length() - i >= 4 &&
-	 ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-	  (in[i+1] < 32 || (unsigned char)in[i+1] > 126) ||
-	  (in[i+2] < 32 || (unsigned char)in[i+2] > 126) ||
-	  (in[i+3] < 32 || (unsigned char)in[i+3] > 126)))) {
-      if (mode == STRING) {
-	out.append(in.substr(from, i - from));
-	out.push_back('\'');
-      }
-      if (mode != HEX) {
-	out.append("0x");
-	mode = HEX;
-      }
-      if (in.length() - i >= 4) {
-	// print a whole u32 at once
-	snprintf(buf, sizeof(buf), "%08x",
-		 (uint32_t)(((unsigned char)in[i] << 24) |
-			    ((unsigned char)in[i+1] << 16) |
-			    ((unsigned char)in[i+2] << 8) |
-			    ((unsigned char)in[i+3] << 0)));
-	i += 3;
-      } else {
-	snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)in[i]);
-      }
-      out.append(buf);
-    } else {
-      if (mode != STRING) {
-	out.push_back('\'');
-	mode = STRING;
-	from = i;
-      }
-    }
-  }
-  if (mode == STRING) {
-    out.append(in.substr(from, i - from));
-    out.push_back('\'');
-  }
-  return out;
 }
 
 static void _key_encode_shard(shard_id_t shard, string *key)
@@ -900,7 +864,7 @@ int KStore::_open_collections(int *errors)
       auto p = bl.cbegin();
       try {
         decode(c->cnode, p);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
         derr << __func__ << " failed to decode cnode, key:"
              << pretty_binary_string(it->key()) << dendl;
         return -EIO;
@@ -1233,7 +1197,7 @@ int KStore::read(
   if (offset == length && offset == 0)
     length = o->onode.size;
 
-  r = _do_read(o, offset, length, bl, op_flags);
+  r = _do_read(o, offset, length, bl, false, op_flags);
 
  out:
   dout(10) << __func__ << " " << ch->cid << " " << oid
@@ -1247,6 +1211,7 @@ int KStore::_do_read(
     uint64_t offset,
     size_t length,
     bufferlist& bl,
+    bool do_cache,
     uint32_t op_flags)
 {
   int r = 0;
@@ -1274,7 +1239,7 @@ int KStore::_do_read(
   stripe_off = offset % stripe_size;
   while (length > 0) {
     bufferlist stripe;
-    _do_read_stripe(o, offset - stripe_off, &stripe);
+    _do_read_stripe(o, offset - stripe_off, &stripe, do_cache);
     dout(30) << __func__ << " stripe " << offset - stripe_off << " got "
 	     << stripe.length() << dendl;
     unsigned swant = std::min<unsigned>(stripe_size - stripe_off, length);
@@ -1530,14 +1495,16 @@ int KStore::_collection_list(
   if (end.hobj.is_max()) {
     pend = temp ? temp_end_key : end_key;
   } else {
-    get_object_key(cct, end, &end_key);
     if (end.hobj.is_temp()) {
       if (temp)
-	pend = end_key;
+        get_object_key(cct, end, &pend);
       else
 	goto out;
     } else {
-      pend = temp ? temp_end_key : end_key;
+      if (temp)
+        pend = temp_end_key;
+      else
+        get_object_key(cct, end, &pend);
     }
   }
   dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
@@ -1550,14 +1517,27 @@ int KStore::_collection_list(
 		 << " > " << end << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
+          if (it->valid() && it->key() < temp_end_key) {
+            int r = get_key_object(it->key(), pnext);
+            ceph_assert(r == 0);
+            set_next = true;
+          }
 	  break;
 	}
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
 	temp = false;
 	it->upper_bound(start_key);
-	pend = end_key;
+        if (end.hobj.is_max())
+          pend = end_key;
+        else
+          get_object_key(cct, end, &pend);
 	dout(30) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
 	continue;
+      }
+      if (it->valid() && it->key() < end_key) {
+        int r = get_key_object(it->key(), pnext);
+        ceph_assert(r == 0);
+        set_next = true;
       }
       break;
     }
@@ -1899,7 +1879,7 @@ int KStore::_open_super_meta()
     auto p = bl.cbegin();
     try {
       decode(nid_max, p);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
     nid_last = nid_max;
@@ -2261,7 +2241,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_COLL_HINT:
       {
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         bufferlist hint;
         i.decode_bl(hint);
         auto hiter = hint.cbegin();
@@ -2500,7 +2480,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
-	uint32_t flags = op->alloc_hint_flags;
+	uint32_t flags = op->hint;
 	r = _setallochint(txc, c, o,
 			  expected_object_size,
 			  expected_write_size,
@@ -2593,8 +2573,15 @@ void KStore::_dump_onode(OnodeRef o)
   }
 }
 
-void KStore::_do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl)
+void KStore::_do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl, bool do_cache)
 {
+  if (!do_cache) {
+    string key;
+    get_data_key(o->onode.nid, offset, &key);
+    db->get(PREFIX_DATA, key, pbl);
+    return;
+  }
+ 
   map<uint64_t,bufferlist>::iterator p = o->pending_stripes.find(offset);
   if (p == o->pending_stripes.end()) {
     string key;
@@ -2664,7 +2651,7 @@ int KStore::_do_write(TransContext *txc,
     }
     uint64_t stripe_off = offset - offset_rem;
     bufferlist prev;
-    _do_read_stripe(o, stripe_off, &prev);
+    _do_read_stripe(o, stripe_off, &prev, true);
     dout(20) << __func__ << " read previous stripe " << stripe_off
 	     << ", got " << prev.length() << dendl;
     bufferlist bl;
@@ -2755,7 +2742,7 @@ int KStore::_zero(TransContext *txc,
     while (pos < offset + length) {
       if (stripe_off || end - pos < stripe_size) {
 	bufferlist stripe;
-	_do_read_stripe(o, pos - stripe_off, &stripe);
+	_do_read_stripe(o, pos - stripe_off, &stripe, true);
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist bl;
@@ -2812,7 +2799,7 @@ int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
     while (pos < o->onode.size) {
       if (stripe_off) {
 	bufferlist stripe;
-	_do_read_stripe(o, pos - stripe_off, &stripe);
+	_do_read_stripe(o, pos - stripe_off, &stripe, true);
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist t;
@@ -3149,7 +3136,7 @@ int KStore::_clone(TransContext *txc,
   // data
   oldo->flush();
 
-  r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
+  r = _do_read(oldo, 0, oldo->onode.size, bl, true, 0);
   if (r < 0)
     goto out;
 
@@ -3219,7 +3206,7 @@ int KStore::_clone_range(TransContext *txc,
   newo->exists = true;
   _assign_nid(txc, newo);
 
-  r = _do_read(oldo, srcoff, length, bl, 0);
+  r = _do_read(oldo, srcoff, length, bl, true, 0);
   if (r < 0)
     goto out;
 

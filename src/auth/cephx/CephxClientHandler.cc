@@ -28,6 +28,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx client: "
 
+using std::string;
+
+using ceph::bufferlist;
+
 void CephxClientHandler::reset()
 {
   ldout(cct,10) << __func__ << dendl;
@@ -128,7 +132,13 @@ int CephxClientHandler::handle_response(
 
   if (starting) {
     CephXServerChallenge ch;
-    decode(ch, indata);
+    try {
+      decode(ch, indata);
+    } catch (ceph::buffer::error& e) {
+      ldout(cct, 1) << __func__ << " failed to decode CephXServerChallenge: "
+		    << e.what() << dendl;
+      return -EPERM;
+    }
     server_challenge = ch.server_challenge;
     ldout(cct, 10) << " got initial server challenge "
 		   << std::hex << server_challenge << std::dec << dendl;
@@ -139,7 +149,13 @@ int CephxClientHandler::handle_response(
   }
 
   struct CephXResponseHeader header;
-  decode(header, indata);
+  try {
+    decode(header, indata);
+  } catch (ceph::buffer::error& e) {
+    ldout(cct, 1) << __func__ << " failed to decode CephXResponseHeader: "
+		  << e.what() << dendl;
+    return -EPERM;
+  }
 
   switch (header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -154,13 +170,20 @@ int CephxClientHandler::handle_response(
 	
       if (!tickets.verify_service_ticket_reply(secret, indata)) {
 	ldout(cct, 0) << "could not verify service_ticket reply" << dendl;
-	return -EPERM;
+	return -EACCES;
       }
       ldout(cct, 10) << " want=" << want << " need=" << need << " have=" << have << dendl;
       if (!indata.end()) {
 	bufferlist cbl, extra_tickets;
-	decode(cbl, indata);
-	decode(extra_tickets, indata);
+	using ceph::decode;
+	try {
+	  decode(cbl, indata);
+	  decode(extra_tickets, indata);
+	} catch (ceph::buffer::error& e) {
+	  ldout(cct, 1) << __func__ << " failed to decode tickets: "
+			<< e.what() << dendl;
+	  return -EPERM;
+	}
 	ldout(cct, 10) << " got connection bl " << cbl.length()
 		       << " and extra tickets " << extra_tickets.length()
 		       << dendl;
@@ -208,7 +231,7 @@ int CephxClientHandler::handle_response(
   
       if (!tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
         ldout(cct, 0) << "could not verify service_ticket reply" << dendl;
-        return -EPERM;
+        return -EACCES;
       }
       validate_tickets();
       if (!_need_tickets()) {

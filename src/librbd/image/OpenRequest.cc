@@ -5,11 +5,12 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/ConfigWatcher.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/PluginRegistry.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
-#include "librbd/cache/ParentCacheObjectDispatch.cc"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -483,6 +484,7 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
       m_image_ctx->data_ctx.close();
     } else {
       m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
+      m_image_ctx->rebuild_data_io_context();
     }
   } else {
     data_pool_id = m_image_ctx->md_ctx.get_id();
@@ -499,6 +501,9 @@ void OpenRequest<I>::send_refresh() {
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->config_watcher = ConfigWatcher<I>::create(*m_image_ctx);
+  m_image_ctx->config_watcher->init();
 
   using klass = OpenRequest<I>;
   RefreshRequest<I> *req = RefreshRequest<I>::create(
@@ -519,37 +524,31 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
     return nullptr;
   }
 
-  return send_parent_cache(result);
-}
-
-template <typename I>
-Context* OpenRequest<I>::send_parent_cache(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
-
-  bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
-    "rbd_parent_cache_enabled");
-
-  if (m_image_ctx->child == nullptr || !parent_cache_enabled) {
-    return send_init_cache(result);
-  }
-
-  auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
-  using klass = OpenRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_parent_cache>(this);
-
-  parent_cache->init(ctx);
+  send_init_plugin_registry();
   return nullptr;
 }
 
 template <typename I>
-Context* OpenRequest<I>::handle_parent_cache(int* result) {
+void OpenRequest<I>::send_init_plugin_registry() {
+  CephContext *cct = m_image_ctx->cct;
+
+  auto plugins = m_image_ctx->config.template get_val<std::string>(
+    "rbd_plugins");
+  ldout(cct, 10) << __func__ << ": plugins=" << plugins << dendl;
+
+  auto ctx = create_context_callback<
+    OpenRequest<I>, &OpenRequest<I>::handle_init_plugin_registry>(this);
+  m_image_ctx->plugin_registry->init(plugins, ctx);
+}
+
+template <typename I>
+Context* OpenRequest<I>::handle_init_plugin_registry(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << "failed to parent cache " << dendl;
+    lderr(cct) << "failed to initialize plugin registry: "
+               << cpp_strerror(*result) << dendl;
     send_close_image(*result);
     return nullptr;
   }
@@ -559,8 +558,8 @@ Context* OpenRequest<I>::handle_parent_cache(int* result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_init_cache(int *result) {
-  // cache is disabled or parent image context
-  if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
+  if (!m_image_ctx->cache || m_image_ctx->child != nullptr ||
+      !m_image_ctx->data_ctx.is_valid()) {
     return send_register_watch(result);
   }
 
@@ -577,6 +576,8 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
     auto cache = cache::WriteAroundObjectDispatch<I>::create(
       m_image_ctx, max_dirty, writethrough_until_flush);
     cache->init();
+
+    m_image_ctx->readahead.set_max_readahead_size(0);
   } else if (cache_policy == "writethrough" || cache_policy == "writeback") {
     if (cache_policy == "writethrough") {
       max_dirty = 0;
@@ -597,7 +598,7 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_register_watch(int *result) {
-  if (m_image_ctx->read_only) {
+  if ((m_image_ctx->read_only_flags & IMAGE_READ_ONLY_FLAG_USER) != 0U) {
     return send_set_snap(result);
   }
 

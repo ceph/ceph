@@ -9,10 +9,8 @@
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
- * 
+ *
  */
-
-
 
 #ifndef CEPH_CDENTRY_H
 #define CEPH_CDENTRY_H
@@ -32,7 +30,7 @@
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
 #include "SimpleLock.h"
-#include "LocalLock.h"
+#include "LocalLockC.h"
 #include "ScrubHeader.h"
 
 class CInode;
@@ -71,7 +69,7 @@ public:
     unsigned char get_remote_d_type() const { return remote_d_type; }
     std::string get_remote_d_type_string() const;
 
-    void set_remote(inodeno_t ino, unsigned char d_type) { 
+    void set_remote(inodeno_t ino, unsigned char d_type) {
       remote_ino = ino;
       remote_d_type = d_type;
       inode = 0;
@@ -102,25 +100,34 @@ public:
 
 
   CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    name(n)
+    name(n),
+    alternate_name(std::move(alternate_name))
   {}
-  CDentry(std::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
+  CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
+          inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    name(n)
+    name(n),
+    alternate_name(std::move(alternate_name))
   {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
+  }
+
+  ~CDentry() override {
+    ceph_assert(batch_ops.empty());
   }
 
   std::string_view pin_name(int p) const override {
@@ -149,6 +156,15 @@ public:
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
   std::string_view get_name() const { return std::string_view(name); }
+  std::string_view get_alternate_name() const {
+    return std::string_view(alternate_name);
+  }
+  void set_alternate_name(mempool::mds_co::string altn) {
+    alternate_name = std::move(altn);
+  }
+  void set_alternate_name(std::string_view altn) {
+    alternate_name = mempool::mds_co::string(altn);
+  }
 
   __u32 get_hash() const { return hash; }
 
@@ -235,7 +251,7 @@ public:
 
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t projected_dirv, LogSegment *ls);
+  void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
 
   void mark_new();
@@ -245,7 +261,7 @@ public:
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
-  void encode_export(bufferlist& bl) {
+  void encode_export(ceph::buffer::list& bl) {
     ENCODE_START(1, 1, bl);
     encode(first, bl);
     encode(state, bl);
@@ -268,7 +284,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::const_iterator& blp, LogSegment *ls) {
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls) {
     DECODE_START(1, blp);
     decode(first, blp);
     __u32 nstate;
@@ -295,8 +311,8 @@ public:
     return &lock;
   }
   void set_object_info(MDSCacheObjectInfo &info) override;
-  void encode_lock_state(int type, bufferlist& bl) override;
-  void decode_lock_state(int type, const bufferlist& bl) override;
+  void encode_lock_state(int type, ceph::buffer::list& bl) override;
+  void decode_lock_state(int type, const ceph::buffer::list& bl) override;
 
   // ---------------------------------------------
   // replicas (on clients)
@@ -326,10 +342,16 @@ public:
   void remove_client_lease(ClientLease *r, Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   void remove_client_leases(Locker *locker);
 
-  ostream& print_db_line_prefix(ostream& out) override;
-  void print(ostream& out) override;
-  void dump(Formatter *f) const;
+  std::ostream& print_db_line_prefix(std::ostream& out) override;
+  void print(std::ostream& out) override;
+  void dump(ceph::Formatter *f) const;
 
+  static void encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl);
+  static void decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
+                            ceph::buffer::list::const_iterator& bl);
 
   __u32 hash;
   snapid_t first, last;
@@ -342,7 +364,7 @@ public:
   static LockType versionlock_type;
 
   SimpleLock lock; // FIXME referenced containers not in mempool
-  LocalLock versionlock; // FIXME referenced containers not in mempool
+  LocalLockC versionlock; // FIXME referenced containers not in mempool
 
   mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
@@ -357,7 +379,7 @@ protected:
   friend class C_MDC_XlockRequest;
 
   CDir *dir = nullptr;     // containing dirfrag
-  linkage_t linkage;
+  linkage_t linkage; /* durable */
   mempool::mds_co::list<linkage_t> projected;
 
   version_t version = 0;  // dir version when last touched.
@@ -365,9 +387,10 @@ protected:
 
 private:
   mempool::mds_co::string name;
+  mempool::mds_co::string alternate_name;
 };
 
-ostream& operator<<(ostream& out, const CDentry& dn);
+std::ostream& operator<<(std::ostream& out, const CDentry& dn);
 
 
 #endif

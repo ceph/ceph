@@ -1,12 +1,12 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
-import { BsModalService } from 'ngx-bootstrap/modal';
+import _ from 'lodash';
 
-import { AuthService } from '../../../shared/api/auth.service';
-import { Credentials } from '../../../shared/models/credentials';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { AuthService } from '~/app/shared/api/auth.service';
+import { Credentials } from '~/app/shared/models/credentials';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 
 @Component({
   selector: 'cd-login',
@@ -16,13 +16,14 @@ import { NotificationService } from '../../../shared/services/notification.servi
 export class LoginComponent implements OnInit {
   model = new Credentials();
   isLoginActive = false;
+  returnUrl: string;
 
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
-    private bsModalService: BsModalService,
-    private router: Router,
-    private notificationService: NotificationService
+    private modalService: ModalService,
+    private route: ActivatedRoute,
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -32,15 +33,9 @@ export class LoginComponent implements OnInit {
       // Make sure all open modal dialogs are closed. This might be
       // necessary when the logged in user is redirected to the login
       // page after a 401.
-      const modalsCount = this.bsModalService.getModalsCount();
-      for (let i = 1; i <= modalsCount; i++) {
-        this.bsModalService.hide(i);
-      }
+      this.modalService.dismissAll();
 
-      // Make sure notification sidebar is closed.
-      this.notificationService.toggleSidebar(true);
-
-      let token = null;
+      let token: string = null;
       if (window.location.hash.indexOf('access_token=') !== -1) {
         token = window.location.hash.split('access_token=')[1];
         const uri = window.location.toString();
@@ -54,7 +49,12 @@ export class LoginComponent implements OnInit {
             window.location.replace(login.login_url);
           }
         } else {
-          this.authStorageService.set(login.username, token, login.permissions, login.sso);
+          this.authStorageService.set(
+            login.username,
+            login.permissions,
+            login.sso,
+            login.pwdExpirationDate
+          );
           this.router.navigate(['']);
         }
       });
@@ -62,8 +62,9 @@ export class LoginComponent implements OnInit {
   }
 
   login() {
-    this.authService.login(this.model).then(() => {
-      this.router.navigate(['']);
+    this.authService.login(this.model).subscribe(() => {
+      const url = _.get(this.route.snapshot.queryParams, 'returnUrl', '/');
+      this.router.navigate([url]);
     });
   }
 }

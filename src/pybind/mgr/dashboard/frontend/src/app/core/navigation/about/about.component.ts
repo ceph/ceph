@@ -1,14 +1,14 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { detect } from 'detect-browser';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
-import { environment } from '../../../../environments/environment';
-import { UserService } from '../../../shared/api/user.service';
-import { AppConstants } from '../../../shared/constants/app.constants';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
+
+import { UserService } from '~/app/shared/api/user.service';
+import { AppConstants } from '~/app/shared/constants/app.constants';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({
   selector: 'cd-about',
@@ -27,7 +27,7 @@ export class AboutComponent implements OnInit, OnDestroy {
   copyright: string;
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private summaryService: SummaryService,
     private userService: UserService,
     private authStorageService: AuthStorageService
@@ -36,14 +36,10 @@ export class AboutComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    this.copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
     this.projectConstants = AppConstants;
     this.hostAddr = window.location.hostname;
     this.modalVariables = this.setVariables();
-    this.subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
+    this.subs = this.summaryService.subscribe((summary) => {
       const version = summary.version.replace('ceph version ', '').split(' ');
       this.hostAddr = summary.mgr_host.replace(/(^\w+:|^)\/\//, '').replace(/\/$/, '');
       this.versionNumber = version[0];

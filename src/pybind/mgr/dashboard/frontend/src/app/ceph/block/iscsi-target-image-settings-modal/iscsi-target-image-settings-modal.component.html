@@ -1,6 +1,6 @@
-<cd-modal>
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title">
-    <ng-container i18n>Settings</ng-container>&nbsp;
+    <ng-container i18n>Configure</ng-container>&nbsp;
     <small>{{ image }}</small>
   </ng-container>
 
@@ -13,6 +13,43 @@
       <div class="modal-body">
         <p class="alert-warning"
            i18n>Changing these parameters from their default values is usually not necessary.</p>
+
+        <span *ngIf="api_version >= 1">
+          <legend class="cd-header"
+                  i18n>Identifier</legend>
+          <!-- LUN -->
+          <div class="form-group row">
+            <div class="col-sm-12">
+              <label class="col-form-label required"
+                     for="lun"
+                     i18n>lun</label>
+              <input type="number"
+                     class="form-control"
+                     id="lun"
+                     name="lun"
+                     formControlName="lun">
+              <span class="invalid-feedback"
+                    *ngIf="settingsForm.showError('lun', formDir, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- WWN -->
+          <div class="form-group row">
+            <div class="col-sm-12">
+              <label class="col-form-label"
+                     for="wwn"
+                     i18n>wwn</label>
+              <input type="text"
+                     class="form-control"
+                     id="wwn"
+                     name="wwn"
+                     formControlName="wwn">
+            </div>
+          </div>
+        </span>
+
+        <legend class="cd-header"
+                i18n>Settings</legend>
 
         <!-- BACKSTORE -->
         <div class="form-group row">
@@ -46,15 +83,9 @@
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="settingsForm"
-                            (submitAction)="save()">Confirm</cd-submit-button>
-          <cd-back-button [back]="modalRef.hide"
-                          name="Cancel"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="save()"
+                              [form]="settingsForm"
+                              [submitText]="actionLabels.UPDATE"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

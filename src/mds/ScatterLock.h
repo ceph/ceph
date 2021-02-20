@@ -21,32 +21,6 @@
 #include "MDSContext.h"
 
 class ScatterLock : public SimpleLock {
-
-  struct more_bits_t {
-    xlist<ScatterLock*>::item item_updated;
-    utime_t update_stamp;
-
-    explicit more_bits_t(ScatterLock *lock) :
-      item_updated(lock)
-    {}
-  };
-
-  mutable std::unique_ptr<more_bits_t> _more;
-
-  more_bits_t *more() {
-    if (!_more)
-      _more.reset(new more_bits_t(this));
-    return _more.get();
-  }
-
-  enum {
-    SCATTER_WANTED   = 1 << 8,
-    UNSCATTER_WANTED = 1 << 9,
-    DIRTY            = 1 << 10,
-    FLUSHING         = 1 << 11,
-    FLUSHED          = 1 << 12,
-  };
-
 public:
   ScatterLock(MDSCacheObject *o, LockType *lt) :
     SimpleLock(o, lt) {}
@@ -168,7 +142,7 @@ public:
       state = LOCK_LOCK;
   }
 
-  void encode_state_for_rejoin(bufferlist& bl, int rep) {
+  void encode_state_for_rejoin(ceph::buffer::list& bl, int rep) {
     __s16 s = get_replica_state();
     if (is_gathering(rep)) {
       // the recovering mds may hold rejoined wrlocks
@@ -197,7 +171,7 @@ public:
     encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
     SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();
@@ -216,7 +190,7 @@ public:
     return SimpleLock::remove_replica(from);
   }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "(";
     _print(out);
     if (is_dirty())
@@ -231,6 +205,29 @@ public:
   }
 
 private:
+  struct more_bits_t {
+    xlist<ScatterLock*>::item item_updated;
+    utime_t update_stamp;
+
+    explicit more_bits_t(ScatterLock *lock) :
+      item_updated(lock)
+    {}
+  };
+
+  more_bits_t *more() {
+    if (!_more)
+      _more.reset(new more_bits_t(this));
+    return _more.get();
+  }
+
+  enum {
+    SCATTER_WANTED   = 1 << 8,
+    UNSCATTER_WANTED = 1 << 9,
+    DIRTY            = 1 << 10,
+    FLUSHING         = 1 << 11,
+    FLUSHED          = 1 << 12,
+  };
+
   void set_flushing() {
     state_flags |= FLUSHING;
   }
@@ -250,6 +247,8 @@ private:
       _more.reset();
     }
   }
+
+  mutable std::unique_ptr<more_bits_t> _more;
 };
 
 #endif

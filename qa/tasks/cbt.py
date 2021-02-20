@@ -3,7 +3,6 @@ import os
 import yaml
 
 from teuthology import misc
-from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology.task import Task
 
@@ -45,7 +44,7 @@ class CBT(Task):
             )
 
         benchmark_config = self.config.get('benchmarks')
-        benchmark_type = benchmark_config.keys()[0]
+        benchmark_type = next(iter(benchmark_config.keys()))
         if benchmark_type in ['librbdfio', 'fio']:
           testdir = misc.get_testdir(self.ctx)
           benchmark_config[benchmark_type]['cmd_path'] = os.path.join(testdir, 'fio/fio')
@@ -75,13 +74,13 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'collectl']
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-dev', 'collectl']
         self.first_mon.run(args=install_cmd + cbt_depends)
 
-        benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
+        benchmark_type = next(iter(self.cbt_config.get('benchmarks').keys()))
         self.log.info('benchmark: %s', benchmark_type)
 
         if benchmark_type in ['librbdfio', 'fio']:
@@ -202,13 +201,14 @@ class CBT(Task):
 
     def setup(self):
         super(CBT, self).setup()
-        self.first_mon = self.ctx.cluster.only(misc.get_first_mon(self.ctx, self.config)).remotes.keys()[0]
+        self.first_mon = next(iter(self.ctx.cluster.only(misc.get_first_mon(self.ctx, self.config)).remotes.keys()))
         self.cbt_config = self.generate_cbt_config()
         self.log.info('cbt configuration is %s', self.cbt_config)
         self.cbt_dir = os.path.join(misc.get_archive_dir(self.ctx), 'cbt')
         self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', self.cbt_dir])
-        misc.write_file(self.first_mon, os.path.join(self.cbt_dir, 'cbt_config.yaml'),
-                        yaml.safe_dump(self.cbt_config, default_flow_style=False))
+        self.first_mon.write_file(
+                os.path.join(self.cbt_dir, 'cbt_config.yaml'),
+                yaml.safe_dump(self.cbt_config, default_flow_style=False))
         self.checkout_cbt()
         self.install_dependencies()
 
@@ -234,7 +234,7 @@ class CBT(Task):
                 '{tdir}/cbt'.format(tdir=testdir),
             ]
         )
-        benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
+        benchmark_type = next(iter(self.cbt_config.get('benchmarks').keys()))
         if benchmark_type in ['librbdfio', 'fio']:
             self.first_mon.run(
                 args=[
@@ -249,6 +249,21 @@ class CBT(Task):
                 cosbench_version = 'cosbench-0.4.2.c3.1'
             else:
                 cosbench_version = '0.4.2.c3'
+            # note: stop-all requires 'nc'
+            self.first_mon.run(
+                args=[
+                    'cd', testdir, run.Raw('&&'),
+                    'cd', 'cos', run.Raw('&&'),
+                    'sh', 'stop-all.sh',
+                    run.Raw('||'), 'true'
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'sudo', 'killall', '-9', 'java',
+                    run.Raw('||'), 'true'
+                ]
+            )
             self.first_mon.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',

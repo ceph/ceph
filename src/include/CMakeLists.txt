@@ -30,6 +30,5 @@ if(WITH_RADOSGW)
   install(FILES
     rados/librgw.h
     rados/rgw_file.h
-    rgw/librgw_admin_user.h
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rados)
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rados)
 endif()

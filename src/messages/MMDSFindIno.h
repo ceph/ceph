@@ -15,24 +15,24 @@
 #ifndef CEPH_MDSFINDINO_H
 #define CEPH_MDSFINDINO_H
 
-#include "msg/Message.h"
 #include "include/filepath.h"
+#include "messages/MMDSOp.h"
 
-class MMDSFindIno : public Message {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMDSFindIno final : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   ceph_tid_t tid {0};
   inodeno_t ino;
 
 protected:
-  MMDSFindIno() : Message{MSG_MDS_FINDINO, HEAD_VERSION, COMPAT_VERSION} {}
-  MMDSFindIno(ceph_tid_t t, inodeno_t i) : Message{MSG_MDS_FINDINO, HEAD_VERSION, COMPAT_VERSION}, tid(t), ino(i) {}
-  ~MMDSFindIno() override {}
+  MMDSFindIno() : MMDSOp{MSG_MDS_FINDINO, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSFindIno(ceph_tid_t t, inodeno_t i) : MMDSOp{MSG_MDS_FINDINO, HEAD_VERSION, COMPAT_VERSION}, tid(t), ino(i) {}
+  ~MMDSFindIno() final {}
 
 public:
   std::string_view get_type_name() const override { return "findino"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "findino(" << tid << " " << ino << ")";
   }
 
@@ -42,6 +42,7 @@ public:
     encode(ino, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(tid, p);
     decode(ino, p);

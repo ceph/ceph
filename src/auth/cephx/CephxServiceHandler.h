@@ -31,20 +31,20 @@ public:
   
   int start_session(const EntityName& name,
 		    size_t connection_secret_required_length,
-		    bufferlist *result_bl,
+		    ceph::buffer::list *result_bl,
 		    AuthCapsInfo *caps,
 		    CryptoKey *session_key,
 		    std::string *connection_secret) override;
   int handle_request(
-    bufferlist::const_iterator& indata,
+    ceph::buffer::list::const_iterator& indata,
     size_t connection_secret_required_length,
-    bufferlist *result_bl,
+    ceph::buffer::list *result_bl,
     uint64_t *global_id,
     AuthCapsInfo *caps,
     CryptoKey *session_key,
     std::string *connection_secret) override;
 
-  void build_cephx_response_header(int request_type, int status, bufferlist& bl);
+  void build_cephx_response_header(int request_type, int status, ceph::buffer::list& bl);
 };
 
 #endif

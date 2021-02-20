@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/bind/bind.hpp>
 #include "common/debug.h"
 #include "common/ceph_context.h"
 #include "CacheSession.h"
@@ -29,6 +30,14 @@ CacheSession::~CacheSession() {
 
 stream_protocol::socket& CacheSession::socket() {
   return m_dm_socket;
+}
+
+void CacheSession::set_client_version(const std::string &version) {
+  m_client_version = version;
+}
+
+const std::string &CacheSession::client_version() const {
+  return m_client_version;
 }
 
 void CacheSession::close() {

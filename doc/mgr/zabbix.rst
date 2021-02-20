@@ -96,7 +96,7 @@ The current configuration of the module can also be shown:
 
 Template
 ^^^^^^^^
-A `template <https://raw.githubusercontent.com/ceph/ceph/9c54334b615362e0a60442c2f41849ed630598ab/src/pybind/mgr/zabbix/zabbix_template.xml>`_. 
+A `template <https://raw.githubusercontent.com/ceph/ceph/master/src/pybind/mgr/zabbix/zabbix_template.xml>`_. 
 (XML) to be used on the Zabbix server can be found in the source directory of the module.
 
 This template contains all items and a few triggers. You can customize the triggers afterwards to fit your needs.

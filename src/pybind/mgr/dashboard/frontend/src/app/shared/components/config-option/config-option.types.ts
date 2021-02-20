@@ -1,8 +1,8 @@
 import { Validators } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
-import { CdValidators } from '../../forms/cd-validators';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { ConfigFormModel } from './config-option.model';
 
 export class ConfigOptionTypes {
@@ -89,7 +89,10 @@ export class ConfigOptionTypes {
       return;
     }
 
-    const typeValidators = { validators: [], patternHelpText: typeParams.patternHelpText };
+    const typeValidators: Record<string, any> = {
+      validators: [],
+      patternHelpText: typeParams.patternHelpText
+    };
 
     if (typeParams.isNumberType) {
       if (configOption.max && configOption.max !== '') {

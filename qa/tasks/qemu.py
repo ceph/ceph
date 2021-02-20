@@ -1,7 +1,6 @@
 """
 Qemu task
 """
-from cStringIO import StringIO
 
 import contextlib
 import logging
@@ -9,37 +8,89 @@ import os
 import yaml
 import time
 
-from teuthology import misc as teuthology
-from teuthology import contextutil
 from tasks import rbd
-from teuthology.orchestra import run
+from tasks.util.workunit import get_refspec_after_overrides
+from teuthology import contextutil
+from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
-
-from util.workunit import get_refspec_after_overrides
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
 DEFAULT_NUM_DISKS = 2
 DEFAULT_IMAGE_URL = 'http://download.ceph.com/qa/ubuntu-12.04.qcow2'
 DEFAULT_IMAGE_SIZE = 10240 # in megabytes
+ENCRYPTION_HEADER_SIZE = 16 # in megabytes
 DEFAULT_CPUS = 1
 DEFAULT_MEM = 4096 # in megabytes
 
-def create_images(ctx, config, managers):
-    for client, client_config in config.iteritems():
+def normalize_disks(config):
+    # normalize the 'disks' parameter into a list of dictionaries
+    for client, client_config in config.items():
+        clone = client_config.get('clone', False)
+        image_url = client_config.get('image_url', DEFAULT_IMAGE_URL)
+        device_type = client_config.get('type', 'filesystem')
+        encryption_format = client_config.get('encryption_format', 'none')
+
         disks = client_config.get('disks', DEFAULT_NUM_DISKS)
         if not isinstance(disks, list):
-            disks = [{} for n in range(int(disks))]
-        clone = client_config.get('clone', False)
+            disks = [{'image_name': '{client}.{num}'.format(client=client,
+                                                            num=i)}
+                     for i in range(int(disks))]
+            client_config['disks'] = disks
+
+        for i, disk in enumerate(disks):
+            if 'action' not in disk:
+                disk['action'] = 'create'
+            assert disk['action'] in ['none', 'create', 'clone'], 'invalid disk action'
+            assert disk['action'] != 'clone' or 'parent_name' in disk, 'parent_name required for clone'
+
+            if 'image_size' not in disk:
+                disk['image_size'] = DEFAULT_IMAGE_SIZE
+            disk['image_size'] = int(disk['image_size'])
+
+            if 'image_url' not in disk and i == 0:
+                disk['image_url'] = image_url
+
+            if 'device_type' not in disk:
+                disk['device_type'] = device_type
+
+            disk['device_letter'] = chr(ord('a') + i)
+
+            if 'encryption_format' not in disk:
+                disk['encryption_format'] = encryption_format
+            assert disk['encryption_format'] in ['none', 'luks1', 'luks2'], 'invalid encryption format'
+
         assert disks, 'at least one rbd device must be used'
-        for i, disk in enumerate(disks[1:]):
+
+        if clone:
+            for disk in disks:
+                if disk['action'] != 'create':
+                    continue
+                clone = dict(disk)
+                clone['action'] = 'clone'
+                clone['parent_name'] = clone['image_name']
+                clone['image_name'] += '-clone'
+                del disk['device_letter']
+                disks.append(clone)
+
+def create_images(ctx, config, managers):
+    for client, client_config in config.items():
+        disks = client_config['disks']
+        for disk in disks:
+            if disk.get('action') != 'create' or (
+                    'image_url' in disk and
+                    disk['encryption_format'] == 'none'):
+                continue
+            image_size = disk['image_size']
+            if disk['encryption_format'] != 'none':
+                image_size += ENCRYPTION_HEADER_SIZE
             create_config = {
                 client: {
-                    'image_name': '{client}.{num}'.format(client=client,
-                                                          num=i + 1),
-                    'image_format': 2 if clone else 1,
-                    'image_size': (disk or {}).get('image_size',
-                                                   DEFAULT_IMAGE_SIZE),
+                    'image_name': disk['image_name'],
+                    'image_format': 2,
+                    'image_size': image_size,
+                    'encryption_format': disk['encryption_format'],
                     }
                 }
             managers.append(
@@ -48,25 +99,36 @@ def create_images(ctx, config, managers):
                 )
 
 def create_clones(ctx, config, managers):
-    for client, client_config in config.iteritems():
-        clone = client_config.get('clone', False)
-        if clone:
-            num_disks = client_config.get('disks', DEFAULT_NUM_DISKS)
-            if isinstance(num_disks, list):
-                num_disks = len(num_disks)
-            for i in xrange(num_disks):
-                create_config = {
-                    client: {
-                        'image_name':
-                        '{client}.{num}-clone'.format(client=client, num=i),
-                        'parent_name':
-                        '{client}.{num}'.format(client=client, num=i),
-                        }
+    for client, client_config in config.items():
+        disks = client_config['disks']
+        for disk in disks:
+            if disk['action'] != 'clone':
+                continue
+
+            create_config = {
+                client: {
+                    'image_name': disk['image_name'],
+                    'parent_name': disk['parent_name']
                     }
-                managers.append(
-                    lambda create_config=create_config:
-                    rbd.clone_image(ctx=ctx, config=create_config)
-                    )
+                }
+            managers.append(
+                lambda create_config=create_config:
+                rbd.clone_image(ctx=ctx, config=create_config)
+                )
+
+def create_encrypted_devices(ctx, config, managers):
+    for client, client_config in config.items():
+        disks = client_config['disks']
+        for disk in disks:
+            if disk['encryption_format'] == 'none' or \
+                    'device_letter' not in disk:
+                continue
+
+            dev_config = {client: disk}
+            managers.append(
+                lambda dev_config=dev_config:
+                rbd.dev_create(ctx=ctx, config=dev_config)
+                )
 
 @contextlib.contextmanager
 def create_dirs(ctx, config):
@@ -74,7 +136,7 @@ def create_dirs(ctx, config):
     Handle directory creation and cleanup
     """
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         assert 'test' in client_config, 'You must specify a test to run'
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
@@ -87,7 +149,7 @@ def create_dirs(ctx, config):
     try:
         yield
     finally:
-        for client, client_config in config.iteritems():
+        for client, client_config in config.items():
             assert 'test' in client_config, 'You must specify a test to run'
             (remote,) = ctx.cluster.only(client).remotes.keys()
             remote.run(
@@ -109,7 +171,7 @@ def generate_iso(ctx, config):
     git_url = teuth_config.get_ceph_qa_suite_git_url()
     log.info('Pulling tests from %s ref %s', git_url, refspec)
 
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         assert 'test' in client_config, 'You must specify a test to run'
         test = client_config['test']
 
@@ -122,7 +184,7 @@ def generate_iso(ctx, config):
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
         metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
 
-        with file(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_setup.yaml')) as f:
             test_setup = ''.join(f.readlines())
             # configuring the commands to setup the nfs mount
             mnt_dir = "/export/{client}".format(client=client)
@@ -130,17 +192,19 @@ def generate_iso(ctx, config):
                 mnt_dir=mnt_dir
             )
 
-        with file(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_teardown.yaml')) as f:
             test_teardown = ''.join(f.readlines())
 
         user_data = test_setup
-        if client_config.get('type', 'filesystem') == 'filesystem':
-            num_disks = client_config.get('disks', DEFAULT_NUM_DISKS)
-            if isinstance(num_disks, list):
-                num_disks = len(num_disks)
-            for i in xrange(1, num_disks):
-                dev_letter = chr(ord('a') + i)
-                user_data += """
+
+        disks = client_config['disks']
+        for disk in disks:
+            if disk['device_type'] != 'filesystem' or \
+                    'device_letter' not in disk or \
+                    'image_url' in disk:
+                continue
+            dev_letter = disk['device_letter']
+            user_data += """
 - |
   #!/bin/bash
   mkdir /mnt/test_{dev_letter}
@@ -172,10 +236,10 @@ def generate_iso(ctx, config):
         user_data = user_data.format(
             ceph_branch=ctx.config.get('branch'),
             ceph_sha1=ctx.config.get('sha1'))
-        teuthology.write_file(remote, userdata_path, StringIO(user_data))
+        remote.write_file(userdata_path, user_data)
 
-        with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
-            teuthology.write_file(remote, metadata_path, f)
+        with open(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
+            remote.write_file(metadata_path, f)
 
         test_file = '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client)
 
@@ -221,52 +285,84 @@ def download_image(ctx, config):
     """Downland base image, remove image file when done"""
     log.info('downloading base image')
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
-        (remote,) = ctx.cluster.only(client).remotes.keys()
-        base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
-        image_url = client_config.get('image_url', DEFAULT_IMAGE_URL)
-        remote.run(
-            args=[
-                'wget', '-nv', '-O', base_file, image_url,
-                ]
-            )
 
-        disks = client_config.get('disks', None)
-        if not isinstance(disks, list):
-            disks = [{}]
-        image_name = '{client}.0'.format(client=client)
-        image_size = (disks[0] or {}).get('image_size', DEFAULT_IMAGE_SIZE)
-        remote.run(
-            args=[
-                'qemu-img', 'convert', '-f', 'qcow2', '-O', 'raw',
-                base_file, 'rbd:rbd/{image_name}'.format(image_name=image_name)
-                ]
-            )
-        remote.run(
-            args=[
-                'rbd', 'resize',
-                '--size={image_size}M'.format(image_size=image_size),
-                image_name,
-                ]
-            )
+    client_base_files = {}
+    for client, client_config in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+
+        client_base_files[client] = []
+        disks = client_config['disks']
+        for disk in disks:
+            if disk['action'] != 'create' or 'image_url' not in disk:
+                continue
+
+            base_file = '{tdir}/qemu/base.{name}.qcow2'.format(tdir=testdir,
+                                                               name=disk['image_name'])
+            client_base_files[client].append(base_file)
+
+            remote.run(
+                args=[
+                    'wget', '-nv', '-O', base_file, disk['image_url'],
+                    ]
+                )
+
+            if disk['encryption_format'] == 'none':
+                remote.run(
+                    args=[
+                        'qemu-img', 'convert', '-f', 'qcow2', '-O', 'raw',
+                        base_file, 'rbd:rbd/{image_name}'.format(image_name=disk['image_name'])
+                        ]
+                    )
+            else:
+                dev_config = {client: {'image_name': disk['image_name'],
+                                       'encryption_format': disk['encryption_format']}}
+                raw_file = '{tdir}/qemu/base.{name}.raw'.format(
+                    tdir=testdir, name=disk['image_name'])
+                client_base_files[client].append(raw_file)
+                remote.run(
+                    args=[
+                        'qemu-img', 'convert', '-f', 'qcow2', '-O', 'raw',
+                        base_file, raw_file
+                        ]
+                    )
+                with rbd.dev_create(ctx, dev_config):
+                    remote.run(
+                        args=[
+                            'dd', 'if={name}'.format(name=raw_file),
+                            'of={name}'.format(name=dev_config[client]['device_path']),
+                            'bs=4M', 'conv=fdatasync'
+                            ]
+                        )
+
+        for disk in disks:
+            if disk['action'] == 'clone' or \
+                    disk['encryption_format'] != 'none' or \
+                    (disk['action'] == 'create' and 'image_url' not in disk):
+                continue
+
+            remote.run(
+                args=[
+                    'rbd', 'resize',
+                    '--size={image_size}M'.format(image_size=disk['image_size']),
+                    disk['image_name'], run.Raw('||'), 'true'
+                    ]
+                )
+
     try:
         yield
     finally:
         log.debug('cleaning up base image files')
-        for client in config.keys():
-            base_file = '{tdir}/qemu/base.{client}.qcow2'.format(
-                tdir=testdir,
-                client=client,
-                )
+        for client, base_files in client_base_files.items():
             (remote,) = ctx.cluster.only(client).remotes.keys()
-            remote.run(
-                args=[
-                    'rm', '-f', base_file,
-                    ],
-                )
+            for base_file in base_files:
+                remote.run(
+                    args=[
+                        'rm', '-f', base_file,
+                        ],
+                    )
 
 
-def _setup_nfs_mount(remote, client, mount_dir):
+def _setup_nfs_mount(remote, client, service_name, mount_dir):
     """
     Sets up an nfs mount on the remote that the guest can use to
     store logs. This nfs mount is also used to touch a file
@@ -286,8 +382,10 @@ def _setup_nfs_mount(remote, client, mount_dir):
     export = "{dir} *(rw,no_root_squash,no_subtree_check,insecure)".format(
         dir=export_dir
     )
+    log.info("Deleting export from /etc/exports...")
     remote.run(args=[
-        'sudo', 'sed', '-i', '/^\/export\//d', "/etc/exports",
+        'sudo', 'sed', '-i', "\|{export_dir}|d".format(export_dir=export_dir),
+        '/etc/exports'
     ])
     remote.run(args=[
         'echo', export, run.Raw("|"),
@@ -297,10 +395,10 @@ def _setup_nfs_mount(remote, client, mount_dir):
     if remote.os.package_type == "deb":
         remote.run(args=['sudo', 'service', 'nfs-kernel-server', 'restart'])
     else:
-        remote.run(args=['sudo', 'systemctl', 'restart', 'nfs'])
+        remote.run(args=['sudo', 'systemctl', 'restart', service_name])
 
 
-def _teardown_nfs_mount(remote, client):
+def _teardown_nfs_mount(remote, client, service_name):
     """
     Tears down the nfs mount on the remote used for logging and reporting the
     status of the tests being ran in the guest.
@@ -314,19 +412,16 @@ def _teardown_nfs_mount(remote, client):
         ])
     else:
         remote.run(args=[
-            'sudo', 'systemctl', 'stop', 'nfs'
+            'sudo', 'systemctl', 'stop', service_name
         ])
     log.info("Unmounting exported directory...")
     remote.run(args=[
         'sudo', 'umount', export_dir
     ])
-    log.info("Deleting exported directory...")
-    remote.run(args=[
-        'sudo', 'rm', '-r', '/export'
-    ])
     log.info("Deleting export from /etc/exports...")
     remote.run(args=[
-        'sudo', 'sed', '-i', '$ d', '/etc/exports'
+        'sudo', 'sed', '-i', "\|{export_dir}|d".format(export_dir=export_dir),
+        '/etc/exports'
     ])
     log.info("Starting NFS...")
     if remote.os.package_type == "deb":
@@ -335,7 +430,7 @@ def _teardown_nfs_mount(remote, client):
         ])
     else:
         remote.run(args=[
-            'sudo', 'systemctl', 'start', 'nfs'
+            'sudo', 'systemctl', 'start', service_name
         ])
 
 
@@ -344,7 +439,7 @@ def run_qemu(ctx, config):
     """Setup kvm environment and start qemu"""
     procs = []
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         log_dir = '{tdir}/archive/qemu/{client}'.format(tdir=testdir, client=client)
         remote.run(
@@ -354,9 +449,13 @@ def run_qemu(ctx, config):
                 ]
             )
 
+        nfs_service_name = 'nfs'
+        if remote.os.name in ['rhel', 'centos'] and float(remote.os.version) >= 8:
+            nfs_service_name = 'nfs-server'
+
         # make an nfs mount to use for logging and to
         # allow to test to tell teuthology the tests outcome
-        _setup_nfs_mount(remote, client, log_dir)
+        _setup_nfs_mount(remote, client, nfs_service_name, log_dir)
 
         # Hack to make sure /dev/kvm permissions are set correctly
         # See http://tracker.ceph.com/issues/17977 and
@@ -391,18 +490,23 @@ def run_qemu(ctx, config):
             else:
                 cachemode = 'writethrough'
 
-        clone = client_config.get('clone', False)
-        num_disks = client_config.get('disks', DEFAULT_NUM_DISKS)
-        if isinstance(num_disks, list):
-            num_disks = len(num_disks)
-        for i in xrange(num_disks):
-            suffix = '-clone' if clone else ''
+        disks = client_config['disks']
+        for disk in disks:
+            if 'device_letter' not in disk:
+                continue
+
+            if disk['encryption_format'] == 'none':
+                disk_spec = 'rbd:rbd/{img}:id={id}'.format(
+                    img=disk['image_name'],
+                    id=client[len('client.'):]
+                    )
+            else:
+                disk_spec = disk['device_path']
+
             args.extend([
                 '-drive',
-                'file=rbd:rbd/{img}:id={id},format=raw,if=virtio,cache={cachemode}'.format(
-                    img='{client}.{num}{suffix}'.format(client=client, num=i,
-                                                        suffix=suffix),
-                    id=client[len('client.'):],
+                'file={disk_spec},format=raw,if=virtio,cache={cachemode}'.format(
+                    disk_spec=disk_spec,
                     cachemode=cachemode,
                     ),
                 ])
@@ -443,7 +547,7 @@ def run_qemu(ctx, config):
                 )
 
             # teardown nfs mount
-            _teardown_nfs_mount(remote, client)
+            _teardown_nfs_mount(remote, client, nfs_service_name)
             # check for test status
             remote.run(
                 args=[
@@ -454,6 +558,12 @@ def run_qemu(ctx, config):
                         ),
                     ],
                 )
+        log.info("Deleting exported directory...")
+        for client in config.keys():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote.run(args=[
+                'sudo', 'rm', '-r', '/export'
+            ])
 
 
 @contextlib.contextmanager
@@ -480,40 +590,27 @@ def task(ctx, config):
             all:
               test: http://download.ceph.com/qa/test.sh
 
-    For tests that don't need a filesystem, set type to block::
+    For tests that want to explicitly describe the RBD images to connect:
 
         tasks:
         - ceph:
         - qemu:
             client.0:
-              test: http://download.ceph.com/qa/test.sh
-              type: block
-
-    The test should be configured to run on /dev/vdb and later
-    devices.
-
-    If you want to run a test that uses more than one rbd image,
-    specify how many images to use::
-
-        tasks:
-        - ceph:
-        - qemu:
-            client.0:
-              test: http://download.ceph.com/qa/test.sh
-              type: block
-              disks: 2
-
-    - or -
-
-        tasks:
-        - ceph:
-        - qemu:
-            client.0:
-              test: http://ceph.com/qa/test.sh
-              type: block
-              disks:
-                - image_size: 1024
-                - image_size: 2048
+                test: http://download.ceph.com/qa/test.sh
+                clone: True/False (optionally clone all created disks),
+                image_url: <URL> (optional default image URL)
+                type: filesystem / block (optional default device type)
+                disks: [
+                    {
+                        action: create / clone / none (optional, defaults to create)
+                        image_name: <image name> (optional)
+                        parent_name: <parent_name> (if action == clone),
+                        type: filesystem / block (optional, defaults to fileystem)
+                        image_url: <URL> (optional),
+                        image_size: <MiB> (optional)
+                        encryption_format: luks1 / luks2 / none (optional, defaults to none)
+                    }, ...
+                ]
 
     You can set the amount of CPUs and memory the VM has (default is 1 CPU and
     4096 MB)::
@@ -525,15 +622,6 @@ def task(ctx, config):
               test: http://download.ceph.com/qa/test.sh
               cpus: 4
               memory: 512 # megabytes
-
-    If you want to run a test against a cloned rbd image, set clone to true::
-
-        tasks:
-        - ceph:
-        - qemu:
-            client.0:
-              test: http://download.ceph.com/qa/test.sh
-              clone: true
 
     If you need to configure additional cloud-config options, set cloud_config
     to the required data set::
@@ -551,20 +639,12 @@ def task(ctx, config):
                         test data
                       type: text/plain
                       filename: /tmp/data
-
-    If you need to override the default cloud image, set image_url:
-
-        tasks:
-        - ceph
-        - qemu:
-            client.0:
-                test: http://ceph.com/qa/test.sh
-                image_url: https://cloud-images.ubuntu.com/releases/16.04/release/ubuntu-16.04-server-cloudimg-amd64-disk1.img
     """
     assert isinstance(config, dict), \
            "task qemu only supports a dictionary for configuration"
 
     config = teuthology.replace_all_with_clients(ctx.cluster, config)
+    normalize_disks(config)
 
     managers = []
     create_images(ctx=ctx, config=config, managers=managers)
@@ -574,6 +654,7 @@ def task(ctx, config):
         lambda: download_image(ctx=ctx, config=config),
         ])
     create_clones(ctx=ctx, config=config, managers=managers)
+    create_encrypted_devices(ctx=ctx, config=config, managers=managers)
     managers.append(
         lambda: run_qemu(ctx=ctx, config=config),
         )

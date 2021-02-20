@@ -5,13 +5,10 @@ import sys
 import time
 import logging
 import errno
+import dateutil.parser
 
-try:
-    from itertools import izip_longest as zip_longest
-except ImportError:
-    from itertools import zip_longest
 from itertools import combinations
-from six import StringIO
+from io import StringIO
 
 import boto
 import boto.s3.connection
@@ -66,18 +63,6 @@ log = logging.getLogger('rgw_multi.tests')
 num_buckets = 0
 run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
 
-def get_gateway_connection(gateway, credentials):
-    """ connect to the given gateway """
-    if gateway.connection is None:
-        gateway.connection = boto.connect_s3(
-                aws_access_key_id = credentials.access_key,
-                aws_secret_access_key = credentials.secret,
-                host = gateway.host,
-                port = gateway.port,
-                is_secure = False,
-                calling_format = boto.s3.connection.OrdinaryCallingFormat())
-    return gateway.connection
-
 def get_zone_connection(zone, credentials):
     """ connect to the zone's first gateway """
     if isinstance(credentials, list):
@@ -89,25 +74,19 @@ def mdlog_list(zone, period = None):
     if period:
         cmd += ['--period', period]
     (mdlog_json, _) = zone.cluster.admin(cmd, read_only=True)
-    mdlog_json = mdlog_json.decode('utf-8')
     return json.loads(mdlog_json)
-
-def meta_sync_status(zone):
-    while True:
-        cmd = ['metadata', 'sync', 'status'] + zone.zone_args()
-        meta_sync_status_json, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
-        if retcode == 0:
-            break
-        assert(retcode == 2) # ENOENT
-        time.sleep(5)
 
 def mdlog_autotrim(zone):
     zone.cluster.admin(['mdlog', 'autotrim'])
 
-def datalog_list(zone, period = None):
-    cmd = ['datalog', 'list']
+def datalog_list(zone, args = None):
+    cmd = ['datalog', 'list'] + (args or [])
     (datalog_json, _) = zone.cluster.admin(cmd, read_only=True)
-    datalog_json = datalog_json.decode('utf-8')
+    return json.loads(datalog_json)
+
+def datalog_status(zone):
+    cmd = ['datalog', 'status']
+    (datalog_json, _) = zone.cluster.admin(cmd, read_only=True)
     return json.loads(datalog_json)
 
 def datalog_autotrim(zone):
@@ -117,14 +96,12 @@ def bilog_list(zone, bucket, args = None):
     cmd = ['bilog', 'list', '--bucket', bucket] + (args or [])
     cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
     bilog, _ = zone.cluster.admin(cmd, read_only=True)
-    bilog = bilog.decode('utf-8')
     return json.loads(bilog)
 
 def bilog_autotrim(zone, args = None):
     zone.cluster.admin(['bilog', 'autotrim'] + (args or []))
 
 def parse_meta_sync_status(meta_sync_status_json):
-    meta_sync_status_json = meta_sync_status_json.decode('utf-8')
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
 
@@ -162,7 +139,7 @@ def meta_sync_status(zone):
 def meta_master_log_status(master_zone):
     cmd = ['mdlog', 'status'] + master_zone.zone_args()
     mdlog_status_json, retcode = master_zone.cluster.admin(cmd, read_only=True)
-    mdlog_status = json.loads(mdlog_status_json.decode('utf-8'))
+    mdlog_status = json.loads(mdlog_status_json)
 
     markers = {i: s['marker'] for i, s in enumerate(mdlog_status)}
     log.debug('master meta markers=%s', markers)
@@ -232,7 +209,6 @@ def realm_meta_checkpoint(realm):
         zonegroup_meta_checkpoint(zonegroup, meta_master_zone, master_status)
 
 def parse_data_sync_status(data_sync_status_json):
-    data_sync_status_json = data_sync_status_json.decode('utf-8')
     log.debug('current data sync status=%s', data_sync_status_json)
     sync_status = json.loads(data_sync_status_json)
 
@@ -281,17 +257,12 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
 
         assert(retcode == 2) # ENOENT
 
-    bucket_sync_status_json = bucket_sync_status_json.decode('utf-8')
-    log.debug('current bucket sync markers=%s', bucket_sync_status_json)
     sync_status = json.loads(bucket_sync_status_json)
 
     markers={}
     for entry in sync_status:
         val = entry['val']
-        if val['status'] == 'incremental-sync':
-            pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
-        else:
-            pos = ''
+        pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
         markers[entry['key']] = pos
 
     return markers
@@ -300,7 +271,7 @@ def data_source_log_status(source_zone):
     source_cluster = source_zone.cluster
     cmd = ['datalog', 'status'] + source_zone.zone_args()
     datalog_status_json, retcode = source_cluster.admin(cmd, read_only=True)
-    datalog_status = json.loads(datalog_status_json.decode('utf-8'))
+    datalog_status = json.loads(datalog_status_json)
 
     markers = {i: s['marker'] for i, s in enumerate(datalog_status)}
     log.debug('data markers for zone=%s markers=%s', source_zone.name, markers)
@@ -312,7 +283,7 @@ def bucket_source_log_status(source_zone, bucket_name):
     cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
     source_cluster = source_zone.cluster
     bilog_status_json, retcode = source_cluster.admin(cmd, read_only=True)
-    bilog_status = json.loads(bilog_status_json.decode('utf-8'))
+    bilog_status = json.loads(bilog_status_json)
 
     m={}
     markers={}
@@ -366,7 +337,7 @@ def compare_bucket_status(target_zone, source_zone, bucket_name, log_status, syn
     return True
 
 def zone_data_checkpoint(target_zone, source_zone):
-    if target_zone == source_zone:
+    if not target_zone.syncs_from(source_zone.name):
         return
 
     log_status = data_source_log_status(source_zone)
@@ -396,26 +367,16 @@ def zonegroup_data_checkpoint(zonegroup_conns):
             zone_data_checkpoint(target_conn.zone, source_conn.zone)
 
 def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
-    if target_zone == source_zone:
+    if not target_zone.syncs_from(source_zone.name):
         return
 
-    log_status = bucket_source_log_status(source_zone, bucket_name)
-    log.info('starting bucket checkpoint for target_zone=%s source_zone=%s bucket=%s', target_zone.name, source_zone.name, bucket_name)
-
-    for _ in range(config.checkpoint_retries):
-        sync_status = bucket_sync_status(target_zone, source_zone, bucket_name)
-
-        log.debug('log_status=%s', log_status)
-        log.debug('sync_status=%s', sync_status)
-
-        if compare_bucket_status(target_zone, source_zone, bucket_name, log_status, sync_status):
-            log.info('finished bucket checkpoint for target_zone=%s source_zone=%s bucket=%s', target_zone.name, source_zone.name, bucket_name)
-            return
-
-        time.sleep(config.checkpoint_delay)
-
-    assert False, 'failed bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
-                  (target_zone.name, source_zone.name, bucket_name)
+    cmd = ['bucket', 'sync', 'checkpoint']
+    cmd += ['--bucket', bucket_name, '--source-zone', source_zone.name]
+    retry_delay_ms = config.checkpoint_delay * 1000
+    timeout_sec = config.checkpoint_retries * config.checkpoint_delay
+    cmd += ['--retry-delay-ms', str(retry_delay_ms), '--timeout-sec', str(timeout_sec)]
+    cmd += target_zone.zone_args()
+    target_zone.cluster.admin(cmd, debug_rgw=1)
 
 def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
     for source_conn in zonegroup_conns.rw_zones:
@@ -528,7 +489,7 @@ def create_bucket_per_zone(zonegroup_conns, buckets_per_zone = 1):
     buckets = []
     zone_bucket = []
     for zone in zonegroup_conns.rw_zones:
-        for i in xrange(buckets_per_zone):
+        for i in range(buckets_per_zone):
             bucket_name = gen_bucket_name()
             log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
             bucket = zone.create_bucket(bucket_name)
@@ -730,6 +691,34 @@ def test_versioned_object_incremental_sync():
 
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def test_concurrent_versioned_object_incremental_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a versioned bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    bucket.configure_versioning(True)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload a dummy object and wait for sync. this forces each zone to finish
+    # a full sync and switch to incremental
+    new_key(zone, bucket, 'dummy').set_contents_from_string('')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # create several concurrent versions on each zone and let them race to sync
+    obj = 'obj'
+    for i in range(10):
+        for zone_conn in zonegroup_conns.rw_zones:
+            k = new_key(zone_conn, bucket, obj)
+            k.set_contents_from_string('version1')
+            log.debug('zone=%s version=%s', zone_conn.zone.name, k.version_id)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
 
 def test_version_suspended_incremental_sync():
     zonegroup = realm.master_zonegroup()
@@ -959,14 +948,27 @@ def test_datalog_autotrim():
         k = new_key(zone, bucket.name, 'key')
         k.set_contents_from_string('body')
 
-    # wait for data sync to catch up
+    # wait for metadata and data sync to catch up
+    zonegroup_meta_checkpoint(zonegroup)
     zonegroup_data_checkpoint(zonegroup_conns)
 
     # trim each datalog
     for zone, _ in zone_bucket:
+        # read max markers for each shard
+        status = datalog_status(zone.zone)
+
         datalog_autotrim(zone.zone)
-        datalog = datalog_list(zone.zone)
-        assert len(datalog) == 0
+
+        for shard_id, shard_status in enumerate(status):
+            try:
+                before_trim = dateutil.parser.isoparse(shard_status['last_update'])
+            except: # empty timestamps look like "0.000000" and will fail here
+                continue
+            entries = datalog_list(zone.zone, ['--shard-id', str(shard_id), '--max-entries', '1'])
+            if not len(entries):
+                continue
+            after_trim = dateutil.parser.isoparse(entries[0]['timestamp'])
+            assert before_trim < after_trim, "any datalog entries must be newer than trim"
 
 def test_multi_zone_redirect():
     zonegroup = realm.master_zonegroup()
@@ -1000,14 +1002,14 @@ def test_multi_zone_redirect():
 
     key2 = bucket2.get_key(obj)
 
-    eq(data, key2.get_contents_as_string())
+    eq(data, key2.get_contents_as_string(encoding='ascii'))
 
     key = bucket.new_key(obj)
 
     for x in ['a', 'b', 'c', 'd']:
         data = x*512
         key.set_contents_from_string(data)
-        eq(data, key2.get_contents_as_string())
+        eq(data, key2.get_contents_as_string(encoding='ascii'))
 
     # revert config changes
     set_sync_from_all(z2, True)
@@ -1095,12 +1097,13 @@ def test_set_bucket_policy():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
     for _, bucket in zone_bucket:
         bucket.set_policy(policy)
-        assert(bucket.get_policy() == policy)
+        assert(bucket.get_policy().decode('ascii') == policy)
 
 def test_bucket_sync_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
     buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+    zonegroup_meta_checkpoint(zonegroup)
 
     for bucket_name in buckets:
         disable_bucket_sync(realm.meta_master_zone(), bucket_name)
@@ -1122,6 +1125,8 @@ def test_bucket_sync_enable_right_after_disable():
         for objname in objnames:
             k = new_key(zone, bucket.name, objname)
             k.set_contents_from_string(content)
+
+    zonegroup_meta_checkpoint(zonegroup)
 
     for bucket_name in buckets:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
@@ -1241,10 +1246,10 @@ def test_encrypted_object_sync():
     # read the encrypted objects from the second zone
     bucket2 = get_bucket(zone2, bucket_name)
     key = bucket2.get_key('testobj-sse-c', headers=sse_c_headers)
-    eq(data, key.get_contents_as_string(headers=sse_c_headers))
+    eq(data, key.get_contents_as_string(headers=sse_c_headers, encoding='ascii'))
 
     key = bucket2.get_key('testobj-sse-kms')
-    eq(data, key.get_contents_as_string())
+    eq(data, key.get_contents_as_string(encoding='ascii'))
 
 def test_bucket_index_log_trim():
     zonegroup = realm.master_zonegroup()

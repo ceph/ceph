@@ -4,4 +4,4 @@ meta:
 tasks:
 - exec:
     client.2:
-      - ceph_test_cls_rbd --gtest_filter=-TestClsRbd.get_features:TestClsRbd.parents
+      - ceph_test_cls_rbd --gtest_filter=-TestClsRbd.get_features:TestClsRbd.parents:TestClsRbd.mirror

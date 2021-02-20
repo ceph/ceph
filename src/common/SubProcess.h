@@ -21,9 +21,13 @@
 #include <signal.h>
 #endif
 
+#ifndef _WIN32
 #include <sys/wait.h>
+#endif
 #include <sstream>
 #include <vector>
+
+#include "include/compat.h"
 
 /**
  * SubProcess:
@@ -83,8 +87,11 @@ protected:
   bool is_child() const { return pid == 0; }
   virtual void exec();
 
-private:
   void close(int &fd);
+
+#ifdef _WIN32
+  void close_h(HANDLE &handle);
+#endif
 
 protected:
   std::string cmd;
@@ -97,6 +104,10 @@ protected:
   int stderr_pipe_in_fd;
   int pid;
   std::ostringstream errstr;
+
+#ifdef _WIN32
+  HANDLE proc_handle = INVALID_HANDLE_VALUE;
+#endif
 };
 
 class SubProcessTimed : public SubProcess {
@@ -105,12 +116,21 @@ public:
 		  std_fd_op stdout_op = CLOSE, std_fd_op stderr_op = CLOSE,
 		  int timeout = 0, int sigkill = SIGKILL);
 
+#ifdef _WIN32
+  int spawn() override;
+  int join() override;
+#endif
+
 protected:
   void exec() override;
 
 private:
   int timeout;
   int sigkill;
+
+#ifdef _WIN32
+  std::thread waiter;
+#endif
 };
 
 void timeout_sighandler(int sig);

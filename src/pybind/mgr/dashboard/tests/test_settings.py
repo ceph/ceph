@@ -3,10 +3,13 @@ from __future__ import absolute_import
 
 import errno
 import unittest
-from . import KVStoreMockMixin, ControllerTestCase
+
+from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
+
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
 from ..settings import Settings, handle_option_command
+from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):
@@ -42,7 +45,9 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
 
     def test_get_cmd(self):
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard get-grafana-api-port'})
+            {'prefix': 'dashboard get-grafana-api-port'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, '3000')
         self.assertEqual(err, '')
@@ -50,14 +55,35 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
     def test_set_cmd(self):
         r, out, err = handle_option_command(
             {'prefix': 'dashboard set-grafana-api-port',
-             'value': '4000'})
+             'value': '4000'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, 'Option GRAFANA_API_PORT updated')
         self.assertEqual(err, '')
 
+    def test_set_secret_empty(self):
+        r, out, err = handle_option_command(
+            {'prefix': 'dashboard set-grafana-api-password'},
+            None
+        )
+        self.assertEqual(r, -errno.EINVAL)
+        self.assertEqual(out, '')
+        self.assertEqual(err, ERROR_MSG_EMPTY_INPUT_FILE)
+
+    def test_set_secret(self):
+        r, out, err = handle_option_command(
+            {'prefix': 'dashboard set-grafana-api-password'},
+            'my-secret'
+        )
+        self.assertEqual(r, 0)
+        self.assertEqual(out, 'Option GRAFANA_API_PASSWORD updated')
+        self.assertEqual(err, '')
+
     def test_reset_cmd(self):
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard reset-grafana-enabled'}
+            {'prefix': 'dashboard reset-grafana-enabled'},
+            None
         )
         self.assertEqual(r, 0)
         self.assertEqual(out, 'Option {} reset to default value "{}"'.format(
@@ -66,7 +92,9 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
 
     def test_inv_cmd(self):
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard get-non-existent-option'})
+            {'prefix': 'dashboard get-non-existent-option'},
+            None
+        )
         self.assertEqual(r, -errno.ENOSYS)
         self.assertEqual(out, '')
         self.assertEqual(err, "Command not found "
@@ -75,13 +103,17 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
     def test_sync(self):
         Settings.GRAFANA_API_PORT = 5000
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard get-grafana-api-port'})
+            {'prefix': 'dashboard get-grafana-api-port'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, '5000')
         self.assertEqual(err, '')
         r, out, err = handle_option_command(
             {'prefix': 'dashboard set-grafana-api-host',
-             'value': 'new-local-host'})
+             'value': 'new-local-host'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, 'Option GRAFANA_API_HOST updated')
         self.assertEqual(err, '')
@@ -103,7 +135,19 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
         SettingsController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([SettingsController])
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # pylint: disable=protected-access
+        settings.Options.GRAFANA_API_HOST = ('localhost', str)
+        settings.Options.GRAFANA_ENABLED = (False, bool)
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+
     def setUp(self):
+        super().setUp()
         self.mock_kv_store()
 
     def test_settings_list(self):
@@ -116,6 +160,15 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
         self.assertIn('name', data[0].keys())
         self.assertIn('value', data[0].keys())
 
+    def test_settings_list_filtered(self):
+        self._get('/api/settings?names=GRAFANA_ENABLED,PWD_POLICY_ENABLED')
+        self.assertStatus(200)
+        data = self.json_body()
+        self.assertTrue(len(data) == 2)
+        names = [option['name'] for option in data]
+        self.assertIn('GRAFANA_ENABLED', names)
+        self.assertIn('PWD_POLICY_ENABLED', names)
+
     def test_rgw_daemon_get(self):
         self._get('/api/settings/grafana-api-username')
         self.assertStatus(200)
@@ -127,7 +180,7 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
         })
 
     def test_set(self):
-        self._put('/api/settings/GRAFANA_API_USERNAME', {'value': 'foo'},)
+        self._put('/api/settings/GRAFANA_API_USERNAME', {'value': 'foo'})
         self.assertStatus(200)
 
         self._get('/api/settings/GRAFANA_API_USERNAME')

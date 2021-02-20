@@ -21,6 +21,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
 #include "rgw_client_io.h"
+#include "rgw_sal_rados.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 
@@ -29,19 +30,19 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-void RGWOp_ZoneGroupMap_Get::execute() {
-  http_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj);
-  if (http_ret < 0) {
+void RGWOp_ZoneGroupMap_Get::execute(optional_yield y) {
+  op_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj, y);
+  if (op_ret < 0) {
     dout(5) << "failed to read zone_group map" << dendl;
   }
 }
 
 void RGWOp_ZoneGroupMap_Get::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   if (old_format) {
@@ -49,7 +50,7 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
     region_map.regions = zonegroup_map.zonegroups;
     region_map.master_region = zonegroup_map.master_zonegroup;
     region_map.bucket_quota = zonegroup_map.bucket_quota;
-    region_map.user_quota = zonegroup_map.user_quota;    
+    region_map.user_quota = zonegroup_map.user_quota;
     encode_json("region-map", region_map, s->formatter);
   } else {
     encode_json("zonegroup-map", zonegroup_map, s->formatter);
@@ -60,11 +61,11 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
 void RGWOp_ZoneConfig_Get::send_response() {
   const RGWZoneParams& zone_params = store->svc()->zone->get_zone_params();
 
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   encode_json("zone_params", zone_params, s->formatter);

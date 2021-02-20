@@ -1,15 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 
-import * as moment from 'moment';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import moment from 'moment';
 
-import { RbdService } from '../../../shared/api/rbd.service';
-import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ImageSpec } from '~/app/shared/models/image-spec';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-rbd-trash-move-modal',
@@ -17,22 +19,23 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   styleUrls: ['./rbd-trash-move-modal.component.scss']
 })
 export class RbdTrashMoveModalComponent implements OnInit {
-  metaType: string;
+  // initial state
   poolName: string;
+  namespace: string;
   imageName: string;
+  hasSnapshots: boolean;
+
+  imageSpec: ImageSpec;
+  imageSpecStr: string;
   executingTasks: ExecutingTask[];
 
   moveForm: CdFormGroup;
-  minDate = new Date();
-  bsConfig = {
-    dateInputFormat: 'YYYY-MM-DD HH:mm:ss',
-    containerClass: 'theme-default'
-  };
   pattern: string;
 
   constructor(
     private rbdService: RbdService,
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private fb: CdFormBuilder,
     private taskWrapper: TaskWrapperService
   ) {
@@ -44,11 +47,11 @@ export class RbdTrashMoveModalComponent implements OnInit {
       expiresAt: [
         '',
         [
-          CdValidators.custom('format', (expiresAt) => {
+          CdValidators.custom('format', (expiresAt: string) => {
             const result = expiresAt === '' || moment(expiresAt, 'YYYY-MM-DD HH:mm:ss').isValid();
             return !result;
           }),
-          CdValidators.custom('expired', (expiresAt) => {
+          CdValidators.custom('expired', (expiresAt: string) => {
             const result = moment().isAfter(expiresAt);
             return result;
           })
@@ -58,6 +61,8 @@ export class RbdTrashMoveModalComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.imageSpec = new ImageSpec(this.poolName, this.namespace, this.imageName);
+    this.imageSpecStr = this.imageSpec.toString();
     this.pattern = `${this.poolName}/${this.imageName}`;
   }
 
@@ -66,7 +71,7 @@ export class RbdTrashMoveModalComponent implements OnInit {
     const expiresAt = this.moveForm.getValue('expiresAt');
 
     if (expiresAt) {
-      delay = moment(expiresAt).diff(moment(), 'seconds', true);
+      delay = moment(expiresAt, 'YYYY-MM-DD HH:mm:ss').diff(moment(), 'seconds', true);
     }
 
     if (delay < 0) {
@@ -76,13 +81,14 @@ export class RbdTrashMoveModalComponent implements OnInit {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('rbd/trash/move', {
-          pool_name: this.poolName,
-          image_name: this.imageName
+          image_spec: this.imageSpecStr
         }),
-        call: this.rbdService.moveTrash(this.poolName, this.imageName, delay)
+        call: this.rbdService.moveTrash(this.imageSpec, delay)
       })
-      .subscribe(undefined, undefined, () => {
-        this.modalRef.hide();
+      .subscribe({
+        complete: () => {
+          this.activeModal.close();
+        }
       });
   }
 }

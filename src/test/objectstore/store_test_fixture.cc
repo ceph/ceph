@@ -70,6 +70,10 @@ void StoreTestFixture::TearDown()
   // config settings. Hence setting it to 'unsafe' here as test case is closing.
   g_conf()._clear_safe_to_start_threads();
   PopSettings(0);
+  if (!orig_death_test_style.empty()) {
+    ::testing::FLAGS_gtest_death_test_style = orig_death_test_style;
+    orig_death_test_style.clear();
+  }
   if (store) {
     int r = store->umount();
     EXPECT_EQ(0, r);
@@ -100,4 +104,30 @@ void StoreTestFixture::PopSettings(size_t pos)
     }
     conf->apply_changes(NULL);
   }
+}
+
+void StoreTestFixture::CloseAndReopen() {
+  ceph_assert(store != nullptr);
+  g_conf()._clear_safe_to_start_threads();
+  int r = store->umount();
+  EXPECT_EQ(0, r);
+  ch.reset(nullptr);
+  store.reset(nullptr);
+  store.reset(ObjectStore::create(g_ceph_context,
+                                  type,
+                                  data_dir,
+                                  string("store_test_temp_journal")));
+  if (!store) {
+    cerr << __func__ << ": objectstore type " << type << " failed to reopen!" << std::endl;
+  }
+  ASSERT_TRUE(store);
+#if defined(WITH_BLUESTORE)
+  if (type == "bluestore") {
+    BlueStore *s = static_cast<BlueStore*>(store.get());
+    // better test coverage!
+    s->set_cache_shards(5);
+  }
+#endif
+  ASSERT_EQ(0, store->mount());
+  g_conf().set_safe_to_start_threads();
 }

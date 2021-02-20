@@ -48,19 +48,120 @@ or older versions of Ceph.
 Logging
 -------
 
-``MgrModule`` instances have a ``log`` property which is a logger instance that
-sends log messages into the Ceph logging layer where they will be recorded
-in the mgr daemon's log file.
+Logging in Ceph manager modules is done as in any other Python program. Just
+import the ``logging`` package and get a logger instance with the
+``logging.getLogger`` function.
 
-Use it the same way you would any other python logger.  The python
-log levels debug, info, warn, err are mapped into the Ceph
-severities 20, 4, 1 and 0 respectively.
+Each module has a ``log_level`` option that specifies the current Python
+logging level of the module.
+To change or query the logging level of the module use the following Ceph
+commands::
+
+  ceph config get mgr mgr/<module_name>/log_level
+  ceph config set mgr mgr/<module_name>/log_level <info|debug|critical|error|warning|>
+
+The logging level used upon the module's start is determined by the current
+logging level of the mgr daemon, unless if the ``log_level`` option was
+previously set with the ``config set ...`` command. The mgr daemon logging
+level is mapped to the module python logging level as follows:
+
+* <= 0 is CRITICAL
+* <= 1 is WARNING
+* <= 4 is INFO
+* <= +inf is DEBUG
+
+We can unset the module log level and fallback to the mgr daemon logging level
+by running the following command::
+
+  ceph config set mgr mgr/<module_name>/log_level ''
+
+By default, modules' logging messages are processed by the Ceph logging layer
+where they will be recorded in the mgr daemon's log file.
+But it's also possible to send a module's logging message to it's own file.
+
+The module's log file will be located in the same directory as the mgr daemon's
+log file with the following name pattern::
+
+   <mgr_daemon_log_file_name>.<module_name>.log
+
+To enable the file logging on a module use the following command::
+
+   ceph config set mgr mgr/<module_name>/log_to_file true
+
+When the module's file logging is enabled, module's logging messages stop
+being written to the mgr daemon's log file and are only written to the
+module's log file.
+
+It's also possible to check the status and disable the file logging with the
+following commands::
+
+   ceph config get mgr mgr/<module_name>/log_to_file
+   ceph config set mgr mgr/<module_name>/log_to_file false
+
+
+
 
 Exposing commands
 -----------------
 
-Set the ``COMMANDS`` class attribute of your module to a list of dicts
-like this::
+There are two approaches for exposing a command. The first one is to
+use the ``@CLICommand`` decorator to decorate the method which handles
+the command. like this
+
+.. code:: python
+
+   @CLICommand('antigravity send to blackhole',
+               perm='rw')
+   def send_to_blackhole(self, oid: str, blackhole: Optional[str] = None, inbuf: Optional[str] = None):
+       '''
+       Send the specified object to black hole
+       '''
+       obj = self.find_object(oid)
+       if obj is None:
+           return HandleCommandResult(-errno.ENOENT, stderr=f"object '{oid}' not found")
+       if blackhole is not None and inbuf is not None:
+           try:
+               location = self.decrypt(blackhole, passphrase=inbuf)
+           except ValueError:
+               return HandleCommandResult(-errno.EINVAL, stderr='unable to decrypt location')
+       else:
+           location = blackhole
+       self.send_object_to(obj, location)
+       return HandleCommandResult(stdout=f'the black hole swallowed '{oid}'")
+
+The first parameter passed to ``CLICommand`` is the "name" of the command.
+Since there are lots of commands in Ceph, we tend to group related commands
+with a common prefix. In this case, "antigravity" is used for this purpose.
+As the author is probably designing a module which is also able to launch
+rockets into the deep space.
+
+The `type annotations <https://www.python.org/dev/peps/pep-0484/>`_ for the
+method parameters are mandatory here, so the usage of the command can be
+properly reported to the ``ceph`` CLI, and the manager daemon can convert
+the serialized command parameters sent by the clients to the expected type
+before passing them to the handler method. With properly implemented types,
+one can also perform some sanity checks against the parameters!
+
+The names of the parameters are part of the command interface, so please
+try to take the backward compatibility into consideration when changing
+them. But you **cannot** change name of ``inbuf`` parameter, it is used
+to pass the content of the file specified by ``ceph --in-file`` option.
+
+The docstring of the method is used for the description of the command.
+
+The manager daemon cooks the usage of the command from these ingredients,
+like::
+
+  antigravity send to blackhole <oid> [<blackhole>]  Send the specified object to black hole
+
+as part of the output of ``ceph --help``.
+
+In addition to ``@CLICommand``, you could also use ``@CLIReadCommand`` or
+``@CLIWriteCommand`` if your command only requires read permissions or
+write permissions respectively.
+
+The second one is to set the ``COMMANDS`` class attribute of your module to
+a list of dicts like this::
 
     COMMANDS = [
         {
@@ -347,20 +448,6 @@ is recommend *not* to rely on this reference passing, as in future the
 implementation may change to serialize arguments and return
 values.
 
-
-Logging
--------
-
-Use your module's ``log`` attribute as your logger.  This is a logger
-configured to output via the ceph logging framework, to the local ceph-mgr
-log files.
-
-Python log severities are mapped to ceph severities as follows:
-
-* DEBUG is 20
-* INFO is 4
-* WARN is 1
-* ERR is 0
 
 Shutting down cleanly
 ---------------------

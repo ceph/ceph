@@ -50,6 +50,16 @@ ceph config rm mon.a debug_asok
 ceph config get mon.a debug_asok | grep 11
 ceph config rm mon debug_asok
 ceph config get mon.a debug_asok | grep 33
+#  nested .-prefix scoping
+ceph config set client.foo debug_asok 44
+ceph config get client.foo.bar debug_asok | grep 44
+ceph config get client.foo.bar.baz debug_asok | grep 44
+ceph config set client.foo.bar debug_asok 55
+ceph config get client.foo.bar.baz debug_asok | grep 55
+ceph config rm client.foo debug_asok
+ceph config get client.foo.bar.baz debug_asok | grep 55
+ceph config rm client.foo.bar debug_asok
+ceph config get client.foo.bar.baz debug_asok | grep 33
 ceph config rm global debug_asok
 
 # help
@@ -72,7 +82,7 @@ while ! ceph config show osd.0 | grep debug_asok | grep 99
 do
     sleep 1
 done
-ceph config show osd.0 | grep debug_asok | grep 'override mon'
+ceph config show osd.0 | grep debug_asok | grep 'override  mon'
 ceph tell osd.0 config unset debug_asok
 ceph tell osd.0 config unset debug_asok
 
@@ -83,12 +93,12 @@ do
 done
 ceph config show osd.0 | grep -c debug_asok | grep 0
 
-ceph config set osd.0 osd_data testorama
-while ! ceph config show osd.0 | grep osd_data | grep mon
+ceph config set osd.0 osd_scrub_cost 123
+while ! ceph config show osd.0 | grep osd_scrub_cost | grep mon
 do
     sleep 1
 done
-ceph config rm osd.0 osd_data
+ceph config rm osd.0 osd_scrub_cost
 
 # show-with-defaults
 ceph config show-with-defaults osd.0 | grep debug_asok

@@ -274,7 +274,7 @@ function kill_daemon() {
 function test_kill_daemon() {
     local dir=$1
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
@@ -292,8 +292,6 @@ function test_kill_daemon() {
         #
         kill_daemon $pidfile TERM || return 1
     done
-
-    ceph osd dump | grep "osd.0 down" || return 1
 
     name_prefix=mgr
     for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
@@ -367,7 +365,7 @@ function kill_daemons() {
 function test_kill_daemons() {
     local dir=$1
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     #
@@ -381,7 +379,6 @@ function test_kill_daemons() {
     # killing just the osd and verify the mon still is responsive
     #
     kill_daemons $dir TERM osd || return 1
-    ceph osd dump | grep "osd.0 down" || return 1
     #
     # kill the mgr
     #
@@ -481,6 +478,7 @@ function run_mon() {
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
 	--mon-allow-pool-delete \
+	--mon-allow-pool-size-one \
 	--osd-pool-default-pg-autoscale-mode off \
 	--mon-osd-backfillfull-ratio .99 \
         "$@" || return 1
@@ -516,7 +514,7 @@ function test_run_mon() {
 
     kill_daemons $dir || return 1
 
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"1"}' || return 1
@@ -557,6 +555,7 @@ function run_mgr() {
     shift
     local data=$dir/$id
 
+    ceph config set mgr mgr/devicehealth/enable_monitoring off --force
     ceph-mgr \
         --id $id \
         $EXTRA_OPTS \
@@ -785,6 +784,7 @@ function destroy_osd() {
 
     ceph osd out osd.$id || return 1
     kill_daemons $dir TERM osd.$id || return 1
+    ceph osd down osd.$id || return 1
     ceph osd purge osd.$id --yes-i-really-mean-it || return 1
     teardown $dir/$id || return 1
     rm -fr $dir/$id
@@ -932,11 +932,13 @@ function wait_for_osd() {
 function test_wait_for_osd() {
     local dir=$1
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1  --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
     wait_for_osd up 0 || return 1
-    kill_daemons $dir TERM osd || return 1
+    wait_for_osd up 1 || return 1
+    kill_daemons $dir TERM osd.0 || return 1
     wait_for_osd down 0 || return 1
     ( TIMEOUT=1 ; ! wait_for_osd up 0 ) || return 1
     teardown $dir || return 1
@@ -996,7 +998,7 @@ function wait_for_quorum() {
     fi
 
     if [[ -z "$quorumsize" ]]; then
-      timeout $timeout ceph mon_status --format=json >&/dev/null || return 1
+      timeout $timeout ceph quorum_status --format=json >&/dev/null || return 1
       return 0
     fi
 
@@ -1004,7 +1006,7 @@ function wait_for_quorum() {
     wait_until=$((`date +%s` + $timeout))
     while [[ $(date +%s) -lt $wait_until ]]; do
         jqfilter='.quorum | length == '$quorumsize
-        jqinput="$(timeout $timeout ceph mon_status --format=json 2>/dev/null)"
+        jqinput="$(timeout $timeout ceph quorum_status --format=json 2>/dev/null)"
         res=$(echo $jqinput | jq "$jqfilter")
         if [[ "$res" == "true" ]]; then
           no_quorum=0
@@ -1036,7 +1038,7 @@ function test_get_pg() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1  --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1073,7 +1075,7 @@ function test_get_config() {
 
     # override the default config using command line arg and check it
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     test $(get_config mon a osd_pool_default_size) = 1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 --osd_max_scrubs=3 || return 1
@@ -1108,7 +1110,7 @@ function test_set_config() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     test $(get_config mon a ms_crc_header) = true || return 1
     set_config mon a ms_crc_header false || return 1
     test $(get_config mon a ms_crc_header) = false || return 1
@@ -1140,7 +1142,7 @@ function test_get_primary() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     local osd=0
     run_mgr $dir x || return 1
     run_osd $dir $osd || return 1
@@ -1243,7 +1245,7 @@ function test_objectstore_tool() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     local osd=0
     run_mgr $dir x || return 1
     run_osd $dir $osd || return 1
@@ -1308,13 +1310,43 @@ function test_get_num_active_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
     local num_active_clean=$(get_num_active_clean)
     test "$num_active_clean" = $PG_NUM || return 1
+    teardown $dir || return 1
+}
+
+##
+# Return the number of active or peered PGs in the cluster. A PG matches if
+# ceph pg dump pgs reports it is either **active** or **peered** and that
+# not **stale**.
+#
+# @param STDOUT the number of active PGs
+# @return 0 on success, 1 on error
+#
+function get_num_active_or_peered() {
+    local expression
+    expression+="select(contains(\"active\") or contains(\"peered\")) | "
+    expression+="select(contains(\"stale\") | not)"
+    ceph --format json pg dump pgs 2>/dev/null | \
+        jq ".pg_stats | [.[] | .state | $expression] | length"
+}
+
+function test_get_num_active_or_peered() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+    local num_peered=$(get_num_active_or_peered)
+    test "$num_peered" = $PG_NUM || return 1
     teardown $dir || return 1
 }
 
@@ -1335,7 +1367,7 @@ function test_get_num_pgs() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1365,7 +1397,7 @@ function test_get_osd_id_used_by_pgs() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1407,7 +1439,7 @@ function test_wait_osd_id_used_by_pgs() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1439,7 +1471,7 @@ function test_get_last_scrub_stamp() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1467,7 +1499,7 @@ function test_is_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1593,6 +1625,64 @@ function test_wait_for_clean() {
     teardown $dir || return 1
 }
 
+##
+# Wait until the cluster becomes peered or if it does not make progress
+# for $WAIT_FOR_CLEAN_TIMEOUT seconds.
+# Progress is measured either via the **get_is_making_recovery_progress**
+# predicate or if the number of peered PGs changes (as returned by get_num_active_or_peered)
+#
+# @return 0 if the cluster is clean, 1 otherwise
+#
+function wait_for_peered() {
+    local cmd=$1
+    local num_peered=-1
+    local cur_peered
+    local -a delays=($(get_timeout_delays $WAIT_FOR_CLEAN_TIMEOUT .1))
+    local -i loop=0
+
+    flush_pg_stats || return 1
+    while test $(get_num_pgs) == 0 ; do
+	sleep 1
+    done
+
+    while true ; do
+        # Comparing get_num_active_clean & get_num_pgs is used to determine
+        # if the cluster is clean. That's almost an inline of is_clean() to
+        # get more performance by avoiding multiple calls of get_num_active_clean.
+        cur_peered=$(get_num_active_or_peered)
+        test $cur_peered = $(get_num_pgs) && break
+        if test $cur_peered != $num_peered ; then
+            loop=0
+            num_peered=$cur_peered
+        elif get_is_making_recovery_progress ; then
+            loop=0
+        elif (( $loop >= ${#delays[*]} )) ; then
+            ceph report
+            return 1
+        fi
+	# eval is a no-op if cmd is empty
+        eval $cmd
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+    return 0
+}
+
+function test_wait_for_peered() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_mgr $dir x || return 1
+    create_rbd_pool || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_clean || return 1
+    run_osd $dir 1 || return 1
+    wait_for_peered || return 1
+    teardown $dir || return 1
+}
+
+
 #######################################################################
 
 ##
@@ -1671,7 +1761,7 @@ function test_repair() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1  --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1711,7 +1801,7 @@ function test_pg_scrub() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1803,7 +1893,7 @@ function test_wait_for_scrub() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1908,7 +1998,7 @@ function run_in_background() {
     shift
     # Execute the command and prepend the output with its pid
     # We enforce to return the exit status of the command and not the sed one.
-    ("$@" |& sed 's/^/'$$': /'; return "${PIPESTATUS[0]}") >&2 &
+    ("$@" |& sed 's/^/'$BASHPID': /'; return "${PIPESTATUS[0]}") >&2 &
     eval "$pid_variable+=\" $!\""
 }
 
@@ -1980,6 +2070,10 @@ function flush_pg_stats()
     seqs=''
     for osd in $ids; do
 	    seq=`ceph tell osd.$osd flush_pg_stats`
+	    if test -z "$seq"
+	    then
+		continue
+	    fi
 	    seqs="$seqs $osd-$seq"
     done
 
@@ -2001,7 +2095,7 @@ function test_flush_pg_stats()
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1

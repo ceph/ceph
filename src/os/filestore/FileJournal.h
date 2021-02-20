@@ -58,13 +58,13 @@ public:
   };
   struct write_item {
     uint64_t seq;
-    bufferlist bl;
+    ceph::buffer::list bl;
     uint32_t orig_len;
     TrackedOpRef tracked_op;
     ZTracer::Trace trace;
-    write_item(uint64_t s, bufferlist& b, int ol, TrackedOpRef opref) :
+    write_item(uint64_t s, ceph::buffer::list& b, int ol, TrackedOpRef opref) :
       seq(s), orig_len(ol), tracked_op(opref) {
-      bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
+      bl = std::move(b);
     }
     write_item() : seq(0), orig_len(0) {}
   };
@@ -76,25 +76,25 @@ public:
 
   ceph::mutex writeq_lock = ceph::make_mutex("FileJournal::writeq_lock");
   ceph::condition_variable writeq_cond;
-  list<write_item> writeq;
+  std::list<write_item> writeq;
   bool writeq_empty();
   write_item &peek_write();
   void pop_write();
-  void batch_pop_write(list<write_item> &items);
-  void batch_unpop_write(list<write_item> &items);
+  void batch_pop_write(std::list<write_item> &items);
+  void batch_unpop_write(std::list<write_item> &items);
 
   ceph::mutex completions_lock =
     ceph::make_mutex("FileJournal::completions_lock");
-  list<completion_item> completions;
+  std::list<completion_item> completions;
   bool completions_empty() {
     std::lock_guard l{completions_lock};
     return completions.empty();
   }
-  void batch_pop_completions(list<completion_item> &items) {
+  void batch_pop_completions(std::list<completion_item> &items) {
     std::lock_guard l{completions_lock};
     completions.swap(items);
   }
-  void batch_unpop_completions(list<completion_item> &items) {
+  void batch_unpop_completions(std::list<completion_item> &items) {
     std::lock_guard l{completions_lock};
     completions.splice(completions.begin(), items);
   }
@@ -109,9 +109,9 @@ public:
     completions.pop_front();
   }
 
-  int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) override;
+  int prepare_entry(std::vector<ObjectStore::Transaction>& tls, ceph::buffer::list* tbl) override;
 
-  void submit_entry(uint64_t seq, bufferlist& bl, uint32_t orig_len,
+  void submit_entry(uint64_t seq, ceph::buffer::list& bl, uint32_t orig_len,
 		    Context *oncommit,
 		    TrackedOpRef osd_op = TrackedOpRef()) override;
   /// End protected by finisher_lock
@@ -161,11 +161,11 @@ public:
       return *(uint64_t*)fsid.bytes();
     }
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       __u32 v = 4;
       encode(v, bl);
-      bufferlist em;
+      ceph::buffer::list em;
       {
 	encode(flags, em);
 	encode(fsid, em);
@@ -178,13 +178,13 @@ public:
       }
       encode(em, bl);
     }
-    void decode(bufferlist::const_iterator& bl) {
+    void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       __u32 v;
       decode(v, bl);
       if (v < 2) {  // normally 0, but conceivably 1
 	// decode old header_t struct (pre v0.40).
-	bl.advance(4u); // skip __u32 flags (it was unused by any old code)
+	bl += 4u; // skip __u32 flags (it was unused by any old code)
 	flags = 0;
 	uint64_t tfsid;
 	decode(tfsid, bl);
@@ -198,7 +198,7 @@ public:
 	start_seq = 0;
 	return;
       }
-      bufferlist em;
+      ceph::buffer::list em;
       decode(em, bl);
       auto t = em.cbegin();
       decode(flags, t);
@@ -241,7 +241,7 @@ public:
   bool journalq_empty() { return journalq.empty(); }
 
 private:
-  string fn;
+  std::string fn;
 
   char *zero_buf;
   off64_t max_size;
@@ -257,15 +257,15 @@ private:
   /// Protected by aio_lock
   struct aio_info {
     struct iocb iocb {};
-    bufferlist bl;
+    ceph::buffer::list bl;
     struct iovec *iov;
     bool done;
     uint64_t off, len;    ///< these are for debug only
     uint64_t seq;         ///< seq number to complete on aio completion, if non-zero
 
-    aio_info(bufferlist& b, uint64_t o, uint64_t s)
+    aio_info(ceph::buffer::list& b, uint64_t o, uint64_t s)
       : iov(NULL), done(false), off(o), len(b.length()), seq(s) {
-      bl.claim(b);
+      bl = std::move(b);
     }
     ~aio_info() {
       delete[] iov;
@@ -275,7 +275,7 @@ private:
   ceph::condition_variable aio_cond;
   ceph::condition_variable write_finish_cond;
   io_context_t aio_ctx = 0;
-  list<aio_info> aio_queue;
+  std::list<aio_info> aio_queue;
   int aio_num = 0, aio_bytes = 0;
   uint64_t aio_write_queue_ops = 0;
   uint64_t aio_write_queue_bytes = 0;
@@ -285,7 +285,7 @@ private:
   uint64_t last_committed_seq;
   uint64_t journaled_since_start;
 
-  string devname;
+  std::string devname;
 
   /*
    * full states cycle at the beginnging of each commit epoch, when commit_start()
@@ -304,7 +304,7 @@ private:
   int fd;
 
   // in journal
-  deque<pair<uint64_t, off64_t> > journalq;  // track seq offsets, so we can trim later.
+  std::deque<std::pair<uint64_t, off64_t> > journalq;  // track seq offsets, so we can trim later.
   uint64_t writing_seq;
 
 
@@ -317,7 +317,7 @@ private:
     for (const char **i = get_tracked_conf_keys();
 	 *i;
 	 ++i) {
-      if (changed.count(string(*i))) {
+      if (changed.count(std::string(*i))) {
 	set_throttle_params();
 	return;
       }
@@ -338,10 +338,10 @@ private:
   int _open_block_device();
   void _close(int fd) const;
   int _open_file(int64_t oldsize, blksize_t blksize, bool create);
-  int _dump(ostream& out, bool simple);
+  int _dump(std::ostream& out, bool simple);
   void print_header(const header_t &hdr) const;
   int read_header(header_t *hdr) const;
-  bufferptr prepare_header();
+  ceph::bufferptr prepare_header();
   void start_writer();
   void stop_writer();
   void write_thread_entry();
@@ -349,25 +349,25 @@ private:
   void queue_completions_thru(uint64_t seq);
 
   int check_for_full(uint64_t seq, off64_t pos, off64_t size);
-  int prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
-  int prepare_single_write(write_item &next_write, bufferlist& bl, off64_t& queue_pos,
+  int prepare_multi_write(ceph::buffer::list& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
+  int prepare_single_write(write_item &next_write, ceph::buffer::list& bl, off64_t& queue_pos,
     uint64_t& orig_ops, uint64_t& orig_bytes);
-  void do_write(bufferlist& bl);
+  void do_write(ceph::buffer::list& bl);
 
   void write_finish_thread_entry();
   void check_aio_completion();
-  void do_aio_write(bufferlist& bl);
-  int write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq);
+  void do_aio_write(ceph::buffer::list& bl);
+  int write_aio_bl(off64_t& pos, ceph::buffer::list& bl, uint64_t seq);
 
 
-  void check_align(off64_t pos, bufferlist& bl);
-  int write_bl(off64_t& pos, bufferlist& bl);
+  void check_align(off64_t pos, ceph::buffer::list& bl);
+  int write_bl(off64_t& pos, ceph::buffer::list& bl);
 
   /// read len from journal starting at in_pos and wrapping up to len
   void wrap_read_bl(
     off64_t in_pos,   ///< [in] start position
     int64_t len,      ///< [in] length to read
-    bufferlist* bl,   ///< [out] result
+    ceph::buffer::list* bl,   ///< [out] result
     off64_t *out_pos  ///< [out] next position to read, will be wrapped
     ) const;
 
@@ -417,7 +417,7 @@ private:
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
-    throttle(cct->_conf->filestore_caller_concurrency),
+    throttle(cct, cct->_conf->filestore_caller_concurrency),
     write_stop(true),
     aio_stop(true),
     write_thread(this),
@@ -449,14 +449,14 @@ private:
   void close() override;
   int peek_fsid(uuid_d& fsid);
 
-  int dump(ostream& out) override;
-  int simple_dump(ostream& out);
-  int _fdump(Formatter &f, bool simple);
+  int dump(std::ostream& out) override;
+  int simple_dump(std::ostream& out);
+  int _fdump(ceph::Formatter &f, bool simple);
 
   void flush() override;
 
-  void get_devices(set<string> *ls) override;
-  void collect_metadata(map<string,string> *pm) override;
+  void get_devices(std::set<std::string> *ls) override;
+  void collect_metadata(std::map<std::string,std::string> *pm) override;
 
   void reserve_throttle_and_backoff(uint64_t count) override;
 
@@ -476,7 +476,7 @@ private:
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
-  off64_t get_journal_size_estimate();
+  off64_t get_journal_size_estimate() override;
 
   // reads
 
@@ -504,20 +504,20 @@ private:
   read_entry_result do_read_entry(
     off64_t pos,          ///< [in] position to read
     off64_t *next_pos,    ///< [out] next position to read
-    bufferlist* bl,       ///< [out] payload for successful read
+    ceph::buffer::list* bl,       ///< [out] payload for successful read
     uint64_t *seq,        ///< [out] seq of successful read
-    ostream *ss,          ///< [out] error output
+    std::ostream *ss,          ///< [out] error output
     entry_header_t *h = 0 ///< [out] header
     ) const; ///< @return result code
 
   bool read_entry(
-    bufferlist &bl,
+    ceph::buffer::list &bl,
     uint64_t &last_seq,
     bool *corrupt
     );
 
   bool read_entry(
-    bufferlist &bl,
+    ceph::buffer::list &bl,
     uint64_t &last_seq) override {
     return read_entry(bl, last_seq, 0);
   }

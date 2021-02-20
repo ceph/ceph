@@ -1,6 +1,6 @@
 tasks:
 - ceph-fuse:
-- print: "**** done mimic client"
+- print: "**** done nautilus client"
 - workunit:
     clients:
       all:

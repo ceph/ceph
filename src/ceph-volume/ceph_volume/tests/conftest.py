@@ -1,8 +1,10 @@
 import os
 import pytest
+from mock.mock import patch, PropertyMock, create_autospec
+from ceph_volume.api import lvm
 from ceph_volume.util import disk
+from ceph_volume.util import device
 from ceph_volume.util.constants import ceph_disk_guids
-from ceph_volume.api import lvm as lvm_api
 from ceph_volume import conf, configuration
 
 
@@ -38,6 +40,48 @@ def factory():
 @pytest.fixture
 def capture():
     return Capture()
+
+@pytest.fixture
+def mock_lv_device_generator():
+    def mock_lv():
+        size = 21474836480
+        dev = create_autospec(device.Device)
+        dev.lv_name = 'lv'
+        dev.vg_name = 'vg'
+        dev.path = '{}/{}'.format(dev.vg_name, dev.lv_name)
+        dev.used_by_ceph = False
+        dev.vg_size = [size]
+        dev.vg_free = dev.vg_size
+        dev.lvs = [lvm.Volume(vg_name=dev.vg_name, lv_name=dev.lv_name, lv_size=size, lv_tags='')]
+        return dev
+    return mock_lv
+
+
+@pytest.fixture
+def mock_devices_available():
+    dev = create_autospec(device.Device)
+    dev.path = '/dev/foo'
+    dev.available_lvm = True
+    dev.vg_size = [21474836480]
+    dev.vg_free = dev.vg_size
+    return [dev]
+
+@pytest.fixture
+def mock_device_generator():
+    def mock_device():
+        dev = create_autospec(device.Device)
+        dev.path = '/dev/foo'
+        dev.available_lvm = True
+        dev.vg_size = [21474836480]
+        dev.vg_free = dev.vg_size
+        dev.lvs = []
+        return dev
+    return mock_device
+
+
+@pytest.fixture(params=range(1,11))
+def osds_per_device(request):
+    return request.param
 
 
 @pytest.fixture
@@ -139,47 +183,6 @@ def conf_ceph_stub(monkeypatch, tmpfile):
 
 
 @pytest.fixture
-def volumes(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
-    volumes = lvm_api.Volumes()
-    volumes._purge()
-    return volumes
-
-
-@pytest.fixture
-def volume_groups(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
-    vgs = lvm_api.VolumeGroups()
-    vgs._purge()
-    return vgs
-
-def volume_groups_empty(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
-    vgs = lvm_api.VolumeGroups(populate=False)
-    return vgs
-
-@pytest.fixture
-def stub_vgs(monkeypatch, volume_groups):
-    def apply(vgs):
-        monkeypatch.setattr(lvm_api, 'get_api_vgs', lambda: vgs)
-    return apply
-
-
-@pytest.fixture
-def pvolumes(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
-    pvolumes = lvm_api.PVolumes()
-    pvolumes._purge()
-    return pvolumes
-@pytest.fixture
-def pvolumes_empty(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
-    pvolumes = lvm_api.PVolumes(populate=False)
-    return pvolumes
-
-
-
-@pytest.fixture
 def is_root(monkeypatch):
     """
     Patch ``os.getuid()`` so that ceph-volume's decorators that ensure a user
@@ -212,15 +215,6 @@ def disable_kernel_queries(monkeypatch):
     monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: {})
 
 
-@pytest.fixture
-def disable_lvm_queries(monkeypatch):
-    '''
-    This speeds up calls to Device and Disk
-    '''
-    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
-    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: None)
-
-
 @pytest.fixture(params=[
     '', 'ceph data', 'ceph journal', 'ceph block',
     'ceph block.wal', 'ceph block.db', 'ceph lockbox'])
@@ -236,18 +230,20 @@ def ceph_parttype(request):
 @pytest.fixture
 def lsblk_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
     monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
-                        lambda path: {'PARTLABEL': ceph_partlabel})
+                        lambda path: {'TYPE': 'disk', 'PARTLABEL': ceph_partlabel})
     # setting blkid here too in order to be able to fall back to PARTTYPE based
     # membership
     monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
-                        lambda path: {'PARTLABEL': '',
+                        lambda path: {'TYPE': 'disk',
+                                      'PARTLABEL': '',
                                       'PARTTYPE': ceph_parttype})
 
 
 @pytest.fixture
 def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
     monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
-                        lambda path: {'PARTLABEL': ceph_partlabel,
+                        lambda path: {'TYPE': 'disk',
+                                      'PARTLABEL': ceph_partlabel,
                                       'PARTTYPE': ceph_parttype})
 
 
@@ -259,14 +255,28 @@ def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
 ])
 def device_info_not_ceph_disk_member(monkeypatch, request):
     monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
-                        lambda path: {'PARTLABEL': request.param[0]})
+                        lambda path: {'TYPE': 'disk',
+                                      'PARTLABEL': request.param[0]})
     monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
-                        lambda path: {'PARTLABEL': request.param[1]})
-
+                        lambda path: {'TYPE': 'disk',
+                                      'PARTLABEL': request.param[1]})
 
 @pytest.fixture
-def device_info(monkeypatch):
-    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None):
+def patched_get_block_devs_lsblk():
+    with patch('ceph_volume.util.disk.get_block_devs_lsblk') as p:
+        yield p
+
+@pytest.fixture
+def patch_bluestore_label():
+    with patch('ceph_volume.util.device.Device.has_bluestore_label',
+               new_callable=PropertyMock) as p:
+        p.return_value = False
+        yield p
+
+@pytest.fixture
+def device_info(monkeypatch, patch_bluestore_label):
+    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None,
+              has_bluestore_label=False):
         devices = devices if devices else {}
         lsblk = lsblk if lsblk else {}
         blkid = blkid if blkid else {}
@@ -275,10 +285,10 @@ def device_info(monkeypatch):
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
         if not devices:
-            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_first_lv", lambda filters: lv)
         else:
-            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
-        monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: lv)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_device_lvs",
+                                lambda path: [lv])
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
         monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)

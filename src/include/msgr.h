@@ -23,13 +23,6 @@
 #define CEPH_MON_PORT_IANA      3300  /* IANA monitor port */
 
 /*
- * client-side processes will try to bind to ports in this
- * range, simply for the benefit of tools like nmap or wireshark
- * that would like to identify the protocol.
- */
-#define CEPH_PORT_FIRST  6789
-
-/*
  * tcp connection banner.  include a protocol version. and adjust
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
@@ -52,15 +45,16 @@
 #define DEFINE_MSGR2_FEATURE(bit, incarnation, name)               \
 	const static uint64_t CEPH_MSGR2_FEATURE_##name = (1ULL << bit); \
 	const static uint64_t CEPH_MSGR2_FEATUREMASK_##name =            \
-			(1ULL << bit | CEPH_FEATURE_INCARNATION_##incarnation);
+			(1ULL << bit | CEPH_MSGR2_INCARNATION_##incarnation);
 
 #define HAVE_MSGR2_FEATURE(x, name) \
 	(((x) & (CEPH_MSGR2_FEATUREMASK_##name)) == (CEPH_MSGR2_FEATUREMASK_##name))
 
+DEFINE_MSGR2_FEATURE( 0, 1, REVISION_1)   // msgr2.1
 
-#define CEPH_MSGR2_SUPPORTED_FEATURES (0ull)
+#define CEPH_MSGR2_SUPPORTED_FEATURES (CEPH_MSGR2_FEATURE_REVISION_1)
 
-#define CEPH_MSGR2_REQUIRED_FEATURES (CEPH_MSGR2_SUPPORTED_FEATURES)
+#define CEPH_MSGR2_REQUIRED_FEATURES  (0ull)
 
 
 /*

@@ -14,48 +14,59 @@
 #ifndef CEPH_LIBRADOS_RADOSCLIENT_H
 #define CEPH_LIBRADOS_RADOSCLIENT_H
 
+#include <functional>
+#include <memory>
+#include <string>
+
+#include "msg/Dispatcher.h"
+
+#include "common/async/context_pool.h"
 #include "common/config_fwd.h"
 #include "common/Cond.h"
-#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "common/config_obs.h"
+#include "include/common_fwd.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
 #include "mgr/MgrClient.h"
-#include "msg/Dispatcher.h"
 
 #include "IoCtxImpl.h"
 
-struct AuthAuthorizer;
 struct Context;
-class CephContext;
-struct Connection;
 class Message;
 class MLog;
 class Messenger;
 class AioCompletionImpl;
 
-class librados::RadosClient : public Dispatcher
-{
-  std::unique_ptr<CephContext,
-		  std::function<void(CephContext*)> > cct_deleter;
+namespace neorados { namespace detail { class RadosClient; }}
 
+class librados::RadosClient : public Dispatcher,
+			      public md_config_obs_t
+{
+  friend neorados::detail::RadosClient;
 public:
   using Dispatcher::cct;
-  const ConfigProxy& conf;
+private:
+  std::unique_ptr<CephContext,
+		  std::function<void(CephContext*)>> cct_deleter;
+
+public:
+  const ConfigProxy& conf{cct->_conf};
+  ceph::async::io_context_pool poolctx;
 private:
   enum {
     DISCONNECTED,
     CONNECTING,
     CONNECTED,
-  } state;
+  } state{DISCONNECTED};
 
-  MonClient monclient;
-  MgrClient mgrclient;
-  Messenger *messenger;
+  MonClient monclient{cct, poolctx};
+  MgrClient mgrclient{cct, nullptr, &monclient.monmap};
+  Messenger *messenger{nullptr};
 
-  uint64_t instance_id;
+  uint64_t instance_id{0};
 
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m) override;
@@ -65,31 +76,31 @@ private:
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;
 
-  Objecter *objecter;
+  Objecter *objecter{nullptr};
 
   ceph::mutex lock = ceph::make_mutex("librados::RadosClient::lock");
   ceph::condition_variable cond;
-  SafeTimer timer;
-  int refcnt;
+  int refcnt{1};
 
-  version_t log_last_version;
-  rados_log_callback_t log_cb;
-  rados_log_callback2_t log_cb2;
-  void *log_cb_arg;
+  version_t log_last_version{0};
+  rados_log_callback_t log_cb{nullptr};
+  rados_log_callback2_t log_cb2{nullptr};
+  void *log_cb_arg{nullptr};
   string log_watch;
 
   bool service_daemon = false;
   string daemon_name, service_name;
   map<string,string> daemon_metadata;
+  ceph::timespan rados_mon_op_timeout{};
 
   int wait_for_osdmap();
 
 public:
-  Finisher finisher;
+  boost::asio::io_context::strand finish_strand{poolctx.get_io_context()};
 
-  explicit RadosClient(CephContext *cct_);
+  explicit RadosClient(CephContext *cct);
   ~RadosClient() override;
-  int ping_monitor(string mon_id, string *result);
+  int ping_monitor(std::string mon_id, std::string *result);
   int connect();
   void shutdown();
 
@@ -136,7 +147,7 @@ public:
 
   int pool_delete_async(const char *name, PoolAsyncCompletionImpl *c);
 
-  int blacklist_add(const string& client_address, uint32_t expire_seconds);
+  int blocklist_add(const string& client_address, uint32_t expire_seconds);
 
   int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
@@ -165,7 +176,9 @@ public:
 
   void get();
   bool put();
-  void blacklist_self(bool set);
+  void blocklist_self(bool set);
+
+  std::string get_addrs() const;
 
   int service_daemon_register(
     const std::string& service,  ///< service name (e.g., 'rgw')
@@ -177,6 +190,9 @@ public:
   mon_feature_t get_required_monitor_features() const;
 
   int get_inconsistent_pgs(int64_t pool_id, std::vector<std::string>* pgs);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };
 
 #endif

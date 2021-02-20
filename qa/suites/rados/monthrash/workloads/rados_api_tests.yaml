@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - reached quota
       - overall HEALTH_
       - \(CACHE_POOL_NO_HIT_SET\)
@@ -11,6 +11,7 @@ overrides:
       - \(PG_
       - \(POOL_APP_NOT_ENABLED\)
       - \(SMALLER_PGP_NUM\)
+      - slow request
     conf:
       global:
         debug objecter: 20

@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import base64
 import logging
-import urllib
+import time
+from urllib import parse
 
-from .helper import DashboardTestCase, JObj, JList, JLeaf
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.hashes import SHA1
+from cryptography.hazmat.primitives.twofactor.totp import TOTP
+
+from .helper import DashboardTestCase, JLeaf, JList, JObj
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +31,9 @@ class RgwTestCase(DashboardTestCase):
             '--system', '--access-key', 'admin', '--secret', 'admin'
         ])
         # Update the dashboard configuration.
-        cls._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        cls._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+        cls._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'admin'])
+        cls._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
+        cls._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
         # Create a test user?
         if cls.create_test_user:
             cls._radosgw_admin_cmd([
@@ -50,12 +57,11 @@ class RgwTestCase(DashboardTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        # Delete administrator account.
+        cls._radosgw_admin_cmd(['user', 'rm', '--uid', 'admin'])
         if cls.create_test_user:
-            cls._radosgw_admin_cmd(['user', 'rm', '--uid=teuth-test-user'])
+            cls._radosgw_admin_cmd(['user', 'rm', '--uid=teuth-test-user', '--purge-data'])
         super(RgwTestCase, cls).tearDownClass()
-
-    def setUp(self):
-        super(RgwTestCase, self).setUp()
 
     def get_rgw_user(self, uid):
         return self._get('/api/rgw/user/{}'.format(uid))
@@ -66,6 +72,7 @@ class RgwApiCredentialsTest(RgwTestCase):
     AUTH_ROLES = ['rgw-manager']
 
     def setUp(self):
+        super(RgwApiCredentialsTest, self).setUp()
         # Restart the Dashboard module to ensure that the connection to the
         # RGW Admin Ops API is re-established with the new credentials.
         self.logout()
@@ -73,13 +80,13 @@ class RgwApiCredentialsTest(RgwTestCase):
         self._ceph_cmd(['mgr', 'module', 'enable', 'dashboard', '--force'])
         # Set the default credentials.
         self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', ''])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
         super(RgwApiCredentialsTest, self).setUp()
 
     def test_no_access_secret_key(self):
-        self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', ''])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', ''])
+        self._ceph_cmd(['dashboard', 'reset-rgw-api-secret-key'])
+        self._ceph_cmd(['dashboard', 'reset-rgw-api-access-key'])
         resp = self._get('/api/rgw/user')
         self.assertStatus(500)
         self.assertIn('detail', resp)
@@ -105,7 +112,32 @@ class RgwApiCredentialsTest(RgwTestCase):
                       data['message'])
 
 
+class RgwSiteTest(RgwTestCase):
+
+    AUTH_ROLES = ['rgw-manager']
+
+    def test_get_placement_targets(self):
+        data = self._get('/api/rgw/site?query=placement-targets')
+        self.assertStatus(200)
+        self.assertSchema(data, JObj({
+            'zonegroup': str,
+            'placement_targets': JList(JObj({
+                'name': str,
+                'data_pool': str
+            }))
+        }))
+
+    def test_get_realms(self):
+        data = self._get('/api/rgw/site?query=realms')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(str))
+
+
 class RgwBucketTest(RgwTestCase):
+
+    _mfa_token_serial = '1'
+    _mfa_token_seed = '23456723'
+    _mfa_token_time_step = 2
 
     AUTH_ROLES = ['rgw-manager']
 
@@ -113,6 +145,12 @@ class RgwBucketTest(RgwTestCase):
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwBucketTest, cls).setUpClass()
+        # Create MFA TOTP token for test user.
+        cls._radosgw_admin_cmd([
+            'mfa', 'create', '--uid', 'teuth-test-user', '--totp-serial', cls._mfa_token_serial,
+            '--totp-seed', cls._mfa_token_seed, '--totp-seed-type', 'base32',
+            '--totp-seconds', str(cls._mfa_token_time_step), '--totp-window', '1'
+        ])
         # Create tenanted users.
         cls._radosgw_admin_cmd([
             'user', 'create', '--tenant', 'testx', '--uid', 'teuth-test-user',
@@ -126,10 +164,17 @@ class RgwBucketTest(RgwTestCase):
     @classmethod
     def tearDownClass(cls):
         cls._radosgw_admin_cmd(
-            ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user'])
+            ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user', '--purge-data'])
         cls._radosgw_admin_cmd(
-            ['user', 'rm', '--tenant', 'testx2', '--uid=teuth-test-user2'])
+            ['user', 'rm', '--tenant', 'testx2', '--uid=teuth-test-user2', '--purge-data'])
         super(RgwBucketTest, cls).tearDownClass()
+
+    def _get_mfa_token_pin(self):
+        totp_key = base64.b32decode(self._mfa_token_seed)
+        totp = TOTP(totp_key, 6, SHA1(), self._mfa_token_time_step, backend=default_backend(),
+                    enforce_key_length=False)
+        time_value = int(time.time())
+        return totp.generate(time_value)
 
     def test_all(self):
         # Create a new bucket.
@@ -164,6 +209,20 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(len(data), 1)
         self.assertIn('teuth-test-bucket', data)
 
+        # List all buckets with stats.
+        data = self._get('/api/rgw/bucket?stats=true')
+        self.assertStatus(200)
+        self.assertEqual(len(data), 1)
+        self.assertSchema(data[0], JObj(sub_elems={
+            'bid': JLeaf(str),
+            'bucket': JLeaf(str),
+            'bucket_quota': JObj(sub_elems={}, allow_unknown=True),
+            'id': JLeaf(str),
+            'owner': JLeaf(str),
+            'usage': JObj(sub_elems={}, allow_unknown=True),
+            'tenant': JLeaf(str),
+        }, allow_unknown=True))
+
         # Get the bucket.
         data = self._get('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(200)
@@ -173,14 +232,17 @@ class RgwBucketTest(RgwTestCase):
             'tenant': JLeaf(str),
             'bucket': JLeaf(str),
             'bucket_quota': JObj(sub_elems={}, allow_unknown=True),
-            'owner': JLeaf(str)
+            'owner': JLeaf(str),
+            'mfa_delete': JLeaf(str),
+            'usage': JObj(sub_elems={}, allow_unknown=True),
+            'versioning': JLeaf(str)
         }, allow_unknown=True))
         self.assertEqual(data['bucket'], 'teuth-test-bucket')
         self.assertEqual(data['owner'], 'admin')
         self.assertEqual(data['placement_rule'], 'default-placement')
         self.assertEqual(data['versioning'], 'Suspended')
 
-        # Update the bucket.
+        # Update bucket: change owner, enable versioning.
         self._put(
             '/api/rgw/bucket/teuth-test-bucket',
             params={
@@ -199,6 +261,41 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['owner'], 'teuth-test-user')
         self.assertEqual(data['versioning'], 'Enabled')
 
+        # Update bucket: enable MFA Delete.
+        self._put(
+            '/api/rgw/bucket/teuth-test-bucket',
+            params={
+                'bucket_id': data['id'],
+                'uid': 'teuth-test-user',
+                'versioning_state': 'Enabled',
+                'mfa_delete': 'Enabled',
+                'mfa_token_serial': self._mfa_token_serial,
+                'mfa_token_pin': self._get_mfa_token_pin()
+            })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(200)
+        self.assertEqual(data['versioning'], 'Enabled')
+        self.assertEqual(data['mfa_delete'], 'Enabled')
+
+        # Update bucket: disable versioning & MFA Delete.
+        time.sleep(self._mfa_token_time_step * 3)  # Required to get new TOTP pin.
+        self._put(
+            '/api/rgw/bucket/teuth-test-bucket',
+            params={
+                'bucket_id': data['id'],
+                'uid': 'teuth-test-user',
+                'versioning_state': 'Suspended',
+                'mfa_delete': 'Disabled',
+                'mfa_token_serial': self._mfa_token_serial,
+                'mfa_token_pin': self._get_mfa_token_pin()
+            })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(200)
+        self.assertEqual(data['versioning'], 'Suspended')
+        self.assertEqual(data['mfa_delete'], 'Disabled')
+
         # Delete the bucket.
         self._delete('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(204)
@@ -206,7 +303,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 
-    def test_create_get_update_delete_w_tenant(self):
+    def test_crud_w_tenant(self):
         # Create a new bucket. The tenant of the user is used when
         # the bucket is created.
         self._post(
@@ -233,7 +330,7 @@ class RgwBucketTest(RgwTestCase):
         def _verify_tenant_bucket(bucket, tenant, uid):
             full_bucket_name = '{}/{}'.format(tenant, bucket)
             _data = self._get('/api/rgw/bucket/{}'.format(
-                urllib.quote_plus(full_bucket_name)))
+                parse.quote_plus(full_bucket_name)))
             self.assertStatus(200)
             self.assertSchema(_data, JObj(sub_elems={
                 'owner': JLeaf(str),
@@ -255,7 +352,7 @@ class RgwBucketTest(RgwTestCase):
         # Update bucket: different user with different tenant, enable versioning.
         self._put(
             '/api/rgw/bucket/{}'.format(
-                urllib.quote_plus('testx/teuth-test-bucket')),
+                parse.quote_plus('testx/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
                 'uid': 'testx2$teuth-test-user2',
@@ -267,7 +364,7 @@ class RgwBucketTest(RgwTestCase):
         # Change owner to a non-tenanted user
         self._put(
             '/api/rgw/bucket/{}'.format(
-                urllib.quote_plus('testx2/teuth-test-bucket')),
+                parse.quote_plus('testx2/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
                 'uid': 'admin'
@@ -296,14 +393,64 @@ class RgwBucketTest(RgwTestCase):
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
+            parse.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 
+    def test_crud_w_locking(self):
+        # Create
+        self._post('/api/rgw/bucket',
+                   params={
+                       'bucket': 'teuth-test-bucket',
+                       'uid': 'teuth-test-user',
+                       'zonegroup': 'default',
+                       'placement_target': 'default-placement',
+                       'lock_enabled': 'true',
+                       'lock_mode': 'GOVERNANCE',
+                       'lock_retention_period_days': '0',
+                       'lock_retention_period_years': '1'
+                   })
+        self.assertStatus(201)
+        # Read
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(200)
+        self.assertSchema(
+            data,
+            JObj(sub_elems={
+                'lock_enabled': JLeaf(bool),
+                'lock_mode': JLeaf(str),
+                'lock_retention_period_days': JLeaf(int),
+                'lock_retention_period_years': JLeaf(int)
+            },
+                allow_unknown=True))
+        self.assertTrue(data['lock_enabled'])
+        self.assertEqual(data['lock_mode'], 'GOVERNANCE')
+        self.assertEqual(data['lock_retention_period_days'], 0)
+        self.assertEqual(data['lock_retention_period_years'], 1)
+        # Update
+        self._put('/api/rgw/bucket/teuth-test-bucket',
+                  params={
+                      'bucket_id': data['id'],
+                      'uid': 'teuth-test-user',
+                      'lock_mode': 'COMPLIANCE',
+                      'lock_retention_period_days': '15',
+                      'lock_retention_period_years': '0'
+                  })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertTrue(data['lock_enabled'])
+        self.assertEqual(data['lock_mode'], 'COMPLIANCE')
+        self.assertEqual(data['lock_retention_period_days'], 15)
+        self.assertEqual(data['lock_retention_period_years'], 0)
+        self.assertStatus(200)
+        # Delete
+        self._delete('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(204)
 
-class RgwDaemonTest(DashboardTestCase):
+
+class RgwDaemonTest(RgwTestCase):
 
     AUTH_ROLES = ['rgw-manager']
 
@@ -337,14 +484,6 @@ class RgwDaemonTest(DashboardTestCase):
         self.assertTrue(data['rgw_metadata'])
 
     def test_status(self):
-        self._radosgw_admin_cmd([
-            'user', 'create', '--uid=admin', '--display-name=admin',
-            '--system', '--access-key=admin', '--secret=admin'
-        ])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
-
         data = self._get('/api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
@@ -387,6 +526,11 @@ class RgwUserTest(RgwTestCase):
         self.assertStatus(200)
         self.assertGreaterEqual(len(data), 1)
         self.assertIn('admin', data)
+
+    def test_get_emails(self):
+        data = self._get('/api/rgw/user/get_emails')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(str))
 
     def test_create_get_update_delete(self):
         # Create a new user.

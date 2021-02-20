@@ -24,6 +24,9 @@
 CLS_VER(1,0)
 CLS_NAME(cephfs)
 
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
 
 std::ostream &operator<<(std::ostream &out, const ObjCeiling &in)
 {
@@ -65,7 +68,7 @@ static int set_if_greater(cls_method_context_t hctx,
         // Valid existing value, do comparison
         set_val = input_val > existing_val;
       }
-    } catch (const buffer::error &err) {
+    } catch (const ceph::buffer::error &err) {
       // Corrupt or empty existing value, overwrite it
       set_val = true;
     }
@@ -96,7 +99,7 @@ static int accumulate_inode_metadata(cls_method_context_t hctx,
   AccumulateArgs args;
   try {
     args.decode(q);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EINVAL;
   }
 
@@ -132,7 +135,7 @@ public:
       InodeTagFilterArgs args;
       args.decode(params);
       scrub_tag = args.scrub_tag;
-    } catch (buffer::error &e) {
+    } catch (ceph::buffer::error &e) {
       return -EINVAL;
     }
 
@@ -173,7 +176,7 @@ bool PGLSCephFSFilter::filter(const hobject_t &obj,
       decode(tag_ondisk, q);
       if (tag_ondisk == scrub_tag)
 	return false;
-    } catch (const buffer::error &err) {
+    } catch (const ceph::buffer::error &err) {
     }
   }
 

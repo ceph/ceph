@@ -19,6 +19,8 @@
 
 #include <common/DecayCounter.h>
 
+#include "include/common_fwd.h"
+
 #include "messages/MClientReconnect.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientRequest.h"
@@ -28,25 +30,26 @@
 #include "messages/MClientReclaimReply.h"
 #include "messages/MLock.h"
 
+#include "CInode.h"
 #include "MDSRank.h"
 #include "Mutation.h"
 #include "MDSContext.h"
 
 class OSDMap;
-class PerfCounters;
 class LogEvent;
 class EMetaBlob;
 class EUpdate;
 class MDLog;
 struct SnapInfo;
+class MetricsHandler;
 
 enum {
   l_mdss_first = 1000,
   l_mdss_dispatch_client_request,
-  l_mdss_dispatch_slave_request,
+  l_mdss_dispatch_peer_request,
   l_mdss_handle_client_request,
   l_mdss_handle_client_session,
-  l_mdss_handle_slave_request,
+  l_mdss_handle_peer_request,
   l_mdss_req_create_latency,
   l_mdss_req_getattr_latency,
   l_mdss_req_getfilelock_latency,
@@ -76,6 +79,7 @@ enum {
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
+  l_mdss_cap_acquisition_throttle,
   l_mdss_last,
 };
 
@@ -84,38 +88,14 @@ public:
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
 
-private:
-  MDSRank *mds;
-  MDCache *mdcache;
-  MDLog *mdlog;
-  PerfCounters *logger;
-
-  // OSDMap full status, used to generate ENOSPC on some operations
-  bool is_full;
-
-  // State for while in reconnect
-  MDSContext *reconnect_done;
-  int failed_reconnects;
-  bool reconnect_evicting;  // true if I am waiting for evictions to complete
-                            // before proceeding to reconnect_gather_finish
-  time reconnect_start = clock::zero();
-  time reconnect_last_seen = clock::zero();
-  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
-
-  feature_bitset_t supported_features;
-  feature_bitset_t required_client_features;
-
-  double cap_revoke_eviction_timeout = 0;
-
-  friend class MDSContinuation;
-  friend class ServerContext;
-  friend class ServerLogContext;
-  friend class Batch_Getattr_Lookup;
-
-public:
-  bool terminating_sessions;
-
-  explicit Server(MDSRank *m);
+  enum class RecallFlags : uint64_t {
+    NONE = 0,
+    STEADY = (1<<0),
+    ENFORCE_MAX = (1<<1),
+    TRIM = (1<<2),
+    ENFORCE_LIVENESS = (1<<3),
+  };
+  explicit Server(MDSRank *m, MetricsHandler *metrics_handler);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;
@@ -139,7 +119,8 @@ public:
 
   void handle_client_session(const cref_t<MClientSession> &m);
   void _session_logged(Session *session, uint64_t state_seq, 
-		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
+		       bool open, version_t pv, const interval_set<inodeno_t>& inos,version_t piv,
+		       const interval_set<inodeno_t>& purge_inos, LogSegment *ls);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
 					map<client_t,client_metadata_t>& cmm,
 					map<client_t,pair<Session*,uint64_t> >& smap);
@@ -149,11 +130,10 @@ public:
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
-  void kill_session(Session *session, Context *on_safe);
-  size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
-  void journal_close_session(Session *session, int state, Context *on_safe);
+  void kill_session(Session *session, Context *on_safe, bool need_purge_inos = false);
+  size_t apply_blocklist(const std::set<entity_addr_t> &blocklist);
+  void journal_close_session(Session *session, int state, Context *on_safe, bool need_purge_inos = false);
 
-  set<client_t> client_reclaim_gather;
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
   Session *find_session_by_uuid(std::string_view uuid);
   void reclaim_session(Session *session, const cref_t<MClientReclaim> &m);
@@ -170,13 +150,6 @@ public:
   void reconnect_tick();
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
-  enum class RecallFlags : uint64_t {
-    NONE = 0,
-    STEADY = (1<<0),
-    ENFORCE_MAX = (1<<1),
-    TRIM = (1<<2),
-    ENFORCE_LIVENESS = (1<<3),
-  };
   std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, RecallFlags=RecallFlags::NONE);
   void force_clients_readonly();
 
@@ -191,42 +164,33 @@ public:
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
-  void set_trace_dist(Session *session, const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
-		      snapid_t snapid,
-		      int num_dentries_wanted,
+  void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      MDRequestRef& mdr);
 
-
-  void handle_slave_request(const cref_t<MMDSSlaveRequest> &m);
-  void handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m);
-  void dispatch_slave_request(MDRequestRef& mdr);
-  void handle_slave_auth_pin(MDRequestRef& mdr);
-  void handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack);
+  void handle_peer_request(const cref_t<MMDSPeerRequest> &m);
+  void handle_peer_request_reply(const cref_t<MMDSPeerRequest> &m);
+  void dispatch_peer_request(MDRequestRef& mdr);
+  void handle_peer_auth_pin(MDRequestRef& mdr);
+  void handle_peer_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
 
   // some helpers
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
-  CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_view dname);
-  CDir *traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath);
-  CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_view dname, bool okexist=false);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-			    file_layout_t *layout=NULL);
+			    const file_layout_t *layout=nullptr);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
-  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
-			      bool want_auth, bool no_want_auth=false,
-			      file_layout_t **layout=nullptr,
-			      bool no_lookup=false);
-  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
-				    MutationImpl::LockOpVec& lov,
-				    bool okexist, bool mustexist, bool alwaysxlock,
-				    file_layout_t **layout=nullptr);
+  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
+			      bool no_want_auth=false);
+  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
+				    bool okexist=false, bool want_layout=false);
+  std::pair<CDentry*, CDentry*>
+	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
-
 
   // requests on existing inodes.
   void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
@@ -238,6 +202,9 @@ public:
   void handle_client_file_setlock(MDRequestRef& mdr);
   void handle_client_file_readlock(MDRequestRef& mdr);
 
+  bool xlock_policylock(MDRequestRef& mdr, CInode *in,
+			bool want_layout=false, bool xlock_snaplock=false);
+  CInode* try_get_auth_inode(MDRequestRef& mdr, inodeno_t ino);
   void handle_client_setattr(MDRequestRef& mdr);
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
@@ -250,12 +217,8 @@ public:
                           string name,
                           string value,
                           file_layout_t *layout);
-  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			 file_layout_t *dir_layout,
-			 MutationImpl::LockOpVec& lov);
-  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
-			    file_layout_t *dir_layout,
-			    MutationImpl::LockOpVec& lov);
+  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 
@@ -273,7 +236,7 @@ public:
 
   // link
   void handle_client_link(MDRequestRef& mdr);
-  void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti);
+  void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
   void _link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
 			  version_t, version_t, bool);
 
@@ -281,12 +244,12 @@ public:
   void _link_remote_finish(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
-  void handle_slave_link_prep(MDRequestRef& mdr);
-  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
-  void _commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti);
-  void _committed_slave(MDRequestRef& mdr);  // use for rename, too
-  void handle_slave_link_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m);
-  void do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
+  void handle_peer_link_prep(MDRequestRef& mdr);
+  void _logged_peer_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
+  void _commit_peer_link(MDRequestRef& mdr, int r, CInode *targeti);
+  void _committed_peer(MDRequestRef& mdr);  // use for rename, too
+  void handle_peer_link_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void do_link_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr);
   void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
 			     map<client_t,ref_t<MClientSnap>>& split);
 
@@ -299,11 +262,11 @@ public:
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
   bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn);
-  void handle_slave_rmdir_prep(MDRequestRef& mdr);
-  void _logged_slave_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
-  void _commit_slave_rmdir(MDRequestRef& mdr, int r, CDentry *straydn);
-  void handle_slave_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack);
-  void do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
+  void handle_peer_rmdir_prep(MDRequestRef& mdr);
+  void _logged_peer_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
+  void _commit_peer_rmdir(MDRequestRef& mdr, int r, CDentry *straydn);
+  void handle_peer_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
+  void do_rmdir_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr);
   void _rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
 
   // rename
@@ -319,7 +282,6 @@ public:
   void handle_client_renamesnap(MDRequestRef& mdr);
   void _renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
 
-
   // helpers
   bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_rank_t> &witnesse,
 			       vector<CDentry*>& srctrace, vector<CDentry*>& dsttrace, CDentry *straydn);
@@ -327,20 +289,21 @@ public:
   bool _need_force_journal(CInode *diri, bool empty);
   void _rename_prepare(MDRequestRef& mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
-		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+		       CDentry *srcdn, CDentry *destdn, std::string_view alternate_name,
+                       CDentry *straydn);
   /* set not_journaling=true if you're going to discard the results --
    * this bypasses the asserts to make sure we're journaling the right
    * things on the right nodes */
   void _rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
   // slaving
-  void handle_slave_rename_prep(MDRequestRef& mdr);
-  void handle_slave_rename_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m);
-  void handle_slave_rename_notify_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m);
-  void _slave_rename_sessions_flushed(MDRequestRef& mdr);
-  void _logged_slave_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr, bool finish_mdr=false);
+  void handle_peer_rename_prep(MDRequestRef& mdr);
+  void handle_peer_rename_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void handle_peer_rename_notify_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void _peer_rename_sessions_flushed(MDRequestRef& mdr);
+  void _logged_peer_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _commit_peer_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, map<client_t,ref_t<MClientSnap>> splits[2],
 			       bool finish_mdr);
@@ -348,13 +311,165 @@ public:
   void evict_cap_revoke_non_responders();
   void handle_conf_change(const std::set<std::string>& changed);
 
+  bool terminating_sessions = false;
+
+  set<client_t> client_reclaim_gather;
+
 private:
+  friend class MDSContinuation;
+  friend class ServerContext;
+  friend class ServerLogContext;
+  friend class Batch_Getattr_Lookup;
+
+  // placeholder for validation handler to store xattr specific
+  // data
+  struct XattrInfo {
+    virtual ~XattrInfo() {
+    }
+  };
+
+  struct MirrorXattrInfo : XattrInfo {
+    std::string cluster_id;
+    std::string fs_id;
+
+    static const std::string MIRROR_INFO_REGEX;
+    static const std::string CLUSTER_ID;
+    static const std::string FS_ID;
+
+    MirrorXattrInfo(std::string_view cluster_id,
+                    std::string_view fs_id)
+      : cluster_id(cluster_id),
+        fs_id(fs_id) {
+    }
+  };
+
+  struct XattrOp {
+    int op;
+    std::string xattr_name;
+    const bufferlist &xattr_value;
+    int flags = 0;
+
+    std::unique_ptr<XattrInfo> xinfo;
+
+    XattrOp(int op, std::string_view xattr_name, const bufferlist &xattr_value, int flags)
+      : op(op),
+        xattr_name(xattr_name),
+        xattr_value(xattr_value),
+        flags (flags) {
+    }
+  };
+
+  struct XattrHandler {
+    const std::string xattr_name;
+    const std::string description;
+
+    // basic checks are to be done in this handler. return -errno to
+    // reject xattr request (set or remove), zero to proceed. handlers
+    // may parse xattr value for verification if needed and have an
+    // option to store custom data in XattrOp::xinfo.
+    int (Server::*validate)(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                            XattrOp *xattr_op);
+
+    // set xattr for an inode in xattr_map
+    void (Server::*setxattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                             const XattrOp &xattr_op);
+
+    // remove xattr for an inode from xattr_map
+    void (Server::*removexattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                const XattrOp &xattr_op);
+  };
+
+  inline static const std::string DEFAULT_HANDLER = "<default>";
+  static const XattrHandler xattr_handlers[];
+
+  const XattrHandler* get_xattr_or_default_handler(std::string_view xattr_name);
+
+  // generic variant to set/remove xattr in/from xattr_map
+  int xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                     const std::string &xattr_name, int op, int flags);
+  void xattr_set(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name,
+                 const bufferlist &xattr_value);
+  void xattr_rm(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name);
+
+  // default xattr handlers
+  int default_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                             XattrOp *xattr_op);
+  void default_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                const XattrOp &xattr_op);
+  void default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                   const XattrOp &xattr_op);
+
+  // mirror info xattr handler
+  int parse_mirror_info_xattr(const std::string &name, const std::string &value,
+                              std::string &cluster_id, std::string &fs_id);
+  int mirror_info_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                 XattrOp *xattr_op);
+  void mirror_info_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                    const XattrOp &xattr_op);
+  void mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                       const XattrOp &xattr_op);
+
+  static bool is_ceph_vxattr(std::string_view xattr_name) {
+    return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
+           xattr_name.rfind("ceph.file.layout", 0) == 0 ||
+           xattr_name.rfind("ceph.quota", 0) == 0 ||
+           xattr_name == "ceph.dir.subvolume"sv ||
+           xattr_name == "ceph.dir.pin"sv ||
+           xattr_name == "ceph.dir.pin.random"sv ||
+           xattr_name == "ceph.dir.pin.distributed"sv;
+  }
+
+  static bool is_allowed_ceph_xattr(std::string_view xattr_name) {
+    // not a ceph xattr -- allow!
+    if (xattr_name.rfind("ceph.", 0) != 0) {
+      return true;
+    }
+
+    return xattr_name == "ceph.mirror.info";
+  }
+
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
-  void flush_session(Session *session, MDSGatherBuilder *gather);
-  void clear_batch_ops(const MDRequestRef& mdr);
+  void flush_session(Session *session, MDSGatherBuilder& gather);
+
+  MDSRank *mds;
+  MDCache *mdcache;
+  MDLog *mdlog;
+  PerfCounters *logger = nullptr;
+
+  // OSDMap full status, used to generate ENOSPC on some operations
+  bool is_full = false;
+
+  // State for while in reconnect
+  MDSContext *reconnect_done = nullptr;
+  int failed_reconnects = 0;
+  bool reconnect_evicting = false;  // true if I am waiting for evictions to complete
+                            // before proceeding to reconnect_gather_finish
+  time reconnect_start = clock::zero();
+  time reconnect_last_seen = clock::zero();
+  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+  set<client_t> client_reconnect_denied;  // clients whose reconnect msg have been denied .
+
+  feature_bitset_t supported_features;
+  feature_bitset_t required_client_features;
+
+  bool forward_all_requests_to_auth = false;
+  bool replay_unsafe_with_closed_session = false;
+  double cap_revoke_eviction_timeout = 0;
+  uint64_t max_snaps_per_dir = 100;
+  unsigned delegate_inos_pct = 0;
 
   DecayCounter recall_throttle;
   time last_recall_state;
+
+  MetricsHandler *metrics_handler;
+
+  // Cache cap acquisition throttle configs
+  uint64_t max_caps_per_client;
+  uint64_t cap_acquisition_throttle;
+  double max_caps_throttle_ratio;
+  double caps_throttle_retry_request_timeout;
+
+  size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
@@ -373,5 +488,4 @@ static inline constexpr bool operator!(const Server::RecallFlags& f) {
   using T = std::underlying_type<Server::RecallFlags>::type;
   return static_cast<T>(f) == static_cast<T>(0);
 }
-
 #endif

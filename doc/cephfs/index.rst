@@ -34,30 +34,38 @@ Ceph and was once the primary use-case for RADOS.  Now it is joined by two
 other storage interfaces to form a modern unified storage system: RBD (Ceph
 Block Devices) and RGW (Ceph Object Storage Gateway).
 
-.. note:: If you are evaluating CephFS for the first time, please review
-          the best practices for deployment: :doc:`/cephfs/best-practices`
 
+Getting Started with CephFS
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+For most deployments of Ceph, setting up a CephFS file system is as simple as:
 
-Using CephFS
-^^^^^^^^^^^^
+.. code:: bash
 
-Using CephFS with a running Ceph Storage Cluster requires at least one active
-:doc:`Metadata Server (MDS) daemon </cephfs/add-remove-mds>`, :doc:`creating
-the file system </cephfs/createfs>`, selecting a mount mechanism for clients
-(:doc:`FUSE </cephfs/fuse>` or :doc:`kernel driver </cephfs/kernel>`), and
-configuring :doc:`authentication credentials </cephfs/client-auth>` for
-clients.
+    ceph fs volume create <fs name>
 
-For setting up CephFS quickly, checkout the :doc:`CephFS Quick Start document
-</start/quick-cephfs>`.
+The Ceph `Orchestrator`_  will automatically create and configure MDS for
+your file system if the back-end deployment technology supports it (see
+`Orchestrator deployment table`_). Otherwise, please `deploy MDS manually
+as needed`_.
+
+Finally, to mount CephFS on your client nodes, see `Mount CephFS:
+Prerequisites`_ page. Additionally, a command-line shell utility is available
+for interactive access or scripting via the `cephfs-shell`_.
+
+.. _Orchestrator: ../mgr/orchestrator
+.. _deploy MDS manually as needed: add-remove-mds
+.. _Orchestrator deployment table: ../mgr/orchestrator/#current-implementation-status
+.. _Mount CephFS\: Prerequisites: mount-prerequisites
+.. _cephfs-shell: cephfs-shell
+
 
 .. raw:: html
 
    <!---
 
-Metadata Server Setup
-^^^^^^^^^^^^^^^^^^^^^
+Administration
+^^^^^^^^^^^^^^
 
 .. raw:: html
 
@@ -67,12 +75,22 @@ Metadata Server Setup
    :maxdepth: 1
    :hidden:
 
-	Provision/Add/Remove MDS(s) <add-remove-mds>
-	MDS failover and standby configuration <standby>
-	MDS Configuration Settings <mds-config-ref>
-	Client Configuration Settings <client-config-ref>
-	Journaler Configuration <journaler>
-	Manpage ceph-mds <../../man/8/ceph-mds>
+    Create a CephFS file system <createfs>
+    Administrative commands <administration>
+    Creating Multiple File Systems <multifs>
+    Provision/Add/Remove MDS(s) <add-remove-mds>
+    MDS failover and standby configuration <standby>
+    MDS Cache Configuration <cache-configuration>
+    MDS Configuration Settings <mds-config-ref>
+    Manual: ceph-mds <../../man/8/ceph-mds>
+    Export over NFS <nfs>
+    Export over NFS with volume nfs interface <fs-nfs-exports>
+    Application best practices <app-best-practices>
+    FS volume and subvolumes <fs-volumes>
+    CephFS Quotas <quota>
+    Health messages <health-messages>
+    Upgrading old file systems <upgrading>
+    CephFS Top Utility <cephfs-top>
 
 
 .. raw:: html
@@ -90,15 +108,87 @@ Mounting CephFS
    :maxdepth: 1
    :hidden:
 
-	Create a CephFS file system <createfs>
-	Mount CephFS with the Kernel Driver <kernel>
-	Mount CephFS as FUSE <fuse>
-	Mount CephFS in fstab <fstab>
-	Use the CephFS Shell <cephfs-shell>
-	Supported Features of Kernel Driver <kernel-features>
-	Manpage ceph-fuse <../../man/8/ceph-fuse>
-	Manpage mount.ceph <../../man/8/mount.ceph>
-	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
+    Client Configuration Settings <client-config-ref>
+    Client Authentication <client-auth>
+    Mount CephFS: Prerequisites <mount-prerequisites>
+    Mount CephFS using Kernel Driver <mount-using-kernel-driver>
+    Mount CephFS using FUSE <mount-using-fuse>
+    Use the CephFS Shell <cephfs-shell>
+    Supported Features of Kernel Driver <kernel-features>
+    Manual: ceph-fuse <../../man/8/ceph-fuse>
+    Manual: mount.ceph <../../man/8/mount.ceph>
+    Manual: mount.fuse.ceph <../../man/8/mount.fuse.ceph>
+
+
+.. raw:: html
+
+   <!---
+
+CephFS Concepts
+^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   --->
+
+.. toctree:: 
+   :maxdepth: 1
+   :hidden:
+
+    MDS States <mds-states>
+    POSIX compatibility <posix>
+    MDS Journaling <mds-journaling>
+    File layouts <file-layouts>
+    Distributed Metadata Cache <mdcache>
+    Dynamic Metadata Management in CephFS <dynamic-metadata-management>
+    CephFS IO Path <cephfs-io-path>
+    LazyIO <lazyio>
+    Directory fragmentation <dirfrags>
+    Multiple active MDS daemons <multimds>
+
+
+.. raw:: html
+
+   <!---
+
+Troubleshooting and Disaster Recovery
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   --->
+
+.. toctree:: 
+   :hidden:
+
+    Client eviction <eviction>
+    Scrubbing the File System <scrub>
+    Handling full file systems <full>
+    Metadata repair <disaster-recovery-experts>
+    Troubleshooting <troubleshooting>
+    Disaster recovery <disaster-recovery>
+    cephfs-journal-tool <cephfs-journal-tool>
+
+
+.. raw:: html
+
+   <!---
+
+Developer Guides
+^^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   --->
+
+.. toctree:: 
+   :maxdepth: 1
+   :hidden:
+
+    Journaler Configuration <journaler>
+    Client's Capabilities <capabilities>
+    Java and Python bindings <api/index>
+    Mantle <mantle>
 
 
 .. raw:: html
@@ -112,71 +202,8 @@ Additional Details
 
    --->
 
-.. toctree:: 
+.. toctree::
    :maxdepth: 1
    :hidden:
 
-    Deployment best practices <best-practices>
-    MDS States <mds-states>
-    Administrative commands <administration>
-    Understanding MDS Cache Size Limits <cache-size-limits>
-    POSIX compatibility <posix>
     Experimental Features <experimental-features>
-    CephFS Quotas <quota>
-    Using Ceph with Hadoop <hadoop>
-    MDS Journaling <mds-journaling>
-    cephfs-journal-tool <cephfs-journal-tool>
-    File layouts <file-layouts>
-    Client eviction <eviction>
-    Handling full file systems <full>
-    Health messages <health-messages>
-    Troubleshooting <troubleshooting>
-    Disaster recovery <disaster-recovery>
-    Client authentication <client-auth>
-    Upgrading old file systems <upgrading>
-    Configuring directory fragmentation <dirfrags>
-    Configuring multiple active MDS daemons <multimds>
-    Export over NFS <nfs>
-    Application best practices <app-best-practices>
-    Scrub <scrub>
-    LazyIO <lazyio>
-    Distributed Metadata Cache <mdcache>
-    FS volume and subvolumes <fs-volumes>
-    Dynamic Metadata Management in CephFS <dynamic-metadata-management>
-
-.. raw:: html
-
-   <!---
-
-Metadata Repair
-^^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
-.. toctree:: 
-   :hidden:
-
-    Advanced: Metadata repair <disaster-recovery-experts>
-
-
-.. raw:: html
-
-   <!---
-
-For Developers
-^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
-.. toctree:: 
-   :maxdepth: 1
-   :hidden:
-
-    Client's Capabilities <capabilities>
-    libcephfs <../../api/libcephfs-java/>
-    Mantle <mantle>
-

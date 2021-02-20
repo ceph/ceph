@@ -46,10 +46,14 @@ class C_handle_notify : public EventCallback {
     char c[256];
     int r = 0;
     do {
+      #ifdef _WIN32
+      r = recv(fd_or_id, c, sizeof(c), 0);
+      #else
       r = read(fd_or_id, c, sizeof(c));
+      #endif
       if (r < 0) {
-        if (errno != EAGAIN)
-          ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << dendl;
+        if (ceph_sock_errno() != EAGAIN)
+          ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(ceph_sock_errno()) << dendl;
       }
     } while (r > 0);
   }
@@ -69,7 +73,7 @@ class C_handle_notify : public EventCallback {
  *      about the poller. The name of the superclass is probably sufficient
  *      for most cases.
  */
-EventCenter::Poller::Poller(EventCenter* center, const string& name)
+EventCenter::Poller::Poller(EventCenter* center, const std::string& name)
     : owner(center), poller_name(name), slot(owner->pollers.size())
 {
   owner->pollers.push_back(this);
@@ -94,7 +98,7 @@ EventCenter::Poller::~Poller()
   slot = -1;
 }
 
-ostream& EventCenter::_event_prefix(std::ostream *_dout)
+std::ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
   return *_dout << "Event(" << this << " nevent=" << nevent
                 << " time_id=" << time_event_next_id << ").";
@@ -142,14 +146,20 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
     return 0;
 
   int fds[2];
+
+  #ifdef _WIN32
+  if (win_socketpair(fds) < 0) {
+  #else
   if (pipe_cloexec(fds, 0) < 0) {
-    int e = errno;
+  #endif
+    int e = ceph_sock_errno();
     lderr(cct) << __func__ << " can't create notify pipe: " << cpp_strerror(e) << dendl;
     return -e;
   }
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
+
   r = net.set_nonblock(notify_receive_fd);
   if (r < 0) {
     return r;
@@ -177,9 +187,9 @@ EventCenter::~EventCenter()
   //assert(time_events.empty());
 
   if (notify_receive_fd >= 0)
-    ::close(notify_receive_fd);
+    compat_closesocket(notify_receive_fd);
   if (notify_send_fd >= 0)
-    ::close(notify_send_fd);
+    compat_closesocket(notify_send_fd);
 
   delete driver;
   if (notify_handler)
@@ -248,7 +258,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
     event->write_cb = ctxt;
   }
   ldout(cct, 20) << __func__ << " create event end fd=" << fd << " mask=" << mask
-                 << " original mask is " << event->mask << dendl;
+                 << " current mask is " << event->mask << dendl;
   return 0;
 }
 
@@ -281,7 +291,7 @@ void EventCenter::delete_file_event(int fd, int mask)
 
   event->mask = event->mask & (~mask);
   ldout(cct, 30) << __func__ << " delete event end fd=" << fd << " mask=" << mask
-                 << " original mask is " << event->mask << dendl;
+                 << " current mask is " << event->mask << dendl;
 }
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)
@@ -327,10 +337,15 @@ void EventCenter::wakeup()
   ldout(cct, 20) << __func__ << dendl;
   char buf = 'c';
   // wake up "event_wait"
+  #ifdef _WIN32
+  int n = send(notify_send_fd, &buf, sizeof(buf), 0);
+  #else
   int n = write(notify_send_fd, &buf, sizeof(buf));
+  #endif
   if (n < 0) {
-    if (errno != EAGAIN) {
-      ldout(cct, 1) << __func__ << " write notify pipe failed: " << cpp_strerror(errno) << dendl;
+    if (ceph_sock_errno() != EAGAIN) {
+      ldout(cct, 1) << __func__ << " write notify pipe failed: "
+                    << cpp_strerror(ceph_sock_errno()) << dendl;
       ceph_abort();
     }
   }
@@ -340,6 +355,7 @@ int EventCenter::process_time_events()
 {
   int processed = 0;
   clock_type::time_point now = clock_type::now();
+  using ceph::operator <<;
   ldout(cct, 30) << __func__ << " cur time is " << now << dendl;
 
   while (!time_events.empty()) {
@@ -388,7 +404,7 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
   tv.tv_usec = timeout_microseconds % 1000000;
 
   ldout(cct, 30) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
-  vector<FiredFileEvent> fired_events;
+  std::vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
   auto working_start = ceph::mono_clock::now();
   for (int event_id = 0; event_id < numevents; event_id++) {
@@ -422,7 +438,7 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
 
   if (external_num_events.load()) {
     external_lock.lock();
-    deque<EventCallbackRef> cur_process;
+    std::deque<EventCallbackRef> cur_process;
     cur_process.swap(external_events);
     external_num_events.store(0);
     external_lock.unlock();

@@ -35,6 +35,8 @@ Generally, the metadata pool will have at most a few gigabytes of data. For
 this reason, a smaller PG count is usually recommended. 64 or 128 is commonly
 used in practice for large clusters.
 
+.. note:: The names of the file systems, metadata pools, and data pools can
+          only have characters in the set [a-zA-Z0-9\_-.].
 
 Creating a file system
 ======================
@@ -68,12 +70,18 @@ choose which to use when mounting.
 	- `Mount CephFS`_
 	- `Mount CephFS as FUSE`_
 
-.. _Mount CephFS: ../../cephfs/kernel
-.. _Mount CephFS as FUSE: ../../cephfs/fuse
+.. _Mount CephFS: ../../cephfs/mount-using-kernel-driver
+.. _Mount CephFS as FUSE: ../../cephfs/mount-using-fuse
 
 If you have created more than one file system, and a client does not
 specify a file system when mounting, you can control which file system
 they will see by using the `ceph fs set-default` command.
+
+Adding a Data Pool to the File System 
+-------------------------------------
+
+See :ref:`adding-data-pool-to-file-system`.
+
 
 Using Erasure Coded pools with CephFS
 =====================================

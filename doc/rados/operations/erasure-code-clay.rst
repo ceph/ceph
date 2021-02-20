@@ -23,13 +23,13 @@ amount of information. More general parameters are provided below. The benefits 
 when the repair is carried out for a rack that stores information on the order of 
 Terabytes.
 
-	+-------------+---------------------------+
-	| plugin      | total amount of disk IO   |
-	+=============+===========================+
-	|jerasure,isa | k*S                       |
-	+-------------+---------------------------+
-	| clay        | d*S/(d-k+1) = (k+m-1)*S/m |
-	+-------------+---------------------------+
+	+-------------+---------------------------------------------------------+
+	| plugin      | total amount of disk IO                                 |
+	+=============+=========================================================+
+	|jerasure,isa | :math:`k S`                                             |
+	+-------------+---------------------------------------------------------+
+	| clay        | :math:`\frac{d S}{d - k + 1} = \frac{(k + m - 1) S}{m}` |
+	+-------------+---------------------------------------------------------+
 
 where *S* is the amount of data stored on a single OSD undergoing repair. In the table above, we have 
 used the largest possible value of *d* as this will result in the smallest amount of data download needed
@@ -88,7 +88,7 @@ Where:
 
 :Description: Number of OSDs requested to send data during recovery of
               a single chunk. *d* needs to be chosen such that
-              k+1 <= d <= k+m-1. Larger the *d*, the better the savings.
+              k+1 <= d <= k+m-1. The larger the *d*, the better the savings.
 
 :Type: Integer
 :Required: No.
@@ -174,14 +174,14 @@ is a vector code and it is able to view and manipulate data within a chunk
 at a finer granularity termed as a sub-chunk. The number of sub-chunks within 
 a chunk for a Clay code is given by:
 
-	sub-chunk count = q\ :sup:`(k+m)/q`, where q=d-k+1
+	sub-chunk count = :math:`q^{\frac{k+m}{q}}`, where :math:`q = d - k + 1`
 
 
 During repair of an OSD, the helper information requested
 from an available OSD is only a fraction of a chunk. In fact, the number
 of sub-chunks within a chunk that are accessed during repair is given by:
 
-	repair sub-chunk count = sub-chunk count / q
+	repair sub-chunk count = :math:`\frac{sub---chunk \: count}{q}`
 
 Examples
 --------
@@ -203,9 +203,9 @@ are not necessarily stored consecutively within a chunk. For best disk IO
 performance, it is helpful to read contiguous data. For this reason, it is suggested that
 you choose stripe-size such that the sub-chunk size is sufficiently large.
 
-For a given stripe-size (that's fixed based on a workload), choose ``k``, ``m``, ``d`` such that::
+For a given stripe-size (that's fixed based on a workload), choose ``k``, ``m``, ``d`` such that:
 
-	sub-chunk size = stripe-size / (k*sub-chunk count) = 4KB, 8KB, 12KB ...
+	sub-chunk size = :math:`\frac{stripe-size}{k sub-chunk count}` = 4KB, 8KB, 12KB ...
 
 #. For large size workloads for which the stripe size is large, it is easy to choose k, m, d.
    For example consider a stripe-size of size 64MB, choosing *k=16*, *m=4* and *d=19* will

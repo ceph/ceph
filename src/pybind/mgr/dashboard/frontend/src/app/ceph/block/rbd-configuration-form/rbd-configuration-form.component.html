@@ -4,18 +4,21 @@
 
   <div *ngFor="let section of rbdConfigurationService.sections"
        class="col-12">
-    <h3 class="cd-header">
+    <h4 class="cd-header">
       <span (click)="toggleSectionVisibility(section.class)"
-        class="collapsible">{{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle" aria-hidden="true"></i></span>
-    </h3>
+            class="collapsible">
+        {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
+                                 aria-hidden="true"></i>
+      </span>
+    </h4>
     <div class="{{ section.class }}"
          [hidden]="!sectionVisibility[section.class]">
       <div class="form-group row"
            *ngFor="let option of section.options">
-        <label class="col-form-label col-sm-3"
+        <label class="cd-col-form-label"
                [for]="option.name">{{ option.displayName }}<cd-helper>{{ option.description }}</cd-helper></label>
 
-        <div class="col-sm-9 {{ section.heading }}">
+        <div class="cd-col-form-input {{ section.heading }}">
           <div class="input-group">
             <ng-container [ngSwitch]="option.type">
               <ng-container *ngSwitchCase="configurationType.milliseconds">
@@ -62,7 +65,7 @@
           </div>
           <span i18n
                 class="invalid-feedback"
-                *ngIf="form.showError('configuration.' + option.name, cfgFormGroup, 'min')">The mininum value is 0</span>
+                *ngIf="form.showError('configuration.' + option.name, cfgFormGroup, 'min')">The minimum value is 0</span>
         </div>
       </div>
     </div>

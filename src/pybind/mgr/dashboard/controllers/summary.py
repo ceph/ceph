@@ -3,16 +3,43 @@ from __future__ import absolute_import
 
 import json
 
-from . import ApiController, Endpoint, BaseController
 from .. import mgr
-from ..security import Permission, Scope
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..exceptions import ViewCacheNoDataException
-from ..tools import TaskManager
+from ..security import Permission, Scope
 from ..services import progress
+from ..tools import TaskManager
+from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc
+
+SUMMARY_SCHEMA = {
+    "health_status": (str, ""),
+    "mgr_id": (str, ""),
+    "mgr_host": (str, ""),
+    "have_mon_connection": (str, ""),
+    "executing_tasks": ([str], ""),
+    "finished_tasks": ([{
+        "name": (str, ""),
+        "metadata": ({
+            "pool": (int, ""),
+        }, ""),
+        "begin_time": (str, ""),
+        "end_time": (str, ""),
+        "duration": (int, ""),
+        "progress": (int, ""),
+        "success": (bool, ""),
+        "ret_value": (str, ""),
+        "exception": (str, ""),
+    }], ""),
+    "version": (str, ""),
+    "rbd_mirroring": ({
+        "warnings": (int, ""),
+        "errors": (int, "")
+    }, "")
+}
 
 
 @ApiController('/summary')
+@ControllerDoc("Get Ceph Summary Details", "Summary")
 class Summary(BaseController):
     def _health_status(self):
         health_data = mgr.get("health")
@@ -21,8 +48,8 @@ class Summary(BaseController):
     def _rbd_mirroring(self):
         try:
             _, data = get_daemons_and_pools()
-        except ViewCacheNoDataException:
-            return {}
+        except ViewCacheNoDataException:  # pragma: no cover
+            return {}  # pragma: no cover
 
         daemons = data.get('daemons', [])
         pools = data.get('pools', {})
@@ -30,18 +57,18 @@ class Summary(BaseController):
         warnings = 0
         errors = 0
         for daemon in daemons:
-            if daemon['health_color'] == 'error':
+            if daemon['health_color'] == 'error':  # pragma: no cover
                 errors += 1
-            elif daemon['health_color'] == 'warning':
+            elif daemon['health_color'] == 'warning':  # pragma: no cover
                 warnings += 1
         for _, pool in pools.items():
-            if pool['health_color'] == 'error':
+            if pool['health_color'] == 'error':  # pragma: no cover
                 errors += 1
-            elif pool['health_color'] == 'warning':
+            elif pool['health_color'] == 'warning':  # pragma: no cover
                 warnings += 1
         return {'warnings': warnings, 'errors': errors}
 
-    def _task_permissions(self, name):
+    def _task_permissions(self, name):  # pragma: no cover
         result = True
         if name == 'pool/create':
             result = self._has_permissions(Permission.CREATE, Scope.POOL)
@@ -64,11 +91,13 @@ class Summary(BaseController):
         return result
 
     def _get_host(self):
-        mgr_map = mgr.get('mgr_map')
-        services = mgr_map['services']
-        return services['dashboard']
+        # type: () -> str
+        services = mgr.get('mgr_map')['services']
+        return services['dashboard'] if 'dashboard' in services else ''
 
     @Endpoint()
+    @EndpointDoc("Display Summary",
+                 responses={200: SUMMARY_SCHEMA})
     def __call__(self):
         exe_t, fin_t = TaskManager.list_serializable()
         executing_tasks = [task for task in exe_t if self._task_permissions(task['name'])]

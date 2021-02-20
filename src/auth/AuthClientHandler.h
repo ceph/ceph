@@ -17,8 +17,8 @@
 
 
 #include "auth/Auth.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 struct MAuthReply;
 class RotatingKeyRing;
 

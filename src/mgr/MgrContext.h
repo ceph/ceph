@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "common/ceph_json.h"
+#include "common/Cond.h"
 #include "mon/MonClient.h"
 
 class Command
@@ -31,6 +32,12 @@ public:
   void run(MonClient *monc, const std::string &command)
   {
     monc->start_mon_command({command}, {},
+        &outbl, &outs, &cond);
+  }
+
+  void run(MonClient *monc, const std::string &command, const ceph::buffer::list &inbl)
+  {
+    monc->start_mon_command({command}, inbl,
         &outbl, &outs, &cond);
   }
 

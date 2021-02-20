@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import datetime
+import logging
+import os
 from contextlib import contextmanager
 
-import datetime
-import os
-import six
 import cephfs
 
-from .. import mgr, logger
+from .. import mgr
+
+logger = logging.getLogger('cephfs')
 
 
 class CephFS(object):
@@ -35,17 +37,17 @@ class CephFS(object):
         return fs_info[0]['mdsmap']['fs_name']
 
     def __init__(self, fs_name=None):
-        logger.debug("[CephFS] initializing cephfs connection")
+        logger.debug("initializing cephfs connection")
         self.cfs = cephfs.LibCephFS(rados_inst=mgr.rados)
-        logger.debug("[CephFS] mounting cephfs filesystem: %s", fs_name)
+        logger.debug("mounting cephfs filesystem: %s", fs_name)
         if fs_name:
             self.cfs.mount(filesystem_name=fs_name)
         else:
             self.cfs.mount()
-        logger.debug("[CephFS] mounted cephfs filesystem")
+        logger.debug("mounted cephfs filesystem")
 
     def __del__(self):
-        logger.debug("[CephFS] shutting down cephfs filesystem")
+        logger.debug("shutting down cephfs filesystem")
         self.cfs.shutdown()
 
     @contextmanager
@@ -58,42 +60,75 @@ class CephFS(object):
             if d:
                 self.cfs.closedir(d)
 
-    def ls_dir(self, path, level):
+    def ls_dir(self, path, depth):
+        """
+        List directories of specified path with additional information.
+        :param path: The root directory path.
+        :type path: str | bytes
+        :param depth: The number of steps to go down the directory tree.
+        :type depth: int | str
+        :return: A list of directory dicts which consist of name, path,
+            parent, snapshots and quotas.
+        :rtype: list
+        """
+        paths = self._ls_dir(path, int(depth))
+        # Convert (bytes => string), prettify paths (strip slashes)
+        # and append additional information.
+        return [self.get_directory(p) for p in paths if p != path.encode()]
+
+    def _ls_dir(self, path, depth):
         """
         List directories of specified path.
         :param path: The root directory path.
         :type path: str | bytes
-        :param level: The number of steps to go down the directory tree.
-        :type level: int
-        :return: A list of directory paths (bytes encoded). The specified
-            root directory is also included.
+        :param depth: The number of steps to go down the directory tree.
+        :type depth: int
+        :return: A list of directory paths (bytes encoded).
             Example:
             ls_dir('/photos', 1) => [
-                b'/photos', b'/photos/flowers', b'/photos/cars'
+                b'/photos/flowers', b'/photos/cars'
             ]
         :rtype: list
         """
-        if isinstance(path, six.string_types):
+        if isinstance(path, str):
             path = path.encode()
-        logger.debug("[CephFS] get_dir_list dir_path=%s level=%s",
-                     path, level)
-        if level == 0:
+        logger.debug("get_dir_list dirpath=%s depth=%s", path,
+                     depth)
+        if depth == 0:
             return [path]
-        logger.debug("[CephFS] opening dir_path=%s", path)
+        logger.debug("opening dirpath=%s", path)
         with self.opendir(path) as d:
             dent = self.cfs.readdir(d)
             paths = [path]
             while dent:
-                logger.debug("[CephFS] found entry=%s", dent.d_name)
+                logger.debug("found entry=%s", dent.d_name)
                 if dent.d_name in [b'.', b'..']:
                     dent = self.cfs.readdir(d)
                     continue
                 if dent.is_dir():
-                    logger.debug("[CephFS] found dir=%s", dent.d_name)
+                    logger.debug("found dir=%s", dent.d_name)
                     subdir_path = os.path.join(path, dent.d_name)
-                    paths.extend(self.ls_dir(subdir_path, level - 1))
+                    paths.extend(self._ls_dir(subdir_path, depth - 1))
                 dent = self.cfs.readdir(d)
         return paths
+
+    def get_directory(self, path):
+        """
+        Transforms path of directory into a meaningful dictionary.
+        :param path: The root directory path.
+        :type path: str | bytes
+        :return: Dict consists of name, path, parent, snapshots and quotas.
+        :rtype: dict
+        """
+        path = path.decode()
+        not_root = path != os.sep
+        return {
+            'name': os.path.basename(path) if not_root else path,
+            'path': path,
+            'parent': os.path.dirname(path) if not_root else None,
+            'snapshots': self.ls_snapshots(path),
+            'quotas': self.get_quotas(path) if not_root else None
+        }
 
     def dir_exists(self, path):
         try:
@@ -111,7 +146,7 @@ class CephFS(object):
             raise Exception('Cannot create root directory "/"')
         if self.dir_exists(path):
             return
-        logger.info("[CephFS] Creating directory: %s", path)
+        logger.info("Creating directory: %s", path)
         self.cfs.mkdirs(path, 0o755)
 
     def rm_dir(self, path):
@@ -123,7 +158,7 @@ class CephFS(object):
             raise Exception('Cannot remove root directory "/"')
         if not self.dir_exists(path):
             return
-        logger.info("[CephFS] Removing directory: %s", path)
+        logger.info("Removing directory: %s", path)
         self.cfs.rmdir(path)
 
     def mk_snapshot(self, path, name=None, mode=0o755):
@@ -147,7 +182,7 @@ class CephFS(object):
             name = now.replace(tzinfo=tz).isoformat('T')
         client_snapdir = self.cfs.conf_get('client_snapdir')
         snapshot_path = os.path.join(path, client_snapdir, name)
-        logger.info("[CephFS] Creating snapshot: %s", snapshot_path)
+        logger.info("Creating snapshot: %s", snapshot_path)
         self.cfs.mkdir(snapshot_path, mode)
         return name
 
@@ -167,7 +202,7 @@ class CephFS(object):
             dent = self.cfs.readdir(d)
             while dent:
                 if dent.is_dir():
-                    if dent.d_name not in [b'.', b'..']:
+                    if dent.d_name not in [b'.', b'..'] and not dent.d_name.startswith(b'_'):
                         snapshot_path = os.path.join(path, dent.d_name)
                         stat = self.cfs.stat(snapshot_path)
                         result.append({
@@ -188,7 +223,7 @@ class CephFS(object):
         """
         client_snapdir = self.cfs.conf_get('client_snapdir')
         snapshot_path = os.path.join(path, client_snapdir, name)
-        logger.info("[CephFS] Removing snapshot: %s", snapshot_path)
+        logger.info("Removing snapshot: %s", snapshot_path)
         self.cfs.rmdir(snapshot_path)
 
     def get_quotas(self, path):
@@ -220,7 +255,9 @@ class CephFS(object):
         :param max_files: The file limit.
         :type max_files: int | None
         """
-        self.cfs.setxattr(path, 'ceph.quota.max_bytes',
-                          str(max_bytes if max_bytes else 0).encode(), 0)
-        self.cfs.setxattr(path, 'ceph.quota.max_files',
-                          str(max_files if max_files else 0).encode(), 0)
+        if max_bytes is not None:
+            self.cfs.setxattr(path, 'ceph.quota.max_bytes',
+                              str(max_bytes).encode(), 0)
+        if max_files is not None:
+            self.cfs.setxattr(path, 'ceph.quota.max_files',
+                              str(max_files).encode(), 0)

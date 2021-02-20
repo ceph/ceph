@@ -15,28 +15,27 @@
 #ifndef CEPH_MMDSRESOLVEACK_H
 #define CEPH_MMDSRESOLVEACK_H
 
-#include "msg/Message.h"
-
 #include "include/types.h"
+#include "messages/MMDSOp.h"
 
 
-class MMDSResolveAck : public Message {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMDSResolveAck final : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 public:
-  map<metareqid_t, bufferlist> commit;
-  vector<metareqid_t> abort;
+  std::map<metareqid_t, ceph::buffer::list> commit;
+  std::vector<metareqid_t> abort;
 
 protected:
-  MMDSResolveAck() : Message{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MMDSResolveAck() override {}
+  MMDSResolveAck() : MMDSOp{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
+  ~MMDSResolveAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "resolve_ack"; }
   /*void print(ostream& out) const {
     out << "resolve_ack.size()
 	<< "+" << ambiguous_imap.size()
-	<< " imports +" << slave_requests.size() << " slave requests)";
+	<< " imports +" << peer_requests.size() << " peer requests)";
   }
   */
   

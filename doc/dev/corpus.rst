@@ -12,11 +12,13 @@ You can also mark known or deliberate incompatibilities between versions with::
  archive/$version/forward_incompat/$type
 
 The presence of a file indicates that new versions of code cannot
-decode old objects across that $version (this is normally the case).
+decode old objects across that ``$version`` (this is normally the case).
 
 
 How to generate an object corpus
 --------------------------------
+
+.. highlight:: shell
 
 We can generate an object corpus for a particular version of ceph using the
 script of ``script/gen-corpus.sh``, or by following the instructions below:
@@ -51,7 +53,7 @@ script of ``script/gen-corpus.sh``, or by following the instructions below:
 	bin/ceph_test_librbd
 	bin/ceph_test_libcephfs
 	bin/init-ceph restart mds.a
-    ../qa/workunits/rgw/run-s3tests.sh
+	../qa/workunits/rgw/run-s3tests.sh
 
 #. Stop::
 

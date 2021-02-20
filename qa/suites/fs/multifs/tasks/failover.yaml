@@ -1,7 +1,7 @@
 overrides:
   ceph:
-    log-whitelist:
-      - not responding, replacing
+    log-ignorelist:
+      - Replacing daemon mds
       - \(MDS_INSUFFICIENT_STANDBY\)
       - \(MDS_ALL_DOWN\)
       - \(MDS_UP_LESS_THAN_MAX\)
@@ -12,6 +12,7 @@ tasks:
       mon.a:
         - ceph config set mgr mgr/crash/warn_recent_interval 0
   - cephfs_test_runner:
+      fail_on_skip: false
       modules:
         - tasks.cephfs.test_failover
 

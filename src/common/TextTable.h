@@ -53,6 +53,7 @@ private:
   std::vector<TextTableColumn> col;	// column definitions
   unsigned int curcol, currow;		// col, row being inserted into
   unsigned int indent;			// indent width when rendering
+  std::string column_separation = {"  "};
 
 protected:
   std::vector<std::vector<std::string> > row;	// row data array
@@ -81,6 +82,15 @@ public:
    * @param i Number of spaces to indent
    */
   void set_indent(int i) { indent = i; }
+
+  /**
+   * Set column separation
+   *
+   * @param s String to separate columns
+   */
+  void set_column_separation(const std::string& s) {
+    column_separation = s;
+  }
 
   /**
    * Add item to table, perhaps on new row.

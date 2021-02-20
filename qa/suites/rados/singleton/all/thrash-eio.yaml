@@ -20,7 +20,9 @@ override:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    log-ignorelist:
     - but it is still running
     - missing primary copy of
     - objects unfound and apparently lost
@@ -32,6 +34,7 @@ tasks:
     - \(OSD_
     - \(OBJECT_
     - \(TOO_FEW_PGS\)
+    - slow request
 - thrashosds:
     op_delay: 30
     clean_interval: 120

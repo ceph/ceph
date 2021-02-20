@@ -1,4 +1,13 @@
-Sphinx == 2.1.2
+Sphinx == 3.2.1
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
-breathe == 4.13.1
+breathe >= 4.20.0
+Jinja2
 pyyaml >= 5.1.2
+Cython
+pcpp
+prettytable
+sphinx-autodoc-typehints
+sphinx-prompt
+Sphinx-Substitution-Extensions
+typed-ast
+sphinxcontrib-openapi

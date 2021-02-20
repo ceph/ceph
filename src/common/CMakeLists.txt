@@ -7,13 +7,20 @@ add_library(common_texttable_obj OBJECT
 add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
 
+if(WIN32)
+  add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
+endif()
+
 set(common_srcs
   AsyncOpTracker.cc
   BackTrace.cc
   ConfUtils.cc
   Cycles.cc
+  CDC.cc
   DecayCounter.cc
+  FastCDC.cc
   Finisher.cc
+  FixedCDC.cc
   Formatter.cc
   Graylog.cc
   HTMLFormatter.cc
@@ -26,19 +33,16 @@ set(common_srcs
   Readahead.cc
   RefCountedObj.cc
   SloppyCRCMap.cc
-  SubProcess.cc
   Thread.cc
   Throttle.cc
   Timer.cc
   TracepointProvider.cc
   TrackedOp.cc
   WorkQueue.cc
-  address_helper.cc
   admin_socket.cc
   admin_socket_client.cc
   assert.cc
   bit_str.cc
-  blkdev.cc
   bloom_filter.cc
   ceph_argparse.cc
   ceph_context.cc
@@ -57,7 +61,6 @@ set(common_srcs
   condition_variable_debug.cc
   config.cc
   config_values.cc
-  dns_resolve.cc
   dout.cc
   entity_name.cc
   environment.cc
@@ -71,19 +74,19 @@ set(common_srcs
   hostname.cc
   ipaddr.cc
   iso_8601.cc
-  linux_version.c
   lockdep.cc
   mempool.cc
   mime.c
   mutex_debug.cc
   numa.cc
+  openssl_opts_handler.cc
   options.cc
   page.cc
   perf_counters.cc
   perf_counters_collection.cc
   perf_histogram.cc
   pick_address.cc
-  rabin.cc
+  random_string.cc
   reverse.c
   run_cmd.cc
   scrub_types.cc
@@ -95,10 +98,47 @@ set(common_srcs
   strtol.cc
   types.cc
   url_escape.cc
+  pretty_binary.cc
   utf8.c
   util.cc
-  version.cc
-  xattr.c)
+  version.cc)
+
+if(WIN32)
+  if(MINGW)
+    set(CMAKE_MC_COMPILER x86_64-w64-mingw32-windmc)
+    set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+  endif()
+
+  add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/src/common/event_logging.h
+    COMMAND ${CMAKE_MC_COMPILER} -b -e h -h ${CMAKE_BINARY_DIR}/src/common/
+      -r ${CMAKE_BINARY_DIR}/src/common ${CMAKE_SOURCE_DIR}/src/common/win32/event_logging.mc
+    COMMAND ${CMAKE_RC_COMPILER} ${CMAKE_BINARY_DIR}/src/common/event_logging.rc
+      -o ${CMAKE_BINARY_DIR}/src/common/event_logging.o
+    COMMAND ${CMAKE_CXX_COMPILER} -o ${CMAKE_BINARY_DIR}/bin/event_logging.dll -shared
+      ${CMAKE_BINARY_DIR}/src/common/event_logging.o
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/common/win32/event_logging.mc)
+
+  set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/win32/syslog.cc
+    APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/common/event_logging.h)
+
+  include_directories(SYSTEM "${CMAKE_BINARY_DIR}/src/common/")
+
+  list(APPEND common_srcs
+    win32/blkdev.cc
+    win32/dns_resolve.cc
+    win32/ifaddrs.cc
+    win32/registry.cc
+    win32/service.cc
+    win32/SubProcess.cc
+    win32/syslog.cc)
+else()
+  list(APPEND common_srcs
+    blkdev.cc
+    dns_resolve.cc
+    linux_version.c
+    SubProcess.cc)
+endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/version.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
@@ -118,6 +158,8 @@ elseif(SUN)
   list(APPEND common_srcs solaris_errno.cc)
 elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
+elseif(WIN32)
+  list(APPEND common_srcs win32/errno.cc)
 endif()
 
 if(WITH_EVENTTRACE)
@@ -126,6 +168,10 @@ endif()
 
 add_library(common-common-objs OBJECT
   ${common_srcs})
+# Let's not rely on the default system headers and point Cmake to the
+# retrieved OpenSSL location. This is especially important when cross
+# compiling (e.g. targeting Windows).
+target_include_directories(common-common-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 # for options.cc
 target_compile_definitions(common-common-objs PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
@@ -145,15 +191,15 @@ set(crc32_srcs
   crc32c.cc
   crc32c_intel_baseline.c
   sctp_crc32.c)
-
 if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
-  if(HAVE_GOOD_YASM_ELF64)
+  if(HAVE_NASM_X64)
+    set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
-      crc32c_intel_fast_asm.s
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_00.asm
       crc32c_intel_fast_zero_asm.s)
-  endif(HAVE_GOOD_YASM_ELF64)
+  endif(HAVE_NASM_X64)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
     crc32c_ppc.c)
@@ -167,7 +213,7 @@ elseif(HAVE_ARMV8_CRC)
     crc32c_aarch64.c)
 endif(HAVE_INTEL)
 
-add_library(crc32 ${crc32_srcs})
+add_library(crc32 STATIC ${crc32_srcs})
 if(HAVE_ARMV8_CRC)
   set_target_properties(crc32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")

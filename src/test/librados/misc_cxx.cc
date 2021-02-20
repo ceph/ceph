@@ -269,7 +269,7 @@ TEST_F(LibRadosMiscPP, BigObjectPP) {
 TEST_F(LibRadosMiscPP, AioOperatePP) {
   bool my_aio_complete = false;
   AioCompletion *my_completion = cluster.aio_create_completion(
-	  (void*)&my_aio_complete, set_completion_complete, NULL);
+	  (void*)&my_aio_complete, set_completion_complete);
   AioCompletion *my_completion_null = NULL;
   ASSERT_NE(my_completion, my_completion_null);
 
@@ -707,11 +707,11 @@ public:
 
 typedef ::testing::Types<
     LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH32,
-			   Checksummer::xxhash32, uint32_t>,
+			   Checksummer::xxhash32, ceph_le32>,
     LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH64,
-			   Checksummer::xxhash64, uint64_t>,
+			   Checksummer::xxhash64, ceph_le64>,
     LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_CRC32C,
-			   Checksummer::crc32c, uint32_t>
+			   Checksummer::crc32c, ceph_le32>
   > LibRadosChecksumTypes;
 
 TYPED_TEST_SUITE(LibRadosChecksum, LibRadosChecksumTypes);

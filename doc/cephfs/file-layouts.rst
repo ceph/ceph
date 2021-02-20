@@ -20,10 +20,10 @@ Layout fields
 -------------
 
 pool
-    String, giving ID or name.  Which RADOS pool a file's data objects will be stored in.
+    String, giving ID or name. String can only have characters in the set [a-zA-Z0-9\_-.]. Which RADOS pool a file's data objects will be stored in.
 
 pool_namespace
-    String.  Within the data pool, which RADOS namespace the objects will
+    String with only characters in the set [a-zA-Z0-9\_-.].  Within the data pool, which RADOS namespace the objects will
     be written to.  Empty by default (i.e. default namespace).
 
 stripe_unit
@@ -202,9 +202,11 @@ directories do not have layouts set:
     # file: dir/childdir/grandchild
     ceph.file.layout="stripe_unit=4194304 stripe_count=4 object_size=4194304 pool=cephfs_data"
 
+
+.. _adding-data-pool-to-file-system:
     
-Adding a data pool to the MDS
------------------------------
+Adding a data pool to the File System 
+-------------------------------------
 
 Before you can use a pool with CephFS you have to add it to the Metadata Servers.
 

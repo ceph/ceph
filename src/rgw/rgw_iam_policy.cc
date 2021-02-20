@@ -73,6 +73,8 @@ static const actpair actpairs[] =
  { "s3:DeleteObjectVersion", s3DeleteObjectVersion },
  { "s3:DeleteObjectTagging", s3DeleteObjectTagging },
  { "s3:DeleteObjectVersionTagging", s3DeleteObjectVersionTagging },
+ { "s3:DeleteBucketPublicAccessBlock", s3DeleteBucketPublicAccessBlock},
+ { "s3:DeletePublicAccessBlock", s3DeletePublicAccessBlock},
  { "s3:DeleteReplicationConfiguration", s3DeleteReplicationConfiguration },
  { "s3:GetAccelerateConfiguration", s3GetAccelerateConfiguration },
  { "s3:GetBucketAcl", s3GetBucketAcl },
@@ -81,12 +83,15 @@ static const actpair actpairs[] =
  { "s3:GetBucketLogging", s3GetBucketLogging },
  { "s3:GetBucketNotification", s3GetBucketNotification },
  { "s3:GetBucketPolicy", s3GetBucketPolicy },
+ { "s3:GetBucketPolicyStatus", s3GetBucketPolicyStatus },
+ { "s3:GetBucketPublicAccessBlock", s3GetBucketPublicAccessBlock },
  { "s3:GetBucketRequestPayment", s3GetBucketRequestPayment },
  { "s3:GetBucketTagging", s3GetBucketTagging },
  { "s3:GetBucketVersioning", s3GetBucketVersioning },
  { "s3:GetBucketWebsite", s3GetBucketWebsite },
  { "s3:GetLifecycleConfiguration", s3GetLifecycleConfiguration },
  { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration },
+ { "s3:GetPublicAccessBlock", s3GetPublicAccessBlock },
  { "s3:GetObjectAcl", s3GetObjectAcl },
  { "s3:GetObject", s3GetObject },
  { "s3:GetObjectTorrent", s3GetObjectTorrent },
@@ -123,6 +128,8 @@ static const actpair actpairs[] =
  { "s3:PutObjectRetention", s3PutObjectRetention },
  { "s3:PutObjectLegalHold", s3PutObjectLegalHold },
  { "s3:BypassGovernanceRetention", s3BypassGovernanceRetention },
+ { "s3:PutBucketPublicAccessBlock", s3PutBucketPublicAccessBlock },
+ { "s3:PutPublicAccessBlock", s3PutPublicAccessBlock },
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
  { "s3:RestoreObject", s3RestoreObject },
  { "iam:PutUserPolicy", iamPutUserPolicy },
@@ -138,6 +145,10 @@ static const actpair actpairs[] =
  { "iam:GetRolePolicy", iamGetRolePolicy},
  { "iam:ListRolePolicies", iamListRolePolicies},
  { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
+ { "iam:CreateOIDCProvider", iamCreateOIDCProvider},
+ { "iam:DeleteOIDCProvider", iamDeleteOIDCProvider},
+ { "iam:GetOIDCProvider", iamGetOIDCProvider},
+ { "iam:ListOIDCProviders", iamListOIDCProviders},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -371,7 +382,7 @@ bool ParseState::key(const char* s, size_t l) {
   bool ifexists = false;
   if (w->id == TokenID::Condition && w->kind == TokenKind::statement) {
     static constexpr char IfExists[] = "IfExists";
-    if (boost::algorithm::ends_with(boost::string_view{s, l}, IfExists)) {
+    if (boost::algorithm::ends_with(std::string_view{s, l}, IfExists)) {
       ifexists = true;
       token_len -= sizeof(IfExists)-1;
     }
@@ -455,6 +466,9 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
         if (match[1] == "oidc-provider") {
                 return Principal::oidc_provider(std::move(match[2]));
         }
+   if (match[1] == "assumed-role") {
+     return Principal::assumed_role(std::move(a->account), match[2]);
+   }
       }
     } else {
       if (std::none_of(s.begin(), s.end(),
@@ -963,12 +977,9 @@ ostream& operator <<(ostream& m, const Condition& c) {
 Effect Statement::eval(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida,
 		       uint64_t act, const ARN& res) const {
-  if (ida) {
-    if (!princ.empty() && !ida->is_identity(princ)) {
-      return Effect::Pass;
-    } else if (!noprinc.empty() && ida->is_identity(noprinc)) {
-      return Effect::Pass;
-    }
+
+  if (eval_principal(e, ida) == Effect::Deny) {
+    return Effect::Pass;
   }
 
   if (!resource.empty()) {
@@ -1248,6 +1259,18 @@ const char* action_bit_string(uint64_t action) {
   case iamDeleteRolePolicy:
     return "iam:DeleteRolePolicy";
 
+  case iamCreateOIDCProvider:
+    return "iam:CreateOIDCProvider";
+
+  case iamDeleteOIDCProvider:
+    return "iam:DeleteOIDCProvider";
+
+  case iamGetOIDCProvider:
+    return "iam:GetOIDCProvider";
+
+  case iamListOIDCProviders:
+    return "iam:ListOIDCProviders";
+
   case stsAssumeRole:
     return "sts:AssumeRole";
 
@@ -1431,5 +1454,35 @@ ostream& operator <<(ostream& m, const Policy& p) {
   return m << " }";
 }
 
+static const Environment iam_all_env = {
+					{"aws:SourceIp","1.1.1.1"},
+					{"aws:UserId","anonymous"},
+					{"s3:x-amz-server-side-encryption-aws-kms-key-id","secret"}
+};
+
+struct IsPublicStatement
+{
+  bool operator() (const Statement &s) const {
+    if (s.effect == Effect::Allow) {
+      for (const auto& p : s.princ) {
+	if (p.is_wildcard()) {
+	  return s.eval_conditions(iam_all_env) == Effect::Allow;
+	}
+      }
+      // no princ should not contain fixed values
+      return std::none_of(s.noprinc.begin(), s.noprinc.end(), [](const rgw::auth::Principal& p) {
+								return p.is_wildcard();
+							      });
+    }
+    return false;
+  }
+};
+
+
+bool is_public(const Policy& p)
+{
+  return std::any_of(p.statements.begin(), p.statements.end(), IsPublicStatement());
 }
-}
+
+} // namespace IAM
+} // namespace rgw

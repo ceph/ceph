@@ -14,21 +14,31 @@
 
 #include "mdstypes.h"
 #include "MDSContext.h"
+#include "include/elist.h"
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
 //#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
 //#define MDS_VERIFY_FRAGSTAT    // do (slow) sanity checking on frags
 
-
+/*
+ * for metadata leases to clients
+ */
 class MLock;
 class SimpleLock;
 class MDSCacheObject;
 class MDSContext;
 
-/*
- * for metadata leases to clients
- */
+namespace ceph {
+class Formatter;
+}
+
 struct ClientLease {
+  ClientLease(client_t c, MDSCacheObject *p) :
+    client(c), parent(p),
+    item_session_lease(this),
+    item_lease(this) { }
+  ClientLease() = delete;
+
   client_t client;
   MDSCacheObject *parent;
 
@@ -36,27 +46,24 @@ struct ClientLease {
   utime_t ttl;
   xlist<ClientLease*>::item item_session_lease; // per-session list
   xlist<ClientLease*>::item item_lease;         // global list
-
-  ClientLease(client_t c, MDSCacheObject *p) : 
-    client(c), parent(p),
-    item_session_lease(this),
-    item_lease(this) { }
-  ClientLease() = delete;
 };
-
 
 // print hack
 struct mdsco_db_line_prefix {
-  MDSCacheObject *object;
   explicit mdsco_db_line_prefix(MDSCacheObject *o) : object(o) {}
+  MDSCacheObject *object;
 };
-std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o);
-
-// printer
-std::ostream& operator<<(std::ostream& out, const MDSCacheObject &o);
 
 class MDSCacheObject {
  public:
+  typedef mempool::mds_co::compact_map<mds_rank_t,unsigned> replica_map_type;
+
+  struct ptr_lt {
+    bool operator()(const MDSCacheObject* l, const MDSCacheObject* r) const {
+      return l->is_lt(r);
+    }
+  };
+
   // -- pins --
   const static int PIN_REPLICATED =  1000;
   const static int PIN_DIRTY      =  1001;
@@ -69,23 +76,7 @@ class MDSCacheObject {
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
   static const int PIN_CLIENTLEASE = 1009;
   static const int PIN_DISCOVERBASE = 1010;
-
-  std::string_view generic_pin_name(int p) const {
-    switch (p) {
-    case PIN_REPLICATED: return "replicated";
-    case PIN_DIRTY: return "dirty";
-    case PIN_LOCK: return "lock";
-    case PIN_REQUEST: return "request";
-    case PIN_WAITER: return "waiter";
-    case PIN_DIRTYSCATTERED: return "dirtyscattered";
-    case PIN_AUTHPIN: return "authpin";
-    case PIN_PTRWAITER: return "ptrwaiter";
-    case PIN_TEMPEXPORTING: return "tempexporting";
-    case PIN_CLIENTLEASE: return "clientlease";
-    case PIN_DISCOVERBASE: return "discoverbase";
-    default: ceph_abort(); return std::string_view();
-    }
-  }
+  static const int PIN_SCRUBQUEUE = 1011;     // for scrub of inode and dir
 
   // -- state --
   const static int STATE_AUTH      = (1<<30);
@@ -94,31 +85,24 @@ class MDSCacheObject {
   const static int STATE_REJOINING = (1<<27);  // replica has not joined w/ primary copy
   const static int STATE_REJOINUNDEF = (1<<26);  // contents undefined.
 
-
   // -- wait --
   const static uint64_t WAIT_ORDERED	 = (1ull<<61);
   const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
   const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
 
+  elist<MDSCacheObject*>::item item_scrub;   // for scrub inode or dir
 
-  // ============================================
-  // cons
- public:
   MDSCacheObject() {}
   virtual ~MDSCacheObject() {}
+
+  std::string_view generic_pin_name(int p) const;
 
   // printing
   virtual void print(std::ostream& out) = 0;
   virtual std::ostream& print_db_line_prefix(std::ostream& out) { 
     return out << "mdscacheobject(" << this << ") "; 
   }
-  
-  // --------------------------------------------
-  // state
- protected:
-  __u32 state = 0;     // state bits
 
- public:
   unsigned get_state() const { return state; }
   unsigned state_test(unsigned mask) const { return (state & mask); }
   void state_clear(unsigned mask) { state &= ~mask; }
@@ -133,19 +117,10 @@ class MDSCacheObject {
   // --------------------------------------------
   // authority
   virtual mds_authority_t authority() const = 0;
-  bool is_ambiguous_auth() const {
+  virtual bool is_ambiguous_auth() const {
     return authority().second != CDIR_AUTH_UNKNOWN;
   }
 
-  // --------------------------------------------
-  // pins
-protected:
-  __s32      ref = 0;       // reference count
-#ifdef MDS_REF_SET
-  mempool::mds_co::flat_map<int,int> ref_map;
-#endif
-
- public:
   int get_num_ref(int by = -1) const {
 #ifdef MDS_REF_SET
     if (by >= 0) {
@@ -217,13 +192,6 @@ protected:
 #endif
   }
 
-protected:
-  int auth_pins = 0;
-#ifdef MDS_AUTHPIN_SET
-  mempool::mds_co::multiset<void*> auth_pin_set;
-#endif
-
-public:
   int get_num_auth_pins() const { return auth_pins; }
 #ifdef MDS_AUTHPIN_SET
   void print_authpin_set(std::ostream& out) const {
@@ -231,10 +199,9 @@ public:
   }
 #endif
 
-  void dump_states(Formatter *f) const;
-  void dump(Formatter *f) const;
+  void dump_states(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
-  // --------------------------------------------
   // auth pins
   enum {
     // can_auth_pin() error codes
@@ -252,15 +219,6 @@ public:
     return is_frozen() || is_freezing();
   }
 
-
-  // --------------------------------------------
-  // replication (across mds cluster)
- protected:
-  unsigned		replica_nonce = 0; // [replica] defined on replica
-  typedef mempool::mds_co::compact_map<mds_rank_t,unsigned> replica_map_type;
-  replica_map_type replica_map;   // [auth] mds -> nonce
-
- public:
   bool is_replicated() const { return !get_replicas().empty(); }
   bool is_replica(mds_rank_t mds) const { return get_replicas().count(mds); }
   int num_replicas() const { return get_replicas().size(); }
@@ -303,26 +261,7 @@ public:
   unsigned get_replica_nonce() const { return replica_nonce; }
   void set_replica_nonce(unsigned n) { replica_nonce = n; }
 
-
-  // ---------------------------------------------
-  // waiting
- private:
-  mempool::mds_co::compact_multimap<uint64_t, std::pair<uint64_t, MDSContext*>> waiting;
-  static uint64_t last_wait_seq;
-
- public:
-  bool is_waiter_for(uint64_t mask, uint64_t min=0) {
-    if (!min) {
-      min = mask;
-      while (min & (min-1))  // if more than one bit is set
-        min &= min-1;        //  clear LSB
-    }
-    for (auto p = waiting.lower_bound(min); p != waiting.end(); ++p) {
-      if (p->first & mask) return true;
-      if (p->first > mask) return false;
-    }
-    return false;
-  }
+  bool is_waiter_for(uint64_t mask, uint64_t min=0);
   virtual void add_waiter(uint64_t mask, MDSContext *c) {
     if (waiting.empty())
       get(PIN_WAITER);
@@ -332,50 +271,16 @@ public:
       seq = ++last_wait_seq;
       mask &= ~WAIT_ORDERED;
     }
-    waiting.insert(pair<uint64_t, pair<uint64_t, MDSContext*> >(
+    waiting.insert(std::pair<uint64_t, std::pair<uint64_t, MDSContext*> >(
 			    mask,
-			    pair<uint64_t, MDSContext*>(seq, c)));
+			    std::pair<uint64_t, MDSContext*>(seq, c)));
 //    pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this)) 
 //			       << "add_waiter " << hex << mask << dec << " " << c
 //			       << " on " << *this
 //			       << dendl;
     
   }
-  virtual void take_waiting(uint64_t mask, MDSContext::vec& ls) {
-    if (waiting.empty()) return;
-
-    // process ordered waiters in the same order that they were added.
-    std::map<uint64_t, MDSContext*> ordered_waiters;
-
-    for (auto it = waiting.begin(); it != waiting.end(); ) {
-      if (it->first & mask) {
-	    if (it->second.first > 0) {
-	      ordered_waiters.insert(it->second);
-	    } else {
-	      ls.push_back(it->second.second);
-        }
-//	pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this))
-//				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
-//				   << " tag " << hex << it->first << dec
-//				   << " on " << *this
-//				   << dendl;
-        waiting.erase(it++);
-      } else {
-//	pdout(10,g_conf()->debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
-//				   << " tag " << hex << it->first << dec
-//				   << " on " << *this 
-//				   << dendl;
-	      ++it;
-      }
-    }
-    for (auto it = ordered_waiters.begin(); it != ordered_waiters.end(); ++it) {
-      ls.push_back(it->second);
-    }
-    if (waiting.empty()) {
-      put(PIN_WAITER);
-      waiting.clear();
-    }
-  }
+  virtual void take_waiting(uint64_t mask, MDSContext::vec& ls);
   void finish_waiting(uint64_t mask, int result = 0);
 
   // ---------------------------------------------
@@ -383,8 +288,8 @@ public:
   // noop unless overloaded.
   virtual SimpleLock* get_lock(int type) { ceph_abort(); return 0; }
   virtual void set_object_info(MDSCacheObjectInfo &info) { ceph_abort(); }
-  virtual void encode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
-  virtual void decode_lock_state(int type, const bufferlist& bl) { ceph_abort(); }
+  virtual void encode_lock_state(int type, ceph::buffer::list& bl) { ceph_abort(); }
+  virtual void decode_lock_state(int type, const ceph::buffer::list& bl) { ceph_abort(); }
   virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { ceph_abort(); }
   virtual void add_lock_waiter(int type, uint64_t mask, MDSContext *c) { ceph_abort(); }
   virtual bool is_lock_waiting(int type, uint64_t mask) { ceph_abort(); return false; }
@@ -394,13 +299,36 @@ public:
   // ---------------------------------------------
   // ordering
   virtual bool is_lt(const MDSCacheObject *r) const = 0;
-  struct ptr_lt {
-    bool operator()(const MDSCacheObject* l, const MDSCacheObject* r) const {
-      return l->is_lt(r);
-    }
-  };
 
+  // state
+ protected:
+  __u32 state = 0;     // state bits
+
+  // pins
+  __s32      ref = 0;       // reference count
+#ifdef MDS_REF_SET
+  mempool::mds_co::flat_map<int,int> ref_map;
+#endif
+
+  int auth_pins = 0;
+#ifdef MDS_AUTHPIN_SET
+  mempool::mds_co::multiset<void*> auth_pin_set;
+#endif
+
+  // replication (across mds cluster)
+  unsigned replica_nonce = 0; // [replica] defined on replica
+    replica_map_type replica_map;   // [auth] mds -> nonce
+
+  // ---------------------------------------------
+  // waiting
+ private:
+  mempool::mds_co::compact_multimap<uint64_t, std::pair<uint64_t, MDSContext*>> waiting;
+  static uint64_t last_wait_seq;
 };
+
+std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o);
+// printer
+std::ostream& operator<<(std::ostream& out, const MDSCacheObject &o);
 
 inline std::ostream& operator<<(std::ostream& out, MDSCacheObject &o) {
   o.print(out);
@@ -411,5 +339,4 @@ inline std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o
   o.object->print_db_line_prefix(out);
   return out;
 }
-
 #endif

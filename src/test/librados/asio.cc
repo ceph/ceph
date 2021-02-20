@@ -19,10 +19,10 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
-#ifdef HAVE_BOOST_CONTEXT
 #define BOOST_COROUTINES_NO_DEPRECATION_WARNING
+#include <boost/range/begin.hpp>
+#include <boost/range/end.hpp>
 #include <boost/asio/spawn.hpp>
-#endif
 #include <boost/asio/use_future.hpp>
 
 #define dout_subsys ceph_subsys_rados
@@ -107,7 +107,6 @@ TEST_F(AsioRados, AsyncReadFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncReadYield)
 {
   boost::asio::io_service service;
@@ -129,7 +128,6 @@ TEST_F(AsioRados, AsyncReadYield)
 
   service.run();
 }
-#endif
 
 TEST_F(AsioRados, AsyncWriteCallback)
 {
@@ -171,7 +169,6 @@ TEST_F(AsioRados, AsyncWriteFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncWriteYield)
 {
   boost::asio::io_service service;
@@ -198,7 +195,6 @@ TEST_F(AsioRados, AsyncWriteYield)
 
   service.run();
 }
-#endif
 
 TEST_F(AsioRados, AsyncReadOperationCallback)
 {
@@ -249,7 +245,6 @@ TEST_F(AsioRados, AsyncReadOperationFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncReadOperationYield)
 {
   boost::asio::io_service service;
@@ -277,7 +272,6 @@ TEST_F(AsioRados, AsyncReadOperationYield)
 
   service.run();
 }
-#endif
 
 TEST_F(AsioRados, AsyncWriteOperationCallback)
 {
@@ -332,7 +326,6 @@ TEST_F(AsioRados, AsyncWriteOperationFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncWriteOperationYield)
 {
   boost::asio::io_service service;
@@ -360,7 +353,6 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
 
   service.run();
 }
-#endif
 
 int main(int argc, char **argv)
 {

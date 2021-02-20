@@ -30,6 +30,11 @@ class FileSystemCommandHandler : protected CommandHandler
 protected:
   std::string prefix;
 
+  enum {
+    POOL_METADATA,
+    POOL_DATA_DEFAULT,
+    POOL_DATA_EXTRA,
+  };
   /**
    * Return 0 if the pool is suitable for use with CephFS, or
    * in case of errors return a negative error code, and populate
@@ -40,11 +45,11 @@ protected:
   int _check_pool(
       OSDMap &osd_map,
       const int64_t pool_id,
-      bool metadata,
+      int type,
       bool force,
       std::stringstream *ss) const;
 
-  virtual std::string const &get_prefix() {return prefix;}
+  virtual std::string const &get_prefix() const {return prefix;}
 
 public:
   FileSystemCommandHandler(const std::string &prefix_)
@@ -54,9 +59,21 @@ public:
   virtual ~FileSystemCommandHandler()
   {}
 
-  bool can_handle(std::string const &prefix_)
+  int is_op_allowed(const MonOpRequestRef& op, const FSMap& fsmap,
+		    const cmdmap_t& cmdmap, std::stringstream &ss) const;
+
+  int can_handle(std::string const &prefix_, MonOpRequestRef& op, FSMap& fsmap,
+	         const cmdmap_t& cmdmap, std::stringstream &ss) const
   {
-    return get_prefix() == prefix_;
+    if (get_prefix() != prefix_) {
+      return 0;
+    }
+
+    if (get_prefix() == "fs new" || get_prefix() == "fs flag set") {
+      return 1;
+    }
+
+    return is_op_allowed(op, fsmap, cmdmap, ss);
   }
 
   static std::list<std::shared_ptr<FileSystemCommandHandler> > load(Paxos *paxos);

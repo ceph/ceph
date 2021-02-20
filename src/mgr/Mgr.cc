@@ -100,9 +100,10 @@ void MetadataUpdate::finish(int r)
         }
       }
 
-      DaemonStatePtr state;
       if (daemon_state.exists(key)) {
-        state = daemon_state.get(key);
+        DaemonStatePtr state = daemon_state.get(key);
+        state->hostname = daemon_meta.at("hostname").get_str();
+
         if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
           daemon_meta.erase("name");
         } else if (key.type == "osd") {
@@ -110,13 +111,12 @@ void MetadataUpdate::finish(int r)
         }
         daemon_meta.erase("hostname");
 	map<string,string> m;
-        for (const auto &i : daemon_meta) {
-          m[i.first] = i.second.get_str();
+        for (const auto &[key, val] : daemon_meta) {
+          m.emplace(key, val.get_str());
 	}
-
 	daemon_state.update_metadata(state, m);
       } else {
-        state = std::make_shared<DaemonState>(daemon_state.types);
+        auto state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
         state->hostname = daemon_meta.at("hostname").get_str();
 
@@ -128,8 +128,8 @@ void MetadataUpdate::finish(int r)
         daemon_meta.erase("hostname");
 
 	map<string,string> m;
-        for (const auto &i : daemon_meta) {
-          m[i.first] = i.second.get_str();
+        for (const auto &[key, val] : daemon_meta) {
+          m.emplace(key, val.get_str());
         }
 	state->set_metadata(m);
 
@@ -219,27 +219,32 @@ std::map<std::string, std::string> Mgr::load_store()
   return loaded;
 }
 
+void Mgr::handle_signal(int signum)
+{
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  shutdown();
+}
+
+static void handle_mgr_signal(int signum)
+{
+  derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
+
+  // The python modules don't reliably shut down, so don't even
+  // try. The mon will blocklist us (and all of our rados/cephfs
+  // clients) anyway. Just exit!
+
+  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
+}
+
 void Mgr::init()
 {
   std::unique_lock l(lock);
   ceph_assert(initializing);
   ceph_assert(!initialized);
 
-  // Start communicating with daemons to learn statistics etc
-  int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
-  if (r < 0) {
-    derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
-    // This is typically due to a bind() failure, so let's let
-    // systemd restart us.
-    exit(1);
-  }
-  dout(4) << "Initialized server at " << server.get_myaddrs() << dendl;
-
-  // Preload all daemon metadata (will subsequently keep this
-  // up to date by watching maps, so do the initial load before
-  // we subscribe to any maps)
-  dout(4) << "Loading daemon metadata..." << dendl;
-  load_all_metadata();
+  // Enable signal handlers
+  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
   // subscribe to all the maps
   monc->sub_want("log-info", 0, 0);
@@ -258,8 +263,31 @@ void Mgr::init()
 
   // Start Objecter and wait for OSD map
   lock.unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
-  objecter->wait_for_osd_map();
+  epoch_t e;
+  cluster_state.with_mgrmap([&e](const MgrMap& m) {
+    e = m.last_failure_osd_epoch;
+  });
+  /* wait for any blocklists to be applied to previous mgr instance */
+  dout(4) << "Waiting for new OSDMap (e=" << e
+          << ") that may blocklist prior active." << dendl;
+  objecter->wait_for_osd_map(e);
   lock.lock();
+
+  // Start communicating with daemons to learn statistics etc
+  int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
+  if (r < 0) {
+    derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
+    // This is typically due to a bind() failure, so let's let
+    // systemd restart us.
+    exit(1);
+  }
+  dout(4) << "Initialized server at " << server.get_myaddrs() << dendl;
+
+  // Preload all daemon metadata (will subsequently keep this
+  // up to date by watching maps, so do the initial load before
+  // we subscribe to any maps)
+  dout(4) << "Loading daemon metadata..." << dendl;
+  load_all_metadata();
 
   // Populate PGs in ClusterState
   cluster_state.with_osdmap_and_pgmap([this](const OSDMap &osd_map,
@@ -280,12 +308,6 @@ void Mgr::init()
   // Load module KV store
   auto kv_store = load_store();
 
-  // Migrate config from KV store on luminous->mimic
-  // drop lock because we do blocking config sets to mon
-  lock.unlock();
-  py_module_registry->upgrade_config(monc, kv_store);
-  lock.lock();
-
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
   py_module_registry->active_start(daemon_state, cluster_state,
@@ -293,6 +315,12 @@ void Mgr::init()
       finisher, server);
 
   cluster_state.final_init();
+
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  r = admin_socket->register_command(
+    "mgr_status", this,
+    "Dump mgr status");
+  ceph_assert(r == 0);
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -335,8 +363,8 @@ void Mgr::load_all_metadata()
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
 
-    for (const auto &i : daemon_meta) {
-      dm->metadata[i.first] = i.second.get_str();
+    for (const auto &[key, val] : daemon_meta) {
+      dm->metadata.emplace(key, val.get_str());
     }
 
     daemon_state.insert(dm);
@@ -358,8 +386,8 @@ void Mgr::load_all_metadata()
     daemon_meta.erase("hostname");
 
     map<string,string> m;
-    for (const auto &i : daemon_meta) {
-      m[i.first] = i.second.get_str();
+    for (const auto &[key, val] : daemon_meta) {
+      m.emplace(key, val.get_str());
     }
     dm->set_metadata(m);
 
@@ -395,6 +423,7 @@ void Mgr::load_all_metadata()
 
 void Mgr::shutdown()
 {
+  dout(10) << "mgr shutdown init" << dendl;
   finisher.queue(new LambdaContext([&](int) {
     {
       std::lock_guard l(lock);
@@ -434,37 +463,22 @@ void Mgr::handle_osd_map()
       names_exist.insert(stringify(osd_id));
 
       // Consider whether to update the daemon metadata (new/restarted daemon)
-      bool update_meta = false;
       const auto k = DaemonKey{"osd", std::to_string(osd_id)};
       if (daemon_state.is_updating(k)) {
         continue;
       }
 
+      bool update_meta = false;
       if (daemon_state.exists(k)) {
-        auto metadata = daemon_state.get(k);
-	std::lock_guard l(metadata->lock);
-        auto addr_iter = metadata->metadata.find("front_addr");
-        if (addr_iter != metadata->metadata.end()) {
-          const std::string &metadata_addr = addr_iter->second;
-          const auto &map_addrs = osd_map.get_addrs(osd_id);
-
-          if (metadata_addr != stringify(map_addrs)) {
-            dout(4) << "OSD[" << osd_id << "] addr change " << metadata_addr
-                    << " != " << stringify(map_addrs) << dendl;
-            update_meta = true;
-          } else {
-            dout(20) << "OSD[" << osd_id << "] addr unchanged: "
-                     << metadata_addr << dendl;
-          }
-        } else {
-          // Awkward case where daemon went into DaemonState because it
-          // sent us a report but its metadata didn't get loaded yet
+        if (osd_map.get_up_from(osd_id) == osd_map.get_epoch()) {
+          dout(4) << "Mgr::handle_osd_map: osd." << osd_id
+		  << " joined cluster at " << "e" << osd_map.get_epoch()
+		  << dendl;
           update_meta = true;
         }
       } else {
         update_meta = true;
       }
-
       if (update_meta) {
         auto c = new MetadataUpdate(daemon_state, k);
         std::ostringstream cmd;
@@ -507,6 +521,16 @@ void Mgr::handle_mon_map()
       names_exist.insert(monmap.get_name(i));
     }
   });
+  for (const auto& name : names_exist) {
+    const auto k = DaemonKey{"osd", name};
+    if (daemon_state.is_updating(k)) {
+      continue;
+    }
+    auto c = new MetadataUpdate(daemon_state, k);
+    const char* cmd = R"(P{{"prefix": "mon metadata", "id": "{}"}})";
+    monc->start_mon_command({fmt::format(cmd, name)}, {},
+			    &c->outbl, &c->outs, c);
+  }
   daemon_state.cull("mon", names_exist);
 }
 
@@ -527,7 +551,6 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       py_module_registry->notify_all("fs_map", "");
       handle_fs_map(ref_cast<MFSMap>(m));
       return false; // I shall let this pass through for Client
-      break;
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
 
@@ -671,3 +694,29 @@ std::map<std::string, std::string> Mgr::get_services() const
   return py_module_registry->get_services();
 }
 
+int Mgr::call(
+  std::string_view admin_command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  std::ostream& errss,
+  bufferlist& out)
+{
+  try {
+    if (admin_command == "mgr_status") {
+      f->open_object_section("mgr_status");
+      cluster_state.with_mgrmap(
+	[f](const MgrMap& mm) {
+	  f->dump_unsigned("mgrmap_epoch", mm.get_epoch());
+	});
+      f->dump_bool("initialized", initialized);
+      f->close_section();
+      return 0;
+    } else {
+      return -ENOSYS;
+    }
+  } catch (const TOPNSPC::common::bad_cmd_get& e) {
+    errss << e.what();
+    return -EINVAL;
+  }
+  return 0;
+}

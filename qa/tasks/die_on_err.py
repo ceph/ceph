@@ -6,7 +6,7 @@ import logging
 import time
 from teuthology.orchestra import run
 
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

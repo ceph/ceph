@@ -5,8 +5,10 @@ from __future__ import absolute_import
 import errno
 import unittest
 
-from . import CmdException, exec_dashboard_cmd, KVStoreMockMixin
 from ..services.sso import handle_sso_command, load_sso_db
+from . import CmdException  # pylint: disable=no-name-in-module
+from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
+from . import exec_dashboard_cmd  # pylint: disable=no-name-in-module
 
 
 class AccessControlTest(unittest.TestCase, KVStoreMockMixin):

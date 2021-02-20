@@ -79,7 +79,7 @@ void ConfigValues::set_logging(int which, const char* val)
     subsys.set_log_level(which, log);
     subsys.set_gather_level(which, gather);
 #if WITH_SEASTAR
-    ceph::get_logger(which).set_level(ceph::to_log_level(log));
+    crimson::get_logger(which).set_level(crimson::to_log_level(log));
 #endif
   }
 }

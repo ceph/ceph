@@ -314,7 +314,7 @@ function TEST_recovery_undersized() {
     done
 
     create_pool $poolname 1 1
-    ceph osd pool set $poolname size 1
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
 
     wait_for_clean || return 1
 
@@ -472,7 +472,7 @@ function TEST_recovery_multi() {
 
     kill $(cat $dir/osd.${primary}.pid)
     ceph osd down osd.${primary}
-    run_osd $dir ${otherosd}
+    activate_osd $dir ${otherosd}
     sleep 3
 
     for i in $(seq $(expr $half + 1) $objects)
@@ -485,7 +485,7 @@ function TEST_recovery_multi() {
 
     ceph osd unset noout
     ceph osd out osd.$primary osd.$otherosd
-    run_osd $dir ${primary}
+    activate_osd $dir ${primary}
     sleep 3
 
     ceph osd pool set test size 4

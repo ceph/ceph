@@ -33,23 +33,23 @@ public:
   void flush(ostream& os) override;
   void reset() override;
 
-  void open_array_section(const char *name) override;
-  void open_array_section_in_ns(const char *name, const char *ns) override;
-  void open_object_section(const char *name) override;
-  void open_object_section_in_ns(const char *name, const char *ns) override;
+  void open_array_section(std::string_view name) override;
+  void open_array_section_in_ns(std::string_view name, const char *ns) override;
+  void open_object_section(std::string_view name) override;
+  void open_object_section_in_ns(std::string_view name, const char *ns) override;
   void close_section() override;
-  void dump_unsigned(const char *name, uint64_t u) override;
-  void dump_int(const char *name, int64_t u) override;
-  void dump_float(const char *name, double d) override;
-  void dump_string(const char *name, std::string_view s) override;
-  std::ostream& dump_stream(const char *name) override;
-  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
+  void dump_unsigned(std::string_view name, uint64_t u) override;
+  void dump_int(std::string_view name, int64_t u) override;
+  void dump_float(std::string_view name, double d) override;
+  void dump_string(std::string_view name, std::string_view s) override;
+  std::ostream& dump_stream(std::string_view name) override;
+  void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
   int get_len() const override;
   void write_raw_data(const char *data) override;
 
 private:
   void write_data(const char *fmt, ...);
-  void dump_value_int(const char *name, const char *fmt, ...);
+  void dump_value_int(std::string_view name, const char *fmt, ...);
 
   char *buf = nullptr;
   int len = 0;

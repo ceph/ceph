@@ -15,7 +15,6 @@
 #ifndef ASYNC_RESERVER_H
 #define ASYNC_RESERVER_H
 
-#include "common/Finisher.h"
 #include "common/Formatter.h"
 
 #define rdout(x) lgeneric_subdout(cct,reserver,x)
@@ -27,10 +26,10 @@
  * linear with respect to the total number of priorities used
  * over all time.
  */
-template <typename T>
+template <typename T, typename F>
 class AsyncReserver {
   CephContext *cct;
-  Finisher *f;
+  F *f;
   unsigned max_allowed;
   unsigned min_priority;
   ceph::mutex lock = ceph::make_mutex("AsyncReserver::lock");
@@ -43,21 +42,21 @@ class AsyncReserver {
     Reservation() {}
     Reservation(T i, unsigned pr, Context *g, Context *p = 0)
       : item(i), prio(pr), grant(g), preempt(p) {}
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->dump_stream("item") << item;
       f->dump_unsigned("prio", prio);
       f->dump_bool("can_preempt", !!preempt);
     }
-    friend ostream& operator<<(ostream& out, const Reservation& r) {
+    friend std::ostream& operator<<(std::ostream& out, const Reservation& r) {
       return out << r.item << "(prio " << r.prio << " grant " << r.grant
 		 << " preempt " << r.preempt << ")";
     }
   };
 
-  map<unsigned, list<Reservation>> queues;
-  map<T, pair<unsigned, typename list<Reservation>::iterator>> queue_pointers;
-  map<T,Reservation> in_progress;
-  set<pair<unsigned,T>> preempt_by_prio;  ///< in_progress that can be preempted
+  std::map<unsigned, std::list<Reservation>> queues;
+  std::map<T, std::pair<unsigned, typename std::list<Reservation>::iterator>> queue_pointers;
+  std::map<T,Reservation> in_progress;
+  std::set<std::pair<unsigned,T>> preempt_by_prio;  ///< in_progress that can be preempted
 
   void preempt_one() {
     ceph_assert(!preempt_by_prio.empty());
@@ -73,7 +72,7 @@ class AsyncReserver {
 
   void do_queues() {
     rdout(20) << __func__ << ":\n";
-    JSONFormatter jf(true);
+    ceph::JSONFormatter jf(true);
     jf.open_object_section("queue");
     _dump(&jf);
     jf.close_section();
@@ -115,14 +114,14 @@ class AsyncReserver {
       p.grant = nullptr;
       in_progress[p.item] = p;
       if (p.preempt) {
-	preempt_by_prio.insert(make_pair(p.prio, p.item));
+	preempt_by_prio.insert(std::make_pair(p.prio, p.item));
       }
     }
   }
 public:
   AsyncReserver(
     CephContext *cct,
-    Finisher *f,
+    F *f,
     unsigned max_allowed,
     unsigned min_priority = 0)
     : cct(cct),
@@ -178,8 +177,8 @@ public:
 	   !in_progress.count(item));
       r.prio = newprio;
       queues[newprio].push_back(r);
-      queue_pointers.insert(make_pair(item,
-				    make_pair(newprio,--(queues[newprio]).end())));
+      queue_pointers.insert(std::make_pair(item,
+				    std::make_pair(newprio,--(queues[newprio]).end())));
     } else {
       auto p = in_progress.find(item);
       if (p != in_progress.end()) {
@@ -200,9 +199,9 @@ public:
 		        << " lowered priority let do_queues() preempt it" << dendl;
             }
           }
-	  preempt_by_prio.erase(make_pair(p->second.prio, p->second.item));
+	  preempt_by_prio.erase(std::make_pair(p->second.prio, p->second.item));
           p->second.prio = newprio;
-	  preempt_by_prio.insert(make_pair(p->second.prio, p->second.item));
+	  preempt_by_prio.insert(std::make_pair(p->second.prio, p->second.item));
 	} else {
           p->second.prio = newprio;
         }
@@ -214,11 +213,11 @@ public:
     return;
   }
 
-  void dump(Formatter *f) {
+  void dump(ceph::Formatter *f) {
     std::lock_guard l(lock);
     _dump(f);
   }
-  void _dump(Formatter *f) {
+  void _dump(ceph::Formatter *f) {
     f->dump_unsigned("max_allowed", max_allowed);
     f->dump_unsigned("min_priority", min_priority);
     f->open_array_section("queues");
@@ -260,8 +259,8 @@ public:
     ceph_assert(!queue_pointers.count(item) &&
 	   !in_progress.count(item));
     queues[prio].push_back(r);
-    queue_pointers.insert(make_pair(item,
-				    make_pair(prio,--(queues[prio]).end())));
+    queue_pointers.insert(std::make_pair(item,
+				    std::make_pair(prio,--(queues[prio]).end())));
     do_queues();
   }
 
@@ -294,7 +293,7 @@ public:
 	rdout(10) << __func__ << " cancel " << p->second
 		  << " (was in progress)" << dendl;
 	if (p->second.preempt) {
-	  preempt_by_prio.erase(make_pair(p->second.prio, p->second.item));
+	  preempt_by_prio.erase(std::make_pair(p->second.prio, p->second.item));
 	  delete p->second.preempt;
 	}
 	in_progress.erase(p);

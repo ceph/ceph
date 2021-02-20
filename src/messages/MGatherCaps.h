@@ -1,10 +1,10 @@
 #ifndef CEPH_MGATHERCAPS_H
 #define CEPH_MGATHERCAPS_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
 
-class MGatherCaps : public Message {
+class MGatherCaps final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -13,12 +13,12 @@ public:
 
 protected:
   MGatherCaps() :
-    Message{MSG_MDS_GATHERCAPS, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MGatherCaps() override {}
+    MMDSOp{MSG_MDS_GATHERCAPS, HEAD_VERSION, COMPAT_VERSION} {}
+  ~MGatherCaps() final {}
 
 public:
   std::string_view get_type_name() const override { return "gather_caps"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "gather_caps(" << ino << ")";
   }
 

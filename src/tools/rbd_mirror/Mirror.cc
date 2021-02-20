@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <signal.h>
+
 #include <boost/range/adaptor/map.hpp>
 
 #include "common/Formatter.h"
@@ -12,6 +14,7 @@
 #include "librbd/ImageCtx.h"
 #include "perfglue/heap_profiler.h"
 #include "Mirror.h"
+#include "PoolMetaCache.h"
 #include "ServiceDaemon.h"
 #include "Threads.h"
 
@@ -483,12 +486,8 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_args(args),
   m_local(new librados::Rados()),
   m_cache_manager_handler(new CacheManagerHandler(cct)),
-  m_asok_hook(new MirrorAdminSocketHook(cct, this))
-{
-  m_threads =
-    &(cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx>>(
-	"rbd_mirror::threads", false, cct));
-  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
+  m_pool_meta_cache(new PoolMetaCache(cct)),
+  m_asok_hook(new MirrorAdminSocketHook(cct, this)) {
 }
 
 Mirror::~Mirror()
@@ -498,10 +497,26 @@ Mirror::~Mirror()
 
 void Mirror::handle_signal(int signum)
 {
-  m_stopping = true;
-  {
-    std::lock_guard l{m_lock};
+  dout(20) << signum << dendl;
+
+  std::lock_guard l{m_lock};
+
+  switch (signum) {
+  case SIGHUP:
+    for (auto &it : m_pool_replayers) {
+      it.second->reopen_logs();
+    }
+    g_ceph_context->reopen_logs();
+    break;
+
+  case SIGINT:
+  case SIGTERM:
+    m_stopping = true;
     m_cond.notify_all();
+    break;
+
+  default:
+    ceph_abort_msgf("unexpected signal %d", signum);
   }
 }
 
@@ -518,6 +533,10 @@ int Mirror::init()
     derr << "error connecting to local cluster" << dendl;
     return r;
   }
+
+  m_threads = &(m_cct->lookup_or_create_singleton_object<
+    Threads<librbd::ImageCtx>>("rbd_mirror::threads", false, m_local));
+  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
 
   r = m_service_daemon->init();
   if (r < 0) {
@@ -694,8 +713,8 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);
-        } else if (pool_replayer->is_blacklisted()) {
-          derr << "restarting blacklisted pool replayer for " << peer << dendl;
+        } else if (pool_replayer->is_blocklisted()) {
+          derr << "restarting blocklisted pool replayer for " << peer << dendl;
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);
@@ -709,7 +728,8 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
         dout(20) << "starting pool replayer for " << peer << dendl;
         unique_ptr<PoolReplayer<>> pool_replayer(
             new PoolReplayer<>(m_threads, m_service_daemon.get(),
-                               m_cache_manager_handler.get(), kv.first, peer,
+                               m_cache_manager_handler.get(),
+                               m_pool_meta_cache.get(), kv.first, peer,
                                m_args));
 
         // TODO: make async

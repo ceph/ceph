@@ -1,38 +1,36 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
-import { ConfigurationService } from '../../../shared/api/configuration.service';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-configuration',
   templateUrl: './configuration.component.html',
   styleUrls: ['./configuration.component.scss']
 })
-export class ConfigurationComponent implements OnInit {
+export class ConfigurationComponent extends ListWithDetails implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
-  data = [];
+  data: any[] = [];
   icons = Icons;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
-  filters = [
+  filters: CdTableColumn[] = [
     {
-      label: this.i18n('Level'),
+      name: $localize`Level`,
       prop: 'level',
-      initValue: 'basic',
-      value: 'basic',
-      options: ['basic', 'advanced', 'dev'],
-      applyFilter: (row, value) => {
+      filterOptions: ['basic', 'advanced', 'dev'],
+      filterInitValue: 'basic',
+      filterPredicate: (row, value) => {
         enum Level {
           basic = 0,
           advanced = 1,
@@ -45,50 +43,53 @@ export class ConfigurationComponent implements OnInit {
       }
     },
     {
-      label: this.i18n('Service'),
+      name: $localize`Service`,
       prop: 'services',
-      initValue: 'any',
-      value: 'any',
-      options: ['any', 'mon', 'mgr', 'osd', 'mds', 'common', 'mds_client', 'rgw'],
-      applyFilter: (row, value) => {
-        if (value === 'any') {
-          return true;
-        }
-
+      filterOptions: ['mon', 'mgr', 'osd', 'mds', 'common', 'mds_client', 'rgw'],
+      filterPredicate: (row, value) => {
         return row.services.includes(value);
       }
     },
     {
-      label: this.i18n('Source'),
+      name: $localize`Source`,
       prop: 'source',
-      initValue: 'any',
-      value: 'any',
-      options: ['any', 'mon'],
-      applyFilter: (row, value) => {
-        if (value === 'any') {
-          return true;
-        }
-
+      filterOptions: ['mon'],
+      filterPredicate: (row, value) => {
         if (!row.hasOwnProperty('source')) {
           return false;
         }
-
         return row.source.includes(value);
+      }
+    },
+    {
+      name: $localize`Modified`,
+      prop: 'modified',
+      filterOptions: ['yes', 'no'],
+      filterPredicate: (row, value) => {
+        if (value === 'yes' && row.hasOwnProperty('value')) {
+          return true;
+        }
+
+        if (value === 'no' && !row.hasOwnProperty('value')) {
+          return true;
+        }
+
+        return false;
       }
     }
   ];
 
   @ViewChild('confValTpl', { static: true })
   public confValTpl: TemplateRef<any>;
-  @ViewChild('confFlagTpl', { static: false })
+  @ViewChild('confFlagTpl')
   public confFlagTpl: TemplateRef<any>;
 
   constructor(
     private authStorageService: AuthStorageService,
     private configurationService: ConfigurationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().configOpt;
     const getConfigOptUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;
@@ -104,18 +105,18 @@ export class ConfigurationComponent implements OnInit {
 
   ngOnInit() {
     this.columns = [
-      { canAutoResize: true, prop: 'name', name: this.i18n('Name') },
-      { prop: 'desc', name: this.i18n('Description'), cellClass: 'wrap' },
+      { canAutoResize: true, prop: 'name', name: $localize`Name` },
+      { prop: 'desc', name: $localize`Description`, cellClass: 'wrap' },
       {
         prop: 'value',
-        name: this.i18n('Current value'),
+        name: $localize`Current value`,
         cellClass: 'wrap',
         cellTemplate: this.confValTpl
       },
-      { prop: 'default', name: this.i18n('Default'), cellClass: 'wrap' },
+      { prop: 'default', name: $localize`Default`, cellClass: 'wrap' },
       {
         prop: 'can_update_at_runtime',
-        name: this.i18n('Editable'),
+        name: $localize`Editable`,
         cellTransformation: CellTemplate.checkIcon,
         flexGrow: 0.4,
         cellClass: 'text-center'
@@ -136,17 +137,6 @@ export class ConfigurationComponent implements OnInit {
         context.error();
       }
     );
-  }
-
-  updateFilter() {
-    this.data = [...this.data];
-  }
-
-  resetFilter() {
-    this.filters.forEach((item) => {
-      item.value = item.initValue;
-    });
-    this.data = [...this.data];
   }
 
   isEditable(selection: CdTableSelection): boolean {

@@ -3,7 +3,8 @@ from __future__ import absolute_import
 
 import errno
 import inspect
-from six import add_metaclass
+
+from mgr_module import CLICheckNonemptyFileInput
 
 from . import mgr
 
@@ -21,6 +22,9 @@ class Options(object):
     ENABLE_BROWSABLE_API = (True, bool)
     REST_REQUESTS_TIMEOUT = (45, int)
 
+    # AUTHENTICATION ATTEMPTS
+    ACCOUNT_LOCKOUT_ATTEMPTS = (10, int)
+
     # API auditing
     AUDIT_API_ENABLED = (False, bool)
     AUDIT_API_LOG_PAYLOAD = (True, bool)
@@ -37,8 +41,10 @@ class Options(object):
 
     # Grafana settings
     GRAFANA_API_URL = ('', str)
+    GRAFANA_FRONTEND_API_URL = ('', str)
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
+    GRAFANA_API_SSL_VERIFY = (True, bool)
     GRAFANA_UPDATE_DASHBOARDS = (False, bool)
 
     # NFS Ganesha settings
@@ -46,15 +52,48 @@ class Options(object):
 
     # Prometheus settings
     PROMETHEUS_API_HOST = ('', str)
+    PROMETHEUS_API_SSL_VERIFY = (True, bool)
     ALERTMANAGER_API_HOST = ('', str)
+    ALERTMANAGER_API_SSL_VERIFY = (True, bool)
 
     # iSCSI management settings
     ISCSI_API_SSL_VERIFICATION = (True, bool)
 
+    # user management settings
+    # Time span of user passwords to expire in days.
+    # The default value is '0' which means that user passwords are
+    # never going to expire.
+    USER_PWD_EXPIRATION_SPAN = (0, int)
+    # warning levels to notify the user that the password is going
+    # to expire soon
+    USER_PWD_EXPIRATION_WARNING_1 = (10, int)
+    USER_PWD_EXPIRATION_WARNING_2 = (5, int)
+
+    # Password policy
+    PWD_POLICY_ENABLED = (True, bool)
+    # Individual checks
+    PWD_POLICY_CHECK_LENGTH_ENABLED = (True, bool)
+    PWD_POLICY_CHECK_OLDPWD_ENABLED = (True, bool)
+    PWD_POLICY_CHECK_USERNAME_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_COMPLEXITY_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED = (False, bool)
+    # Settings
+    PWD_POLICY_MIN_LENGTH = (8, int)
+    PWD_POLICY_MIN_COMPLEXITY = (10, int)
+    PWD_POLICY_EXCLUSION_LIST = (','.join(['osd', 'host',
+                                           'dashboard', 'pool',
+                                           'block', 'nfs',
+                                           'ceph', 'monitors',
+                                           'gateway', 'logs',
+                                           'crush', 'maps']),
+                                 str)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
-               getattr(Settings, name) == getattr(Options, name)[0]
+            getattr(Settings, name) == getattr(Options, name)[0]
 
 
 class SettingsMeta(type):
@@ -80,8 +119,7 @@ class SettingsMeta(type):
 
 
 # pylint: disable=no-init
-@add_metaclass(SettingsMeta)
-class Settings(object):
+class Settings(object, metaclass=SettingsMeta):
     pass
 
 
@@ -126,12 +164,16 @@ def options_command_list():
                 'perm': 'r'
             })
         elif cmd.startswith('dashboard set'):
-            cmd_list.append({
+            cmd_entry = {
                 'cmd': '{} name=value,type={}'
                        .format(cmd, py2ceph(opt['type'])),
                 'desc': 'Set the {} option value'.format(opt['name']),
                 'perm': 'w'
-            })
+            }
+            if handles_secret(cmd):
+                cmd_entry['cmd'] = cmd
+                cmd_entry['desc'] = '{} read from -i <file>'.format(cmd_entry['desc'])
+            cmd_list.append(cmd_entry)
         elif cmd.startswith('dashboard reset'):
             desc = 'Reset the {} option to its default value'.format(
                 opt['name'])
@@ -152,12 +194,13 @@ def options_schema_list():
     for option, value in inspect.getmembers(Options, filter_attr):
         if option.startswith('_'):
             continue
-        result.append({'name': option, 'default': value[0]})
+        result.append({'name': option, 'default': value[0],
+                       'type': value[1].__name__})
 
     return result
 
 
-def handle_option_command(cmd):
+def handle_option_command(cmd, inbuf):
     if cmd['prefix'] not in _OPTIONS_COMMAND_MAP:
         return -errno.ENOSYS, '', "Command not found '{}'".format(cmd['prefix'])
 
@@ -170,8 +213,23 @@ def handle_option_command(cmd):
     elif cmd['prefix'].startswith('dashboard get'):
         return 0, str(getattr(Settings, opt['name'])), ''
     elif cmd['prefix'].startswith('dashboard set'):
-        value = opt['type'](cmd['value'])
+        if handles_secret(cmd['prefix']):
+            value, stdout, stderr = get_secret(inbuf=inbuf)
+            if stderr:
+                return value, stdout, stderr
+        else:
+            value = cmd['value']
+        value = opt['type'](value)
         if opt['type'] == bool and cmd['value'].lower() == 'false':
             value = False
         setattr(Settings, opt['name'], value)
         return 0, 'Option {} updated'.format(opt['name']), ''
+
+
+def handles_secret(cmd: str) -> bool:
+    return bool([cmd for secret_word in ['password', 'key'] if (secret_word in cmd)])
+
+
+@CLICheckNonemptyFileInput
+def get_secret(inbuf=None):
+    return inbuf, None, None

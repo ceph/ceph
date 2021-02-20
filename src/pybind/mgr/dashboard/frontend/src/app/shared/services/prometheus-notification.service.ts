@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { PrometheusService } from '../api/prometheus.service';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -25,12 +25,10 @@ export class PrometheusNotificationService {
     if (this.backendFailure) {
       return;
     }
-    this.prometheusService
-      .getNotifications(_.last(this.notifications))
-      .subscribe(
-        (notifications) => this.handleNotifications(notifications),
-        () => (this.backendFailure = true)
-      );
+    this.prometheusService.getNotifications(_.last(this.notifications)).subscribe(
+      (notifications) => this.handleNotifications(notifications),
+      () => (this.backendFailure = true)
+    );
   }
 
   private handleNotifications(notifications: AlertmanagerNotification[]) {

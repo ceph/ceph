@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_CLS_RGW_CONST_H
@@ -71,6 +71,5 @@
 #define RGW_CLEAR_BUCKET_RESHARDING "clear_bucket_resharding"
 #define RGW_GUARD_BUCKET_RESHARDING "guard_bucket_resharding"
 #define RGW_GET_BUCKET_RESHARDING "get_bucket_resharding"
-
 
 #endif

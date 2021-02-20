@@ -1,13 +1,11 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FormatterService {
-  constructor() {}
-
   format_number(n: any, divisor: number, units: string[], decimals: number = 1): string {
     if (_.isString(n)) {
       n = Number(n);
@@ -35,7 +33,7 @@ export class FormatterService {
    * @returns Returns the given value in bytes without any unit appended or the defined error value
    *          in case xof an error.
    */
-  toBytes(value: string, error_value = null): number | null {
+  toBytes(value: string, error_value: number = null): number | null {
     const base = 1024;
     const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
     const m = RegExp('^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s)?)?$', 'i').exec(value);

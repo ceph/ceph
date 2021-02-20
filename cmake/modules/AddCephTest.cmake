@@ -5,9 +5,10 @@ function(add_ceph_test test_name test_path)
   add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN})
   if(TARGET ${test_name})
     add_dependencies(tests ${test_name})
+    set_property(TARGET ${test_name}
+      PROPERTY EXCLUDE_FROM_ALL TRUE)
   endif()
-  set_property(TEST
-    ${test_name}
+  set_property(TEST ${test_name}
     PROPERTY ENVIRONMENT 
     CEPH_ROOT=${CMAKE_SOURCE_DIR}
     CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
@@ -15,11 +16,10 @@ function(add_ceph_test test_name test_path)
     CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
     LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
-    PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.${Python${PYTHON_VERSION}_VERSION_MAJOR}:${CMAKE_SOURCE_DIR}/src/pybind
+    PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.3:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
   # none of the tests should take more than 1 hour to complete
-  set_property(TEST
-    ${test_name}
+  set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
 endfunction()
 
@@ -32,13 +32,14 @@ if(WITH_GTEST_PARALLEL)
       SOURCE_DIR "${gtest_parallel_source_dir}"
       GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
       GIT_TAG "master"
+      GIT_SHALLOW TRUE
       CONFIGURE_COMMAND ""
       BUILD_COMMAND ""
       INSTALL_COMMAND "")
     add_dependencies(tests gtest-parallel_ext)
-    find_package(Python REQUIRED)
+    find_package(Python3 QUIET REQUIRED)
     set(GTEST_PARALLEL_COMMAND
-      ${Python_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+      ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
   endif()
 endif()
 
@@ -62,20 +63,16 @@ function(add_tox_test name)
   else()
     set(tox_path ${CMAKE_CURRENT_SOURCE_DIR})
   endif()
-  if(WITH_PYTHON2)
-    list(APPEND tox_envs py27)
-  endif()
-  if(WITH_PYTHON3)
-    list(APPEND tox_envs py3)
-  endif()
   if(DEFINED TOXTEST_TOX_ENVS)
     list(APPEND tox_envs ${TOXTEST_TOX_ENVS})
+  else()
+    list(APPEND tox_envs py3)
   endif()
   string(REPLACE ";" "," tox_envs "${tox_envs}")
-  find_package(Python REQUIRED)
+  find_package(Python3 QUIET REQUIRED)
   add_custom_command(
     OUTPUT ${venv_path}/bin/activate
-    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python_EXECUTABLE}" ${venv_path}
+    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python3_EXECUTABLE}" ${venv_path}
     WORKING_DIRECTORY ${tox_path}
     COMMENT "preparing venv for ${name}")
   add_custom_target(${name}-venv

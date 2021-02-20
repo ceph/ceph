@@ -4,7 +4,7 @@
 
 .. index:: Ceph Block Device; RBD Replay
 
-RBD Replay is a set of tools for capturing and replaying Rados Block Device
+RBD Replay is a set of tools for capturing and replaying RADOS Block Device
 (RBD) workloads. To capture an RBD workload, ``lttng-tools`` must be installed
 on the client, and ``librbd`` on the client must be the v0.87 (Giant) release 
 or later. To replay an RBD workload, ``librbd`` on the client must be the Giant

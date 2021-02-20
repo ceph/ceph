@@ -4,7 +4,7 @@ Run fsx on an rbd image
 import contextlib
 import logging
 
-from teuthology.orchestra import run
+from teuthology.exceptions import ConfigError
 from teuthology.parallel import parallel
 from teuthology import misc as teuthology
 

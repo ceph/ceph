@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
     - but it is still running
     - objects unfound and apparently lost
     - osd_map_cache_size

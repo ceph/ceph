@@ -7,7 +7,7 @@
 #include "messages/PaxosServiceMessage.h"
 #include "mon/health_check.h"
 
-class MMonHealthChecks : public PaxosServiceMessage {
+class MMonHealthChecks final : public PaxosServiceMessage {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -23,15 +23,16 @@ public:
   {}
 
 private:
-  ~MMonHealthChecks() override { }
+  ~MMonHealthChecks() final { }
 
 public:
   std::string_view get_type_name() const override { return "mon_health_checks"; }
-  void print(ostream &o) const override {
+  void print(std::ostream &o) const override {
     o << "mon_health_checks(" << health_checks.checks.size() << " checks)";
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(health_checks, p);

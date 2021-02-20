@@ -18,7 +18,7 @@ void RGWLoadGenRequestEnv::set_date(utime_t& tm)
 
 int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
 {
-  map<string, string> meta_map;
+  meta_map_t meta_map;
   map<string, string> sub_resources;
 
   string canonical_header;
@@ -29,7 +29,7 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
                                  content_type.c_str(),
                                  date_str.c_str(),
                                  meta_map,
-				 map<string, string>{},
+				                 meta_map_t{},
                                  uri.c_str(),
                                  sub_resources,
                                  canonical_header);
@@ -111,8 +111,8 @@ size_t RGWLoadGenIO::send_100_continue()
   return 0;
 }
 
-size_t RGWLoadGenIO::send_header(const boost::string_ref& name,
-                                 const boost::string_ref& value)
+size_t RGWLoadGenIO::send_header(const std::string_view& name,
+                                 const std::string_view& value)
 {
   return 0;
 }

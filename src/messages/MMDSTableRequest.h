@@ -16,28 +16,28 @@
 #ifndef CEPH_MMDSTABLEREQUEST_H
 #define CEPH_MMDSTABLEREQUEST_H
 
-#include "msg/Message.h"
 #include "mds/mds_table_types.h"
+#include "messages/MMDSOp.h"
 
-class MMDSTableRequest : public Message {
+class MMDSTableRequest final : public MMDSOp {
 public:
   __u16 table = 0;
   __s16 op = 0;
   uint64_t reqid = 0;
-  bufferlist bl;
+  ceph::buffer::list bl;
 
 protected:
-  MMDSTableRequest() : Message{MSG_MDS_TABLE_REQUEST} {}
+  MMDSTableRequest() : MMDSOp{MSG_MDS_TABLE_REQUEST} {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
-    Message{MSG_MDS_TABLE_REQUEST},
+    MMDSOp{MSG_MDS_TABLE_REQUEST},
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }
-  ~MMDSTableRequest() override {}
+  ~MMDSTableRequest() final {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "mds_table_request"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mds_table_request(" << get_mdstable_name(table)
       << " " << get_mdstableserver_opname(op);
     if (reqid) o << " " << reqid;
@@ -47,6 +47,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(table, p);
     decode(op, p);

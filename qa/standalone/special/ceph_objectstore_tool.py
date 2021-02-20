@@ -1,25 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
-from __future__ import print_function
-from subprocess import call
-try:
-    from subprocess import check_output
-except ImportError:
-    def check_output(*popenargs, **kwargs):
-        import subprocess
-        # backported from python 2.7 stdlib
-        process = subprocess.Popen(
-            stdout=subprocess.PIPE, *popenargs, **kwargs)
-        output, unused_err = process.communicate()
-        retcode = process.poll()
-        if retcode:
-            cmd = kwargs.get("args")
-            if cmd is None:
-                cmd = popenargs[0]
-            error = subprocess.CalledProcessError(retcode, cmd)
-            error.output = output
-            raise error
-        return output
+from subprocess import call, check_output, DEVNULL
 
 import filecmp
 import os
@@ -33,25 +14,8 @@ import json
 import tempfile
 import platform
 
-try:
-    from subprocess import DEVNULL
-except ImportError:
-    DEVNULL = open(os.devnull, "wb")
-
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING,
                     datefmt="%FT%T")
-
-
-if sys.version_info[0] >= 3:
-    def decode(s):
-        return s.decode('utf-8')
-
-    def check_output(*args, **kwargs):
-        return decode(subprocess.check_output(*args, **kwargs))
-else:
-    def decode(s):
-        return s
-
 
 
 def wait_for_health():
@@ -68,7 +32,7 @@ def wait_for_health():
 def get_pool_id(name, nullfd):
     cmd = "{path}/ceph osd pool stats {pool}".format(pool=name, path=CEPH_BIN).split()
     # pool {pool} id # .... grab the 4 field
-    return check_output(cmd, stderr=nullfd).split()[3]
+    return check_output(cmd, stderr=nullfd).decode().split()[3]
 
 
 # return a list of unique PGS given an osd subdirectory
@@ -150,9 +114,9 @@ def cat_file(level, filename):
     print("<EOF>")
 
 
-def vstart(new, opt=""):
+def vstart(new, opt="-o osd_pool_default_pg_autoscale_mode=off"):
     print("vstarting....", end="")
-    NEW = new and "-n" or "-N"
+    NEW = new and "-n" or "-k"
     call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print("DONE")
 
@@ -229,7 +193,7 @@ def verify(DATADIR, POOL, NAME_PREFIX, db):
         for key, val in db[nspace][file]["xattr"].items():
             cmd = "{path}/rados -p {pool} -N '{nspace}' getxattr {name} {key}".format(pool=POOL, name=file, key=key, nspace=nspace, path=CEPH_BIN)
             logging.debug(cmd)
-            getval = check_output(cmd, shell=True, stderr=DEVNULL)
+            getval = check_output(cmd, shell=True, stderr=DEVNULL).decode()
             logging.debug("getxattr {key} {val}".format(key=key, val=getval))
             if getval != val:
                 logging.error("getxattr of key {key} returned wrong val: {get} instead of {orig}".format(key=key, get=getval, orig=val))
@@ -337,7 +301,7 @@ def check_entry_transactions(entry, enum):
 
 
 def check_transaction_ops(ops, enum, tnum):
-    if len(ops) is 0:
+    if len(ops) == 0:
         logging.warning("No ops found in entry {e} trans {t}".format(e=enum, t=tnum))
     errors = 0
     for onum in range(len(ops)):
@@ -376,7 +340,7 @@ def test_dump_journal(CFSD_PREFIX, osds):
         os.unlink(TMPFILE)
 
         journal_errors = check_journal(jsondict)
-        if journal_errors is not 0:
+        if journal_errors != 0:
             logging.error(jsondict)
         ERRORS += journal_errors
 
@@ -450,7 +414,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     osdmap_file = tempfile.NamedTemporaryFile(delete=True)
     cmd = (CFSD_PREFIX + "--op get-osdmap --file {osdmap_file}").format(osd=osd_path,
                                                                         osdmap_file=osdmap_file.name)
-    output = check_output(cmd, shell=True)
+    output = check_output(cmd, shell=True).decode()
     epoch = int(re.findall('#(\d+)', output)[0])
 
     new_crush_file = tempfile.NamedTemporaryFile(delete=True)
@@ -515,12 +479,12 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     output = check_output("{path}/crushtool --tree -i {crush_file} | tail -n {num_osd}".format(crush_file=crush_file.name,
                                                                                           num_osd=len(osd_ids), path=CEPH_BIN),
                           stderr=DEVNULL,
-                          shell=True)
+                          shell=True).decode()
     weights = []
     for line in output.strip().split('\n'):
         print(line)
         linev = re.split('\s+', line)
-        if linev[0] is '':
+        if linev[0] == '':
             linev.pop(0)
         print('linev %s' % linev)
         weights.append(float(linev[2]))
@@ -561,7 +525,7 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
     file_e2 = tempfile.NamedTemporaryFile(delete=True)
     cmd = (CFSD_PREFIX + "--op get-inc-osdmap --file {file}").format(osd=osd_path,
                                                                      file=file_e2.name)
-    output = check_output(cmd, shell=True)
+    output = check_output(cmd, shell=True).decode()
     epoch = int(re.findall('#(\d+)', output)[0])
     # backup e1 incremental before overwriting it
     epoch -= 1
@@ -688,10 +652,7 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
 
 
 def main(argv):
-    if sys.version_info[0] < 3:
-        sys.stdout = stdout = os.fdopen(sys.stdout.fileno(), 'wb', 0)
-    else:
-        stdout = sys.stdout.buffer
+    stdout = sys.stdout.buffer
     if len(argv) > 1 and argv[1] == "debug":
         nullfd = stdout
     else:
@@ -997,7 +958,7 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
     ERRORS += test_failure(cmd, "file: {FOO}: No such file or directory".format(FOO=OTHERFILE))
 
-    cmd = "{path}/ceph-objectstore-tool --no-mon-config --data-path BAD_DATA_PATH --op list".format(osd=ONEOSD, path=CEPH_BIN)
+    cmd = "{path}/ceph-objectstore-tool --no-mon-config --data-path BAD_DATA_PATH --op list".format(path=CEPH_BIN)
     ERRORS += test_failure(cmd, "data-path: BAD_DATA_PATH: No such file or directory")
 
     cmd = (CFSD_PREFIX + "--journal-path BAD_JOURNAL_PATH --op list").format(osd=ONEOSD)
@@ -1020,7 +981,7 @@ def main(argv):
     ERRORS += test_failure(cmd, "Unable to create store of type foobar")
 
     # Don't specify a data-path
-    cmd = "{path}/ceph-objectstore-tool --no-mon-config --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG, path=CEPH_BIN)
+    cmd = "{path}/ceph-objectstore-tool --no-mon-config --type memstore --op list --pgid {pg}".format(pg=ONEPG, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     cmd = (CFSD_PREFIX + "--op remove --pgid 2.0").format(osd=ONEOSD)
@@ -1035,7 +996,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, statfs)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
@@ -1298,7 +1259,7 @@ def main(argv):
                         attrkey = "_" + key
                         cmd = (CFSD_PREFIX + " '{json}' get-attr {key}").format(osd=osd, json=JSON, key=attrkey)
                         logging.debug(cmd)
-                        getval = check_output(cmd, shell=True)
+                        getval = check_output(cmd, shell=True).decode()
                         if getval != val:
                             logging.error("get-attr of key {key} returned wrong val: {get} instead of {orig}".format(key=attrkey, get=getval, orig=val))
                             ERRORS += 1
@@ -1322,7 +1283,7 @@ def main(argv):
                         # Check the set-attr
                         cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
                         logging.debug(cmd)
-                        getval = check_output(cmd, shell=True)
+                        getval = check_output(cmd, shell=True).decode()
                         if ret != 0:
                             logging.error("Bad exit status {ret} from get-attr".format(ret=ret))
                             ERRORS += 1
@@ -1365,7 +1326,7 @@ def main(argv):
                     hdr = db[nspace][basename].get("omapheader", "")
                     cmd = (CFSD_PREFIX + "'{json}' get-omaphdr").format(osd=osd, json=JSON)
                     logging.debug(cmd)
-                    gethdr = check_output(cmd, shell=True)
+                    gethdr = check_output(cmd, shell=True).decode()
                     if gethdr != hdr:
                         logging.error("get-omaphdr was wrong: {get} instead of {orig}".format(get=gethdr, orig=hdr))
                         ERRORS += 1
@@ -1381,7 +1342,7 @@ def main(argv):
                     # Check the set-omaphdr
                     cmd = (CFSD_PREFIX + "'{json}' get-omaphdr").format(osd=osd, pg=pg, json=JSON)
                     logging.debug(cmd)
-                    gethdr = check_output(cmd, shell=True)
+                    gethdr = check_output(cmd, shell=True).decode()
                     if ret != 0:
                         logging.error("Bad exit status {ret} from get-omaphdr".format(ret=ret))
                         ERRORS += 1
@@ -1410,7 +1371,7 @@ def main(argv):
                     for omapkey, val in db[nspace][basename]["omap"].items():
                         cmd = (CFSD_PREFIX + " '{json}' get-omap {key}").format(osd=osd, json=JSON, key=omapkey)
                         logging.debug(cmd)
-                        getval = check_output(cmd, shell=True)
+                        getval = check_output(cmd, shell=True).decode()
                         if getval != val:
                             logging.error("get-omap of key {key} returned wrong val: {get} instead of {orig}".format(key=omapkey, get=getval, orig=val))
                             ERRORS += 1
@@ -1434,7 +1395,7 @@ def main(argv):
                         # Check the set-omap
                         cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
                         logging.debug(cmd)
-                        getval = check_output(cmd, shell=True)
+                        getval = check_output(cmd, shell=True).decode()
                         if ret != 0:
                             logging.error("Bad exit status {ret} from get-omap".format(ret=ret))
                             ERRORS += 1
@@ -1535,14 +1496,17 @@ def main(argv):
                     jsondict[1]['shard_id'] = int(pg.split('s')[1])
                     JSON = json.dumps((pg, jsondict[1]))
                     for osd in OSDS:
-                        cmd = (CFSD_PREFIX + " '{json}' get-attr hinfo_key").format(osd=osd, json=JSON)
+                        cmd = (CFSD_PREFIX + " --tty '{json}' get-attr hinfo_key").format(osd=osd, json=JSON)
                         logging.debug("TRY: " + cmd)
                         try:
-                            out = check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+                            out = check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode()
                             logging.debug("FOUND: {json} in {osd} has value '{val}'".format(osd=osd, json=JSON, val=out))
                             found += 1
                         except subprocess.CalledProcessError as e:
-                            if "No such file or directory" not in e.output and "No data available" not in e.output:
+                            logging.debug("Error message: {output}".format(output=e.output))
+                            if "No such file or directory" not in str(e.output) and \
+                               "No data available" not in str(e.output) and \
+                               "not contained by pg" not in str(e.output):
                                 raise
                 # Assuming k=2 m=1 for the default ec pool
                 if found != 3:
@@ -1691,7 +1655,7 @@ def main(argv):
 
         cmd = (CFSD_PREFIX + "--op list-pgs").format(osd=osd)
         logging.debug(cmd)
-        TEST_PGS = check_output(cmd, shell=True).split("\n")
+        TEST_PGS = check_output(cmd, shell=True).decode().split("\n")
         TEST_PGS = sorted(TEST_PGS)[1:]  # Skip extra blank line
 
         if TEST_PGS != CHECK_PGS:
@@ -1876,7 +1840,7 @@ def main(argv):
                         ERRORS += 1
                     cmd = "{path}/rados -p {pool} ls".format(pool=NEWPOOL, path=CEPH_BIN)
                     logging.debug(cmd)
-                    data = check_output(cmd, shell=True)
+                    data = check_output(cmd, shell=True).decode()
                     if data:
                         logging.error("'{data}'".format(data=data))
                         logging.error("Found objects after dry-run")
@@ -1915,7 +1879,7 @@ def main(argv):
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     SPLITID = get_pool_id(SPLIT_POOL, nullfd)
-    pool_size = int(check_output("{path}/ceph osd pool get {pool} size".format(pool=SPLIT_POOL, path=CEPH_BIN), shell=True, stderr=nullfd).split(" ")[1])
+    pool_size = int(check_output("{path}/ceph osd pool get {pool} size".format(pool=SPLIT_POOL, path=CEPH_BIN), shell=True, stderr=nullfd).decode().split(" ")[1])
     EXP_ERRORS = 0
     RM_ERRORS = 0
     IMP_ERRORS = 0
@@ -2057,11 +2021,11 @@ def remove_btrfs_subvolumes(path):
         return
     result = subprocess.Popen("stat -f -c '%%T' %s" % path, shell=True, stdout=subprocess.PIPE)
     for line in result.stdout:
-        filesystem = decode(line).rstrip('\n')
+        filesystem = line.decode('utf-8').rstrip('\n')
     if filesystem == "btrfs":
         result = subprocess.Popen("sudo btrfs subvolume list %s" % path, shell=True, stdout=subprocess.PIPE)
         for line in result.stdout:
-            subvolume = decode(line).split()[8]
+            subvolume = line.decode('utf-8').split()[8]
             # extracting the relative volume name
             m = re.search(".*(%s.*)" % path, subvolume)
             if m:

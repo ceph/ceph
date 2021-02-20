@@ -13,24 +13,35 @@
 """
 from __future__ import absolute_import
 
-from .settings import Settings
-from .tools import build_url
 import inspect
+import logging
 import re
+
 import requests
 from requests.exceptions import ConnectionError, InvalidURL, Timeout
-from . import logger
+
+from .settings import Settings
+from .tools import build_url
 
 try:
     from requests.packages.urllib3.exceptions import SSLError
 except ImportError:
-    from urllib3.exceptions import SSLError
+    from urllib3.exceptions import SSLError  # type: ignore
+
+try:
+    from typing import List
+except ImportError:
+    pass  # Just for type checking
+
+
+logger = logging.getLogger('rest_client')
 
 
 class TimeoutRequestsSession(requests.Session):
     """
     Set timeout argument for all requests if this is not already done.
     """
+
     def request(self, *args, **kwargs):
         if ((args[8] if len(args) > 8 else None) is None) \
                 and kwargs.get('timeout') is None:
@@ -177,13 +188,13 @@ class _ResponseValidator(object):
                 level_next = path[path_sep + 1:].strip()
             else:
                 path_sep = len(path)
-                level_next = None
+                level_next = None  # type: ignore
             key = path[:path_sep].strip()
 
             if key == '*':
                 continue
             elif key == '':  # check all keys
-                for k in resp.keys():
+                for k in resp.keys():  # type: ignore
                     _ResponseValidator._validate_key(k, level_next, resp)
             else:
                 _ResponseValidator._validate_key(key, level_next, resp)
@@ -246,6 +257,7 @@ class _ResponseValidator(object):
 
     @staticmethod
     def _parse_level_paths(level):
+        # type: (str) -> List[str]
         level = level.strip()
         if level[0] == '(':
             level = level[1:]
@@ -295,7 +307,8 @@ class _Request(object):
                  method=None,
                  params=None,
                  data=None,
-                 raw_content=False):
+                 raw_content=False,
+                 headers=None):
         method = method if method else self.method
         if not method:
             raise Exception('No HTTP request method specified')
@@ -310,7 +323,7 @@ class _Request(object):
                         method.upper()))
                 data = req_data
         resp = self.rest_client.do_request(method, self._gen_path(), params,
-                                           data, raw_content)
+                                           data, raw_content, headers)
         if raw_content and self.resp_structure:
             raise Exception("Cannot validate response in raw format")
         _ResponseValidator.validate(self.resp_structure, resp)
@@ -368,32 +381,36 @@ class RestClient(object):
                    path,
                    params=None,
                    data=None,
-                   raw_content=False):
+                   raw_content=False,
+                   headers=None):
         url = '{}{}'.format(self.base_url, path)
         logger.debug('%s REST API %s req: %s data: %s', self.client_name,
                      method.upper(), path, data)
+        request_headers = self.headers.copy()
+        if headers:
+            request_headers.update(headers)
         try:
             if method.lower() == 'get':
                 resp = self.session.get(
-                    url, headers=self.headers, params=params, auth=self.auth)
+                    url, headers=request_headers, params=params, auth=self.auth)
             elif method.lower() == 'post':
                 resp = self.session.post(
                     url,
-                    headers=self.headers,
+                    headers=request_headers,
                     params=params,
                     data=data,
                     auth=self.auth)
             elif method.lower() == 'put':
                 resp = self.session.put(
                     url,
-                    headers=self.headers,
+                    headers=request_headers,
                     params=params,
                     data=data,
                     auth=self.auth)
             elif method.lower() == 'delete':
                 resp = self.session.delete(
                     url,
-                    headers=self.headers,
+                    headers=request_headers,
                     params=params,
                     data=data,
                     auth=self.auth)
@@ -443,7 +460,7 @@ class RestClient(object):
                         match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
                                          ex.args[0].reason.args[0])
                     except AttributeError:
-                        match = False
+                        match = None
                     if match:
                         errno = match.group(1)
                         strerror = match.group(2)
@@ -497,7 +514,7 @@ class RestClient(object):
                 resp_structure = api_kwargs.get('resp_structure', None)
                 args_name = inspect.getargspec(func).args
                 args_dict = dict(zip(args_name[1:], args))
-                for key, val in kwargs:
+                for key, val in kwargs.items():
                     args_dict[key] = val
                 return func(
                     self,

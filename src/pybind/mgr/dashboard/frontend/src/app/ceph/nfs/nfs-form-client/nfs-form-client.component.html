@@ -1,8 +1,8 @@
 <div class="form-group row">
-  <label class="col-sm-3 col-form-label"
+  <label class="cd-col-form-label"
          i18n>Clients</label>
 
-  <div class="col-sm-9"
+  <div class="cd-col-form-input"
        [formGroup]="form"
        #formDir="ngForm">
     <span *ngIf="form.get('clients').value.length === 0"
@@ -19,16 +19,16 @@
             {{ (index + 1) | ordinal }}
             <span class="float-right clickable"
                   (click)="removeClient(index)"
-                  tooltip="Remove">&times;</span>
+                  ngbTooltip="Remove">&times;</span>
           </div>
 
           <div class="card-body">
             <!-- Addresses -->
             <div class="form-group row">
               <label i18n
-                     class="col-sm-3 col-form-label"
+                     class="cd-col-form-label"
                      for="addresses">Addresses</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input type="text"
                        class="form-control"
                        name="addresses"
@@ -37,7 +37,7 @@
                        placeholder="192.168.0.10, 192.168.1.0/8">
                 <span class="invalid-feedback">
                   <span *ngIf="showError(index, 'addresses', formDir, 'required')"
-                        i18n>Required field</span>
+                        i18n>This field is required.</span>
 
                   <span *ngIf="showError(index, 'addresses', formDir, 'pattern')">
                     <ng-container i18n>Must contain one or more comma-separated values</ng-container>
@@ -51,9 +51,9 @@
             <!-- Access Type-->
             <div class="form-group row">
               <label i18n
-                     class="col-sm-3 col-form-label"
+                     class="cd-col-form-label"
                      for="access_type">Access Type</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <select class="form-control custom-select"
                         name="access_type"
                         id="access_type"
@@ -72,9 +72,9 @@
             <!-- Squash -->
             <div class="form-group row">
               <label i18n
-                     class="col-sm-3 col-form-label"
+                     class="cd-col-form-label"
                      for="squash">Squash</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <select class="form-control custom-select"
                         name="squash"
                         id="squash"

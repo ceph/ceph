@@ -40,6 +40,12 @@ extern char *sys_siglist[];
 
 #define dout_context g_ceph_context
 
+using std::ostringstream;
+using std::string;
+
+using ceph::BackTrace;
+using ceph::JSONFormatter;
+
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
   int ret;

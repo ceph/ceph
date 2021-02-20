@@ -29,6 +29,8 @@
 
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MMonCommand.h"
+#include "messages/MMonCommandAck.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -39,8 +41,18 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "asok(" << (void*)m_cct << ") "
 
+using namespace std::literals;
 
 using std::ostringstream;
+using std::string;
+using std::stringstream;
+
+using namespace TOPNSPC::common;
+
+using ceph::bufferlist;
+using ceph::cref_t;
+using ceph::Formatter;
+
 
 /*
  * UNIX domain sockets created by an application persist even after that
@@ -114,8 +126,12 @@ AdminSocket::~AdminSocket()
 std::string AdminSocket::create_wakeup_pipe(int *pipe_rd, int *pipe_wr)
 {
   int pipefd[2];
+  #ifdef _WIN32
+  if (win_socketpair(pipefd) < 0) {
+  #else
   if (pipe_cloexec(pipefd, O_NONBLOCK) < 0) {
-    int e = errno;
+  #endif
+    int e = ceph_sock_errno();
     ostringstream oss;
     oss << "AdminSocket::create_wakeup_pipe error: " << cpp_strerror(e);
     return oss.str();
@@ -130,10 +146,10 @@ std::string AdminSocket::destroy_wakeup_pipe()
 {
   // Send a byte to the wakeup pipe that the thread is listening to
   char buf[1] = { 0x0 };
-  int ret = safe_write(m_wakeup_wr_fd, buf, sizeof(buf));
+  int ret = safe_send(m_wakeup_wr_fd, buf, sizeof(buf));
 
   // Close write end
-  retry_sys_call(::close, m_wakeup_wr_fd);
+  retry_sys_call(::compat_closesocket, m_wakeup_wr_fd);
   m_wakeup_wr_fd = -1;
 
   if (ret != 0) {
@@ -147,7 +163,7 @@ std::string AdminSocket::destroy_wakeup_pipe()
 
   // Close read end. Doing this before join() blocks the listenter and prevents
   // joining.
-  retry_sys_call(::close, m_wakeup_rd_fd);
+  retry_sys_call(::compat_closesocket, m_wakeup_rd_fd);
   m_wakeup_rd_fd = -1;
 
   return "";
@@ -168,19 +184,20 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   }
   int sock_fd = socket_cloexec(PF_UNIX, SOCK_STREAM, 0);
   if (sock_fd < 0) {
-    int err = errno;
+    int err = ceph_sock_errno();
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: "
 	<< "failed to create socket: " << cpp_strerror(err);
     return oss.str();
   }
+  // FIPS zeroization audit 20191115: this memset is fine.
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path),
 	   "%s", sock_path.c_str());
   if (::bind(sock_fd, (struct sockaddr*)&address,
 	   sizeof(struct sockaddr_un)) != 0) {
-    int err = errno;
+    int err = ceph_sock_errno();
     if (err == EADDRINUSE) {
       AdminSocketClient client(sock_path);
       bool ok;
@@ -195,7 +212,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 		 sizeof(struct sockaddr_un)) == 0) {
 	  err = 0;
 	} else {
-	  err = errno;
+	  err = ceph_sock_errno();
 	}
       }
     }
@@ -209,7 +226,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
     }
   }
   if (listen(sock_fd, 5) != 0) {
-    int err = errno;
+    int err = ceph_sock_errno();
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: "
 	  << "failed to listen to socket: " << cpp_strerror(err);
@@ -226,6 +243,7 @@ void AdminSocket::entry() noexcept
   ldout(m_cct, 5) << "entry start" << dendl;
   while (true) {
     struct pollfd fds[2];
+    // FIPS zeroization audit 20191115: this memset is fine.
     memset(fds, 0, sizeof(fds));
     fds[0].fd = m_sock_fd;
     fds[0].events = POLLIN | POLLRDBAND;
@@ -235,7 +253,7 @@ void AdminSocket::entry() noexcept
     ldout(m_cct,20) << __func__ << " waiting" << dendl;
     int ret = poll(fds, 2, -1);
     if (ret < 0) {
-      int err = errno;
+      int err = ceph_sock_errno();
       if (err == EINTR) {
 	continue;
       }
@@ -252,7 +270,12 @@ void AdminSocket::entry() noexcept
     if (fds[1].revents & POLLIN) {
       // read off one byte
       char buf;
-      ::read(m_wakeup_rd_fd, &buf, 1);
+      auto s = safe_recv(m_wakeup_rd_fd, &buf, 1);
+      if (s == -1) {
+        int e = ceph_sock_errno();
+        ldout(m_cct, 5) << "AdminSocket: (ignoring) read(2) error: '"
+		        << cpp_strerror(e) << dendl;
+      }
       do_tell_queue();
     }
     if (m_shutdown) {
@@ -295,7 +318,7 @@ void AdminSocket::do_accept()
   int connection_fd = accept_cloexec(m_sock_fd, (struct sockaddr*) &address,
 			     &address_length);
   if (connection_fd < 0) {
-    int err = errno;
+    int err = ceph_sock_errno();
     lderr(m_cct) << "AdminSocket: do_accept error: '"
 			   << cpp_strerror(err) << dendl;
     return;
@@ -306,13 +329,13 @@ void AdminSocket::do_accept()
   unsigned pos = 0;
   string c;
   while (1) {
-    int ret = safe_read(connection_fd, &cmd[pos], 1);
+    int ret = safe_recv(connection_fd, &cmd[pos], 1);
     if (ret <= 0) {
       if (ret < 0) {
         lderr(m_cct) << "AdminSocket: error reading request code: "
 		     << cpp_strerror(ret) << dendl;
       }
-      retry_sys_call(::close, connection_fd);
+      retry_sys_call(::compat_closesocket, connection_fd);
       return;
     }
     if (cmd[0] == '\0') {
@@ -346,7 +369,7 @@ void AdminSocket::do_accept()
     }
     if (++pos >= sizeof(cmd)) {
       lderr(m_cct) << "AdminSocket: error reading request too long" << dendl;
-      retry_sys_call(::close, connection_fd);
+      retry_sys_call(::compat_closesocket, connection_fd);
       return;
     }
   }
@@ -362,32 +385,36 @@ void AdminSocket::do_accept()
   if (rval < 0) {
     ostringstream ss;
     ss << "ERROR: " << cpp_strerror(rval) << "\n";
+    ss << err.str() << "\n";
     bufferlist o;
     o.append(ss.str());
     o.claim_append(out);
     out.claim_append(o);
   }
   uint32_t len = htonl(out.length());
-  int ret = safe_write(connection_fd, &len, sizeof(len));
+  int ret = safe_send(connection_fd, &len, sizeof(len));
   if (ret < 0) {
     lderr(m_cct) << "AdminSocket: error writing response length "
 		 << cpp_strerror(ret) << dendl;
   } else {
-    if (out.write_fd(connection_fd) < 0) {
+    int r = out.send_fd(connection_fd);
+    if (r < 0) {
       lderr(m_cct) << "AdminSocket: error writing response payload "
 		   << cpp_strerror(ret) << dendl;
     }
   }
-  retry_sys_call(::close, connection_fd);
+  retry_sys_call(::compat_closesocket, connection_fd);
 }
 
 void AdminSocket::do_tell_queue()
 {
   ldout(m_cct,10) << __func__ << dendl;
-  std::list<ref_t<MCommand>> q;
+  std::list<cref_t<MCommand>> q;
+  std::list<cref_t<MMonCommand>> lq;
   {
     std::lock_guard l(tell_lock);
     q.swap(tell_queue);
+    lq.swap(tell_legacy_queue);
   }
   for (auto& m : q) {
     bufferlist outbl;
@@ -399,7 +426,23 @@ void AdminSocket::do_tell_queue()
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
 #ifdef WITH_SEASTAR
-#warning "fix message send with crimson"
+        // TODO: crimson: handle asok commmand from alien thread
+#else
+	m->get_connection()->send_message(reply);
+#endif
+      });
+  }
+  for (auto& m : lq) {
+    bufferlist outbl;
+    execute_command(
+      m->cmd,
+      m->get_data(),
+      [m](int r, const std::string& err, bufferlist& outbl) {
+	auto reply = new MMonCommandAck(m->cmd, r, err, 0);
+	reply->set_tid(m->get_tid());
+	reply->set_data(outbl);
+#ifdef WITH_SEASTAR
+        // TODO: crimson: handle asok commmand from alien thread
 #else
 	m->get_connection()->send_message(reply);
 #endif
@@ -414,7 +457,7 @@ int AdminSocket::execute_command(
   bufferlist *outbl)
 {
 #ifdef WITH_SEASTAR
-#warning "must implement admin socket blocking execute_command() for crimson"
+   // TODO: crimson: blocking execute_command() in alien thread
   return -ENOSYS;
 #else
   bool done = false;
@@ -427,7 +470,7 @@ int AdminSocket::execute_command(
     inbl,
     [&errss, outbl, &fin](int r, const std::string& err, bufferlist& out) {
       errss << err;
-      outbl->claim(out);
+      *outbl = std::move(out);
       fin.finish(r);
     });
   {
@@ -454,41 +497,29 @@ void AdminSocket::execute_command(
   }
   string prefix;
   try {
-    cmd_getval(m_cct, cmdmap, "format", format);
-    cmd_getval(m_cct, cmdmap, "prefix", prefix);
+    cmd_getval(cmdmap, "format", format);
+    cmd_getval(cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
     return on_finish(-EINVAL, "invalid json, missing format and/or prefix",
 		     empty);
   }
 
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+  auto f = Formatter::create(format, "json-pretty", "json-pretty");
 
-  std::unique_lock l(lock);
-  decltype(hooks)::iterator p;
-  p = hooks.find(prefix);
-  if (p == hooks.cend()) {
+  auto [retval, hook] = find_matched_hook(prefix, cmdmap);
+  switch (retval) {
+  case ENOENT:
     lderr(m_cct) << "AdminSocket: request '" << cmdvec
 		 << "' not defined" << dendl;
     delete f;
     return on_finish(-EINVAL, "unknown command prefix "s + prefix, empty);
+  case EINVAL:
+    delete f;
+    return on_finish(-EINVAL, "invalid command json", empty);
+  default:
+    assert(retval == 0);
   }
 
-  // make sure one of the registered commands with this prefix validates.
-  while (!validate_cmd(m_cct, p->second.desc, cmdmap, errss)) {
-    ++p;
-    if (p->first != prefix) {
-      delete f;
-      return on_finish(-EINVAL, "invalid command json", empty);
-    }
-  }
-
-  // Drop lock to avoid cycles in cases where the hook takes
-  // the same lock that was held during calls to register/unregister,
-  // and set in_hook to allow unregister to wait for us before
-  // removing this hook.
-  in_hook = true;
-  auto hook = p->second.hook;
-  l.unlock();
   hook->call_async(
     prefix, cmdmap, f, inbl,
     [f, on_finish](int r, const std::string& err, bufferlist& out) {
@@ -500,16 +531,47 @@ void AdminSocket::execute_command(
       on_finish(r, err, out);
     });
 
-  l.lock();
+  std::unique_lock l(lock);
   in_hook = false;
   in_hook_cond.notify_all();
 }
 
-void AdminSocket::queue_tell_command(ref_t<MCommand> m)
+std::pair<int, AdminSocketHook*>
+AdminSocket::find_matched_hook(std::string& prefix,
+			       const cmdmap_t& cmdmap)
+{
+  std::unique_lock l(lock);
+  // Drop lock after done with the lookup to avoid cycles in cases where the
+  // hook takes the same lock that was held during calls to
+  // register/unregister, and set in_hook to allow unregister to wait for us
+  // before removing this hook.
+  auto [hooks_begin, hooks_end] = hooks.equal_range(prefix);
+  if (hooks_begin == hooks_end) {
+    return {ENOENT, nullptr};
+  }
+  // make sure one of the registered commands with this prefix validates.
+  stringstream errss;
+  for (auto hook = hooks_begin; hook != hooks_end; ++hook) {
+    if (validate_cmd(m_cct, hook->second.desc, cmdmap, errss)) {
+      in_hook = true;
+      return {0, hook->second.hook};
+    }
+  }
+  return {EINVAL, nullptr};
+}
+
+void AdminSocket::queue_tell_command(cref_t<MCommand> m)
 {
   ldout(m_cct,10) << __func__ << " " << *m << dendl;
   std::lock_guard l(tell_lock);
   tell_queue.push_back(std::move(m));
+  wakeup();
+}
+void AdminSocket::queue_tell_command(cref_t<MMonCommand> m)
+{
+  ldout(m_cct,10) << __func__ << " " << *m << dendl;
+  std::lock_guard l(tell_lock);
+  tell_legacy_queue.push_back(std::move(m));
   wakeup();
 }
 
@@ -615,7 +677,7 @@ public:
       // do what you'd expect. GCC 7 does not.
       (void)command;
       ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      secname << "cmd" << std::setfill('0') << std::setw(3) << cmdnum;
       dump_cmd_and_help_to_json(f,
                                 CEPH_FEATURES_ALL,
 				secname.str().c_str(),
@@ -631,6 +693,19 @@ public:
 bool AdminSocket::init(const std::string& path)
 {
   ldout(m_cct, 5) << "init " << path << dendl;
+
+  #ifdef _WIN32
+  OSVERSIONINFOEXW ver = {0};
+  ver.dwOSVersionInfoSize = sizeof(ver);
+  get_windows_version(&ver);
+
+  if (std::tie(ver.dwMajorVersion, ver.dwMinorVersion, ver.dwBuildNumber) <
+      std::make_tuple(10, 0, 17063)) {
+    ldout(m_cct, 5) << "Unix sockets require Windows 10.0.17063 or later. "
+                    << "The admin socket will not be available." << dendl;
+    return false;
+  }
+  #endif
 
   /* Set up things for the new thread */
   std::string err;
@@ -688,7 +763,7 @@ void AdminSocket::shutdown()
     lderr(m_cct) << "AdminSocket::shutdown: error: " << err << dendl;
   }
 
-  retry_sys_call(::close, m_sock_fd);
+  retry_sys_call(::compat_closesocket, m_sock_fd);
 
   unregister_commands(version_hook.get());
   version_hook.reset();
@@ -707,6 +782,6 @@ void AdminSocket::wakeup()
 {
   // Send a byte to the wakeup pipe that the thread is listening to
   char buf[1] = { 0x0 };
-  int r = safe_write(m_wakeup_wr_fd, buf, sizeof(buf));
+  int r = safe_send(m_wakeup_wr_fd, buf, sizeof(buf));
   (void)r;
 }

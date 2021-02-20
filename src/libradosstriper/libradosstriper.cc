@@ -432,7 +432,7 @@ extern "C" int rados_striper_read(rados_striper_t striper,
     if (bl.length() > len)
       return -ERANGE;
     if (!bl.is_provided_buffer(buf))
-      bl.copy(0, bl.length(), buf);
+      bl.begin().copy(bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
   return ret;
@@ -463,7 +463,7 @@ extern "C" int rados_striper_getxattr(rados_striper_t striper,
   if (ret >= 0) {
     if (bl.length() > len)
       return -ERANGE;
-    bl.copy(0, bl.length(), buf);
+    bl.begin().copy(bl.length(), buf);
     ret = bl.length();
   }
   return ret;

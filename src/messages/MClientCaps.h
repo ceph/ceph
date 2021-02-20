@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
 
-class MClientCaps : public Message {
+class MClientCaps final : public SafeMessage {
 private:
 
   static constexpr int HEAD_VERSION = 11;
@@ -44,11 +44,11 @@ private:
 
   struct ceph_mds_cap_peer peer;
 
-  bufferlist snapbl;
-  bufferlist xattrbl;
-  bufferlist flockbl;
+  ceph::buffer::list snapbl;
+  ceph::buffer::list xattrbl;
+  ceph::buffer::list flockbl;
   version_t  inline_version = 0;
-  bufferlist inline_data;
+  ceph::buffer::list inline_data;
 
   // Receivers may not use their new caps until they have this OSD map
   epoch_t osd_epoch_barrier = 0;
@@ -129,7 +129,7 @@ private:
 
 protected:
   MClientCaps()
-    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION} {}
+    : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION} {}
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
@@ -140,7 +140,7 @@ protected:
 	      int dirty,
 	      int mseq,
               epoch_t oeb)
-    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
+    : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
@@ -157,7 +157,7 @@ protected:
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
-    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
+    : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
@@ -167,14 +167,14 @@ protected:
     head.migrate_seq = mseq;
     memset(&peer, 0, sizeof(peer));
   }
-  ~MClientCaps() override {}
+  ~MClientCaps() final {}
 
 private:
   file_layout_t layout;
 
 public:
   std::string_view get_type_name() const override { return "Cfcap";}
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
@@ -200,15 +200,20 @@ public:
 
     out << ")";
   }
-  
+
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
-    ceph_mds_caps_body_legacy body;
-    decode(body, p);
     if (head.op == CEPH_CAP_OP_EXPORT) {
+      ceph_mds_caps_export_body body;
+      decode(body, p);
       peer = body.peer;
+      p += (sizeof(ceph_mds_caps_non_export_body) -
+	    sizeof(ceph_mds_caps_export_body));
     } else {
+      ceph_mds_caps_non_export_body body;
+      decode(body, p);
       size = body.size;
       max_size = body.max_size;
       truncate_size = body.truncate_size;
@@ -219,7 +224,7 @@ public:
       layout.from_legacy(body.layout);
       time_warp_seq = body.time_warp_seq;
     }
-    decode_nohead(head.snap_trace_len, snapbl, p);
+    ceph::decode_nohead(head.snap_trace_len, snapbl, p);
 
     ceph_assert(middle.length() == head.xattr_len);
     if (head.xattr_len)
@@ -273,11 +278,16 @@ public:
     head.xattr_len = xattrbl.length();
 
     encode(head, payload);
-    ceph_mds_caps_body_legacy body;
+    static_assert(sizeof(ceph_mds_caps_non_export_body) >
+		  sizeof(ceph_mds_caps_export_body));
     if (head.op == CEPH_CAP_OP_EXPORT) {
-      memset(&body, 0, sizeof(body));
+      ceph_mds_caps_export_body body;
       body.peer = peer;
+      encode(body, payload);
+      payload.append_zero(sizeof(ceph_mds_caps_non_export_body) -
+			  sizeof(ceph_mds_caps_export_body));
     } else {
+      ceph_mds_caps_non_export_body body;
       body.size = size;
       body.max_size = max_size;
       body.truncate_size = truncate_size;
@@ -287,9 +297,9 @@ public:
       ctime.encode_timeval(&body.ctime);
       layout.to_legacy(&body.layout);
       body.time_warp_seq = time_warp_seq;
+      encode(body, payload);
     }
-    encode(body, payload);
-    encode_nohead(snapbl, payload);
+    ceph::encode_nohead(snapbl, payload);
 
     middle = xattrbl;
 
@@ -314,7 +324,7 @@ public:
       encode(inline_data, payload);
     } else {
       encode(inline_version, payload);
-      encode(bufferlist(), payload);
+      encode(ceph::buffer::list(), payload);
     }
 
     encode(osd_epoch_barrier, payload);

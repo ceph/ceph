@@ -4,9 +4,8 @@
                 *ngIf="available === false"
                 title="iSCSI Targets not available"
                 i18n-title>
-  <ng-container i18n>Please consult the <a href="{{docsUrl}}"
-       target="_blank">documentation</a>
-    on how to configure and enable the iSCSI Targets management functionality.</ng-container>
+  <ng-container i18n>Please consult the <cd-doc section="iscsi"></cd-doc> on
+    how to configure and enable the iSCSI Targets management functionality.</ng-container>
 
   <ng-container *ngIf="status">
     <br>
@@ -23,6 +22,8 @@
           identifier="target_iqn"
           forceIdentifier="true"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
     <cd-table-actions class="btn-group"
@@ -42,8 +43,8 @@
   </div>
 
   <cd-iscsi-target-details cdTableDetail
-                           *ngIf="selection.hasSingleSelection"
+                           *ngIf="expandedRow"
                            [cephIscsiConfigVersion]="cephIscsiConfigVersion"
-                           [selection]="selection"
+                           [selection]="expandedRow"
                            [settings]="settings"></cd-iscsi-target-details>
 </cd-table>

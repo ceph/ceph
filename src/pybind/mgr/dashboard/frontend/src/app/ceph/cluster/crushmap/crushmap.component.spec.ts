@@ -1,14 +1,13 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { DebugElement } from '@angular/core';
+import { DebugElement, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TreeModule } from 'ng2-tree';
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TreeModule } from '@circlon/angular-tree-component';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { HealthService } from '../../../shared/api/health.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { HealthService } from '~/app/shared/api/health.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { CrushmapComponent } from './crushmap.component';
 
 describe('CrushmapComponent', () => {
@@ -16,7 +15,7 @@ describe('CrushmapComponent', () => {
   let fixture: ComponentFixture<CrushmapComponent>;
   let debugElement: DebugElement;
   configureTestBed({
-    imports: [HttpClientTestingModule, TreeModule, TabsModule.forRoot(), SharedModule],
+    imports: [HttpClientTestingModule, TreeModule, SharedModule],
     declarations: [CrushmapComponent],
     providers: [HealthService]
   });
@@ -47,13 +46,13 @@ describe('CrushmapComponent', () => {
     };
 
     beforeEach(() => {
-      healthService = debugElement.injector.get(HealthService);
+      healthService = debugElement.injector.get(HealthService as Type<HealthService>);
     });
 
     it('should display "No nodes!" if ceph tree nodes is empty array', () => {
       prepareGetHealth([]);
       expect(healthService.getFullHealth).toHaveBeenCalled();
-      expect(component.tree.value).toEqual('No nodes!');
+      expect(component.nodes[0].name).toEqual('No nodes!');
     });
 
     describe('nodes not empty', () => {
@@ -71,86 +70,70 @@ describe('CrushmapComponent', () => {
       });
 
       it('should have two root nodes', () => {
-        expect(component.tree.children).toEqual([
+        expect(component.nodes).toEqual([
           {
+            cdId: -3,
             children: [
               {
                 children: [
                   {
-                    id: 4,
-                    settings: {
-                      static: true
-                    },
+                    id: component.nodes[0].children[0].children[0].id,
+                    cdId: 4,
                     status: 'up',
                     type: 'osd',
-                    value: 'osd.0-2 (osd)'
+                    name: 'osd.0-2 (osd)'
                   }
                 ],
-                id: -4,
-                settings: {
-                  static: true
-                },
+                id: component.nodes[0].children[0].id,
+                cdId: -4,
                 status: undefined,
                 type: 'host',
-                value: 'my-host-2 (host)'
+                name: 'my-host-2 (host)'
               }
             ],
-            id: -3,
-            settings: {
-              static: true
-            },
+            id: component.nodes[0].id,
             status: undefined,
             type: 'root',
-            value: 'default-2 (root)'
+            name: 'default-2 (root)'
           },
           {
             children: [
               {
                 children: [
                   {
-                    id: 0,
-                    settings: {
-                      static: true
-                    },
+                    id: component.nodes[1].children[0].children[0].id,
+                    cdId: 0,
                     status: 'up',
                     type: 'osd',
-                    value: 'osd.0 (osd)'
+                    name: 'osd.0 (osd)'
                   },
                   {
-                    id: 1,
-                    settings: {
-                      static: true
-                    },
+                    id: component.nodes[1].children[0].children[1].id,
+                    cdId: 1,
                     status: 'down',
                     type: 'osd',
-                    value: 'osd.1 (osd)'
+                    name: 'osd.1 (osd)'
                   },
                   {
-                    id: 2,
-                    settings: {
-                      static: true
-                    },
+                    id: component.nodes[1].children[0].children[2].id,
+                    cdId: 2,
                     status: 'up',
                     type: 'osd',
-                    value: 'osd.2 (osd)'
+                    name: 'osd.2 (osd)'
                   }
                 ],
-                id: -2,
-                settings: {
-                  static: true
-                },
+                id: component.nodes[1].children[0].id,
+                cdId: -2,
                 status: undefined,
                 type: 'host',
-                value: 'my-host (host)'
+                name: 'my-host (host)'
               }
             ],
-            id: -1,
-            settings: {
-              static: true
-            },
+            id: component.nodes[1].id,
+            cdId: -1,
             status: undefined,
             type: 'root',
-            value: 'default (root)'
+            name: 'default (root)'
           }
         ]);
       });

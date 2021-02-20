@@ -1,0 +1,21 @@
+<cd-prometheus-tabs></cd-prometheus-tabs>
+
+<cd-alert-panel *ngIf="!isPrometheusConfigured"
+                type="info"
+                i18n>To see all configured Prometheus alerts, please
+  provide the URL to the API of Prometheus as described in
+  the <cd-doc section="prometheus"></cd-doc>.</cd-alert-panel>
+
+<cd-table *ngIf="isPrometheusConfigured"
+          [data]="prometheusAlertService.rules"
+          [columns]="columns"
+          [hasDetails]="true"
+          (updateSelection)="setExpandedRow($event)"
+          [selectionType]="'single'">
+  <cd-table-key-value cdTableDetail
+                      *ngIf="expandedRow"
+                      [data]="expandedRow"
+                      [renderObjects]="true"
+                      [hideKeys]="hideKeys">
+  </cd-table-key-value>
+</cd-table>

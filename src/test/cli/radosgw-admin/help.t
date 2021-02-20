@@ -29,8 +29,10 @@
     bucket chown               link bucket to specified user and update its object ACLs
     bucket reshard             reshard bucket
     bucket rewrite             rewrite all objects in the specified bucket
+    bucket sync checkpoint     poll a bucket's sync status until it catches up to its remote
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
+    bucket radoslist           list rados objects backing bucket's objects
     bi get                     retrieve bucket index object entries
     bi put                     store bucket index object entries
     bi list                    list raw bucket index entries
@@ -79,6 +81,7 @@
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup placement list   list zonegroup's placement targets
+    zonegroup placement get    get a placement target of a specific zonegroup
     zonegroup placement add    add a placement target id to a zonegroup
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
@@ -91,6 +94,7 @@
     zone list                  list all zones set on this cluster
     zone rename                rename a zone
     zone placement list        list zone's placement targets
+    zone placement get         get a zone placement target
     zone placement add         add a zone placement target
     zone placement modify      modify a zone placement target
     zone placement rm          remove a zone placement target
@@ -126,8 +130,7 @@
     metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog list                 list metadata log
-    mdlog trim                 trim metadata log (use start-date, end-date or
-                               start-marker, end-marker)
+    mdlog trim                 trim metadata log (use marker)
     mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
@@ -135,9 +138,10 @@
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
-    orphans find               init and run search for leaked rados objects (use job-id, pool)
-    orphans finish             clean up search for leaked rados objects
-    orphans list-jobs          list the current job-ids for orphans search
+    orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)
+    orphans finish             deprecated -- clean up search for leaked rados objects
+    orphans list-jobs          deprecated -- list the current job-ids for orphans search
+                             * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool
     role create                create a AWS role for use with STS
     role rm                    remove a role
     role get                   get a role
@@ -162,8 +166,22 @@
     mfa remove                 delete MFA TOTP token
     mfa check                  check MFA TOTP token
     mfa resync                 re-sync MFA TOTP token
+    topic list                 list bucket notifications/pubsub topics
+    topic get                  get a bucket notifications/pubsub topic
+    topic rm                   remove a bucket notifications/pubsub topic
+    subscription get           get a pubsub subscription definition
+    subscription rm            remove a pubsub subscription
+    subscription pull          show events in a pubsub subscription
+    subscription ack           ack (remove) an events in a pubsub subscription
+    script put                 upload a lua script to a context
+    script get                 get the lua script of a context
+    script rm                  remove the lua scripts of a context
+    script-package add         add a lua package to the scripts allowlist
+    script-package rm          remove a lua package from the scripts allowlist
+    script-package list        get the lua packages allowlist
   options:
      --tenant=<tenant>         tenant name
+     --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)
      --uid=<id>                user id
      --new-uid=<id>            new user id
      --subuser=<name>          subuser name
@@ -243,6 +261,7 @@
                                set list of zones to sync from
      --sync-from-rm=[zone-name][,...]
                                remove zones from list of zones to sync from
+     --bucket-index-max-shards override a zone/zonegroup's default bucket index shard count
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state
@@ -310,6 +329,22 @@
      --totp-seconds            the time resolution that is being used for TOTP generation
      --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
      --totp-pin                the valid value of a TOTP token at a certain time
+  
+  Bucket notifications/pubsub options:
+     --topic                   bucket notifications/pubsub topic name
+     --subscription            pubsub subscription name
+     --event-id                event id in a pubsub subscription
+  
+  Script options:
+     --context                 context in which the script runs. one of: preRequest, postRequest
+     --package                 name of the lua package that should be added/removed to/from the allowlist
+     --allow-compilation       package is allowed to compile C code as part of its installation
+  
+  radoslist options:
+     --rgw-obj-fs              the field separator that will separate the rados
+                               object name from the rgw object name;
+                               additionally rados objects for incomplete
+                               multipart uploads will not be output
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name

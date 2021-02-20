@@ -1,12 +1,12 @@
 """
 Handle osdfailsafe configuration settings (nearfull ratio and full ratio)
 """
-from cStringIO import StringIO
+from io import StringIO
 import logging
 import time
 
 from teuthology.orchestra import run
-from util.rados import rados
+from tasks.util.rados import rados
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -16,13 +16,13 @@ def task(ctx, config):
     Test handling of osd_failsafe_nearfull_ratio and osd_failsafe_full_ratio
     configuration settings
 
-    In order for test to pass must use log-whitelist as follows
+    In order for test to pass must use log-ignorelist as follows
 
         tasks:
             - chef:
             - install:
             - ceph:
-                log-whitelist: ['OSD near full', 'OSD full dropping all updates']
+                log-ignorelist: ['OSD near full', 'OSD full dropping all updates']
             - osd_failsafe_enospc:
 
     """

@@ -55,6 +55,7 @@ FLAGS
   [--format plain|json|json-pretty]
                                   dump variables in plain text, json or pretty
                                   json
+  [--pid <pid>]                   Override the $pid when expanding options
 
 If there is no action given, the action will default to --lookup.
 
@@ -117,11 +118,10 @@ static int list_sections(const std::string &prefix,
 static int lookup(const std::deque<std::string> &sections,
 		  const std::string &key, bool resolve_search)
 {
-  std::vector <std::string> my_sections;
-  for (deque<string>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
-    my_sections.push_back(*s);
+  std::vector<std::string> my_sections{sections.begin(), sections.end()};
+  for (auto& section : g_conf().get_my_sections()) {
+    my_sections.push_back(section);
   }
-  g_conf().get_my_sections(my_sections);
   std::string val;
   int ret = g_conf().get_val_from_conf_file(my_sections, key.c_str(), val, true);
   if (ret == -ENOENT)
@@ -164,6 +164,17 @@ static int dump_all(const string& format)
   }
 }
 
+static void maybe_override_pid(vector<const char*>& args)
+{
+  for (auto i = args.begin(); i != args.end(); ++i) {
+    string val;
+    if (ceph_argparse_witharg(args, i, &val, "--pid", (char*)NULL)) {
+      setenv("PID", val.c_str(), 1);
+      break;
+    }
+  }
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -177,8 +188,11 @@ int main(int argc, const char **argv)
   std::string dump_format;
 
   argv_to_vec(argc, argv, args);
+
   auto orig_args = args;
   auto cct = [&args] {
+    // override the PID before options are expanded
+    maybe_override_pid(args);
     std::map<std::string,std::string> defaults = {{"log_to_file", "false"}};
     return global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 		       CODE_ENVIRONMENT_DAEMON,

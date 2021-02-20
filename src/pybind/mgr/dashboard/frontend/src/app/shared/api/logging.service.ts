@@ -1,15 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { ApiModule } from './api.module';
-
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class LoggingService {
   constructor(private http: HttpClient) {}
 
-  jsError(url, message, stack) {
+  jsError(url: string, message: string, stack: any) {
     const request = {
       url: url,
       message: message,

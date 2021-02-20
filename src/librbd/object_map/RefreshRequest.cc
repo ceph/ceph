@@ -133,6 +133,11 @@ Context *RefreshRequest<I>::handle_load(int *ret_val) {
     return nullptr;
   } else if (*ret_val < 0) {
     lderr(cct) << "failed to load object map: " << oid << dendl;
+    if (*ret_val == -ETIMEDOUT &&
+        !cct->_conf.get_val<bool>("rbd_invalidate_object_map_on_timeout")) {
+      return m_on_finish;
+    }
+
     send_invalidate();
     return nullptr;
   }
@@ -236,7 +241,7 @@ void RefreshRequest<I>::send_resize() {
 
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "");
   }
   if (m_truncate_on_disk_object_map) {
     op.truncate(0);

@@ -9,9 +9,8 @@ Copyright (C) 2013 Inktank Storage, Inc.
 
 LGPL-2.1 or LGPL-3.0.  See file COPYING.
 """
-from __future__ import print_function
 import copy
-import errno
+import enum
 import math
 import json
 import os
@@ -23,14 +22,31 @@ import sys
 import threading
 import uuid
 
+from collections import abc
+from typing import Any, Callable, Dict, Generic, List, Optional, Sequence, Tuple, Union
+
+if sys.version_info >= (3, 8):
+    from typing import get_args, get_origin
+else:
+    def get_args(tp):
+        if tp is Generic:
+            return tp
+        else:
+            return getattr(tp, '__args__', ())
+
+    def get_origin(tp):
+        return getattr(tp, '__origin__', None)
+
+
 # Flags are from MonCommand.h
 class Flag:
     NOFORWARD = (1 << 0)
     OBSOLETE = (1 << 1)
     DEPRECATED = (1 << 2)
-    MGR = (1<<3)
+    MGR = (1 << 3)
     POLL = (1 << 4)
     HIDDEN = (1 << 5)
+
 
 KWARG_EQUALS = "--([^=]+)=(.+)"
 KWARG_SPACE = "--([^=]+)"
@@ -145,8 +161,88 @@ class CephArgtype(object):
         """
         return '<{0}>'.format(self.__class__.__name__)
 
+    def __call__(self, v):
+        return v
+
     def complete(self, s):
         return []
+
+    @staticmethod
+    def _compound_type_to_argdesc(tp, attrs):
+        # generate argdesc from Sequence[T], Tuple[T,..] and Optional[T]
+        orig_type = get_origin(tp)
+        type_args = get_args(tp)
+        if orig_type in (abc.Sequence, Sequence, List, list):
+            assert len(type_args) == 1
+            attrs['n'] = 'N'
+            return CephArgtype.to_argdesc(type_args[0], attrs)
+        elif orig_type is Tuple:
+            assert len(type_args) >= 1
+            inner_tp = type_args[0]
+            assert type_args.count(inner_tp) == len(type_args), \
+                f'all elements in {tp} should be identical'
+            attrs['n'] = str(len(type_args))
+            return CephArgtype.to_argdesc(inner_tp, attrs)
+        elif get_origin(tp) is Union:
+            # should be Union[t, NoneType]
+            assert len(type_args) == 2 and isinstance(None, type_args[1])
+            return CephArgtype.to_argdesc(type_args[0], attrs, True)
+        else:
+            raise ValueError(f"unknown type '{tp}': '{attrs}'")
+
+    @staticmethod
+    def to_argdesc(tp, attrs, has_default=False):
+        if has_default:
+            attrs['req'] = 'false'
+        CEPH_ARG_TYPES = {
+            str: CephString,
+            int: CephInt,
+            float: CephFloat,
+            bool: CephBool
+        }
+        try:
+            return CEPH_ARG_TYPES[tp]().argdesc(attrs)
+        except KeyError:
+            if isinstance(tp, CephArgtype):
+                return tp.argdesc(attrs)
+            elif isinstance(tp, type) and issubclass(tp, enum.Enum):
+                return CephChoices(tp=tp).argdesc(attrs)
+            else:
+                return CephArgtype._compound_type_to_argdesc(tp, attrs)
+
+    def argdesc(self, attrs):
+        attrs['type'] = type(self).__name__
+        return ','.join(f'{k}={v}' for k, v in attrs.items())
+
+    @staticmethod
+    def _cast_to_compound_type(tp, v):
+        orig_type = get_origin(tp)
+        type_args = get_args(tp)
+        if orig_type in (abc.Sequence, Sequence, List, list):
+            return [CephArgtype.cast_to(type_args[0], e) for e in v]
+        elif orig_type is Tuple:
+            return tuple(CephArgtype.cast_to(type_args[0], e) for e in v)
+        elif get_origin(tp) is Union:
+            # should be Union[t, NoneType]
+            assert len(type_args) == 2 and isinstance(None, type_args[1])
+            return CephArgtype.cast_to(type_args[0], v)
+        else:
+            raise ValueError(f"unknown type '{tp}': '{v}'")
+
+    @staticmethod
+    def cast_to(tp, v):
+        PYTHON_TYPES = (
+            str,
+            int,
+            float,
+            bool
+        )
+        if tp in PYTHON_TYPES:
+            return tp(v)
+        elif isinstance(tp, type) and issubclass(tp, enum.Enum):
+            return tp(v)
+        else:
+            return CephArgtype._cast_to_compound_type(tp, v)
 
 
 class CephInt(CephArgtype):
@@ -168,10 +264,10 @@ class CephInt(CephArgtype):
             raise ArgumentValid("{0} doesn't represent an int".format(s))
         if len(self.range) == 2:
             if val < self.range[0] or val > self.range[1]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         elif len(self.range) == 1:
             if val < self.range[0]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         self.val = val
 
     def __str__(self):
@@ -182,6 +278,11 @@ class CephInt(CephArgtype):
             r = '[{0}-{1}]'.format(self.range[0], self.range[1])
 
         return '<int{0}>'.format(r)
+
+    def argdesc(self, attrs):
+        if self.range:
+            attrs['range'] = '|'.join(self.range)
+        return super().argdesc(attrs)
 
 
 class CephFloat(CephArgtype):
@@ -203,10 +304,10 @@ class CephFloat(CephArgtype):
             raise ArgumentValid("{0} doesn't represent a float".format(s))
         if len(self.range) == 2:
             if val < self.range[0] or val > self.range[1]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         elif len(self.range) == 1:
             if val < self.range[0]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         self.val = val
 
     def __str__(self):
@@ -217,6 +318,11 @@ class CephFloat(CephArgtype):
             r = '[{0}-{1}]'.format(self.range[0], self.range[1])
         return '<float{0}>'.format(r)
 
+    def argdesc(self, attrs):
+        if self.range:
+            attrs['range'] = '|'.join(self.range)
+        return super().argdesc(attrs)
+
 
 class CephString(CephArgtype):
     """
@@ -226,7 +332,7 @@ class CephString(CephArgtype):
         from string import printable
         try:
             re.compile(goodchars)
-        except:
+        except re.error:
             raise ValueError('CephString(): "{0}" is not a valid RE'.
                              format(goodchars))
         self.goodchars = goodchars
@@ -252,6 +358,11 @@ class CephString(CephArgtype):
             return []
         else:
             return [s]
+
+    def argdesc(self, attrs):
+        if self.goodchars:
+            attrs['goodchars'] = self.goodchars
+        return super().argdesc(attrs)
 
 
 class CephSocketpath(CephArgtype):
@@ -291,7 +402,7 @@ class CephIPAddr(CephArgtype):
                 p = None
             try:
                 socket.inet_pton(socket.AF_INET, a)
-            except:
+            except OSError:
                 raise ArgumentValid('{0}: invalid IPv4 address'.format(a))
         else:
             # v6
@@ -302,7 +413,7 @@ class CephIPAddr(CephArgtype):
                 if s[end + 1] == ':':
                     try:
                         p = int(s[end + 2])
-                    except:
+                    except ValueError:
                         raise ArgumentValid('{0}: bad port number'.format(s))
                 a = s[1:end]
             else:
@@ -310,7 +421,7 @@ class CephIPAddr(CephArgtype):
                 p = None
             try:
                 socket.inet_pton(socket.AF_INET6, a)
-            except:
+            except OSError:
                 raise ArgumentValid('{0} not valid IPv6 address'.format(s))
         if p is not None and int(p) > 65535:
             raise ArgumentValid("{0} not a valid port number".format(p))
@@ -425,7 +536,7 @@ class CephName(CephArgtype):
                 if i != '*':
                     try:
                         i = int(i)
-                    except:
+                    except ValueError:
                         raise ArgumentFormat('osd id ' + i + ' not integer')
             self.nametype = t
         self.val = s
@@ -458,7 +569,7 @@ class CephOsdName(CephArgtype):
             i = s
         try:
             i = int(i)
-        except:
+        except ValueError:
             raise ArgumentFormat('osd id ' + i + ' not integer')
         if i < 0:
             raise ArgumentFormat('osd id {0} is less than 0'.format(i))
@@ -474,8 +585,11 @@ class CephChoices(CephArgtype):
     """
     Set of string literals; init with valid choices
     """
-    def __init__(self, strings='', **kwargs):
+    def __init__(self, strings='', tp=None, **kwargs):
         self.strings = strings.split('|')
+        self.enum = tp
+        if self.enum is not None:
+            self.strings = list(e.value for e in self.enum)
 
     def valid(self, s, partial=False):
         if not partial:
@@ -498,9 +612,19 @@ class CephChoices(CephArgtype):
         else:
             return '{0}'.format('|'.join(self.strings))
 
+    def __call__(self, v):
+        if self.enum is None:
+            return v
+        else:
+            return self.enum[v]
+
     def complete(self, s):
         all_elems = [token for token in self.strings if token.startswith(s)]
         return all_elems
+
+    def argdesc(self, attrs):
+        attrs['strings'] = '|'.join(self.strings)
+        return super().argdesc(attrs)
 
 
 class CephBool(CephArgtype):
@@ -564,11 +688,11 @@ class CephFragment(CephArgtype):
             raise ArgumentFormat("{0} not a hex integer".format(val))
         try:
             int(val)
-        except:
+        except ValueError:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(val))
         try:
             int(bits)
-        except:
+        except ValueError:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(bits))
         self.val = s
 
@@ -755,7 +879,7 @@ def descsort(sh1, sh2):
     return cmp(descsort_key(sh1), descsort_key(sh2))
 
 
-def parse_funcsig(sig):
+def parse_funcsig(sig: Sequence[Union[str, Dict[str, str]]]) -> List[argdesc]:
     """
     parse a single descriptor (array of strings or dicts) into a
     dict of function descriptor/validators (objects of CephXXX type)
@@ -798,7 +922,8 @@ def parse_funcsig(sig):
     return newsig
 
 
-def parse_json_funcsigs(s, consumer):
+def parse_json_funcsigs(s: str,
+                        consumer: str) -> Dict[str, Dict[str, List[argdesc]]]:
     """
     A function signature is mostly an array of argdesc; it's represented
     in JSON as
@@ -907,7 +1032,12 @@ def matchnum(args, signature, partial=False):
     return matchcnt
 
 
-def store_arg(desc, d):
+ValidatedArgs = Dict[str, Union[bool, int, float, str,
+                                Tuple[str, str],
+                                Sequence[str]]]
+
+
+def store_arg(desc: argdesc, d: ValidatedArgs):
     '''
     Store argument described by, and held in, thanks to valid(),
     desc into the dictionary d, keyed by desc.name.  Three cases:
@@ -932,7 +1062,10 @@ def store_arg(desc, d):
         d[desc.name] = desc.instance.val
 
 
-def validate(args, signature, flags=0, partial=False):
+def validate(args: List[str],
+             signature: Sequence[argdesc],
+             flags: Optional[int] = 0,
+             partial: Optional[bool] = False) -> ValidatedArgs:
     """
     validate(args, signature, flags=0, partial=False)
 
@@ -1022,6 +1155,7 @@ def validate(args, signature, flags=0, partial=False):
 
                 if kwarg_desc:
                     validate_one(kwarg_v, kwarg_desc)
+                    matchcnt += 1
                     store_arg(kwarg_desc, d)
                     continue
 
@@ -1076,15 +1210,12 @@ def validate(args, signature, flags=0, partial=False):
             # Have an arg; validate it
             try:
                 validate_one(myarg, desc)
-                valid = True
             except ArgumentError as e:
-                valid = False
-
                 # argument mismatch
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    save_exception = [ myarg, e ]
+                    save_exception = [myarg, e]
                     myargs.insert(0, myarg)
                     break
                 else:
@@ -1109,7 +1240,7 @@ def validate(args, signature, flags=0, partial=False):
         raise ArgumentError("unused arguments: " + str(myargs))
 
     if flags & Flag.MGR:
-        d['target'] = ('mon-mgr','')
+        d['target'] = ('mon-mgr', '')
 
     if flags & Flag.POLL:
         d['poll'] = True
@@ -1118,12 +1249,14 @@ def validate(args, signature, flags=0, partial=False):
     return d
 
 
-def validate_command(sigdict, args, verbose=False):
+def validate_command(sigdict: Dict[str, Dict[str, Any]],
+                     args: Sequence[str],
+                     verbose: Optional[bool] = False) -> ValidatedArgs:
     """
     Parse positional arguments into a parameter dict, according to
     the command descriptions.
 
-    Writes advice about nearly-matching commands ``sys.stderr`` if 
+    Writes advice about nearly-matching commands ``sys.stderr`` if
     the arguments do not match any command.
 
     :param sigdict: A command description dictionary, as returned
@@ -1170,9 +1303,9 @@ def validate_command(sigdict, args, verbose=False):
     # (relies on a cmdsig being key,val where val is a list of len 1)
 
     def grade(cmd):
-      # prefer optional arguments over required ones
-      sigs = cmd['sig']
-      return sum(map(lambda sig: sig.req, sigs))
+        # prefer optional arguments over required ones
+        sigs = cmd['sig']
+        return sum(map(lambda sig: sig.req, sigs))
 
     bestcmds_sorted = sorted(bestcmds, key=grade)
     if verbose:
@@ -1219,15 +1352,15 @@ def validate_command(sigdict, args, verbose=False):
     else:
         bestcmds = [c for c in bestcmds
                     if not c.get('flags', 0) & (Flag.DEPRECATED | Flag.HIDDEN)]
-        bestcmds = bestcmds[:10] # top 10
-        print('no valid command found; {0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
+        bestcmds = bestcmds[:10]  # top 10
+        print('no valid command found; {0} closest matches:'.format(len(bestcmds)),
+              file=sys.stderr)
         for cmd in bestcmds:
             print(concise_sig(cmd['sig']), file=sys.stderr)
     return valid_dict
 
 
-
-def find_cmd_target(childargs):
+def find_cmd_target(childargs: List[str]) -> Tuple[str, str]:
     """
     Using a minimal validation, figure out whether the command
     should be sent to a monitor or an osd.  We do this before even
@@ -1310,13 +1443,17 @@ class RadosThread(threading.Thread):
             self.exception = e
 
 
-def run_in_thread(func, *args, **kwargs):
-    interrupt = False
+def run_in_thread(func: Callable[[Any, Any], int],
+                  *args: Any, **kwargs: Any) -> int:
     timeout = kwargs.pop('timeout', 0)
-    if timeout == 0 or timeout == None:
+    if timeout == 0 or timeout is None:
         # python threading module will just get blocked if timeout is `None`,
         # otherwise it will keep polling until timeout or thread stops.
-        timeout = 2 ** 32
+        # timeout in integer when converting it to nanoseconds, but since
+        # python3 uses `int64_t` for the deadline before timeout expires,
+        # we have to use a safe value which does not overflow after being
+        # added to current time in microseconds.
+        timeout = 24 * 60 * 60
     t = RadosThread(func, *args, **kwargs)
 
     # allow the main thread to exit (presumably, avoid a join() on this
@@ -1340,7 +1477,7 @@ def run_in_thread(func, *args, **kwargs):
         return t.retval
 
 
-def send_command_retry(*args, **kwargs):
+def send_command_retry(*args: Any, **kwargs: Any) -> Tuple[int, bytes, str]:
     while True:
         try:
             return send_command(*args, **kwargs)
@@ -1353,8 +1490,13 @@ def send_command_retry(*args, **kwargs):
             else:
                 raise
 
-def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
-                 verbose=False):
+
+def send_command(cluster,
+                 target: Optional[Tuple[str, str]] = ('mon', ''),
+                 cmd: Optional[List[str]] = None,
+                 inbuf: Optional[bytes] = b'',
+                 timeout: Optional[int] = 0,
+                 verbose: Optional[bool] = False) -> Tuple[int, bytes, str]:
     """
     Send a command to a daemon using librados's
     mon_command, osd_command, mgr_command, or pg_command.  Any bulk input data
@@ -1399,11 +1541,11 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             # pgid will already be in the command for the pg <pgid>
             # form, but for tell <pgid>, we need to put it in
             if cmd:
-                cmddict = json.loads(cmd[0])
+                cmddict = json.loads(cmd)
                 cmddict['pgid'] = pgid
             else:
                 cmddict = dict(pgid=pgid)
-            cmd = [json.dumps(cmddict)]
+            cmd = json.dumps(cmddict)
             if verbose:
                 print('submit {0} for pgid {1}'.format(cmd, pgid),
                       file=sys.stderr)
@@ -1449,8 +1591,13 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
     return ret, outbuf, outs
 
 
-def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
-                 inbuf=b'', timeout=0, verbose=False):
+def json_command(cluster,
+                 target: Optional[Tuple[str, str]] = ('mon', ''),
+                 prefix: Optional[str] = None,
+                 argdict: Optional[Dict[str, str]] = None,
+                 inbuf: Optional[bytes] = b'',
+                 timeout: Optional[int] = 0,
+                 verbose: Optional[bool] = False) -> Tuple[int, bytes, str]:
     """
     Serialize a command and up a JSON command and send it with send_command() above.
     Prefix may be supplied separately or in argdict.  Any bulk input
@@ -1485,7 +1632,7 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
                 # use the target we were originally given
                 pass
         ret, outbuf, outs = send_command_retry(cluster,
-                                               target, [json.dumps(cmddict)],
+                                               target, json.dumps(cmddict),
                                                inbuf, timeout, verbose)
 
     except Exception as e:

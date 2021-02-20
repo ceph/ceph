@@ -137,6 +137,10 @@ TYPE_FEATUREFUL(ServiceMap)
 TYPE_FEATUREFUL(ServiceMap::Service)
 TYPE_FEATUREFUL(ServiceMap::Daemon)
 
+#include "mon/ConnectionTracker.h"
+TYPE(ConnectionReport);
+TYPE(ConnectionTracker);
+
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)

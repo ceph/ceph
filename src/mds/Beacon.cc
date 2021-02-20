@@ -204,9 +204,9 @@ bool Beacon::_send()
       want_state,
       last_seq,
       CEPH_FEATURES_SUPPORTED_DEFAULT);
-
   beacon->set_health(health);
   beacon->set_compat(compat);
+  beacon->set_fs(g_conf().get_val<std::string>("mds_join_fs"));
   // piggyback the sys info on beacon msg
   if (want_state == MDSMap::STATE_BOOT) {
     map<string, string> sys_info;
@@ -258,7 +258,7 @@ bool Beacon::is_laggy()
   return false;
 }
 
-void Beacon::set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState const newstate)
+void Beacon::set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState newstate)
 {
   std::unique_lock lock(mutex);
 
@@ -304,14 +304,14 @@ void Beacon::notify_health(MDSRank const *mds)
   }
 
   // Detect MDS_HEALTH_TRIM condition
-  // Arbitrary factor of 2, indicates MDS is not trimming promptly
+  // Indicates MDS is not trimming promptly
   {
-    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * 2)) {
-      std::ostringstream oss;
-      oss << "Behind on trimming (" << mds->mdlog->get_num_segments()
+    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * g_conf().get_val<double>("mds_log_warn_factor"))) {
+      CachedStackStringStream css;
+      *css << "Behind on trimming (" << mds->mdlog->get_num_segments()
         << "/" << g_conf()->mds_log_max_segments << ")";
 
-      MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, oss.str());
+      MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, css->strv());
       m.metadata["num_segments"] = stringify(mds->mdlog->get_num_segments());
       m.metadata["max_segments"] = stringify(g_conf()->mds_log_max_segments);
       health.metrics.push_back(m);
@@ -336,9 +336,9 @@ void Beacon::notify_health(MDSRank const *mds)
         continue;
       }
 
-      std::ostringstream oss;
-      oss << "Client " << s->get_human_name() << " failing to respond to capability release";
-      MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE, HEALTH_WARN, oss.str());
+      CachedStackStringStream css;
+      *css << "Client " << s->get_human_name() << " failing to respond to capability release";
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE, HEALTH_WARN, css->strv());
       m.metadata["client_id"] = stringify(client.v);
       late_cap_metrics.emplace_back(std::move(m));
     }
@@ -347,10 +347,10 @@ void Beacon::notify_health(MDSRank const *mds)
       auto&& m = late_cap_metrics;
       health.metrics.insert(std::end(health.metrics), std::cbegin(m), std::cend(m));
     } else {
-      std::ostringstream oss;
-      oss << "Many clients (" << late_cap_metrics.size()
+      CachedStackStringStream css;
+      *css << "Many clients (" << late_cap_metrics.size()
           << ") failing to respond to capability release";
-      MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE_MANY, HEALTH_WARN, oss.str());
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE_MANY, HEALTH_WARN, css->strv());
       m.metadata["client_count"] = stringify(late_cap_metrics.size());
       health.metrics.push_back(std::move(m));
     }
@@ -364,20 +364,22 @@ void Beacon::notify_health(MDSRank const *mds)
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
 
+    const auto min_caps_working_set = g_conf().get_val<uint64_t>("mds_min_caps_working_set");
     const auto recall_warning_threshold = g_conf().get_val<Option::size_t>("mds_recall_warning_threshold");
     const auto max_completed_requests = g_conf()->mds_max_completed_requests;
     const auto max_completed_flushes = g_conf()->mds_max_completed_flushes;
     std::vector<MDSHealthMetric> late_recall_metrics;
     std::vector<MDSHealthMetric> large_completed_requests_metrics;
     for (auto& session : sessions) {
+      const uint64_t num_caps = session->get_num_caps();
       const uint64_t recall_caps = session->get_recall_caps();
-      if (recall_caps > recall_warning_threshold) {
+      if (recall_caps > recall_warning_threshold && num_caps > min_caps_working_set) {
         dout(2) << "Session " << *session <<
              " is not releasing caps fast enough. Recalled caps at " << recall_caps
           << " > " << recall_warning_threshold << " (mds_recall_warning_threshold)." << dendl;
-        std::ostringstream oss;
-        oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
-        MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
+        CachedStackStringStream css;
+        *css << "Client " << session->get_human_name() << " failing to respond to cache pressure";
+        MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, css->strv());
         m.metadata["client_id"] = stringify(session->get_client());
         late_recall_metrics.emplace_back(std::move(m));
       }
@@ -385,9 +387,9 @@ void Beacon::notify_health(MDSRank const *mds)
 	   session->get_num_completed_requests() >= max_completed_requests) ||
 	  (session->get_num_trim_flushes_warnings() > 0 &&
 	   session->get_num_completed_flushes() >= max_completed_flushes)) {
-	std::ostringstream oss;
-	oss << "Client " << session->get_human_name() << " failing to advance its oldest client/flush tid. ";
-	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());
+	CachedStackStringStream css;
+	*css << "Client " << session->get_human_name() << " failing to advance its oldest client/flush tid. ";
+	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, css->strv());
 	m.metadata["client_id"] = stringify(session->get_client());
 	large_completed_requests_metrics.emplace_back(std::move(m));
       }
@@ -397,10 +399,10 @@ void Beacon::notify_health(MDSRank const *mds)
       auto&& m = late_recall_metrics;
       health.metrics.insert(std::end(health.metrics), std::cbegin(m), std::cend(m));
     } else {
-      std::ostringstream oss;
-      oss << "Many clients (" << late_recall_metrics.size()
+      CachedStackStringStream css;
+      *css << "Many clients (" << late_recall_metrics.size()
           << ") failing to respond to cache pressure";
-      MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL_MANY, HEALTH_WARN, oss.str());
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL_MANY, HEALTH_WARN, css->strv());
       m.metadata["client_count"] = stringify(late_recall_metrics.size());
       health.metrics.push_back(m);
       late_recall_metrics.clear();
@@ -410,10 +412,10 @@ void Beacon::notify_health(MDSRank const *mds)
       auto&& m = large_completed_requests_metrics;
       health.metrics.insert(std::end(health.metrics), std::cbegin(m), std::cend(m));
     } else {
-      std::ostringstream oss;
-      oss << "Many clients (" << large_completed_requests_metrics.size()
+      CachedStackStringStream css;
+      *css << "Many clients (" << large_completed_requests_metrics.size()
 	<< ") failing to advance their oldest client/flush tid";
-      MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID_MANY, HEALTH_WARN, oss.str());
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID_MANY, HEALTH_WARN, css->strv());
       m.metadata["client_count"] = stringify(large_completed_requests_metrics.size());
       health.metrics.push_back(m);
       large_completed_requests_metrics.clear();
@@ -425,10 +427,10 @@ void Beacon::notify_health(MDSRank const *mds)
     int slow = mds->get_mds_slow_req_count();
     if (slow) {
       dout(20) << slow << " slow request found" << dendl;
-      std::ostringstream oss;
-      oss << slow << " slow requests are blocked > " << g_conf()->mds_op_complaint_time << " secs";
+      CachedStackStringStream css;
+      *css << slow << " slow requests are blocked > " << g_conf()->mds_op_complaint_time << " secs";
 
-      MDSHealthMetric m(MDS_HEALTH_SLOW_REQUEST, HEALTH_WARN, oss.str());
+      MDSHealthMetric m(MDS_HEALTH_SLOW_REQUEST, HEALTH_WARN, css->strv());
       health.metrics.push_back(m);
     }
   }
@@ -444,11 +446,11 @@ void Beacon::notify_health(MDSRank const *mds)
       dout(20) << count << " slow metadata IOs found" << dendl;
 
       auto oldest_secs = std::chrono::duration<double>(now - oldest).count();
-      std::ostringstream oss;
-      oss << count << " slow metadata IOs are blocked > " << complaint_time
+      CachedStackStringStream css;
+      *css << count << " slow metadata IOs are blocked > " << complaint_time
 	  << " secs, oldest blocked for " << (int64_t)oldest_secs << " secs";
 
-      MDSHealthMetric m(MDS_HEALTH_SLOW_METADATA_IO, HEALTH_WARN, oss.str());
+      MDSHealthMetric m(MDS_HEALTH_SLOW_METADATA_IO, HEALTH_WARN, css->strv());
       health.metrics.push_back(m);
     }
   }
@@ -462,13 +464,13 @@ void Beacon::notify_health(MDSRank const *mds)
 
   // Report if we have significantly exceeded our cache size limit
   if (mds->mdcache->cache_overfull()) {
-    std::ostringstream oss;
-    oss << "MDS cache is too large (" << bytes2str(mds->mdcache->cache_size())
+    CachedStackStringStream css;
+    *css << "MDS cache is too large (" << bytes2str(mds->mdcache->cache_size())
         << "/" << bytes2str(mds->mdcache->cache_limit_memory()) << "); "
         << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
         << mds->mdcache->get_num_strays() << " stray files";
 
-    MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, oss.str());
+    MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, css->strv());
     health.metrics.push_back(m);
   }
 }

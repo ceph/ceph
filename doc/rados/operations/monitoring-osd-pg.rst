@@ -33,7 +33,9 @@ not assign placement groups to the OSD. If an OSD is ``down``, it should also be
 .. note:: If an OSD is ``down`` and ``in``, there is a problem and the cluster 
    will not be in a healthy state.
 
-.. ditaa:: +----------------+        +----------------+
+.. ditaa::
+
+           +----------------+        +----------------+
            |                |        |                |
            |   OSD #n In    |        |   OSD #n Up    |
            |                |        |                |
@@ -107,9 +109,15 @@ requires three replicas of a placement group, CRUSH may assign them to
 ``osd.1``, ``osd.2`` and ``osd.3`` respectively. CRUSH actually seeks a
 pseudo-random placement that will take into account failure domains you set in
 your `CRUSH map`_, so you will rarely see placement groups assigned to nearest
-neighbor OSDs in a large cluster. We refer to the set of OSDs that should
-contain the replicas of a particular placement group as the **Acting Set**. In
-some cases, an OSD in the Acting Set is ``down`` or otherwise not able to
+neighbor OSDs in a large cluster.
+
+Ceph processes a client request using the **Acting Set**, which is the set of
+OSDs that will actually handle the requests since they have a full and working
+version of a placement group shard. The set of OSDs that should contain a shard
+of a particular placement group as the **Up Set**, i.e. where data is
+moved/copied to (or planned to be).
+
+In some cases, an OSD in the Acting Set is ``down`` or otherwise not able to
 service requests for objects in the placement group. When these situations
 arise, don't panic. Common examples include:
 
@@ -120,12 +128,10 @@ arise, don't panic. Common examples include:
 - An OSD in the Acting Set is ``down`` or unable to service requests, 
   and another OSD has temporarily assumed its duties.
 
-Ceph processes a client request using the **Up Set**, which is the set of OSDs
-that will actually handle the requests. In most cases, the Up Set and the Acting
-Set are virtually identical. When they are not, it may indicate that Ceph is
-migrating data, an OSD is recovering, or that there is a problem (i.e., Ceph
-usually echoes a "HEALTH WARN" state with a "stuck stale" message in such
-scenarios).
+In most cases, the Up Set and the Acting Set are identical. When they are not,
+it may indicate that Ceph is migrating the PG (it's remapped), an OSD is
+recovering, or that there is a problem (i.e., Ceph usually echoes a "HEALTH
+WARN" state with a "stuck stale" message in such scenarios).
 
 To retrieve a list of placement groups, execute:: 
 
@@ -158,7 +164,9 @@ OSDs to establish agreement on the current state of the placement group
 (assuming a pool with 3 replicas of the PG).
 
 
-.. ditaa:: +---------+     +---------+     +-------+
+.. ditaa::
+
+           +---------+     +---------+     +-------+
            |  OSD 1  |     |  OSD 2  |     | OSD 3 |
            +---------+     +---------+     +-------+
                 |               |              |
@@ -265,8 +273,8 @@ group's Acting Set will peer. Once peering is complete, the placement group
 status should be ``active+clean``, which means a Ceph client can begin writing
 to the placement group.
 
-.. ditaa:: 
-         
+.. ditaa::
+
        /-----------\       /-----------\       /-----------\
        | Creating  |------>|  Peering  |------>|  Active   |
        \-----------/       \-----------/       \-----------/

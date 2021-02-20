@@ -1,4 +1,4 @@
-from ceph_volume.util import arg_validators
+from ceph_volume.util import arg_validators, disk
 from ceph_volume import process, conf
 from ceph_volume import terminal
 import argparse
@@ -34,6 +34,124 @@ def rollback_osd(args, osd_id=None):
     process.run(cmd)
 
 
+common_args = {
+    '--data': {
+        'help': 'OSD data path. A physical device or logical volume',
+        'required': True,
+        'type': arg_validators.ValidDevice(as_string=True),
+        #'default':,
+        #'type':,
+    },
+    '--data-size': {
+        'help': 'Size of data LV in case a device was passed in --data',
+        'default': '0',
+        'type': disk.Size.parse
+    },
+    '--data-slots': {
+        'help': ('Intended number of slots on data device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        'type': int,
+        'default': 1,
+    },
+    '--osd-id': {
+        'help': 'Reuse an existing OSD id',
+        'default': None,
+    },
+    '--osd-fsid': {
+        'help': 'Reuse an existing OSD fsid',
+        'default': None,
+    },
+    '--cluster-fsid': {
+        'help': 'Specify the cluster fsid, useful when no ceph.conf is available',
+        'default': None,
+    },
+    '--crush-device-class': {
+        'dest': 'crush_device_class',
+        'help': 'Crush device class to assign this OSD to',
+        'default': None,
+    },
+    '--dmcrypt': {
+        'action': 'store_true',
+        'help': 'Enable device encryption via dm-crypt',
+    },
+    '--no-systemd': {
+        'dest': 'no_systemd',
+        'action': 'store_true',
+        'help': 'Skip creating and enabling systemd units and starting OSD services when activating',
+    },
+}
+
+bluestore_args = {
+    '--bluestore': {
+        'action': 'store_true',
+        'help': 'Use the bluestore objectstore',
+    },
+    '--block.db': {
+        'dest': 'block_db',
+        'help': 'Path to bluestore block.db logical volume or device',
+    },
+    '--block.db-size': {
+        'dest': 'block_db_size',
+        'help': 'Size of block.db LV in case device was passed in --block.db',
+        'default': '0',
+        'type': disk.Size.parse
+    },
+    '--block.db-slots': {
+        'dest': 'block_db_slots',
+        'help': ('Intended number of slots on db device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        'type': int,
+        'default': 1,
+    },
+    '--block.wal': {
+        'dest': 'block_wal',
+        'help': 'Path to bluestore block.wal logical volume or device',
+    },
+    '--block.wal-size': {
+        'dest': 'block_wal_size',
+        'help': 'Size of block.wal LV in case device was passed in --block.wal',
+        'default': '0',
+        'type': disk.Size.parse
+    },
+    '--block.wal-slots': {
+        'dest': 'block_wal_slots',
+        'help': ('Intended number of slots on wal device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        'type': int,
+        'default': 1,
+    },
+}
+
+filestore_args = {
+    '--filestore': {
+        'action': 'store_true',
+        'help': 'Use the filestore objectstore',
+    },
+    '--journal': {
+        'help': 'A logical volume (vg_name/lv_name), or path to a device',
+    },
+    '--journal-size': {
+        'help': 'Size of journal LV in case a raw block device was passed in --journal',
+        'default': '0',
+        'type': disk.Size.parse
+    },
+    '--journal-slots': {
+        'help': ('Intended number of slots on journal device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        'type': int,
+        'default': 1,
+    },
+}
+
+def get_default_args():
+    defaults = {}
+    def format_name(name):
+        return name.strip('-').replace('-', '_').replace('.', '_')
+    for argset in (common_args, filestore_args, bluestore_args):
+        defaults.update({format_name(name): val.get('default', None) for name, val in argset.items()})
+    return defaults
+
+
 def common_parser(prog, description):
     """
     Both prepare and create share the same parser, those are defined here to
@@ -45,79 +163,17 @@ def common_parser(prog, description):
         description=description,
     )
 
-    required_group = parser.add_argument_group('required arguments')
     filestore_group = parser.add_argument_group('filestore')
     bluestore_group = parser.add_argument_group('bluestore')
 
-    required_group.add_argument(
-        '--data',
-        required=True,
-        type=arg_validators.ValidDevice(as_string=True),
-        help='OSD data path. A physical device or logical volume',
-    )
+    for name, kwargs in common_args.items():
+        parser.add_argument(name, **kwargs)
 
-    filestore_group.add_argument(
-        '--filestore',
-        action='store_true',
-        help='Use the filestore objectstore',
-    )
+    for name, kwargs in bluestore_args.items():
+        bluestore_group.add_argument(name, **kwargs)
 
-    filestore_group.add_argument(
-        '--journal',
-        help='(REQUIRED) A logical volume (vg_name/lv_name), or path to a device',
-    )
-
-    bluestore_group.add_argument(
-        '--bluestore',
-        action='store_true',
-        help='Use the bluestore objectstore',
-    )
-
-    bluestore_group.add_argument(
-        '--block.db',
-        dest='block_db',
-        help='Path to bluestore block.db logical volume or device',
-    )
-
-    bluestore_group.add_argument(
-        '--block.wal',
-        dest='block_wal',
-        help='Path to bluestore block.wal logical volume or device',
-    )
-
-    parser.add_argument(
-        '--osd-id',
-        help='Reuse an existing OSD id',
-    )
-
-    parser.add_argument(
-        '--osd-fsid',
-        help='Reuse an existing OSD fsid',
-    )
-
-    parser.add_argument(
-        '--cluster-fsid',
-        help='Specify the cluster fsid, useful when no ceph.conf is available',
-    )
-
-    parser.add_argument(
-        '--crush-device-class',
-        dest='crush_device_class',
-        help='Crush device class to assign this OSD to',
-    )
-
-    parser.add_argument(
-        '--dmcrypt',
-        action='store_true',
-        help='Enable device encryption via dm-crypt',
-    )
-
-    parser.add_argument(
-        '--no-systemd',
-        dest='no_systemd',
-        action='store_true',
-        help='Skip creating and enabling systemd units and starting OSD services when activating',
-    )
+    for name, kwargs in filestore_args.items():
+        filestore_group.add_argument(name, **kwargs)
 
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior

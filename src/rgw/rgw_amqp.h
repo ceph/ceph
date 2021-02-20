@@ -5,9 +5,10 @@
 
 #include <string>
 #include <functional>
+#include <boost/optional.hpp>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace rgw::amqp {
 // forward declaration of connection object
@@ -30,7 +31,8 @@ bool init(CephContext* cct);
 void shutdown();
 
 // connect to an amqp endpoint
-connection_ptr_t connect(const std::string& url, const std::string& exchange);
+connection_ptr_t connect(const std::string& url, const std::string& exchange, bool mandatory_delivery, bool verify_ssl,
+        boost::optional<const std::string&> ca_location);
 
 // publish a message over a connection that was already created
 int publish(connection_ptr_t& conn,

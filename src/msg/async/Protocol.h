@@ -47,7 +47,7 @@ public:
 };
 
 using rx_buffer_t =
-    std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>;
+  std::unique_ptr<ceph::buffer::ptr_node, ceph::buffer::ptr_node::disposer>;
 
 template <class C>
 class CtRxNode : public Ct<C> {

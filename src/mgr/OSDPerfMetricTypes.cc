@@ -5,6 +5,8 @@
 
 #include <ostream>
 
+using ceph::bufferlist;
+
 std::ostream& operator<<(std::ostream& os,
                          const OSDPerfMetricSubKeyDescriptor &d) {
   switch(d.type) {

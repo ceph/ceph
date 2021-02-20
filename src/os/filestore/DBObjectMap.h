@@ -47,11 +47,11 @@
  * store three mappings: the key mapping, the complete mapping, and the parent.
  * The complete mapping (COMPLETE_PREFIX space) is key->key.  Each x->y entry in
  * this mapping indicates that the key mapping contains all entries on [x,y).
- * Note, max string is represented by "", so ""->"" indicates that the parent
+ * Note, max std::string is represented by "", so ""->"" indicates that the parent
  * is unnecessary (@see rm_keys).  When looking up a key not contained in the
- * the complete set, we have to check the parent if we don't find it in the
- * key set.  During rm_keys, we copy keys from the parent and update the
- * complete set to reflect the change @see rm_keys.
+ * the complete std::set, we have to check the parent if we don't find it in the
+ * key std::set.  During rm_keys, we copy keys from the parent and update the
+ * complete std::set to reflect the change @see rm_keys.
  */
 class DBObjectMap : public ObjectMap {
 public:
@@ -59,17 +59,17 @@ public:
   KeyValueDB *get_db() override { return db.get(); }
 
   /**
-   * Serializes access to next_seq as well as the in_use set
+   * Serializes access to next_seq as well as the in_use std::set
    */
   ceph::mutex header_lock = ceph::make_mutex("DBOBjectMap");
   ceph::condition_variable header_cond;
   ceph::condition_variable map_header_cond;
 
   /**
-   * Set of headers currently in use
+   * Std::Set of headers currently in use
    */
-  set<uint64_t> in_use;
-  set<ghobject_t> map_header_in_use;
+  std::set<uint64_t> in_use;
+  std::set<ghobject_t> map_header_in_use;
 
   /**
    * Takes the map_header_in_use entry in constructor, releases in
@@ -122,19 +122,19 @@ public:
 
   int set_keys(
     const ghobject_t &oid,
-    const map<string, bufferlist> &set,
+    const std::map<std::string, ceph::buffer::list> &set,
     const SequencerPosition *spos=0
     ) override;
 
   int set_header(
     const ghobject_t &oid,
-    const bufferlist &bl,
+    const ceph::buffer::list &bl,
     const SequencerPosition *spos=0
     ) override;
 
   int get_header(
     const ghobject_t &oid,
-    bufferlist *bl
+    ceph::buffer::list *bl
     ) override;
 
   int clear(
@@ -149,53 +149,53 @@ public:
 
   int rm_keys(
     const ghobject_t &oid,
-    const set<string> &to_clear,
+    const std::set<std::string> &to_clear,
     const SequencerPosition *spos=0
     ) override;
 
   int get(
     const ghobject_t &oid,
-    bufferlist *header,
-    map<string, bufferlist> *out
+    ceph::buffer::list *header,
+    std::map<std::string, ceph::buffer::list> *out
     ) override;
 
   int get_keys(
     const ghobject_t &oid,
-    set<string> *keys
+    std::set<std::string> *keys
     ) override;
 
   int get_values(
     const ghobject_t &oid,
-    const set<string> &keys,
-    map<string, bufferlist> *out
+    const std::set<std::string> &keys,
+    std::map<std::string, ceph::buffer::list> *out
     ) override;
 
   int check_keys(
     const ghobject_t &oid,
-    const set<string> &keys,
-    set<string> *out
+    const std::set<std::string> &keys,
+    std::set<std::string> *out
     ) override;
 
   int get_xattrs(
     const ghobject_t &oid,
-    const set<string> &to_get,
-    map<string, bufferlist> *out
+    const std::set<std::string> &to_get,
+    std::map<std::string, ceph::buffer::list> *out
     ) override;
 
   int get_all_xattrs(
     const ghobject_t &oid,
-    set<string> *out
+    std::set<std::string> *out
     ) override;
 
   int set_xattrs(
     const ghobject_t &oid,
-    const map<string, bufferlist> &to_set,
+    const std::map<std::string, ceph::buffer::list> &to_set,
     const SequencerPosition *spos=0
     ) override;
 
   int remove_xattrs(
     const ghobject_t &oid,
-    const set<string> &to_remove,
+    const std::set<std::string> &to_remove,
     const SequencerPosition *spos=0
     ) override;
 
@@ -209,13 +209,13 @@ public:
     const ghobject_t &from,
     const ghobject_t &to,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int legacy_clone(
     const ghobject_t &oid,
     const ghobject_t &target,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   /// Read initial state from backing store
   int get_state();
@@ -239,28 +239,28 @@ public:
   }
 
   /// Util, get all objects, there must be no other concurrent access
-  int list_objects(vector<ghobject_t> *objs ///< [out] objects
+  int list_objects(std::vector<ghobject_t> *objs ///< [out] objects
     );
 
   struct _Header;
   // Util, get all object headers, there must be no other concurrent access
-  int list_object_headers(vector<_Header> *out ///< [out] headers
+  int list_object_headers(std::vector<_Header> *out ///< [out] headers
     );
 
   ObjectMapIterator get_iterator(const ghobject_t &oid) override;
 
-  static const string USER_PREFIX;
-  static const string XATTR_PREFIX;
-  static const string SYS_PREFIX;
-  static const string COMPLETE_PREFIX;
-  static const string HEADER_KEY;
-  static const string USER_HEADER_KEY;
-  static const string GLOBAL_STATE_KEY;
-  static const string HOBJECT_TO_SEQ;
+  static const std::string USER_PREFIX;
+  static const std::string XATTR_PREFIX;
+  static const std::string SYS_PREFIX;
+  static const std::string COMPLETE_PREFIX;
+  static const std::string HEADER_KEY;
+  static const std::string USER_HEADER_KEY;
+  static const std::string GLOBAL_STATE_KEY;
+  static const std::string HOBJECT_TO_SEQ;
 
   /// Legacy
-  static const string LEAF_PREFIX;
-  static const string REVERSE_LEAF_PREFIX;
+  static const std::string LEAF_PREFIX;
+  static const std::string REVERSE_LEAF_PREFIX;
 
   /// persistent state for store @see generate_header
   struct State {
@@ -272,7 +272,7 @@ public:
     State() : v(0), seq(1), legacy(false) {}
     explicit State(uint64_t seq) : v(0), seq(seq), legacy(false) {}
 
-    void encode(bufferlist &bl) const {
+    void encode(ceph::buffer::list &bl) const {
       ENCODE_START(3, 1, bl);
       encode(v, bl);
       encode(seq, bl);
@@ -280,7 +280,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::const_iterator &bl) {
+    void decode(ceph::buffer::list::const_iterator &bl) {
       DECODE_START(3, bl);
       if (struct_v >= 2)
 	decode(v, bl);
@@ -294,13 +294,13 @@ public:
       DECODE_FINISH(bl);
     }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->dump_unsigned("v", v);
       f->dump_unsigned("seq", seq);
       f->dump_bool("legacy", legacy);
     }
 
-    static void generate_test_instances(list<State*> &o) {
+    static void generate_test_instances(std::list<State*> &o) {
       o.push_back(new State(0));
       o.push_back(new State(20));
     }
@@ -315,7 +315,7 @@ public:
 
     SequencerPosition spos;
 
-    void encode(bufferlist &bl) const {
+    void encode(ceph::buffer::list &bl) const {
       coll_t unused;
       ENCODE_START(2, 1, bl);
       encode(seq, bl);
@@ -327,7 +327,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::const_iterator &bl) {
+    void decode(ceph::buffer::list::const_iterator &bl) {
       coll_t unused;
       DECODE_START(2, bl);
       decode(seq, bl);
@@ -340,14 +340,14 @@ public:
       DECODE_FINISH(bl);
     }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->dump_unsigned("seq", seq);
       f->dump_unsigned("parent", parent);
       f->dump_unsigned("num_children", num_children);
       f->dump_stream("oid") << oid;
     }
 
-    static void generate_test_instances(list<_Header*> &o) {
+    static void generate_test_instances(std::list<_Header*> &o) {
       o.push_back(new _Header);
       o.push_back(new _Header);
       o.back()->parent = 20;
@@ -361,25 +361,25 @@ public:
     _Header() : seq(0), parent(0), num_children(1) {}
   };
 
-  /// String munging (public for testing)
-  static string ghobject_key(const ghobject_t &oid);
-  static string ghobject_key_v0(coll_t c, const ghobject_t &oid);
+  /// Std::String munging (public for testing)
+  static std::string ghobject_key(const ghobject_t &oid);
+  static std::string ghobject_key_v0(coll_t c, const ghobject_t &oid);
   static int is_buggy_ghobject_key_v1(CephContext* cct,
-				      const string &in);
+				      const std::string &in);
 private:
   /// Implicit lock on Header->seq
   typedef std::shared_ptr<_Header> Header;
   ceph::mutex cache_lock = ceph::make_mutex("DBObjectMap::CacheLock");
   SimpleLRU<ghobject_t, _Header> caches;
 
-  string map_header_key(const ghobject_t &oid);
-  string header_key(uint64_t seq);
-  string complete_prefix(Header header);
-  string user_prefix(Header header);
-  string sys_prefix(Header header);
-  string xattr_prefix(Header header);
-  string sys_parent_prefix(_Header header);
-  string sys_parent_prefix(Header header) {
+  std::string map_header_key(const ghobject_t &oid);
+  std::string header_key(uint64_t seq);
+  std::string complete_prefix(Header header);
+  std::string user_prefix(Header header);
+  std::string sys_prefix(Header header);
+  std::string xattr_prefix(Header header);
+  std::string sys_parent_prefix(_Header header);
+  std::string sys_parent_prefix(Header header) {
     return sys_parent_prefix(*header);
   }
 
@@ -387,12 +387,12 @@ private:
   public:
     int seek_to_first() override { return 0; }
     int seek_to_last() { return 0; }
-    int upper_bound(const string &after) override { return 0; }
-    int lower_bound(const string &to) override { return 0; }
+    int upper_bound(const std::string &after) override { return 0; }
+    int lower_bound(const std::string &to) override { return 0; }
     bool valid() override { return false; }
     int next() override { ceph_abort(); return 0; }
-    string key() override { ceph_abort(); return ""; }
-    bufferlist value() override { ceph_abort(); return bufferlist(); }
+    std::string key() override { ceph_abort(); return ""; }
+    ceph::buffer::list value() override { ceph_abort(); return ceph::buffer::list(); }
     int status() override { return 0; }
   };
 
@@ -425,12 +425,12 @@ private:
       map(map), hlock(map), header(header), r(0), ready(false), invalid(true) {}
     int seek_to_first() override;
     int seek_to_last();
-    int upper_bound(const string &after) override;
-    int lower_bound(const string &to) override;
+    int upper_bound(const std::string &after) override;
+    int lower_bound(const std::string &to) override;
     bool valid() override;
     int next() override;
-    string key() override;
-    bufferlist value() override;
+    std::string key() override;
+    ceph::buffer::list value() override;
     int status() override;
 
     bool on_parent() {
@@ -441,16 +441,16 @@ private:
     int next_parent();
     
     /// first parent() >= to
-    int lower_bound_parent(const string &to);
+    int lower_bound_parent(const std::string &to);
 
     /**
      * Tests whether to_test is in complete region
      *
      * postcondition: complete_iter will be max s.t. complete_iter->value > to_test
      */
-    int in_complete_region(const string &to_test, ///< [in] key to test
-			   string *begin,         ///< [out] beginning of region
-			   string *end            ///< [out] end of region
+    int in_complete_region(const std::string &to_test, ///< [in] key to test
+			   std::string *begin,         ///< [out] beginning of region
+			   std::string *end            ///< [out] end of region
       ); ///< @returns true if to_test is in the complete region, else false
 
   private:
@@ -469,7 +469,7 @@ private:
   /// Removes node corresponding to header
   void clear_header(Header header, KeyValueDB::Transaction t);
 
-  /// Set node containing input to new contents
+  /// Std::Set node containing input to new contents
   void set_header(Header input, KeyValueDB::Transaction t);
 
   /// Remove leaf node corresponding to oid in c
@@ -479,13 +479,13 @@ private:
     Header header,
     KeyValueDB::Transaction t);
 
-  /// Set leaf node for c and oid to the value of header
+  /// Std::Set leaf node for c and oid to the value of header
   void set_map_header(
     const MapHeaderLock &l,
     const ghobject_t &oid, _Header header,
     KeyValueDB::Transaction t);
 
-  /// Set leaf node for c and oid to the value of header
+  /// Std::Set leaf node for c and oid to the value of header
   bool check_spos(const ghobject_t &oid,
 		  Header header,
 		  const SequencerPosition *spos);
@@ -523,13 +523,13 @@ private:
 
 
   /// Helpers
-  int _get_header(Header header, bufferlist *bl);
+  int _get_header(Header header, ceph::buffer::list *bl);
 
   /// Scan keys in header into out_keys and out_values (if nonnull)
   int scan(Header header,
-	   const set<string> &in_keys,
-	   set<string> *out_keys,
-	   map<string, bufferlist> *out_values);
+	   const std::set<std::string> &in_keys,
+	   std::set<std::string> *out_keys,
+	   std::map<std::string, ceph::buffer::list> *out_values);
 
   /// Remove header and all related prefixes
   int _clear(Header header,
@@ -537,11 +537,11 @@ private:
 
   /* Scan complete region bumping *begin to the beginning of any
    * containing region and adding all complete region keys between
-   * the updated begin and end to the complete_keys_to_remove set */
+   * the updated begin and end to the complete_keys_to_remove std::set */
   int merge_new_complete(DBObjectMapIterator &iter,
-			 string *begin,
-			 const string &end,
-			 set<string> *complete_keys_to_remove);
+			 std::string *begin,
+			 const std::string &end,
+			 std::set<std::string> *complete_keys_to_remove);
 
   /// Writes out State (mainly next_seq)
   int write_state(KeyValueDB::Transaction _t =
@@ -552,7 +552,7 @@ private:
 		     KeyValueDB::Transaction t);
 
   /// Sets header @see set_header
-  void _set_header(Header header, const bufferlist &bl,
+  void _set_header(Header header, const ceph::buffer::list &bl,
 		   KeyValueDB::Transaction t);
 
   /**
@@ -579,6 +579,6 @@ private:
 WRITE_CLASS_ENCODER(DBObjectMap::_Header)
 WRITE_CLASS_ENCODER(DBObjectMap::State)
 
-ostream& operator<<(ostream& out, const DBObjectMap::_Header& h);
+std::ostream& operator<<(std::ostream& out, const DBObjectMap::_Header& h);
 
 #endif

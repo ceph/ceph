@@ -1,0 +1,93 @@
+// Color system
+
+$white: #fff !default;
+$gray-100: #f8f9fa !default;
+$gray-200: #e9ecef !default;
+$gray-300: #dee2e6 !default;
+$gray-400: #ced4da !default;
+$gray-500: #adb5bd !default;
+$gray-600: #6c757d !default;
+$gray-700: #495057 !default;
+$gray-800: #343a40 !default;
+$gray-900: #212529 !default;
+$black: #000 !default;
+
+$blue: #007bff !default;
+$indigo: #6610f2 !default;
+$purple: #6f42c1 !default;
+$pink: #a94442 !default;
+$red: #ef5c55 !default;
+$orange: #fd7e14 !default;
+$yellow: #ffc200 !default;
+$green: #0b0 !default;
+$teal: #20c997 !default;
+$cyan: #17a2b8 !default;
+
+$primary: #2b99a8 !default;
+$secondary: #374249 !default;
+$success: $green !default;
+$info: $primary !default;
+$warning: $yellow !default;
+$danger: $red !default;
+$light: $gray-100 !default;
+$dark: #777 !default;
+
+// Extra theme colors.
+$accent: $red !default;
+$warning-dark: $orange !default;
+
+$fg-color-over-dark-bg: $white !default;
+$fg-hover-color-over-dark-bg: $gray-500 !default;
+
+$theme-colors: (
+  'accent': $accent,
+  'warning-dark': $warning-dark
+) !default;
+
+// Body
+
+$body-color-bright: $light !default;
+$body-bg: $white !default;
+$body-color: $gray-900 !default;
+$body-bg-alt: $gray-200 !default;
+
+// Typography
+
+$font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-serif,
+  'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji' !default;
+
+// Card
+
+$card-cap-bg: $gray-100 !default;
+
+// Grid
+
+$grid-gutter-width: 30px !default;
+
+// Table
+
+$datatable-divider-color: rgba($black, 0.09) !default;
+
+// Navs
+
+$nav-tabs-margin-bottom: 1rem !default;
+
+// Tooltips
+
+$tooltip-color: $white !default;
+$tooltip-bg: $body-color !default;
+
+// Misc
+
+$screen-sm-min: 576px !default;
+$screen-md-min: 768px !default;
+$screen-lg-min: 992px !default;
+$screen-xl-min: 1200px !default;
+
+$screen-xs-max: calc(#{$screen-sm-min} - 1px) !default;
+$screen-sm-max: calc(#{$screen-md-min} - 1px) !default;
+$screen-md-max: calc(#{$screen-lg-min} - 1px) !default;
+$screen-lg-max: calc(#{$screen-xl-min} - 1px) !default;
+
+$navbar-height: 43px !default;
+$top-notification-height: 37.6px !default;

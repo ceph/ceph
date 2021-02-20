@@ -14,7 +14,9 @@ and a dual-core processor, but more CPU and RAM will perform better. The
 following diagram depicts the CloudStack/Ceph technology stack.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                   CloudStack                      |
             +---------------------------------------------------+
             |                     libvirt                       |

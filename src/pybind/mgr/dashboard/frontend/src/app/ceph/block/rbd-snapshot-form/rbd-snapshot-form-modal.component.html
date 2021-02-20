@@ -1,0 +1,38 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title|Example: Create rbdSnapshot@@formTitle"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="snapshotForm"
+          #formDir="ngForm"
+          [formGroup]="snapshotForm"
+          novalidate>
+      <div class="modal-body">
+        <!-- Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="snapshotName"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Snapshot name..."
+                   id="snapshotName"
+                   name="snapshotName"
+                   formControlName="snapshotName"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="snapshotForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

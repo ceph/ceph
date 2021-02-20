@@ -5,7 +5,6 @@ import random
 import time
 import unittest
 
-
 from ..tools import NotificationQueue
 
 

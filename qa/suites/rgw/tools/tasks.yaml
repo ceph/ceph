@@ -1,0 +1,19 @@
+tasks:
+- install:
+- ceph:
+- rgw:
+    client.0:
+      # force rgw_dns_name to be set with the fully qualified host name;
+      # it will be appended to the empty string
+      dns-name: ''
+- workunit:
+    clients:
+       client.0:
+           - rgw/test_rgw_orphan_list.sh
+overrides:
+  ceph:
+    conf:
+      client:
+        debug rgw: 20
+        debug ms: 1
+        rgw enable static website: false

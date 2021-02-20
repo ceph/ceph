@@ -7,8 +7,8 @@
 #define TIMEOUT_MS 3000
 #define RETRY_COUNT 7
 
-RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib,
-                                                           shared_ptr<RDMADispatcher>& rdma_dispatcher,
+RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, std::shared_ptr<Infiniband>& ib,
+                                                           std::shared_ptr<RDMADispatcher>& rdma_dispatcher,
                                                            RDMAWorker *w, RDMACMInfo *info)
   : RDMAConnectedSocketImpl(cct, ib, rdma_dispatcher, w), cm_con_handler(new C_handle_cm_connection(this))
 {
@@ -98,6 +98,7 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
         break;
       }
 
+      // FIPS zeroization audit 20191115: this memset is not security related.
       memset(&cm_params, 0, sizeof(cm_params));
       cm_params.retry_count = RETRY_COUNT;
       cm_params.qp_num = local_qpn;

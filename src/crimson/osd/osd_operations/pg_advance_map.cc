@@ -1,22 +1,23 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <seastar/core/future.hh>
+#include "crimson/osd/osd_operations/pg_advance_map.h"
 
 #include <boost/smart_ptr/local_shared_ptr.hpp>
+#include <seastar/core/future.hh>
+
 #include "include/types.h"
-#include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
-#include "common/Formatter.h"
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
   OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to,
@@ -75,14 +76,19 @@ seastar::future<> PGAdvanceMap::start()
 	  handle.exit();
 	  if (do_init) {
 	    osd.pg_map.pg_created(pg->get_pgid(), pg);
+	    osd.shard_services.inc_pg_num();
 	    logger().info("PGAdvanceMap::start new pg {}", *pg);
 	  }
 	  return seastar::when_all_succeed(
-	    pg->get_need_up_thru() ? osd._send_alive() : seastar::now(),
+	    pg->get_need_up_thru() \
+              ? osd.shard_services.send_alive(pg->get_same_interval_since())
+              : seastar::now(),
 	    osd.shard_services.dispatch_context(
 	      pg->get_collection_ref(),
 	      std::move(rctx)));
-	});
+	}).then_unpack([this] {
+          return osd.shard_services.send_pg_temp();
+        });
     }).then([this, ref=std::move(ref)] {
       logger().debug("{}: complete", *this);
     });

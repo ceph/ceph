@@ -2,10 +2,10 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { SharedModule } from '../../../shared/shared.module';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { NfsFormClientComponent } from './nfs-form-client.component';
 
 describe('NfsFormClientComponent', () => {
@@ -14,16 +14,15 @@ describe('NfsFormClientComponent', () => {
 
   configureTestBed({
     declarations: [NfsFormClientComponent],
-    imports: [ReactiveFormsModule, SharedModule, HttpClientTestingModule],
-    providers: i18nProviders
+    imports: [ReactiveFormsModule, SharedModule, HttpClientTestingModule]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsFormClientComponent);
-    const formBuilder = TestBed.get(CdFormBuilder);
+    const formBuilder = TestBed.inject(CdFormBuilder);
     component = fixture.componentInstance;
 
-    component.form = this.nfsForm = new CdFormGroup({
+    component.form = new CdFormGroup({
       access_type: new FormControl(''),
       clients: formBuilder.array([]),
       squash: new FormControl('')

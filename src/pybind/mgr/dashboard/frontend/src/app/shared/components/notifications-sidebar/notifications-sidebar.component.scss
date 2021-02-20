@@ -1,32 +1,50 @@
-@import 'defaults';
+@use './src/styles/vendor/variables' as vv;
 
-// sidebar
-::ng-deep .ng-sidebar {
-  &.ng-sidebar--opened {
-    margin-right: 20px;
-  }
+:host {
+  bottom: 10px;
+  max-width: 90vw;
+  position: fixed;
+  right: -350px;
+  top: vv.$navbar-height + 10px;
+
+  transition: all 0.6s;
 
   width: 350px;
-  max-width: 90vw;
-  z-index: 9 !important;
 
-  top: 6vh !important;
-  height: 92vh;
+  z-index: 9;
+}
 
-  .card {
-    height: 100%;
+:host.active {
+  right: 20px;
+}
 
-    .card-body {
-      overflow: auto;
-    }
-  }
+.card {
+  height: 100%;
+}
 
-  .separator {
-    padding: 5px 12px;
-    color: $color-popover-seperator-text;
-    background-color: $color-popover-seperator-bg;
-    font-size: 12px;
-  }
+.card-body {
+  padding-left: 0;
+  padding-right: 5px;
+  padding-top: 3px;
+}
+
+ngx-simplebar {
+  height: calc(100% - 42.2px);
+}
+
+.separator {
+  background-color: vv.$gray-200;
+  color: vv.$gray-600;
+  font-size: 1rem;
+  padding: 5px 12px;
+}
+
+.btn-block {
+  width: 98%;
+}
+
+.btn-link .fa-trash-o {
+  color: vv.$black;
 }
 
 table {
@@ -36,4 +54,11 @@ table {
 .row {
   margin-left: 0;
   margin-right: 0;
+  padding-bottom: 1rem;
+  padding-top: 1rem;
+}
+
+hr {
+  margin-bottom: 2px;
+  margin-top: 2px;
 }

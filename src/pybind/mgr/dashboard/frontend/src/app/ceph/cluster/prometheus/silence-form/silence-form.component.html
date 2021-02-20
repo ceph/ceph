@@ -5,7 +5,7 @@
     <ng-container *ngFor="let config of matcherConfig">
       <div class="input-group-prepend">
         <span class="input-group-text"
-              [tooltip]=config.tooltip>
+              [ngbTooltip]="config.tooltip">
           <i [ngClass]="[config.icon]"></i>
         </span>
       </div>
@@ -37,16 +37,16 @@
       <button type="button"
               class="btn btn-light"
               id="matcher-edit-{{index}}"
-              i18n-tooltip
-              tooltip="Edit"
+              i18n-ngbTooltip
+              ngbTooltip="Edit"
               (click)="showMatcherModal(index)">
         <i [ngClass]="[icons.edit]"></i>
       </button>
       <button type="button"
               class="btn btn-light"
               id="matcher-delete-{{index}}"
-              i18n-tooltip
-              tooltip="Delete"
+              i18n-ngbTooltip
+              ngbTooltip="Delete"
               (click)="deleteMatcher(index)">
         <i [ngClass]="[icons.trash]"></i>
       </button>
@@ -55,7 +55,7 @@
   <span class="help-block"></span>
 </ng-template>
 
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form">
   <form #formDir="ngForm"
         [formGroup]="form"
         class="form"
@@ -73,12 +73,10 @@
       <!-- Creator -->
       <div class="card-body">
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="created-by">
-            <ng-container i18n>Creator</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="created-by"
+                 i18n>Creator</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    formControlName="createdBy"
                    id="created-by"
@@ -92,12 +90,10 @@
 
         <!-- Comment -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="comment">
-            <ng-container i18n>Comment</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="comment"
+                 i18n>Comment</label>
+          <div class="cd-col-form-input">
             <textarea class="form-control"
                       formControlName="comment"
                       id="comment"
@@ -112,19 +108,20 @@
 
         <!-- Start time -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="starts-at">
-            <ng-container i18n>Start time</ng-container>
+            <span class="required"
+                  i18n>Start time</span>
             <cd-helper i18n>If the start time lies in the past the creation time will be used</cd-helper>
-            <span class="required"></span>
           </label>
-          <div class="col-sm-9">
-            <input [bsConfig]="bsConfig"
-                   bsDatepicker
-                   class="form-control"
+          <div class="cd-col-form-input">
+            <input class="form-control"
                    formControlName="startsAt"
-                   id="starts-at"
-                   name="starts-at">
+                   [ngbPopover]="popStart"
+                   triggers="manual"
+                   #ps="ngbPopover"
+                   (click)="ps.open()"
+                   (keypress)="ps.close()">
             <span *ngIf="form.showError('startsAt', formDir, 'required')"
                   class="invalid-feedback"
                   i18n>This field is required!</span>
@@ -133,12 +130,10 @@
 
         <!-- Duration -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="duration">
-            <ng-container i18n>Duration</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="duration"
+                 i18n>Duration</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    formControlName="duration"
                    id="duration"
@@ -152,18 +147,17 @@
 
         <!-- End time -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="ends-at">
-            <ng-container i18n>End time</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
-            <input [bsConfig]="bsConfig"
-                   bsDatepicker
-                   class="form-control"
+          <label class="cd-col-form-label required"
+                 for="ends-at"
+                 i18n>End time</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
                    formControlName="endsAt"
-                   id="ends-at"
-                   name="ends-at">
+                   [ngbPopover]="popEnd"
+                   triggers="manual"
+                   #pe="ngbPopover"
+                   (click)="pe.open()"
+                   (keypress)="pe.close()">
             <span *ngIf="form.showError('endsAt', formDir, 'required')"
                   class="invalid-feedback"
                   i18n>This field is required!</span>
@@ -172,9 +166,10 @@
 
         <!-- Matchers -->
         <fieldset>
-          <legend i18n>Matchers<span class="required">*</span></legend>
+          <legend class="required"
+                  i18n>Matchers</legend>
 
-          <div class="offset-sm-3 col-sm-9">
+          <div class="cd-col-form-offset">
             <h5 *ngIf="matchers.length === 0"
                 [ngClass]="{'text-warning': !formDir.submitted, 'text-danger': formDir.submitted}">
               <strong i18n>A silence requires at least one matcher</strong>
@@ -199,7 +194,7 @@
           </div>
 
           <div *ngIf="matchers.length && matcherMatch"
-               class="offset-sm-3 col-sm-9 {{matcherMatch.cssClass}}"
+               class="cd-col-form-offset {{matcherMatch.cssClass}}"
                id="match-state">
             <span class="text-muted {{matcherMatch.cssClass}}">
               {{ matcherMatch.status }}
@@ -209,15 +204,23 @@
       </div>
 
       <div class="card-footer">
-        <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submit()"
-                            [form]="formDir"
-                            i18n="@@formTitle">
-            {{ action | titlecase }} {{ resource | upperFirst }}
-          </cd-submit-button>
-          <cd-back-button></cd-back-button>
+        <div class="text-right">
+          <cd-form-button-panel (submitActionEvent)="submit()"
+                                [form]="form"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
         </div>
       </div>
     </div>
   </form>
 </div>
+
+<ng-template #popStart>
+  <cd-date-time-picker [control]="form.get('startsAt')"
+                       [hasSeconds]="false"></cd-date-time-picker>
+</ng-template>
+
+
+<ng-template #popEnd>
+  <cd-date-time-picker [control]="form.get('endsAt')"
+                       [hasSeconds]="false"></cd-date-time-picker>
+</ng-template>

@@ -6,9 +6,13 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/int_types.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/operation/ObjectMapIterate.h"
 #include <atomic>
 #include <string>
+#include <list>
+#include <map>
+#include <set>
 #include <boost/function.hpp>
 
 class Context;
@@ -18,10 +22,31 @@ namespace librbd {
 class ImageCtx;
 class ProgressContext;
 
+enum Operation {
+  OPERATION_CHECK_OBJECT_MAP,
+  OPERATION_FLATTEN,
+  OPERATION_METADATA_UPDATE,
+  OPERATION_MIGRATE,
+  OPERATION_REBUILD_OBJECT_MAP,
+  OPERATION_RENAME,
+  OPERATION_RESIZE,
+  OPERATION_SNAP_CREATE,
+  OPERATION_SNAP_PROTECT,
+  OPERATION_SNAP_REMOVE,
+  OPERATION_SNAP_RENAME,
+  OPERATION_SNAP_ROLLBACK,
+  OPERATION_SNAP_UNPROTECT,
+  OPERATION_SPARSIFY,
+  OPERATION_UPDATE_FEATURES,
+};
+
 template <typename ImageCtxT = ImageCtx>
 class Operations {
 public:
   Operations(ImageCtxT &image_ctx);
+
+  void start_op(enum Operation op, Context *ctx);
+  void finish_op(enum Operation op, int r);
 
   int flatten(ProgressContext &prog_ctx);
   void execute_flatten(ProgressContext &prog_ctx, Context *on_finish);
@@ -45,13 +70,15 @@ public:
                       Context *on_finish, uint64_t journal_op_tid);
 
   int snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-		  const std::string& snap_name);
+		  const std::string& snap_name, uint64_t flags,
+                  ProgressContext& prog_ctx);
   void snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-		   const std::string& snap_name, Context *on_finish);
+		   const std::string& snap_name, uint64_t flags,
+                   ProgressContext& prog_ctx, Context *on_finish);
   void execute_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-			   const std::string &snap_name,
-			   Context *on_finish,
-                           uint64_t journal_op_tid, bool skip_object_map);
+			   const std::string &snap_name, Context *on_finish,
+                           uint64_t journal_op_tid, uint64_t flags,
+                           ProgressContext &prog_ctx);
 
   int snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
 		    const std::string& snap_name,
@@ -107,13 +134,18 @@ public:
   void execute_sparsify(size_t sparse_size, ProgressContext &prog_ctx,
                         Context *on_finish);
 
-  int prepare_image_update(bool request_lock);
+  int prepare_image_update(exclusive_lock::OperationRequestType request_type,
+                           bool request_lock);
 
 private:
   ImageCtxT &m_image_ctx;
-  std::atomic<int> m_async_request_seq;
 
-  int invoke_async_request(const std::string& request_type,
+  mutable ceph::mutex m_queue_lock;
+  std::set<Operation> m_in_flight_ops;
+  std::map<Operation, std::list<Context *>> m_queued_ops;
+
+  int invoke_async_request(Operation op,
+                           exclusive_lock::OperationRequestType request_type,
                            bool permit_snapshot,
                            const boost::function<void(Context*)>& local,
                            const boost::function<void(Context*)>& remote);

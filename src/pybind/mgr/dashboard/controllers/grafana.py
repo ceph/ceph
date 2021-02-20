@@ -1,21 +1,34 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import (ApiController, BaseController, Endpoint, ReadPermission,
-               UpdatePermission)
+from .. import mgr
 from ..exceptions import DashboardException
 from ..grafana import GrafanaRestClient, push_local_dashboards
 from ..security import Scope
 from ..settings import Settings
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, UpdatePermission
+
+URL_SCHEMA = {
+    "instance": (str, "grafana instance")
+}
 
 
 @ApiController('/grafana', Scope.GRAFANA)
+@ControllerDoc("Grafana Management API", "Grafana")
 class Grafana(BaseController):
-
     @Endpoint()
     @ReadPermission
+    @EndpointDoc("List Grafana URL Instance", responses={200: URL_SCHEMA})
     def url(self):
-        response = {'instance': Settings.GRAFANA_API_URL}
+        grafana_url = mgr.get_module_option('GRAFANA_API_URL')
+        grafana_frontend_url = mgr.get_module_option('GRAFANA_FRONTEND_API_URL')
+        if grafana_frontend_url != '' and grafana_url == '':
+            url = ''
+        else:
+            url = (mgr.get_module_option('GRAFANA_FRONTEND_API_URL')
+                   or mgr.get_module_option('GRAFANA_API_URL')).rstrip('/')
+        response = {'instance': url}
         return response
 
     @Endpoint()
@@ -23,7 +36,7 @@ class Grafana(BaseController):
     def validation(self, params):
         grafana = GrafanaRestClient()
         method = 'GET'
-        url = Settings.GRAFANA_API_URL.rstrip('/') + \
+        url = str(Settings.GRAFANA_API_URL).rstrip('/') + \
             '/api/dashboards/uid/' + params
         response = grafana.url_validation(method, url)
         return response

@@ -1,16 +1,17 @@
 import { TestBed } from '@angular/core/testing';
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdSummaryPipe } from './osd-summary.pipe';
 
 describe('OsdSummaryPipe', () => {
   let pipe: OsdSummaryPipe;
 
   configureTestBed({
-    providers: [OsdSummaryPipe, i18nProviders]
+    providers: [OsdSummaryPipe]
   });
 
   beforeEach(() => {
-    pipe = TestBed.get(OsdSummaryPipe);
+    pipe = TestBed.inject(OsdSummaryPipe);
   });
 
   it('create an instance', () => {
@@ -23,7 +24,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 3 up, 3 in, 0 down, 0 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 1 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 1 },
+        { up: 1, in: 1 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {
@@ -43,7 +48,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 2 up, 1 in, 1 down, 1 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 0 }, { up: 0, in: 0 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 0 },
+        { up: 0, in: 0 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {
@@ -71,7 +80,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 2 up, 2 in, 1 down, 0 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 0, in: 0 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 1 },
+        { up: 0, in: 0 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {
@@ -99,7 +112,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 3 up, 2 in, 0 down, 1 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 0 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 1 },
+        { up: 1, in: 0 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {

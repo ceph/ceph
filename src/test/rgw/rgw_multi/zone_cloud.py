@@ -11,12 +11,8 @@ import datetime
 import re
 
 from nose.tools import eq_ as eq
-try:
-    from itertools import izip_longest as zip_longest
-except ImportError:
-    from itertools import zip_longest
-
-from six.moves.urllib.parse import urlparse
+from itertools import zip_longest # type: ignore
+from urllib.parse import urlparse
 
 from .multisite import *
 from .tools import *
@@ -61,7 +57,7 @@ def check_object_eq(k1, k2, check_extra = True):
 
 def make_request(conn, method, bucket, key, query_args, headers):
     result = conn.make_request(method, bucket=bucket, key=key, query_args=query_args, headers=headers)
-    if result.status / 100 != 2:
+    if result.status // 100 != 2:
         raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
     return result
 
@@ -116,7 +112,7 @@ class CloudKey:
             self.etag = '"' + self.etag + '"'
 
         new_meta = {}
-        for meta_key, meta_val in k.metadata.iteritems():
+        for meta_key, meta_val in k.metadata.items():
             if not meta_key.startswith('rgwx-'):
                 new_meta[meta_key] = meta_val
 
@@ -129,8 +125,8 @@ class CloudKey:
         self.content_language = k.content_language
 
 
-    def get_contents_as_string(self):
-        r = self.key.get_contents_as_string()
+    def get_contents_as_string(self, encoding=None):
+        r = self.key.get_contents_as_string(encoding=encoding)
 
         # the previous call changed the status of the source object, as it loaded
         # its metadata
@@ -139,14 +135,6 @@ class CloudKey:
         self.update()
 
         return r
-
-def append_query_arg(s, n, v):
-    if not v:
-        return s
-    nv = '{n}={v}'.format(n=n, v=v)
-    if not s:
-        return nv
-    return '{s}&{nv}'.format(s=s, nv=nv)
 
 
 class CloudZoneBucket:

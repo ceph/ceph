@@ -1,0 +1,66 @@
+# {{ cephadm_managed }}
+global
+    log         127.0.0.1 local2
+    chroot      /var/lib/haproxy
+    pidfile     /var/lib/haproxy/haproxy.pid
+    maxconn     8000
+    daemon
+    stats socket /var/lib/haproxy/stats
+{% if spec.ha_proxy_frontend_ssl_certificate %}
+  {% if spec.ha_proxy_ssl_dh_param %}
+    tune.ssl.default-dh-param {{ spec.ha_proxy_ssl_dh_param }}
+  {% endif %}
+  {% if spec.ha_proxy_ssl_ciphers %}
+    ssl-default-bind-ciphers {{ spec.ha_proxy_ssl_ciphers | join(':') }}
+  {% endif %}
+  {% if spec.ha_proxy_ssl_options %}
+    ssl-default-bind-options {{ spec.ha_proxy_ssl_options | join(' ') }}
+  {% endif %}
+{% endif %}
+
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    1s
+    timeout queue           20s
+    timeout connect         5s
+    timeout client          1s
+    timeout server          1s
+    timeout http-keep-alive 5s
+    timeout check           5s
+    maxconn                 8000
+
+frontend stats
+    bind *:{{ spec.ha_proxy_port }}
+{% if spec.ha_proxy_stats_enabled %}
+    stats enable
+{% endif %}
+    stats uri /stats
+    stats refresh 10s
+    stats auth {{ spec.ha_proxy_stats_user }}:{{ spec.ha_proxy_stats_password }}
+{% if spec.ha_proxy_enable_prometheus_exporter %}
+    http-request use-service prometheus-exporter if { path /metrics }
+{% endif %}
+    monitor-uri {{ spec.ha_proxy_monitor_uri }}
+
+frontend rgw-frontend
+{% if spec.ha_proxy_frontend_ssl_certificate %}
+    bind {{ virtual_ip_address }}:{{ spec.ha_proxy_frontend_ssl_port }} ssl crt /var/lib/haproxy/haproxy.pem
+{% else %}
+    bind {{ virtual_ip_address }}:{{ spec.frontend_port }}
+{% endif %}
+    default_backend rgw-backend
+
+backend rgw-backend
+    option forwardfor
+    balance static-rr
+    option httpchk HEAD / HTTP/1.0
+    {% for server in rgw_servers %}
+    server {{ server.name }} {{ server.ip }}:80 check weight 100
+    {% endfor %}

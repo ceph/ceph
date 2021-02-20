@@ -16,10 +16,9 @@ Description
 ===========
 
 **ceph-fuse** is a FUSE ("Filesystem in USErspace") client for Ceph
-distributed file system. It will mount a ceph file system specified
-via the -m option or described by ceph.conf (see below) at the
-specific mount point. See `Mount CephFS using FUSE`_ for detailed
-information.
+distributed file system. It will mount a ceph file system specified via the -m
+option or described by ceph.conf (see below) at the specific mount point. See
+`Mount CephFS using FUSE`_ for detailed information.
 
 The file system can be unmounted with::
 
@@ -50,6 +49,10 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
+.. option:: -n client.{cephx-username}
+
+   Pass the name of CephX user whose secret key is be to used for mounting.
+
 .. option:: -k <path-to-keyring>
 
    Provide path to keyring; useful when it's absent in standard locations.
@@ -79,4 +82,4 @@ See also
 fusermount(8),
 :doc:`ceph <ceph>`\(8)
 
-.. _Mount CephFS using FUSE: ../../../cephfs/fuse/
+.. _Mount CephFS using FUSE: ../../../cephfs/mount-using-fuse/

@@ -81,22 +81,22 @@ public:
 
 int decode(
   const stripe_info_t &sinfo,
-  ErasureCodeInterfaceRef &ec_impl,
-  std::map<int, bufferlist> &to_decode,
-  bufferlist *out);
+  ceph::ErasureCodeInterfaceRef &ec_impl,
+  std::map<int, ceph::buffer::list> &to_decode,
+  ceph::buffer::list *out);
 
 int decode(
   const stripe_info_t &sinfo,
-  ErasureCodeInterfaceRef &ec_impl,
-  std::map<int, bufferlist> &to_decode,
-  std::map<int, bufferlist*> &out);
+  ceph::ErasureCodeInterfaceRef &ec_impl,
+  std::map<int, ceph::buffer::list> &to_decode,
+  std::map<int, ceph::buffer::list*> &out);
 
 int encode(
   const stripe_info_t &sinfo,
-  ErasureCodeInterfaceRef &ec_impl,
-  bufferlist &in,
+  ceph::ErasureCodeInterfaceRef &ec_impl,
+  ceph::buffer::list &in,
   const std::set<int> &want,
-  std::map<int, bufferlist> *out);
+  std::map<int, ceph::buffer::list> *out);
 
 class HashInfo {
   uint64_t total_chunk_size = 0;
@@ -108,16 +108,16 @@ public:
   HashInfo() {}
   explicit HashInfo(unsigned num_chunks) :
     cumulative_shard_hashes(num_chunks, -1) {}
-  void append(uint64_t old_size, std::map<int, bufferlist> &to_append);
+  void append(uint64_t old_size, std::map<int, ceph::buffer::list> &to_append);
   void clear() {
     total_chunk_size = 0;
     cumulative_shard_hashes = std::vector<uint32_t>(
       cumulative_shard_hashes.size(),
       -1);
   }
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<HashInfo*>& o);
   uint32_t get_chunk_hash(int shard) const {
     ceph_assert((unsigned)shard < cumulative_shard_hashes.size());

@@ -16,10 +16,10 @@
 #define CEPH_TIMER_H
 
 #include <map>
+#include "include/common_fwd.h"
 #include "ceph_time.h"
 #include "ceph_mutex.h"
 
-class CephContext;
 class Context;
 class SafeTimerThread;
 
@@ -36,7 +36,7 @@ class SafeTimer
   void timer_thread();
   void _shutdown();
 
-  using clock_t = ceph::real_clock;
+  using clock_t = ceph::mono_clock;
   using scheduled_map_t = std::multimap<clock_t::time_point, Context*>;
   scheduled_map_t schedule;
   using event_lookup_map_t = std::map<Context*, scheduled_map_t::iterator>;
@@ -74,9 +74,10 @@ public:
 
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
+  Context* add_event_after(ceph::timespan duration, Context *callback);
   Context* add_event_after(double seconds, Context *callback);
   Context* add_event_at(clock_t::time_point when, Context *callback);
-
+  Context* add_event_at(ceph::real_clock::time_point when, Context *callback);
   /* Cancel an event.
    * Call with the event_lock LOCKED
    *

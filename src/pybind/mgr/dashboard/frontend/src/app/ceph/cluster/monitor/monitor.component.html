@@ -1,7 +1,8 @@
 <div class="row">
   <div class="col-lg-4">
     <fieldset>
-      <legend class="cd-header" i18n>Status</legend>
+      <legend class="cd-header"
+              i18n>Status</legend>
       <table class="table table-striped"
              *ngIf="mon_status">
         <tr>
@@ -12,7 +13,7 @@
         <tr>
           <td i18n
               class="bold">monmap modified</td>
-          <td>{{ mon_status.monmap.modified }}</td>
+          <td>{{ mon_status.monmap.modified | relativeDate }}</td>
         </tr>
         <tr>
           <td i18n

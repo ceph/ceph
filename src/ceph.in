@@ -1,4 +1,4 @@
-#!@Python_EXECUTABLE@
+#!@Python3_EXECUTABLE@
 # -*- mode:python -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
@@ -19,15 +19,17 @@ License version 2, as published by the Free Software
 Foundation.  See file COPYING.
 """
 
-from __future__ import print_function
 from time import sleep
-import codecs
 import grp
 import os
 import pwd
+import shutil
+import stat
 import sys
 import time
 import platform
+
+from typing import Dict, List, Sequence, Tuple
 
 try:
     input = raw_input
@@ -66,7 +68,7 @@ DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH *
 def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
     execv_cmd = []
     if 'CEPH_DBG' in os.environ:
-        execv_cmd += ['@Python_EXECUTABLE@', '-mpdb']
+        execv_cmd += ['@Python3_EXECUTABLE@', '-mpdb']
 
     if platform.system() == "Darwin":
         lib_path_var = "DYLD_LIBRARY_PATH"
@@ -87,8 +89,8 @@ def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
         if "CEPH_DEV" not in os.environ:
             print(DEVMODEMSG, file=sys.stderr)
         os.execvp(execv_cmd[0], execv_cmd)
-    sys.path.insert(0, os.path.join(MYDIR, pybind_path))
-    sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
+    sys.path.insert(0, pybind_path)
+    sys.path.insert(0, pythonlib_path)
 
 
 def get_pythonlib_dir():
@@ -155,20 +157,10 @@ from ceph_daemon import admin_socket, DaemonWatcher, Termsize
 verbose = False
 cluster_handle = None
 
-# Always use Unicode (UTF-8) for stdout
-if sys.version_info[0] >= 3:
-    raw_stdout = sys.stdout.buffer
-    raw_stderr = sys.stderr.buffer
-else:
-    raw_stdout = sys.__stdout__
-    raw_stderr = sys.__stderr__
-    sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
-    sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
-
 
 def raw_write(buf):
     sys.stdout.flush()
-    raw_stdout.write(rados.cstr(buf, ''))
+    sys.stdout.buffer.write(buf)
 
 
 def osdids():
@@ -267,7 +259,9 @@ GLOBAL_ARGS = {
 }
 
 
-def parse_cmdargs(args=None, target=''):
+def parse_cmdargs(args=None, target='') -> Tuple[argparse.ArgumentParser,
+                                                 argparse.Namespace,
+                                                 List[str]]:
     """
     Consume generic arguments from the start of the ``args``
     list.  Call this first to handle arguments that are not
@@ -305,7 +299,7 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--cluster', help='cluster name')
 
     parser.add_argument('--admin-daemon', dest='admin_socket',
-                        help='submit admin-socket commands (\"help\" for help')
+                        help='submit admin-socket commands (\"help\" for help)')
 
     parser.add_argument('-s', '--status', action='store_true',
                         help='show cluster status')
@@ -323,11 +317,9 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
-    parser.add_argument('--watch-channel', dest="watch_channel",
-                        choices=['cluster', 'audit', '*'],
-                        help="which log channel to follow " \
-                        "when using -w/--watch.  One of ['cluster', 'audit', '*']",
-                        default='cluster')
+    parser.add_argument('-W', '--watch-channel', dest="watch_channel",
+                        help="watch live cluster changes on a specific channel "
+                        "(e.g., cluster, audit, cephadm, or '*' for all)")
 
     parser.add_argument('--version', '-v', action="store_true", help="display version")
     parser.add_argument('--verbose', action="store_true", help="make verbose")
@@ -335,7 +327,7 @@ def parse_cmdargs(args=None, target=''):
                         help="make less verbose")
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
-                        'xml', 'xml-pretty', 'plain'], dest='output_format')
+                        'xml', 'xml-pretty', 'plain', 'yaml'], dest='output_format')
 
     parser.add_argument('--connect-timeout', dest='cluster_timeout',
                         type=int,
@@ -386,10 +378,13 @@ daemonperf {type.id | path} list|ls [stat-pats] [priority]
     """, file=sys.stdout)
 
 
-def do_extended_help(parser, args, target, partial):
+def do_extended_help(parser, args, target, partial) -> int:
     def help_for_sigs(sigs, partial=None):
-        sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
-                         partial=partial))
+        try:
+            sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
+                             partial=partial))
+        except BrokenPipeError:
+            pass
 
     def help_for_target(target, partial=None):
         # wait for osdmap because we know this is sent after the mgrmap
@@ -399,7 +394,7 @@ def do_extended_help(parser, args, target, partial):
                                          prefix='get_command_descriptions',
                                          timeout=10)
         if ret:
-            if ret == -errno.EPERM and target[0] in ('osd', 'mds'):
+            if (ret == -errno.EPERM or ret == -errno.EACCES) and target[0] in ('osd', 'mds'):
                 print("Permission denied.  Check that your user has 'allow *' "
                       "capabilities for the target daemon type.", file=sys.stderr)
             elif ret == -errno.EPERM:
@@ -467,7 +462,7 @@ def wrap(s, width, indent):
             yield result
 
 
-def format_help(cmddict, partial=None):
+def format_help(cmddict, partial=None) -> str:
     """
     Formats all the cmdsigs and helptexts from cmddict into a sorted-by-
     cmdsig 2-column display, with each column wrapped and indented to
@@ -504,11 +499,20 @@ def format_help(cmddict, partial=None):
     return fullusage
 
 
-def ceph_conf(parsed_args, field, name):
-    args = ['ceph-conf']
+def ceph_conf(parsed_args, field, name, pid=None):
+    cmd = 'ceph-conf'
+    bindir = os.path.dirname(__file__)
+    if shutil.which(cmd):
+        args = [cmd]
+    elif shutil.which(cmd, path=bindir):
+        args = [os.path.join(bindir, cmd)]
+    else:
+        raise RuntimeError('"ceph-conf" not found')
 
     if name:
         args.extend(['--name', name])
+    if pid:
+        args.extend(['--pid', pid])
 
     # add any args in GLOBAL_ARGS
     for key, val in GLOBAL_ARGS.items():
@@ -524,9 +528,10 @@ def ceph_conf(parsed_args, field, name):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
     outdata, errdata = p.communicate()
-    if len(errdata):
+    if p.returncode != 0:
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
+
 
 PROMPT = 'ceph> '
 
@@ -594,7 +599,7 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
             sleep(parsed_args.period)
         except KeyboardInterrupt:
             print('Interrupted')
-            return ret, '', ''
+            return errno.EINTR, '', ''
     if ret == errno.ETIMEDOUT:
         ret = -ret
         if not outs:
@@ -603,7 +608,11 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
     return ret, outbuf, outs
 
 
-def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
+def new_style_command(parsed_args,
+                      cmdargs,
+                      target,
+                      sigdict,
+                      inbuf, verbose) -> Tuple[int, bytes, str]:
     """
     Do new-style command dance.
     target: daemon to receive command: mon (any) or osd.N
@@ -617,47 +626,46 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             sig = cmd['sig']
             print('{0}: {1}'.format(cmdtag, concise_sig(sig)))
 
-    if True:
-        if cmdargs:
-            # Non interactive mode
-            ret, outbuf, outs = do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
-        else:
-            # Interactive mode (ceph cli)
-            if sys.stdin.isatty():
-                # do the command-interpreter looping
-                # for input to do readline cmd editing
-                import readline  # noqa
+    if cmdargs:
+        # Non interactive mode
+        ret, outbuf, outs = do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
+    else:
+        # Interactive mode (ceph cli)
+        if sys.stdin.isatty():
+            # do the command-interpreter looping
+            # for input to do readline cmd editing
+            import readline  # noqa
 
-            while True:
-                try:
-                    interactive_input = read_input()
-                except EOFError:
-                    # leave user an uncluttered prompt
-                    return 0, '\n', ''
-                if interactive_input is None:
-                    return 0, '', ''
-                cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
-                try:
-                    target = find_cmd_target(cmdargs)
-                except Exception as e:
-                    print('error handling command target: {0}'.format(e),
-                          file=sys.stderr)
-                    continue
-                if len(cmdargs) and cmdargs[0] == 'tell':
-                    print('Can not use \'tell\' in interactive mode.',
-                          file=sys.stderr)
-                    continue
-                ret, outbuf, outs = do_command(parsed_args, target, cmdargs,
-                                               sigdict, inbuf, verbose)
-                if ret < 0:
-                    ret = -ret
-                    errstr = errno.errorcode.get(ret, 'Unknown')
-                    print(u'Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
-                else:
-                    if outs:
-                        print(outs, file=sys.stderr)
-                    if outbuf:
-                        print(outbuf)
+        while True:
+            try:
+                interactive_input = read_input()
+            except EOFError:
+                # leave user an uncluttered prompt
+                return 0, b'\n', ''
+            if interactive_input is None:
+                return 0, b'', ''
+            cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
+            try:
+                target = find_cmd_target(cmdargs)
+            except Exception as e:
+                print('error handling command target: {0}'.format(e),
+                      file=sys.stderr)
+                continue
+            if len(cmdargs) and cmdargs[0] == 'tell':
+                print('Can not use \'tell\' in interactive mode.',
+                      file=sys.stderr)
+                continue
+            ret, outbuf, outs = do_command(parsed_args, target, cmdargs,
+                                           sigdict, inbuf, verbose)
+            if ret < 0:
+                ret = -ret
+                errstr = errno.errorcode.get(ret, 'Unknown')
+                print('Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
+            else:
+                if outs:
+                    print(outs, file=sys.stderr)
+                if outbuf:
+                    print(outbuf.decode('utf-8'))
 
     return ret, outbuf, outs
 
@@ -681,6 +689,9 @@ def complete(sigdict, args, target):
     match_count = 0
     comps = []
     for cmdtag, cmd in sigdict.items():
+        flags = cmd.get('flags', 0)
+        if flags & (Flag.OBSOLETE | Flag.HIDDEN):
+            continue
         sig = cmd['sig']
         j = 0
         # iterate over all arguments, except last one
@@ -729,6 +740,23 @@ def ping_monitor(cluster_handle, name, timeout):
     return 0
 
 
+def get_admin_socket(parsed_args, name):
+    path = ceph_conf(parsed_args, 'admin_socket', name)
+    try:
+        if stat.S_ISSOCK(os.stat(path).st_mode):
+            return path
+    except OSError:
+        pass
+    # try harder, probably the "name" option is in the form of
+    # "${name}.${pid}"?
+    parts = name.rsplit('.', 1)
+    if len(parts) > 1 and parts[-1].isnumeric():
+        name, pid = parts
+        return ceph_conf(parsed_args, 'admin_socket', name, pid)
+    else:
+        return path
+
+
 def maybe_daemon_command(parsed_args, childargs):
     """
     Check if --admin-socket, daemon, or daemonperf command
@@ -750,8 +778,7 @@ def maybe_daemon_command(parsed_args, childargs):
             else:
                 # try resolve daemon name
                 try:
-                    sockpath = ceph_conf(parsed_args, 'admin_socket',
-                                         childargs[1])
+                    sockpath = get_admin_socket(parsed_args, childargs[1])
                 except Exception as e:
                     print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
                     return True, errno.EINVAL
@@ -783,7 +810,7 @@ def isnum(s):
         return False
 
 
-def daemonperf(childargs, sockpath):
+def daemonperf(childargs: Sequence[str], sockpath: str):
     """
     Handle daemonperf command; returns errno or 0
 
@@ -857,7 +884,9 @@ def daemonperf(childargs, sockpath):
 
     return 0
 
-def get_scrub_timestamps(childargs):
+
+def get_scrub_timestamps(childargs: Sequence[str]) -> Dict[str,
+                                                           Tuple[str, str]]:
     last_scrub_stamp = "last_" + childargs[1].replace('-', '_') + "_stamp"
     results = dict()
     scruball = False
@@ -876,6 +905,7 @@ def get_scrub_timestamps(childargs):
             results[stat['pgid']] = scrub_tuple
     return results
 
+
 def check_scrub_stamps(waitdata, currdata):
     for pg in waitdata.keys():
        # Try to handle the case where a pg may not exist in current results
@@ -883,15 +913,17 @@ def check_scrub_stamps(waitdata, currdata):
            return False
     return True
 
+
 def waitscrub(childargs, waitdata):
-    print(u'Waiting for {0} to complete...'.format(childargs[1]), file=sys.stdout)
+    print('Waiting for {0} to complete...'.format(childargs[1]), file=sys.stdout)
     currdata = get_scrub_timestamps(childargs)
     while not check_scrub_stamps(waitdata, currdata):
         time.sleep(3)
         currdata = get_scrub_timestamps(childargs)
-    print(u'{0} completed'.format(childargs[1]), file=sys.stdout)
+    print('{0} completed'.format(childargs[1]), file=sys.stdout)
 
-def wait(childargs, waitdata):
+
+def wait(childargs: Sequence[str], waitdata):
     if childargs[1] in ['scrub', 'deep-scrub']:
         waitscrub(childargs, waitdata)
 
@@ -914,6 +946,12 @@ def main():
             CEPH_RELEASE_NAME,
             CEPH_RELEASE_TYPE))  # noqa
         return 0
+
+    # --watch-channel|-W implies -w
+    if parsed_args.watch_channel:
+        parsed_args.watch = True
+    elif parsed_args.watch and not parsed_args.watch_channel:
+        parsed_args.watch_channel = 'cluster'
 
     global verbose
     verbose = parsed_args.verbose
@@ -993,15 +1031,6 @@ def main():
     if injectargs and '--' in injectargs:
         injectargs.remove('--')
 
-    # special deprecation warning for 'ceph <type> tell'
-    # someday 'mds' will be here too
-    if (len(childargs) >= 2 and
-            childargs[0] in ['mon', 'osd'] and
-            childargs[1] == 'tell'):
-        print('"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0]),
-              file=sys.stderr)
-        return 1
-
     block = False
     waitdata = dict()
     if parsed_args.block:
@@ -1041,21 +1070,33 @@ def main():
         return 1
 
     if parsed_args.help:
-        hdr('Monitor commands:')
+        target = None
+        if len(childargs) >= 2 and childargs[0] == 'tell':
+            target = childargs[1].split('.', 1)
+            if not validate_target(target):
+                print('target {0} doesn\'t exist; please pass correct target to tell command (e.g., mon.a, osd.1, mds.a, mgr)'.format(childargs[1]), file=sys.stderr)
+                return 1
+            childargs = childargs[2:]
+            hdr('Tell %s commands:' % target[0])
+        else:
+            hdr('Monitor commands:')
+            target = ('mon', '')
         if verbose:
             print('[Contacting monitor, timeout after %d seconds]' % timeout)
 
-        return do_extended_help(parser, childargs, ('mon', ''), ' '.join(childargs))
+        return do_extended_help(parser, childargs, target, ' '.join(childargs))
 
     # implement "tell service.id help"
     if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
-        target = childargs[1].split('.')
+        target = childargs[1].split('.', 1)
         if validate_target(target):
+            hdr('Tell %s commands' % target[0])
             return do_extended_help(parser, childargs, target, None)
         else:
             print('target {0} doesn\'t exists, please pass correct target to tell command, such as mon.a/'
                   'osd.1/mds.a/mgr'.format(childargs[1]), file=sys.stderr)
             return 1
+
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
     level = ''
@@ -1069,10 +1110,8 @@ def main():
         # an awfully simple callback
         def watch_cb(arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
             # Filter on channel
-            if sys.version_info[0] >= 3:
-                channel = channel.decode('utf-8')
-            if (channel == parsed_args.watch_channel or \
-                           parsed_args.watch_channel == "*"):
+            channel = channel.decode('utf-8')
+            if parsed_args.watch_channel in (channel, '*'):
                 print(line.decode('utf-8'))
                 sys.stdout.flush()
 
@@ -1099,7 +1138,7 @@ def main():
     if parsed_args.input_file:
         try:
             if parsed_args.input_file == '-':
-                inbuf = sys.stdin.read()
+                inbuf = sys.stdin.buffer.read()
             else:
                 with open(parsed_args.input_file, 'rb') as f:
                     inbuf = f.read()
@@ -1111,7 +1150,7 @@ def main():
     if parsed_args.output_file:
         try:
             if parsed_args.output_file == '-':
-                outf = sys.stdout
+                outf = sys.stdout.buffer
             else:
                 outf = open(parsed_args.output_file, 'wb')
         except Exception as e:
@@ -1214,7 +1253,7 @@ def main():
         if ret < 0:
             ret = -ret
             errstr = errno.errorcode.get(ret, 'Unknown')
-            print(u'Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
+            print('Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
             if len(targets) > 1:
                 final_ret = ret
             else:
@@ -1248,8 +1287,12 @@ def main():
                 except IOError as e:
                     if e.errno != errno.EPIPE:
                         raise e
+        try:
+            sys.stdout.flush()
+        except IOError as e:
+            if e.errno != errno.EPIPE:
+                raise e
 
-        sys.stdout.flush()
 
     # Block until command completion (currently scrub and deep_scrub only)
     if block:
@@ -1264,8 +1307,19 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    retval = main()
-    # shutdown explicitly; Rados() does not
-    if cluster_handle:
-        run_in_thread(cluster_handle.shutdown)
-    sys.exit(retval)
+    try:
+        retval = main()
+        # shutdown explicitly; Rados() does not
+        if retval == 0 and cluster_handle:
+            run_in_thread(cluster_handle.shutdown)
+    except KeyboardInterrupt:
+        print('Interrupted')
+        retval = errno.EINTR
+
+    if retval:
+        # flush explicitly because we aren't exiting in the usual way
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(retval)
+    else:
+        sys.exit(retval)

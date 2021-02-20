@@ -48,7 +48,7 @@ def task(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     print(str(config.get('increment',-1)))
     for role in config.get('clients', ['client.0']):
-        assert isinstance(role, basestring)
+        assert isinstance(role, str)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -80,4 +80,4 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining omapbench')
-        run.wait(omapbench.itervalues())
+        run.wait(omapbench.values())

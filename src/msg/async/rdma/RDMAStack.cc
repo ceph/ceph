@@ -40,7 +40,7 @@ RDMADispatcher::~RDMADispatcher()
   ceph_assert(dead_queue_pairs.empty());
 }
 
-RDMADispatcher::RDMADispatcher(CephContext* c, shared_ptr<Infiniband>& ib)
+RDMADispatcher::RDMADispatcher(CephContext* c, std::shared_ptr<Infiniband>& ib)
   : cct(c), ib(ib)
 {
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
@@ -178,8 +178,9 @@ void RDMADispatcher::handle_async_event()
           } else {
              conn->fault();
              if (qp) {
-                if (!cct->_conf->ms_async_rdma_cm)
-                enqueue_dead_qp(qpn);
+                if (!cct->_conf->ms_async_rdma_cm) {
+                  enqueue_dead_qp_lockless(qpn);
+                }
              }
           }
         }
@@ -413,9 +414,8 @@ Infiniband::QueuePair* RDMADispatcher::get_qp(uint32_t qp)
   return get_qp_lockless(qp);
 }
 
-void RDMADispatcher::enqueue_dead_qp(uint32_t qpn)
+void RDMADispatcher::enqueue_dead_qp_lockless(uint32_t qpn)
 {
-  std::lock_guard l{lock};
   auto it = qp_conns.find(qpn);
   if (it == qp_conns.end()) {
     lderr(cct) << __func__ << " QP [" << qpn << "] is not registered." << dendl;
@@ -425,6 +425,12 @@ void RDMADispatcher::enqueue_dead_qp(uint32_t qpn)
   dead_queue_pairs.push_back(qp);
   qp_conns.erase(it);
   --num_qp_conn;
+}
+
+void RDMADispatcher::enqueue_dead_qp(uint32_t qpn)
+{
+  std::lock_guard l{lock};
+  enqueue_dead_qp_lockless(qpn);
 }
 
 void RDMADispatcher::schedule_qp_destroy(uint32_t qpn)
@@ -539,7 +545,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
     //TX completion may come either from
     // 1) regular send message, WCE wr_id points to chunk
     // 2) 'fin' message, wr_id points to the QP
-    if (ib->get_memory_manager()->is_tx_buffer(chunk->buffer)) {
+    if (ib->get_memory_manager()->is_valid_chunk(chunk)) {
       tx_chunks.push_back(chunk);
     } else if (reinterpret_cast<QueuePair*>(response->wr_id)->get_local_qp_number() == response->qp_num ) {
       ldout(cct, 1) << __func__ << " sending of the disconnect msg completed" << dendl;
@@ -772,9 +778,9 @@ void RDMAWorker::handle_pending_message()
   dispatcher->notify_pending_workers();
 }
 
-RDMAStack::RDMAStack(CephContext *cct, const string &t)
-  : NetworkStack(cct, t), ib(make_shared<Infiniband>(cct)),
-    rdma_dispatcher(make_shared<RDMADispatcher>(cct, ib))
+RDMAStack::RDMAStack(CephContext *cct)
+  : NetworkStack(cct), ib(std::make_shared<Infiniband>(cct)),
+    rdma_dispatcher(std::make_shared<RDMADispatcher>(cct, ib))
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
 

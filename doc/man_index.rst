@@ -11,7 +11,6 @@
    man/8/ceph-create-keys
    man/8/ceph-debugpack
    man/8/ceph-dencoder
-   man/8/ceph-deploy
    man/8/ceph-volume
    man/8/ceph-volume-systemd
    man/8/ceph-fuse
@@ -23,6 +22,9 @@
    man/8/ceph-run
    man/8/ceph-syn
    man/8/ceph
+   man/8/cephadm
+   man/8/cephfs-top
+   man/8/cephfs-mirror
    man/8/crushtool
    man/8/librados-config
    man/8/monmaptool
@@ -40,4 +42,6 @@
    man/8/rbd-replay
    man/8/rbd
    man/8/rbdmap
+   man/8/rgw-orphan-list
    man/8/ceph-immutable-object-cache
+   man/8/ceph-diff-sorted

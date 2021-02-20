@@ -23,7 +23,7 @@
  * Capability::Export
  */
 
-void Capability::Export::encode(bufferlist &bl) const
+void Capability::Export::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(3, 2, bl);
   encode(cap_id, bl);
@@ -38,7 +38,7 @@ void Capability::Export::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::Export::decode(bufferlist::const_iterator &p)
+void Capability::Export::decode(ceph::buffer::list::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, p);
   decode(cap_id, p);
@@ -54,12 +54,12 @@ void Capability::Export::decode(bufferlist::const_iterator &p)
   DECODE_FINISH(p);
 }
 
-void Capability::Export::dump(Formatter *f) const
+void Capability::Export::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("cap_id", cap_id);
-  f->dump_unsigned("wanted", wanted);
-  f->dump_unsigned("issued", issued);
-  f->dump_unsigned("pending", pending);
+  f->dump_stream("wanted") << ccap_string(wanted);
+  f->dump_stream("issued") << ccap_string(issued);
+  f->dump_stream("pending") << ccap_string(pending);
   f->dump_unsigned("client_follows", client_follows);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("migrate_seq", mseq);
@@ -78,7 +78,7 @@ void Capability::Export::generate_test_instances(std::list<Capability::Export*>&
   ls.back()->last_issue_stamp = utime_t(6, 7);
 }
 
-void Capability::Import::encode(bufferlist &bl) const
+void Capability::Import::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(1, 1, bl);
   encode(cap_id, bl);
@@ -87,7 +87,7 @@ void Capability::Import::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::Import::decode(bufferlist::const_iterator &bl)
+void Capability::Import::decode(ceph::buffer::list::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(cap_id, bl);
@@ -96,7 +96,7 @@ void Capability::Import::decode(bufferlist::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-void Capability::Import::dump(Formatter *f) const
+void Capability::Import::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("cap_id", cap_id);
   f->dump_unsigned("issue_seq", issue_seq);
@@ -107,7 +107,7 @@ void Capability::Import::dump(Formatter *f) const
  * Capability::revoke_info
  */
 
-void Capability::revoke_info::encode(bufferlist& bl) const
+void Capability::revoke_info::encode(ceph::buffer::list& bl) const
 {
   ENCODE_START(2, 2, bl)
   encode(before, bl);
@@ -116,7 +116,7 @@ void Capability::revoke_info::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::revoke_info::decode(bufferlist::const_iterator& bl)
+void Capability::revoke_info::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(before, bl);
@@ -125,7 +125,7 @@ void Capability::revoke_info::decode(bufferlist::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void Capability::revoke_info::dump(Formatter *f) const
+void Capability::revoke_info::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("before", before);
   f->dump_unsigned("seq", seq);
@@ -146,15 +146,10 @@ void Capability::revoke_info::generate_test_instances(std::list<Capability::revo
  * Capability
  */
 Capability::Capability(CInode *i, Session *s, uint64_t id) :
-  client_follows(0),
-  client_xattr_version(0), client_inline_version(0),
-  last_rbytes(0), last_rsize(0),
   item_session_caps(this), item_snaprealm_caps(this),
   item_revoking_caps(this), item_client_revoking_caps(this),
-  inode(i), session(s),
-  cap_id(id), _wanted(0), num_revoke_warnings(0),
-  _pending(0), _issued(0), last_sent(0), last_issue(0), mseq(0),
-  suppress(0), state(0)
+  lock_caches(member_offset(MDLockCache, item_cap_lock_cache)),
+  inode(i), session(s), cap_id(id)
 {
   if (session) {
     session->touch_cap_bottom(this);
@@ -171,6 +166,8 @@ Capability::Capability(CInode *i, Session *s, uint64_t id) :
       if (!conn->has_feature(CEPH_FEATURE_MDS_QUOTA))
 	state |= STATE_NOQUOTA;
     }
+  } else {
+    cap_gen = 0;
   }
 }
 
@@ -215,22 +212,19 @@ void Capability::maybe_clear_notable()
 void Capability::set_wanted(int w) {
   CInode *in = get_inode();
   if (in) {
-    if (!_wanted && w) {
-      in->adjust_num_caps_wanted(1);
-    } else if (_wanted && !w) {
-      in->adjust_num_caps_wanted(-1);
-    }
     if (!is_wanted_notable(_wanted) && is_wanted_notable(w)) {
+      in->adjust_num_caps_notable(1);
       if (!is_notable())
 	mark_notable();
     } else if (is_wanted_notable(_wanted) && !is_wanted_notable(w)) {
+      in->adjust_num_caps_notable(-1);
       maybe_clear_notable();
     }
   }
   _wanted = w;
 }
 
-void Capability::encode(bufferlist& bl) const
+void Capability::encode(ceph::buffer::list& bl) const
 {
   ENCODE_START(2, 2, bl)
   encode(last_sent, bl);
@@ -242,7 +236,7 @@ void Capability::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::decode(bufferlist::const_iterator &bl)
+void Capability::decode(ceph::buffer::list::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
   decode(last_sent, bl);
@@ -258,12 +252,14 @@ void Capability::decode(bufferlist::const_iterator &bl)
   calc_issued();
 }
 
-void Capability::dump(Formatter *f) const
+void Capability::dump(ceph::Formatter *f) const
 {
+  if (inode)
+    f->dump_stream("ino") << inode->ino();
   f->dump_unsigned("last_sent", last_sent);
-  f->dump_unsigned("last_issue_stamp", last_issue_stamp);
-  f->dump_unsigned("wanted", _wanted);
-  f->dump_unsigned("pending", _pending);
+  f->dump_stream("last_issue_stamp") << last_issue_stamp;
+  f->dump_stream("wanted") << ccap_string(_wanted);
+  f->dump_stream("pending") << ccap_string(_pending);
 
   f->open_array_section("revokes");
   for (const auto &r : _revokes) {

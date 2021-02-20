@@ -14,7 +14,7 @@
 #include "crimson/osd/pg.h"
 #include "osd/osd_types.h"
 
-namespace ceph::osd {
+namespace crimson::osd {
 class PG;
 
 class PGMap {
@@ -37,14 +37,20 @@ class PGMap {
   };
 
   std::map<spg_t, PGCreationState> pgs_creating;
-  std::map<spg_t, Ref<PG>> pgs;
+  using pgs_t = std::map<spg_t, Ref<PG>>;
+  pgs_t pgs;
 
 public:
   /**
    * Get future for pg with a bool indicating whether it's already being
    * created.
    */
-  std::pair<blocking_future<Ref<PG>>, bool> get_pg(spg_t pgid, bool wait=true);
+  std::pair<blocking_future<Ref<PG>>, bool> wait_for_pg(spg_t pgid);
+
+  /**
+   * get PG in non-blocking manner
+   */
+  Ref<PG> get_pg(spg_t pgid);
 
   /**
    * Set creating
@@ -61,8 +67,8 @@ public:
    */
   void pg_loaded(spg_t pgid, Ref<PG> pg);
 
-  decltype(pgs) &get_pgs() { return pgs; }
-
+  pgs_t& get_pgs() { return pgs; }
+  const pgs_t& get_pgs() const { return pgs; }
   PGMap() = default;
   ~PGMap();
 };

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, JAny, JLeaf, JList, JObj
+from .helper import (DashboardTestCase, JAny, JLeaf, JList, JObj,
+                     addrvec_schema, module_options_schema)
 
 
 class HealthTest(DashboardTestCase):
@@ -17,6 +18,41 @@ class HealthTest(DashboardTestCase):
         }),
         'pgs_per_osd': float,
         'statuses': JObj({}, allow_unknown=True, unknown_schema=int)
+    })
+
+    __mdsmap_schema = JObj({
+        'session_autoclose': int,
+        'balancer': str,
+        'up': JObj({}, allow_unknown=True),
+        'last_failure_osd_epoch': int,
+        'in': JList(int),
+        'last_failure': int,
+        'max_file_size': int,
+        'explicitly_allowed_features': int,
+        'damaged': JList(int),
+        'tableserver': int,
+        'failed': JList(int),
+        'metadata_pool': int,
+        'epoch': int,
+        'stopped': JList(int),
+        'max_mds': int,
+        'compat': JObj({
+            'compat': JObj({}, allow_unknown=True),
+            'ro_compat': JObj({}, allow_unknown=True),
+            'incompat': JObj({}, allow_unknown=True)
+        }),
+        'required_client_features': JObj({}, allow_unknown=True),
+        'data_pools': JList(int),
+        'info': JObj({}, allow_unknown=True),
+        'fs_name': str,
+        'created': str,
+        'standby_count_wanted': int,
+        'enabled': bool,
+        'modified': str,
+        'session_timeout': int,
+        'flags': int,
+        'ever_allowed_features': int,
+        'root': int
     })
 
     def test_minimal_health(self):
@@ -40,18 +76,10 @@ class HealthTest(DashboardTestCase):
             'fs_map': JObj({
                 'filesystems': JList(
                     JObj({
-                        'mdsmap': JObj({
-                            'info': JObj(
-                                {},
-                                allow_unknown=True,
-                                unknown_schema=JObj({
-                                    'state': str
-                                })
-                            )
-                        })
+                        'mdsmap': self.__mdsmap_schema
                     }),
                 ),
-                'standbys': JList(JObj({})),
+                'standbys': JList(JObj({}, allow_unknown=True)),
             }),
             'health': JObj({
                 'checks': JList(JObj({}, allow_unknown=True)),
@@ -94,23 +122,7 @@ class HealthTest(DashboardTestCase):
             'can_run': bool,
             'error_string': str,
             'name': str,
-            'module_options': JObj(
-                {},
-                allow_unknown=True,
-                unknown_schema=JObj({
-                    'name': str,
-                    'type': str,
-                    'level': str,
-                    'flags': int,
-                    'default_value': str,
-                    'min': str,
-                    'max': str,
-                    'enum_allowed': JList(str),
-                    'see_also': JList(str),
-                    'desc': str,
-                    'long_desc': str,
-                    'tags': JList(str),
-                })),
+            'module_options': module_options_schema
         })
         schema = JObj({
             'client_perf': JObj({
@@ -142,7 +154,8 @@ class HealthTest(DashboardTestCase):
                         'wr_bytes': int,
                         'compress_bytes_used': int,
                         'compress_under_bytes': int,
-                        'stored_raw': int
+                        'stored_raw': int,
+                        'avail_raw': int
                     }),
                     'name': str,
                     'id': int
@@ -173,16 +186,7 @@ class HealthTest(DashboardTestCase):
                 'filesystems': JList(
                     JObj({
                         'id': int,
-                        'mdsmap': JObj({
-                            # TODO: Expand mdsmap schema
-                            'info': JObj(
-                                {},
-                                allow_unknown=True,
-                                unknown_schema=JObj({
-                                    'state': str
-                                }, allow_unknown=True)
-                            )
-                        }, allow_unknown=True)
+                        'mdsmap': self.__mdsmap_schema
                     }),
                 ),
                 'standbys': JList(JObj({}, allow_unknown=True)),
@@ -200,20 +204,13 @@ class HealthTest(DashboardTestCase):
             'mgr_map': JObj({
                 'active_addr': str,
                 'active_addrs': JObj({
-                    'addrvec': JList(JObj({
-                        'addr': str,
-                        'nonce': int,
-                        'type': str
-                    }))
+                    'addrvec': addrvec_schema
                 }),
                 'active_change': str,  # timestamp
                 'active_mgr_features': int,
                 'active_gid': int,
                 'active_name': str,
-                'always_on_modules': JObj(
-                    {},
-                    allow_unknown=True, unknown_schema=JList(str)
-                ),
+                'always_on_modules': JObj({}, allow_unknown=True),
                 'available': bool,
                 'available_modules': JList(module_info_schema),
                 'epoch': int,
@@ -246,7 +243,7 @@ class HealthTest(DashboardTestCase):
                     'required_mon': JList(str)
                 }),
                 'monmap': JObj({
-                    # TODO: expand on monmap schema
+                    # @TODO: expand on monmap schema
                     'mons': JList(JLeaf(dict)),
                 }, allow_unknown=True),
                 'name': str,
@@ -255,11 +252,12 @@ class HealthTest(DashboardTestCase):
                 'quorum_age': int,
                 'rank': int,
                 'state': str,
-                # TODO: What type should be expected here?
-                'sync_provider': JList(JAny(none=True))
+                # @TODO: What type should be expected here?
+                'sync_provider': JList(JAny(none=True)),
+                'stretch_mode': bool
             }),
             'osd_map': JObj({
-                # TODO: define schema for crush map and osd_metadata, among
+                # @TODO: define schema for crush map and osd_metadata, among
                 # others
                 'osds': JList(
                     JObj({

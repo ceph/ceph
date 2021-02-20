@@ -48,84 +48,123 @@ Daemon-reported health checks
 
 MDS daemons can identify a variety of unwanted conditions, and
 indicate these to the operator in the output of ``ceph status``.
-This conditions have human readable messages, and additionally
-a unique code starting MDS_HEALTH which appears in JSON output.
+These conditions have human readable messages, and additionally
+a unique code starting with ``MDS_``.
 
-Message: "Behind on trimming..."
-Code: MDS_HEALTH_TRIM
-Description: CephFS maintains a metadata journal that is divided into
-*log segments*.  The length of journal (in number of segments) is controlled
-by the setting ``mds_log_max_segments``, and when the number of segments
-exceeds that setting the MDS starts writing back metadata so that it
-can remove (trim) the oldest segments.  If this writeback is happening
-too slowly, or a software bug is preventing trimming, then this health
-message may appear.  The threshold for this message to appear is for the
-number of segments to be double ``mds_log_max_segments``.
+.. highlight:: console
 
-Message: "Client *name* failing to respond to capability release"
-Code: MDS_HEALTH_CLIENT_LATE_RELEASE, MDS_HEALTH_CLIENT_LATE_RELEASE_MANY
-Description: CephFS clients are issued *capabilities* by the MDS, which
-are like locks.  Sometimes, for example when another client needs access,
-the MDS will request clients release their capabilities.  If the client
-is unresponsive or buggy, it might fail to do so promptly or fail to do
-so at all.  This message appears if a client has taken longer than
-``session_timeout`` (default 60s) to comply.
+``ceph health detail`` shows the details of the conditions. Following
+is a typical health report from a cluster experiencing MDS related
+performance issues::
 
-Message: "Client *name* failing to respond to cache pressure"
-Code: MDS_HEALTH_CLIENT_RECALL, MDS_HEALTH_CLIENT_RECALL_MANY
-Description: Clients maintain a metadata cache.  Items (such as inodes) in the
-client cache are also pinned in the MDS cache, so when the MDS needs to shrink
-its cache (to stay within ``mds_cache_size`` or ``mds_cache_memory_limit``), it
-sends messages to clients to shrink their caches too.  If the client is
-unresponsive or buggy, this can prevent the MDS from properly staying within
-its cache limits and it may eventually run out of memory and crash.  This
-message appears if a client has failed to release more than
-``mds_recall_warning_threshold`` capabilities (decaying with a half-life of
-``mds_recall_max_decay_rate``) within the last
-``mds_recall_warning_decay_rate`` second.
+  $ ceph health detail
+  HEALTH_WARN 1 MDSs report slow metadata IOs; 1 MDSs report slow requests
+  MDS_SLOW_METADATA_IO 1 MDSs report slow metadata IOs
+     mds.fs-01(mds.0): 3 slow metadata IOs are blocked > 30 secs, oldest blocked for 51123 secs
+  MDS_SLOW_REQUEST 1 MDSs report slow requests
+     mds.fs-01(mds.0): 5 slow requests are blocked > 30 secs
 
-Message: "Client *name* failing to advance its oldest client/flush tid"
-Code: MDS_HEALTH_CLIENT_OLDEST_TID, MDS_HEALTH_CLIENT_OLDEST_TID_MANY
-Description: The CephFS client-MDS protocol uses a field called the
-*oldest tid* to inform the MDS of which client requests are fully
-complete and may therefore be forgotten about by the MDS.  If a buggy
-client is failing to advance this field, then the MDS may be prevented
-from properly cleaning up resources used by client requests.  This message
-appears if a client appears to have more than ``max_completed_requests``
-(default 100000) requests that are complete on the MDS side but haven't
-yet been accounted for in the client's *oldest tid* value.
+Where, for intance, ``MDS_SLOW_REQUEST`` is the unique code representing the
+condition where requests are taking long time to complete. And the following
+description shows its severity and the MDS daemons which are serving these
+slow requests.
 
-Message: "Metadata damage detected"
-Code: MDS_HEALTH_DAMAGE,
-Description: Corrupt or missing metadata was encountered when reading
-from the metadata pool.  This message indicates that the damage was
-sufficiently isolated for the MDS to continue operating, although
-client accesses to the damaged subtree will return IO errors.  Use
-the ``damage ls`` admin socket command to get more detail on the damage.
-This message appears as soon as any damage is encountered.
+This page lists the health checks raised by MDS daemons. For the checks from
+other daemons, please see :ref:`health-checks`.
 
-Message: "MDS in read-only mode"
-Code: MDS_HEALTH_READ_ONLY,
-Description: The MDS has gone into readonly mode and will return EROFS
-error codes to client operations that attempt to modify any metadata.  The
-MDS will go into readonly mode if it encounters a write error while
-writing to the metadata pool, or if forced to by an administrator using
-the *force_readonly* admin socket command.
+* ``MDS_TRIM``
 
-Message: *N* slow requests are blocked"
-Code: MDS_HEALTH_SLOW_REQUEST,
-Description: One or more client requests have not been completed promptly,
-indicating that the MDS is either running very slowly, or that the RADOS
-cluster is not acknowledging journal writes promptly, or that there is a bug.
-Use the ``ops`` admin socket command to list outstanding metadata operations.
-This message appears if any client requests have taken longer than
-``mds_op_complaint_time`` (default 30s).
+  Message
+    "Behind on trimming..."
+  Description
+    CephFS maintains a metadata journal that is divided into
+    *log segments*.  The length of journal (in number of segments) is controlled
+    by the setting ``mds_log_max_segments``, and when the number of segments
+    exceeds that setting the MDS starts writing back metadata so that it
+    can remove (trim) the oldest segments.  If this writeback is happening
+    too slowly, or a software bug is preventing trimming, then this health
+    message may appear.  The threshold for this message to appear is controlled by
+    the config option ``mds_log_warn_factor``, the default is 2.0.
+* ``MDS_HEALTH_CLIENT_LATE_RELEASE``, ``MDS_HEALTH_CLIENT_LATE_RELEASE_MANY``
 
-Message: "Too many inodes in cache"
-Code: MDS_HEALTH_CACHE_OVERSIZED
-Description: The MDS is not succeeding in trimming its cache to comply with the
-limit set by the administrator.  If the MDS cache becomes too large, the daemon
-may exhaust available memory and crash.  By default, this message appears if
-the actual cache size (in inodes or memory) is at least 50% greater than
-``mds_cache_size`` (default 100000) or ``mds_cache_memory_limit`` (default
-1GB). Modify ``mds_health_cache_threshold`` to set the warning ratio.
+  Message
+    "Client *name* failing to respond to capability release"
+  Description
+    CephFS clients are issued *capabilities* by the MDS, which
+    are like locks.  Sometimes, for example when another client needs access,
+    the MDS will request clients release their capabilities.  If the client
+    is unresponsive or buggy, it might fail to do so promptly or fail to do
+    so at all.  This message appears if a client has taken longer than
+    ``session_timeout`` (default 60s) to comply.
+* ``MDS_CLIENT_RECALL``, ``MDS_HEALTH_CLIENT_RECALL_MANY``
+
+  Message
+    "Client *name* failing to respond to cache pressure"
+  Description
+    Clients maintain a metadata cache.  Items (such as inodes) in the
+    client cache are also pinned in the MDS cache, so when the MDS needs to shrink
+    its cache (to stay within ``mds_cache_memory_limit``), it sends messages to
+    clients to shrink their caches too.  If the client is unresponsive or buggy,
+    this can prevent the MDS from properly staying within its cache limits and it
+    may eventually run out of memory and crash.  This message appears if a client
+    has failed to release more than
+    ``mds_recall_warning_threshold`` capabilities (decaying with a half-life of
+    ``mds_recall_max_decay_rate``) within the last
+    ``mds_recall_warning_decay_rate`` second.
+* ``MDS_CLIENT_OLDEST_TID``, ``MDS_CLIENT_OLDEST_TID_MANY``
+
+  Message
+    "Client *name* failing to advance its oldest client/flush tid"
+  Description
+    The CephFS client-MDS protocol uses a field called the
+    *oldest tid* to inform the MDS of which client requests are fully
+    complete and may therefore be forgotten about by the MDS.  If a buggy
+    client is failing to advance this field, then the MDS may be prevented
+    from properly cleaning up resources used by client requests.  This message
+    appears if a client appears to have more than ``max_completed_requests``
+    (default 100000) requests that are complete on the MDS side but haven't
+    yet been accounted for in the client's *oldest tid* value.
+* ``MDS_DAMAGE``
+
+  Message
+    "Metadata damage detected"
+  Description
+    Corrupt or missing metadata was encountered when reading
+    from the metadata pool.  This message indicates that the damage was
+    sufficiently isolated for the MDS to continue operating, although
+    client accesses to the damaged subtree will return IO errors.  Use
+    the ``damage ls`` admin socket command to get more detail on the damage.
+    This message appears as soon as any damage is encountered.
+* ``MDS_HEALTH_READ_ONLY``
+
+  Message
+    "MDS in read-only mode"
+  Description
+    The MDS has gone into readonly mode and will return EROFS
+    error codes to client operations that attempt to modify any metadata.  The
+    MDS will go into readonly mode if it encounters a write error while
+    writing to the metadata pool, or if forced to by an administrator using
+    the *force_readonly* admin socket command.
+* ``MDS_SLOW_REQUEST``
+
+  Message
+    "*N* slow requests are blocked"
+
+  Description
+    One or more client requests have not been completed promptly,
+    indicating that the MDS is either running very slowly, or that the RADOS
+    cluster is not acknowledging journal writes promptly, or that there is a bug.
+    Use the ``ops`` admin socket command to list outstanding metadata operations.
+    This message appears if any client requests have taken longer than
+    ``mds_op_complaint_time`` (default 30s).
+* ``MDS_CACHE_OVERSIZED``
+
+  Message
+    "Too many inodes in cache"
+  Description
+    The MDS is not succeeding in trimming its cache to comply with the
+    limit set by the administrator.  If the MDS cache becomes too large, the daemon
+    may exhaust available memory and crash.  By default, this message appears if
+    the actual cache size (in memory) is at least 50% greater than
+    ``mds_cache_memory_limit`` (default 1GB). Modify ``mds_health_cache_threshold``
+    to set the warning ratio.

@@ -16,6 +16,7 @@
 #define INTERVAL_MAP_H
 
 #include "include/interval_set.h"
+#include <initializer_list>
 
 template <typename K, typename V, typename S>
 /**
@@ -101,6 +102,13 @@ class interval_map {
     }
   }
 public:
+  interval_map() = default;
+  interval_map(std::initializer_list<typename map::value_type> l) {
+    for (auto& v : l) {
+      insert(v.first, v.second.first, v.second.second);
+    }
+  }
+
   interval_map intersect(K off, K len) const {
     interval_map ret;
     auto limits = get_range(off, len);

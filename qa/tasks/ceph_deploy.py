@@ -1,7 +1,6 @@
 """
 Execute ceph-deploy as a task
 """
-from cStringIO import StringIO
 
 import contextlib
 import os
@@ -116,18 +115,16 @@ def is_healthy(ctx, config):
             )
             raise RuntimeError(msg)
 
-        r = remote.run(
-            args=[
+        out = remote.sh(
+            [
                 'cd',
                 '{tdir}'.format(tdir=testdir),
                 run.Raw('&&'),
                 'sudo', 'ceph',
                 'health',
             ],
-            stdout=StringIO(),
             logger=log.getChild('health'),
         )
-        out = r.stdout.getvalue()
         log.info('Ceph health: %s', out.rstrip('\n'))
         if out.split(None, 1)[0] == 'HEALTH_OK':
             break
@@ -147,7 +144,7 @@ def get_nodes_using_role(ctx, target_role):
     # Prepare a modified version of cluster.remotes with ceph-deploy-ized names
     modified_remotes = {}
     ceph_deploy_mapped = dict()
-    for _remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for _remote, roles_for_host in ctx.cluster.remotes.items():
         modified_remotes[_remote] = []
         for svc_id in roles_for_host:
             if svc_id.startswith("{0}.".format(target_role)):
@@ -179,7 +176,7 @@ def get_nodes_using_role(ctx, target_role):
 def get_dev_for_osd(ctx, config):
     """Get a list of all osd device names."""
     osd_devs = []
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for remote, roles_for_host in ctx.cluster.remotes.items():
         host = remote.name.split('@')[-1]
         shortname = host.split('.')[0]
         devs = teuthology.get_scratch_devices(remote)
@@ -207,7 +204,7 @@ def get_dev_for_osd(ctx, config):
 def get_all_nodes(ctx, config):
     """Return a string of node names separated by blanks"""
     nodelist = []
-    for t, k in ctx.config['targets'].iteritems():
+    for t, k in ctx.config['targets'].items():
         host = t.split('@')[-1]
         simple_host = host.split('.')[0]
         nodelist.append(simple_host)
@@ -242,7 +239,7 @@ def build_ceph_cluster(ctx, config):
         for d in node_dev_list:
             node = d[0]
             for disk in d[1:]:
-                zap = './ceph-deploy disk zap ' + node + ':' + disk
+                zap = './ceph-deploy disk zap ' + node + ' ' + disk
                 estatus = execute_ceph_deploy(zap)
                 if estatus != 0:
                     raise RuntimeError("ceph-deploy: Failed to zap osds")
@@ -312,7 +309,7 @@ def build_ceph_cluster(ctx, config):
         ceph_branch = None
         if config.get('branch') is not None:
             cbranch = config.get('branch')
-            for var, val in cbranch.iteritems():
+            for var, val in cbranch.items():
                 ceph_branch = '--{var}={val}'.format(var=var, val=val)
         all_nodes = get_all_nodes(ctx, config)
         mds_nodes = get_nodes_using_role(ctx, 'mds')
@@ -347,15 +344,13 @@ def build_ceph_cluster(ctx, config):
 
         if config.get('conf') is not None:
             confp = config.get('conf')
-            for section, keys in confp.iteritems():
+            for section, keys in confp.items():
                 lines = '[{section}]\n'.format(section=section)
-                teuthology.append_lines_to_file(ceph_admin, conf_path, lines,
-                                                sudo=True)
-                for key, value in keys.iteritems():
+                ceph_admin.sudo_write_file(conf_path, lines, append=True)
+                for key, value in keys.items():
                     log.info("[%s] %s = %s" % (section, key, value))
                     lines = '{key} = {value}\n'.format(key=key, value=value)
-                    teuthology.append_lines_to_file(
-                        ceph_admin, conf_path, lines, sudo=True)
+                    ceph_admin.sudo_write_file(conf_path, lines, append=True)
 
         # install ceph
         dev_branch = ctx.config['branch']
@@ -423,19 +418,11 @@ def build_ceph_cluster(ctx, config):
             admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
             first_mon = teuthology.get_first_mon(ctx, config)
             (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
-            conf_data = teuthology.get_file(
-                remote=mon0_remote,
-                path=conf_path,
-                sudo=True,
-            )
-            admin_keyring = teuthology.get_file(
-                remote=mon0_remote,
-                path=admin_keyring_path,
-                sudo=True,
-            )
+            conf_data = mon0_remote.read_file(conf_path, sudo=True)
+            admin_keyring = mon0_remote.read_file(admin_keyring_path, sudo=True)
 
             clients = ctx.cluster.only(teuthology.is_type('client'))
-            for remot, roles_for_host in clients.remotes.iteritems():
+            for remote, roles_for_host in clients.remotes.items():
                 for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
                     client_keyring = \
                         '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
@@ -457,28 +444,24 @@ def build_ceph_cluster(ctx, config):
                             run.Raw('"'),
                         ],
                     )
-                    key_data = teuthology.get_file(
-                        remote=mon0_remote,
+                    key_data = mon0_remote.read_file(
                         path=client_keyring,
                         sudo=True,
                     )
-                    teuthology.sudo_write_file(
-                        remote=remot,
+                    remote.sudo_write_file(
                         path=client_keyring,
                         data=key_data,
-                        perms='0644'
+                        mode='0644'
                     )
-                    teuthology.sudo_write_file(
-                        remote=remot,
+                    remote.sudo_write_file(
                         path=admin_keyring_path,
                         data=admin_keyring,
-                        perms='0644'
+                        mode='0644'
                     )
-                    teuthology.sudo_write_file(
-                        remote=remot,
+                    remote.sudo_write_file(
                         path=conf_path,
                         data=conf_data,
-                        perms='0644'
+                        mode='0644'
                     )
 
             if mds_nodes:
@@ -529,7 +512,7 @@ def build_ceph_cluster(ctx, config):
             path = os.path.join(ctx.archive, 'data')
             os.makedirs(path)
             mons = ctx.cluster.only(teuthology.is_type('mon'))
-            for remote, roles in mons.remotes.iteritems():
+            for remote, roles in mons.remotes.items():
                 for role in roles:
                     if role.startswith('mon.'):
                         teuthology.pull_directory_tarball(
@@ -617,7 +600,7 @@ def cli_test(ctx, config):
             branch = ctx.config.get('branch')
             test_branch = ' --dev={branch} '.format(branch=branch)
     mons = ctx.cluster.only(teuthology.is_type('mon'))
-    for node, role in mons.remotes.iteritems():
+    for node, role in mons.remotes.items():
         admin = node
         admin.run(args=['mkdir', conf_dir], check_status=False)
         nodename = admin.shortname
@@ -627,7 +610,7 @@ def cli_test(ctx, config):
     log.info('system type is %s', system_type)
     osds = ctx.cluster.only(teuthology.is_type('osd'))
 
-    for remote, roles in osds.remotes.iteritems():
+    for remote, roles in osds.remotes.items():
         devs = teuthology.get_scratch_devices(remote)
         log.info("roles %s", roles)
         if (len(devs) < 3):
@@ -641,15 +624,13 @@ def cli_test(ctx, config):
     execute_cdeploy(admin, new_cmd, path)
     if config.get('conf') is not None:
         confp = config.get('conf')
-        for section, keys in confp.iteritems():
+        for section, keys in confp.items():
             lines = '[{section}]\n'.format(section=section)
-            teuthology.append_lines_to_file(admin, conf_path, lines,
-                                            sudo=True)
-            for key, value in keys.iteritems():
+            admin.sudo_write_file(conf_path, lines, append=True)
+            for key, value in keys.items():
                 log.info("[%s] %s = %s" % (section, key, value))
                 lines = '{key} = {value}\n'.format(key=key, value=value)
-                teuthology.append_lines_to_file(admin, conf_path, lines,
-                                                sudo=True)
+                admin.sudo_write_file(conf_path, lines, append=True)
     new_mon_install = 'install {branch} --mon '.format(
         branch=test_branch) + nodename
     new_mgr_install = 'install {branch} --mgr '.format(
@@ -678,15 +659,13 @@ def cli_test(ctx, config):
     log.info("list files for debugging purpose to check file permissions")
     admin.run(args=['ls', run.Raw('-lt'), conf_dir])
     remote.run(args=['sudo', 'ceph', '-s'], check_status=False)
-    r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
-    out = r.stdout.getvalue()
+    out = remote.sh('sudo ceph health')
     log.info('Ceph health: %s', out.rstrip('\n'))
     log.info("Waiting for cluster to become healthy")
     with contextutil.safe_while(sleep=10, tries=6,
                                 action='check health') as proceed:
         while proceed():
-            r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
-            out = r.stdout.getvalue()
+            out = remote.sh('sudo ceph health')
             if (out.split(None, 1)[0] == 'HEALTH_OK'):
                 break
     rgw_install = 'install {branch} --rgw {node}'.format(
@@ -706,7 +685,7 @@ def cli_test(ctx, config):
         time.sleep(4)
         for i in range(3):
             umount_dev = "{d}1".format(d=devs[i])
-            r = remote.run(args=['sudo', 'umount', run.Raw(umount_dev)])
+            remote.run(args=['sudo', 'umount', run.Raw(umount_dev)])
         cmd = 'purge ' + nodename
         execute_cdeploy(admin, cmd, path)
         cmd = 'purgedata ' + nodename
@@ -794,7 +773,7 @@ def upgrade(ctx, config):
         if mapped_role.get(role):
             role = mapped_role.get(role)
         remotes_and_roles = ctx.cluster.only(role).remotes
-        for remote, roles in remotes_and_roles.iteritems():
+        for remote, roles in remotes_and_roles.items():
             nodename = remote.shortname
             cmd = cmd + ' ' + nodename
             log.info("Upgrading ceph on  %s", nodename)
@@ -818,7 +797,7 @@ def upgrade(ctx, config):
     # write the correct mgr key to disk
     if config.get('setup-mgr-node', None):
         mons = ctx.cluster.only(teuthology.is_type('mon'))
-        for remote, roles in mons.remotes.iteritems():
+        for remote, roles in mons.remotes.items():
             remote.run(
                 args=[
                     run.Raw('sudo ceph auth get client.bootstrap-mgr'),

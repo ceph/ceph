@@ -21,8 +21,10 @@ static const std::map<std::string, uint64_t> RBD_FEATURE_MAP = {
   {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
   {RBD_FEATURE_NAME_OPERATIONS, RBD_FEATURE_OPERATIONS},
   {RBD_FEATURE_NAME_MIGRATING, RBD_FEATURE_MIGRATING},
+  {RBD_FEATURE_NAME_NON_PRIMARY, RBD_FEATURE_NON_PRIMARY},
+  {RBD_FEATURE_NAME_DIRTY_CACHE, RBD_FEATURE_DIRTY_CACHE},
 };
-static_assert((RBD_FEATURE_MIGRATING << 1) > RBD_FEATURES_ALL,
+static_assert((RBD_FEATURE_DIRTY_CACHE << 1) > RBD_FEATURES_ALL,
 	      "new RBD feature added");
 
 
@@ -34,8 +36,8 @@ std::string rbd_features_to_string(uint64_t features,
   std::string r;
   for (auto& i : RBD_FEATURE_MAP) {
     if (features & i.second) {
-      if (r.empty()) {
-	r += ",";
+      if (!r.empty()) {
+      r += ",";
       }
       r += i.first;
       features &= ~i.second;
@@ -73,12 +75,14 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
              << std::hex << unsupported_features << std::dec;
       }
     }
-    uint64_t internal_features = (features & RBD_FEATURES_INTERNAL);
-    if (internal_features != 0ULL) {
-      features &= ~RBD_FEATURES_INTERNAL;
+
+    uint64_t ignore_features_mask = (
+      RBD_FEATURES_INTERNAL | RBD_FEATURES_MUTABLE_INTERNAL);
+    uint64_t ignored_features = (features & ignore_features_mask);
+    if (ignored_features != 0ULL) {
+      features &= ~ignore_features_mask;
       if (err) {
-	*err << "ignoring internal feature mask 0x"
-	     << std::hex << internal_features;
+	*err << "ignoring feature mask 0x" << std::hex << ignored_features;
       }
     }
   } catch (boost::bad_lexical_cast&) {

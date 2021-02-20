@@ -2,13 +2,13 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_realm_reloader.h"
-#include "rgw_rados.h"
 
 #include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_rest.h"
 #include "rgw_user.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 
@@ -101,10 +101,12 @@ void RGWRealmReloader::reload()
     reload_scheduled = nullptr;
   }
 
+  const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
+
   while (!store) {
     // recreate and initialize a new store
     store =
-      RGWStoreManager::get_storage(cct,
+      RGWStoreManager::get_storage(&dp, cct,
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
 				   cct->_conf->rgw_enable_quota_threads,

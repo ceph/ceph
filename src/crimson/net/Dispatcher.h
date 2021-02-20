@@ -14,50 +14,33 @@
 
 #pragma once
 
-#include <seastar/core/future.hh>
-#include <seastar/core/sharded.hh>
-
 #include "Fwd.h"
 
 class AuthAuthorizer;
 
-namespace ceph::net {
+namespace crimson::net {
 
 class Dispatcher {
  public:
   virtual ~Dispatcher() {}
 
-  virtual seastar::future<> ms_dispatch(Connection* conn, MessageRef m) {
-    return seastar::make_ready_future<>();
-  }
+  // Dispatchers are put into a chain as described by chain-of-responsibility
+  // pattern. If any of the dispatchers claims this message, it returns a valid
+  // future to prevent other dispatchers from processing it, and this is also
+  // used to throttle the connection if it's too busy.
+  virtual std::optional<seastar::future<>> ms_dispatch(ConnectionRef, MessageRef) = 0;
 
-  virtual seastar::future<> ms_handle_accept(ConnectionRef conn) {
-    return seastar::make_ready_future<>();
-  }
+  virtual void ms_handle_accept(ConnectionRef conn) {}
 
-  virtual seastar::future<> ms_handle_connect(ConnectionRef conn) {
-    return seastar::make_ready_future<>();
-  }
+  virtual void ms_handle_connect(ConnectionRef conn) {}
 
-  virtual seastar::future<> ms_handle_reset(ConnectionRef conn) {
-    return seastar::make_ready_future<>();
-  }
+  // a reset event is dispatched when the connection is closed unexpectedly.
+  // is_replace=true means the reset connection is going to be replaced by
+  // another accepting connection with the same peer_addr, which currently only
+  // happens under lossy policy when both sides wish to connect to each other.
+  virtual void ms_handle_reset(ConnectionRef conn, bool is_replace) {}
 
-  virtual seastar::future<> ms_handle_remote_reset(ConnectionRef conn) {
-    return seastar::make_ready_future<>();
-  }
-
-  virtual seastar::future<msgr_tag_t, bufferlist>
-  ms_verify_authorizer(entity_type_t,
-		       auth_proto_t,
-		       bufferlist&) {
-    return seastar::make_ready_future<msgr_tag_t, bufferlist>(0, bufferlist{});
-  }
-
-  // get the local dispatcher shard if it is accessed by another core
-  virtual Dispatcher* get_local_shard() {
-    return this;
-  }
+  virtual void ms_handle_remote_reset(ConnectionRef conn) {}
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

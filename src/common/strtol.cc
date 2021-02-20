@@ -14,13 +14,27 @@
 
 #include "strtol.h"
 
+#include <algorithm>
 #include <climits>
 #include <limits>
 #include <cmath>
 #include <sstream>
+#include <strings.h>
 #include <string_view>
 
 using std::ostringstream;
+
+bool strict_strtob(const char* str, std::string *err)
+{
+  if (strcasecmp(str, "false") == 0) {
+    return false;
+  } else if (strcasecmp(str, "true") == 0) {
+    return true;
+  } else {
+    int b = strict_strtol(str, 10, err);
+    return (bool)!!b;
+  }
+}
 
 long long strict_strtoll(std::string_view str, int base, std::string *err)
 {
@@ -143,7 +157,7 @@ T strict_iec_cast(std::string_view str, std::string *err)
   std::string_view n = str;
   size_t u = str.find_first_not_of("0123456789-+");
   int m = 0;
-  // deal with unit prefix is there is one
+  // deal with unit prefix if there is one
   if (u != std::string_view::npos) {
     n = str.substr(0, u);
     unit = str.substr(u, str.length() - u);
@@ -277,17 +291,17 @@ T strict_si_cast(std::string_view str, std::string *err)
     return 0;
   }
   using promoted_t = typename std::common_type<decltype(ll), T>::type;
-  if (static_cast<promoted_t>(ll) <
-      static_cast<promoted_t>(std::numeric_limits<T>::min()) / pow (10, m)) {
-    *err = "strict_sistrtoll: value seems to be too small";
+  auto v = static_cast<promoted_t>(ll);
+  auto coefficient = static_cast<promoted_t>(powl(10, m));
+  if (v != std::clamp(v,
+		      (static_cast<promoted_t>(std::numeric_limits<T>::min()) /
+		       coefficient),
+		      (static_cast<promoted_t>(std::numeric_limits<T>::max()) /
+		       coefficient))) {
+    *err = "strict_sistrtoll: value out of range";
     return 0;
   }
-  if (static_cast<promoted_t>(ll) >
-      static_cast<promoted_t>(std::numeric_limits<T>::max()) / pow (10, m)) {
-    *err = "strict_sistrtoll: value seems to be too large";
-    return 0;
-  }
-  return (ll * pow (10,  m));
+  return v * coefficient;
 }
 
 template int strict_si_cast<int>(std::string_view str, std::string *err);

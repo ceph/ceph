@@ -1,14 +1,9 @@
-from cStringIO import StringIO
 import logging
 import json
-import requests
 import time
 
-from requests.packages.urllib3 import PoolManager
-from requests.packages.urllib3.util import Retry
-from urlparse import urlparse
+from io import StringIO
 
-from teuthology.orchestra.connection import split_user
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -21,9 +16,9 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
     client_with_id = daemon_type + '.' + client_id
     pre = [
         'adjust-ulimits',
-        'ceph-coverage'.format(tdir=testdir),
+        'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
-        'radosgw-admin'.format(tdir=testdir),
+        'radosgw-admin',
         '--log-to-stderr',
         '--format', format,
         '-n',  client_with_id,

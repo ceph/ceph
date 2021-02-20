@@ -8,8 +8,8 @@
 #define dout_prefix *_dout << " RDMAIWARPServerSocketImpl "
 
 RDMAIWARPServerSocketImpl::RDMAIWARPServerSocketImpl(
-  CephContext *cct, shared_ptr<Infiniband>& ib,
-  shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w,
+  CephContext *cct, std::shared_ptr<Infiniband>& ib,
+  std::shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w,
   entity_addr_t& a, unsigned addr_slot)
   : RDMAServerSocketImpl(cct, ib, rdma_dispatcher, w, a, addr_slot)
 {
@@ -90,6 +90,7 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
   RDMAIWARPConnectedSocketImpl* server =
     new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w), &info);
 
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&local_conn_param, 0, sizeof(local_conn_param));
   local_conn_param.qp_num = server->get_local_qpn();
 

@@ -1,0 +1,32 @@
+meta:
+- desc: install ceph/octopus latest
+tasks:
+- install:
+    exclude_packages:
+      - ceph-mgr-cephadm
+      - cephadm
+      - libcephfs-dev
+    branch: octopus
+- print: "**** done install octopus"
+- ceph:
+    conf:
+      global:
+        bluestore_warn_on_legacy_statfs: false
+        bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
+    log-ignorelist:
+      - Not found or unloadable
+      - evicting unresponsive client
+- exec:
+    osd.0:
+      - ceph osd require-osd-release octopus
+      - ceph osd set-require-min-compat-client octopus
+- print: "**** done ceph"
+- rgw:
+   - client.0
+- print: "**** done => started rgw client.0"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

@@ -1,9 +1,9 @@
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form"
+     *cdFormLoading="loading">
   <form name="targetForm"
         #formDir="ngForm"
         [formGroup]="targetForm"
-        novalidate
-        *ngIf="targetForm">
+        novalidate>
     <div class="card">
       <div i18n="form title|Example: Create Pool@@formTitle"
            class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
@@ -11,18 +11,17 @@
       <div class="card-body">
         <!-- Target IQN -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="target_iqn">
-            <ng-container i18n>Target IQN</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="target_iqn"
+                 i18n>Target IQN</label>
+          <div class="cd-col-form-input">
             <div class="input-group">
               <input class="form-control"
                      type="text"
                      id="target_iqn"
                      name="target_iqn"
-                     formControlName="target_iqn" />
+                     formControlName="target_iqn"
+                     cdTrim />
               <span class="input-group-append">
                 <button class="btn btn-light"
                         id="ecp-info-button"
@@ -63,12 +62,10 @@
 
         <!-- Portals -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="portals">
-            <ng-container i18n>Portals</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="portals"
+                 i18n>Portals</label>
+          <div class="cd-col-form-input">
 
             <ng-container *ngFor="let portal of portals.value; let i = index">
               <div class="input-group cd-mb">
@@ -87,10 +84,6 @@
               </div>
             </ng-container>
 
-            <span class="invalid-feedback"
-                  *ngIf="targetForm.showError('portals', formDir, 'minGateways')"
-                  i18n>At least {{ minimum_gateways }} gateways are required.</span>
-
             <div class="row">
               <div class="col-md-12">
                 <cd-select [data]="portals.value"
@@ -104,16 +97,26 @@
               </div>
             </div>
 
+            <input class="form-control"
+                   type="hidden"
+                   id="portals"
+                   name="portals"
+                   formControlName="portals" />
+
+            <span class="invalid-feedback"
+                  *ngIf="targetForm.showError('portals', formDir, 'minGateways')"
+                  i18n>At least {{ minimum_gateways }} gateways are required.</span>
+
             <hr />
           </div>
         </div>
 
         <!-- Images -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="disks"
                  i18n>Images</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <ng-container *ngFor="let image of targetForm.getValue('disks'); let i = index">
               <div class="input-group cd-mb">
                 <input class="cd-form-control"
@@ -121,6 +124,8 @@
                        [value]="image"
                        disabled />
                 <span class="input-group-append">
+                  <div class="input-group-text"
+                       *ngIf="api_version >= 1">lun: {{ imagesSettings[image]['lun'] }}</div>
                   <button class="btn btn-light"
                           type="button"
                           (click)="imageSettingsModal(image)">
@@ -146,9 +151,19 @@
               </span>
             </ng-container>
 
+            <input class="form-control"
+                   type="hidden"
+                   id="disks"
+                   name="disks"
+                   formControlName="disks" />
+
             <span class="invalid-feedback"
-                  *ngIf="targetForm.showError('disks', formDir, 'required')"
-                  i18n>At least 1 image is required.</span>
+                  *ngIf="targetForm.showError('disks', formDir, 'dupLunId')"
+                  i18n>Duplicated LUN numbers.</span>
+
+            <span class="invalid-feedback"
+                  *ngIf="targetForm.showError('disks', formDir, 'dupWwn')"
+                  i18n>Duplicated WWN.</span>
 
             <div class="row">
               <div class="col-md-12">
@@ -169,7 +184,7 @@
 
         <!-- acl_enabled -->
         <div class="form-group row">
-          <div class="offset-sm-3 col-sm-9">
+          <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"
@@ -186,17 +201,19 @@
         </div>
 
         <!-- Target level authentication was introduced in ceph-iscsi config v11 -->
-        <div formGroupName="auth" *ngIf="cephIscsiConfigVersion > 10 && !targetForm.getValue('acl_enabled')">
+        <div formGroupName="auth"
+             *ngIf="cephIscsiConfigVersion > 10 && !targetForm.getValue('acl_enabled')">
 
           <!-- Target user -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_user">
               <ng-container i18n>User</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      type="text"
+                     autocomplete="off"
                      id="target_user"
                      name="target_user"
                      formControlName="user" />
@@ -207,18 +224,18 @@
 
               <span class="invalid-feedback"
                     *ngIf="targetForm.showError('user', formDir, 'pattern')"
-                    i18n>Usernames must have a length of 8 to 64 characters and
-                can only contain letters, '.', '@', '-', '_' or ':'.</span>
+                    i18n>User names must have a length of 8 to 64 characters and can contain
+                alphanumeric characters, '.', '@', '-', '_' or ':'.</span>
             </div>
           </div>
 
           <!-- Target password -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_password">
               <ng-container i18n>Password</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="input-group">
                 <input class="form-control"
                        type="password"
@@ -226,16 +243,13 @@
                        id="target_password"
                        name="target_password"
                        formControlName="password" />
-
                 <span class="input-group-append">
                   <button type="button"
                           class="btn btn-light"
                           cdPasswordButton="target_password">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="target_password">
-                  </button>
+                  <cd-copy-2-clipboard-button source="target_password">
+                  </cd-copy-2-clipboard-button>
                 </span>
               </div>
 
@@ -245,20 +259,21 @@
 
               <span class="invalid-feedback"
                     *ngIf="targetForm.showError('password', formDir, 'pattern')"
-                    i18n>Passwords must have a length of 12 to 16 characters
-                and can only contain letters, '@', '-', '_' or '/'.</span>
+                    i18n>Passwords must have a length of 12 to 16 characters and can contain
+                alphanumeric characters, '@', '-', '_' or '/'.</span>
             </div>
           </div>
 
           <!-- Target mutual_user -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_mutual_user">
               <ng-container i18n>Mutual User</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      type="text"
+                     autocomplete="off"
                      id="target_mutual_user"
                      name="target_mutual_user"
                      formControlName="mutual_user" />
@@ -269,18 +284,18 @@
 
               <span class="invalid-feedback"
                     *ngIf="targetForm.showError('mutual_user', formDir, 'pattern')"
-                    i18n>Usernames must have a length of 8 to 64 characters and
-                can only contain letters, '.', '@', '-', '_' or ':'.</span>
+                    i18n>User names must have a length of 8 to 64 characters and can contain
+                alphanumeric characters, '.', '@', '-', '_' or ':'.</span>
             </div>
           </div>
 
           <!-- Target mutual_password -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_mutual_password">
               <ng-container i18n>Mutual Password</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="input-group">
                 <input class="form-control"
                        type="password"
@@ -294,10 +309,8 @@
                           class="btn btn-light"
                           cdPasswordButton="target_mutual_password">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="target_mutual_password">
-                  </button>
+                  <cd-copy-2-clipboard-button source="target_mutual_password">
+                  </cd-copy-2-clipboard-button>
                 </span>
               </div>
 
@@ -307,8 +320,8 @@
 
               <span class="invalid-feedback"
                     *ngIf="targetForm.showError('mutual_password', formDir, 'pattern')"
-                    i18n>Passwords must have a length of 12 to 16 characters
-                and can only contain letters, '@', '-', '_' or '/'.</span>
+                    i18n>Passwords must have a length of 12 to 16 characters and can contain
+                alphanumeric characters, '@', '-', '_' or '/'.</span>
             </div>
           </div>
 
@@ -317,10 +330,10 @@
         <!-- Initiators -->
         <div class="form-group row"
              *ngIf="targetForm.getValue('acl_enabled')">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="initiators"
                  i18n>Initiators</label>
-          <div class="col-sm-9"
+          <div class="cd-col-form-input"
                formArrayName="initiators">
             <div class="card mb-2"
                  *ngFor="let initiator of initiators.controls; let ii = index"
@@ -336,15 +349,14 @@
               <div class="card-body">
                 <!-- Initiator: Name -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
-                         for="client_iqn">
-                    <ng-container i18n>Client IQN</ng-container>
-                    <span class="required"></span>
-                  </label>
-                  <div class="col-sm-9">
+                  <label class="cd-col-form-label required"
+                         for="client_iqn"
+                         i18n>Client IQN</label>
+                  <div class="cd-col-form-input">
                     <input class="form-control"
                            type="text"
                            formControlName="client_iqn"
+                           cdTrim
                            (blur)="updatedInitiatorSelector()">
 
                     <span class="invalid-feedback"
@@ -364,13 +376,14 @@
                 <ng-container formGroupName="auth">
                   <!-- Initiator: User -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="user"
                            i18n>User</label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <input [id]="'user' + ii"
                              class="form-control"
                              formControlName="user"
+                             autocomplete="off"
                              type="text">
                       <span class="invalid-feedback"
                             *ngIf="initiator.showError('user', formDir, 'required')"
@@ -378,21 +391,22 @@
 
                       <span class="invalid-feedback"
                             *ngIf="initiator.showError('user', formDir, 'pattern')"
-                            i18n>Usernames must have a length of 8 to 64 characters and
-                        can only contain letters, '.', '@', '-', '_' or ':'.</span>
+                            i18n>User names must have a length of 8 to 64 characters and can contain
+                        alphanumeric characters, '.', '@', '-', '_' or ':'.</span>
                     </div>
                   </div>
 
                   <!-- Initiator: Password -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="password"
                            i18n>Password</label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <div class="input-group">
                         <input [id]="'password' + ii"
                                class="form-control"
                                formControlName="password"
+                               autocomplete="new-password"
                                type="password">
 
                         <span class="input-group-append">
@@ -400,10 +414,8 @@
                                   class="btn btn-light"
                                   [cdPasswordButton]="'password' + ii">
                           </button>
-                          <button type="button"
-                                  class="btn btn-light"
-                                  [cdCopy2ClipboardButton]="'password' + ii">
-                          </button>
+                          <cd-copy-2-clipboard-button [source]="'password' + ii">
+                          </cd-copy-2-clipboard-button>
                         </span>
                       </div>
                       <span class="invalid-feedback"
@@ -412,22 +424,23 @@
 
                       <span class="invalid-feedback"
                             *ngIf="initiator.showError('password', formDir, 'pattern')"
-                            i18n>Passwords must have a length of 12 to 16 characters
-                        and can only contain letters, '@', '-', '_' or '/'.</span>
+                            i18n>Passwords must have a length of 12 to 16 characters and can contain
+                        alphanumeric characters, '@', '-', '_' or '/'.</span>
                     </div>
                   </div>
 
 
                   <!-- Initiator: mutual_user -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="mutual_user">
                       <ng-container i18n>Mutual User</ng-container>
                     </label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <input [id]="'mutual_user' + ii"
                              class="form-control"
                              formControlName="mutual_user"
+                             autocomplete="off"
                              type="text">
 
                       <span class="invalid-feedback"
@@ -436,21 +449,22 @@
 
                       <span class="invalid-feedback"
                             *ngIf="initiator.showError('mutual_user', formDir, 'pattern')"
-                            i18n>Usernames must have a length of 8 to 64 characters and
-                        can only contain letters, '.', '@', '-', '_' or ':'.</span>
+                            i18n>User names must have a length of 8 to 64 characters and can contain
+                        alphanumeric characters, '.', '@', '-', '_' or ':'.</span>
                     </div>
                   </div>
 
                   <!-- Initiator: mutual_password -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="mutual_password"
                            i18n>Mutual Password</label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <div class="input-group">
                         <input [id]="'mutual_password' + ii"
                                class="form-control"
                                formControlName="mutual_password"
+                               autocomplete="new-password"
                                type="password">
 
                         <span class="input-group-append">
@@ -458,10 +472,8 @@
                                   class="btn btn-light"
                                   [cdPasswordButton]="'mutual_password' + ii">
                           </button>
-                          <button type="button"
-                                  class="btn btn-light"
-                                  [cdCopy2ClipboardButton]="'mutual_password' + ii">
-                          </button>
+                          <cd-copy-2-clipboard-button [source]="'mutual_password' + ii">
+                          </cd-copy-2-clipboard-button>
                         </span>
                       </div>
                       <span class="invalid-feedback"
@@ -470,18 +482,18 @@
 
                       <span class="invalid-feedback"
                             *ngIf="initiator.showError('mutual_password', formDir, 'pattern')"
-                            i18n>Passwords must have a length of 12 to 16 characters and
-                        can only contain letters, '@', '-', '_' or '/'.</span>
+                            i18n>Passwords must have a length of 12 to 16 characters and can contain
+                        alphanumeric characters, '@', '-', '_' or '/'.</span>
                     </div>
                   </div>
                 </ng-container>
 
                 <!-- Initiator: Images -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
+                  <label class="cd-col-form-label"
                          for="luns"
                          i18n>Images</label>
-                  <div class="col-sm-9">
+                  <div class="cd-col-form-input">
                     <ng-container *ngFor="let image of initiator.getValue('luns'); let li = index">
                       <div class="input-group cd-mb">
                         <input class="cd-form-control"
@@ -540,10 +552,10 @@
         <!-- Groups -->
         <div class="form-group row"
              *ngIf="targetForm.getValue('acl_enabled')">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="initiators"
                  i18n>Groups</label>
-          <div class="col-sm-9"
+          <div class="cd-col-form-input"
                formArrayName="groups">
             <div class="card mb-2"
                  *ngFor="let group of groups.controls; let gi = index"
@@ -552,19 +564,17 @@
                 <ng-container i18n>Group</ng-container>: {{ group.getValue('group_id') }}
                 <button type="button"
                         class="close"
-                        (click)="groups.removeAt(gi)">
+                        (click)="removeGroup(gi)">
                   <i [ngClass]="[icons.destroy]"></i>
                 </button>
               </div>
               <div class="card-body">
                 <!-- Group: group_id -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
-                         for="group_id">
-                    <ng-container i18n>Name</ng-container>
-                    <span class="required"></span>
-                  </label>
-                  <div class="col-sm-9">
+                  <label class="cd-col-form-label required"
+                         for="group_id"
+                         i18n>Name</label>
+                  <div class="cd-col-form-input">
                     <input class="form-control"
                            type="text"
                            formControlName="group_id">
@@ -573,11 +583,11 @@
 
                 <!-- Group: members -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
+                  <label class="cd-col-form-label"
                          for="members">
                     <ng-container i18n>Initiators</ng-container>
                   </label>
-                  <div class="col-sm-9">
+                  <div class="cd-col-form-input">
                     <ng-container *ngFor="let member of group.getValue('members'); let i = index">
                       <div class="input-group cd-mb">
                         <input class="cd-form-control"
@@ -600,7 +610,7 @@
                         <cd-select [data]="group.getValue('members')"
                                    [options]="groupMembersSelections[gi]"
                                    [messages]="messages.groupInitiator"
-                                   (selection)="onGroupMemberSelection($event)"
+                                   (selection)="onGroupMemberSelection($event, gi)"
                                    elemClass="btn btn-light float-right">
                           <i [ngClass]="[icons.add]"></i>
                           <ng-container i18n>Add initiator</ng-container>
@@ -614,11 +624,11 @@
 
                 <!-- Group: disks -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
+                  <label class="cd-col-form-label"
                          for="disks">
                     <ng-container i18n>Images</ng-container>
                   </label>
-                  <div class="col-sm-9">
+                  <div class="cd-col-form-input">
                     <ng-container *ngFor="let disk of group.getValue('disks'); let i = index">
                       <div class="input-group cd-mb">
                         <input class="cd-form-control"
@@ -672,12 +682,10 @@
 
       </div>
       <div class="card-footer">
-        <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submit()"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="targetForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

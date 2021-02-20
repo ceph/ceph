@@ -47,7 +47,8 @@ public:
     encode(ids, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_list"), _, _, _))
+                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_list"),
+                     _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
                                           *out_bl = bl;
                                         })),

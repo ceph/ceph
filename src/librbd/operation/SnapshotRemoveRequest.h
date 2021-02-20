@@ -43,6 +43,9 @@ public:
    *    v (skip if disabled/in-use)
    * REMOVE_OBJECT_MAP
    *    |
+   *    v (skip if not mirror snpashot)
+   * REMOVE_IMAGE_STATE
+   *    |
    *    v (skip if in-use)
    * RELEASE_SNAP_ID
    *    |
@@ -102,6 +105,9 @@ private:
 
   void remove_object_map();
   void handle_remove_object_map(int r);
+
+  void remove_image_state();
+  void handle_remove_image_state(int r);
 
   void release_snap_id();
   void handle_release_snap_id(int r);

@@ -2,7 +2,8 @@ import datetime
 import json
 import re
 import threading
-import six
+
+from mgr_module import CLICommand, CLIReadCommand, HandleCommandResult
 from mgr_module import MgrModule, CommandResult
 from . import health as health_util
 
@@ -17,22 +18,8 @@ INSIGHTS_HEALTH_CHECK = "MGR_INSIGHTS_WARNING"
 # version tag for persistent data format
 ON_DISK_VERSION = 1
 
-class Module(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "insights",
-            "desc": "Retrieve insights report",
-            "perm": "r",
-            "poll": "false",
-        },
-        {
-            'cmd': 'insights prune-health name=hours,type=CephString',
-            'desc': 'Remove health history older than <hours> hours',
-            'perm': 'rw',
-            "poll": "false",
-        },
-    ]
 
+class Module(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
@@ -108,7 +95,7 @@ class Module(MgrModule):
             # build store data entry
             slot = self._health_slot.health()
             assert "version" not in slot
-            slot.update(dict(version = ON_DISK_VERSION))
+            slot.update(dict(version=ON_DISK_VERSION))
             data = json.dumps(slot, cls=health_util.HealthEncoder)
 
             self.log.debug("Storing health key {} data {}".format(
@@ -121,15 +108,17 @@ class Module(MgrModule):
         """Filter hourly health reports timestamp"""
         matches = filter(
             lambda t: f(health_util.HealthHistorySlot.key_to_time(t[0])),
-            six.iteritems(self.get_store_prefix(health_util.HEALTH_HISTORY_KEY_PREFIX)))
+            self.get_store_prefix(health_util.HEALTH_HISTORY_KEY_PREFIX).items())
         return map(lambda t: t[0], matches)
 
     def _health_prune_history(self, hours):
         """Prune old health entries"""
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours = hours)
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
         for key in self._health_filter(lambda ts: ts <= cutoff):
             self.log.info("Removing old health slot key {}".format(key))
             self.set_store(key, None)
+        if not hours:
+            self._health_slot = health_util.HealthHistorySlot()
 
     def _health_report(self, hours):
         """
@@ -150,8 +139,8 @@ class Module(MgrModule):
         collector.merge(self._health_slot)
 
         return dict(
-           current = json.loads(self.get("health")["json"]),
-           history = collector.health()
+            current=json.loads(self.get("health")["json"]),
+            history=collector.health()
         )
 
     def _version_parse(self, version):
@@ -162,33 +151,28 @@ class Module(MgrModule):
         constituent components, such as when Ceph has been built with
         ENABLE_GIT_VERSION=OFF.
         """
-        r = "ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
+        r = r"ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
         m = re.match(r, version)
         ver = {} if not m else {
             "release": m.group("release"),
             "major": m.group("major"),
             "minor": m.group("minor")
         }
-        return { k:int(v) for k,v in six.iteritems(ver) }
+        return {k: int(v) for k, v in ver.items()}
 
     def _crash_history(self, hours):
         """
         Load crash history for the past N hours from the crash module.
         """
-        params = dict(
-            prefix = "crash json_report",
-            hours = hours
-        )
-
         result = dict(
-            summary = {},
-            hours = params["hours"],
+            summary={},
+            hours=hours,
         )
 
         health_check_details = []
 
         try:
-            _, _, crashes = self.remote("crash", "handle_command", "", params)
+            _, _, crashes = self.remote("crash", "do_json_report", hours)
             result["summary"] = json.loads(crashes)
         except Exception as e:
             errmsg = "failed to invoke crash module"
@@ -220,7 +204,6 @@ class Module(MgrModule):
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 osd['stats'][s.split('.')[1]] = self.get_latest('osd', str(osd["osd"]), s)
 
-
     def _config_dump(self):
         """Report cluster configuration
 
@@ -228,7 +211,7 @@ class Module(MgrModule):
         configuration defaults; these can be inferred from the version number.
         """
         result = CommandResult("")
-        args = dict(prefix = "config dump", format = "json")
+        args = dict(prefix="config dump", format="json")
         self.send_command(result, "mon", "", json.dumps(args), "")
         ret, outb, outs = result.wait()
         if ret == 0:
@@ -238,13 +221,17 @@ class Module(MgrModule):
                     ret={}, outs=\"{}\"".format(ret, outs))
             return [], ["Failed to read monitor config dump"]
 
-    def do_report(self, inbuf, command):
+    @CLIReadCommand('insights')
+    def do_report(self):
+        '''
+        Retrieve insights report
+        '''
         health_check_details = []
         report = {}
 
         report.update({
-            "version": dict(full = self.version,
-                **self._version_parse(self.version))
+            "version": dict(full=self.version,
+                            **self._version_parse(self.version))
         })
 
         # crash history
@@ -289,17 +276,16 @@ class Module(MgrModule):
                 }
             })
 
-        return 0, json.dumps(report, indent=2, cls=health_util.HealthEncoder), ""
+        result = json.dumps(report, indent=2, cls=health_util.HealthEncoder)
+        return HandleCommandResult(stdout=result)
 
-    def do_prune_health(self, inbuf, command):
-        try:
-            hours = int(command['hours'])
-        except ValueError:
-            return errno.EINVAL, '', 'hours argument must be integer'
-
+    @CLICommand('insights prune-health')
+    def do_prune_health(self, hours: int):
+        '''
+        Remove health history older than <hours> hours
+        '''
         self._health_prune_history(hours)
-
-        return 0, "", ""
+        return HandleCommandResult()
 
     def testing_set_now_time_offset(self, hours):
         """
@@ -307,17 +293,6 @@ class Module(MgrModule):
         the selftest module to manage testing scenarios related to tracking
         health history.
         """
-        try:
-            hours = long(hours)
-        except NameError:
-            hours = int(hours)
-        health_util.NOW_OFFSET = datetime.timedelta(hours = hours)
+        hours = int(hours)
+        health_util.NOW_OFFSET = datetime.timedelta(hours=hours)
         self.log.warning("Setting now time offset {}".format(health_util.NOW_OFFSET))
-
-    def handle_command(self, inbuf, command):
-        if command["prefix"] == "insights":
-            return self.do_report(inbuf, command)
-        elif command["prefix"] == "insights prune-health":
-            return self.do_prune_health(inbuf, command)
-        else:
-            raise NotImplementedError(cmd["prefix"])

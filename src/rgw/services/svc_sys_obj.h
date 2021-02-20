@@ -97,7 +97,7 @@ public:
 
       ROp(Obj& _source);
 
-      int stat(optional_yield y);
+      int stat(optional_yield y, const DoutPrefixProvider *dpp);
       int read(int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
       int read(bufferlist *pbl, optional_yield y) {
         return read(0, -1, pbl, y);

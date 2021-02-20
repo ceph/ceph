@@ -29,7 +29,7 @@
  *
  */
 
-class MOSDOpReply : public Message {
+class MOSDOpReply final : public Message {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 2;
@@ -99,14 +99,14 @@ public:
   void claim_op_out_data(std::vector<OSDOp>& o) {
     ceph_assert(ops.size() == o.size());
     for (unsigned i = 0; i < o.size(); i++) {
-      ops[i].outdata.claim(o[i].outdata);
+      ops[i].outdata = std::move(o[i].outdata);
     }
   }
   void claim_ops(std::vector<OSDOp>& o) {
     o.swap(ops);
     bdata_encode = false;
   }
-  void set_op_returns(const vector<pg_log_op_return_item_t>& op_returns) {
+  void set_op_returns(const std::vector<pg_log_op_return_item_t>& op_returns) {
     if (op_returns.size()) {
       ceph_assert(ops.empty() || ops.size() == op_returns.size());
       ops.resize(op_returns.size());
@@ -165,7 +165,7 @@ public:
     }
   }
 private:
-  ~MOSDOpReply() override {}
+  ~MOSDOpReply() final {}
 
 public:
   void encode_payload(uint64_t features) override {

@@ -5,6 +5,8 @@ import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@
 import { of as observableOf } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
+import { Icons } from '../enum/icons.enum';
+
 /**
  * This service checks if a route can be activated by executing a
  * REST API call to '/api/<apiPath>/status'. If the returned response
@@ -34,8 +36,8 @@ import { catchError, map } from 'rxjs/operators';
   providedIn: 'root'
 })
 export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
-  // TODO: Hotfix - remove WHITELIST'ing when a generic ErrorComponent is implemented
-  static readonly WHITELIST: string[] = ['501'];
+  // TODO: Hotfix - remove ALLOWLIST'ing when a generic ErrorComponent is implemented
+  static readonly ALLOWLIST: string[] = ['501'];
 
   constructor(private http: HttpClient, private router: Router) {}
 
@@ -48,14 +50,22 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
   }
 
   private doCheck(route: ActivatedRouteSnapshot) {
-    if (route.url.length > 0 && ModuleStatusGuardService.WHITELIST.includes(route.url[0].path)) {
+    if (route.url.length > 0 && ModuleStatusGuardService.ALLOWLIST.includes(route.url[0].path)) {
       return observableOf(true);
     }
     const config = route.data['moduleStatusGuardConfig'];
     return this.http.get(`api/${config.apiPath}/status`).pipe(
       map((resp: any) => {
         if (!resp.available) {
-          this.router.navigate([config.redirectTo, resp.message || '']);
+          this.router.navigate([config.redirectTo || ''], {
+            state: {
+              header: config.header,
+              message: resp.message,
+              section: config.section,
+              section_info: config.section_info,
+              icon: Icons.wrench
+            }
+          });
         }
         return resp.available;
       }),

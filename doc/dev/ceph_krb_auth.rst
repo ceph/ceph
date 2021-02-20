@@ -261,7 +261,7 @@ properly:
             + Both *(forward and reverse)* zones, with *fully qualified domain
               name (fqdn)* ``(hostname + domain.name)``
 
-            + KDC discover can be set up to to use DNS ``(srv resources)`` as
+            + KDC discover can be set up to use DNS ``(srv resources)`` as
               service location protocol *(RFCs 2052, 2782)*, as well as *host
               or domain* to the *appropriate realm* ``(txt record)``.
 

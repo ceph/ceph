@@ -5,7 +5,6 @@
 #   https://bitbucket.org/prometheus/sphinxcontrib-htsql/src/331a542c29a102eec9f8cba44797e53a49de2a49/sphinxcontrib/htsql.py?at=default&fileviewer=file-view-default
 # into the glory that follows:
 import json
-import six
 import yaml
 import sphinx
 import datetime
@@ -49,7 +48,7 @@ class CephReleases(Directive):
         row_node.extend(nodes.entry(h, nodes.paragraph(text=h))
             for h in ["Version", "Initial release", "Latest", "End of life (estimated)"])
 
-        releases = six.iteritems(releases)
+        releases = releases.items()
         releases = sorted(releases, key=lambda t: t[0], reverse=True)
 
         tbody = nodes.tbody()
@@ -127,7 +126,7 @@ class CephTimeline(Directive):
         display_releases = self.arguments[1:]
 
         timeline = []
-        for code_name, info in six.iteritems(releases["releases"]):
+        for code_name, info in releases["releases"].items():
             if code_name in display_releases:
                 for release in info.get("releases", []):
                     released = release["released"]

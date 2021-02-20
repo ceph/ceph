@@ -36,6 +36,20 @@ int rgw_perf_start(CephContext *cct)
 
   plb.add_u64_counter(l_rgw_gc_retire, "gc_retire_object", "GC object retires");
 
+  plb.add_u64_counter(l_rgw_lc_expire_current, "lc_expire_current",
+		      "Lifecycle current expiration");
+  plb.add_u64_counter(l_rgw_lc_expire_noncurrent, "lc_expire_noncurrent",
+		      "Lifecycle non-current expiration");
+  plb.add_u64_counter(l_rgw_lc_expire_dm, "lc_expire_dm",
+		      "Lifecycle delete-marker expiration");
+  plb.add_u64_counter(l_rgw_lc_transition_current, "lc_transition_current",
+		      "Lifecycle current transition");
+  plb.add_u64_counter(l_rgw_lc_transition_noncurrent,
+		      "lc_transition_noncurrent",
+		      "Lifecycle non-current transition");
+  plb.add_u64_counter(l_rgw_lc_abort_mpu, "lc_abort_mpu",
+		      "Lifecycle abort multipart upload");
+
   plb.add_u64_counter(l_rgw_pubsub_event_triggered, "pubsub_event_triggered", "Pubsub events with at least one topic");
   plb.add_u64_counter(l_rgw_pubsub_event_lost, "pubsub_event_lost", "Pubsub events lost");
   plb.add_u64_counter(l_rgw_pubsub_store_ok, "pubsub_store_ok", "Pubsub events successfully stored");

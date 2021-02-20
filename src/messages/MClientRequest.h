@@ -35,22 +35,39 @@
 
 #include <string_view>
 
-#include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
+#include "messages/MMDSOp.h"
 
 #include <sys/types.h>
 #include <utime.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
+struct SnapPayload {
+  std::map<std::string, std::string> metadata;
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(metadata, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &iter) {
+    DECODE_START(1, iter);
+    decode(metadata, iter);
+    DECODE_FINISH(iter);
+  }
+};
+
+WRITE_CLASS_ENCODER(SnapPayload)
 
 // metadata ops.
 
-class MClientRequest : public Message {
+class MClientRequest final : public MMDSOp {
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -59,29 +76,30 @@ public:
 
   struct Release {
     mutable ceph_mds_request_release item;
-    string dname;
+    std::string dname;
 
     Release() : item(), dname() {}
-    Release(const ceph_mds_request_release& rel, string name) :
+    Release(const ceph_mds_request_release& rel, std::string name) :
       item(rel), dname(name) {}
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       item.dname_len = dname.length();
       encode(item, bl);
-      encode_nohead(dname, bl);
+      ceph::encode_nohead(dname, bl);
     }
-    void decode(bufferlist::const_iterator& bl) {
+    void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       decode(item, bl);
-      decode_nohead(item.dname_len, dname, bl);
+      ceph::decode_nohead(item.dname_len, dname, bl);
     }
   };
-  mutable vector<Release> releases; /* XXX HACK! */
+  mutable std::vector<Release> releases; /* XXX HACK! */
 
   // path arguments
   filepath path, path2;
-  vector<uint64_t> gid_list;
+  std::string alternate_name;
+  std::vector<uint64_t> gid_list;
 
   /* XXX HACK */
   mutable bool queued_for_replay = false;
@@ -89,13 +107,13 @@ public:
 protected:
   // cons
   MClientRequest()
-    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
   MClientRequest(int op)
-    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
-  ~MClientRequest() override {}
+  ~MClientRequest() final {}
 
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -132,6 +150,9 @@ public:
   bool is_replay() const {
     return get_flags() & CEPH_MDS_FLAG_REPLAY;
   }
+  bool is_async() const {
+    return get_flags() & CEPH_MDS_FLAG_ASYNC;
+  }
 
   // normal fields
   void set_stamp(utime_t t) { stamp = t; }
@@ -155,6 +176,16 @@ public:
   void set_replayed_op() {
     head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
   }
+  void set_async_op() {
+    head.flags = head.flags | CEPH_MDS_FLAG_ASYNC;
+  }
+
+  void set_alternate_name(std::string _alternate_name) {
+    alternate_name = std::move(_alternate_name);
+  }
+  void set_alternate_name(bufferptr&& cipher) {
+    alternate_name = std::move(cipher.c_str());
+  }
 
   utime_t get_stamp() const { return stamp; }
   ceph_tid_t get_oldest_client_tid() const { return head.oldest_client_tid; }
@@ -163,12 +194,13 @@ public:
   int get_op() const { return head.op; }
   unsigned get_caller_uid() const { return head.caller_uid; }
   unsigned get_caller_gid() const { return head.caller_gid; }
-  const vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
+  const std::vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
-  const string& get_path() const { return path.get_path(); }
+  const std::string& get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
-  const string& get_path2() const { return path2.get_path(); }
+  const std::string& get_path2() const { return path2.get_path(); }
   const filepath& get_filepath2() const { return path2; }
+  std::string_view get_alternate_name() const { return std::string_view(alternate_name); }
 
   int get_dentry_wanted() const { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
@@ -176,6 +208,7 @@ public:
   bool is_queued_for_replay() const { return queued_for_replay; }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
 
     if (header.version >= 4) {
@@ -200,11 +233,13 @@ public:
 
     decode(path, p);
     decode(path2, p);
-    decode_nohead(head.num_releases, releases, p);
+    ceph::decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
       decode(stamp, p);
     if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
       decode(gid_list, p);
+    if (header.version >= 5)
+      decode(alternate_name, p);
   }
 
   void encode_payload(uint64_t features) override {
@@ -223,15 +258,16 @@ public:
 
     encode(path, payload);
     encode(path2, payload);
-    encode_nohead(releases, payload);
+    ceph::encode_nohead(releases, payload);
     encode(stamp, payload);
     encode(gid_list, payload);
+    encode(alternate_name, payload);
   }
 
   std::string_view get_type_name() const override { return "creq"; }
-  void print(ostream& out) const override {
-    out << "client_request(" << get_orig_source() 
-	<< ":" << get_tid() 
+  void print(std::ostream& out) const override {
+    out << "client_request(" << get_orig_source()
+	<< ":" << get_tid()
 	<< " " << ceph_mds_op_name(get_op());
     if (head.op == CEPH_MDS_OP_GETATTR)
       out << " " << ccap_string(head.args.getattr.mask);
@@ -261,13 +297,17 @@ public:
     }
     //if (!get_filepath().empty()) 
     out << " " << get_filepath();
+    if (alternate_name.size())
+      out << " (" << alternate_name << ") ";
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
     if (stamp != utime_t())
       out << " " << stamp;
     if (head.num_retry)
       out << " RETRY=" << (int)head.num_retry;
-    if (get_flags() & CEPH_MDS_FLAG_REPLAY)
+    if (is_async())
+      out << " ASYNC";
+    if (is_replay())
       out << " REPLAY";
     if (queued_for_replay)
       out << " QUEUED_FOR_REPLAY";

@@ -1,5 +1,5 @@
 
-from cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 from teuthology.exceptions import CommandFailedError
 
@@ -47,7 +47,7 @@ class TestQuota(CephFSTestCase):
         self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes",
                               "%s" % size_before)
 
-        self.mount_b.mount(mount_path="/subdir")
+        self.mount_b.mount_wait(cephfs_mntpt="/subdir")
 
         self.assertDictEqual(
             self.mount_b.df(),

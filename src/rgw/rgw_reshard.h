@@ -5,11 +5,15 @@
 #define RGW_RESHARD_H
 
 #include <vector>
+#include <initializer_list>
 #include <functional>
+#include <iterator>
+#include <algorithm>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
 
+#include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_time.h"
 #include "common/async/yield_context.h"
@@ -19,7 +23,6 @@
 #include "rgw_common.h"
 
 
-class CephContext;
 class RGWReshard;
 namespace rgw { namespace sal {
   class RGWRadosStore;
@@ -77,22 +80,30 @@ private:
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
 
+  // using an initializer_list as an array in contiguous memory
+  // allocated in at once
+  static const std::initializer_list<uint16_t> reshard_primes;
+
   int create_new_bucket_instance(int new_num_shards,
-				 RGWBucketInfo& new_bucket_info);
+				 RGWBucketInfo& new_bucket_info,
+                                 const DoutPrefixProvider *dpp);
   int do_reshard(int num_shards,
 		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
                  bool verbose,
                  ostream *os,
-		 Formatter *formatter);
+		 Formatter *formatter,
+                 const DoutPrefixProvider *dpp);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
   // manage
-  RGWBucketReshard(rgw::sal::RGWRadosStore *_store, const RGWBucketInfo& _bucket_info,
+  RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
+		   const RGWBucketInfo& _bucket_info,
                    const std::map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
+              const DoutPrefixProvider *dpp,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
@@ -119,7 +130,64 @@ public:
     return set_resharding_status(store, bucket_info,
 				 new_instance_id, num_shards, status);
   }
+
+  static uint32_t get_max_prime_shards() {
+    return *std::crbegin(reshard_primes);
+  }
+
+  // returns the prime in our list less than or equal to the
+  // parameter; the lowest value that can be returned is 1
+  static uint32_t get_prime_shards_less_or_equal(uint32_t requested_shards) {
+    auto it = std::upper_bound(reshard_primes.begin(), reshard_primes.end(),
+			       requested_shards);
+    if (it == reshard_primes.begin()) {
+      return 1;
+    } else {
+      return *(--it);
+    }
+  }
+
+  // returns the prime in our list greater than or equal to the
+  // parameter; if we do not have such a prime, 0 is returned
+  static uint32_t get_prime_shards_greater_or_equal(
+    uint32_t requested_shards)
+  {
+    auto it = std::lower_bound(reshard_primes.begin(), reshard_primes.end(),
+			       requested_shards);
+    if (it == reshard_primes.end()) {
+      return 0;
+    } else {
+      return *it;
+    }
+  }
+
+  // returns a preferred number of shards given a calculated number of
+  // shards based on max_dynamic_shards and the list of prime values
+  static uint32_t get_preferred_shards(uint32_t suggested_shards,
+				       uint32_t max_dynamic_shards) {
+
+    // use a prime if max is within our prime range, otherwise use
+    // specified max
+    const uint32_t absolute_max =
+      max_dynamic_shards >= get_max_prime_shards() ?
+      max_dynamic_shards :
+      get_prime_shards_less_or_equal(max_dynamic_shards);
+
+    // if we can use a prime number, use it, otherwise use suggested;
+    // note get_prime_shards_greater_or_equal will return 0 if no prime in
+    // prime range
+    const uint32_t prime_ish_num_shards =
+      std::max(get_prime_shards_greater_or_equal(suggested_shards),
+	       suggested_shards);
+
+    // dynamic sharding cannot reshard more than defined maximum
+    const uint32_t final_num_shards =
+      std::min(prime_ish_num_shards, absolute_max);
+
+    return final_num_shards;
+  }
 }; // RGWBucketReshard
+
 
 class RGWReshard {
 public:
@@ -137,7 +205,7 @@ private:
 
     void get_logshard_oid(int shard_num, string *shard);
 protected:
-  class ReshardWorker : public Thread {
+  class ReshardWorker : public Thread, public DoutPrefixProvider {
     CephContext *cct;
     RGWReshard *reshard;
     ceph::mutex lock = ceph::make_mutex("ReshardWorker");
@@ -147,11 +215,14 @@ protected:
     ReshardWorker(CephContext * const _cct,
 		  RGWReshard * const _reshard)
       : cct(_cct),
-        reshard(_reshard) {
-    }
+        reshard(_reshard) {}
 
     void *entry() override;
     void stop();
+
+    CephContext *get_cct() const override;
+    unsigned get_subsys() const;
+    std::ostream& gen_prefix(std::ostream& out) const;
   };
 
   ReshardWorker *worker = nullptr;
@@ -170,8 +241,8 @@ public:
   int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
-  int process_single_logshard(int logshard_num);
-  int process_all_logshards();
+  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp);
+  int process_all_logshards(const DoutPrefixProvider *dpp);
   bool going_down();
   void start_processor();
   void stop_processor();
@@ -188,13 +259,9 @@ class RGWReshardWait {
   ceph::condition_variable cond;
 
   struct Waiter : boost::intrusive::list_base_hook<> {
-#if BOOST_VERSION < 107000
-    using Timer = boost::asio::basic_waitable_timer<Clock>;
-#else
     using Executor = boost::asio::io_context::executor_type;
     using Timer = boost::asio::basic_waitable_timer<Clock,
           boost::asio::wait_traits<Clock>, Executor>;
-#endif
     Timer timer;
     explicit Waiter(boost::asio::io_context& ioc) : timer(ioc) {}
   };

@@ -5,8 +5,10 @@
           identifier="id"
           forceIdentifier="true"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <cd-cephfs-tabs cdTableDetail
-                  [selection]="selection">
+                  [selection]="expandedRow">
   </cd-cephfs-tabs>
 </cd-table>

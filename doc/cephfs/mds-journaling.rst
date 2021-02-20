@@ -55,3 +55,36 @@ line utility `cephfs-journal-tool` which can be used as follows:
 
 `cephfs-journal-tool` is also used to discover and repair a damaged Ceph File System.
 (See :doc:`/cephfs/cephfs-journal-tool` for more details)
+
+Journal Event Types
+-------------------
+
+Following are various event types that are journaled by the MDS.
+
+#. `EVENT_COMMITTED`: Mark a request (id) as committed.
+
+#. `EVENT_EXPORT`: Maps directories to an MDS rank.
+
+#. `EVENT_FRAGMENT`: Tracks various stages of directory fragmentation (split/merge).
+
+#. `EVENT_IMPORTSTART`: Logged when an MDS rank starts importing directory fragments.
+
+#. `EVENT_IMPORTFINISH`: Logged when an MDS rank finishes importing directory fragments.
+
+#. `EVENT_NOOP`: No operation event type for skipping over a journal region.
+
+#. `EVENT_OPEN`: Tracks which inodes have open file handles.
+
+#. `EVENT_RESETJOURNAL`: Used to mark a journal as `reset` post truncation.
+
+#. `EVENT_SESSION`: Tracks open client sessions.
+
+#. `EVENT_SLAVEUPDATE`: Logs various stages of an operation that has been forwarded to a (slave) mds.
+
+#. `EVENT_SUBTREEMAP`: Map of directory inodes to directory contents (subtree partition).
+
+#. `EVENT_TABLECLIENT`: Log transition states of MDSs view of client tables (snap/anchor).
+
+#. `EVENT_TABLESERVER`: Log transition states of MDSs view of server tables (snap/anchor).
+
+#. `EVENT_UPDATE`: Log file operations on an inode.

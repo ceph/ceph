@@ -20,6 +20,7 @@
 #include "include/counter.h"
 #include "include/mempool.h"
 #include "include/xlist.h"
+#include "include/elist.h"
 
 #include "common/config.h"
 
@@ -62,6 +63,7 @@
 
 class CInode;
 class Session;
+class MDLockCache;
 
 namespace ceph {
   class Formatter;
@@ -77,9 +79,9 @@ public:
 	   ceph_seq_t s, ceph_seq_t m, utime_t lis, unsigned st) :
       cap_id(id), wanted(w), issued(i), pending(p), client_follows(cf),
       seq(s), mseq(m), last_issue_stamp(lis), state(st) {}
-    void encode(bufferlist &bl) const;
-    void decode(bufferlist::const_iterator &p);
-    void dump(Formatter *f) const;
+    void encode(ceph::buffer::list &bl) const;
+    void decode(ceph::buffer::list::const_iterator &p);
+    void dump(ceph::Formatter *f) const;
     static void generate_test_instances(std::list<Export*>& ls);
 
     int64_t cap_id = 0;
@@ -95,9 +97,9 @@ public:
   struct Import {
     Import() {}
     Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
-    void encode(bufferlist &bl) const;
-    void decode(bufferlist::const_iterator &p);
-    void dump(Formatter *f) const;
+    void encode(ceph::buffer::list &bl) const;
+    void decode(ceph::buffer::list::const_iterator &p);
+    void dump(ceph::Formatter *f) const;
 
     int64_t cap_id = 0;
     ceph_seq_t issue_seq = 0;
@@ -106,9 +108,9 @@ public:
   struct revoke_info {
     revoke_info() {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
-    void encode(bufferlist& bl) const;
-    void decode(bufferlist::const_iterator& bl);
-    void dump(Formatter *f) const;
+    void encode(ceph::buffer::list& bl) const;
+    void decode(ceph::buffer::list::const_iterator& bl);
+    void dump(ceph::Formatter *f) const;
     static void generate_test_instances(std::list<revoke_info*>& ls);
 
     __u32 before = 0;
@@ -180,8 +182,8 @@ public:
     inc_last_seq();
     return last_sent;
   }
-  void confirm_receipt(ceph_seq_t seq, unsigned caps) {
-    bool was_revoking = (_issued & ~_pending);
+  int confirm_receipt(ceph_seq_t seq, unsigned caps) {
+    int was_revoking = (_issued & ~_pending);
     if (seq == last_sent) {
       _revokes.clear();
       _issued = caps;
@@ -206,7 +208,7 @@ public:
       item_client_revoking_caps.remove_myself();
       maybe_clear_notable();
     }
-    //check_rdcaps_list();
+    return was_revoking & ~_issued; // return revoked
   }
   // we may get a release racing with revocations, which means our revokes will be ignored
   // by the client.  clean them out of our _revokes history so we don't wait on them.
@@ -250,6 +252,9 @@ public:
 
   static bool is_wanted_notable(int wanted) {
     return wanted & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD);
+  }
+  bool is_wanted_notable() const {
+    return is_wanted_notable(wanted());
   }
   bool is_notable() const { return state & STATE_NOTABLE; }
 
@@ -339,27 +344,33 @@ public:
     set_wanted(wanted() | otherwanted);
   }
 
-  void revoke() {
+  int revoke() {
     if (revoking())
-      confirm_receipt(last_sent, pending());
+      return confirm_receipt(last_sent, pending());
+    return 0;
   }
 
   // serializers
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<Capability*>& ls);
-  
-  snapid_t client_follows;
-  version_t client_xattr_version;
-  version_t client_inline_version;
-  int64_t last_rbytes;
-  int64_t last_rsize;
+
+  snapid_t client_follows = 0;
+  version_t client_xattr_version = 0;
+  version_t client_inline_version = 0;
+  int64_t last_rbytes = 0;
+  int64_t last_rsize = 0;
 
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
   xlist<Capability*>::item item_revoking_caps;
   xlist<Capability*>::item item_client_revoking_caps;
+
+  elist<MDLockCache*> lock_caches;
+  int get_lock_cache_allowed() const { return lock_cache_allowed; }
+  void set_lock_cache_allowed(int c) { lock_cache_allowed |= c; }
+  void clear_lock_cache_allowed(int c) { lock_cache_allowed &= ~c; }
 
 private:
   void calc_issued() {
@@ -380,24 +391,26 @@ private:
   uint64_t cap_id;
   uint32_t cap_gen;
 
-  __u32 _wanted;     // what the client wants (ideally)
+  __u32 _wanted = 0;     // what the client wants (ideally)
 
   utime_t last_issue_stamp;
   utime_t last_revoke_stamp;
-  unsigned num_revoke_warnings;
+  unsigned num_revoke_warnings = 0;
 
   // track in-flight caps --------------
   //  - add new caps to _pending
   //  - track revocations in _revokes list
-  __u32 _pending, _issued;
+  __u32 _pending = 0, _issued = 0;
   mempool::mds_co::list<revoke_info> _revokes;
 
-  ceph_seq_t last_sent;
-  ceph_seq_t last_issue;
-  ceph_seq_t mseq;
+  ceph_seq_t last_sent = 0;
+  ceph_seq_t last_issue = 0;
+  ceph_seq_t mseq = 0;
 
-  int suppress;
-  unsigned state;
+  int suppress = 0;
+  unsigned state = 0;
+
+  int lock_cache_allowed = 0;
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)

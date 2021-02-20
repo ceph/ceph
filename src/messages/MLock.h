@@ -16,14 +16,14 @@
 #ifndef CEPH_MLOCK_H
 #define CEPH_MLOCK_H
 
-#include "msg/Message.h"
 #include "mds/locks.h"
 #include "mds/SimpleLock.h"
+#include "messages/MMDSOp.h"
 
-class MLock : public Message {
+class MLock final : public MMDSOp {
 private:
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   int32_t     action = 0;  // action type
   mds_rank_t  asker = 0;  // who is initiating this request
@@ -32,11 +32,11 @@ private:
   __u16      lock_type = 0;  // lock object type
   MDSCacheObjectInfo object_info;  
   
-  bufferlist lockdata;  // and possibly some data
+  ceph::buffer::list lockdata;  // and possibly some data
   
 public:
-  bufferlist& get_data() { return lockdata; }
-  const bufferlist& get_data() const { return lockdata; }
+  ceph::buffer::list& get_data() { return lockdata; }
+  const ceph::buffer::list& get_data() const { return lockdata; }
   int get_asker() const { return asker; }
   int get_action() const { return action; }
   metareqid_t get_reqid() const { return reqid; }
@@ -46,28 +46,28 @@ public:
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
 protected:
-  MLock() : Message{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION} {}
+  MLock() : MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION} {}
   MLock(int ac, mds_rank_t as) :
-    Message{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as),
     lock_type(0) { }
   MLock(SimpleLock *lock, int ac, mds_rank_t as) :
-    Message{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
-  MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
-    Message{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
+  MLock(SimpleLock *lock, int ac, mds_rank_t as, ceph::buffer::list& bl) :
+    MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
-    lockdata.claim(bl);
+    lockdata = std::move(bl);
   }
-  ~MLock() override {}
+  ~MLock() final {}
   
 public:
   std::string_view get_type_name() const override { return "ILock"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "lock(a=" << SimpleLock::get_lock_action_name(action)
 	<< " " << SimpleLock::get_lock_type_name(lock_type)
 	<< " " << object_info
@@ -75,7 +75,7 @@ public:
   }
   
   void set_reqid(metareqid_t ri) { reqid = ri; }
-  void set_data(const bufferlist& lockdata) {
+  void set_data(const ceph::buffer::list& lockdata) {
     this->lockdata = lockdata;
   }
   

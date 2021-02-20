@@ -42,7 +42,7 @@ bool test_dump_pgstate_history(std::string &output) {
     return false;
   }
 
-  uint total = 0;
+  unsigned int total = 0;
   if ((*iterone)->get_name() == "pgs") {
     JSONObjIter iter = (*(*iterone)->find_first())->find_first();
     for (; !iter.end(); ++iter) {

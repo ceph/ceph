@@ -1,15 +1,8 @@
 
 include(Distutils)
 
-if(WITH_PYTHON2)
-  set(python_version_major 2)
-else()
-  set(python_version_major 3)
-endif()
-
 distutils_install_module(ceph_volume
-  INSTALL_SCRIPT ${CMAKE_INSTALL_FULL_SBINDIR}
-  PYTHON_VERSION ${python_version_major})
+  INSTALL_SCRIPT ${CMAKE_INSTALL_FULL_SBINDIR})
 
 if(FREEBSD)
   add_subdirectory(plugin/zfs)

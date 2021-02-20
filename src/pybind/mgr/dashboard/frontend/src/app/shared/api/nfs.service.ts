@@ -1,12 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
-import { ApiModule } from './api.module';
-
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class NfsService {
   apiPath = 'api/nfs-ganesha';
@@ -15,71 +11,68 @@ export class NfsService {
   nfsAccessType = [
     {
       value: 'RW',
-      help: this.i18n('Allows all operations')
+      help: $localize`Allows all operations`
     },
     {
       value: 'RO',
-      help: this.i18n('Allows only operations that do not modify the server')
+      help: $localize`Allows only operations that do not modify the server`
     },
     {
       value: 'MDONLY',
-      help: this.i18n('Does not allow read or write operations, but allows any other operation')
+      help: $localize`Does not allow read or write operations, but allows any other operation`
     },
     {
       value: 'MDONLY_RO',
-      help: this.i18n(
-        'Does not allow read, write, or any operation that modifies file \
-       attributes or directory content'
-      )
+      help: $localize`Does not allow read, write, or any operation that modifies file attributes or directory content`
     },
     {
       value: 'NONE',
-      help: this.i18n('Allows no access at all')
+      help: $localize`Allows no access at all`
     }
   ];
 
   nfsFsal = [
     {
       value: 'CEPH',
-      descr: this.i18n('CephFS')
+      descr: $localize`CephFS`
     },
     {
       value: 'RGW',
-      descr: this.i18n('Object Gateway')
+      descr: $localize`Object Gateway`
     }
   ];
 
   nfsSquash = ['no_root_squash', 'root_id_squash', 'root_squash', 'all_squash'];
 
-  constructor(private http: HttpClient, private i18n: I18n) {}
+  constructor(private http: HttpClient) {}
 
   list() {
     return this.http.get(`${this.apiPath}/export`);
   }
 
-  get(clusterId, exportId) {
+  get(clusterId: string, exportId: string) {
     return this.http.get(`${this.apiPath}/export/${clusterId}/${exportId}`);
   }
 
-  create(nfs) {
+  create(nfs: any) {
     return this.http.post(`${this.apiPath}/export`, nfs, { observe: 'response' });
   }
 
-  update(clusterId, id, nfs) {
+  update(clusterId: string, id: string, nfs: any) {
     return this.http.put(`${this.apiPath}/export/${clusterId}/${id}`, nfs, { observe: 'response' });
   }
 
-  delete(clusterId, exportId) {
+  delete(clusterId: string, exportId: string) {
     return this.http.delete(`${this.apiPath}/export/${clusterId}/${exportId}`, {
       observe: 'response'
     });
   }
 
-  lsDir(root_dir) {
-    return this.http.get(`${this.uiApiPath}/lsdir?root_dir=${root_dir}`);
+  lsDir(fs_name: string, root_dir: string) {
+    return this.http.get(`${this.uiApiPath}/lsdir/${fs_name}?root_dir=${root_dir}`);
   }
 
-  buckets(user_id) {
+  buckets(user_id: string) {
     return this.http.get(`${this.uiApiPath}/rgw/buckets?user_id=${user_id}`);
   }
 

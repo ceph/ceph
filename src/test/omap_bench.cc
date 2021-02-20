@@ -17,7 +17,6 @@
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "include/utime.h"
-#include "global/global_context.h"
 #include "common/ceph_argparse.h"
 #include "test/omap_bench.h"
 
@@ -158,14 +157,13 @@ AioWriter::~AioWriter() {
 librados::AioCompletion * AioWriter::get_aioc() {
   return aioc;
 }
-void AioWriter::set_aioc(librados::callback_t complete,
-    librados::callback_t safe) {
-  aioc = ob->rados.aio_create_completion(this, complete, safe);
+void AioWriter::set_aioc(librados::callback_t complete) {
+  aioc = ob->rados.aio_create_completion(this, complete);
 }
 
 
 //Helper methods
-void OmapBench::aio_is_safe(rados_completion_t c, void *arg) {
+void OmapBench::aio_is_complete(rados_completion_t c, void *arg) {
   AioWriter *aiow = reinterpret_cast<AioWriter *>(arg);
   aiow->stop_time();
   ceph::mutex * data_lock = &aiow->ob->data_lock;
@@ -366,7 +364,6 @@ int OmapBench::generate_small_non_random_omap(const int omap_entries,
 
 //tests
 int OmapBench::test_write_objects_in_parallel(omap_generator_t omap_gen) {
-  comp = NULL;
   AioWriter *this_aio_writer;
 
   std::unique_lock l{thread_is_free_lock};
@@ -380,7 +377,7 @@ int OmapBench::test_write_objects_in_parallel(omap_generator_t omap_gen) {
 
     //set up the write
     this_aio_writer = new AioWriter(this);
-    this_aio_writer->set_aioc(NULL,safe);
+    this_aio_writer->set_aioc(comp);
 
     //perform the write
     busythreads_count++;

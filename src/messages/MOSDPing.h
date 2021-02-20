@@ -32,7 +32,7 @@
 #include "osd/osd_types.h"
 
 
-class MOSDPing : public Message {
+class MOSDPing final : public Message {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;
@@ -64,7 +64,7 @@ private:
   utime_t ping_stamp;               ///< when the PING was sent
   ceph::signedspan mono_ping_stamp; ///< relative to sender's clock
   ceph::signedspan mono_send_stamp; ///< replier's send stamp
-  std::optional<ceph::time_detail::signedspan> delta_ub;  ///< ping sender
+  std::optional<ceph::signedspan> delta_ub;  ///< ping sender
   epoch_t up_from = 0;
 
   uint32_t min_message_size = 0;
@@ -75,7 +75,7 @@ private:
 	   ceph::signedspan mss,
 	   epoch_t upf,
 	   uint32_t min_message,
-	   std::optional<ceph::time_detail::signedspan> delta_ub = {})
+	   std::optional<ceph::signedspan> delta_ub = {})
     : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), map_epoch(e), op(o),
       ping_stamp(s),
@@ -89,10 +89,11 @@ private:
     : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MOSDPing() override {}
+  ~MOSDPing() final {}
 
 public:
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(map_epoch, p);
@@ -110,7 +111,7 @@ public:
       decode(delta_ub, p);
     }
 
-    p.advance(size);
+    p += size;
     min_message_size = size + payload_mid_length;
   }
   void encode_payload(uint64_t features) override {
@@ -138,17 +139,17 @@ public:
       // that at runtime we are only adding a bufferptr reference to it.
       static char zeros[16384] = {};
       while (s > sizeof(zeros)) {
-        payload.append(buffer::create_static(sizeof(zeros), zeros));
+        payload.append(ceph::buffer::create_static(sizeof(zeros), zeros));
         s -= sizeof(zeros);
       }
       if (s) {
-        payload.append(buffer::create_static(s, zeros));
+        payload.append(ceph::buffer::create_static(s, zeros));
       }
     }
   }
 
   std::string_view get_type_name() const override { return "osd_ping"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_ping(" << get_op_name(op)
 	<< " e" << map_epoch
 	<< " up_from " << up_from

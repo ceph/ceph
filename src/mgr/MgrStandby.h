@@ -16,6 +16,7 @@
 #define MGR_STANDBY_H_
 
 #include "auth/Auth.h"
+#include "common/async/context_pool.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
@@ -39,6 +40,7 @@ public:
 			  const std::set <std::string> &changed) override;
 
 protected:
+  ceph::async::io_context_pool poolctx;
   MonClient monc;
   std::unique_ptr<Messenger> client_messenger;
   Objecter objecter;
@@ -80,7 +82,6 @@ public:
   void shutdown();
   void respawn();
   int main(vector<const char *> args);
-  void handle_signal(int signum);
   void tick();
 };
 

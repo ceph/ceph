@@ -7,6 +7,11 @@ Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
 License: LGPL-2.1 or LGPL-3 (see COPYING-LGPL2.1 and COPYING-LGPL3)
 
+Files: cmake/modules/FindPython*
+Copyright:
+    Copyright 2000-2020 Kitware, Inc. and Contributors
+License: BSD 3-clause
+
 Files: cmake/modules/FindLTTngUST.cmake
 Copyright:
     Copyright 2016 Kitware, Inc.
@@ -31,6 +36,10 @@ License: GPL2 (see COPYING-GPL2)
 Files: src/include/ceph_hash.cc
 Copyright: None
 License: Public domain
+
+Files: src/include/rados.h, except ceph_stable_mod(), which is public domain
+Copyright: the authors
+License: LGPL-2.1 or LGPL-3 (see COPYING-LGPL2.1 and COPYING-LGPL3)
 
 Files: src/common/bloom_filter.hpp
 Copyright: Copyright (C) 2000 Arash Partow <arash@partow.net>
@@ -191,4 +200,17 @@ License: BSD 3-clause
 
 Files: src/include/function2.hpp
 Copyright: 2015-2018, Denis Blank
+License: Boost Software License, Version 1.0
+
+Files: src/include/expected.hpp
+Copyright: 2017, Simon Brand
+License: CC0
+
+Files: src/include/uses_allocator.h
+Copyright: 2016, Pablo Halpern <phalpern@halpernwightsoftware.com>
+License: Boost Software License, Version 1.0
+
+Files: src/common/async/bind_allocator.h
+Copyright: 2020 Red Hat <contact@redhat.com>
+           2003-2019 Christopher M. Kohlhoff <chris@kohlhoff.com>
 License: Boost Software License, Version 1.0

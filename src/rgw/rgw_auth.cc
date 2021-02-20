@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <array>
+#include <string>
 
 #include "rgw_common.h"
 #include "rgw_auth.h"
@@ -9,6 +10,7 @@
 #include "rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_keystone.h"
+#include "rgw_sal.h"
 
 #include "include/str_list.h"
 
@@ -20,7 +22,11 @@ namespace rgw {
 namespace auth {
 
 std::unique_ptr<rgw::auth::Identity>
-transform_old_authinfo(const req_state* const s)
+transform_old_authinfo(CephContext* const cct,
+                       const rgw_user& auth_id,
+                       const int perm_mask,
+                       const bool is_admin,
+                       const uint32_t type)
 {
   /* This class is not intended for public use. Should be removed altogether
    * with this function after moving all our APIs to the new authentication
@@ -49,7 +55,7 @@ transform_old_authinfo(const req_state* const s)
     }
 
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
-      return rgw_perms_from_aclspec_default_strategy(id, aclspec);
+      return rgw_perms_from_aclspec_default_strategy(id, aclspec, dpp);
     }
 
     bool is_admin_of(const rgw_user& acct_id) const override {
@@ -87,6 +93,10 @@ transform_old_authinfo(const req_state* const s)
       return {};
     }
 
+    string get_subuser() const override {
+      return {};
+    }
+
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", perm_mask=" << perm_mask
@@ -95,13 +105,23 @@ transform_old_authinfo(const req_state* const s)
   };
 
   return std::unique_ptr<rgw::auth::Identity>(
-        new DummyIdentityApplier(s->cct,
-                                 s->user->user_id,
-                                 s->perm_mask,
+        new DummyIdentityApplier(cct,
+                                 auth_id,
+                                 perm_mask,
+                                 is_admin,
+                                 type));
+}
+
+std::unique_ptr<rgw::auth::Identity>
+transform_old_authinfo(const req_state* const s)
+{
+  return transform_old_authinfo(s->cct,
+                                s->user->get_id(),
+                                s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
-                                 s->system_request,
-                                 s->user->type));
+                                s->system_request,
+                                s->user->get_type());
 }
 
 } /* namespace auth */
@@ -110,17 +130,18 @@ transform_old_authinfo(const req_state* const s)
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
-  const rgw::auth::Identity::aclspec_t& aclspec)
+  const rgw::auth::Identity::aclspec_t& aclspec,
+  const DoutPrefixProvider *dpp)
 {
-  dout(5) << "Searching permissions for uid=" << uid <<  dendl;
+  ldpp_dout(dpp, 5) << "Searching permissions for uid=" << uid <<  dendl;
 
   const auto iter = aclspec.find(uid.to_str());
   if (std::end(aclspec) != iter) {
-    dout(5) << "Found permission: " << iter->second << dendl;
+    ldpp_dout(dpp, 5) << "Found permission: " << iter->second << dendl;
     return iter->second;
   }
 
-  dout(5) << "Permissions for user not found" << dendl;
+  ldpp_dout(dpp, 5) << "Permissions for user not found" << dendl;
   return 0;
 }
 
@@ -207,7 +228,7 @@ strategy_handle_granted(rgw::auth::Engine::result_t&& engine_result,
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
+rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const
 {
   result_t strategy_result = result_t::deny();
 
@@ -219,7 +240,7 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
 
     result_t engine_result = result_t::deny();
     try {
-      engine_result = engine.authenticate(dpp, s);
+      engine_result = engine.authenticate(dpp, s, y);
     } catch (const int err) {
       engine_result = result_t::deny(err);
     }
@@ -267,10 +288,10 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
 
 int
 rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strategy& auth_strategy,
-                           req_state* const s) noexcept
+                           req_state* const s, optional_yield y) noexcept
 {
   try {
-    auto result = auth_strategy.authenticate(dpp, s);
+    auto result = auth_strategy.authenticate(dpp, s, y);
     if (result.get_status() != decltype(result)::Status::GRANTED) {
       /* Access denied is acknowledged by returning a std::unique_ptr with
        * nullptr inside. */
@@ -285,7 +306,7 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
-      applier->load_acct_info(dpp, *s->user);
+      applier->load_acct_info(dpp, s->user->get_info());
       s->perm_mask = applier->get_perm_mask();
 
       /* This is the single place where we pass req_state as a pointer
@@ -303,10 +324,17 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
     } catch (const int err) {
       ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
       return err;
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 5) << "applier throwed unexpected err: " << e.what()
+                        << dendl;
+      return -EPERM;
     }
   } catch (const int err) {
     ldpp_dout(dpp, 5) << "auth engine throwed err=" << err << dendl;
     return err;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 5) << "auth engine throwed unexpected err: " << e.what()
+                      << dendl;
   }
 
   /* We never should be here. */
@@ -331,16 +359,71 @@ void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
 string rgw::auth::WebIdentityApplier::get_idp_url() const
 {
   string idp_url = token_claims.iss;
-  auto pos = idp_url.find("http://");
-  if (pos == std::string::npos) {
-      pos = idp_url.find("https://");
-      if (pos != std::string::npos) {
-        idp_url.erase(pos, 8);
-    }
-  } else {
-    idp_url.erase(pos, 7);
-  }
+  idp_url = url_remove_prefix(idp_url);
   return idp_url;
+}
+
+void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp,
+                                              const rgw_user& acct_user,
+                                              const string& display_name,
+                                              RGWUserInfo& user_info) const      /* out */
+{
+  user_info.user_id = acct_user;
+  user_info.display_name = display_name;
+  user_info.type = TYPE_WEB;
+
+  user_info.max_buckets =
+    cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
+  rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+
+  int ret = ctl->user->store_info(dpp, user_info, null_yield,
+                                  RGWUserCtl::PutParams().set_exclusive(true));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
+                  << user_info.user_id << " ret=" << ret << dendl;
+    throw ret;
+  }
+}
+
+void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const {
+  rgw_user federated_user;
+  federated_user.id = token_claims.sub;
+  federated_user.tenant = role_tenant;
+  federated_user.ns = "oidc";
+
+  //Check in oidc namespace
+  if (ctl->user->get_info_by_uid(dpp, federated_user, &user_info, null_yield) >= 0) {
+    /* Succeeded. */
+    return;
+  }
+
+  federated_user.ns.clear();
+  //Check for old users which wouldn't have been created in oidc namespace
+  if (ctl->user->get_info_by_uid(dpp, federated_user, &user_info, null_yield) >= 0) {
+    /* Succeeded. */
+    return;
+  }
+
+  //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
+  RGWStorageStats stats;
+  int ret = ctl->user->read_stats(federated_user, &stats, null_yield);
+  if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
+    return;
+  }
+  if (ret == -ENOENT) { /* in case of ENOENT, which means user doesnt have buckets */
+    //In this case user will be created in oidc namespace
+    ldpp_dout(dpp, 5) << "NOTICE: incoming user has no buckets " << federated_user << dendl;
+    federated_user.ns = "oidc";
+  } else {
+    //User already has buckets associated, hence wont be created in oidc namespace.
+    ldpp_dout(dpp, 5) << "NOTICE: incoming user already has buckets associated " << federated_user << ", won't be created in oidc namespace"<< dendl;
+    federated_user.ns = "";
+  }
+
+  ldpp_dout(dpp, 0) << "NOTICE: couldn't map oidc federated user " << federated_user << dendl;
+  create_account(dpp, federated_user, token_claims.user_name, user_info);
 }
 
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
@@ -348,10 +431,16 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
   s->info.args.append("sub", token_claims.sub);
   s->info.args.append("aud", token_claims.aud);
   s->info.args.append("provider_id", token_claims.iss);
+  s->info.args.append("client_id", token_claims.client_id);
 
   string idp_url = get_idp_url();
   string condition = idp_url + ":app_id";
+
   s->env.emplace(condition, token_claims.aud);
+
+  condition.clear();
+  condition = idp_url + ":sub";
+  s->env.emplace(condition, token_claims.sub);
 }
 
 bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
@@ -376,7 +465,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
 
   /* For backward compatibility with ACLOwner. */
   perm |= rgw_perms_from_aclspec_default_strategy(info.acct_user,
-                                                  aclspec);
+                                                  aclspec, dpp);
 
   /* We also need to cover cases where rgw_keystone_implicit_tenants
    * was enabled. */
@@ -384,7 +473,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
     const rgw_user tenanted_acct_user(info.acct_user.id, info.acct_user.id);
 
     perm |= rgw_perms_from_aclspec_default_strategy(tenanted_acct_user,
-                                                    aclspec);
+                                                    aclspec, dpp);
   }
 
   /* Now it's a time for invoking additional strategy that was supplied by
@@ -506,11 +595,12 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   user_info.user_id = new_acct_user;
   user_info.display_name = info.acct_name;
 
-  user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
+  user_info.max_buckets =
+    cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
   rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
 
-  int ret = ctl->user->store_info(user_info, null_yield,
+  int ret = ctl->user->store_info(dpp, user_info, null_yield,
                                   RGWUserCtl::PutParams().set_exclusive(true));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
@@ -552,7 +642,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   else if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
 
-    if (ctl->user->get_info_by_uid(tenanted_uid, &user_info, null_yield) >= 0) {
+    if (ctl->user->get_info_by_uid(dpp, tenanted_uid, &user_info, null_yield) >= 0) {
       /* Succeeded. */
       return;
     }
@@ -560,7 +650,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
-  else if (ctl->user->get_info_by_uid(acct_user, &user_info, null_yield) >= 0) {
+  else if (ctl->user->get_info_by_uid(dpp, acct_user, &user_info, null_yield) >= 0) {
       /* Succeeded. */
       return;
   }
@@ -577,7 +667,7 @@ const std::string rgw::auth::LocalApplier::NO_SUBUSER;
 
 uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
-  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec);
+  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec, dpp);
 }
 
 bool rgw::auth::LocalApplier::is_admin_of(const rgw_user& uid) const
@@ -598,9 +688,22 @@ bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
 	       id.get_tenant() == user_info.user_id.tenant) {
       return true;
     } else if (id.is_user() &&
-	       (id.get_tenant() == user_info.user_id.tenant) &&
-	       (id.get_id() == user_info.user_id.id)) {
-      return true;
+	       (id.get_tenant() == user_info.user_id.tenant)) {
+      if (id.get_id() == user_info.user_id.id) {
+        return true;
+      }
+      std::string wildcard_subuser = user_info.user_id.id;
+      wildcard_subuser.append(":*");
+      if (wildcard_subuser == id.get_id()) {
+        return true;
+      } else if (subuser != NO_SUBUSER) {
+        std::string user = user_info.user_id.id;
+        user.append(":");
+        user.append(subuser);
+        if (user == id.get_id()) {
+          return true;
+        }
+      }
     }
   }
   return false;
@@ -640,26 +743,42 @@ void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWU
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
-  out << "rgw::auth::LocalApplier(role name =" << role_name;
-  for (auto policy : role_policies) {
+  out << "rgw::auth::LocalApplier(role name =" << role.name;
+  for (auto& policy: role.role_policies) {
     out << ", role policy =" << policy;
   }
+  out << ", token policy =" << token_policy;
   out << ")";
 }
 
 bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
   for (auto& p : ids) {
-    string name;
-    string tenant = p.get_tenant();
-    if (tenant.empty()) {
-      name = p.get_id();
-    } else {
-      name = tenant + "$" + p.get_id();
-    }
     if (p.is_wildcard()) {
       return true;
-    } else if (p.is_role() && name == role_name) {
-      return true;
+    } else if (p.is_role()) {
+      string name = p.get_id();
+      string tenant = p.get_tenant();
+      if (name == role.name && tenant == role.tenant) {
+        return true;
+      }
+    } else if (p.is_assumed_role()) {
+      string tenant = p.get_tenant();
+      string role_session = role.name + "/" + role_session_name; //role/role-session
+      if (role.tenant == tenant && role_session == p.get_role_session()) {
+        return true;
+      }
+    } else {
+      string id = p.get_id();
+      string tenant = p.get_tenant();
+      string oidc_id;
+      if (user_id.ns.empty()) {
+        oidc_id = user_id.id;
+      } else {
+        oidc_id = user_id.ns + "$" + user_id.id;
+      }
+      if (oidc_id == id && user_id.tenant == tenant) {
+        return true;
+      }
     }
   }
   return false;
@@ -673,21 +792,43 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
-  for (auto it : role_policies) {
+  for (auto it: role.role_policies) {
     try {
       bufferlist bl = bufferlist::static_from_string(it);
-      const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
       s->iam_user_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
       //verified earlier
-      ldpp_dout(dpp, 20) << "failed to parse policy: " << e.what() << dendl;
+      ldpp_dout(dpp, 20) << "failed to parse role policy: " << e.what() << dendl;
     }
+  }
+
+  try {
+    string policy = this->token_policy;
+    bufferlist bl = bufferlist::static_from_string(policy);
+    const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+    s->iam_user_policies.push_back(std::move(p));
+  } catch (rgw::IAM::PolicyParseException& e) {
+    //Control shouldn't reach here as the policy has already been
+    //verified earlier
+    ldpp_dout(dpp, 20) << "failed to parse token policy: " << e.what() << dendl;
+  }
+
+  string condition = "aws:userid";
+  string value = role.id + ":" + role_session_name;
+  s->env.emplace(condition, value);
+
+  s->env.emplace("aws:TokenIssueTime", token_issued_at);
+
+  s->token_claims.emplace_back("sts");
+  for (auto& it : token_claims) {
+    s->token_claims.emplace_back(it);
   }
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
+rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const
 {
   if (! is_applicable(s)) {
     return result_t::deny(-EPERM);

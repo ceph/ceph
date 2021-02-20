@@ -1,26 +1,28 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permission } from '../../../shared/models/permissions';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Permission } from '~/app/shared/models/permissions';
+import { Task } from '~/app/shared/models/task';
+import { JoinPipe } from '~/app/shared/pipes/join.pipe';
+import { NotAvailablePipe } from '~/app/shared/pipes/not-available.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
 
 @Component({
@@ -29,14 +31,13 @@ import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-mo
   styleUrls: ['./iscsi-target-list.component.scss'],
   providers: [TaskListService]
 })
-export class IscsiTargetListComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent, { static: false })
+export class IscsiTargetListComponent extends ListWithDetails implements OnInit, OnDestroy {
+  @ViewChild(TableComponent)
   table: TableComponent;
 
   available: boolean = undefined;
   columns: CdTableColumn[];
-  docsUrl: string;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   permission: Permission;
   selection = new CdTableSelection();
   cephIscsiConfigVersion: number;
@@ -44,11 +45,11 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   status: string;
   summaryDataSubscription: Subscription;
   tableActions: CdTableAction[];
-  targets = [];
+  targets: any[] = [];
   icons = Icons;
 
   builders = {
-    'iscsi/target/create': (metadata) => {
+    'iscsi/target/create': (metadata: object) => {
       return {
         target_iqn: metadata['target_iqn']
       };
@@ -57,15 +58,15 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private iscsiService: IscsiService,
+    private joinPipe: JoinPipe,
     private taskListService: TaskListService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
-    private summaryservice: SummaryService,
-    private modalService: BsModalService,
+    private notAvailablePipe: NotAvailablePipe,
+    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().iscsi;
 
     this.tableActions = [
@@ -79,15 +80,15 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
         permission: 'update',
         icon: Icons.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
-        name: this.actionLabels.EDIT
+        name: this.actionLabels.EDIT,
+        disable: () => this.getEditDisableDesc()
       },
       {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
         name: this.actionLabels.DELETE,
-        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
-        disableDesc: () => this.getDeleteDisableDesc()
+        disable: () => this.getDeleteDisableDesc()
       }
     ];
   }
@@ -95,24 +96,27 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Target'),
+        name: $localize`Target`,
         prop: 'target_iqn',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: this.i18n('Portals'),
+        name: $localize`Portals`,
         prop: 'cdPortals',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
-        name: this.i18n('Images'),
+        name: $localize`Images`,
         prop: 'cdImages',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
-        name: this.i18n('# Sessions'),
+        name: $localize`# Sessions`,
         prop: 'info.num_sessions',
+        pipe: this.notAvailablePipe,
         flexGrow: 1
       }
     ];
@@ -138,9 +142,6 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
           this.settings = settings;
         });
       } else {
-        const summary = this.summaryservice.getCurrentSummary();
-        const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-        this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/#enabling-iscsi-management`;
         this.status = result.message;
       }
     });
@@ -152,17 +153,46 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     }
   }
 
-  getDeleteDisableDesc(): string | undefined {
+  getEditDisableDesc(): string | boolean {
     const first = this.selection.first();
-    if (first && first['info'] && first['info']['num_sessions']) {
-      return this.i18n('Target has active sessions');
+
+    if (first && first?.cdExecuting) {
+      return first.cdExecuting;
     }
+
+    if (first && _.isUndefined(first?.['info'])) {
+      return $localize`Unavailable gateway(s)`;
+    }
+
+    return !first;
+  }
+
+  getDeleteDisableDesc(): string | boolean {
+    const first = this.selection.first();
+
+    if (first?.cdExecuting) {
+      return first.cdExecuting;
+    }
+
+    if (first && _.isUndefined(first?.['info'])) {
+      return $localize`Unavailable gateway(s)`;
+    }
+
+    if (first && first?.['info']?.['num_sessions']) {
+      return $localize`Target has active sessions`;
+    }
+
+    return !first;
   }
 
   prepareResponse(resp: any): any[] {
-    resp.forEach((element) => {
-      element.cdPortals = element.portals.map((portal) => `${portal.host}:${portal.ip}`);
-      element.cdImages = element.disks.map((disk) => `${disk.pool}/${disk.image}`);
+    resp.forEach((element: Record<string, any>) => {
+      element.cdPortals = element.portals.map(
+        (portal: Record<string, any>) => `${portal.host}:${portal.ip}`
+      );
+      element.cdImages = element.disks.map(
+        (disk: Record<string, any>) => `${disk.pool}/${disk.image}`
+      );
     });
 
     return resp;
@@ -172,11 +202,11 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     this.table.reset(); // Disable loading indicator.
   }
 
-  itemFilter(entry, task) {
+  itemFilter(entry: Record<string, any>, task: Task) {
     return entry.target_iqn === task.metadata['target_iqn'];
   }
 
-  taskFilter(task) {
+  taskFilter(task: Task) {
     return ['iscsi/target/create', 'iscsi/target/edit', 'iscsi/target/delete'].includes(task.name);
   }
 
@@ -188,21 +218,19 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     const target_iqn = this.selection.first().target_iqn;
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: this.i18n('iSCSI target'),
-        itemNames: [target_iqn],
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('iscsi/target/delete', {
-              target_iqn: target_iqn
-            }),
-            call: this.iscsiService.deleteTarget(target_iqn)
-          })
-      }
+      itemDescription: $localize`iSCSI target`,
+      itemNames: [target_iqn],
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('iscsi/target/delete', {
+            target_iqn: target_iqn
+          }),
+          call: this.iscsiService.deleteTarget(target_iqn)
+        })
     });
   }
 
   configureDiscoveryAuth() {
-    this.modalService.show(IscsiTargetDiscoveryModalComponent, {});
+    this.modalService.show(IscsiTargetDiscoveryModalComponent);
   }
 }

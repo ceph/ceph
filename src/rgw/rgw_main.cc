@@ -9,11 +9,13 @@
 #include "common/Timer.h"
 #include "common/safe_io.h"
 #include "common/TracepointProvider.h"
+#include "common/openssl_opts_handler.h"
+#include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "rgw_common.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
@@ -40,10 +42,16 @@
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#include "rgw_kafka.h"
+#endif
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #include "rgw_dmclock_scheduler_ctx.h"
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+#include "rgw_lua.h"
+#endif
 
 #include "services/svc_zone.h"
 
@@ -168,7 +176,7 @@ static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
-int main(int argc, const char **argv)
+int radosgw_Main(int argc, const char **argv)
 {
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
@@ -198,15 +206,19 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  // First, let's determine which frontends are configured.
   int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
-  global_pre_init(
-    &defaults, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-    flags);
+  // Prevent global_init() from dropping permissions until frontends can bind
+  // privileged ports
+  flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
 
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_DAEMON, flags);
+
+  // First, let's determine which frontends are configured.
   list<string> frontends;
-  g_conf().early_expand_meta(g_conf()->rgw_frontends, &cerr);
-  get_str_list(g_conf()->rgw_frontends, ",", frontends);
+  string rgw_frontends_str = g_conf().get_val<string>("rgw_frontends");
+  g_conf().early_expand_meta(rgw_frontends_str, &cerr);
+  get_str_list(rgw_frontends_str, ",", frontends);
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
   if (frontends.empty()) {
@@ -216,9 +228,6 @@ int main(int argc, const char **argv)
     string& f = *iter;
 
     if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
-      // If civetweb or beast is configured as a frontend, prevent global_init() from
-      // dropping permissions by setting the appropriate flag.
-      flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
       if (f.find("port") != string::npos) {
         // check for the most common ws problems
         if ((f.find("port=") == string::npos) ||
@@ -244,13 +253,26 @@ int main(int argc, const char **argv)
     fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
   }
 
-  // Now that we've determined which frontend(s) to use, continue with global
-  // initialization. Passing false as the final argument ensures that
-  // global_pre_init() is not invoked twice.
-  // claim the reference and release it after subsequent destructors have fired
-  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_DAEMON,
-			 flags, "rgw_data", false);
+  int numa_node = g_conf().get_val<int64_t>("rgw_numa_node");
+  size_t numa_cpu_set_size = 0;
+  cpu_set_t numa_cpu_set;
+
+  if (numa_node >= 0) {
+    int r = get_numa_node_cpu_set(numa_node, &numa_cpu_set_size, &numa_cpu_set);
+    if (r < 0) {
+      dout(1) << __func__ << " unable to determine rgw numa node " << numa_node
+              << " CPUs" << dendl;
+      numa_node = -1;
+    } else {
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
+      if (r < 0) {
+        derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
+        << dendl;
+      }
+    }
+  } else {
+    dout(1) << __func__ << " not setting numa affinity" << dendl;
+  }
 
   // maintain existing region root pool for new multisite objects
   if (!g_conf()->rgw_region_root_pool.empty()) {
@@ -281,6 +303,8 @@ int main(int argc, const char **argv)
   init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
   mutex.unlock();
 
+  ceph::crypto::init_openssl_engine_once();
+
   common_init_finish(g_ceph_context);
 
   init_async_signal_handler();
@@ -303,8 +327,9 @@ int main(int argc, const char **argv)
   FCGX_Init();
 #endif
 
+  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::sal::RGWRadosStore *store =
-    RGWStoreManager::get_storage(g_ceph_context,
+    RGWStoreManager::get_storage(&dp, g_ceph_context,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,
@@ -376,7 +401,33 @@ int main(int argc, const char **argv)
         dout(1) << "ERROR: failed to initialize AMQP manager" << dendl;
     }
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+    if (!rgw::kafka::init(cct.get())) {
+        dout(1) << "ERROR: failed to initialize Kafka manager" << dendl;
+    }
+#endif
   }
+
+  const auto& luarocks_path = g_conf().get_val<std::string>("rgw_luarocks_location");
+  if (luarocks_path.empty()) {
+    store->set_luarocks_path("");
+  } else {
+    store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
+  }
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+  rgw::lua::packages_t failed_packages;
+  std::string output;
+  r = rgw::lua::install_packages(store, null_yield, failed_packages, output);
+  if (r < 0) {
+    dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
+  }
+  if (!output.empty()) {
+    dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
+  }
+  for (const auto& p : failed_packages) {
+    dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+  }
+#endif
 
   if (apis_map.count("swift") > 0) {
     RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
@@ -469,12 +520,36 @@ int main(int argc, const char **argv)
 
   list<RGWFrontend *> fes;
 
+  string frontend_defs_str = g_conf().get_val<string>("rgw_frontend_defaults");
+
+  list<string> frontends_def;
+  get_str_list(frontend_defs_str, ",", frontends_def);
+
+  map<string, std::unique_ptr<RGWFrontendConfig> > fe_def_map;
+  for (auto& f : frontends_def) {
+    RGWFrontendConfig *config = new RGWFrontendConfig(f);
+    int r = config->init();
+    if (r < 0) {
+      delete config;
+      cerr << "ERROR: failed to init default config: " << f << std::endl;
+      return EINVAL;
+    }
+
+    fe_def_map[config->get_framework()].reset(config);
+  }
+
   int fe_count = 0;
 
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
        fiter != fe_map.end(); ++fiter, ++fe_count) {
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
+
+    auto def_iter = fe_def_map.find(framework);
+    if (def_iter != fe_def_map.end()) {
+      config->set_default_config(*def_iter->second);
+    }
+
     RGWFrontend *fe = NULL;
 
     if (framework == "civetweb" || framework == "mongoose") {
@@ -550,12 +625,13 @@ int main(int argc, const char **argv)
 
 
   // add a watcher to respond to realm configuration changes
-  RGWPeriodPusher pusher(store);
+  RGWPeriodPusher pusher(store, null_yield);
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
-  RGWRealmReloader reloader(store, service_map_meta, &pauser);
+  auto reloader = std::make_unique<RGWRealmReloader>(store,
+						     service_map_meta, &pauser);
 
   RGWRealmWatcher realm_watcher(g_ceph_context, store->svc()->zone->get_realm());
-  realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
+  realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 
 #if defined(HAVE_SYS_PRCTL_H)
@@ -567,6 +643,8 @@ int main(int argc, const char **argv)
   wait_shutdown();
 
   derr << "shutting down" << dendl;
+
+  reloader.reset(); // stop the realm reloader
 
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end();
        ++liter) {
@@ -607,6 +685,9 @@ int main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   rgw::amqp::shutdown();
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  rgw::kafka::shutdown();
+#endif
 
   rgw_perf_stop(g_ceph_context);
 
@@ -616,3 +697,13 @@ int main(int argc, const char **argv)
 
   return 0;
 }
+
+extern "C" {
+
+int radosgw_main(int argc, const char** argv)
+{
+  return radosgw_Main(argc, argv);
+}
+
+} /* extern "C" */
+

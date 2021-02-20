@@ -108,6 +108,9 @@ public:
   std::string_view strv() const {
     return ssb.strv();
   }
+  std::string str() const {
+    return std::string(ssb.strv());
+  }
 
 private:
   StackStringBuf<SIZE> ssb;

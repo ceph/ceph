@@ -39,6 +39,10 @@ void DeviceState::set_metadata(map<string,string>&& m)
   if (p != metadata.end()) {
     life_expectancy_stamp.parse(p->second);
   }
+  p = metadata.find("wear_level");
+  if (p != metadata.end()) {
+    wear_level = atof(p->second.c_str());
+  }
 }
 
 void DeviceState::set_life_expectancy(utime_t from, utime_t to, utime_t now)
@@ -46,12 +50,12 @@ void DeviceState::set_life_expectancy(utime_t from, utime_t to, utime_t now)
   life_expectancy = make_pair(from, to);
   life_expectancy_stamp = now;
   if (from != utime_t()) {
-    metadata["life_expectancy_min"] = from;
+    metadata["life_expectancy_min"] = stringify(from);
   } else {
     metadata["life_expectancy_min"] = "";
   }
   if (to != utime_t()) {
-    metadata["life_expectancy_max"] = to;
+    metadata["life_expectancy_max"] = stringify(to);
   } else {
     metadata["life_expectancy_max"] = "";
   }
@@ -69,6 +73,16 @@ void DeviceState::rm_life_expectancy()
   metadata.erase("life_expectancy_min");
   metadata.erase("life_expectancy_max");
   metadata.erase("life_expectancy_stamp");
+}
+
+void DeviceState::set_wear_level(float wear)
+{
+  wear_level = wear;
+  if (wear >= 0) {
+    metadata["wear_level"] = stringify(wear);
+  } else {
+    metadata.erase("wear_level");
+  }
 }
 
 string DeviceState::get_life_expectancy_str(utime_t now) const
@@ -96,10 +110,11 @@ void DeviceState::dump(Formatter *f) const
 {
   f->dump_string("devid", devid);
   f->open_array_section("location");
-  for (auto& i : devnames) {
+  for (auto& i : attachments) {
     f->open_object_section("attachment");
-    f->dump_string("host", i.first);
-    f->dump_string("dev", i.second);
+    f->dump_string("host", std::get<0>(i));
+    f->dump_string("dev", std::get<1>(i));
+    f->dump_string("path", std::get<2>(i));
     f->close_section();
   }
   f->close_section();
@@ -114,13 +129,18 @@ void DeviceState::dump(Formatter *f) const
     f->dump_stream("life_expectancy_stamp")
       << life_expectancy_stamp;
   }
+  if (wear_level >= 0) {
+    f->dump_float("wear_level", wear_level);
+  }
 }
 
 void DeviceState::print(ostream& out) const
 {
   out << "device " << devid << "\n";
-  for (auto& i : devnames) {
-    out << "attachment " << i.first << ":" << i.second << "\n";
+  for (auto& i : attachments) {
+    out << "attachment " << std::get<0>(i) << " " << std::get<1>(i) << " "
+	<< std::get<2>(i) << "\n";
+    out << "\n";
   }
   std::copy(std::begin(daemons), std::end(daemons),
             std::experimental::make_ostream_joiner(out, ","));
@@ -129,6 +149,9 @@ void DeviceState::print(ostream& out) const
     out << "life_expectancy " << life_expectancy.first << " to "
 	<< life_expectancy.second
 	<< " (as of " << life_expectancy_stamp << ")\n";
+  }
+  if (wear_level >= 0) {
+    out << "wear_level " << wear_level << "\n";
   }
 }
 
@@ -150,7 +173,13 @@ void DaemonStateIndex::_insert(DaemonStatePtr dm)
   for (auto& i : dm->devices) {
     auto d = _get_or_create_device(i.first);
     d->daemons.insert(dm->key);
-    d->devnames.insert(make_pair(dm->hostname, i.second));
+    auto p = dm->devices_bypath.find(i.first);
+    if (p != dm->devices_bypath.end()) {
+      d->attachments.insert(std::make_tuple(dm->hostname, i.second, p->second));
+    } else {
+      d->attachments.insert(std::make_tuple(dm->hostname, i.second,
+					    std::string()));
+    }
   }
 }
 
@@ -166,7 +195,12 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
     auto d = _get_or_create_device(i.first);
     ceph_assert(d->daemons.count(dmk));
     d->daemons.erase(dmk);
-    d->devnames.erase(make_pair(dm->hostname, i.second));
+    auto p = dm->devices_bypath.find(i.first);
+    if (p != dm->devices_bypath.end()) {
+      d->attachments.erase(make_tuple(dm->hostname, i.second, p->second));
+    } else {
+      d->attachments.erase(make_tuple(dm->hostname, i.second, std::string()));
+    }
     if (d->empty()) {
       _erase_device(d);
     }
@@ -202,8 +236,8 @@ DaemonStateCollection DaemonStateIndex::get_by_server(
 {
   std::shared_lock l{lock};
 
-  if (by_server.count(hostname)) {
-    return by_server.at(hostname);
+  if (auto found = by_server.find(hostname); found != by_server.end()) {
+    return found->second;
   } else {
     return {};
   }
@@ -259,8 +293,28 @@ void DaemonStateIndex::cull(const std::string& svc_name,
   }
 
   for (auto &i : victims) {
+    DaemonKey daemon_key{svc_name, i};
+    dout(4) << "Removing data for " << daemon_key << dendl;
+    _erase(daemon_key);
+  }
+}
+
+void DaemonStateIndex::cull_services(const std::set<std::string>& types_exist)
+{
+  std::set<DaemonKey> victims;
+
+  std::unique_lock l{lock};
+  for (auto it = all.begin(); it != all.end(); ++it) {
+    const auto& daemon_key = it->first;
+    if (it->second->service_daemon &&
+        types_exist.count(daemon_key.type) == 0) {
+      victims.insert(daemon_key);
+    }
+  }
+
+  for (auto &i : victims) {
     dout(4) << "Removing data for " << i << dendl;
-    _erase({svc_name, i});
+    _erase(i);
   }
 }
 

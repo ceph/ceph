@@ -13,10 +13,10 @@
 
 #pragma once
 
-#include "PythonCompat.h"
-
 #include <string>
 #include <map>
+
+#include <Python.h>
 
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"

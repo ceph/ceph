@@ -289,7 +289,7 @@ public:
     bool dirty_info = false;
     bool dirty_big_info = false;
     merge_log(
-      oinfo, olog, pg_shard_t(1, shard_id_t(0)), info,
+      oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
       &h, dirty_info, dirty_big_info);
 
     ASSERT_EQ(info.last_update, oinfo.last_update);
@@ -890,7 +890,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
@@ -940,7 +940,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
@@ -1045,7 +1045,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
@@ -1154,7 +1154,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     /* When the divergent entry is a DELETE and the authoritative
@@ -1273,7 +1273,7 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     /* When the divergent entry is a DELETE and the authoritative
@@ -1375,7 +1375,7 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());

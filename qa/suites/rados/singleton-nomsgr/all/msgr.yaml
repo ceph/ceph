@@ -16,6 +16,8 @@ openstack:
       size: 1 # GB
 overrides:
   ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     conf:
       client:
         debug ms: 20

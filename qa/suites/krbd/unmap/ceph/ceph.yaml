@@ -1,6 +1,11 @@
 overrides:
   ceph:
     crush_tunables: bobtail
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    conf:
+      global:
+        ms bind msgr2: false
 tasks:
 - install:
 - ceph:

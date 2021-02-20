@@ -2,10 +2,13 @@
 Configuring the iSCSI Target using the Command Line Interface
 =============================================================
 
-The Ceph iSCSI gateway is the iSCSI target node and also a Ceph client
-node. The Ceph iSCSI gateway can be a standalone node or be colocated on
-a Ceph Object Store Disk (OSD) node. Completing the following steps will
-install, and configure the Ceph iSCSI gateway for basic operation.
+The Ceph iSCSI gateway is both an iSCSI target  and a Ceph client;
+think of it as a "translator" between Ceph's RBD interface
+and the iSCSI standard. The Ceph iSCSI gateway can run on a
+standalone node or be colocated with other daemons eg. on
+a Ceph Object Store Disk (OSD) node.  When co-locating, ensure
+that sufficient CPU and memory are available to share.
+The following steps install and configure the Ceph iSCSI gateway for basic operation.
 
 **Requirements:**
 
@@ -36,8 +39,7 @@ to the *Installing* section:
    The Ceph configuration files must exist on the iSCSI gateway node
    under ``/etc/ceph/``.
 
-#. Install and configure the `Ceph Command-line
-   Interface <http://docs.ceph.com/docs/master/start/quick-rbd/#install-ceph>`_
+#. Install and configure the `Ceph Command-line Interface`_
 
 #. If needed, open TCP ports 3260 and 5000 on the firewall.
 
@@ -88,7 +90,7 @@ For rpm based instructions execute the following commands:
 
    If it does not exist instructions for creating pools can be found on the
    `RADOS pool operations page
-   <http://docs.ceph.com/docs/master/rados/operations/pools/>`_.
+   <http://docs.ceph.com/en/latest/rados/operations/pools/>`_.
 
 #. As ``root``, on a iSCSI gateway node, create a file named
    ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory:
@@ -121,7 +123,7 @@ For rpm based instructions execute the following commands:
           # on *each* gateway node. With the SSL files in place, you can use 'api_secure = true'
           # to switch to https mode.
 
-          # To support the API, the bear minimum settings are:
+          # To support the API, the bare minimum settings are:
           api_secure = false
 
           # Additional API configuration options are as follows, defaults shown.
@@ -131,8 +133,8 @@ For rpm based instructions execute the following commands:
           # trusted_ip_list = 192.168.0.10,192.168.0.11
 
       .. note::
-        trusted_ip_list is a list of IP addresses on each iscsi gateway that
-        will be used for management operations like target creation, lun
+        trusted_ip_list is a list of IP addresses on each iSCSI gateway that
+        will be used for management operations like target creation, LUN
         exporting, etc. The IP can be the same that will be used for iSCSI
         data, like READ/WRITE commands to/from the RBD image, but using
         separate IPs is recommended.
@@ -149,14 +151,19 @@ For rpm based instructions execute the following commands:
    ::
 
        # systemctl daemon-reload
+       
+       # systemctl enable rbd-target-gw
+       # systemctl start rbd-target-gw
+
        # systemctl enable rbd-target-api
        # systemctl start rbd-target-api
+
 
 **Configuring:**
 
 gwcli will create and configure the iSCSI target and RBD images and copy the
 configuration across the gateways setup in the last section. Lower level
-tools, like targetcli and rbd, can be used to query the local configuration,
+tools including targetcli and rbd can be used to query the local configuration,
 but should not be used to modify it. This next section will demonstrate how
 to create a iSCSI target and export a RBD image as LUN 0.
 
@@ -228,3 +235,10 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /iscsi-target...at:rh7-client> disk add rbd/disk_1
 
 The next step is to configure the iSCSI initiators.
+
+.. _`Ceph Command-line Interface`: ../../start/quick-rbd/#install-ceph
+
+.. toctree::
+   :hidden:
+
+   ../../start/quick-rbd

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { IndividualConfig, ToastrService } from 'ngx-toastr';
 import { BehaviorSubject, Subject } from 'rxjs';
 
@@ -56,13 +56,24 @@ export class NotificationService {
   }
 
   /**
+   * Removes a single saved notifications
+   */
+  remove(index: number) {
+    const recent = this.dataSource.getValue();
+    recent.splice(index, 1);
+    this.dataSource.next(recent);
+    localStorage.setItem(this.KEY, JSON.stringify(recent));
+  }
+
+  /**
    * Method used for saving a shown notification (check show() method).
    */
   save(notification: CdNotification) {
     const recent = this.dataSource.getValue();
     recent.push(notification);
+    recent.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
     while (recent.length > 10) {
-      recent.shift();
+      recent.pop();
     }
     this.dataSource.next(recent);
     localStorage.setItem(this.KEY, JSON.stringify(recent));
@@ -208,7 +219,7 @@ export class NotificationService {
    * Prevent the notification from being shown.
    * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
    */
-  cancel(timeoutId) {
+  cancel(timeoutId: number) {
     window.clearTimeout(timeoutId);
   }
 

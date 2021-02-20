@@ -5,6 +5,7 @@
 #include "tools/rbd/MirrorDaemonServiceInfo.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/buffer.h"
 #include "include/Context.h"
 #include "include/stringify.h"
 #include "include/rbd/librbd.hpp"
@@ -294,7 +295,7 @@ int format_mirror_peers(librados::IoCtx& io_ctx,
       formatter->dump_string("uuid", peer.uuid);
       formatter->dump_string("direction", direction);
       formatter->dump_string("site_name", peer.site_name);
-      formatter->dump_string("fsid", peer.fsid);
+      formatter->dump_string("mirror_uuid", peer.mirror_uuid);
       formatter->dump_string("client_name", peer.client_name);
       for (auto& pair : attributes) {
         formatter->dump_string(pair.first.c_str(), pair.second);
@@ -305,8 +306,8 @@ int format_mirror_peers(librados::IoCtx& io_ctx,
                 << "UUID: " << peer.uuid << std::endl
                 << "Name: " << peer.site_name << std::endl;
       if (peer.direction != RBD_MIRROR_PEER_DIRECTION_RX ||
-          !peer.fsid.empty()) {
-        std::cout << "FSID: " << peer.fsid << std::endl;
+          !peer.mirror_uuid.empty()) {
+        std::cout << "Mirror UUID: " << peer.mirror_uuid << std::endl;
       }
       std::cout << "Direction: " << direction << std::endl;
       if (peer.direction != RBD_MIRROR_PEER_DIRECTION_TX ||
@@ -592,12 +593,12 @@ public:
       const std::string &image_name,
       const std::map<std::string, std::string> &instance_ids,
       const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
-      const std::map<std::string, std::string> &peer_fsid_to_name,
+      const std::map<std::string, std::string> &peer_mirror_uuids_to_name,
       const MirrorDaemonServiceInfo &daemon_service_info,
       at::Format::Formatter formatter)
     : ImageRequestBase(io_ctx, throttle, image_name),
       m_instance_ids(instance_ids), m_mirror_peers(mirror_peers),
-      m_peer_fsid_to_name(peer_fsid_to_name),
+      m_peer_mirror_uuids_to_name(peer_mirror_uuids_to_name),
       m_daemon_service_info(daemon_service_info), m_formatter(formatter) {
   }
 
@@ -629,7 +630,8 @@ protected:
       std::remove_if(m_mirror_image_global_status.site_statuses.begin(),
                      m_mirror_image_global_status.site_statuses.end(),
                      [](auto& status) {
-          return (status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+          return (status.mirror_uuid ==
+                    RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
         }),
       m_mirror_image_global_status.site_statuses.end());
 
@@ -637,6 +639,7 @@ protected:
                                m_instance_ids.count(m_image_id)) ?
         m_instance_ids.find(m_image_id)->second : "";
 
+    auto mirror_service = m_daemon_service_info.get_by_instance_id(instance_id);
     if (m_formatter != nullptr) {
       m_formatter->open_object_section("image");
       m_formatter->dump_string("name", m_mirror_image_global_status.name);
@@ -646,7 +649,9 @@ protected:
         m_formatter->dump_string("state", utils::mirror_image_site_status_state(
           local_status));
         m_formatter->dump_string("description", local_status.description);
-        m_daemon_service_info.dump(instance_id, m_formatter);
+        if (mirror_service != nullptr) {
+          mirror_service->dump_image(m_formatter);
+        }
         m_formatter->dump_string("last_update", utils::timestr(
           local_status.last_update));
       }
@@ -655,10 +660,11 @@ protected:
         for (auto& status : m_mirror_image_global_status.site_statuses) {
           m_formatter->open_object_section("peer_site");
 
-          auto name_it = m_peer_fsid_to_name.find(status.fsid);
+          auto name_it = m_peer_mirror_uuids_to_name.find(status.mirror_uuid);
           m_formatter->dump_string("site_name",
-            (name_it != m_peer_fsid_to_name.end() ? name_it->second : ""));
-          m_formatter->dump_string("fsid", status.fsid);
+            (name_it != m_peer_mirror_uuids_to_name.end() ?
+               name_it->second : ""));
+          m_formatter->dump_string("mirror_uuids", status.mirror_uuid);
 
           m_formatter->dump_string(
             "state", utils::mirror_image_site_status_state(status));
@@ -679,9 +685,9 @@ protected:
         std::cout << "  state:       " << utils::mirror_image_site_status_state(
                     local_status) << std::endl
                   << "  description: " << local_status.description << std::endl;
-        if (!instance_id.empty()) {
+        if (mirror_service != nullptr) {
           std::cout << "  service:     " <<
-            m_daemon_service_info.get_description(instance_id) << std::endl;
+            mirror_service->get_image_description() << std::endl;
         }
         std::cout << "  last_update: " << utils::timestr(
           local_status.last_update) << std::endl;
@@ -695,10 +701,10 @@ protected:
           }
           first_site = false;
 
-          auto name_it = m_peer_fsid_to_name.find(site.fsid);
+          auto name_it = m_peer_mirror_uuids_to_name.find(site.mirror_uuid);
           std::cout << "    name: "
-                    << (name_it != m_peer_fsid_to_name.end() ? name_it->second :
-                                                               site.fsid)
+                    << (name_it != m_peer_mirror_uuids_to_name.end() ?
+                          name_it->second : site.mirror_uuid)
                     << std::endl
                     << "    state: " << utils::mirror_image_site_status_state(
                       site) << std::endl
@@ -717,7 +723,7 @@ protected:
 private:
   const std::map<std::string, std::string> &m_instance_ids;
   const std::vector<librbd::mirror_peer_site_t> &m_mirror_peers;
-  const std::map<std::string, std::string> &m_peer_fsid_to_name;
+  const std::map<std::string, std::string> &m_peer_mirror_uuids_to_name;
   const MirrorDaemonServiceInfo &m_daemon_service_info;
   at::Format::Formatter m_formatter;
   std::string m_image_id;
@@ -777,13 +783,42 @@ private:
 
 };
 
+int get_mirror_image_status(
+    librados::IoCtx& io_ctx, uint32_t* total_images,
+    std::map<librbd::mirror_image_status_state_t, int>* mirror_image_states,
+    MirrorHealth* mirror_image_health) {
+  librbd::RBD rbd;
+  int r = rbd.mirror_image_status_summary(io_ctx, mirror_image_states);
+  if (r < 0) {
+    std::cerr << "rbd: failed to get status summary for mirrored images: "
+	      << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  *mirror_image_health = MIRROR_HEALTH_OK;
+  for (auto &it : *mirror_image_states) {
+    auto &state = it.first;
+    if (*mirror_image_health < MIRROR_HEALTH_WARNING &&
+	(state != MIRROR_IMAGE_STATUS_STATE_REPLAYING &&
+	 state != MIRROR_IMAGE_STATUS_STATE_STOPPED)) {
+      *mirror_image_health = MIRROR_HEALTH_WARNING;
+    }
+    if (*mirror_image_health < MIRROR_HEALTH_ERROR &&
+	state == MIRROR_IMAGE_STATUS_STATE_ERROR) {
+      *mirror_image_health = MIRROR_HEALTH_ERROR;
+    }
+    *total_images += it.second;
+  }
+
+  return 0;
+}
+
 } // anonymous namespace
 
 void get_peer_bootstrap_create_arguments(po::options_description *positional,
                                          po::options_description *options) {
   at::add_pool_options(positional, options, false);
-  options->add_options()
-    (SITE_NAME.c_str(), po::value<std::string>(), "local site name");
+  add_site_name_optional(options);
 }
 
 int execute_peer_bootstrap_create(
@@ -835,8 +870,7 @@ int execute_peer_bootstrap_create(
 void get_peer_bootstrap_import_arguments(po::options_description *positional,
                                          po::options_description *options) {
   at::add_pool_options(positional, options, false);
-  options->add_options()
-    (SITE_NAME.c_str(), po::value<std::string>(), "local site name");
+  add_site_name_optional(options);
   positional->add_options()
     ("token-path", po::value<std::string>(),
      "bootstrap token file (or '-' for stdin)");
@@ -877,7 +911,7 @@ int execute_peer_bootstrap_import(
 
   int fd = STDIN_FILENO;
   if (token_path != "-") {
-    fd = open(token_path.c_str(), O_RDONLY);
+    fd = open(token_path.c_str(), O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << token_path << std::endl;
@@ -981,8 +1015,19 @@ int execute_peer_add(const po::variables_map &vm,
     std::cerr << "rbd: failed to list mirror peers" << std::endl;
     return r;
   }
+
+  // ignore tx-only peers since the restriction is for rx
+  mirror_peers.erase(
+    std::remove_if(
+      mirror_peers.begin(), mirror_peers.end(),
+      [](const librbd::mirror_peer_site_t& peer) {
+        return (peer.direction == RBD_MIRROR_PEER_DIRECTION_TX);
+      }),
+    mirror_peers.end());
+
   if (!mirror_peers.empty()) {
-    std::cerr << "rbd: multiple peers are not currently supported" << std::endl;
+    std::cerr << "rbd: multiple RX peers are not currently supported"
+              << std::endl;
     return -EINVAL;
   }
 
@@ -995,7 +1040,10 @@ int execute_peer_add(const po::variables_map &vm,
   std::string uuid;
   r = rbd.mirror_peer_site_add(
     io_ctx, &uuid, mirror_peer_direction, remote_cluster, remote_client_name);
-  if (r < 0) {
+  if (r == -EEXIST) {
+    std::cerr << "rbd: mirror peer already exists" << std::endl;
+    return r;
+  } else if (r < 0) {
     std::cerr << "rbd: error adding mirror peer" << std::endl;
     return r;
   }
@@ -1137,8 +1185,37 @@ int execute_peer_set(const po::variables_map &vm,
       return -EINVAL;
     }
 
-    r = rbd.mirror_peer_site_set_direction(
-      io_ctx, uuid, boost::any_cast<rbd_mirror_peer_direction_t>(direction));
+    auto peer_direction = boost::any_cast<rbd_mirror_peer_direction_t>(
+      direction);
+    if (peer_direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+      // TODO: temporary restriction to prevent adding multiple peers
+      // until rbd-mirror daemon can properly handle the scenario
+      std::vector<librbd::mirror_peer_site_t> mirror_peers;
+      r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
+      if (r < 0) {
+        std::cerr << "rbd: failed to list mirror peers" << std::endl;
+        return r;
+      }
+
+      // ignore peer to be updated and tx-only peers since the restriction is
+      // for rx
+      mirror_peers.erase(
+        std::remove_if(
+          mirror_peers.begin(), mirror_peers.end(),
+          [uuid](const librbd::mirror_peer_site_t& peer) {
+            return (peer.uuid == uuid ||
+                    peer.direction == RBD_MIRROR_PEER_DIRECTION_TX);
+          }),
+        mirror_peers.end());
+
+      if (!mirror_peers.empty()) {
+        std::cerr << "rbd: multiple RX peers are not currently supported"
+                  << std::endl;
+        return -EINVAL;
+      }
+    }
+
+    r = rbd.mirror_peer_site_set_direction(io_ctx, uuid, peer_direction);
   } else {
     r = update_peer_config_key(io_ctx, uuid, key, value);
   }
@@ -1414,50 +1491,42 @@ int execute_status(const po::variables_map &vm,
 
   librbd::RBD rbd;
 
-  std::map<librbd::mirror_image_status_state_t, int> states;
-  r = rbd.mirror_image_status_summary(io_ctx, &states);
+  uint32_t total_images = 0;
+  std::map<librbd::mirror_image_status_state_t, int> mirror_image_states;
+  MirrorHealth mirror_image_health = MIRROR_HEALTH_UNKNOWN;
+  r = get_mirror_image_status(io_ctx, &total_images, &mirror_image_states,
+                              &mirror_image_health);
   if (r < 0) {
-    std::cerr << "rbd: failed to get status summary for mirrored images: "
-	      << cpp_strerror(r) << std::endl;
     return r;
   }
 
+  MirrorDaemonServiceInfo daemon_service_info(io_ctx);
+  daemon_service_info.init();
+
+  MirrorHealth mirror_daemon_health = daemon_service_info.get_daemon_health();
+  auto mirror_services = daemon_service_info.get_mirror_services();
+
+  auto mirror_health = std::max(mirror_image_health, mirror_daemon_health);
+
   if (formatter != nullptr) {
     formatter->open_object_section("status");
-  }
-
-  enum Health {Ok = 0, Warning = 1, Error = 2} health = Ok;
-  const char *names[] = {"OK", "WARNING", "ERROR"};
-  int total = 0;
-
-  for (auto &it : states) {
-    auto &state = it.first;
-    if (health < Warning &&
-	(state != MIRROR_IMAGE_STATUS_STATE_REPLAYING &&
-	 state != MIRROR_IMAGE_STATUS_STATE_STOPPED)) {
-      health = Warning;
-    }
-    if (health < Error &&
-	state == MIRROR_IMAGE_STATUS_STATE_ERROR) {
-      health = Error;
-    }
-    total += it.second;
-  }
-
-  if (formatter != nullptr) {
     formatter->open_object_section("summary");
-    formatter->dump_string("health", names[health]);
+    formatter->dump_stream("health") << mirror_health;
+    formatter->dump_stream("daemon_health") << mirror_daemon_health;
+    formatter->dump_stream("image_health") << mirror_image_health;
     formatter->open_object_section("states");
-    for (auto &it : states) {
+    for (auto &it : mirror_image_states) {
       std::string state_name = utils::mirror_image_status_state(it.first);
       formatter->dump_int(state_name.c_str(), it.second);
     }
     formatter->close_section(); // states
     formatter->close_section(); // summary
   } else {
-    std::cout << "health: " << names[health] << std::endl;
-    std::cout << "images: " << total << " total" << std::endl;
-    for (auto &it : states) {
+    std::cout << "health: " << mirror_health << std::endl;
+    std::cout << "daemon health: " << mirror_daemon_health << std::endl;
+    std::cout << "image health: " << mirror_image_health << std::endl;
+    std::cout << "images: " << total_images << " total" << std::endl;
+    for (auto &it : mirror_image_states) {
       std::cout << "    " << it.second << " "
 		<< utils::mirror_image_status_state(it.first) << std::endl;
     }
@@ -1466,18 +1535,70 @@ int execute_status(const po::variables_map &vm,
   int ret = 0;
 
   if (verbose) {
-    std::vector<librbd::mirror_peer_site_t> mirror_peers;
-    utils::get_mirror_peer_sites(io_ctx, &mirror_peers);
+    // dump per-daemon status
+    if (formatter != nullptr) {
+      formatter->open_array_section("daemons");
+      for (auto& mirror_service : mirror_services) {
+        formatter->open_object_section("daemon");
+        formatter->dump_string("service_id", mirror_service.service_id);
+        formatter->dump_string("instance_id", mirror_service.instance_id);
+        formatter->dump_string("client_id", mirror_service.client_id);
+        formatter->dump_string("hostname", mirror_service.hostname);
+        formatter->dump_string("ceph_version", mirror_service.ceph_version);
+        formatter->dump_bool("leader", mirror_service.leader);
+        formatter->dump_stream("health") << mirror_service.health;
+        if (!mirror_service.callouts.empty()) {
+          formatter->open_array_section("callouts");
+          for (auto& callout : mirror_service.callouts) {
+            formatter->dump_string("callout", callout);
+          }
+          formatter->close_section(); // callouts
+        }
+        formatter->close_section(); // daemon
+      }
+      formatter->close_section(); // daemons
+    } else {
+      std::cout << std::endl << "DAEMONS" << std::endl;
+      if (mirror_services.empty()) {
+        std::cout << "  none" << std::endl;
+      }
+      for (auto& mirror_service : mirror_services) {
+        std::cout << "service " << mirror_service.service_id << ":"
+                  << std::endl
+                  << "  instance_id: " << mirror_service.instance_id
+                  << std::endl
+                  << "  client_id: " << mirror_service.client_id << std::endl
+                  << "  hostname: " << mirror_service.hostname << std::endl
+                  << "  version: " << mirror_service.ceph_version << std::endl
+                  << "  leader: " << (mirror_service.leader ? "true" : "false")
+                  << std::endl
+                  << "  health: " << mirror_service.health << std::endl;
+        if (!mirror_service.callouts.empty()) {
+          std::cout << "  callouts: " << mirror_service.callouts << std::endl;
+        }
+        std::cout << std::endl;
+      }
+      std::cout << std::endl;
+    }
 
-    std::map<std::string, std::string> peer_fsid_to_name;
-    utils::get_mirror_peer_fsid_to_names(mirror_peers, &peer_fsid_to_name);
+    // dump per-image status
+    librados::IoCtx default_ns_io_ctx;
+    default_ns_io_ctx.dup(io_ctx);
+    default_ns_io_ctx.set_namespace("");
+    std::vector<librbd::mirror_peer_site_t> mirror_peers;
+    utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
+
+    std::map<std::string, std::string> peer_mirror_uuids_to_name;
+    utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,
+                                                 &peer_mirror_uuids_to_name);
 
     if (formatter != nullptr) {
       formatter->open_array_section("images");
+    } else {
+      std::cout << "IMAGES";
     }
 
     std::map<std::string, std::string> instance_ids;
-    MirrorDaemonServiceInfo daemon_service_info(io_ctx);
 
     std::string start_image_id;
     while (true) {
@@ -1501,12 +1622,8 @@ int execute_status(const po::variables_map &vm,
       start_image_id = ids.rbegin()->first;
     }
 
-    if (!instance_ids.empty()) {
-      daemon_service_info.init();
-    }
-
     ImageRequestGenerator<StatusImageRequest> generator(
-      io_ctx, instance_ids, mirror_peers, peer_fsid_to_name,
+      io_ctx, instance_ids, mirror_peers, peer_mirror_uuids_to_name,
       daemon_service_info, formatter);
     ret = generator.execute();
 

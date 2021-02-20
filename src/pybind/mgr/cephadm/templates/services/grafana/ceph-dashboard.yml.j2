@@ -1,0 +1,18 @@
+# {{ cephadm_managed }}
+deleteDatasources:
+{% for host in hosts %} 
+  - name: 'Dashboard{{ loop.index }}'
+    orgId: 1
+{% endfor %}
+
+datasources:
+{% for host in hosts %} 
+  - name: 'Dashboard{{ loop.index }}'
+    type: 'prometheus'
+    access: 'proxy'
+    orgId: 1
+    url: 'http://{{ host }}:9095'
+    basicAuth: false
+    isDefault: {{ 'true' if loop.first else 'false' }}
+    editable: false
+{% endfor %}

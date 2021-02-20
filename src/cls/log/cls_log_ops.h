@@ -7,19 +7,19 @@
 #include "cls_log_types.h"
 
 struct cls_log_add_op {
-  list<cls_log_entry> entries;
+  std::list<cls_log_entry> entries;
   bool monotonic_inc;
 
   cls_log_add_op() : monotonic_inc(true) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
     encode(entries, bl);
     encode(monotonic_inc, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(entries, bl);
     if (struct_v >= 2) {
@@ -32,14 +32,14 @@ WRITE_CLASS_ENCODER(cls_log_add_op)
 
 struct cls_log_list_op {
   utime_t from_time;
-  string marker; /* if not empty, overrides from_time */
+  std::string marker; /* if not empty, overrides from_time */
   utime_t to_time; /* not inclusive */
   int max_entries; /* upperbound to returned num of entries
                       might return less than that and still be truncated */
 
   cls_log_list_op() : max_entries(0) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(from_time, bl);
     encode(marker, bl);
@@ -48,7 +48,7 @@ struct cls_log_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(from_time, bl);
     decode(marker, bl);
@@ -60,13 +60,13 @@ struct cls_log_list_op {
 WRITE_CLASS_ENCODER(cls_log_list_op)
 
 struct cls_log_list_ret {
-  list<cls_log_entry> entries;
-  string marker;
+  std::list<cls_log_entry> entries;
+  std::string marker;
   bool truncated;
 
   cls_log_list_ret() : truncated(false) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(entries, bl);
     encode(marker, bl);
@@ -74,7 +74,7 @@ struct cls_log_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(marker, bl);
@@ -92,12 +92,12 @@ WRITE_CLASS_ENCODER(cls_log_list_ret)
 struct cls_log_trim_op {
   utime_t from_time;
   utime_t to_time; /* inclusive */
-  string from_marker;
-  string to_marker;
+  std::string from_marker;
+  std::string to_marker;
 
   cls_log_trim_op() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
     encode(from_time, bl);
     encode(to_time, bl);
@@ -106,7 +106,7 @@ struct cls_log_trim_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(from_time, bl);
     decode(to_time, bl);
@@ -122,13 +122,13 @@ WRITE_CLASS_ENCODER(cls_log_trim_op)
 struct cls_log_info_op {
   cls_log_info_op() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     // currently empty request
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     // currently empty request
     DECODE_FINISH(bl);
@@ -139,13 +139,13 @@ WRITE_CLASS_ENCODER(cls_log_info_op)
 struct cls_log_info_ret {
   cls_log_header header;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(header, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(header, bl);
     DECODE_FINISH(bl);

@@ -16,8 +16,6 @@ function run() {
     CEPH_ARGS+="--bluestore_block_db_create=true "
     CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
     CEPH_ARGS+="--bluestore_block_wal_size=536870912 "
-    CEPH_ARGS+="--bluestore_bluefs_min=536870912 "
-    CEPH_ARGS+="--bluestore_bluefs_min_free=536870912 "
     CEPH_ARGS+="--bluestore_block_wal_create=true "
     CEPH_ARGS+="--bluestore_fsck_on_mount=true "
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -140,13 +138,13 @@ function TEST_bluestore() {
 
     ceph-bluestore-tool --path $dir/3 fsck || return 1
 
-    run_osd $dir 0 || return 1
+    activate_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
-    run_osd $dir 1 || return 1
+    activate_osd $dir 1 || return 1
     osd_pid1=$(cat $dir/osd.1.pid)
-    run_osd $dir 2 || return 1
+    activate_osd $dir 2 || return 1
     osd_pid2=$(cat $dir/osd.2.pid)
-    run_osd $dir 3 || return 1
+    activate_osd $dir 3 || return 1
     osd_pid3=$(cat $dir/osd.3.pid)
 
     wait_for_clean || return 1
@@ -218,13 +216,13 @@ function TEST_bluestore() {
 
     ceph-bluestore-tool --path $dir/3 fsck || return 1
 
-    run_osd $dir 0 || return 1
+    activate_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
-    run_osd $dir 1 || return 1
+    activate_osd $dir 1 || return 1
     osd_pid1=$(cat $dir/osd.1.pid)
-    run_osd $dir 2 || return 1
+    activate_osd $dir 2 || return 1
     osd_pid2=$(cat $dir/osd.2.pid)
-    run_osd $dir 3 || return 1
+    activate_osd $dir 3 || return 1
     osd_pid3=$(cat $dir/osd.3.pid)
 
     # write some objects
@@ -324,13 +322,13 @@ function TEST_bluestore() {
 
     ceph-bluestore-tool --path $dir/3 fsck || return 1
 
-    run_osd $dir 0 || return 1
+    activate_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
-    run_osd $dir 1 || return 1
+    activate_osd $dir 1 || return 1
     osd_pid1=$(cat $dir/osd.1.pid)
-    run_osd $dir 2 || return 1
+    activate_osd $dir 2 || return 1
     osd_pid2=$(cat $dir/osd.2.pid)
-    run_osd $dir 3 || return 1
+    activate_osd $dir 3 || return 1
     osd_pid3=$(cat $dir/osd.3.pid)
 
     # write some objects

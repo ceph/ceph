@@ -30,7 +30,7 @@ int __ceph_plugin_init(CephContext *cct,
                        const std::string& type,
                        const std::string& name)
 {
-  PluginRegistry *instance = cct->get_plugin_registry();
+  auto instance = cct->get_plugin_registry();
 
   return instance->add(type, name, new CompressionPluginLZ4(cct));
 }

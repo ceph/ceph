@@ -29,10 +29,6 @@ following command will run tox with envlist of "py27,py3" using the "tox.ini" in
 
   $prog_name --tox-envs py27,py3
 
-following command will run tox with envlist of "py27" using "src/pybind/mgr/ansible/tox.ini"
-
-  $prog_name --tox-envs py27 ansible
-
 following command will run tox with envlist of "py27" using "/ceph/src/python-common/tox.ini"
 
   $prog_name --tox-envs py27 --tox-path /ceph/src/python-common
@@ -120,7 +116,17 @@ function main() {
             echo "$PWD already exists, but it's not a virtualenv. test_name empty?"
             exit 1
         fi
-        $source_dir/src/tools/setup-virtualenv.sh ${venv_path}
+        # try to use the prefered python for creating the virtual env for
+        # bootstrapping tox.
+        case $tox_envs in
+            py3*)
+                virtualenv_python=python3;;
+            py2*)
+                virtualenv_python=python2;;
+            *)
+                virtualenv_python=python3;;
+        esac
+        $source_dir/src/tools/setup-virtualenv.sh --python=${virtualenv_python} ${venv_path}
     fi
     source ${venv_path}/bin/activate
     pip install tox

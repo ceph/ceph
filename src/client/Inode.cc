@@ -95,9 +95,19 @@ void Inode::make_long_path(filepath& p)
     dn->dir->parent_inode->make_long_path(p);
     p.push_dentry(dn->name);
   } else if (snapdir_parent) {
-    snapdir_parent->make_nosnap_relative_path(p);
-    string empty;
-    p.push_dentry(empty);
+    make_nosnap_relative_path(p);
+  } else
+    p = filepath(ino);
+}
+
+void Inode::make_short_path(filepath& p)
+{
+  if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    ceph_assert(dn->dir && dn->dir->parent_inode);
+    p = filepath(dn->name, dn->dir->parent_inode->ino);
+  } else if (snapdir_parent) {
+    make_nosnap_relative_path(p);
   } else
     p = filepath(ino);
 }
@@ -232,6 +242,7 @@ void Inode::try_touch_cap(mds_rank_t mds)
  * This is the bog standard "check whether we have the required caps" operation.
  * Typically, we only check against the capset that is currently "issued".
  * In other words, we ignore caps that have been revoked but not yet released.
+ * Also account capability hit/miss stats.
  *
  * Some callers (particularly those doing attribute retrieval) can also make
  * use of the full set of "implemented" caps to satisfy requests from the
@@ -252,6 +263,7 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
       cap_is_valid(*auth_cap) &&
       (auth_cap->issued & mask) == mask) {
     auth_cap->touch();
+    client->cap_hit();
     return true;
   }
   // try any cap
@@ -260,6 +272,7 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
     if (cap_is_valid(cap)) {
       if ((cap.issued & mask) == mask) {
         cap.touch();
+	client->cap_hit();
 	return true;
       }
       c |= cap.issued;
@@ -275,8 +288,11 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
     for (auto &pair : caps) {
       pair.second.touch();
     }
+    client->cap_hit();
     return true;
   }
+
+  client->cap_miss();
   return false;
 }
 
@@ -445,6 +461,24 @@ void Inode::dump(Formatter *f) const
   if (is_dir()) {
     f->dump_int("dir_hashed", (int)dir_hashed);
     f->dump_int("dir_replicated", (int)dir_replicated);
+    if (dir_replicated) {
+      f->open_array_section("dirfrags");
+      for (const auto &frag : frag_repmap) {
+        f->open_object_section("frags");
+        CachedStackStringStream css;
+        *css << std::hex << frag.first.value() << "/" << std::dec << frag.first.bits();
+        f->dump_string("frag", css->strv());
+
+        f->open_array_section("repmap");
+        for (const auto &mds : frag.second) {
+          f->dump_int("mds", mds);
+        }
+        f->close_section();
+
+        f->close_section();
+      }
+      f->close_section();
+    }
   }
 
   f->open_array_section("caps");
@@ -528,7 +562,7 @@ void Inode::dump(Formatter *f) const
 
   if (!dentries.empty()) {
     f->open_array_section("parents");
-    for (const auto &dn : dentries) {
+    for (const auto &&dn : dentries) {
       f->open_object_section("dentry");
       f->dump_stream("dir_ino") << dn->dir->parent_inode->ino;
       f->dump_string("name", dn->name);

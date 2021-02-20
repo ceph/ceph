@@ -3,6 +3,7 @@
 #include "test/librbd/test_support.h"
 #include "include/rbd_types.h"
 #include "gtest/gtest.h"
+#include "common/ceph_context.h"
 #include <sstream>
 
 bool get_features(uint64_t *features) {
@@ -126,3 +127,11 @@ bool is_librados_test_stub(librados::Rados &rados) {
   return fsid == "00000000-1111-2222-3333-444444444444";
 }
 
+bool is_rbd_pwl_enabled(ceph::common::CephContext *cct) {
+#if defined(WITH_RBD_RWL) || defined(WITH_RBD_SSD_CACHE)
+  auto value = cct->_conf.get_val<std::string>("rbd_persistent_cache_mode");
+  return value == "disabled" ? false : true;
+#else
+  return false;
+#endif
+}

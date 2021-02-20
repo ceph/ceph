@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
+import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { PipesModule } from '../../pipes/pipes.module';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { UsageBarComponent } from './usage-bar.component';
 
 describe('UsageBarComponent', () => {
@@ -11,7 +11,7 @@ describe('UsageBarComponent', () => {
   let fixture: ComponentFixture<UsageBarComponent>;
 
   configureTestBed({
-    imports: [PipesModule, TooltipModule.forRoot()],
+    imports: [PipesModule, NgbTooltipModule],
     declarations: [UsageBarComponent]
   });
 

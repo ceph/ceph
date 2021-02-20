@@ -11,7 +11,7 @@ them, to prevent the UDEV/ceph-disk interaction that will attempt to start them
 up at boot time.
 
 The disabling of ``ceph-disk`` units is done only when calling ``ceph-volume
-simple activate`` directly, but is is avoided when being called by systemd when
+simple activate`` directly, but is avoided when being called by systemd when
 the system is booting up.
 
 The activation process requires using both the :term:`OSD id` and :term:`OSD uuid`

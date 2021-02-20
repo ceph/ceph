@@ -6,7 +6,7 @@
 class EntityName;
 class AuthCapsInfo;
 
-namespace ceph::common {
+namespace crimson::common {
 class AuthHandler {
 public:
   // the peer just got authorized

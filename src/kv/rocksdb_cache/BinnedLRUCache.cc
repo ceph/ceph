@@ -101,9 +101,10 @@ void BinnedLRUHandleTable::Resize() {
   length_ = new_length;
 }
 
-BinnedLRUCacheShard::BinnedLRUCacheShard(size_t capacity, bool strict_capacity_limit,
+BinnedLRUCacheShard::BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
                              double high_pri_pool_ratio)
-    : capacity_(0),
+    : cct(c),
+      capacity_(0),
       high_pri_pool_usage_(0),
       strict_capacity_limit_(strict_capacity_limit),
       high_pri_pool_ratio_(high_pri_pool_ratio),
@@ -480,7 +481,7 @@ BinnedLRUCache::BinnedLRUCache(CephContext *c,
   size_t per_shard = (capacity + (num_shards_ - 1)) / num_shards_;
   for (int i = 0; i < num_shards_; i++) {
     new (&shards_[i])
-        BinnedLRUCacheShard(per_shard, strict_capacity_limit, high_pri_pool_ratio);
+        BinnedLRUCacheShard(c, per_shard, strict_capacity_limit, high_pri_pool_ratio);
   }
 }
 
@@ -488,7 +489,7 @@ BinnedLRUCache::~BinnedLRUCache() {
   for (int i = 0; i < num_shards_; i++) {
     shards_[i].~BinnedLRUCacheShard();
   }
-  free(shards_);
+  aligned_free(shards_);
 }
 
 CacheShard* BinnedLRUCache::GetShard(int shard) {

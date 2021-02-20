@@ -63,49 +63,46 @@ std::function<void ()> NetworkStack::add_thread(unsigned worker_id)
   };
 }
 
-std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t)
+std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
+						   const std::string &t)
 {
+  std::shared_ptr<NetworkStack> stack = nullptr;
+
   if (t == "posix")
-    return std::make_shared<PosixNetworkStack>(c, t);
+    stack.reset(new PosixNetworkStack(c));
 #ifdef HAVE_RDMA
   else if (t == "rdma")
-    return std::make_shared<RDMAStack>(c, t);
+    stack.reset(new RDMAStack(c));
 #endif
 #ifdef HAVE_DPDK
   else if (t == "dpdk")
-    return std::make_shared<DPDKStack>(c, t);
+    stack.reset(new DPDKStack(c));
 #endif
 
-  lderr(c) << __func__ << " ms_async_transport_type " << t <<
+  if (stack == nullptr) {
+    lderr(c) << __func__ << " ms_async_transport_type " << t <<
     " is not supported! " << dendl;
-  ceph_abort();
-  return nullptr;
+    ceph_abort();
+    return nullptr;
+  }
+  
+  const int InitEventNumber = 5000;
+  for (unsigned worker_id = 0; worker_id < stack->num_workers; ++worker_id) {
+    Worker *w = stack->create_worker(c, worker_id);
+    int ret = w->center.init(InitEventNumber, worker_id, t);
+    if (ret)
+      throw std::system_error(-ret, std::generic_category());
+    stack->workers.push_back(w);
+  }
+
+  return stack;
 }
 
-Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned worker_id)
-{
-  if (type == "posix")
-    return new PosixWorker(c, worker_id);
-#ifdef HAVE_RDMA
-  else if (type == "rdma")
-    return new RDMAWorker(c, worker_id);
-#endif
-#ifdef HAVE_DPDK
-  else if (type == "dpdk")
-    return new DPDKWorker(c, worker_id);
-#endif
-
-  lderr(c) << __func__ << " ms_async_transport_type " << type <<
-    " is not supported! " << dendl;
-  ceph_abort();
-  return nullptr;
-}
-
-NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(false), cct(c)
+NetworkStack::NetworkStack(CephContext *c)
+  : cct(c)
 {
   ceph_assert(cct->_conf->ms_async_op_threads > 0);
 
-  const int InitEventNumber = 5000;
   num_workers = cct->_conf->ms_async_op_threads;
   if (num_workers >= EventCenter::MAX_EVENTCENTER) {
     ldout(cct, 0) << __func__ << " max thread limit is "
@@ -113,12 +110,6 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
                   << "Higher thread values are unnecessary and currently unsupported."
                   << dendl;
     num_workers = EventCenter::MAX_EVENTCENTER;
-  }
-
-  for (unsigned worker_id = 0; worker_id < num_workers; ++worker_id) {
-    Worker *w = create_worker(cct, type, worker_id);
-    w->center.init(InitEventNumber, worker_id, type);
-    workers.push_back(w);
   }
 }
 

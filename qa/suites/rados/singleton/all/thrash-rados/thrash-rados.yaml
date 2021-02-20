@@ -15,7 +15,7 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    log-ignorelist:
       - but it is still running
 - thrashosds:
     op_delay: 30

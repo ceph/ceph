@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "tools/rbd/ArgumentTypes.h"
+#include <map>
 #include <string>
 #include <boost/program_options.hpp>
 
@@ -98,7 +99,9 @@ int extract_spec(const std::string &spec, std::string *pool_name,
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
+void normalize_pool_name(std::string* pool_name);
 std::string get_default_pool_name();
+
 int get_pool_and_namespace_names(
     const boost::program_options::variables_map &vm,
     bool default_empty_pool_name, bool validate_pool_name,
@@ -149,13 +152,16 @@ int get_path(const boost::program_options::variables_map &vm,
 int get_formatter(const boost::program_options::variables_map &vm,
                   argument_types::Format::Formatter *formatter);
 
+int get_snap_create_flags(const boost::program_options::variables_map &vm,
+                          uint32_t *flags);
+
 void init_context();
 
 int init_rados(librados::Rados *rados);
 
-int init(const std::string &pool_name, const std::string& namespace_name,
+int init(const std::string& pool_name, const std::string& namespace_name,
          librados::Rados *rados, librados::IoCtx *io_ctx);
-int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
+int init_io_ctx(librados::Rados &rados, std::string pool_name,
                 const std::string& namespace_name, librados::IoCtx *io_ctx);
 int set_namespace(const std::string& namespace_name, librados::IoCtx *io_ctx);
 
@@ -189,6 +195,8 @@ bool is_not_user_snap_namespace(librbd::Image* image,
 
 std::string image_id(librbd::Image& image);
 
+std::string mirror_image_mode(
+    librbd::mirror_image_mode_t mirror_image_mode);
 std::string mirror_image_state(
     librbd::mirror_image_state_t mirror_image_state);
 std::string mirror_image_status_state(
@@ -210,12 +218,16 @@ uint64_t get_rbd_default_features(CephContext* cct);
 void get_mirror_peer_sites(
     librados::IoCtx& io_ctx,
     std::vector<librbd::mirror_peer_site_t>* mirror_peers);
-void get_mirror_peer_fsid_to_names(
+void get_mirror_peer_mirror_uuids_to_names(
     const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
     std::map<std::string, std::string>* fsid_to_name);
 void populate_unknown_mirror_image_site_statuses(
     const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
     librbd::mirror_image_global_status_t* global_status);
+
+int mgr_command(librados::Rados& rados, const std::string& cmd,
+                const std::map<std::string, std::string> &args,
+                std::ostream *out_os, std::ostream *err_os);
 
 } // namespace utils
 } // namespace rbd

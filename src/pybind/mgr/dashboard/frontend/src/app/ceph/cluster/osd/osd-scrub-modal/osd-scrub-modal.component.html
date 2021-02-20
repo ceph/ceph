@@ -1,6 +1,6 @@
-<cd-modal [modalRef]="bsModalRef">
-  <ng-container class="modal-title"
-                i18n>OSDs {deep, select, 1 {Deep }}Scrub</ng-container>
+<cd-modal [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>OSDs {deep, select, true {Deep } other {}}Scrub</span>
 
   <ng-container class="modal-content">
     <form name="scrubForm"
@@ -8,18 +8,14 @@
           [formGroup]="scrubForm"
           novalidate>
       <div class="modal-body">
-        <p i18n>You are about to apply a {deep, select, 1 {deep }}scrub to
-          the OSD(s): <strong>{{ selected | list }}</strong>.</p>
+        <p i18n>You are about to apply a {deep, select, true {deep } other {}}scrub to
+          the OSD(s): <strong>{{ selected | join }}</strong>.</p>
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button (submitAction)="scrub()"
-                          [form]="scrubForm"
-                          i18n>Submit</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="scrub()"
+                              [form]="scrubForm"
+                              [submitText]="actionLabels.UPDATE"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

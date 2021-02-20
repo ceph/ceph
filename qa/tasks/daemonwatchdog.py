@@ -1,7 +1,6 @@
 import logging
 import signal
 import time
-import random
 
 from gevent import sleep
 from gevent.greenlet import Greenlet
@@ -100,14 +99,14 @@ class DaemonWatchdog(Greenlet):
                     bark = True
 
             # If a daemon is no longer failed, remove it from tracking:
-            for name in daemon_failure_time.keys():
+            for name in list(daemon_failure_time.keys()):
                 if name not in [d.role + '.' + d.id_ for d in daemon_failures]:
                     self.log("daemon {name} has been restored".format(name=name))
                     del daemon_failure_time[name]
 
             for thrasher in self.thrashers:
                 if thrasher.exception is not None:
-                    self.log("thrasher on fs.{name} failed".format(name=thrasher.fs.name))
+                    self.log("{name} failed".format(name=thrasher.name))
                     bark = True
 
             if bark:

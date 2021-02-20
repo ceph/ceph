@@ -1,32 +1,60 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ChangeDetectorRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { AppModule } from '../../../app.module';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permissions } from '../../../shared/models/permissions';
-import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
+import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
+import { Permissions } from '~/app/shared/models/permissions';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, Mocks, TabHelper } from '~/testing/unit-test-helper';
 import { PoolDetailsComponent } from './pool-details.component';
 
 describe('PoolDetailsComponent', () => {
   let poolDetailsComponent: PoolDetailsComponent;
   let fixture: ComponentFixture<PoolDetailsComponent>;
 
+  // Needed because of ChangeDetectionStrategy.OnPush
+  // https://github.com/angular/angular/issues/12313#issuecomment-444623173
+  let changeDetector: ChangeDetectorRef;
+  const detectChanges = () => {
+    poolDetailsComponent.ngOnChanges();
+    changeDetector.detectChanges(); // won't call ngOnChanges on it's own but updates fixture
+  };
+
+  const updatePoolSelection = (selection: any) => {
+    poolDetailsComponent.selection = selection;
+    detectChanges();
+  };
+
+  const currentPoolUpdate = () => {
+    updatePoolSelection(poolDetailsComponent.selection);
+  };
+
   configureTestBed({
-    imports: [TabsModule.forRoot(), AppModule],
-    declarations: [PoolDetailsComponent, RbdConfigurationListComponent],
-    providers: [i18nProviders]
+    imports: [
+      BrowserAnimationsModule,
+      NgbNavModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule
+    ],
+    declarations: [PoolDetailsComponent, RbdConfigurationListComponent]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(PoolDetailsComponent);
+    // Needed because of ChangeDetectionStrategy.OnPush
+    // https://github.com/angular/angular/issues/12313#issuecomment-444623173
+    changeDetector = fixture.componentRef.injector.get(ChangeDetectorRef);
     poolDetailsComponent = fixture.componentInstance;
-    poolDetailsComponent.selection = new CdTableSelection();
+    poolDetailsComponent.selection = undefined;
     poolDetailsComponent.permissions = new Permissions({
       grafana: ['read']
     });
-    fixture.detectChanges();
+    updatePoolSelection({ tiers: [0], pool: 0, pool_name: 'micro_pool' });
   });
 
   it('should create', () => {
@@ -34,51 +62,110 @@ describe('PoolDetailsComponent', () => {
   });
 
   describe('Pool details tabset', () => {
-    beforeEach(() => {
-      poolDetailsComponent.selection.selected = [
-        {
-          tiers: [0],
-          pool: 0
-        }
-      ];
-      poolDetailsComponent.selection.update();
-    });
-
     it('should recognize a tabset child', () => {
-      fixture.detectChanges();
-      const tabsetChild: TabsetComponent = poolDetailsComponent.tabsetChild;
-      expect(tabsetChild).toBeDefined();
+      detectChanges();
+      const ngbNav = TabHelper.getNgbNav(fixture);
+      expect(ngbNav).toBeDefined();
     });
 
-    it('should show "Cache Tiers Details" tab if selected pool has "tiers"', () => {
-      fixture.detectChanges();
-      const tabs = poolDetailsComponent.tabsetChild.tabs;
-      expect(tabs.length).toBe(3);
-      expect(tabs[2].heading).toBe('Cache Tiers Details');
+    it('should not change the tabs active status when selection is the same as before', () => {
+      const tabs = TabHelper.getNgbNavItems(fixture);
       expect(tabs[0].active).toBeTruthy();
-    });
-
-    it('should not show "Cache Tiers Details" tab if selected pool has no "tiers"', () => {
-      poolDetailsComponent.selection.selected = [
-        {
-          tiers: []
-        }
-      ];
-      poolDetailsComponent.selection.update();
-      fixture.detectChanges();
-      const tabs = poolDetailsComponent.tabsetChild.tabs;
-      expect(tabs.length).toEqual(2);
-      expect(tabs[0].active).toBeTruthy();
-    });
-
-    it('current active status of tabs should not change when selection is same with previour selection', () => {
-      fixture.detectChanges();
-      const tabs = poolDetailsComponent.tabsetChild.tabs;
+      currentPoolUpdate();
       expect(tabs[0].active).toBeTruthy();
 
-      tabs[1].active = true;
-      fixture.detectChanges();
+      const ngbNav = TabHelper.getNgbNav(fixture);
+      ngbNav.select(tabs[1].id);
       expect(tabs[1].active).toBeTruthy();
+      currentPoolUpdate();
+      expect(tabs[1].active).toBeTruthy();
+    });
+
+    it('should filter out cdExecuting, cdIsBinary and all stats', () => {
+      updatePoolSelection({
+        prop1: 1,
+        cdIsBinary: true,
+        prop2: 2,
+        cdExecuting: true,
+        prop3: 3,
+        stats: { anyStat: 3, otherStat: [1, 2, 3] }
+      });
+      const expectedPool = { prop1: 1, prop2: 2, prop3: 3 };
+      expect(poolDetailsComponent.poolDetails).toEqual(expectedPool);
+    });
+
+    describe('Updates of shown data', () => {
+      const expectedChange = (
+        expected: {
+          selectedPoolConfiguration?: object;
+          poolDetails?: object;
+        },
+        newSelection: object,
+        doesNotEqualOld = true
+      ) => {
+        const getData = () => {
+          const data = {};
+          Object.keys(expected).forEach((key) => (data[key] = poolDetailsComponent[key]));
+          return data;
+        };
+        const oldData = getData();
+        updatePoolSelection(newSelection);
+        const newData = getData();
+        if (doesNotEqualOld) {
+          expect(expected).not.toEqual(oldData);
+        } else {
+          expect(expected).toEqual(oldData);
+        }
+        expect(expected).toEqual(newData);
+      };
+
+      it('should update shown data on change', () => {
+        expectedChange(
+          {
+            poolDetails: {
+              pg_num: 256,
+              pg_num_target: 256,
+              pg_placement_num: 256,
+              pg_placement_num_target: 256,
+              pool: 2,
+              pool_name: 'somePool',
+              type: 'replicated',
+              size: 3
+            }
+          },
+          Mocks.getPool('somePool', 2)
+        );
+      });
+
+      it('should not update shown data if no detail has changed on pool refresh', () => {
+        expectedChange(
+          {
+            poolDetails: {
+              pool: 0,
+              pool_name: 'micro_pool',
+              tiers: [0]
+            }
+          },
+          poolDetailsComponent.selection,
+          false
+        );
+      });
+
+      it('should show "Cache Tiers Details" tab if selected pool has "tiers"', () => {
+        const tabsItem = TabHelper.getNgbNavItems(fixture);
+        const tabsText = TabHelper.getTextContents(fixture);
+        expect(poolDetailsComponent.selection['tiers'].length).toBe(1);
+        expect(tabsItem.length).toBe(3);
+        expect(tabsText[2]).toBe('Cache Tiers Details');
+        expect(tabsItem[0].active).toBeTruthy();
+      });
+
+      it('should not show "Cache Tiers Details" tab if selected pool has no "tiers"', () => {
+        updatePoolSelection({ tiers: [] });
+        const tabs = TabHelper.getNgbNavItems(fixture);
+        expect(tabs.length).toEqual(2);
+        expect(tabs[0].active).toBeTruthy();
+      });
     });
   });
 });

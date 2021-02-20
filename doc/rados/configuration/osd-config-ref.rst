@@ -4,9 +4,10 @@
 
 .. index:: OSD; configuration
 
-You can configure Ceph OSD Daemons in the Ceph configuration file, but Ceph OSD
+You can configure Ceph OSD Daemons in the Ceph configuration file (or in recent
+releases, the central config store), but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` and ``host``,  and
+Ceph OSD Daemon configuration sets ``osd journal size`` (for Filestore), ``host``,  and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -25,7 +26,7 @@ file. For example:
 .. code-block:: ini
 
 	[osd]
-		osd journal size = 5120
+		osd_journal_size = 5120
 
 	[osd.0]
 		host = osd-host-a
@@ -46,22 +47,22 @@ automatically.
 .. warning:: **DO NOT** change the default paths for data or journals, as it
              makes it more problematic to troubleshoot Ceph later.
 
-The journal size should be at least twice the product of the expected drive
-speed multiplied by ``filestore max sync interval``. However, the most common
+When using Filestore, the journal size should be at least twice the product of the expected drive
+speed multiplied by ``filestore_max_sync_interval``. However, the most common
 practice is to partition the journal drive (often an SSD), and mount it such
 that Ceph uses the entire partition for the journal.
 
 
-``osd uuid``
+``osd_uuid``
 
 :Description: The universally unique identifier (UUID) for the Ceph OSD Daemon.
 :Type: UUID
 :Default: The UUID.
-:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
+:Note: The ``osd_uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
        applies to the entire cluster.
 
 
-``osd data``
+``osd_data``
 
 :Description: The path to the OSDs data. You must create the directory when
               deploying Ceph. You should mount a drive for OSD data at this
@@ -71,28 +72,28 @@ that Ceph uses the entire partition for the journal.
 :Default: ``/var/lib/ceph/osd/$cluster-$id``
 
 
-``osd max write size``
+``osd_max_write_size``
 
 :Description: The maximum size of a write in megabytes.
 :Type: 32-bit Integer
 :Default: ``90``
 
 
-``osd max object size``
+``osd_max_object_size``
 
 :Description: The maximum size of a RADOS object in bytes.
 :Type: 32-bit Unsigned Integer
 :Default: 128MB
 
 
-``osd client message size cap``
+``osd_client_message_size_cap``
 
 :Description: The largest client data message allowed in memory.
 :Type: 64-bit Unsigned Integer
 :Default: 500MB default. ``500*1024L*1024L``
 
 
-``osd class dir``
+``osd_class_dir``
 
 :Description: The class path for RADOS class plug-ins.
 :Type: String
@@ -105,27 +106,27 @@ File System Settings
 ====================
 Ceph builds and mounts file systems which are used for Ceph OSDs.
 
-``osd mkfs options {fs-type}``
+``osd_mkfs_options {fs-type}``
 
-:Description: Options used when creating a new Ceph OSD of type {fs-type}.
+:Description: Options used when creating a new Ceph Filestore OSD of type {fs-type}.
 
 :Type: String
 :Default for xfs: ``-f -i 2048``
 :Default for other file systems: {empty string}
 
 For example::
-  ``osd mkfs options xfs = -f -d agcount=24``
+  ``osd_mkfs_options_xfs = -f -d agcount=24``
 
-``osd mount options {fs-type}``
+``osd_mount_options {fs-type}``
 
-:Description: Options used when mounting a Ceph OSD of type {fs-type}.
+:Description: Options used when mounting a Ceph Filestore OSD of type {fs-type}.
 
 :Type: String
 :Default for xfs: ``rw,noatime,inode64``
 :Default for other file systems: ``rw, noatime``
 
 For example::
-  ``osd mount options xfs = rw, noatime, inode64, logbufs=8``
+  ``osd_mount_options_xfs = rw, noatime, inode64, logbufs=8``
 
 
 .. index:: OSD; journal settings
@@ -133,8 +134,11 @@ For example::
 Journal Settings
 ================
 
-By default, Ceph expects that you will store an Ceph OSD Daemons journal with
-the  following path::
+This section applies only to the older Filestore OSD back end.  Since Luminous
+BlueStore has been default and preferred.
+
+By default, Ceph expects that you will provision a Ceph OSD Daemon's journal at
+the following path, which is usually a symlink to a device or partition::
 
 	/var/lib/ceph/osd/$cluster-$id/journal
 
@@ -146,25 +150,25 @@ When using a mix of fast (SSDs, NVMe) devices with slower ones (like spinning
 drives) it makes sense to place the journal on the faster device, while
 ``data`` occupies the slower device fully.
 
-The default ``osd journal size`` value is 5120 (5 gigabytes), but it can be
-larger, in which case it will need to be set in the ``ceph.conf`` file::
+The default ``osd_journal_size`` value is 5120 (5 gigabytes), but it can be
+larger, in which case it will need to be set in the ``ceph.conf`` file.
+A value of 10 gigabytes is common in practice::
+
+	osd_journal_size = 10240
 
 
-	osd journal size = 10240
-
-
-``osd journal``
+``osd_journal``
 
 :Description: The path to the OSD's journal. This may be a path to a file or a
               block device (such as a partition of an SSD). If it is a file,
               you must create the directory to contain it. We recommend using a
-              drive separate from the ``osd data`` drive.
+              separate fast device when the ``osd_data`` drive is an HDD.
 
 :Type: String
 :Default: ``/var/lib/ceph/osd/$cluster-$id/journal``
 
 
-``osd journal size``
+``osd_journal_size``
 
 :Description: The size of the journal in megabytes.
 
@@ -180,7 +184,7 @@ Monitor OSD Interaction
 
 Ceph OSD Daemons check each other's heartbeats and report to monitors
 periodically. Ceph can use default values in many cases. However, if your
-network  has latency issues, you may need to adopt longer intervals. See
+network has latency issues, you may need to adopt longer intervals. See
 `Configuring Monitor/OSD Interaction`_ for a detailed discussion of heartbeats.
 
 
@@ -208,7 +212,7 @@ performance. You can adjust the following settings to increase or decrease
 scrubbing operations.
 
 
-``osd max scrubs``
+``osd_max_scrubs``
 
 :Description: The maximum number of simultaneous scrub operations for
               a Ceph OSD Daemon.
@@ -216,39 +220,55 @@ scrubbing operations.
 :Type: 32-bit Int
 :Default: ``1``
 
-``osd scrub begin hour``
+``osd_scrub_begin_hour``
 
-:Description: The time of day for the lower bound when a scheduled scrub can be
-              performed.
-:Type: Integer in the range of 0 to 24
+:Description: This restricts scrubbing to this hour of the day or later.
+              Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0``
+              to allow scrubbing the entire day.  Along with ``osd_scrub_end_hour``, they define a time
+              window, in which the scrubs can happen.
+              But a scrub will be performed
+              no matter whether the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd_scrub_max_interval``.
+:Type: Integer in the range of 0 to 23
 :Default: ``0``
 
 
-``osd scrub end hour``
+``osd_scrub_end_hour``
 
-:Description: The time of day for the upper bound when a scheduled scrub can be
-              performed. Along with ``osd scrub begin hour``, they define a time
+:Description: This restricts scrubbing to the hour earlier than this.
+              Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing
+              for the entire day.  Along with ``osd_scrub_begin_hour``, they define a time
               window, in which the scrubs can happen. But a scrub will be performed
-              no matter the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd scrub max interval``.
-:Type: Integer in the range of 0 to 24
-:Default: ``24``
+              no matter whether the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd_scrub_max_interval``.
+:Type: Integer in the range of 0 to 23
+:Default: ``0``
 
 
-``osd scrub begin week day``
+``osd_scrub_begin_week_day``
 
 :Description: This restricts scrubbing to this day of the week or later.
-              0 or 7 = Sunday, 1 = Monday, etc.
-:Type: Integer in the range of 0 to 7
+              0  = Sunday, 1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0``
+              and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
+              Along with ``osd_scrub_end_week_day``, they define a time window in which
+              scrubs can happen. But a scrub will be performed
+              no matter whether the time window allows or not, when the PG's
+              scrub interval exceeds ``osd_scrub_max_interval``.
+:Type: Integer in the range of 0 to 6
 :Default: ``0``
 
 
-``osd scrub end week day``
+``osd_scrub_end_week_day``
 
 :Description: This restricts scrubbing to days of the week earlier than this.
-              0 or 7 = Sunday, 1 = Monday, etc.
-:Type: Integer in the range of 0 to 7
-:Default: ``7``
+              0 = Sunday, 1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0``
+              and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
+              Along with ``osd_scrub_begin_week_day``, they define a time
+              window, in which the scrubs can happen. But a scrub will be performed
+              no matter whether the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd_scrub_max_interval``.
+:Type: Integer in the range of 0 to 6
+:Default: ``0``
 
 
 ``osd scrub during recovery``
@@ -258,54 +278,55 @@ scrubbing operations.
               Already running scrubs will be continued. This might be useful to reduce
               load on busy clusters.
 :Type: Boolean
-:Default: ``true``
+:Default: ``false``
 
 
-``osd scrub thread timeout``
+``osd_scrub_thread_timeout``
 
 :Description: The maximum time in seconds before timing out a scrub thread.
 :Type: 32-bit Integer
 :Default: ``60``
 
 
-``osd scrub finalize thread timeout``
+``osd_scrub_finalize_thread_timeout``
 
 :Description: The maximum time in seconds before timing out a scrub finalize
               thread.
 
 :Type: 32-bit Integer
-:Default: ``60*10``
+:Default: ``10*60``
 
 
-``osd scrub load threshold``
+``osd_scrub_load_threshold``
 
 :Description: The normalized maximum load. Ceph will not scrub when the system load
-              (as defined by ``getloadavg() / number of online cpus``) is higher than this number.
+              (as defined by ``getloadavg() / number of online CPUs``) is higher than this number.
               Default is ``0.5``.
 
 :Type: Float
 :Default: ``0.5``
 
 
-``osd scrub min interval``
+``osd_scrub_min_interval``
 
 :Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
               when the Ceph Storage Cluster load is low.
 
 :Type: Float
-:Default: Once per day. ``60*60*24``
+:Default: Once per day. ``24*60*60``
 
+.. _osd_scrub_max_interval:
 
-``osd scrub max interval``
+``osd_scrub_max_interval``
 
 :Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
               irrespective of cluster load.
 
 :Type: Float
-:Default: Once per week. ``7*60*60*24``
+:Default: Once per week. ``7*24*60*60``
 
 
-``osd scrub chunk min``
+``osd_scrub_chunk_min``
 
 :Description: The minimal number of object store chunks to scrub during single operation.
               Ceph blocks writes to single chunk during scrub.
@@ -314,7 +335,7 @@ scrubbing operations.
 :Default: 5
 
 
-``osd scrub chunk max``
+``osd_scrub_chunk_max``
 
 :Description: The maximum number of object store chunks to scrub during single operation.
 
@@ -322,52 +343,52 @@ scrubbing operations.
 :Default: 25
 
 
-``osd scrub sleep``
+``osd_scrub_sleep``
 
-:Description: Time to sleep before scrubbing next group of chunks. Increasing this value will slow
-              down whole scrub operation while client operations will be less impacted.
+:Description: Time to sleep before scrubbing the next group of chunks. Increasing this value will slow
+              down the overall rate of scrubbing so that client operations will be less impacted.
 
 :Type: Float
 :Default: 0
 
 
-``osd deep scrub interval``
+``osd_deep_scrub_interval``
 
 :Description: The interval for "deep" scrubbing (fully reading all data). The
-              ``osd scrub load threshold`` does not affect this setting.
+              ``osd_scrub_load_threshold`` does not affect this setting.
 
 :Type: Float
-:Default: Once per week.  ``60*60*24*7``
+:Default: Once per week.  ``7*24*60*60``
 
 
-``osd scrub interval randomize ratio``
+``osd_scrub_interval_randomize_ratio``
 
-:Description: Add a random delay to ``osd scrub min interval`` when scheduling
-              the next scrub job for a placement group. The delay is a random
-              value less than ``osd scrub min interval`` \*
-              ``osd scrub interval randomized ratio``. So the default setting
-              practically randomly spreads the scrubs out in the allowed time
-              window of ``[1, 1.5]`` \* ``osd scrub min interval``.
+:Description: Add a random delay to ``osd_scrub_min_interval`` when scheduling
+              the next scrub job for a PG. The delay is a random
+              value less than ``osd_scrub_min_interval`` \*
+              ``osd_scrub_interval_randomized_ratio``. The default setting
+              spreads scrubs throughout the allowed time
+              window of ``[1, 1.5]`` \* ``osd_scrub_min_interval``.
 :Type: Float
 :Default: ``0.5``
 
-``osd deep scrub stride``
+``osd_deep_scrub_stride``
 
 :Description: Read size when doing a deep scrub.
 :Type: 32-bit Integer
 :Default: 512 KB. ``524288``
 
 
-``osd scrub auto repair``
+``osd_scrub_auto_repair``
 
-:Description: Setting this to ``true`` will enable automatic pg repair when errors
-              are found in scrub or deep-scrub.  However, if more than
-              ``osd scrub auto repair num errors`` errors are found a repair is NOT performed.
+:Description: Setting this to ``true`` will enable automatic PG repair when errors
+              are found by scrubs or deep-scrubs.  However, if more than
+              ``osd_scrub_auto_repair_num_errors`` errors are found a repair is NOT performed.
 :Type: Boolean
 :Default: ``false``
 
 
-``osd scrub auto repair num errors``
+``osd_scrub_auto_repair_num_errors``
 
 :Description: Auto repair will not occur if more than this many errors are found.
 :Type: 32-bit Integer
@@ -379,31 +400,25 @@ scrubbing operations.
 Operations
 ==========
 
-``osd op queue``
+ ``osd_op_queue``
 
 :Description: This sets the type of queue to be used for prioritizing ops
-              in the OSDs. Both queues feature a strict sub-queue which is
+              within each OSD. Both queues feature a strict sub-queue which is
               dequeued before the normal queue. The normal queue is different
-              between implementations. The original PrioritizedQueue (``prio``) uses a
-              token bucket system which when there are sufficient tokens will
-              dequeue high priority queues first. If there are not enough
-              tokens available, queues are dequeued low priority to high priority.
-              The WeightedPriorityQueue (``wpq``) dequeues all priorities in
-              relation to their priorities to prevent starvation of any queue.
-              WPQ should help in cases where a few OSDs are more overloaded
-              than others. The new mClock based OpClassQueue
-              (``mclock_opclass``) prioritizes operations based on which class
+              between implementations. The WeightedPriorityQueue (``wpq``)
+              dequeues operations in relation to their priorities to prevent
+              starvation of any queue. WPQ should help in cases where a few OSDs
+              are more overloaded than others. The new mClockQueue
+              (``mclock_scheduler``) prioritizes operations based on which class
               they belong to (recovery, scrub, snaptrim, client op, osd subop).
-              And, the mClock based ClientQueue (``mclock_client``) also
-              incorporates the client identifier in order to promote fairness
-              between clients. See `QoS Based on mClock`_. Requires a restart.
+              See `QoS Based on mClock`_. Requires a restart.
 
 :Type: String
-:Valid Choices: prio, wpq, mclock_opclass, mclock_client
+:Valid Choices: wpq, mclock_scheduler
 :Default: ``wpq``
 
 
-``osd op queue cut off``
+``osd_op_queue_cut_off``
 
 :Description: This selects which priority ops will be sent to the strict
               queue verses the normal queue. The ``low`` setting sends all
@@ -411,7 +426,7 @@ Operations
               option sends only replication acknowledgment ops and higher to
               the strict queue. Setting this to ``high`` should help when a few
               OSDs in the cluster are very busy especially when combined with
-              ``wpq`` in the ``osd op queue`` setting. OSDs that are very busy
+              ``wpq`` in the ``osd_op_queue`` setting. OSDs that are very busy
               handling replication traffic could starve primary client traffic
               on these OSDs without these settings. Requires a restart.
 
@@ -420,29 +435,36 @@ Operations
 :Default: ``high``
 
 
-``osd client op priority``
+``osd_client_op_priority``
 
-:Description: The priority set for client operations.
+:Description: The priority set for client operations.  This value is relative
+              to that of ``osd_recovery_op_priority`` below.  The default
+              strongly favors client ops over recovery.
 
 :Type: 32-bit Integer
 :Default: ``63``
 :Valid Range: 1-63
 
 
-``osd recovery op priority``
+``osd_recovery_op_priority``
 
-:Description: The priority set for recovery operations, if not specified by the pool's ``recovery_op_priority``.
+:Description: The priority of recovery operations vs client operations, if not specified by the
+              pool's ``recovery_op_priority``.  The default value prioritizes client
+              ops (see above) over recovery ops.  You may adjust the tradeoff of client
+              impact against the time to restore cluster health by lowering this value
+              for increased prioritization of client ops, or by increasing it to favor
+              recovery.
 
 :Type: 32-bit Integer
 :Default: ``3``
 :Valid Range: 1-63
 
 
-``osd scrub priority``
+``osd_scrub_priority``
 
-:Description: The default priority set for a scheduled scrub work queue when the
+:Description: The default work queue priority for scheduled scrubs when the
               pool doesn't specify a value of ``scrub_priority``.  This can be
-              boosted to the value of ``osd client op priority`` when scrub is
+              boosted to the value of ``osd_client_op_priority`` when scrubs are
               blocking client operations.
 
 :Type: 32-bit Integer
@@ -450,18 +472,18 @@ Operations
 :Valid Range: 1-63
 
 
-``osd requested scrub priority``
+``osd_requested_scrub_priority``
 
 :Description: The priority set for user requested scrub on the work queue.  If
-              this value were to be smaller than ``osd client op priority`` it
-              can be boosted to the value of ``osd client op priority`` when
+              this value were to be smaller than ``osd_client_op_priority`` it
+              can be boosted to the value of ``osd_client_op_priority`` when
               scrub is blocking client operations.
 
 :Type: 32-bit Integer
 :Default: ``120``
 
 
-``osd snap trim priority``
+``osd_snap_trim_priority``
 
 :Description: The priority set for the snap trim work queue.
 
@@ -469,7 +491,7 @@ Operations
 :Default: ``5``
 :Valid Range: 1-63
 
-``osd snap trim sleep``
+``osd_snap_trim_sleep``
 
 :Description: Time in seconds to sleep before next snap trim op.
               Increasing this value will slow down snap trimming.
@@ -479,7 +501,7 @@ Operations
 :Default: ``0``
 
 
-``osd snap trim sleep hdd``
+``osd_snap_trim_sleep_hdd``
 
 :Description: Time in seconds to sleep before next snap trim op
               for HDDs.
@@ -488,31 +510,31 @@ Operations
 :Default: ``5``
 
 
-``osd snap trim sleep ssd``
+``osd_snap_trim_sleep_ssd``
 
 :Description: Time in seconds to sleep before next snap trim op
-              for SSDs.
+              for SSD OSDs (including NVMe).
 
 :Type: Float
 :Default: ``0``
 
 
-``osd snap trim sleep hybrid``
+``osd_snap_trim_sleep_hybrid``
 
 :Description: Time in seconds to sleep before next snap trim op
-              when osd data is on HDD and osd journal is on SSD.
+              when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
 
 :Type: Float
 :Default: ``2``
 
-``osd op thread timeout``
+``osd_op_thread_timeout``
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
 :Default: ``15``
 
 
-``osd op complaint time``
+``osd_op_complaint_time``
 
 :Description: An operation becomes complaint worthy after the specified number
               of seconds have elapsed.
@@ -521,21 +543,21 @@ Operations
 :Default: ``30``
 
 
-``osd op history size``
+``osd_op_history_size``
 
 :Description: The maximum number of completed operations to track.
 :Type: 32-bit Unsigned Integer
 :Default: ``20``
 
 
-``osd op history duration``
+``osd_op_history_duration``
 
 :Description: The oldest completed operation to track.
 :Type: 32-bit Unsigned Integer
 :Default: ``600``
 
 
-``osd op log threshold``
+``osd_op_log_threshold``
 
 :Description: How many operations logs to display at once.
 :Type: 32-bit Integer
@@ -547,18 +569,18 @@ Operations
 QoS Based on mClock
 -------------------
 
-Ceph's use of mClock is currently in the experimental phase and should
+Ceph's use of mClock is currently experimental and should
 be approached with an exploratory mindset.
 
 Core Concepts
 `````````````
 
-The QoS support of Ceph is implemented using a queueing scheduler
+Ceph's QoS support is implemented using a queueing scheduler
 based on `the dmClock algorithm`_. This algorithm allocates the I/O
 resources of the Ceph cluster in proportion to weights, and enforces
 the constraints of minimum reservation and maximum limitation, so that
 the services can compete for the resources fairly. Currently the
-*mclock_opclass* operation queue divides Ceph services involving I/O
+*mclock_scheduler* operation queue divides Ceph services involving I/O
 resources into following buckets:
 
 - client op: the iops issued by client
@@ -596,12 +618,6 @@ portion of the I/O resource, because its weight is "9", while its
 competitor "1". In the case of client ops, it is not clamped by the
 limit setting, so it can make use of all the resources if there is no
 recovery ongoing.
-
-Along with *mclock_opclass* another mclock operation queue named
-*mclock_client* is available. It divides operations based on category
-but also divides them based on the client making the request. This
-helps not only manage the distribution of resources spent on different
-classes of operations but also tries to ensure fairness among clients.
 
 CURRENT IMPLEMENTATION NOTE: the current experimental implementation
 does not enforce the limit values. As a first approximation we decided
@@ -671,17 +687,18 @@ the distributed version of mClock).
 Various organizations and individuals are currently experimenting with
 mClock as it exists in this code base along with their modifications
 to the code base. We hope you'll share you're experiences with your
-mClock and dmClock experiments in the ceph-devel mailing list.
+mClock and dmClock experiments on the ``ceph-devel`` mailing list.
 
 
-``osd push per object cost``
+``osd_push_per_object_cost``
 
 :Description: the overhead for serving a push op
 
 :Type: Unsigned Integer
 :Default: 1000
 
-``osd recovery max chunk``
+
+``osd_recovery_max_chunk``
 
 :Description: the maximum total size of data chunks a recovery op can carry.
 
@@ -689,124 +706,76 @@ mClock and dmClock experiments in the ceph-devel mailing list.
 :Default: 8 MiB
 
 
-``osd op queue mclock client op res``
+``osd_mclock_scheduler_client_res``
 
-:Description: the reservation of client op.
+:Description: IO proportion reserved for each client (default).
 
-:Type: Float
-:Default: 1000.0
-
-
-``osd op queue mclock client op wgt``
-
-:Description: the weight of client op.
-
-:Type: Float
-:Default: 500.0
+:Type: Unsigned Integer
+:Default: 1
 
 
-``osd op queue mclock client op lim``
+``osd_mclock_scheduler_client_wgt``
 
-:Description: the limit of client op.
+:Description: IO share for each client (default) over reservation.
 
-:Type: Float
-:Default: 1000.0
-
-
-``osd op queue mclock osd subop res``
-
-:Description: the reservation of osd subop.
-
-:Type: Float
-:Default: 1000.0
+:Type: Unsigned Integer
+:Default: 1
 
 
-``osd op queue mclock osd subop wgt``
+``osd_mclock_scheduler_client_lim``
 
-:Description: the weight of osd subop.
+:Description: IO limit for each client (default) over reservation.
 
-:Type: Float
-:Default: 500.0
-
-
-``osd op queue mclock osd subop lim``
-
-:Description: the limit of osd subop.
-
-:Type: Float
-:Default: 0.0
+:Type: Unsigned Integer
+:Default: 999999
 
 
-``osd op queue mclock snap res``
+``osd_mclock_scheduler_background_recovery_res``
 
-:Description: the reservation of snap trimming.
+:Description: IO proportion reserved for background recovery (default).
 
-:Type: Float
-:Default: 0.0
-
-
-``osd op queue mclock snap wgt``
-
-:Description: the weight of snap trimming.
-
-:Type: Float
-:Default: 1.0
+:Type: Unsigned Integer
+:Default: 1
 
 
-``osd op queue mclock snap lim``
+``osd_mclock_scheduler_background_recovery_wgt``
 
-:Description: the limit of snap trimming.
+:Description: IO share for each background recovery over reservation.
 
-:Type: Float
-:Default: 0.001
-
-
-``osd op queue mclock recov res``
-
-:Description: the reservation of recovery.
-
-:Type: Float
-:Default: 0.0
+:Type: Unsigned Integer
+:Default: 1
 
 
-``osd op queue mclock recov wgt``
+``osd_mclock_scheduler_background_recovery_lim``
 
-:Description: the weight of recovery.
+:Description: IO limit for background recovery over reservation.
 
-:Type: Float
-:Default: 1.0
-
-
-``osd op queue mclock recov lim``
-
-:Description: the limit of recovery.
-
-:Type: Float
-:Default: 0.001
+:Type: Unsigned Integer
+:Default: 999999
 
 
-``osd op queue mclock scrub res``
+``osd_mclock_scheduler_background_best_effort_res``
 
-:Description: the reservation of scrub jobs.
+:Description: IO proportion reserved for background best_effort (default).
 
-:Type: Float
-:Default: 0.0
-
-
-``osd op queue mclock scrub wgt``
-
-:Description: the weight of scrub jobs.
-
-:Type: Float
-:Default: 1.0
+:Type: Unsigned Integer
+:Default: 1
 
 
-``osd op queue mclock scrub lim``
+``osd_mclock_scheduler_background_best_effort_wgt``
 
-:Description: the limit of scrub jobs.
+:Description: IO share for each background best_effort over reservation.
 
-:Type: Float
-:Default: 0.001
+:Type: Unsigned Integer
+:Default: 1
+
+
+``osd_mclock_scheduler_background_best_effort_lim``
+
+:Description: IO limit for background best_effort over reservation.
+
+:Type: Unsigned Integer
+:Default: 999999
 
 .. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf
 
@@ -816,23 +785,24 @@ mClock and dmClock experiments in the ceph-devel mailing list.
 Backfilling
 ===========
 
-When you add or remove Ceph OSD Daemons to a cluster, the CRUSH algorithm will
-want to rebalance the cluster by moving placement groups to or from Ceph OSD
-Daemons to restore the balance. The process of migrating placement groups and
+When you add or remove Ceph OSD Daemons to a cluster, CRUSH will
+rebalance the cluster by moving placement groups to or from Ceph OSDs
+to restore balanced utilization. The process of migrating placement groups and
 the objects they contain can reduce the cluster's operational performance
 considerably. To maintain operational performance, Ceph performs this migration
 with 'backfilling', which allows Ceph to set backfill operations to a lower
 priority than requests to read or write data.
 
 
-``osd max backfills``
+``osd_max_backfills``
 
 :Description: The maximum number of backfills allowed to or from a single OSD.
+              Note that this is applied separately for read and write operations.
 :Type: 64-bit Unsigned Integer
 :Default: ``1``
 
 
-``osd backfill scan min``
+``osd_backfill_scan_min``
 
 :Description: The minimum number of objects per backfill scan.
 
@@ -840,7 +810,7 @@ priority than requests to read or write data.
 :Default: ``64``
 
 
-``osd backfill scan max``
+``osd_backfill_scan_max``
 
 :Description: The maximum number of objects per backfill scan.
 
@@ -848,7 +818,7 @@ priority than requests to read or write data.
 :Default: ``512``
 
 
-``osd backfill retry interval``
+``osd_backfill_retry_interval``
 
 :Description: The number of seconds to wait before retrying backfill requests.
 :Type: Double
@@ -864,21 +834,21 @@ number of map epochs increases. Ceph provides some settings to ensure that
 Ceph performs well as the OSD map grows larger.
 
 
-``osd map dedup``
+``osd_map_dedup``
 
 :Description: Enable removing duplicates in the OSD map.
 :Type: Boolean
 :Default: ``true``
 
 
-``osd map cache size``
+``osd_map_cache_size``
 
 :Description: The number of OSD maps to keep cached.
 :Type: 32-bit Integer
 :Default: ``50``
 
 
-``osd map message max``
+``osd_map_message_max``
 
 :Description: The maximum map entries allowed per MOSDMap message.
 :Type: 32-bit Integer
@@ -910,16 +880,16 @@ the number recovery requests, threads and object chunk sizes which allows Ceph
 perform well in a degraded state.
 
 
-``osd recovery delay start``
+``osd_recovery_delay_start``
 
 :Description: After peering completes, Ceph will delay for the specified number
-              of seconds before starting to recover objects.
+              of seconds before starting to recover RADOS objects.
 
 :Type: Float
 :Default: ``0``
 
 
-``osd recovery max active``
+``osd_recovery_max_active``
 
 :Description: The number of active recovery requests per OSD at one time. More
               requests will accelerate recovery, but the requests places an
@@ -933,7 +903,7 @@ perform well in a degraded state.
 :Type: 32-bit Integer
 :Default: ``0``
 
-``osd recovery max active hdd``
+``osd_recovery_max_active_hdd``
 
 :Description: The number of active recovery requests per OSD at one time, if the
 	      primary device is rotational.
@@ -941,7 +911,7 @@ perform well in a degraded state.
 :Type: 32-bit Integer
 :Default: ``3``
 
-``osd recovery max active ssd``
+``osd_recovery_max_active_ssd``
 
 :Description: The number of active recovery requests per OSD at one time, if the
 	      primary device is non-rotational (i.e., an SSD).
@@ -950,14 +920,14 @@ perform well in a degraded state.
 :Default: ``10``
 
 
-``osd recovery max chunk``
+``osd_recovery_max_chunk``
 
 :Description: The maximum size of a recovered chunk of data to push.
 :Type: 64-bit Unsigned Integer
 :Default: ``8 << 20``
 
 
-``osd recovery max single start``
+``osd_recovery_max_single_start``
 
 :Description: The maximum number of recovery operations per OSD that will be
               newly started when an OSD is recovering.
@@ -965,14 +935,14 @@ perform well in a degraded state.
 :Default: ``1``
 
 
-``osd recovery thread timeout``
+``osd_recovery_thread_timeout``
 
 :Description: The maximum time in seconds before timing out a recovery thread.
 :Type: 32-bit Integer
 :Default: ``30``
 
 
-``osd recover clone overlap``
+``osd_recover_clone_overlap``
 
 :Description: Preserves clone overlap during recovery. Should always be set
               to ``true``.
@@ -981,9 +951,9 @@ perform well in a degraded state.
 :Default: ``true``
 
 
-``osd recovery sleep``
+``osd_recovery_sleep``
 
-:Description: Time in seconds to sleep before next recovery or backfill op.
+:Description: Time in seconds to sleep before the next recovery or backfill op.
               Increasing this value will slow down recovery operation while
               client operations will be less impacted.
 
@@ -991,7 +961,7 @@ perform well in a degraded state.
 :Default: ``0``
 
 
-``osd recovery sleep hdd``
+``osd_recovery_sleep_hdd``
 
 :Description: Time in seconds to sleep before next recovery or backfill op
               for HDDs.
@@ -1000,25 +970,25 @@ perform well in a degraded state.
 :Default: ``0.1``
 
 
-``osd recovery sleep ssd``
+``osd_recovery_sleep_ssd``
 
-:Description: Time in seconds to sleep before next recovery or backfill op
+:Description: Time in seconds to sleep before the next recovery or backfill op
               for SSDs.
 
 :Type: Float
 :Default: ``0``
 
 
-``osd recovery sleep hybrid``
+``osd_recovery_sleep_hybrid``
 
-:Description: Time in seconds to sleep before next recovery or backfill op
-              when osd data is on HDD and osd journal is on SSD.
+:Description: Time in seconds to sleep before the next recovery or backfill op
+              when OSD data is on HDD and OSD journal / WAL+DB is on SSD.
 
 :Type: Float
 :Default: ``0.025``
 
 
-``osd recovery priority``
+``osd_recovery_priority``
 
 :Description: The default priority set for recovery work queue.  Not
               related to a pool's ``recovery_priority``.
@@ -1030,7 +1000,7 @@ perform well in a degraded state.
 Tiering
 =======
 
-``osd agent max ops``
+``osd_agent_max_ops``
 
 :Description: The maximum number of simultaneous flushing ops per tiering agent
               in the high speed mode.
@@ -1038,7 +1008,7 @@ Tiering
 :Default: ``4``
 
 
-``osd agent max low ops``
+``osd_agent_max_low_ops``
 
 :Description: The maximum number of simultaneous flushing ops per tiering agent
               in the low speed mode.
@@ -1052,92 +1022,92 @@ Miscellaneous
 =============
 
 
-``osd snap trim thread timeout``
+``osd_snap_trim_thread_timeout``
 
 :Description: The maximum time in seconds before timing out a snap trim thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1``
+:Default: ``1*60*60``
 
 
-``osd backlog thread timeout``
+``osd_backlog_thread_timeout``
 
 :Description: The maximum time in seconds before timing out a backlog thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1``
+:Default: ``1*60*60``
 
 
-``osd default notify timeout``
+``osd_default_notify_timeout``
 
 :Description: The OSD default notification timeout (in seconds).
 :Type: 32-bit Unsigned Integer
 :Default: ``30``
 
 
-``osd check for log corruption``
+``osd_check_for_log_corruption``
 
 :Description: Check log files for corruption. Can be computationally expensive.
 :Type: Boolean
 :Default: ``false``
 
 
-``osd remove thread timeout``
+``osd_remove_thread_timeout``
 
 :Description: The maximum time in seconds before timing out a remove OSD thread.
 :Type: 32-bit Integer
 :Default: ``60*60``
 
 
-``osd command thread timeout``
+``osd_command_thread_timeout``
 
 :Description: The maximum time in seconds before timing out a command thread.
 :Type: 32-bit Integer
 :Default: ``10*60``
 
 
-``osd delete sleep``
+``osd_delete_sleep``
 
-:Description: Time in seconds to sleep before next removal transaction. This
-              helps to throttle the pg deletion process.
+:Description: Time in seconds to sleep before the next removal transaction. This
+              throttles the PG deletion process.
 
 :Type: Float
 :Default: ``0``
 
 
-``osd delete sleep hdd``
+``osd_delete_sleep_hdd``
 
-:Description: Time in seconds to sleep before next removal transaction
+:Description: Time in seconds to sleep before the next removal transaction
               for HDDs.
 
 :Type: Float
 :Default: ``5``
 
 
-``osd delete sleep ssd``
+``osd_delete_sleep_ssd``
 
-:Description: Time in seconds to sleep before next removal transaction
+:Description: Time in seconds to sleep before the next removal transaction
               for SSDs.
 
 :Type: Float
 :Default: ``0``
 
 
-``osd delete sleep hybrid``
+``osd_delete_sleep_hybrid``
 
-:Description: Time in seconds to sleep before next removal transaction
-              when osd data is on HDD and osd journal is on SSD.
+:Description: Time in seconds to sleep before the next removal transaction
+              when OSD data is on HDD and OSD journal or WAL+DB is on SSD.
 
 :Type: Float
-:Default: ``2``
+:Default: ``1``
 
 
-``osd command max records``
+``osd_command_max_records``
 
 :Description: Limits the number of lost objects to return.
 :Type: 32-bit Integer
 :Default: ``256``
 
 
-``osd fast fail on connection refused``
+``osd_fast_fail_on_connection_refused``
 
 :Description: If this option is enabled, crashed OSDs are marked down
               immediately by connected peers and MONs (assuming that the

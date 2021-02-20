@@ -4,12 +4,12 @@
 #include "test/librados_test_stub/TestClassHandler.h"
 #include "test/librados_test_stub/TestIoCtxImpl.h"
 #include <boost/algorithm/string/predicate.hpp>
-#include <dlfcn.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include "common/debug.h"
 #include "include/ceph_assert.h"
+#include "include/dlfcn_compat.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
@@ -35,16 +35,12 @@ void TestClassHandler::open_class(const std::string& name,
     return;
   }
 
-  // clear any existing error
-  dlerror();
-
   // initialize
   void (*cls_init)() = reinterpret_cast<void (*)()>(
     dlsym(handle, "__cls_init"));
 
-  char* error = nullptr;
-  if ((error = dlerror()) != nullptr) {
-    std::cerr << "Error locating initializer: " << error << std::endl;
+  if (!cls_init) {
+    std::cerr << "Error locating initializer: " << dlerror() << std::endl;
   } else if (cls_init) {
     m_class_handles.push_back(handle);
     cls_init();
@@ -71,7 +67,7 @@ void TestClassHandler::open_all_classes() {
   while ((pde = ::readdir(dir))) {
     std::string name(pde->d_name);
     if (!boost::algorithm::starts_with(name, "libcls_") ||
-        !boost::algorithm::ends_with(name, ".so")) {
+        !boost::algorithm::ends_with(name, SHARED_LIB_SUFFIX)) {
       continue;
     }
     names.insert(name);
@@ -132,13 +128,14 @@ cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
 }
 
 TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
-    TestIoCtxImpl *io_ctx_impl, const std::string &oid,
+    TestIoCtxImpl *io_ctx_impl, const std::string &oid, uint64_t snap_id,
     const SnapContext &snapc) {
   SharedMethodContext ctx(new MethodContext());
 
   // clone to ioctx to provide a firewall for gmock expectations
   ctx->io_ctx_impl = io_ctx_impl->clone();
   ctx->oid = oid;
+  ctx->snap_id = snap_id;
   ctx->snapc = snapc;
   return ctx;
 }

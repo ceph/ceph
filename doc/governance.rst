@@ -33,6 +33,8 @@ The criteria for becoming a contributor include a consistent level of
 quality and engagement in the project over time.
 
 
+.. _clt:
+
 Ceph Leadership Team
 --------------------
 
@@ -51,23 +53,22 @@ the CLT itself.
 Current CLT members are:
 
  * Abhishek Lekshmanan <abhishek@suse.com>
- * Alfredo Deza <adeza@redhat.com>
  * Casey Bodley <cbodley@redhat.com>
+ * Ernesto Puerta <epuerta@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
  * Haomai Wang <haomai@xsky.com>
  * Jason Dillaman <dillaman@redhat.com>
  * Josh Durgin <jdurgin@redhat.com>
- * Joao Eduardo Luis <joao@suse.de>
+ * João Eduardo Luis <joao@suse.de>
  * Ken Dreyer <kdreyer@redhat.com>
- * Lenz Grimmer <lgrimmer@suse.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Myoungwon Oh <omwmw@sk.com>
  * Neha Ojha <nojha@redhat.com>
+ * Patrick Donnelly <pdonnell@redhat.com>
  * Sage Weil <sage@redhat.com>
  * Sebastian Wagner <swagner@suse.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
- * Zack Cerza <zcerza@redhat.com>
 
 Component Leads
 ---------------
@@ -98,6 +99,5 @@ and ecosystem.  It has no direct control over the technical direction
 of the Ceph open source project beyond offering feedback and input
 into the collaborative development process.
 
-For more information, see `https://ceph.com/foundation
-<https://ceph.com/foundation>`_.
+For more information, see :ref:`foundation`.
 

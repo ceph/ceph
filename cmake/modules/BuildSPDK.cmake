@@ -9,14 +9,8 @@ macro(build_spdk)
     find_package(aio REQUIRED)
     find_package(uuid REQUIRED)
   endif()
-
-  find_program (MAKE_EXECUTABLE NAMES make gmake)
-  if(CMAKE_MAKE_PROGRAM MATCHES "make")
-    # try to inherit command line arguments passed by parent "make" job
-    set(make_cmd "$(MAKE)")
-  else()
-    set(make_cmd "${MAKE_EXECUTABLE}")
-  endif()
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
 
   set(spdk_CFLAGS "-fPIC")
   include(CheckCCompilerFlag)
@@ -25,10 +19,21 @@ macro(build_spdk)
     set(spdk_CFLAGS "${spdk_CFLAGS} -Wno-address-of-packed-member")
   endif()
   include(ExternalProject)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
+    # a safer option than relying on the build host's arch
+    set(target_arch core2)
+  else()
+    # default arch used by SPDK
+    set(target_arch native)
+  endif()
   ExternalProject_Add(spdk-ext
     DEPENDS dpdk-ext
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk
-    CONFIGURE_COMMAND ./configure --with-dpdk=${DPDK_DIR} --without-isal --without-vhost
+    CONFIGURE_COMMAND ./configure
+      --with-dpdk=${DPDK_DIR}
+      --without-isal
+      --without-vhost
+      --target-arch=${target_arch}
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
@@ -37,7 +42,7 @@ macro(build_spdk)
     INSTALL_COMMAND "true")
   unset(make_cmd)
   ExternalProject_Get_Property(spdk-ext source_dir)
-  foreach(c nvme log lvol env_dpdk sock util)
+  foreach(c lvol env_dpdk sock nvmf bdev nvme conf thread trace notify accel event_accel blob vmd event_vmd event_bdev sock_posix event_sock event rpc jsonrpc json util log)
     add_library(spdk::${c} STATIC IMPORTED)
     add_dependencies(spdk::${c} spdk-ext)
     set_target_properties(spdk::${c} PROPERTIES

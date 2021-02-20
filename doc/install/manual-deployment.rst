@@ -11,13 +11,13 @@ whether authentication is required, etc. Most of these values are set by
 default, so it's useful to know about them when setting up your cluster for
 production.
 
-Following the same configuration as `Installation (Quick)`_, we will set up a
-cluster with ``node1`` as  the monitor node, and ``node2`` and ``node3`` for
-OSD nodes.
+We will set up a cluster with ``node1`` as  the monitor node, and ``node2`` and
+``node3`` for OSD nodes.
 
 
 
 .. ditaa::
+
            /------------------\         /----------------\
            |    Admin Node    |         |     node1      |
            |                  +-------->+                |
@@ -108,9 +108,6 @@ The procedure is as follows:
 
 	ls /etc/ceph
 
-   **Note:** Deployment tools may remove this directory when purging a
-   cluster (e.g., ``ceph-deploy purgedata {node-name}``, ``ceph-deploy purge
-   {node-name}``).
 
 #. Create a Ceph configuration file. By default, Ceph uses
    ``ceph.conf``, where ``ceph`` reflects the cluster name. ::
@@ -156,7 +153,7 @@ The procedure is as follows:
 
 #. Create a keyring for your cluster and generate a monitor secret key. ::
 
-	ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+	sudo ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
 
 
 #. Generate an administrator keyring, generate a ``client.admin`` user and add
@@ -173,6 +170,10 @@ The procedure is as follows:
 
 	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
 	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
+
+#. Change the owner for ``ceph.mon.keyring``. ::
+
+	sudo chown ceph:ceph /tmp/ceph.mon.keyring
 
 #. Generate a monitor map using the hostname(s), host IP address(es) and the FSID.
    Save it as ``/tmp/monmap``::
@@ -243,18 +244,13 @@ The procedure is as follows:
 
 #. Start the monitor(s).
 
-   For most distributions, services are started via systemd now::
+   Start the service with systemd::
 
 	sudo systemctl start ceph-mon@node1
 
-   For older Debian/CentOS/RHEL, use sysvinit::
-
-	sudo /etc/init.d/ceph start mon.node1
-
-
 #. Verify that the monitor is running. ::
 
-	ceph -s
+	sudo ceph -s
 
    You should see output that the monitor you started is up and running, and
    you should see a health error indicating that placement groups are stuck
@@ -477,7 +473,7 @@ In the below instructions, ``{id}`` is an arbitrary name, such as the hostname o
 
 #. Import the keyring and set caps.::
 
-	ceph auth add mds.{id} osd "allow rwx" mds "allow" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
+	ceph auth add mds.{id} osd "allow rwx" mds "allow *" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
 
 #. Add to ceph.conf.::
 
@@ -526,7 +522,6 @@ To add (or remove) additional monitors, see `Add/Remove Monitors`_.
 To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 
 
-.. _Installation (Quick): ../../start
 .. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref

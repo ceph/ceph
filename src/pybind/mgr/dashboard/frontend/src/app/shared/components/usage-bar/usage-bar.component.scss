@@ -1,27 +1,27 @@
-@import 'defaults';
+@use './src/styles/vendor/variables' as vv;
 
 .bg-info {
-  background-color: $color-progress-bar-info-bg !important;
+  background-color: vv.$primary !important;
 }
 
 .bg-freespace {
-  background-color: $color-progress-bar-freespace-bg !important;
+  background-color: vv.$gray-400 !important;
 }
 
 .progress {
   height: 20px;
-  position: relative;
   margin-bottom: 0;
+  position: relative;
 
   div.progress-bar {
     position: static;
   }
 
   span {
-    position: absolute;
+    color: vv.$black;
     display: block;
-    width: 100%;
-    color: $color-progress-text;
     font-weight: normal;
+    position: absolute;
+    width: 100%;
   }
 }

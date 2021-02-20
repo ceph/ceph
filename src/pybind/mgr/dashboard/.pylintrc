@@ -3,19 +3,20 @@
 # A comma-separated list of package or module names from where C extensions may
 # be loaded. Extensions are loading into the active Python interpreter and may
 # run arbitrary code
+# TODO: remove racially insensitive terms when this becomes fixed: https://github.com/PyCQA/pylint/issues/3669
 extension-pkg-whitelist=rados,rbd,math,cephfs
 
-# Add files or directories to the blacklist. They should be base names, not
+# Add files or directories to the blocklist. They should be base names, not
 # paths.
 ignore=CVS
 
-# Add files or directories matching the regex patterns to the blacklist. The
+# Add files or directories matching the regex patterns to the blocklist. The
 # regex matches against base names, not paths.
 ignore-patterns=
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
-#init-hook=
+init-hook='import sys; sys.path.append("./")'
 
 # Use multiple processes to speed up Pylint.
 jobs=1
@@ -73,7 +74,6 @@ disable=import-star-module-level,
         reduce-builtin,
         standarderror-builtin,
         unicode-builtin,
-        xrange-builtin,
         coerce-method,
         delslice-method,
         getslice-method,
@@ -119,7 +119,12 @@ disable=import-star-module-level,
         too-many-arguments,
         too-many-locals,
         too-many-statements,
-        useless-object-inheritance
+        useless-object-inheritance,
+        relative-beyond-top-level,
+        raise-missing-from,
+        super-with-arguments,
+        import-outside-toplevel,
+        unsubscriptable-object
 
 
 # Enable the message, report, category or checker with the given id(s). You can
@@ -502,7 +507,7 @@ valid-metaclass-classmethod-first-arg=mcs
 max-args=5
 
 # Maximum number of attributes for a class (see R0902).
-max-attributes=7
+max-attributes=10
 
 # Maximum number of boolean expressions in a if statement
 max-bool-expr=5

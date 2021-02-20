@@ -14,7 +14,8 @@ To use Ceph Block Devices with Kubernetes v1.13 and higher, you must install
 and configure ``ceph-csi`` within your Kubernetes environment. The following
 diagram depicts the Kubernetes/Ceph technology stack.
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+            +---------------------------------------------------+
             |                   Kubernetes                      |
             +---------------------------------------------------+
             |                    ceph--csi                      |
@@ -64,7 +65,7 @@ Setup Ceph Client Authentication
 Create a new user for Kubernetes and `ceph-csi`. Execute the following and
 record the generated key::
 
-    $ ceph auth get-or-create client.kubernetes mon 'profile rbd' osd 'profile rbd pool=kubernetes'
+    $ ceph auth get-or-create client.kubernetes mon 'profile rbd' osd 'profile rbd pool=kubernetes' mgr 'profile rbd pool=kubernetes'
     [client.kubernetes]
         key = AQD9o0Fd6hQRChAAt7fMaSZXduT3NWEqylNpmg==
 

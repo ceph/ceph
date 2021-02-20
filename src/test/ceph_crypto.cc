@@ -268,11 +268,11 @@ void do_simple_crypto() {
   exit(0);
 }
 
-#if GTEST_HAS_DEATH_TEST
+#if GTEST_HAS_DEATH_TEST && !defined(_WIN32)
 TEST_F(ForkDeathTest, MD5) {
   ASSERT_EXIT(do_simple_crypto(), ::testing::ExitedWithCode(0), "^$");
 }
-#endif //GTEST_HAS_DEATH_TEST
+#endif // GTEST_HAS_DEATH_TEST && !defined(_WIN32)
 
 int main(int argc, char **argv) {
   std::vector<const char*> args(argv, argv + argc);

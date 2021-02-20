@@ -10,7 +10,6 @@
 #include <vector>
 #include <boost/circular_buffer.hpp>
 
-class PG;
 class PGStateHistory;
 
 struct EpochSource {
@@ -55,7 +54,6 @@ struct PGStateInstance {
   }
 
   epoch_t this_epoch;
-  utime_t enter_time;
   std::vector<state_history_entry> state_history;
   std::stack<embedded_state> embedded_states;
 };
@@ -73,7 +71,7 @@ public:
     pi = nullptr;
   }
 
-  void dump(Formatter* f) const;
+  void dump(ceph::Formatter* f) const;
 
   const char *get_current_state() const {
     if (pi == nullptr) return "unknown";

@@ -25,6 +25,46 @@ location and how it is being consumed with::
 
   ceph device info <devid>
 
+Identifying physical devices
+----------------------------
+
+You can blink the drive LEDs on hardware enclosures to make the replacement of
+failed disks easy and less error-prone.  Use the following command::
+
+  device light on|off <devid> [ident|fault] [--force]
+
+The ``<devid>`` parameter is the device identification. You can obtain this
+information using the following command::
+
+  ceph device ls
+
+The ``[ident|fault]`` parameter is used to set the kind of light to blink.
+By default, the `identification` light is used.
+
+.. note::
+   This command needs the Cephadm or the Rook `orchestrator <https://docs.ceph.com/docs/master/mgr/orchestrator/#orchestrator-cli-module>`_ module enabled.
+   The orchestrator module enabled is shown by executing the following command::
+
+     ceph orch status
+
+The command behind the scene to blink the drive LEDs is `lsmcli`. If you need
+to customize this command you can configure this via a Jinja2 template::
+
+   ceph config-key set mgr/cephadm/blink_device_light_cmd "<template>"
+   ceph config-key set mgr/cephadm/<host>/blink_device_light_cmd "lsmcli local-disk-{{ ident_fault }}-led-{{'on' if on else 'off'}} --path '{{ path or dev }}'"
+
+The Jinja2 template is rendered using the following arguments:
+
+* ``on``
+    A boolean value.
+* ``ident_fault``
+    A string containing `ident` or `fault`.
+* ``dev``
+    A string containing the device ID, e.g. `SanDisk_X400_M.2_2280_512GB_162924424784`.
+* ``path``
+    A string containing the device path, e.g. `/dev/sda`.
+
+.. _enabling-monitoring:
 
 Enabling monitoring
 -------------------
@@ -80,9 +120,6 @@ health metrics it collects.  There are three modes:
 
 * *none*: disable device failure prediction.
 * *local*: use a pre-trained prediction model from the ceph-mgr daemon
-* *cloud*: share device health and performance metrics an external
-  cloud service run by ProphetStor, using either their free service or
-  a paid service with more accurate predictions
 
 The prediction mode can be configured with::
 

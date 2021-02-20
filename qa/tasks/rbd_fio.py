@@ -9,7 +9,6 @@ import contextlib
 import json
 import logging
 import os
-import StringIO
 
 from teuthology.parallel import parallel
 from teuthology import misc as teuthology
@@ -52,7 +51,7 @@ or
         client_config = config['all']
     clients = ctx.cluster.only(teuthology.is_type('client'))
     rbd_test_dir = teuthology.get_testdir(ctx) + "/rbd_fio_test"
-    for remote,role in clients.remotes.iteritems():
+    for remote,role in clients.remotes.items():
         if 'client_config' in locals():
            with parallel() as p:
                p.spawn(run_fio, remote, client_config, rbd_test_dir)
@@ -77,12 +76,9 @@ def get_ioengine_package_name(ioengine, remote):
 
 def run_rbd_map(remote, image, iodepth):
     iodepth = max(iodepth, 128)  # RBD_QUEUE_DEPTH_DEFAULT
-    out = StringIO.StringIO()
-    remote.run(args=['sudo', 'rbd', 'device', 'map', '-o',
-                     'queue_depth={}'.format(iodepth), image], stdout=out)
-    dev = out.getvalue().rstrip('\n')
-    teuthology.sudo_write_file(
-        remote,
+    dev = remote.sh(['sudo', 'rbd', 'device', 'map', '-o',
+                     'queue_depth={}'.format(iodepth), image]).rstrip('\n')
+    remote.sudo_write_file(
         '/sys/block/{}/queue/nr_requests'.format(os.path.basename(dev)),
         str(iodepth))
     return dev
@@ -94,7 +90,7 @@ def run_fio(remote, config, rbd_test_dir):
     get the fio from github, generate binary, and use it to run on
     the generated fio config file
     """
-    fio_config=NamedTemporaryFile(prefix='fio_rbd_', dir='/tmp/', delete=False)
+    fio_config=NamedTemporaryFile(mode='w', prefix='fio_rbd_', dir='/tmp/', delete=False)
     fio_config.write('[global]\n')
     if config.get('io-engine'):
         ioengine=config['io-engine']
@@ -127,7 +123,7 @@ def run_fio(remote, config, rbd_test_dir):
 
     formats=[1,2]
     features=[['layering'],['striping'],['exclusive-lock','object-map']]
-    fio_version='2.21'
+    fio_version='3.16'
     if config.get('formats'):
         formats=config['formats']
     if config.get('features'):
@@ -160,6 +156,8 @@ def run_fio(remote, config, rbd_test_dir):
                         '--image', rbd_name,
                         '--image-format', '{f}'.format(f=frmt)]
            map(lambda x: create_args.extend(['--image-feature', x]), feature)
+           if config.get('thick-provision'):
+               create_args.append('--thick-provision')
            remote.run(args=create_args)
            remote.run(args=['rbd', 'info', rbd_name])
            if ioengine != 'rbd':
@@ -214,9 +212,8 @@ def run_fio(remote, config, rbd_test_dir):
         remote.run(args=['sudo', run.Raw('{tdir}/fio-fio-{v}/fio {f}'.format(tdir=rbd_test_dir,v=fio_version,f=fio_config.name))])
         remote.run(args=['ceph', '-s'])
     finally:
-        out=StringIO.StringIO()
-        remote.run(args=['rbd', 'device', 'list', '--format=json'], stdout=out)
-        mapped_images = json.loads(out.getvalue())
+        out = remote.sh('rbd device list --format=json')
+        mapped_images = json.loads(out)
         if mapped_images:
             log.info("Unmapping rbd images on {sn}".format(sn=sn))
             for image in mapped_images:

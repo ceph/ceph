@@ -12,7 +12,7 @@
 
 class CryptoKey;
 
-namespace ceph::auth {
+namespace crimson::auth {
 
 class error : public std::logic_error {
 public:
@@ -34,14 +34,14 @@ public:
   /// Build an authentication request to begin the handshake
   ///
   /// @throw auth::error if unable to build the request
-  virtual auth_request_t get_auth_request(ceph::net::ConnectionRef conn,
+  virtual auth_request_t get_auth_request(crimson::net::ConnectionRef conn,
 					  AuthConnectionMetaRef auth_meta) = 0;
 
   /// Handle server's request to continue the handshake
   ///
   /// @throw auth::error if unable to build the request
   virtual ceph::bufferlist handle_auth_reply_more(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     const ceph::bufferlist& bl) = 0;
 
@@ -49,7 +49,7 @@ public:
   ///
   /// @return 0 if authenticated, a negative number otherwise
   virtual int handle_auth_done(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     uint64_t global_id,
     uint32_t con_mode,
@@ -60,7 +60,7 @@ public:
   /// @return 0 if will try next auth method, a negative number if we have no
   ///         more options
   virtual int handle_auth_bad_method(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     uint32_t old_auth_method,
     int result,
@@ -68,4 +68,4 @@ public:
     const std::vector<uint32_t>& allowed_modes) = 0;
 };
 
-} // namespace ceph::auth
+} // namespace crimson::auth

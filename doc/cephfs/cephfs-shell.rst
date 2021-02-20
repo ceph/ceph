@@ -3,16 +3,29 @@
 CephFS Shell
 =============
 
-The File System (FS) shell includes various shell-like commands that directly interact with the :term:`Ceph File System`.
+CephFS Shell provides shell-like commands that directly interact with the
+:term:`Ceph File System`.
+
+This tool can be used in interactive mode as well as in non-interactive mode.
+In former mode, cephfs-shell opens a shell session and after the given command
+is finished, it prints the prompt string and waits indefinitely. When the
+shell session is finished, cephfs-shell quits with the return value of last
+executed command. In non-interactive mode, cephfs-shell issues a command and
+exits right after the command's execution is complete with the command's
+return value.
+
+Behaviour of CephFS Shell can be tweaked using ``cephfs-shell.conf``. Refer to
+`CephFS Shell Configuration File`_ for details.
 
 Usage :
 
-    cephfs-shell [-options] -- [command, command,...]
+    cephfs-shell [options] [command]
+    cephfs-shell [options] -- [command, command,...]
 
 Options :
-    -c, --config FILE     Set Configuration file.
-    -b, --batch FILE      Process a batch file.
-    -t, --test FILE       Test against transcript(s) in FILE
+    -c, --config FILE     Path to cephfs-shell.conf
+    -b, --batch FILE      Path to batch file.
+    -t, --test FILE       Path to transcript(s) in FILE for testing
 
 
 .. note::
@@ -380,3 +393,196 @@ Usage :
 
 Options :
   -h     Shows the help message
+
+snap
+----
+
+Create or Delete Snapshot
+
+Usage:
+
+     snap {create|delete} <snap_name> <dir_name>
+
+* snap_name - Snapshot name to be created or deleted
+
+* dir_name - directory under which snapshot should be created or deleted
+
+setxattr
+--------
+
+Set extended attribute for a file
+
+Usage :
+
+     setxattr [-h] <path> <name> <value>
+
+*  path - Path to the file
+
+*  name - Extended attribute name to get or set
+
+*  value - Extended attribute value to be set
+
+Options:
+  -h, --help   Shows the help message
+
+getxattr
+--------
+
+Get extended attribute value for the name associated with the path
+
+Usage :
+
+     getxattr [-h] <path> <name>
+
+*  path - Path to the file
+
+*  name - Extended attribute name to get or set
+
+Options:
+  -h, --help   Shows the help message
+
+listxattr
+---------
+
+List extended attribute names associated with the path
+
+Usage :
+
+     listxattr [-h] <path>
+
+*  path - Path to the file
+
+Options:
+  -h, --help   Shows the help message
+
+df
+--
+
+Display amount of available disk space
+
+Usage :
+
+    df [-h] [file [file ...]]
+
+* file - name of the file
+
+Options:
+  -h, --help   Shows the help message
+
+du
+--
+
+Show disk usage of a directory
+
+Usage :
+
+    du [-h] [-r] [paths [paths ...]]
+
+* paths - name of the directory
+
+Options:
+  -h, --help   Shows the help message
+
+  -r     Recursive Disk usage of all directories
+
+
+quota
+-----
+
+Quota management for a Directory
+
+Usage :
+
+    quota [-h] [--max_bytes [MAX_BYTES]] [--max_files [MAX_FILES]] {get,set} path
+
+* {get,set} - quota operation type.
+
+* path - name of the directory.
+
+Options :
+  -h, --help   Shows the help message
+
+  --max_bytes MAX_BYTES    Set max cumulative size of the data under this directory
+
+  --max_files MAX_FILES    Set total number of files under this directory tree
+
+CephFS Shell Configuration File
+===============================
+By default, CephFS Shell looks for ``cephfs-shell.conf`` in the path provided
+by the environment variable ``CEPHFS_SHELL_CONF`` and then in user's home
+directory (``~/.cephfs-shell.conf``).
+
+Right now, CephFS Shell inherits all its options from its dependency ``cmd2``.
+Therefore, these options might vary with the version of ``cmd2`` installed on
+your system. Refer to ``cmd2`` docs for a description of these options.
+
+Following is a sample ``cephfs-shell.conf``::
+
+    [cephfs-shell]
+    prompt = CephFS:~/>>>
+    continuation_prompt = >
+
+    quiet = False
+    timing = False
+    colors = True
+    debug = False
+
+    abbrev = False
+    autorun_on_edit = False
+    echo = False
+    editor = vim
+    feedback_to_output = False
+    locals_in_py = True
+
+Exit Code
+=========
+
+Following exit codes are returned by cephfs shell
+
++-----------------------------------------------+-----------+
+| Error Type                                    | Exit Code |
++===============================================+===========+
+| Miscellaneous                                 |     1     |
++-----------------------------------------------+-----------+
+| Keyboard Interrupt                            |     2     |
++-----------------------------------------------+-----------+
+| Operation not permitted                       |     3     |
++-----------------------------------------------+-----------+
+| Permission denied                             |     4     |
++-----------------------------------------------+-----------+
+| No such file or directory                     |     5     |
++-----------------------------------------------+-----------+
+| I/O error                                     |     6     |
++-----------------------------------------------+-----------+
+| No space left on device                       |     7     |
++-----------------------------------------------+-----------+
+| File exists                                   |     8     |
++-----------------------------------------------+-----------+
+| No data available                             |     9     |
++-----------------------------------------------+-----------+
+| Invalid argument                              |     10    |
++-----------------------------------------------+-----------+
+| Operation not supported on transport endpoint |     11    |
++-----------------------------------------------+-----------+
+| Range error                                   |     12    |
++-----------------------------------------------+-----------+
+| Operation would block                         |     13    |
++-----------------------------------------------+-----------+
+| Directory not empty                           |     14    |
++-----------------------------------------------+-----------+
+| Not a directory                               |     15    |
++-----------------------------------------------+-----------+
+| Disk quota exceeded                           |     16    |
++-----------------------------------------------+-----------+
+| Broken pipe                                   |     17    |
++-----------------------------------------------+-----------+
+| Cannot send after transport endpoint shutdown |     18    |
++-----------------------------------------------+-----------+
+| Connection aborted                            |     19    |
++-----------------------------------------------+-----------+
+| Connection refused                            |     20    |
++-----------------------------------------------+-----------+
+| Connection reset                              |     21    |
++-----------------------------------------------+-----------+
+| Interrupted function call                     |     22    |
++-----------------------------------------------+-----------+

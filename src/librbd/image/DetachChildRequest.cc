@@ -4,12 +4,14 @@
 #include "librbd/image/DetachChildRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
+#include "librbd/journal/DisabledPolicy.h"
 #include "librbd/trash/RemoveRequest.h"
 #include <string>
 
@@ -71,6 +73,9 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
                              m_parent_spec.pool_id,
                              m_parent_spec.pool_namespace, &m_parent_io_ctx);
   if (r < 0) {
+    if (r == -ENOENT) {
+      r = 0;
+    }
     finish(r);
     return;
   }
@@ -141,7 +146,7 @@ void DetachChildRequest<I>::handle_clone_v2_get_snapshot(int r) {
     }
   }
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     ldout(cct, 5) << "failed to retrieve snapshot: " << cpp_strerror(r)
                   << dendl;
   }
@@ -162,6 +167,9 @@ void DetachChildRequest<I>::clone_v2_open_parent() {
   m_parent_image_ctx = I::create("", m_parent_spec.image_id, nullptr,
                                  m_parent_io_ctx, false);
 
+  // ensure non-primary images can be modified
+  m_parent_image_ctx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
   auto ctx = create_context_callback<
     DetachChildRequest<I>,
     &DetachChildRequest<I>::handle_clone_v2_open_parent>(this);
@@ -176,10 +184,24 @@ void DetachChildRequest<I>::handle_clone_v2_open_parent(int r) {
   if (r < 0) {
     ldout(cct, 5) << "failed to open parent for read/write: "
                   << cpp_strerror(r) << dendl;
-    m_parent_image_ctx->destroy();
     m_parent_image_ctx = nullptr;
     finish(0);
     return;
+  }
+
+  // do not attempt to open the parent journal when removing the trash
+  // snapshot, because the parent may be not promoted
+  if (m_parent_image_ctx->test_features(RBD_FEATURE_JOURNALING)) {
+    std::unique_lock image_locker{m_parent_image_ctx->image_lock};
+    m_parent_image_ctx->set_journal_policy(new journal::DisabledPolicy());
+  }
+
+  // disallow any proxied maintenance operations
+  {
+    std::shared_lock owner_locker{m_parent_image_ctx->owner_lock};
+    if (m_parent_image_ctx->exclusive_lock != nullptr) {
+      m_parent_image_ctx->exclusive_lock->block_requests(0);
+    }
   }
 
   clone_v2_remove_snapshot();
@@ -316,7 +338,6 @@ void DetachChildRequest<I>::handle_clone_v2_close_parent(int r) {
                   << dendl;
   }
 
-  m_parent_image_ctx->destroy();
   m_parent_image_ctx = nullptr;
   finish(0);
 }

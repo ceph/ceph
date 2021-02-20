@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
+
 from __future__ import absolute_import
 
-from enum import Enum
 import json
-import uuid
+from enum import Enum
 
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 from .plugin import SimplePlugin as SP
+
+try:
+    from typing import no_type_check
+except ImportError:
+    no_type_check = object()  # Just for type checking
 
 
 class Actions(Enum):
@@ -17,7 +22,8 @@ class Actions(Enum):
 
 
 @PM.add_plugin  # pylint: disable=too-many-ancestors
-class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy, I.FilterRequest.BeforeHandler):
+class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy,  # pylint: disable=too-many-ancestors
+            I.Setupable, I.ConfigNotify):
     NAME = 'debug'
 
     OPTIONS = [
@@ -29,30 +35,52 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy, I.FilterRequest.BeforeHandl
         )
     ]
 
-    def handler(self, action):
+    @no_type_check  # https://github.com/python/mypy/issues/7806
+    def _refresh_health_checks(self):
+        debug = self.get_option(self.NAME)
+        if debug:
+            self.mgr.health_checks.update({'DASHBOARD_DEBUG': {
+                'severity': 'warning',
+                'summary': 'Dashboard debug mode is enabled',
+                'detail': [
+                    'Please disable debug mode in production environments using '
+                    '"ceph dashboard {} {}"'.format(self.NAME, Actions.DISABLE.value)
+                ]
+            }})
+        else:
+            self.mgr.health_checks.pop('DASHBOARD_DEBUG', None)
+        self.mgr.refresh_health_checks()
+
+    @PM.add_hook
+    def setup(self):
+        self._refresh_health_checks()
+
+    @no_type_check
+    def handler(self, action: Actions):
+        '''
+        Control and report debug status in Ceph-Dashboard
+        '''
         ret = 0
         msg = ''
-        if action in [Actions.ENABLE.value, Actions.DISABLE.value]:
-            self.set_option(self.NAME, action == Actions.ENABLE.value)
+        if action in [Actions.ENABLE, Actions.DISABLE]:
+            self.set_option(self.NAME, action == Actions.ENABLE)
             self.mgr.update_cherrypy_config({})
+            self._refresh_health_checks()
         else:
             debug = self.get_option(self.NAME)
             msg = "Debug: '{}'".format('enabled' if debug else 'disabled')
-        return (ret, msg, None)
+        return ret, msg, None
 
     COMMANDS = [
         SP.Command(
             prefix="dashboard {name}".format(name=NAME),
-            args="name=action,type=CephChoices,strings={states}".format(
-                states="|".join(a.value for a in Actions)),
-            desc="Control and report debug status in Ceph-Dashboard",
             handler=handler
         )
     ]
 
     def custom_error_response(self, status, message, traceback, version):
         self.response.headers['Content-Type'] = 'application/json'
-        error_response = dict(status=status, detail=message, request_id=self.request.unique_id)
+        error_response = dict(status=status, detail=message, request_id=str(self.request.unique_id))
 
         if self.get_option(self.NAME):
             error_response.update(dict(traceback=traceback, version=version))
@@ -67,7 +95,5 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy, I.FilterRequest.BeforeHandl
         })
 
     @PM.add_hook
-    def filter_request_before_handler(self, request):
-        if not hasattr(request, 'unique_id'):
-            # Cherrypy v8.9.1 doesn't have this property
-            request.unique_id = str(uuid.uuid4())
+    def config_notify(self):
+        self._refresh_health_checks()

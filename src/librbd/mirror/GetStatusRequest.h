@@ -65,6 +65,7 @@ private:
   Context *m_on_finish;
 
   bufferlist m_out_bl;
+  std::string m_primary_mirror_uuid;
 
   void get_info();
   void handle_get_info(int r);

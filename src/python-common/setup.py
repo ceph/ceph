@@ -17,13 +17,9 @@ setup(
     keywords='ceph',
     url="https://github.com/ceph/ceph",
     zip_safe = False,
-    install_requires=(
-        'six',
+    install_requires=(	
+        'pyyaml',	
     ),
-    tests_require=[
-        'pytest >=2.1.3',
-        'tox',
-    ],
     classifiers = [
         'Intended Audience :: Developer',
         'Operating System :: POSIX :: Linux',

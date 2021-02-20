@@ -50,20 +50,24 @@ class ObjectCacheRequest {
   bufferlist get_payload_bufferlist() { return payload; }
 
   virtual void encode_payload() = 0;
-  virtual void decode_payload(bufferlist::const_iterator bl_it) = 0;
+  virtual void decode_payload(bufferlist::const_iterator bl_it,
+                              __u8 encode_version) = 0;
   virtual uint16_t get_request_type() = 0;
   virtual bool payload_empty() = 0;
 };
 
 class ObjectCacheRegData : public ObjectCacheRequest {
  public:
+  std::string version;
   ObjectCacheRegData();
+  ObjectCacheRegData(uint16_t t, uint64_t s, const std::string &version);
   ObjectCacheRegData(uint16_t t, uint64_t s);
   ~ObjectCacheRegData() override;
   void encode_payload() override;
-  void decode_payload(bufferlist::const_iterator bl) override;
+  void decode_payload(bufferlist::const_iterator bl,
+                      __u8 encode_version) override;
   uint16_t get_request_type() override { return RBDSC_REGISTER; }
-  bool payload_empty() override { return true; }
+  bool payload_empty() override { return false; }
 };
 
 class ObjectCacheRegReplyData : public ObjectCacheRequest {
@@ -72,7 +76,8 @@ class ObjectCacheRegReplyData : public ObjectCacheRequest {
   ObjectCacheRegReplyData(uint16_t t, uint64_t s);
   ~ObjectCacheRegReplyData() override;
   void encode_payload() override;
-  void decode_payload(bufferlist::const_iterator iter) override;
+  void decode_payload(bufferlist::const_iterator iter,
+                      __u8 encode_version) override;
   uint16_t get_request_type() override { return RBDSC_REGISTER_REPLY; }
   bool payload_empty() override { return true; }
 };
@@ -83,16 +88,18 @@ class ObjectCacheReadData : public ObjectCacheRequest {
   uint64_t read_len;
   uint64_t pool_id;
   uint64_t snap_id;
+  uint64_t object_size = 0;
   std::string oid;
   std::string pool_namespace;
   ObjectCacheReadData(uint16_t t, uint64_t s, uint64_t read_offset,
                       uint64_t read_len, uint64_t pool_id,
-                      uint64_t snap_id, std::string oid,
-                      std::string pool_namespace);
+                      uint64_t snap_id, uint64_t object_size,
+                      std::string oid, std::string pool_namespace);
   ObjectCacheReadData(uint16_t t, uint64_t s);
   ~ObjectCacheReadData() override;
   void encode_payload() override;
-  void decode_payload(bufferlist::const_iterator bl) override;
+  void decode_payload(bufferlist::const_iterator bl,
+                      __u8 encode_version) override;
   uint16_t get_request_type() override { return RBDSC_READ; }
   bool payload_empty() override { return false; }
 };
@@ -104,7 +111,8 @@ class ObjectCacheReadReplyData : public ObjectCacheRequest {
   ObjectCacheReadReplyData(uint16_t t, uint64_t s);
   ~ObjectCacheReadReplyData() override;
   void encode_payload() override;
-  void decode_payload(bufferlist::const_iterator bl) override;
+  void decode_payload(bufferlist::const_iterator bl,
+                      __u8 encode_version) override;
   uint16_t get_request_type() override { return RBDSC_READ_REPLY; }
   bool payload_empty() override { return false; }
 };
@@ -115,7 +123,8 @@ class ObjectCacheReadRadosData : public ObjectCacheRequest {
   ObjectCacheReadRadosData(uint16_t t, uint64_t s);
   ~ObjectCacheReadRadosData() override;
   void encode_payload() override;
-  void decode_payload(bufferlist::const_iterator bl) override;
+  void decode_payload(bufferlist::const_iterator bl,
+                      __u8 encode_version) override;
   uint16_t get_request_type() override { return RBDSC_READ_RADOS; }
   bool payload_empty() override { return true; }
 };

@@ -75,6 +75,12 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
+/* Defined if you have libzbd */
+#cmakedefine HAVE_LIBZBD
+
+/* Defined if you have liburing */
+#cmakedefine HAVE_LIBURING
+
 /* Defind if you have POSIX AIO */
 #cmakedefine HAVE_POSIXAIO
 
@@ -83,6 +89,12 @@
 
 /* Define if you have fuse */
 #cmakedefine HAVE_LIBFUSE
+
+/* Define version major */
+#define CEPH_FUSE_MAJOR_VERSION @FUSE_MAJOR_VERSION@
+
+/* Define version minor */
+#define CEPH_FUSE_MINOR_VERSION @FUSE_MINOR_VERSION@
 
 /* Define to 1 if you have libxfs */
 #cmakedefine HAVE_LIBXFS 1
@@ -154,6 +166,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to use Jaeger */
+#cmakedefine HAVE_JAEGER
+
 /* Define if you want to use EVENTTRACE */
 #cmakedefine WITH_EVENTTRACE
 
@@ -193,9 +208,6 @@
 /* Define to 1 if you have fdatasync. */
 #cmakedefine HAVE_FDATASYNC 1
 
-/* Defined if you have librocksdb enabled */
-#cmakedefine HAVE_LIBROCKSDB
-
 /* Define to 1 if you have the <valgrind/helgrind.h> header file. */
 #cmakedefine HAVE_VALGRIND_HELGRIND_H 1
 
@@ -210,6 +222,9 @@
 
 /* Define to 1 if you have sched.h. */
 #cmakedefine HAVE_SCHED 1
+
+/* Define to 1 if you have sigdescr_np. */
+#cmakedefine HAVE_SIGDESCR_NP 1
 
 /* Support SSE (Streaming SIMD Extensions) instructions */
 #cmakedefine HAVE_SSE
@@ -229,11 +244,17 @@
 /* name_to_handle_at exists */
 #cmakedefine HAVE_NAME_TO_HANDLE_AT
 
-/* we have a recent yasm and are x86_64 */
-#cmakedefine HAVE_GOOD_YASM_ELF64 
+/* we have a recent nasm and are x86_64 */
+#cmakedefine HAVE_NASM_X64
 
-/* yasm can also build the isa-l */
-#cmakedefine HAVE_BETTER_YASM_ELF64
+/* nasm can also build the isa-l:avx2 */
+#cmakedefine HAVE_NASM_X64_AVX2
+
+/* nasm can also build the isa-l:avx512 */
+#cmakedefine HAVE_NASM_X64_AVX512
+
+/* Define if isa-l is compiled for arm64 */
+#cmakedefine HAVE_ARMV8_SIMD
 
 /* Define to 1 if strerror_r returns char *. */
 #cmakedefine STRERROR_R_CHAR_P 1
@@ -303,14 +324,14 @@
 
 #cmakedefine MGR_PYTHON_EXECUTABLE "@MGR_PYTHON_EXECUTABLE@"
 
+/* the default value of "mgr_disabled_module" option */
+#cmakedefine MGR_DISABLED_MODULES "@MGR_DISABLED_MODULES@"
+
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
 
 /* Defined if getentropy() is available */
 #cmakedefine HAVE_GETENTROPY
-
-/* Defined if boost::context is available */
-#cmakedefine HAVE_BOOST_CONTEXT
 
 /* Defined if libradosstriper is enabled: */
 #cmakedefine WITH_LIBRADOSSTRIPER
@@ -320,6 +341,12 @@
 
 /* Defined if rabbitmq-c is available for rgw amqp push endpoint */
 #cmakedefine WITH_RADOSGW_AMQP_ENDPOINT
+
+/* Defined if libedkafka is available for rgw kafka push endpoint */
+#cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
+
+/* Defined if lua packages can be installed by radosgw */
+#cmakedefine WITH_RADOSGW_LUA_PACKAGES
 
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
@@ -332,5 +359,23 @@
 
 /* Define if unit tests are built. */
 #cmakedefine UNIT_TESTS_BUILT
+
+/* Define if RWL is enabled */
+#cmakedefine WITH_RBD_RWL
+
+/* Define if PWL-SSD is enabled */
+#cmakedefine WITH_RBD_SSD_CACHE
+
+/* Define if libcryptsetup version < 2.0.5 */
+#cmakedefine LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT
+
+/* Define if libcryptsetup can be used (linux only) */
+#cmakedefine HAVE_LIBCRYPTSETUP
+
+/* Shared library extension, such as .so, .dll or .dylib */
+#cmakedefine CMAKE_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"
+
+/* libexec directory path */
+#cmakedefine CMAKE_INSTALL_LIBEXECDIR "@CMAKE_INSTALL_LIBEXECDIR@"
 
 #endif /* CONFIG_H */

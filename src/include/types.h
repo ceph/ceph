@@ -49,7 +49,7 @@ extern "C" {
 #include <map>
 #include <vector>
 #include <optional>
-#include <iostream>
+#include <ostream>
 #include <iomanip>
 
 
@@ -324,7 +324,8 @@ WRITE_RAW_ENCODER(ceph_mds_request_head)
 WRITE_RAW_ENCODER(ceph_mds_request_release)
 WRITE_RAW_ENCODER(ceph_filelock)
 WRITE_RAW_ENCODER(ceph_mds_caps_head)
-WRITE_RAW_ENCODER(ceph_mds_caps_body_legacy)
+WRITE_RAW_ENCODER(ceph_mds_caps_export_body)
+WRITE_RAW_ENCODER(ceph_mds_caps_non_export_body)
 WRITE_RAW_ENCODER(ceph_mds_cap_peer)
 WRITE_RAW_ENCODER(ceph_mds_cap_release)
 WRITE_RAW_ENCODER(ceph_mds_cap_item)
@@ -523,9 +524,12 @@ WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
 
-#if defined(__sun) || defined(_AIX) || defined(__APPLE__) || defined(__FreeBSD__)
+#if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
+    defined(__FreeBSD__) || defined(_WIN32)
+extern "C" {
 __s32  ceph_to_hostos_errno(__s32 e);
 __s32  hostos_to_ceph_errno(__s32 e);
+}
 #else
 #define  ceph_to_hostos_errno(e) (e)
 #define  hostos_to_ceph_errno(e) (e)
@@ -574,7 +578,7 @@ struct sha_digest_t {
     for (size_t i = 0; i < S; i++) {
       ::sprintf(&str[i * 2], "%02x", static_cast<int>(v[i]));
     }
-    return string(str);
+    return std::string(str);
   }
   sha_digest_t(const unsigned char *_v) { memcpy(v, _v, SIZE); };
   sha_digest_t() {}

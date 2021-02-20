@@ -7,17 +7,17 @@
 #include "osd/osd_types.h"
 #include "include/types.h"
 
-class MMonGetPurgedSnapsReply : public PaxosServiceMessage {
+class MMonGetPurgedSnapsReply final : public PaxosServiceMessage {
 public:
   epoch_t start, last;
-  map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
+  std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
 
   MMonGetPurgedSnapsReply(epoch_t s=0, epoch_t l=0)
     : PaxosServiceMessage{MSG_MON_GET_PURGED_SNAPS_REPLY, 0},
       start(s),
       last(l) {}
 private:
-  ~MMonGetPurgedSnapsReply() override {}
+  ~MMonGetPurgedSnapsReply() final {}
 
 public:
   std::string_view get_type_name() const override {

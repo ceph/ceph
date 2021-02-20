@@ -34,17 +34,28 @@ struct Scenario {
 };
 
 std::vector<Scenario> scenarios{
-      Scenario{512, 65536, 0.8, 0.6, 0.1, 3},
-      Scenario{512, 65536, 0.9, 0.7, 0.0, 3},
-      Scenario{512, 65536, 0.9, 0.7, 0.1, 3},
-      Scenario{512, 65536, 0.8, 0.6, 0.5, 3},
-      Scenario{512, 65536, 0.9, 0.7, 0.5, 3},
-      Scenario{1024, 65536, 0.8, 0.6, 0.1, 3},
-      Scenario{1024, 65536, 0.9, 0.7, 0.0, 3},
-      Scenario{1024, 65536, 0.9, 0.7, 0.1, 3},
+      Scenario{512,    65536, 0.8, 0.6, 0.1, 3},
+      Scenario{512,    65536, 0.9, 0.7, 0.0, 3},
+      Scenario{512,    65536, 0.9, 0.7, 0.1, 3},
+      Scenario{512,    65536, 0.8, 0.6, 0.5, 3},
+      Scenario{512,    65536, 0.9, 0.7, 0.5, 3},
+      Scenario{1024,   65536, 0.8, 0.6, 0.1, 3},
+      Scenario{1024,   65536, 0.9, 0.7, 0.0, 3},
+      Scenario{1024,   65536, 0.9, 0.7, 0.1, 3},
       Scenario{1024*2, 65536, 0.8, 0.6, 0.3, 3},
       Scenario{1024*2, 65536, 0.9, 0.7, 0.0, 3},
-      Scenario{1024*2, 65536, 0.9, 0.7, 0.3, 3}
+      Scenario{1024*2, 65536, 0.9, 0.7, 0.3, 3},
+      Scenario{512,    65536/16, 0.8, 0.6, 0.1, 3},
+      Scenario{512,    65536/16, 0.9, 0.7, 0.0, 3},
+      Scenario{512,    65536/16, 0.9, 0.7, 0.1, 3},
+      Scenario{512,    65536/16, 0.8, 0.6, 0.5, 3},
+      Scenario{512,    65536/16, 0.9, 0.7, 0.5, 3},
+      Scenario{1024,   65536/16, 0.8, 0.6, 0.1, 3},
+      Scenario{1024,   65536/16, 0.9, 0.7, 0.0, 3},
+      Scenario{1024,   65536/16, 0.9, 0.7, 0.1, 3},
+      Scenario{1024*2, 65536/16, 0.8, 0.6, 0.3, 3},
+      Scenario{1024*2, 65536/16, 0.9, 0.7, 0.0, 3},
+      Scenario{1024*2, 65536/16, 0.9, 0.7, 0.3, 3}
 };
 
 void PrintTo(const Scenario& s, ::std::ostream* os)
@@ -93,6 +104,7 @@ struct test_result {
   double fragmented_percent = 0;
   double fragments_count = 0;
   double time = 0;
+  double frag_score = 0;
 };
 
 std::map<std::string, test_result> results_per_allocator;
@@ -284,6 +296,7 @@ void AllocTest::doAgingTest(
   r.fragmented_percent += 100.0 * fragmented / allocs;
   r.fragments_count += ( fragmented != 0 ? double(fragments) / fragmented : 2 );
   r.time += ceph_clock_now() - start;
+  r.frag_score += frag_score;
 }
 
 void AllocTest::TearDownTestCase() {
@@ -292,6 +305,7 @@ void AllocTest::TearDownTestCase() {
     std::cout << r.first <<
         "    fragmented allocs=" << r.second.fragmented_percent / r.second.tests_cnt << "%" <<
         " #frags=" << r.second.fragments_count / r.second.tests_cnt <<
+        " free_score=" << r.second.frag_score / r.second.tests_cnt <<
         " time=" << r.second.time * 1000 << "ms" << std::endl;
   }
 }
@@ -353,8 +367,9 @@ TEST_P(AllocTest, test_alloc_fragmentation_max_chunk_8M)
     std::cout << std::endl;
     boost::uniform_int<> D(1, max_object_size / s.alloc_unit);
 
+    uint32_t object_size = 0;
+
     auto size_generator = [&]() -> uint32_t {
-      static uint32_t object_size = 0;
       uint32_t c;
       if (object_size == 0)
 	object_size = (uint32_t(D(rng))* s.alloc_unit);
@@ -419,5 +434,5 @@ TEST_P(AllocTest, test_bonus_empty_fragmented)
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap"));
+  ::testing::Values("stupid", "bitmap", "avl"));
 

@@ -17,7 +17,7 @@ class MissingLoc {
 
   class MappingInfo {
   public:
-    virtual const set<pg_shard_t> &get_upset() const = 0;
+    virtual const std::set<pg_shard_t> &get_upset() const = 0;
     virtual bool is_ec_pg() const = 0;
     virtual int get_pg_size() const = 0;
     virtual ~MappingInfo() {}
@@ -35,7 +35,7 @@ class MissingLoc {
 	      (l.up == r.up &&
 	       (l.other < r.other)));
     }
-    friend ostream& operator<<(ostream& out, const loc_count_t& l) {
+    friend std::ostream& operator<<(std::ostream& out, const loc_count_t& l) {
       ceph_assert(l.up >= 0);
       ceph_assert(l.other >= 0);
       return out << "(" << l.up << "+" << l.other << ")";
@@ -43,9 +43,9 @@ class MissingLoc {
   };
 
 
-  using missing_by_count_t = map < shard_id_t, map<loc_count_t,int> >;
+  using missing_by_count_t = std::map<shard_id_t, std::map<loc_count_t,int>>;
  private:
-  loc_count_t _get_count(const set<pg_shard_t> &shards) {
+  loc_count_t _get_count(const std::set<pg_shard_t> &shards) {
     loc_count_t r;
     for (auto s : shards) {
       if (mapping_info->get_upset().count(s)) {
@@ -57,21 +57,21 @@ class MissingLoc {
     return r;
   }
 
-  map<hobject_t, pg_missing_item> needs_recovery_map;
-  map<hobject_t, set<pg_shard_t> > missing_loc;
-  set<pg_shard_t> missing_loc_sources;
+  std::map<hobject_t, pg_missing_item> needs_recovery_map;
+  std::map<hobject_t, std::set<pg_shard_t> > missing_loc;
+  std::set<pg_shard_t> missing_loc_sources;
 
   // for every entry in missing_loc, we count how many of each type of shard we have,
-  // and maintain totals here.  The sum of the values for this map will always equal
+  // and maintain totals here.  The sum of the values for this std::map will always equal
   // missing_loc.size().
   missing_by_count_t missing_by_count;
 
   void pgs_by_shard_id(
-    const set<pg_shard_t>& s,
-    map< shard_id_t, set<pg_shard_t> >& pgsbs) {
+    const std::set<pg_shard_t>& s,
+    std::map<shard_id_t, std::set<pg_shard_t> >& pgsbs) {
     if (mapping_info->is_ec_pg()) {
       int num_shards = mapping_info->get_pg_size();
-      // For completely missing shards initialize with empty set<pg_shard_t>
+      // For completely missing shards initialize with empty std::set<pg_shard_t>
       for (int i = 0 ; i < num_shards ; ++i) {
 	shard_id_t shard(i);
 	pgsbs[shard];
@@ -83,14 +83,14 @@ class MissingLoc {
     }
   }
 
-  void _inc_count(const set<pg_shard_t>& s) {
-    map< shard_id_t, set<pg_shard_t> > pgsbs;
+  void _inc_count(const std::set<pg_shard_t>& s) {
+    std::map< shard_id_t, std::set<pg_shard_t> > pgsbs;
     pgs_by_shard_id(s, pgsbs);
     for (auto shard: pgsbs)
       ++missing_by_count[shard.first][_get_count(shard.second)];
   }
-  void _dec_count(const set<pg_shard_t>& s) {
-    map< shard_id_t, set<pg_shard_t> > pgsbs;
+  void _dec_count(const std::set<pg_shard_t>& s) {
+    std::map< shard_id_t, std::set<pg_shard_t> > pgsbs;
     pgs_by_shard_id(s, pgsbs);
     for (auto shard: pgsbs) {
       auto p = missing_by_count[shard.first].find(_get_count(shard.second));
@@ -105,7 +105,7 @@ class MissingLoc {
   MappingInfo *mapping_info;
   DoutPrefixProvider *dpp;
   CephContext *cct;
-  set<pg_shard_t> empty_set;
+  std::set<pg_shard_t> empty_set;
  public:
   boost::scoped_ptr<IsPGReadablePredicate> is_readable;
   boost::scoped_ptr<IsPGRecoverablePredicate> is_recoverable;
@@ -130,7 +130,7 @@ class MissingLoc {
   bool needs_recovery(
     const hobject_t &hoid,
     eversion_t *v = 0) const {
-    map<hobject_t, pg_missing_item>::const_iterator i =
+    std::map<hobject_t, pg_missing_item>::const_iterator i =
       needs_recovery_map.find(hoid);
     if (i == needs_recovery_map.end())
       return false;
@@ -157,10 +157,11 @@ class MissingLoc {
   }
   bool readable_with_acting(
     const hobject_t &hoid,
-    const set<pg_shard_t> &acting) const;
+    const std::set<pg_shard_t> &acting,
+    eversion_t* v = 0) const;
   uint64_t num_unfound() const {
     uint64_t ret = 0;
-    for (map<hobject_t, pg_missing_item>::const_iterator i =
+    for (std::map<hobject_t, pg_missing_item>::const_iterator i =
 	   needs_recovery_map.begin();
 	 i != needs_recovery_map.end();
 	 ++i) {
@@ -174,7 +175,7 @@ class MissingLoc {
   }
 
   bool have_unfound() const {
-    for (map<hobject_t, pg_missing_item>::const_iterator i =
+    for (std::map<hobject_t, pg_missing_item>::const_iterator i =
 	   needs_recovery_map.begin();
 	 i != needs_recovery_map.end();
 	 ++i) {
@@ -196,7 +197,7 @@ class MissingLoc {
   void add_location(const hobject_t &hoid, pg_shard_t location) {
     auto p = missing_loc.find(hoid);
     if (p == missing_loc.end()) {
-      p = missing_loc.emplace(hoid, set<pg_shard_t>()).first;
+      p = missing_loc.emplace(hoid, std::set<pg_shard_t>()).first;
     } else {
       _dec_count(p->second);
     }
@@ -225,11 +226,11 @@ class MissingLoc {
   }
 
   void add_active_missing(const pg_missing_t &missing) {
-    for (map<hobject_t, pg_missing_item>::const_iterator i =
+    for (std::map<hobject_t, pg_missing_item>::const_iterator i =
 	   missing.get_items().begin();
 	 i != missing.get_items().end();
 	 ++i) {
-      map<hobject_t, pg_missing_item>::const_iterator j =
+      std::map<hobject_t, pg_missing_item>::const_iterator j =
 	needs_recovery_map.find(i->first);
       if (j == needs_recovery_map.end()) {
 	needs_recovery_map.insert(*i);
@@ -263,7 +264,7 @@ class MissingLoc {
 
   /// Adds recovery sources in batch
   void add_batch_sources_info(
-    const set<pg_shard_t> &sources,  ///< [in] a set of resources which can be used for all objects
+    const std::set<pg_shard_t> &sources,  ///< [in] a std::set of resources which can be used for all objects
     HBHandle *handle  ///< [in] ThreadPool handle
     );
 
@@ -273,7 +274,7 @@ class MissingLoc {
   /// Remove stray from recovery sources
   void remove_stray_recovery_sources(pg_shard_t stray);
 
-  /// Call when hoid is no longer missing in acting set
+  /// Call when hoid is no longer missing in acting std::set
   void recovered(const hobject_t &hoid) {
     needs_recovery_map.erase(hoid);
     auto p = missing_loc.find(hoid);
@@ -287,11 +288,11 @@ class MissingLoc {
   void rebuild(
     const hobject_t &hoid,
     pg_shard_t self,
-    const set<pg_shard_t> &to_recover,
+    const std::set<pg_shard_t> &to_recover,
     const pg_info_t &info,
     const pg_missing_t &missing,
-    const map<pg_shard_t, pg_missing_t> &pmissing,
-    const map<pg_shard_t, pg_info_t> &pinfo) {
+    const std::map<pg_shard_t, pg_missing_t> &pmissing,
+    const std::map<pg_shard_t, pg_info_t> &pinfo) {
     recovered(hoid);
     std::optional<pg_missing_item> item;
     auto miter = missing.get_items().find(hoid);
@@ -317,7 +318,7 @@ class MissingLoc {
     if (item->is_delete())
       return;
     auto mliter =
-      missing_loc.emplace(hoid, set<pg_shard_t>()).first;
+      missing_loc.emplace(hoid, std::set<pg_shard_t>()).first;
     ceph_assert(info.last_backfill.is_max());
     ceph_assert(info.last_update >= item->need);
     if (!missing.is_missing(hoid))
@@ -335,14 +336,14 @@ class MissingLoc {
     _inc_count(mliter->second);
   }
 
-  const set<pg_shard_t> &get_locations(const hobject_t &hoid) const {
+  const std::set<pg_shard_t> &get_locations(const hobject_t &hoid) const {
     auto it = missing_loc.find(hoid);
     return it == missing_loc.end() ? empty_set : it->second;
   }
-  const map<hobject_t, set<pg_shard_t>> &get_missing_locs() const {
+  const std::map<hobject_t, std::set<pg_shard_t>> &get_missing_locs() const {
     return missing_loc;
   }
-  const map<hobject_t, pg_missing_item> &get_needs_recovery() const {
+  const std::map<hobject_t, pg_missing_item> &get_needs_recovery() const {
     return needs_recovery_map;
   }
 

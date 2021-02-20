@@ -103,7 +103,7 @@ struct TestMockTrashRemoveRequest : public TestMockFixture {
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(StrEq("rbd_trash"), _, StrEq("rbd"), StrEq("trash_state_set"),
-                     ContentsEqual(in_bl), _, _))
+                     ContentsEqual(in_bl), _, _, _))
       .WillOnce(Return(r));
   }
 
@@ -122,7 +122,6 @@ struct TestMockTrashRemoveRequest : public TestMockFixture {
       .WillOnce(Invoke([r](Context *on_finish) {
                   on_finish->complete(r);
                 }));
-    EXPECT_CALL(mock_image_ctx, destroy());
   }
 
   void expect_remove_image(MockImageRemoveRequest& mock_image_remove_request,
@@ -140,7 +139,7 @@ struct TestMockTrashRemoveRequest : public TestMockFixture {
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(StrEq("rbd_trash"), _, StrEq("rbd"), StrEq("trash_remove"),
-                     ContentsEqual(in_bl), _, _))
+                     ContentsEqual(in_bl), _, _, _))
       .WillOnce(Return(r));
   }
 };

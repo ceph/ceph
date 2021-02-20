@@ -50,6 +50,72 @@ struct OrderByObject {
   }
 };
 
+template <typename I>
+void add_partial_sparse_result(
+    CephContext *cct,
+    std::map<uint64_t, std::pair<ceph::buffer::list, uint64_t> >* partial,
+    uint64_t* total_intended_len, bufferlist& bl, I* it, const I& end_it,
+    uint64_t* bl_off, uint64_t tofs, uint64_t tlen) {
+  ldout(cct, 30) << " be " << tofs << "~" << tlen << dendl;
+
+  auto& s = *it;
+  while (tlen > 0) {
+    ldout(cct, 20) << "  t " << tofs << "~" << tlen
+                   << " bl has " << bl.length()
+                   << " off " << *bl_off << dendl;
+    if (s == end_it) {
+      ldout(cct, 20) << "  s at end" << dendl;
+      auto& r = (*partial)[tofs];
+      r.second = tlen;
+      *total_intended_len += r.second;
+      break;
+    }
+
+    ldout(cct, 30) << "  s " << s->first << "~" << s->second << dendl;
+
+    // skip zero-length extent
+    if (s->second == 0) {
+      ldout(cct, 30) << "  s len 0, skipping" << dendl;
+      ++s;
+      continue;
+    }
+
+    if (s->first > *bl_off) {
+      // gap in sparse read result
+      pair<bufferlist, uint64_t>& r = (*partial)[tofs];
+      size_t gap = std::min<size_t>(s->first - *bl_off, tlen);
+      ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
+      r.second = gap;
+      *total_intended_len += r.second;
+      *bl_off += gap;
+      tofs += gap;
+      tlen -= gap;
+      if (tlen == 0) {
+        continue;
+      }
+    }
+
+    ceph_assert(s->first <= *bl_off);
+    size_t left = (s->first + s->second) - *bl_off;
+    size_t actual = std::min<size_t>(left, tlen);
+
+    if (actual > 0) {
+      ldout(cct, 20) << "  s has " << actual << ", copying" << dendl;
+      pair<bufferlist, uint64_t>& r = (*partial)[tofs];
+      bl.splice(0, actual, &r.first);
+      r.second = actual;
+      *total_intended_len += r.second;
+      *bl_off += actual;
+      tofs += actual;
+      tlen -= actual;
+    }
+    if (actual == left) {
+      ldout(cct, 30) << "  s advancing" << dendl;
+      ++s;
+    }
+  }
+}
+
 } // anonymous namespace
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
@@ -296,6 +362,26 @@ uint64_t Striper::get_num_objects(const file_layout_t& layout,
   return num_periods * stripe_count - remainder_objs;
 }
 
+uint64_t Striper::get_file_offset(CephContext *cct,
+        const file_layout_t *layout, uint64_t objectno, uint64_t off) {
+  ldout(cct, 10) << "get_file_offset " << objectno << " " << off  << dendl;
+
+  __u32 object_size = layout->object_size;
+  __u32 su = layout->stripe_unit;
+  __u32 stripe_count = layout->stripe_count;
+  ceph_assert(object_size >= su);
+  uint64_t stripes_per_object = object_size / su;
+  ldout(cct, 20) << " stripes_per_object " << stripes_per_object << dendl;
+
+  uint64_t off_in_block = off % su;
+
+  uint64_t stripepos = objectno % stripe_count;
+  uint64_t objectsetno = objectno / stripe_count;
+  uint64_t stripeno = off / su + objectsetno * stripes_per_object;
+  uint64_t blockno = stripeno * stripe_count + stripepos;
+  return blockno * su + off_in_block;
+}
+
 // StripedReadResult
 
 void Striper::StripedReadResult::add_partial_result(
@@ -339,89 +425,36 @@ void Striper::StripedReadResult::add_partial_sparse_result(
   ldout(cct, 10) << "add_partial_sparse_result(" << this << ") " << bl.length()
 		 << " covering " << bl_map << " (offset " << bl_off << ")"
 		 << " to " << buffer_extents << dendl;
+
+  if (bl_map.empty()) {
+    add_partial_result(cct, bl, buffer_extents);
+    return;
+  }
+
   auto s = bl_map.cbegin();
   for (auto& be : buffer_extents) {
-    add_partial_sparse_result(cct, bl, &s, bl_map.end(), &bl_off, be.first,
-                              be.second);
+    ::add_partial_sparse_result(cct, &partial, &total_intended_len, bl, &s,
+                                bl_map.end(), &bl_off, be.first, be.second);
   }
 }
 
 void Striper::StripedReadResult::add_partial_sparse_result(
-    CephContext *cct, ceph::buffer::list& bl,
-    const std::map<uint64_t, uint64_t>& bl_map, uint64_t bl_off,
+    CephContext *cct, ceph::buffer::list&& bl,
+    const std::vector<std::pair<uint64_t, uint64_t>>& bl_map, uint64_t bl_off,
     const striper::LightweightBufferExtents& buffer_extents) {
   ldout(cct, 10) << "add_partial_sparse_result(" << this << ") " << bl.length()
 		 << " covering " << bl_map << " (offset " << bl_off << ")"
 		 << " to " << buffer_extents << dendl;
+
+  if (bl_map.empty()) {
+    add_partial_result(cct, std::move(bl), buffer_extents);
+    return;
+  }
+
   auto s = bl_map.cbegin();
   for (auto& be : buffer_extents) {
-    add_partial_sparse_result(cct, bl, &s, bl_map.cend(), &bl_off, be.first,
-                              be.second);
-  }
-}
-
-void Striper::StripedReadResult::add_partial_sparse_result(
-    CephContext *cct, bufferlist& bl,
-    std::map<uint64_t, uint64_t>::const_iterator* it,
-    const std::map<uint64_t, uint64_t>::const_iterator& end_it,
-    uint64_t* bl_off, uint64_t tofs, uint64_t tlen) {
-  ldout(cct, 30) << " be " << tofs << "~" << tlen << dendl;
-
-  auto& s = *it;
-  while (tlen > 0) {
-    ldout(cct, 20) << "  t " << tofs << "~" << tlen
-                   << " bl has " << bl.length()
-                   << " off " << *bl_off << dendl;
-    if (s == end_it) {
-      ldout(cct, 20) << "  s at end" << dendl;
-      auto& r = partial[tofs];
-      r.second = tlen;
-      total_intended_len += r.second;
-      break;
-    }
-
-    ldout(cct, 30) << "  s " << s->first << "~" << s->second << dendl;
-
-    // skip zero-length extent
-    if (s->second == 0) {
-      ldout(cct, 30) << "  s len 0, skipping" << dendl;
-      ++s;
-      continue;
-    }
-
-    if (s->first > *bl_off) {
-      // gap in sparse read result
-      pair<bufferlist, uint64_t>& r = partial[tofs];
-      size_t gap = std::min<size_t>(s->first - *bl_off, tlen);
-      ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
-      r.second = gap;
-      total_intended_len += r.second;
-      *bl_off += gap;
-      tofs += gap;
-      tlen -= gap;
-      if (tlen == 0) {
-        continue;
-      }
-    }
-
-    ceph_assert(s->first <= *bl_off);
-    size_t left = (s->first + s->second) - *bl_off;
-    size_t actual = std::min<size_t>(left, tlen);
-
-    if (actual > 0) {
-      ldout(cct, 20) << "  s has " << actual << ", copying" << dendl;
-      pair<bufferlist, uint64_t>& r = partial[tofs];
-      bl.splice(0, actual, &r.first);
-      r.second = actual;
-      total_intended_len += r.second;
-      *bl_off += actual;
-      tofs += actual;
-      tlen -= actual;
-    }
-    if (actual == left) {
-      ldout(cct, 30) << "  s advancing" << dendl;
-      ++s;
-    }
+    ::add_partial_sparse_result(cct, &partial, &total_intended_len, bl, &s,
+                                bl_map.cend(), &bl_off, be.first, be.second);
   }
 }
 
@@ -474,10 +507,11 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer,
     curr -= p->second.second;
     if (len < p->second.second) {
       if (len)
-	p->second.first.copy(0, len, buffer + curr);
+	p->second.first.begin().copy(len, buffer + curr);
+      // FIPS zeroization audit 20191117: this memset is not security related.
       memset(buffer + curr + len, 0, p->second.second - len);
     } else {
-      p->second.first.copy(0, len, buffer + curr);
+      p->second.first.begin().copy(len, buffer + curr);
     }
     ++p;
   }
@@ -485,7 +519,7 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer,
   ceph_assert(curr == 0);
 }
 
-void Striper::StripedReadResult::assemble_result(
+uint64_t Striper::StripedReadResult::assemble_result(
     CephContext *cct, std::map<uint64_t, uint64_t> *extent_map,
     bufferlist *bl)
 {
@@ -499,4 +533,5 @@ void Striper::StripedReadResult::assemble_result(
     }
   }
   partial.clear();
+  return total_intended_len;
 }

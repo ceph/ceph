@@ -14,6 +14,10 @@
 
 #include "ExtentCache.h"
 
+using std::ostream;
+
+using ceph::bufferlist;
+
 void ExtentCache::extent::_link_pin_state(pin_state &pin_state)
 {
   ceph_assert(parent_extent_set);

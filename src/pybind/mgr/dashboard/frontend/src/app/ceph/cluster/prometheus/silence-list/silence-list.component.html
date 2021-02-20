@@ -1,11 +1,20 @@
 <cd-prometheus-tabs></cd-prometheus-tabs>
 
-<cd-table [data]="silences"
+<cd-alert-panel *ngIf="!isAlertmanagerConfigured"
+                type="info"
+                i18n>To enable Silences, please provide the URL to
+  the API of the Prometheus' Alertmanager as described in the
+  <cd-doc section="prometheus"></cd-doc>.</cd-alert-panel>
+
+<cd-table *ngIf="isAlertmanagerConfigured"
+          [data]="silences"
           [columns]="columns"
           [forceIdentifier]="true"
           [customCss]="customCss"
           [sorts]="sorts"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (fetchData)="refresh()"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"
@@ -13,17 +22,13 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <tabset cdTableDetail *ngIf="selection.hasSingleSelection">
-    <tab i18n-heading
-         heading="Details">
-      <cd-table-key-value [renderObjects]="true"
-                          [hideEmpty]="true"
-                          [appendParentKey]="false"
-                          [data]="selection.first()"
-                          [customCss]="customCss"
-                          [autoReload]="false">
-      </cd-table-key-value>
-    </tab>
-  </tabset>
+  <cd-table-key-value cdTableDetail
+                      *ngIf="expandedRow"
+                      [renderObjects]="true"
+                      [hideEmpty]="true"
+                      [appendParentKey]="false"
+                      [data]="expandedRow"
+                      [customCss]="customCss"
+                      [autoReload]="false">
+  </cd-table-key-value>
 </cd-table>
-

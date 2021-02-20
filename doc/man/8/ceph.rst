@@ -23,13 +23,11 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
-| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* ] ...
+| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* ] ...
 
 | **ceph** **fsid**
 
 | **ceph** **health** *{detail}*
-
-| **ceph** **heap** [ *dump* \| *start_profiler* \| *stop_profiler* \| *release* \| *get_release_rate* \| *set_release_rate* \| *stats* ] ...
 
 | **ceph** **injectargs** *<injectedargs>* [ *<injectedargs>*... ]
 
@@ -39,9 +37,7 @@ Synopsis
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
-| **ceph** **mon_status**
-
-| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
@@ -53,13 +49,9 @@ Synopsis
 
 | **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *stat* ] ...
 
-| **ceph** **quorum** [ *enter* \| *exit* ]
-
 | **ceph** **quorum_status**
 
 | **ceph** **report** { *<tags>* [ *<tags>...* ] }
-
-| **ceph** **scrub**
 
 | **ceph** **status**
 
@@ -393,6 +385,13 @@ Usage::
 
 	ceph fs rm <fs_name> {--yes-i-really-mean-it}
 
+Subcommand ``authorize`` creates a new client that will be authorized for the
+given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
+``<perms>`` below can be ``r``, ``rw`` or ``rwp``.
+
+Usage::
+
+    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
 
 fsid
 ----
@@ -421,13 +420,13 @@ Show heap usage info (available only if compiled with tcmalloc)
 
 Usage::
 
-	ceph heap dump|start_profiler|stop_profiler|stats
+	ceph tell <name (type.id)> heap dump|start_profiler|stop_profiler|stats
 
 Subcommand ``release`` to make TCMalloc to releases no-longer-used memory back to the kernel at once. 
 
 Usage::
 
-	ceph heap release
+	ceph tell <name (type.id)> heap release
 
 Subcommand ``(get|set)_release_rate`` get or set the TCMalloc memory release rate. TCMalloc releases 
 no-longer-used memory back to the kernel gradually. the rate controls how quickly this happens. 
@@ -436,7 +435,7 @@ memory to system, 1 means wait for 1000 pages after releasing a page to system. 
 
 Usage::
 
-	ceph heap get_release_rate|set_release_rate {<val>}
+	ceph tell <name (type.id)> heap get_release_rate|set_release_rate {<val>}
 
 injectargs
 ----------
@@ -557,15 +556,6 @@ Usage::
 
 	ceph mon stat
 
-mon_status
-----------
-
-Reports status of monitors.
-
-Usage::
-
-	ceph mon_status
-
 mgr
 ---
 
@@ -630,27 +620,27 @@ osd
 Manage OSD configuration and administration. It uses some additional
 subcommands.
 
-Subcommand ``blacklist`` manage blacklisted clients. It uses some additional
+Subcommand ``blocklist`` manage blocklisted clients. It uses some additional
 subcommands.
 
-Subcommand ``add`` add <addr> to blacklist (optionally until <expire> seconds
+Subcommand ``add`` add <addr> to blocklist (optionally until <expire> seconds
 from now)
 
 Usage::
 
-	ceph osd blacklist add <EntityAddr> {<float[0.0-]>}
+	ceph osd blocklist add <EntityAddr> {<float[0.0-]>}
 
-Subcommand ``ls`` show blacklisted clients
-
-Usage::
-
-	ceph osd blacklist ls
-
-Subcommand ``rm`` remove <addr> from blacklist
+Subcommand ``ls`` show blocklisted clients
 
 Usage::
 
-	ceph osd blacklist rm <EntityAddr>
+	ceph osd blocklist ls
+
+Subcommand ``rm`` remove <addr> from blocklist
+
+Usage::
+
+	ceph osd blocklist rm <EntityAddr>
 
 Subcommand ``blocked-by`` prints a histogram of which OSDs are blocking their peers
 
@@ -1042,7 +1032,7 @@ Subcommand ``create`` creates pool.
 Usage::
 
 	ceph osd pool create <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
-	{<erasure_code_profile>} {<rule>} {<int>}
+	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
 
 Subcommand ``delete`` deletes pool.
 
@@ -1162,7 +1152,7 @@ Usage::
 
         ceph osd pool application rm <pool-name> <app> <key>
 
-Subcommand ``set`` assosciates or updates, if it already exists, a key-value
+Subcommand ``set`` associates or updates, if it already exists, a key-value
 pair with the given application for the given pool.
 
 Usage::
@@ -1203,12 +1193,14 @@ Usage::
 	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
 	{--no-increasing}
 
-Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
-[overload-percentage-for-consideration, default 120].
+Subcommand ``reweight-by-utilization`` reweights OSDs by utilization.  It only reweights
+outlier OSDs whose utilization exceeds the average, eg. the default 120%
+limits reweight to those OSDs that are more than 20% over the average.
+[overload-threshold, default 120 [max_weight_change, default 0.05 [max_osds_to_adjust, default 4]]] 
 
 Usage::
 
-	ceph osd reweight-by-utilization {<int[100-]>}
+	ceph osd reweight-by-utilization {<int[100-]> {<float[0.0-]> {<int[0-]>}}}
 	{--no-increasing}
 
 Subcommand ``rm`` removes osd(s) <id> [<id>...] from the OSD map.
@@ -1317,8 +1309,7 @@ Subcommand ``cache-mode`` specifies the caching mode for cache tier <pool>.
 
 Usage::
 
-	ceph osd tier cache-mode <poolname> none|writeback|forward|readonly|
-	readforward|readproxy
+	ceph osd tier cache-mode <poolname> writeback|readproxy|readonly|none
 
 Subcommand ``remove`` removes the tier <tierpool> (the second one) from base pool
 <pool> (the first one).
@@ -1464,14 +1455,9 @@ Usage::
 quorum
 ------
 
-Cause MON to enter or exit quorum.
+Cause a specific MON to enter or exit quorum.
 
 Usage::
-
-	ceph quorum enter|exit
-
-Note: this only works on the MON to which the ``ceph`` command is connected.
-If you want a specific MON to enter or exit quorum, use this syntax::
 
 	ceph tell mon.<id> quorum enter|exit
 
@@ -1495,16 +1481,6 @@ Usage::
 	ceph report {<tags> [<tags>...]}
 
 
-scrub
------
-
-Scrubs the monitor stores.
-
-Usage::
-
-	ceph scrub
-
-
 status
 ------
 
@@ -1513,16 +1489,6 @@ Shows cluster status.
 Usage::
 
 	ceph status
-
-
-sync force
-----------
-
-Forces sync of and clear monitor store.
-
-Usage::
-
-	ceph sync force {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
 
 
 tell
@@ -1606,7 +1572,11 @@ Options
 
 .. option:: -w, --watch
 
-	Watch live cluster changes.
+	Watch live cluster changes on the default 'cluster' channel
+
+.. option:: -W, --watch-channel
+
+	Watch live cluster changes on any channel (cluster, audit, cephadm, or * for all)
 
 .. option:: --watch-debug
 

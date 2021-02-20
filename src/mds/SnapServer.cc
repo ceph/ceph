@@ -418,9 +418,9 @@ void SnapServer::dump(Formatter *f) const
 
   f->open_object_section("need_to_purge");
   for (map<int, set<snapid_t> >::const_iterator i = need_to_purge.begin(); i != need_to_purge.end(); ++i) {
-    stringstream pool_id;
-    pool_id << i->first;
-    f->open_array_section(pool_id.str().c_str());
+    CachedStackStringStream css;
+    *css << i->first;
+    f->open_array_section(css->strv());
     for (set<snapid_t>::const_iterator s = i->second.begin(); s != i->second.end(); ++s) {
       f->dump_unsigned("snapid", s->val);
     }

@@ -4,12 +4,12 @@ Locally repairable erasure code plugin
 
 With the *jerasure* plugin, when an erasure coded object is stored on
 multiple OSDs, recovering from the loss of one OSD requires reading
-from all the others. For instance if *jerasure* is configured with
-*k=8* and *m=4*, losing one OSD requires reading from the eight
-others to repair.
+from *k* others. For instance if *jerasure* is configured with
+*k=8* and *m=4*, recovering from the loss of one OSD requires reading
+from eight others.
 
-The *lrc* erasure code plugin creates local parity chunks to be able
-to recover using less OSDs. For instance if *lrc* is configured with
+The *lrc* erasure code plugin creates local parity chunks to enable
+recovery using fewer surviving OSDs. For instance if *lrc* is configured with
 *k=8*, *m=4* and *l=4*, it will create an additional parity chunk for
 every four OSDs. When a single OSD is lost, it can be recovered with
 only four OSDs instead of eight.
@@ -34,7 +34,7 @@ observed.::
 Reduce recovery bandwidth between racks
 ---------------------------------------
 
-In Firefly the reduced bandwidth will only be observed if the primary
+In Firefly the bandwidth reduction will only be observed if the primary
 OSD is in the same rack as the lost chunk.::
 
         $ ceph osd erasure-code-profile set LRCprofile \
@@ -106,7 +106,7 @@ Where:
 
 ``crush-locality={bucket-type}``
 
-:Description: The type of the crush bucket in which each set of chunks
+:Description: The type of the CRUSH bucket in which each set of chunks
               defined by **l** will be stored. For instance, if it is
               set to **rack**, each group of **l** chunks will be
               placed in a different rack. It is used to create a
@@ -158,8 +158,8 @@ Low level plugin configuration
 ==============================
 
 The sum of **k** and **m** must be a multiple of the **l** parameter.
-The low level configuration parameters do not impose such a
-restriction and it may be more convenient to use it for specific
+The low level configuration parameters however do not enforce this
+restriction and it may be advantageous to use them for specific
 purposes. It is for instance possible to define two groups, one with 4
 chunks and another with 3 chunks. It is also possible to recursively
 define locality sets, for instance datacenters and racks into

@@ -6,12 +6,12 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 
-using Config = ceph::common::ConfigProxy;
-using MonClient = ceph::mon::Client;
+using Config = crimson::common::ConfigProxy;
+using MonClient = crimson::mon::Client;
 
 namespace {
 
-class DummyAuthHandler : public ceph::common::AuthHandler {
+class DummyAuthHandler : public crimson::common::AuthHandler {
 public:
   void handle_authentication(const EntityName& name,
                              const AuthCapsInfo& caps) final
@@ -24,7 +24,7 @@ DummyAuthHandler dummy_handler;
 
 static seastar::future<> test_monc()
 {
-  return ceph::common::sharded_conf().start(EntityName{}, string_view{"ceph"}).then([] {
+  return crimson::common::sharded_conf().start(EntityName{}, string_view{"ceph"}).then([] {
     std::vector<const char*> args;
     std::string cluster;
     std::string conf_file_list;
@@ -32,40 +32,37 @@ static seastar::future<> test_monc()
                                                 CEPH_ENTITY_TYPE_CLIENT,
                                                 &cluster,
                                                 &conf_file_list);
-    auto& conf = ceph::common::local_conf();
+    auto& conf = crimson::common::local_conf();
     conf->name = init_params.name;
     conf->cluster = cluster;
     return conf.parse_config_files(conf_file_list);
   }).then([] {
-    return ceph::common::sharded_perf_coll().start();
-  }).then([] {
-    return ceph::net::Messenger::create(entity_name_t::OSD(0), "monc", 0,
-                                        seastar::engine().cpu_id())
-        .then([] (ceph::net::Messenger *msgr) {
-      auto& conf = ceph::common::local_conf();
-      if (conf->ms_crc_data) {
-        msgr->set_crc_data();
-      }
-      if (conf->ms_crc_header) {
-        msgr->set_crc_header();
-      }
-      msgr->set_require_authorizer(false);
-      return seastar::do_with(MonClient{*msgr, dummy_handler},
-                              [msgr](auto& monc) {
-        return msgr->start(&monc).then([&monc] {
-          return seastar::with_timeout(
-            seastar::lowres_clock::now() + std::chrono::seconds{10},
-            monc.start());
-        }).then([&monc] {
-          return monc.stop();
-        });
-      }).finally([msgr] {
-        return msgr->shutdown();
+    return crimson::common::sharded_perf_coll().start();
+  }).then([]() mutable {
+    auto msgr = crimson::net::Messenger::create(entity_name_t::OSD(0), "monc", 0);
+    auto& conf = crimson::common::local_conf();
+    if (conf->ms_crc_data) {
+      msgr->set_crc_data();
+    }
+    if (conf->ms_crc_header) {
+      msgr->set_crc_header();
+    }
+    msgr->set_require_authorizer(false);
+    return seastar::do_with(MonClient{*msgr, dummy_handler},
+                            [msgr](auto& monc) mutable {
+      return msgr->start({&monc}).then([&monc] {
+        return seastar::with_timeout(
+          seastar::lowres_clock::now() + std::chrono::seconds{10},
+          monc.start());
+      }).then([&monc] {
+        return monc.stop();
       });
+    }).finally([msgr] {
+      return msgr->shutdown();
     });
   }).finally([] {
-    return ceph::common::sharded_perf_coll().stop().then([] {
-      return ceph::common::sharded_conf().stop();
+    return crimson::common::sharded_perf_coll().stop().then([] {
+      return crimson::common::sharded_conf().stop();
     });
   });
 }

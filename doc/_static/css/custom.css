@@ -1,0 +1,8 @@
+ul.simple > li > ul > li:last-child {
+    margin-block-end : 1em;
+}
+
+div.section > ul > li > p {
+    margin-block-start : 0.6em;
+    margin-block-end : 0.6em;
+}

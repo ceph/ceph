@@ -16,13 +16,13 @@ struct cls_timeindex_entry {
   utime_t key_ts;
   /* Not mandatory. The name_ext field, if not empty, will form second
    * part of the key. */
-  string key_ext;
+  std::string key_ext;
   /* Become value of OMAP-based mapping. */
-  bufferlist value;
+  ceph::buffer::list value;
 
   cls_timeindex_entry() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(key_ts, bl);
     encode(key_ext, bl);
@@ -30,7 +30,7 @@ struct cls_timeindex_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(key_ts, bl);
     decode(key_ext, bl);
@@ -38,8 +38,8 @@ struct cls_timeindex_entry {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_timeindex_entry*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_timeindex_entry*>& o);
 };
 WRITE_CLASS_ENCODER(cls_timeindex_entry)
 

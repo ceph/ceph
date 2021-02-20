@@ -214,7 +214,7 @@ void Replayer::run(const std::string& replay_file) {
       m_rbd = new librbd::RBD();
       map<thread_id_t, Worker*> workers;
 
-      int fd = open(replay_file.c_str(), O_RDONLY);
+      int fd = open(replay_file.c_str(), O_RDONLY|O_BINARY);
       if (fd < 0) {
         std::cerr << "Failed to open " << replay_file << ": "
                   << cpp_strerror(errno) << std::endl;

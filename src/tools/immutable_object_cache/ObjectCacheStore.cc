@@ -3,7 +3,13 @@
 
 #include "ObjectCacheStore.h"
 #include "Utils.h"
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
 #include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
@@ -11,10 +17,33 @@
 #define dout_prefix *_dout << "ceph::cache::ObjectCacheStore: " << this << " " \
                            << __func__ << ": "
 
-namespace efs = std::experimental::filesystem;
 
 namespace ceph {
 namespace immutable_obj_cache {
+
+namespace {
+
+class SafeTimerSingleton : public SafeTimer {
+public:
+  ceph::mutex lock = ceph::make_mutex
+    ("ceph::immutable_object_cache::SafeTimerSingleton::lock");
+
+  explicit SafeTimerSingleton(CephContext *cct)
+      : SafeTimer(cct, lock, true) {
+    init();
+  }
+  ~SafeTimerSingleton() {
+    std::lock_guard locker{lock};
+    shutdown();
+  }
+};
+
+}  // anonymous namespace
+
+enum ThrottleTargetCode {
+  ROC_QOS_IOPS_THROTTLE = 1,
+  ROC_QOS_BPS_THROTTLE = 2
+};
 
 ObjectCacheStore::ObjectCacheStore(CephContext *cct)
       : m_cct(cct), m_rados(new librados::Rados()) {
@@ -35,12 +64,48 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
   uint64_t max_inflight_ops =
     m_cct->_conf.get_val<uint64_t>("immutable_object_cache_max_inflight_ops");
 
+  uint64_t limit = 0;
+  if ((limit = m_cct->_conf.get_val<uint64_t>
+                   ("immutable_object_cache_qos_iops_limit")) != 0) {
+    apply_qos_tick_and_limit(ROC_QOS_IOPS_THROTTLE,
+                  m_cct->_conf.get_val<std::chrono::milliseconds>
+                   ("immutable_object_cache_qos_schedule_tick_min"),
+                  limit,
+                  m_cct->_conf.get_val<uint64_t>
+                   ("immutable_object_cache_qos_iops_burst"),
+                  m_cct->_conf.get_val<std::chrono::seconds>
+                   ("immutable_object_cache_qos_iops_burst_seconds"));
+  }
+  if ((limit = m_cct->_conf.get_val<uint64_t>
+                   ("immutable_object_cache_qos_bps_limit")) != 0) {
+    apply_qos_tick_and_limit(ROC_QOS_BPS_THROTTLE,
+                  m_cct->_conf.get_val<std::chrono::milliseconds>
+                   ("immutable_object_cache_qos_schedule_tick_min"),
+                  limit,
+                  m_cct->_conf.get_val<uint64_t>
+                   ("immutable_object_cache_qos_bps_burst"),
+                  m_cct->_conf.get_val<std::chrono::seconds>
+                   ("immutable_object_cache_qos_bps_burst_seconds"));
+  }
+
+  if ((cache_watermark <= 0) || (cache_watermark > 1)) {
+    lderr(m_cct) << "Invalid water mark provided, set it to default." << dendl;
+    cache_watermark = 0.9;
+  }
   m_policy = new SimplePolicy(m_cct, cache_max_size, max_inflight_ops,
                               cache_watermark);
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
   delete m_policy;
+  if (m_qos_enabled_flag & ROC_QOS_IOPS_THROTTLE) {
+    ceph_assert(m_throttles[ROC_QOS_IOPS_THROTTLE] != nullptr);
+    delete m_throttles[ROC_QOS_IOPS_THROTTLE];
+  }
+  if (m_qos_enabled_flag & ROC_QOS_BPS_THROTTLE) {
+    ceph_assert(m_throttles[ROC_QOS_BPS_THROTTLE] != nullptr);
+    delete m_throttles[ROC_QOS_BPS_THROTTLE];
+  }
 }
 
 int ObjectCacheStore::init(bool reset) {
@@ -60,17 +125,19 @@ int ObjectCacheStore::init(bool reset) {
 
   // TODO(dehao): fsck and reuse existing cache objects
   if (reset) {
-    std::error_code ec;
-    if (efs::exists(m_cache_root_dir)) {
-      // remove all sub folders
-      for (auto& p : efs::directory_iterator(m_cache_root_dir)) {
-        efs::remove_all(p.path());
+    try {
+      if (fs::exists(m_cache_root_dir)) {
+        // remove all sub folders
+        for (auto& p : fs::directory_iterator(m_cache_root_dir)) {
+          fs::remove_all(p.path());
+        }
+      } else {
+        fs::create_directories(m_cache_root_dir);
       }
-    } else {
-      if (!efs::create_directories(m_cache_root_dir, ec)) {
-        lderr(m_cct) << "fail to create cache store dir: " << ec << dendl;
-        return ec.value();
-      }
+    } catch (const fs::filesystem_error& e) {
+      lderr(m_cct) << "failed to initialize cache store directory: "
+                   << e.what() << dendl;
+      return -e.code().value();
     }
   }
   return 0;
@@ -90,16 +157,16 @@ int ObjectCacheStore::init_cache() {
   return 0;
 }
 
-int ObjectCacheStore::do_promote(std::string pool_nspace,
-                                  uint64_t pool_id, uint64_t snap_id,
-                                  std::string object_name) {
+int ObjectCacheStore::do_promote(std::string pool_nspace, uint64_t pool_id,
+                                 uint64_t snap_id, std::string object_name) {
   ldout(m_cct, 20) << "to promote object: " << object_name
                    << " from pool id: " << pool_id
                    << " namespace: " << pool_nspace
                    << " snapshot: " << snap_id << dendl;
 
   int ret = 0;
-  std::string cache_file_name = get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
+  std::string cache_file_name =
+    get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
   librados::IoCtx ioctx;
   {
     std::lock_guard _locker{m_ioctx_map_lock};
@@ -140,33 +207,34 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     return ret;
   }
 
+  auto state = OBJ_CACHE_PROMOTED;
   if (ret == -ENOENT) {
     // object is empty
+    state = OBJ_CACHE_DNE;
     ret = 0;
-  }
+  } else {
+    std::string cache_file_path = get_cache_file_path(cache_file_name, true);
+    if (cache_file_path == "") {
+      lderr(m_cct) << "fail to write cache file" << dendl;
+      m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
+      delete read_buf;
+      return -ENOSPC;
+    }
 
-  std::string cache_file_path = get_cache_file_path(cache_file_name, true);
+    ret = read_buf->write_file(cache_file_path.c_str());
+    if (ret < 0) {
+      lderr(m_cct) << "fail to write cache file" << dendl;
 
-  if (cache_file_path == "") {
-    lderr(m_cct) << "fail to write cache file" << dendl;
-    m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
-    delete read_buf;
-    return -ENOSPC;
-  }
-
-  ret = read_buf->write_file(cache_file_path.c_str());
-  if (ret < 0) {
-    lderr(m_cct) << "fail to write cache file" << dendl;
-
-    m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
-    delete read_buf;
-    return ret;
+      m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
+      delete read_buf;
+      return ret;
+    }
   }
 
   // update metadata
   ceph_assert(OBJ_CACHE_SKIP == m_policy->get_status(cache_file_name));
-  m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED, read_buf->length());
-  ceph_assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
+  m_policy->update_status(cache_file_name, state, read_buf->length());
+  ceph_assert(state == m_policy->get_status(cache_file_name));
 
   delete read_buf;
 
@@ -175,28 +243,39 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   return ret;
 }
 
-int ObjectCacheStore::lookup_object(std::string pool_nspace,
-                                    uint64_t pool_id, uint64_t snap_id,
+int ObjectCacheStore::lookup_object(std::string pool_nspace, uint64_t pool_id,
+                                    uint64_t snap_id, uint64_t object_size,
                                     std::string object_name,
+                                    bool return_dne_path,
                                     std::string& target_cache_file_path) {
   ldout(m_cct, 20) << "object name = " << object_name
                    << " in pool ID : " << pool_id << dendl;
 
   int pret = -1;
-  std::string cache_file_name = get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
+  std::string cache_file_name =
+    get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
 
   cache_status_t ret = m_policy->lookup_object(cache_file_name);
 
   switch (ret) {
     case OBJ_CACHE_NONE: {
-      pret = do_promote(pool_nspace, pool_id, snap_id, object_name);
-      if (pret < 0) {
-        lderr(m_cct) << "fail to start promote" << dendl;
+      if (take_token_from_throttle(object_size, 1)) {
+        pret = do_promote(pool_nspace, pool_id, snap_id, object_name);
+        if (pret < 0) {
+          lderr(m_cct) << "fail to start promote" << dendl;
+        }
+      } else {
+        m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
       }
       return ret;
     }
     case OBJ_CACHE_PROMOTED:
       target_cache_file_path = get_cache_file_path(cache_file_name);
+      return ret;
+    case OBJ_CACHE_DNE:
+      if (return_dne_path) {
+        target_cache_file_path = get_cache_file_path(cache_file_name);
+      }
       return ret;
     case OBJ_CACHE_SKIP:
       return ret;
@@ -278,12 +357,12 @@ std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name,
     ldout(m_cct, 20) << "creating cache dir: " << cache_file_dir <<dendl;
     std::error_code ec;
     std::string new_dir = m_cache_root_dir + cache_file_dir;
-    if (efs::exists(new_dir, ec)) {
+    if (fs::exists(new_dir, ec)) {
       ldout(m_cct, 20) << "cache dir exists: " << cache_file_dir <<dendl;
       return new_dir + cache_file_name;
     }
 
-    if (!efs::create_directories(new_dir, ec)) {
+    if (!fs::create_directories(new_dir, ec)) {
       ldout(m_cct, 5) << "fail to create cache dir: " << new_dir
                       << "error: " << ec.message() << dendl;
       return "";
@@ -291,6 +370,96 @@ std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name,
   }
 
   return m_cache_root_dir + cache_file_dir + cache_file_name;
+}
+
+void ObjectCacheStore::handle_throttle_ready(uint64_t tokens, uint64_t type) {
+  m_io_throttled = false;
+  std::lock_guard lock(m_throttle_lock);
+  if (type & ROC_QOS_IOPS_THROTTLE){
+    m_iops_tokens += tokens;
+  } else if (type & ROC_QOS_BPS_THROTTLE){
+    m_bps_tokens += tokens;
+  } else {
+    lderr(m_cct) << "unknow throttle type." << dendl;
+  }
+}
+
+bool ObjectCacheStore::take_token_from_throttle(uint64_t object_size,
+                                                uint64_t object_num) {
+  if (m_io_throttled == true) {
+    return false;
+  }
+
+  int flag = 0;
+  bool wait = false;
+  if (!wait && (m_qos_enabled_flag & ROC_QOS_IOPS_THROTTLE)) {
+    std::lock_guard lock(m_throttle_lock);
+    if (object_num > m_iops_tokens) {
+      wait = m_throttles[ROC_QOS_IOPS_THROTTLE]->get(object_num, this,
+          &ObjectCacheStore::handle_throttle_ready, object_num,
+          ROC_QOS_IOPS_THROTTLE);
+    } else {
+      m_iops_tokens -= object_num;
+      flag = 1;
+    }
+  }
+  if (!wait && (m_qos_enabled_flag & ROC_QOS_BPS_THROTTLE)) {
+    std::lock_guard lock(m_throttle_lock);
+    if (object_size > m_bps_tokens) {
+      wait = m_throttles[ROC_QOS_BPS_THROTTLE]->get(object_size, this,
+          &ObjectCacheStore::handle_throttle_ready, object_size,
+          ROC_QOS_BPS_THROTTLE);
+    } else {
+      m_bps_tokens -= object_size;
+    }
+  }
+
+  if (wait) {
+    m_io_throttled = true;
+    // when passing iops throttle, but limit in bps throttle, recovery
+    if (flag == 1) {
+      std::lock_guard lock(m_throttle_lock);
+      m_iops_tokens += object_num;
+    }
+  }
+
+  return !wait;
+}
+
+static const std::map<uint64_t, std::string> THROTTLE_FLAGS = {
+  { ROC_QOS_IOPS_THROTTLE, "roc_qos_iops_throttle" },
+  { ROC_QOS_BPS_THROTTLE, "roc_qos_bps_throttle" }
+};
+
+void ObjectCacheStore::apply_qos_tick_and_limit(
+    const uint64_t flag,
+    std::chrono::milliseconds min_tick,
+    uint64_t limit,
+    uint64_t burst,
+    std::chrono::seconds burst_seconds) {
+  SafeTimerSingleton* safe_timer_singleton = nullptr;
+  TokenBucketThrottle* throttle = nullptr;
+  safe_timer_singleton =
+    &m_cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
+      "tools::immutable_object_cache", false, m_cct);
+  SafeTimer* timer = safe_timer_singleton;
+  ceph::mutex* timer_lock = &safe_timer_singleton->lock;
+  m_qos_enabled_flag |= flag;
+  auto throttle_flags_it = THROTTLE_FLAGS.find(flag);
+  ceph_assert(throttle_flags_it != THROTTLE_FLAGS.end());
+  throttle = new TokenBucketThrottle(m_cct, throttle_flags_it->second,
+    0, 0, timer, timer_lock);
+  throttle->set_schedule_tick_min(min_tick.count());
+  int ret = throttle->set_limit(limit, burst, burst_seconds.count());
+  if (ret < 0) {
+    lderr(m_cct) << throttle->get_name() << ": invalid qos parameter: "
+                 << "burst(" << burst << ") is less than "
+                 << "limit(" << limit << ")" << dendl;
+    throttle->set_limit(limit, 0, 1);
+  }
+
+  ceph_assert(m_throttles.find(flag) == m_throttles.end());
+  m_throttles.insert({flag, throttle});
 }
 
 }  // namespace immutable_obj_cache

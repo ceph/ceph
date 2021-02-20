@@ -4,13 +4,21 @@
 #ifndef CEPH_LIBRBD_EXCLUSIVE_LOCK_H
 #define CEPH_LIBRBD_EXCLUSIVE_LOCK_H
 
-#include "librbd/ManagedLock.h"
 #include "common/AsyncOpTracker.h"
+#include "librbd/ManagedLock.h"
+#include "librbd/exclusive_lock/Policy.h"
+#include "librbd/io/Types.h"
+#include "common/RefCountedObj.h"
+
+struct Context;
 
 namespace librbd {
 
+namespace exclusive_lock { template <typename> struct ImageDispatch; }
+
 template <typename ImageCtxT = ImageCtx>
-class ExclusiveLock : public ManagedLock<ImageCtxT> {
+class ExclusiveLock : public RefCountedObject,
+                      public ManagedLock<ImageCtxT> {
 public:
   static ExclusiveLock *create(ImageCtxT &image_ctx) {
     return new ExclusiveLock<ImageCtxT>(image_ctx);
@@ -18,8 +26,13 @@ public:
 
   ExclusiveLock(ImageCtxT &image_ctx);
 
-  bool accept_requests(int *ret_val = nullptr) const;
+  bool accept_request(exclusive_lock::OperationRequestType request_type,
+                      int *ret_val) const;
   bool accept_ops() const;
+
+  void set_require_lock(bool init_shutdown, io::Direction direction,
+                        Context* on_finish);
+  void unset_require_lock(io::Direction direction);
 
   void block_requests(int r);
   void unblock_requests();
@@ -82,9 +95,8 @@ private:
    * @endverbatim
    */
 
-  struct C_InitComplete;
-
   ImageCtxT& m_image_ctx;
+  exclusive_lock::ImageDispatch<ImageCtxT>* m_image_dispatch = nullptr;
   Context *m_pre_post_callback = nullptr;
 
   AsyncOpTracker m_async_op_tracker;
@@ -96,7 +108,6 @@ private:
 
   bool accept_ops(const ceph::mutex &lock) const;
 
-  void handle_init_complete(uint64_t features);
   void handle_post_acquiring_lock(int r);
   void handle_post_acquired_lock(int r);
 };

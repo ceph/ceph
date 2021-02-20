@@ -50,24 +50,6 @@ function install_one() {
     esac
 }
 
-function install_cmake3_on_centos7 {
-    source /etc/os-release
-    local MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
-    sudo yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
-    sudo yum install --nogpgcheck -y epel-release
-    sudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
-    sudo yum install -y cmake3
-}
-
-function install_cmake3_on_xenial {
-    install_pkg_on_ubuntu \
-	ceph-cmake \
-	d278b9d28de0f6b88f56dfe1e8bf684a41577210 \
-	xenial \
-	force \
-	cmake
-}
-
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -117,7 +99,7 @@ function pool_read_write() {
 
     ceph osd pool delete $test_pool $test_pool --yes-i-really-really-mean-it || return 1
     ceph osd pool create $test_pool 4 || return 1
-    ceph osd pool set $test_pool size $size || return 1
+    ceph osd pool set $test_pool size $size --yes-i-really-mean-it || return 1
     ceph osd pool set $test_pool min_size $size || return 1
     ceph osd pool application enable $test_pool rados
 

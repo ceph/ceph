@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IMAGE_CREATE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_CREATE_REQUEST_H
 
+#include "common/config_fwd.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
@@ -11,15 +12,16 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
 
-class ConfigProxy;
 class Context;
-class ContextWQ;
 
 using librados::IoCtx;
 
 namespace journal { class Journaler; }
 
 namespace librbd {
+
+namespace asio { struct ContextWQ; }
+
 namespace image {
 
 template <typename ImageCtxT = ImageCtx>
@@ -29,14 +31,16 @@ public:
                                const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
+                               uint32_t create_flags,
+                               cls::rbd::MirrorImageMode mirror_image_mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               bool skip_mirror_enable,
-                               ContextWQ *op_work_queue, Context *on_finish) {
+                               asio::ContextWQ *op_work_queue,
+                               Context *on_finish) {
     return new CreateRequest(config, ioctx, image_name, image_id, size,
-                             image_options, non_primary_global_image_id,
-                             primary_mirror_uuid, skip_mirror_enable,
-                             op_work_queue, on_finish);
+                             image_options, create_flags,
+                             mirror_image_mode, non_primary_global_image_id,
+                             primary_mirror_uuid, op_work_queue, on_finish);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -90,10 +94,11 @@ private:
                 const std::string &image_name,
                 const std::string &image_id, uint64_t size,
                 const ImageOptions &image_options,
+                uint32_t create_flags,
+                cls::rbd::MirrorImageMode mirror_image_mode,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
-                bool skip_mirror_enable,
-                ContextWQ *op_work_queue, Context *on_finish);
+                asio::ContextWQ *op_work_queue, Context *on_finish);
 
   const ConfigProxy& m_config;
   IoCtx m_io_ctx;
@@ -110,22 +115,22 @@ private:
   std::string m_journal_pool;
   std::string m_data_pool;
   int64_t m_data_pool_id = -1;
+  uint32_t m_create_flags;
+  cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
-  bool m_skip_mirror_enable;
   bool m_negotiate_features = false;
 
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   CephContext *m_cct;
   int m_r_saved = 0;  // used to return actual error after cleanup
-  bool m_force_non_primary;
   file_layout_t m_layout;
   std::string m_id_obj, m_header_obj, m_objmap_name;
 
   bufferlist m_outbl;
-  rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
+  cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
 
   void validate_data_pool();

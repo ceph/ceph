@@ -4,7 +4,6 @@
 #define CEPH_LIBRBD_OPERATION_MIGRATE_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include "common/snap_types.h"
 #include "librbd/Types.h"
 
 namespace librbd {

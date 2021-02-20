@@ -4,11 +4,16 @@
 #
 # Copyright 2016 Mehdi Abaakouk <sileht@redhat.com>
 
-
-cdef extern from "rados/librados.h" nogil:
-    ctypedef void* rados_t
-    ctypedef void* rados_config_t
-    ctypedef void* rados_ioctx_t
+IF BUILD_DOC:
+    cdef:
+        ctypedef void* rados_t
+        ctypedef void* rados_config_t
+        ctypedef void* rados_ioctx_t
+ELSE:
+    cdef extern from "rados/librados.h" nogil:
+        ctypedef void* rados_t
+        ctypedef void* rados_config_t
+        ctypedef void* rados_ioctx_t
 
 
 cdef class Rados(object):
@@ -25,6 +30,7 @@ cdef class Rados(object):
 
 cdef class Ioctx(object):
     cdef:
+        object rados
         rados_ioctx_t io
         public object name
         public object state

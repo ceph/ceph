@@ -1,14 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/WorkQueue.h"
+#include "common/errno.h"
+#include "include/neorados/RADOS.hpp"
 #include "librbd/ImageCtx.h"
-#include "librbd/Journal.h"
 #include "librbd/Utils.h"
-#include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
-#include "librbd/io/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/ParentCacheObjectDispatch.h"
+#include "librbd/io/ObjectDispatchSpec.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/plugin/Api.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
 
@@ -27,17 +28,20 @@ namespace cache {
 
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
-    I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_initialized(false), m_connecting(false) {
+    I* image_ctx, plugin::Api<I>& plugin_api)
+  : m_image_ctx(image_ctx), m_plugin_api(plugin_api),
+    m_lock(ceph::make_mutex(
+      "librbd::cache::ParentCacheObjectDispatch::lock", true, false)) {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
-  std::string controller_path =
-    ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
+  auto controller_path = image_ctx->cct->_conf.template get_val<std::string>(
+    "immutable_object_cache_sock");
   m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
 }
 
 template <typename I>
 ParentCacheObjectDispatch<I>::~ParentCacheObjectDispatch() {
-    delete m_cache_client;
+  delete m_cache_client;
+  m_cache_client = nullptr;
 }
 
 template <typename I>
@@ -45,85 +49,69 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  if (m_image_ctx->parent != nullptr) {
-    ldout(cct, 5) << "child image: skipping" << dendl;
+  if (m_image_ctx->child == nullptr) {
+    ldout(cct, 5) << "non-parent image: skipping" << dendl;
+    if (on_finish != nullptr) {
+      on_finish->complete(-EINVAL);
+    }
     return;
   }
 
-  Context* create_session_ctx = new LambdaContext([this, on_finish](int ret) {
-    m_connecting.store(false);
-    if (on_finish != nullptr) {
-      on_finish->complete(ret);
-    }
-  });
+  m_image_ctx->io_object_dispatcher->register_dispatch(this);
 
-  m_connecting.store(true);
-  create_cache_session(create_session_ctx, false);
-
-  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
-  m_initialized = true;
+  std::unique_lock locker{m_lock};
+  create_cache_session(on_finish, false);
 }
 
 template <typename I>
 bool ParentCacheObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off,
-    uint64_t object_len, librados::snap_t snap_id, int op_flags,
-    const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-    io::ExtentMap* extent_map, int* object_dispatch_flags,
+    uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+    uint64_t* version, int* object_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
-                 << object_len << dendl;
-  ceph_assert(m_initialized);
+  ldout(cct, 20) << "object_no=" << object_no << " " << *extents << dendl;
+
+  if (version != nullptr) {
+    // we currently don't cache read versions
+    return false;
+  }
+
   string oid = data_object_name(m_image_ctx, object_no);
 
   /* if RO daemon still don't startup, or RO daemon crash,
    * or session occur any error, try to re-connect daemon.*/
+  std::unique_lock locker{m_lock};
   if (!m_cache_client->is_session_work()) {
-    if (!m_connecting.exchange(true)) {
-      /* Since we don't have a giant lock protecting the full re-connect process,
-       * if thread A first passes the if (!m_cache_client->is_session_work()),
-       * thread B could have also passed it and reconnected
-       * before thread A resumes and executes if (!m_connecting.exchange(true)).
-       * This will result in thread A re-connecting a working session.
-       * So, we need to check if session is normal again. If session work,
-       * we need set m_connecting to false. */
-      if (!m_cache_client->is_session_work()) {
-        Context* on_finish = new LambdaContext([this](int ret) {
-          m_connecting.store(false);
-        });
-        create_cache_session(on_finish, true);
-      } else {
-        m_connecting.store(false);
-      }
-    }
+    create_cache_session(nullptr, true);
     ldout(cct, 5) << "Parent cache try to re-connect to RO daemon. "
                   << "dispatch current request to lower object layer" << dendl;
     return false;
   }
 
-  ceph_assert(m_cache_client->is_session_work());
-
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
-   ([this, snap_id, read_data, dispatch_result, on_dispatched,
-      oid, object_off, object_len](ObjectCacheRequest* ack) {
-     handle_read_cache(ack, object_off, object_len, read_data,
-                       dispatch_result, on_dispatched);
+   ([this, extents, dispatch_result, on_dispatched, object_no, io_context,
+     &parent_trace]
+   (ObjectCacheRequest* ack) {
+      handle_read_cache(ack, object_no, extents, io_context, parent_trace,
+                        dispatch_result, on_dispatched);
   });
 
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
                                 m_image_ctx->data_ctx.get_id(),
-                                (uint64_t)snap_id, oid, std::move(ctx));
+                                io_context->read_snap().value_or(CEPH_NOSNAP),
+                                m_image_ctx->layout.object_size,
+                                oid, std::move(ctx));
   return true;
 }
 
 template <typename I>
 void ParentCacheObjectDispatch<I>::handle_read_cache(
-     ObjectCacheRequest* ack, uint64_t read_off, uint64_t read_len,
-     ceph::bufferlist* read_data, io::DispatchResult* dispatch_result,
-     Context* on_dispatched) {
+     ObjectCacheRequest* ack, uint64_t object_no, io::ReadExtents* extents,
+     IOContext io_context, const ZTracer::Trace &parent_trace,
+     io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -136,19 +124,46 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
 
   ceph_assert(ack->type == RBDSC_READ_REPLY);
   std::string file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
-  ceph_assert(file_path != "");
-
-  // try to read from parent image cache
-  int r = read_object(file_path, read_data, read_off, read_len, on_dispatched);
-  if(r < 0) {
-    // cache read error, fall back to read rados
-    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-    on_dispatched->complete(0);
+  if (file_path.empty()) {
+    auto ctx = new LambdaContext(
+      [this, dispatch_result, on_dispatched](int r) {
+        if (r < 0 && r != -ENOENT) {
+          lderr(m_image_ctx->cct) << "failed to read parent: "
+                                  << cpp_strerror(r) << dendl;
+        }
+        *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+        on_dispatched->complete(r);
+      });
+    m_plugin_api.read_parent(m_image_ctx, object_no, extents,
+                             io_context->read_snap().value_or(CEPH_NOSNAP),
+                             parent_trace, ctx);
     return;
   }
 
+  int read_len = 0;
+  for (auto& extent: *extents) {
+    // try to read from parent image cache
+    int r = read_object(file_path, &extent.bl, extent.offset, extent.length,
+                        on_dispatched);
+    if (r < 0) {
+      // cache read error, fall back to read rados
+      for (auto& read_extent: *extents) {
+        // clear read bufferlists
+        if (&read_extent == &extent) {
+          break;
+        }
+        read_extent.bl.clear();
+      }
+      *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+      on_dispatched->complete(0);
+      return;
+    }
+
+    read_len += r;
+  }
+
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  on_dispatched->complete(r);
+  on_dispatched->complete(read_len);
 }
 
 template <typename I>
@@ -163,18 +178,29 @@ int ParentCacheObjectDispatch<I>::handle_register_client(bool reg) {
 }
 
 template <typename I>
-int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool is_reconnect) {
+void ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish,
+                                                       bool is_reconnect) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  if (m_connecting) {
+    return;
+  }
+  m_connecting = true;
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
   Context* register_ctx = new LambdaContext([this, cct, on_finish](int ret) {
     if (ret < 0) {
       lderr(cct) << "Parent cache fail to register client." << dendl;
-    } else {
-      ceph_assert(m_cache_client->is_session_work());
     }
     handle_register_client(ret < 0 ? false : true);
-    on_finish->complete(ret);
+
+    ceph_assert(m_connecting);
+    m_connecting = false;
+
+    if (on_finish != nullptr) {
+      on_finish->complete(0);
+    }
   });
 
   Context* connect_ctx = new LambdaContext(
@@ -195,21 +221,19 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
     delete m_cache_client;
 
     // create new CacheClient to connect RO daemon.
-    std::string controller_path =
-      ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
+    auto controller_path = cct->_conf.template get_val<std::string>(
+      "immutable_object_cache_sock");
     m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
   }
 
   m_cache_client->run();
-
   m_cache_client->connect(connect_ctx);
-  return 0;
 }
 
 template <typename I>
 int ParentCacheObjectDispatch<I>::read_object(
-        std::string file_path, ceph::bufferlist* read_data, uint64_t offset,
-        uint64_t length, Context *on_finish) {
+    std::string file_path, ceph::bufferlist* read_data, uint64_t offset,
+    uint64_t length, Context *on_finish) {
 
   auto *cct = m_image_ctx->cct;
   ldout(cct, 20) << "file path: " << file_path << dendl;

@@ -2,14 +2,14 @@
 from __future__ import absolute_import
 
 import json
-import unittest
 import threading
 import time
+import unittest
 from collections import defaultdict
 from functools import partial
 
 from ..services.exception import serialize_dashboard_exception
-from ..tools import NotificationQueue, TaskManager, TaskExecutor
+from ..tools import NotificationQueue, TaskExecutor, TaskManager
 
 
 class MyTask(object):

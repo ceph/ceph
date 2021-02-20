@@ -35,7 +35,8 @@ public:
     encode(ready, payload);
   }
   void decode_payload() override {
-    bufferlist::const_iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(pgid, p);
     decode(source_version, p);
@@ -45,7 +46,7 @@ public:
     decode(ready, p);
   }
   std::string_view get_type_name() const override { return "osd_pg_ready_to_merge"; }
-  void print(ostream &out) const {
+  void print(std::ostream &out) const {
     out << get_type_name()
         << "(" << pgid
 	<< " sv " << source_version

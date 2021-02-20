@@ -1,10 +1,14 @@
 import argparse
+from collections import namedtuple
+import json
 import logging
 from textwrap import dedent
 from ceph_volume import terminal, decorators
-from ceph_volume.util import disk, prompt_bool
-from ceph_volume.util import arg_validators
-from . import strategies
+from ceph_volume.util import disk, prompt_bool, arg_validators, templates
+from ceph_volume.util import prepare
+from . import common
+from .create import Create
+from .prepare import Prepare
 
 mlogger = terminal.MultiLogger(__name__)
 logger = logging.getLogger(__name__)
@@ -25,95 +29,122 @@ def device_formatter(devices):
     return ''.join(lines)
 
 
-# Scenario filtering/detection
-def bluestore_single_type(device_facts):
-    """
-    Detect devices that are just HDDs or solid state so that a 1:1
-    device-to-osd provisioning can be done
-    """
-    types = [device.rotational for device in device_facts]
-    if len(set(types)) == 1:
-        return strategies.bluestore.SingleType
+def ensure_disjoint_device_lists(data, db=[], wal=[], journal=[]):
+    # check that all device lists are disjoint with each other
+    if not all([set(data).isdisjoint(set(db)),
+                set(data).isdisjoint(set(wal)),
+                set(data).isdisjoint(set(journal)),
+                set(db).isdisjoint(set(wal))]):
+        raise Exception('Device lists are not disjoint')
 
 
-def bluestore_mixed_type(device_facts):
-    """
-    Detect if devices are HDDs as well as solid state so that block.db can be
-    placed in solid devices while data is kept in the spinning drives.
-    """
-    types = [device.rotational for device in device_facts]
-    if len(set(types)) > 1:
-        return strategies.bluestore.MixedType
+def separate_devices_from_lvs(devices):
+    phys = []
+    lvm = []
+    for d in devices:
+        phys.append(d) if d.is_device else lvm.append(d)
+    return phys, lvm
 
 
-def filestore_single_type(device_facts):
-    """
-    Detect devices that are just HDDs or solid state so that a 1:1
-    device-to-osd provisioning can be done, keeping the journal on the OSD
-    """
-    types = [device.rotational for device in device_facts]
-    if len(set(types)) == 1:
-        return strategies.filestore.SingleType
+def get_physical_osds(devices, args):
+    '''
+    Goes through passed physical devices and assigns OSDs
+    '''
+    data_slots = args.osds_per_device
+    if args.data_slots:
+        data_slots = max(args.data_slots, args.osds_per_device)
+    rel_data_size = 1.0 / data_slots
+    mlogger.debug('relative data size: {}'.format(rel_data_size))
+    ret = []
+    for dev in devices:
+        if dev.available_lvm:
+            dev_size = dev.vg_size[0]
+            abs_size = disk.Size(b=int(dev_size * rel_data_size))
+            free_size = dev.vg_free[0]
+            for _ in range(args.osds_per_device):
+                if abs_size > free_size:
+                    break
+                free_size -= abs_size.b
+                osd_id = None
+                if args.osd_ids:
+                    osd_id = args.osd_ids.pop()
+                ret.append(Batch.OSD(dev.path,
+                                     rel_data_size,
+                                     abs_size,
+                                     args.osds_per_device,
+                                     osd_id,
+                                     'dmcrypt' if args.dmcrypt else None))
+    return ret
 
 
-def filestore_mixed_type(device_facts):
-    """
-    Detect if devices are HDDs as well as solid state so that the journal can be
-    placed in solid devices while data is kept in the spinning drives.
-    """
-    types = [device.rotational for device in device_facts]
-    if len(set(types)) > 1:
-        return strategies.filestore.MixedType
+def get_lvm_osds(lvs, args):
+    '''
+    Goes through passed LVs and assigns planned osds
+    '''
+    ret = []
+    for lv in lvs:
+        if lv.used_by_ceph:
+            continue
+        osd_id = None
+        if args.osd_ids:
+            osd_id = args.osd_ids.pop()
+        osd = Batch.OSD("{}/{}".format(lv.vg_name, lv.lv_name),
+                        100.0,
+                        disk.Size(b=int(lv.lvs[0].lv_size)),
+                        1,
+                        osd_id,
+                        'dmcrypt' if args.dmcrypt else None)
+        ret.append(osd)
+    return ret
 
 
-def get_strategy(args, devices):
-    """
-    Given a set of devices as input, go through the different detection
-    mechanisms to narrow down on a strategy to use. The strategies are 4 in
-    total:
+def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, args):
+    requested_slots = getattr(args, '{}_slots'.format(type_))
+    if not requested_slots or requested_slots < fast_slots_per_device:
+        if requested_slots:
+            mlogger.info('{}_slots argument is too small, ignoring'.format(type_))
+        requested_slots = fast_slots_per_device
 
-    * Single device type on Bluestore
-    * Mixed device types on Bluestore
-    * Single device type on Filestore
-    * Mixed device types on Filestore
+    requested_size = getattr(args, '{}_size'.format(type_), 0)
+    if requested_size == 0:
+        # no size argument was specified, check ceph.conf
+        get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
+        requested_size = get_size_fct(lv_format=False)
 
-    When the function matches to a scenario it returns the strategy class. This
-    allows for dynamic loading of the conditions needed for each scenario, with
-    normalized classes
-    """
-    bluestore_strategies = [bluestore_mixed_type, bluestore_single_type]
-    filestore_strategies = [filestore_mixed_type, filestore_single_type]
-    if args.bluestore:
-        strategies = bluestore_strategies
-    else:
-        strategies = filestore_strategies
+    ret = []
+    for dev in devices:
+        if not dev.available_lvm:
+            continue
+        # any LV present is considered a taken slot
+        occupied_slots = len(dev.lvs)
+        # this only looks at the first vg on device, unsure if there is a better
+        # way
+        dev_size = dev.vg_size[0]
+        abs_size = disk.Size(b=int(dev_size / requested_slots))
+        free_size = dev.vg_free[0]
+        relative_size = int(abs_size) / dev_size
+        if requested_size:
+            if requested_size <= abs_size:
+                abs_size = requested_size
+            else:
+                mlogger.error(
+                    '{} was requested for {}, but only {} can be fulfilled'.format(
+                        requested_size,
+                        '{}_size'.format(type_),
+                        abs_size,
+                    ))
+                exit(1)
+        while abs_size <= free_size and len(ret) < new_osds and occupied_slots < fast_slots_per_device:
+            free_size -= abs_size.b
+            occupied_slots += 1
+            ret.append((dev.path, relative_size, abs_size, requested_slots))
+    return ret
 
-    for strategy in strategies:
-        backend = strategy(devices)
-        if backend:
-            return backend
 
-
-def filter_devices(args):
-    unused_devices = [device for device in args.devices if not device.used_by_ceph]
-    # only data devices, journals can be reused
-    used_devices = [device.abspath for device in args.devices if device.used_by_ceph]
-    filtered_devices = {}
-    if used_devices:
-        for device in used_devices:
-            filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
-        logger.info("Ignoring devices already used by ceph: %s" % ", ".join(used_devices))
-    if len(unused_devices) == 1:
-        last_device = unused_devices[0]
-        if not last_device.rotational and last_device.is_lvm_member:
-            reason = "Used by ceph as a %s already and there are no devices left for data/block" % (
-                last_device.lvs[0].tags.get("ceph.type"),
-            )
-            filtered_devices[last_device.abspath] = {"reasons": [reason]}
-            logger.info(reason + ": %s" % last_device.abspath)
-            unused_devices = []
-
-    return unused_devices, filtered_devices
+def get_lvm_fast_allocs(lvs):
+    return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
+             disk.Size(b=int(d.lvs[0].lv_size)), 1) for d in lvs if not
+            d.used_by_ceph]
 
 
 class Batch(object):
@@ -123,13 +154,11 @@ class Batch(object):
     _help = dedent("""
     Automatically size devices ready for OSD provisioning based on default strategies.
 
-    Detected devices:
-    {detected_devices}
-
     Usage:
 
         ceph-volume lvm batch [DEVICE...]
 
+    Devices can be physical block devices or LVs.
     Optional reporting on possible outcomes is enabled with --report
 
         ceph-volume lvm batch --report [DEVICE...]
@@ -139,41 +168,49 @@ class Batch(object):
         parser = argparse.ArgumentParser(
             prog='ceph-volume lvm batch',
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=self.print_help(),
+            description=self._help,
         )
 
         parser.add_argument(
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs',
         )
         parser.add_argument(
             '--db-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs db volumes',
         )
         parser.add_argument(
             '--wal-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs wal volumes',
         )
         parser.add_argument(
             '--journal-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs journal volumes',
         )
         parser.add_argument(
-            '--no-auto',
+            '--auto',
             action='store_true',
+            help=('deploy multi-device OSDs if rotational and non-rotational drives '
+                  'are passed in DEVICES'),
+            default=True
+        )
+        parser.add_argument(
+            '--no-auto',
+            action='store_false',
+            dest='auto',
             help=('deploy standalone OSDs if rotational and non-rotational drives '
                   'are passed in DEVICES'),
         )
@@ -190,7 +227,7 @@ class Batch(object):
         parser.add_argument(
             '--report',
             action='store_true',
-            help='Autodetect the objectstore by inspecting the OSD',
+            help='Only report on OSD that would be created and exit',
         )
         parser.add_argument(
             '--yes',
@@ -201,7 +238,7 @@ class Batch(object):
             '--format',
             help='output format, defaults to "pretty"',
             default='pretty',
-            choices=['json', 'pretty'],
+            choices=['json', 'json-pretty', 'pretty'],
         )
         parser.add_argument(
             '--dmcrypt',
@@ -226,19 +263,50 @@ class Batch(object):
             help='Provision more than 1 (the default) OSD per device',
         )
         parser.add_argument(
-            '--block-db-size',
+            '--data-slots',
             type=int,
+            help=('Provision more than 1 (the default) OSD slot per device'
+                  ' if more slots then osds-per-device are specified, slots'
+                  'will stay unoccupied'),
+        )
+        parser.add_argument(
+            '--block-db-size',
+            type=disk.Size.parse,
             help='Set (or override) the "bluestore_block_db_size" value, in bytes'
         )
         parser.add_argument(
-            '--block-wal-size',
+            '--block-db-slots',
             type=int,
+            help='Provision slots on DB device, can remain unoccupied'
+        )
+        parser.add_argument(
+            '--block-wal-size',
+            type=disk.Size.parse,
             help='Set (or override) the "bluestore_block_wal_size" value, in bytes'
         )
         parser.add_argument(
-            '--journal-size',
+            '--block-wal-slots',
             type=int,
+            help='Provision slots on WAL device, can remain unoccupied'
+        )
+        def journal_size_in_mb_hack(size):
+            # TODO give user time to adjust, then remove this
+            if size and size[-1].isdigit():
+                mlogger.warning('DEPRECATION NOTICE')
+                mlogger.warning('--journal-size as integer is parsed as megabytes')
+                mlogger.warning('A future release will parse integers as bytes')
+                mlogger.warning('Add a "M" to explicitly pass a megabyte size')
+                size += 'M'
+            return disk.Size.parse(size)
+        parser.add_argument(
+            '--journal-size',
+            type=journal_size_in_mb_hack,
             help='Override the "osd_journal_size" value, in megabytes'
+        )
+        parser.add_argument(
+            '--journal-slots',
+            type=int,
+            help='Provision slots on journal device, can remain unoccupied'
         )
         parser.add_argument(
             '--prepare',
@@ -256,51 +324,59 @@ class Batch(object):
         for dev_list in ['', 'db_', 'wal_', 'journal_']:
             setattr(self, '{}usable'.format(dev_list), [])
 
-    def get_devices(self):
-        # remove devices with partitions
-        devices = [(device, details) for device, details in
-                       disk.get_devices().items() if details.get('partitions') == {}]
-        size_sort = lambda x: (x[0], x[1]['size'])
-        return device_formatter(sorted(devices, key=size_sort))
+    def report(self, plan):
+        report = self._create_report(plan)
+        print(report)
 
-    def print_help(self):
-        return self._help.format(
-            detected_devices=self.get_devices(),
-        )
-
-    def report(self):
+    def _create_report(self, plan):
         if self.args.format == 'pretty':
-            self.strategy.report_pretty(self.filtered_devices)
-        elif self.args.format == 'json':
-            self.strategy.report_json(self.filtered_devices)
+            report = ''
+            report += templates.total_osds.format(total_osds=len(plan))
+
+            report += templates.osd_component_titles
+            for osd in plan:
+                report += templates.osd_header
+                report += osd.report()
+            return report
         else:
-            raise RuntimeError('report format must be "pretty" or "json"')
+            json_report = []
+            for osd in plan:
+                json_report.append(osd.report_json())
+            if self.args.format == 'json':
+                return json.dumps(json_report)
+            elif self.args.format == 'json-pretty':
+                return json.dumps(json_report, indent=4,
+                                  sort_keys=True)
 
-    def execute(self):
-        if not self.args.yes:
-            self.strategy.report_pretty(self.filtered_devices)
-            terminal.info('The above OSDs would be created if the operation continues')
-            if not prompt_bool('do you want to proceed? (yes/no)'):
-                devices = ','.join([device.abspath for device in self.args.devices])
-                terminal.error('aborting OSD provisioning for %s' % devices)
-                raise SystemExit(0)
+    def _check_slot_args(self):
+        '''
+        checking if -slots args are consistent with other arguments
+        '''
+        if self.args.data_slots and self.args.osds_per_device:
+            if self.args.data_slots < self.args.osds_per_device:
+                raise ValueError('data_slots is smaller then osds_per_device')
 
-        self.strategy.execute()
-
-    def _get_strategy(self):
-        strategy = get_strategy(self.args, self.args.devices)
-        unused_devices, self.filtered_devices = filter_devices(self.args)
-        if not unused_devices and not self.args.format == 'json':
-            # report nothing changed
-            mlogger.info("All devices are already used by ceph. No OSDs will be created.")
-            raise SystemExit(0)
+    def _sort_rotational_disks(self):
+        '''
+        Helper for legacy auto behaviour.
+        Sorts drives into rotating and non-rotating, the latter being used for
+        db or journal.
+        '''
+        mlogger.warning('DEPRECATION NOTICE')
+        mlogger.warning('You are using the legacy automatic disk sorting behavior')
+        mlogger.warning('The Pacific release will change the default to --no-auto')
+        rotating = []
+        ssd = []
+        for d in self.args.devices:
+            rotating.append(d) if d.rotational else ssd.append(d)
+        if ssd and not rotating:
+            # no need for additional sorting, we'll only deploy standalone on ssds
+            return
+        self.args.devices = rotating
+        if self.args.filestore:
+            self.args.journal_devices = ssd
         else:
-            new_strategy = get_strategy(self.args, unused_devices)
-            if new_strategy and strategy != new_strategy:
-                mlogger.error("Aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
-                raise SystemExit(1)
-
-        self.strategy = strategy.with_auto_devices(self.args, unused_devices)
+            self.args.db_devices = ssd
 
     @decorators.needs_root
     def main(self):
@@ -312,66 +388,241 @@ class Batch(object):
         if not self.args.bluestore and not self.args.filestore:
             self.args.bluestore = True
 
-        if (self.args.no_auto or self.args.db_devices or
-                                  self.args.journal_devices or
-                                  self.args.wal_devices):
-            self._get_explicit_strategy()
-        else:
-            self._get_strategy()
+        if (self.args.auto and not self.args.db_devices and not
+            self.args.wal_devices and not self.args.journal_devices):
+            self._sort_rotational_disks()
+
+        self._check_slot_args()
+
+        ensure_disjoint_device_lists(self.args.devices,
+                                     self.args.db_devices,
+                                     self.args.wal_devices,
+                                     self.args.journal_devices)
+
+        plan = self.get_plan(self.args)
 
         if self.args.report:
-            self.report()
-        else:
-            self.execute()
+            self.report(plan)
+            return 0
 
-    def _get_explicit_strategy(self):
-        # TODO assert that none of the device lists overlap?
-        self._filter_devices()
-        self._ensure_disjoint_device_lists()
-        if self.args.bluestore:
-            if self.db_usable or self.wal_usable:
-                self.strategy = strategies.bluestore.MixedType(
-                    self.args,
-                    self.usable,
-                    self.db_usable,
-                    self.wal_usable)
+        if not self.args.yes:
+            self.report(plan)
+            terminal.info('The above OSDs would be created if the operation continues')
+            if not prompt_bool('do you want to proceed? (yes/no)'):
+                terminal.error('aborting OSD provisioning')
+                raise SystemExit(0)
+
+        self._execute(plan)
+
+    def _execute(self, plan):
+        defaults = common.get_default_args()
+        global_args = [
+            'bluestore',
+            'filestore',
+            'dmcrypt',
+            'crush_device_class',
+            'no_systemd',
+        ]
+        defaults.update({arg: getattr(self.args, arg) for arg in global_args})
+        for osd in plan:
+            args = osd.get_args(defaults)
+            if self.args.prepare:
+                p = Prepare([])
+                p.safe_prepare(argparse.Namespace(**args))
             else:
-                self.strategy = strategies.bluestore.SingleType(
-                    self.args,
-                    self.usable)
+                c = Create([])
+                c.create(argparse.Namespace(**args))
+
+
+    def get_plan(self, args):
+        if args.bluestore:
+            plan = self.get_deployment_layout(args, args.devices, args.db_devices,
+                                              args.wal_devices)
+        elif args.filestore:
+            plan = self.get_deployment_layout(args, args.devices, args.journal_devices)
+        return plan
+
+    def get_deployment_layout(self, args, devices, fast_devices=[],
+                              very_fast_devices=[]):
+        '''
+        The methods here are mostly just organization, error reporting and
+        setting up of (default) args. The heavy lifting code for the deployment
+        layout can be found in the static get_*_osds and get_*_fast_allocs
+        functions.
+        '''
+        plan = []
+        phys_devs, lvm_devs = separate_devices_from_lvs(devices)
+        mlogger.debug(('passed data devices: {} physical,'
+                       ' {} LVM').format(len(phys_devs), len(lvm_devs)))
+
+        plan.extend(get_physical_osds(phys_devs, args))
+
+        plan.extend(get_lvm_osds(lvm_devs, args))
+
+        num_osds = len(plan)
+        if num_osds == 0:
+            mlogger.info('All data devices are unavailable')
+            return plan
+        requested_osds = args.osds_per_device * len(phys_devs) + len(lvm_devs)
+
+        fast_type = 'block_db' if args.bluestore else 'journal'
+        fast_allocations = self.fast_allocations(fast_devices,
+                                                 requested_osds,
+                                                 num_osds,
+                                                 fast_type)
+        if fast_devices and not fast_allocations:
+            mlogger.info('{} fast devices were passed, but none are available'.format(len(fast_devices)))
+            return []
+        if fast_devices and not len(fast_allocations) == num_osds:
+            mlogger.error('{} fast allocations != {} num_osds'.format(
+                len(fast_allocations), num_osds))
+            exit(1)
+
+        very_fast_allocations = self.fast_allocations(very_fast_devices,
+                                                      requested_osds,
+                                                      num_osds,
+                                                      'block_wal')
+        if very_fast_devices and not very_fast_allocations:
+            mlogger.info('{} very fast devices were passed, but none are available'.format(len(very_fast_devices)))
+            return []
+        if very_fast_devices and not len(very_fast_allocations) == num_osds:
+            mlogger.error('{} very fast allocations != {} num_osds'.format(
+                len(very_fast_allocations), num_osds))
+            exit(1)
+
+        for osd in plan:
+            if fast_devices:
+                osd.add_fast_device(*fast_allocations.pop(),
+                                    type_=fast_type)
+            if very_fast_devices and args.bluestore:
+                osd.add_very_fast_device(*very_fast_allocations.pop())
+        return plan
+
+    def fast_allocations(self, devices, requested_osds, new_osds, type_):
+        ret = []
+        if not devices:
+            return ret
+        phys_devs, lvm_devs = separate_devices_from_lvs(devices)
+        mlogger.debug(('passed {} devices: {} physical,'
+                       ' {} LVM').format(type_, len(phys_devs), len(lvm_devs)))
+
+        ret.extend(get_lvm_fast_allocs(lvm_devs))
+
+        # fill up uneven distributions across fast devices: 5 osds and 2 fast
+        # devices? create 3 slots on each device rather then deploying
+        # heterogeneous osds
+        if (requested_osds - len(lvm_devs)) % len(phys_devs):
+            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / len(phys_devs)) + 1
         else:
-            if self.journal_usable:
-                self.strategy = strategies.filestore.MixedType(
-                    self.args,
-                    self.usable,
-                    self.journal_usable)
-            else:
-                self.strategy = strategies.filestore.SingleType(
-                    self.args,
-                    self.usable)
+            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / len(phys_devs))
 
 
-    def _filter_devices(self):
-        # filter devices by their available property.
-        # TODO: Some devices are rejected in the argparser already. maybe it
-        # makes sense to unifiy this
-        used_reason = {"reasons": ["Used by ceph as a data device already"]}
-        self.filtered_devices = {}
-        for dev_list in ['', 'db_', 'wal_', 'journal_']:
-            dev_list_prop = '{}devices'.format(dev_list)
-            if hasattr(self.args, dev_list_prop):
-                usable_dev_list_prop = '{}usable'.format(dev_list)
-                usable = [d for d in getattr(self.args, dev_list_prop) if
-                          d.available]
-                setattr(self, usable_dev_list_prop, usable)
-                self.filtered_devices.update({d: used_reason for d in
-                                              getattr(self.args, dev_list_prop)
-                                              if d.used_by_ceph})
+        ret.extend(get_physical_fast_allocs(phys_devs,
+                                            type_,
+                                            fast_slots_per_device,
+                                            new_osds,
+                                            self.args))
+        return ret
 
-    def _ensure_disjoint_device_lists(self):
-        # check that all device lists are disjoint with each other
-        if not(set(self.usable).isdisjoint(set(self.db_usable)) and
-               set(self.usable).isdisjoint(set(self.wal_usable)) and
-               set(self.usable).isdisjoint(set(self.journal_usable)) and
-               set(self.db_usable).isdisjoint(set(self.wal_usable))):
-            raise Exception('Device lists are not disjoint')
+    class OSD(object):
+        '''
+        This class simply stores info about to-be-deployed OSDs and provides an
+        easy way to retrieve the necessary create arguments.
+        '''
+        VolSpec = namedtuple('VolSpec',
+                             ['path',
+                              'rel_size',
+                              'abs_size',
+                              'slots',
+                              'type_'])
+
+        def __init__(self,
+                     data_path,
+                     rel_size,
+                     abs_size,
+                     slots,
+                     id_,
+                     encryption):
+            self.id_ = id_
+            self.data = self.VolSpec(path=data_path,
+                                rel_size=rel_size,
+                                abs_size=abs_size,
+                                slots=slots,
+                                type_='data')
+            self.fast = None
+            self.very_fast = None
+            self.encryption = encryption
+
+        def add_fast_device(self, path, rel_size, abs_size, slots, type_):
+            self.fast = self.VolSpec(path=path,
+                                rel_size=rel_size,
+                                abs_size=abs_size,
+                                slots=slots,
+                                type_=type_)
+
+        def add_very_fast_device(self, path, rel_size, abs_size, slots):
+            self.very_fast = self.VolSpec(path=path,
+                                rel_size=rel_size,
+                                abs_size=abs_size,
+                                slots=slots,
+                                type_='block_wal')
+
+        def _get_osd_plan(self):
+            plan = {
+                'data': self.data.path,
+                'data_size': self.data.abs_size,
+                'encryption': self.encryption,
+            }
+            if self.fast:
+                type_ = self.fast.type_.replace('.', '_')
+                plan.update(
+                    {
+                        type_: self.fast.path,
+                        '{}_size'.format(type_): self.fast.abs_size,
+                    })
+            if self.very_fast:
+                plan.update(
+                    {
+                        'block_wal': self.very_fast.path,
+                        'block_wal_size': self.very_fast.abs_size,
+                    })
+            if self.id_:
+                plan.update({'osd_id': self.id_})
+            return plan
+
+        def get_args(self, defaults):
+            my_defaults = defaults.copy()
+            my_defaults.update(self._get_osd_plan())
+            return my_defaults
+
+        def report(self):
+            report = ''
+            if self.id_:
+                report += templates.osd_reused_id.format(
+                    id_=self.id_)
+            if self.encryption:
+                report += templates.osd_encryption.format(
+                    enc=self.encryption)
+            report += templates.osd_component.format(
+                _type=self.data.type_,
+                path=self.data.path,
+                size=self.data.abs_size,
+                percent=self.data.rel_size)
+            if self.fast:
+                report += templates.osd_component.format(
+                    _type=self.fast.type_,
+                    path=self.fast.path,
+                    size=self.fast.abs_size,
+                    percent=self.fast.rel_size)
+            if self.very_fast:
+                report += templates.osd_component.format(
+                    _type=self.very_fast.type_,
+                    path=self.very_fast.path,
+                    size=self.very_fast.abs_size,
+                    percent=self.very_fast.rel_size)
+            return report
+
+        def report_json(self):
+            # cast all values to string so that the report can be dumped in to
+            # json.dumps
+            return {k: str(v) for k, v in self._get_osd_plan().items()}

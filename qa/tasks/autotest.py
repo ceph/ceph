@@ -1,4 +1,4 @@
-""" 
+"""
 Run an autotest test on the ceph cluster.
 """
 import json
@@ -48,7 +48,7 @@ def task(ctx, config):
 
     log.info('Making a separate scratch dir for every client...')
     for role in config.keys():
-        assert isinstance(role, basestring)
+        assert isinstance(role, str)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -68,7 +68,7 @@ def task(ctx, config):
             )
 
     with parallel() as p:
-        for role, tests in config.iteritems():
+        for role, tests in config.items():
             (remote,) = ctx.cluster.only(role).remotes.keys()
             p.spawn(_run_tests, testdir, remote, role, tests)
 
@@ -103,7 +103,7 @@ def _run_tests(testdir, remote, role, tests):
     """
     Spawned to run test on remote site
     """
-    assert isinstance(role, basestring)
+    assert isinstance(role, str)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]
@@ -120,8 +120,7 @@ def _run_tests(testdir, remote, role, tests):
             id=id_,
             )
         control = '{tdir}/control.{tag}'.format(tdir=testdir, tag=tag)
-        teuthology.write_file(
-            remote=remote,
+        remote.write_file(
             path=control,
             data='import json; data=json.loads({data!r}); job.run_test(**data)'.format(
                 data=json.dumps(dict(

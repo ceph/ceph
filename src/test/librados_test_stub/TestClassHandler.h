@@ -27,6 +27,7 @@ public:
 
     TestIoCtxImpl *io_ctx_impl;
     std::string oid;
+    uint64_t snap_id;
     SnapContext snapc;
   };
   typedef boost::shared_ptr<MethodContext> SharedMethodContext;
@@ -54,6 +55,7 @@ public:
                                    const std::string &method);
   SharedMethodContext get_method_context(TestIoCtxImpl *io_ctx_impl,
                                          const std::string &oid,
+                                         uint64_t snap_id,
                                          const SnapContext &snapc);
 
   int create_filter(cls_handle_t hclass, const std::string& filter_name,

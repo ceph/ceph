@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Loop writing/reading the first 4k of image argv[1] in pool rbd,
 after acquiring exclusive lock named argv[2].  When an exception
 happens, split off the last number in the exception 'args' string
 and use it as the process exit code, if it's convertible to a number.
 
-Designed to run against a blacklist operation and verify the
+Designed to run against a blocklist operation and verify the
 ESHUTDOWN expected from the image operation.
 
 Note: this cannot be run with writeback caching on, currently, as

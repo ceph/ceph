@@ -91,12 +91,9 @@ void RGWLifecycleConfiguration_S3::decode_xml(XMLObj *obj)
 
   for (auto& rule : rules) {
     if (rule.get_id().empty()) {
-      string id;
-
       // S3 generates a 48 bit random ID, maybe we could generate shorter IDs
       static constexpr auto LC_ID_LENGTH = 48;
-
-      gen_rand_alphanumeric_lower(cct, &id, LC_ID_LENGTH);
+      string id = gen_rand_alphanumeric_lower(cct, LC_ID_LENGTH);
       rule.set_id(id);
     }
 
@@ -131,20 +128,21 @@ void LCFilter_S3::dump_xml(Formatter *f) const
 
 void LCFilter_S3::decode_xml(XMLObj *obj)
 {
+  /*
+   * The prior logic here looked for an And element, but did not
+   * structurally parse the Filter clause (and incorrectly rejected
+   * the base case where a Prefix and one Tag were supplied).  It
+   * could not reject generally malformed Filter syntax.
+   *
+   * Empty filters are allowed:
+   * https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html
+   */
   XMLObj *o = obj->find_first("And");
-  bool single_cond = false;
-  int num_conditions = 0;
-  // If there is an AND condition, every tag is a child of and
-  // else we only support single conditions and return false if we see multiple
-
   if (o == nullptr){
     o = obj;
-    single_cond = true;
   }
 
   RGWXMLDecoder::decode_xml("Prefix", prefix, o);
-  if (!prefix.empty())
-    num_conditions++;
   auto tags_iter = o->find("Tag");
   obj_tags.clear();
   while (auto tag_xml =tags_iter.get_next()){
@@ -152,11 +150,6 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
     RGWXMLDecoder::decode_xml("Key", _key, tag_xml);
     RGWXMLDecoder::decode_xml("Value", _val, tag_xml);
     obj_tags.emplace_tag(std::move(_key), std::move(_val));
-    num_conditions++;
-  }
-
-  if (single_cond && num_conditions > 1) {
-    throw RGWXMLDecoder::err("Bad filter: badly formed multiple conditions");
   }
 }
 
@@ -320,7 +313,7 @@ void LCRule_S3::dump_xml(Formatter *f) const {
   }
 }
 
-int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfiguration& dest)
+int RGWLifecycleConfiguration_S3::rebuild(RGWLifecycleConfiguration& dest)
 {
   int ret = 0;
   multimap<string, LCRule>::iterator iter;

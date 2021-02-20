@@ -34,13 +34,22 @@
 #include "chain_xattr.h"
 
 #include "LFNIndex.h"
-using ceph::crypto::SHA1;
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "LFNIndex(" << get_base_path() << ") "
 
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::crypto::SHA1;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
 
 const string LFNIndex::LFN_ATTR = "user.cephos.lfn";
 const string LFNIndex::PHASH_ATTR_PREFIX = "user.cephos.phash.";

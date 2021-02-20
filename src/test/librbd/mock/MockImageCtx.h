@@ -12,8 +12,9 @@
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librbd/mock/MockOperations.h"
+#include "test/librbd/mock/MockPluginRegistry.h"
 #include "test/librbd/mock/MockReadahead.h"
-#include "test/librbd/mock/io/MockImageRequestWQ.h"
+#include "test/librbd/mock/io/MockImageDispatcher.h"
 #include "test/librbd/mock/io/MockObjectDispatcher.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
@@ -26,7 +27,6 @@ class MockSafeTimer;
 
 namespace librbd {
 
-namespace cache { class MockImageCache; }
 namespace operation {
 template <typename> class ResizeRequest;
 }
@@ -40,7 +40,6 @@ struct MockImageCtx {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }
-  MOCK_METHOD0(destroy, void());
 
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
@@ -56,10 +55,14 @@ struct MockImageCtx {
       snap_ids(image_ctx.snap_ids),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
+      read_only_flags(image_ctx.read_only_flags),
+      read_only_mask(image_ctx.read_only_mask),
       clone_copy_on_read(image_ctx.clone_copy_on_read),
       lockers(image_ctx.lockers),
       exclusive_locked(image_ctx.exclusive_locked),
       lock_tag(image_ctx.lock_tag),
+      asio_engine(image_ctx.asio_engine),
+      rados_api(image_ctx.rados_api),
       owner_lock(image_ctx.owner_lock),
       image_lock(image_ctx.image_lock),
       timestamp_lock(image_ctx.timestamp_lock),
@@ -81,9 +84,10 @@ struct MockImageCtx {
       format_string(image_ctx.format_string),
       group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
-      io_work_queue(new io::MockImageRequestWQ()),
+      io_image_dispatcher(new io::MockImageDispatcher()),
       io_object_dispatcher(new io::MockObjectDispatcher()),
       op_work_queue(new MockContextWQ()),
+      plugin_registry(new MockPluginRegistry()),
       readahead_max_bytes(image_ctx.readahead_max_bytes),
       event_socket(image_ctx.event_socket),
       parent(NULL), operations(new MockOperations()),
@@ -97,6 +101,8 @@ struct MockImageCtx {
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
       enable_alloc_hint(image_ctx.enable_alloc_hint),
+      alloc_hint_flags(image_ctx.alloc_hint_flags),
+      read_flags(image_ctx.read_flags),
       ignore_migrating(image_ctx.ignore_migrating),
       enable_sparse_copyup(image_ctx.enable_sparse_copyup),
       mtime_update_interval(image_ctx.mtime_update_interval),
@@ -112,8 +118,9 @@ struct MockImageCtx {
     }
   }
 
-  ~MockImageCtx() {
+  virtual ~MockImageCtx() {
     wait_for_async_requests();
+    wait_for_async_ops();
     image_ctx->md_ctx.aio_flush();
     image_ctx->data_ctx.aio_flush();
     image_ctx->op_work_queue->drain();
@@ -121,10 +128,12 @@ struct MockImageCtx {
     delete operations;
     delete image_watcher;
     delete op_work_queue;
-    delete io_work_queue;
+    delete plugin_registry;
+    delete io_image_dispatcher;
     delete io_object_dispatcher;
   }
 
+  void wait_for_async_ops();
   void wait_for_async_requests() {
     async_ops_lock.lock();
     if (async_requests.empty()) {
@@ -145,6 +154,7 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_object_size, uint64_t());
   MOCK_CONST_METHOD0(get_current_size, uint64_t());
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
+  MOCK_CONST_METHOD1(get_effective_image_size, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_object_count, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_read_flags, int(librados::snap_t));
   MOCK_CONST_METHOD2(get_flags, int(librados::snap_t in_snap_id,
@@ -204,6 +214,7 @@ struct MockImageCtx {
   MOCK_METHOD1(notify_update, void(Context *));
 
   MOCK_CONST_METHOD0(get_exclusive_lock_policy, exclusive_lock::Policy*());
+  MOCK_METHOD1(set_exclusive_lock_policy, void(exclusive_lock::Policy*));
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
   MOCK_METHOD1(set_journal_policy, void(journal::Policy*));
 
@@ -212,6 +223,10 @@ struct MockImageCtx {
 
   MOCK_CONST_METHOD0(get_stripe_count, uint64_t());
   MOCK_CONST_METHOD0(get_stripe_period, uint64_t());
+
+  MOCK_METHOD0(rebuild_data_io_context, void());
+  IOContext get_data_io_context();
+  IOContext duplicate_data_io_context();
 
   static void set_timer_instance(MockSafeTimer *timer, ceph::mutex *timer_lock);
   static void get_timer_instance(CephContext *cct, MockSafeTimer **timer,
@@ -229,10 +244,12 @@ struct MockImageCtx {
   ::SnapContext snapc;
   std::vector<librados::snap_t> snaps;
   std::map<librados::snap_t, SnapInfo> snap_info;
-  std::map<std::pair<cls::rbd::SnapshotNamespace, std::string>, librados::snap_t> snap_ids;
+  std::map<ImageCtx::SnapKey, librados::snap_t, ImageCtx::SnapKeyComparator> snap_ids;
 
   bool old_format;
   bool read_only;
+  uint32_t read_only_flags;
+  uint32_t read_only_mask;
 
   bool clone_copy_on_read;
 
@@ -240,6 +257,9 @@ struct MockImageCtx {
            rados::cls::lock::locker_info_t> lockers;
   bool exclusive_locked;
   std::string lock_tag;
+
+  std::shared_ptr<AsioEngine> asio_engine;
+  neorados::RADOS& rados_api;
 
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;
@@ -275,17 +295,18 @@ struct MockImageCtx {
 
   std::map<uint64_t, io::CopyupRequest<MockImageCtx>*> copyup_list;
 
-  io::MockImageRequestWQ *io_work_queue;
+  io::MockImageDispatcher *io_image_dispatcher;
   io::MockObjectDispatcher *io_object_dispatcher;
   MockContextWQ *op_work_queue;
 
-  cache::MockImageCache *image_cache = nullptr;
+  MockPluginRegistry* plugin_registry;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;
 
   EventSocket &event_socket;
 
+  MockImageCtx *child = nullptr;
   MockImageCtx *parent;
   MockOperations *operations;
   MockImageState *state;
@@ -303,6 +324,8 @@ struct MockImageCtx {
   bool non_blocking_aio;
   bool blkin_trace_all;
   bool enable_alloc_hint;
+  uint32_t alloc_hint_flags;
+  uint32_t read_flags;
   bool ignore_migrating;
   bool enable_sparse_copyup;
   uint64_t mtime_update_interval;
@@ -310,6 +333,7 @@ struct MockImageCtx {
   bool cache;
 
   ConfigProxy config;
+  std::set<std::string> config_overrides;
 };
 
 } // namespace librbd

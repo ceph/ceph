@@ -10,7 +10,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
 
+using std::map;
+using std::vector;
 
+using ceph::bufferptr;
+using ceph::bufferlist;
 
 void JournalingObjectStore::journal_start()
 {

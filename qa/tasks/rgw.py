@@ -3,21 +3,17 @@ rgw routines
 """
 import argparse
 import contextlib
-import json
 import logging
-import os
-import errno
-import util.rgw as rgw_utils
 
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.exceptions import ConfigError
-from util import get_remote_for_role
-from util.rgw import rgwadmin, wait_for_radosgw
-from util.rados import (rados, create_ec_pool,
-                                        create_replicated_pool,
-                                        create_cache_pool)
+from tasks.util import get_remote_for_role
+from tasks.util.rgw import rgwadmin, wait_for_radosgw
+from tasks.util.rados import (create_ec_pool,
+                              create_replicated_pool,
+                              create_cache_pool)
 
 log = logging.getLogger(__name__)
 
@@ -108,9 +104,9 @@ def start_rgw(ctx, config, clients):
                 ])
 
 
-        if client_config.get('dns-name'):
+        if client_config.get('dns-name') is not None:
             rgw_cmd.extend(['--rgw-dns-name', endpoint.dns_name])
-        if client_config.get('dns-s3website-name'):
+        if client_config.get('dns-s3website-name') is not None:
             rgw_cmd.extend(['--rgw-dns-s3website-name', endpoint.website_dns_name])
 
 
@@ -138,6 +134,9 @@ def start_rgw(ctx, config, clients):
             ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
+            log.info("Restrict access to token file")
+            ctx.cluster.only(client).run(args=['chmod', '600', token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
 
             rgw_cmd.extend([
                 '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
@@ -149,8 +148,7 @@ def start_rgw(ctx, config, clients):
             run.Raw('|'),
             'sudo',
             'tee',
-            '/var/log/ceph/rgw.{client_with_cluster}.stdout'.format(tdir=testdir,
-                                                       client_with_cluster=client_with_cluster),
+            '/var/log/ceph/rgw.{client_with_cluster}.stdout'.format(client_with_cluster=client_with_cluster),
             run.Raw('2>&1'),
             ])
 
@@ -159,7 +157,9 @@ def start_rgw(ctx, config, clients):
                 testdir,
                 client_with_cluster,
                 cmd_prefix,
-                client_config.get('valgrind')
+                client_config.get('valgrind'),
+                # see https://github.com/ceph/teuthology/pull/1600
+                exit_on_first_error=False
                 )
 
         run_cmd = list(cmd_prefix)
@@ -168,6 +168,7 @@ def start_rgw(ctx, config, clients):
         ctx.daemons.add_daemon(
             remote, 'rgw', client_with_id,
             cluster=cluster_name,
+            fsid=ctx.ceph[cluster_name].fsid,
             args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,
@@ -202,7 +203,7 @@ def start_rgw(ctx, config, clients):
 
 def assign_endpoints(ctx, config, default_cert):
     role_endpoints = {}
-    for role, client_config in config.iteritems():
+    for role, client_config in config.items():
         client_config = client_config or {}
         remote = get_remote_for_role(ctx, role)
 
@@ -225,9 +226,8 @@ def assign_endpoints(ctx, config, default_cert):
             dns_name += remote.hostname
 
         website_dns_name = client_config.get('dns-s3website-name')
-        if website_dns_name:
-            if len(website_dns_name) == 0 or website_dns_name.endswith('.'):
-                website_dns_name += remote.hostname
+        if website_dns_name is not None and (len(website_dns_name) == 0 or website_dns_name.endswith('.')):
+            website_dns_name += remote.hostname
 
         role_endpoints[role] = RGWEndpoint(remote.hostname, port, ssl_certificate, dns_name, website_dns_name)
 

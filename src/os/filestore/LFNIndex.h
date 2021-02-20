@@ -87,22 +87,22 @@ class LFNIndex : public CollectionIndex {
   /// Length of hashed filename cookie.
   static const int FILENAME_EXTRA = 4;
   /// Lfn cookie value.
-  static const string FILENAME_COOKIE;
+  static const std::string FILENAME_COOKIE;
   /// Name of LFN attribute for storing full name.
-  static const string LFN_ATTR;
+  static const std::string LFN_ATTR;
   /// Prefix for subdir index attributes.
-  static const string PHASH_ATTR_PREFIX;
+  static const std::string PHASH_ATTR_PREFIX;
   /// Prefix for index subdirectories.
-  static const string SUBDIR_PREFIX;
+  static const std::string SUBDIR_PREFIX;
 
   /// Path to Index base.
-  const string base_path;
+  const std::string base_path;
 
 protected:
   const uint32_t index_version;
 
   /// true if retry injection is enabled
-  struct RetryException : public exception {};
+  struct RetryException : public std::exception {};
   bool error_injection_enabled;
   bool error_injection_on;
   double error_injection_probability;
@@ -120,7 +120,7 @@ protected:
   }
 
 private:
-  string lfn_attribute, lfn_alt_attribute;
+  std::string lfn_attribute, lfn_alt_attribute;
   coll_t collection;
 
 public:
@@ -144,8 +144,8 @@ public:
     } else {
       char buf[100];
       snprintf(buf, sizeof(buf), "%d", index_version);
-      lfn_attribute = LFN_ATTR + string(buf);
-      lfn_alt_attribute = LFN_ATTR + string(buf) + "-alt";
+      lfn_attribute = LFN_ATTR + std::string(buf);
+      lfn_alt_attribute = LFN_ATTR + std::string(buf) + "-alt";
    }
   }
 
@@ -189,7 +189,7 @@ public:
     const ghobject_t &start,
     const ghobject_t &end,
     int max_count,
-    vector<ghobject_t> *ls,
+    std::vector<ghobject_t> *ls,
     ghobject_t *next
     ) override;
 
@@ -237,23 +237,23 @@ protected:
 
   /// Will be called upon object creation
   virtual int _created(
-    const vector<string> &path, ///< [in] Path to subdir.
+    const std::vector<std::string> &path, ///< [in] Path to subdir.
     const ghobject_t &oid,      ///< [in] Object created.
-    const string &mangled_name  ///< [in] Mangled filename.
+    const std::string &mangled_name  ///< [in] Mangled filename.
     ) = 0;
 
   /// Will be called to remove an object
   virtual int _remove(
-    const vector<string> &path,     ///< [in] Path to subdir.
+    const std::vector<std::string> &path,     ///< [in] Path to subdir.
     const ghobject_t &oid,          ///< [in] Object to remove.
-    const string &mangled_name	    ///< [in] Mangled filename.
+    const std::string &mangled_name	    ///< [in] Mangled filename.
     ) = 0;
 
   /// Return the path and mangled_name for oid.
   virtual int _lookup(
     const ghobject_t &oid,///< [in] Object for lookup.
-    vector<string> *path, ///< [out] Path to the object.
-    string *mangled_name, ///< [out] Mangled filename.
+    std::vector<std::string> *path, ///< [out] Path to the object.
+    std::string *mangled_name, ///< [out] Mangled filename.
     int *exists		  ///< [out] True if the object exists.
     ) = 0;
 
@@ -269,7 +269,7 @@ protected:
     const ghobject_t &start,
     const ghobject_t &end,
     int max_count,
-    vector<ghobject_t> *ls,
+    std::vector<ghobject_t> *ls,
     ghobject_t *next
     ) = 0;
 
@@ -279,15 +279,15 @@ protected:
 
   /// Sync a subdirectory
   int fsync_dir(
-    const vector<string> &path ///< [in] Path to sync
+    const std::vector<std::string> &path ///< [in] Path to sync
     ); ///< @return Error Code, 0 on success
 
   /// Link an object from from into to
   int link_object(
-    const vector<string> &from,   ///< [in] Source subdirectory.
-    const vector<string> &to,     ///< [in] Dest subdirectory.
+    const std::vector<std::string> &from,   ///< [in] Source subdirectory.
+    const std::vector<std::string> &to,     ///< [in] Dest subdirectory.
     const ghobject_t &oid,        ///< [in] Object to move.
-    const string &from_short_name ///< [in] Mangled filename of oid.
+    const std::string &from_short_name ///< [in] Mangled filename of oid.
     ); ///< @return Error Code, 0 on success
 
   /**
@@ -303,9 +303,9 @@ protected:
    * @return Error Code, 0 on success.
    */
   int remove_objects(
-    const vector<string> &dir,
-    const map<string, ghobject_t> &to_remove,
-    map<string, ghobject_t> *remaining
+    const std::vector<std::string> &dir,
+    const std::map<std::string, ghobject_t> &to_remove,
+    std::map<std::string, ghobject_t> *remaining
     );
 
 
@@ -318,8 +318,8 @@ protected:
    * @return Error Code, 0 on success
    */
   int move_objects(
-    const vector<string> &from, ///< [in] Source subdirectory.
-    const vector<string> &to    ///< [in] Dest subdirectory.
+    const std::vector<std::string> &from, ///< [in] Source subdirectory.
+    const std::vector<std::string> &to    ///< [in] Dest subdirectory.
     );
 
   /**
@@ -329,7 +329,7 @@ protected:
    * @return Error Code, 0 on success
    */
   int remove_object(
-    const vector<string> &from,  ///< [in] Directory from which to remove.
+    const std::vector<std::string> &from,  ///< [in] Directory from which to remove.
     const ghobject_t &to_remove   ///< [in] Object to remove.
     );
 
@@ -341,9 +341,9 @@ protected:
    * @return Error code on failure, 0 on success
    */
   int get_mangled_name(
-    const vector<string> &from, ///< [in] Subdirectory
+    const std::vector<std::string> &from, ///< [in] Subdirectory
     const ghobject_t &oid,	///< [in] Object
-    string *mangled_name,	///< [out] Filename
+    std::string *mangled_name,	///< [out] Filename
     int *hardlink		///< [out] hardlink for this file, hardlink=0 mean no-exist
     );
 
@@ -351,16 +351,16 @@ protected:
   static int move_subdir(
     LFNIndex &from,             ///< [in] from index
     LFNIndex &dest,             ///< [in] to index
-    const vector<string> &path, ///< [in] path containing dir
-    string dir                  ///< [in] dir to move
+    const std::vector<std::string> &path, ///< [in] path containing dir
+    std::string dir                  ///< [in] dir to move
     );
 
   /// do move object from from to dest
   static int move_object(
     LFNIndex &from,             ///< [in] from index
     LFNIndex &dest,             ///< [in] to index
-    const vector<string> &path, ///< [in] path to split
-    const pair<string, ghobject_t> &obj ///< [in] obj to move
+    const std::vector<std::string> &path, ///< [in] path to split
+    const std::pair<std::string, ghobject_t> &obj ///< [in] obj to move
     );
 
   /**
@@ -374,52 +374,52 @@ protected:
    * @return Error code on failure, 0 on success
    */
   int list_objects(
-    const vector<string> &to_list,
+    const std::vector<std::string> &to_list,
     int max_objects,
     long *handle,
-    map<string, ghobject_t> *out
+    std::map<std::string, ghobject_t> *out
     );
 
   /// Lists subdirectories.
   int list_subdirs(
-    const vector<string> &to_list, ///< [in] Directory to list.
-    vector<string> *out		   ///< [out] Subdirectories listed.
+    const std::vector<std::string> &to_list, ///< [in] Directory to list.
+    std::vector<std::string> *out		   ///< [out] Subdirectories listed.
     );
 
   /// Create subdirectory.
   int create_path(
-    const vector<string> &to_create ///< [in] Subdirectory to create.
+    const std::vector<std::string> &to_create ///< [in] Subdirectory to create.
     );
 
   /// Remove subdirectory.
   int remove_path(
-    const vector<string> &to_remove ///< [in] Subdirectory to remove.
+    const std::vector<std::string> &to_remove ///< [in] Subdirectory to remove.
     );
 
   /// Check whether to_check exists.
   int path_exists(
-    const vector<string> &to_check, ///< [in] Subdirectory to check.
+    const std::vector<std::string> &to_check, ///< [in] Subdirectory to check.
     int *exists			    ///< [out] 1 if it exists, 0 else
     );
 
   /// Save attr_value to attr_name attribute on path.
   int add_attr_path(
-    const vector<string> &path, ///< [in] Path to modify.
-    const string &attr_name, 	///< [in] Name of attribute.
-    bufferlist &attr_value	///< [in] Value to save.
+    const std::vector<std::string> &path, ///< [in] Path to modify.
+    const std::string &attr_name, 	///< [in] Name of attribute.
+    ceph::buffer::list &attr_value	///< [in] Value to save.
     );
 
   /// Read into attr_value attribute attr_name on path.
   int get_attr_path(
-    const vector<string> &path, ///< [in] Path to read.
-    const string &attr_name, 	///< [in] Attribute to read.
-    bufferlist &attr_value	///< [out] Attribute value read.
+    const std::vector<std::string> &path, ///< [in] Path to read.
+    const std::string &attr_name, 	///< [in] Attribute to read.
+    ceph::buffer::list &attr_value	///< [out] Attribute value read.
     );
 
   /// Remove attr from path
   int remove_attr_path(
-    const vector<string> &path, ///< [in] path from which to remove attr
-    const string &attr_name	///< [in] attr to remove
+    const std::vector<std::string> &path, ///< [in] path from which to remove attr
+    const std::string &attr_name	///< [in] attr to remove
     ); ///< @return Error code, 0 on success
 
 private:
@@ -428,10 +428,10 @@ private:
   /**
    * Gets the version specific lfn attribute tag
    */
-  const string &get_lfn_attr() const {
+  const std::string &get_lfn_attr() const {
     return lfn_attribute;
   }
-  const string &get_alt_lfn_attr() const {
+  const std::string &get_alt_lfn_attr() const {
     return lfn_alt_attribute;
   }
 
@@ -447,63 +447,63 @@ private:
    * @return Error Code, 0 on success.
    */
   int lfn_get_name(
-    const vector<string> &path,
+    const std::vector<std::string> &path,
     const ghobject_t &oid,
-    string *mangled_name,
-    string *full_path,
+    std::string *mangled_name,
+    std::string *full_path,
     int *hardlink
     );
 
   /// Adjusts path contents when oid is created at name mangled_name.
   int lfn_created(
-    const vector<string> &path, ///< [in] Path to adjust.
+    const std::vector<std::string> &path, ///< [in] Path to adjust.
     const ghobject_t &oid,	///< [in] Object created.
-    const string &mangled_name  ///< [in] Filename of created object.
+    const std::string &mangled_name  ///< [in] Filename of created object.
     );
 
   /// Removes oid from path while adjusting path contents
   int lfn_unlink(
-    const vector<string> &path, ///< [in] Path containing oid.
+    const std::vector<std::string> &path, ///< [in] Path containing oid.
     const ghobject_t &oid,	///< [in] Object to remove.
-    const string &mangled_name	///< [in] Filename of object to remove.
+    const std::string &mangled_name	///< [in] Filename of object to remove.
     );
 
   ///Transate a file into and ghobject_t.
   int lfn_translate(
-    const vector<string> &path, ///< [in] Path containing the file.
-    const string &short_name,	///< [in] Filename to translate.
+    const std::vector<std::string> &path, ///< [in] Path containing the file.
+    const std::string &short_name,	///< [in] Filename to translate.
     ghobject_t *out		///< [out] Object found.
     ); ///< @return Negative error code on error, 0 if not an object, 1 else
 
   /* manglers/demanglers */
   /// Filters object filenames
   bool lfn_is_object(
-    const string &short_name ///< [in] Filename to check
+    const std::string &short_name ///< [in] Filename to check
     ); ///< True if short_name is an object, false otherwise
 
   /// Filters subdir filenames
   bool lfn_is_subdir(
-    const string &short_name, ///< [in] Filename to check.
-    string *demangled_name    ///< [out] Demangled subdir name.
+    const std::string &short_name, ///< [in] Filename to check.
+    std::string *demangled_name    ///< [out] Demangled subdir name.
     ); ///< @return True if short_name is a subdir, false otherwise
 
   /// Generate object name
-  string lfn_generate_object_name_keyless(
+  std::string lfn_generate_object_name_keyless(
     const ghobject_t &oid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
 
   /// Generate object name
-  string lfn_generate_object_name_poolless(
+  std::string lfn_generate_object_name_poolless(
     const ghobject_t &oid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
 
   /// Generate object name
-  static string lfn_generate_object_name_current(
+  static std::string lfn_generate_object_name_current(
     const ghobject_t &oid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
 
   /// Generate object name
-  string lfn_generate_object_name(
+  std::string lfn_generate_object_name(
     const ghobject_t &oid ///< [in] Object for which to generate.
     ) {
     if (index_version == HASH_INDEX_TAG)
@@ -516,74 +516,74 @@ private:
 
   /// Parse object name
   int lfn_parse_object_name_keyless(
-    const string &long_name, ///< [in] Name to parse
+    const std::string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successful, False otherwise.
 
   /// Parse object name
   int lfn_parse_object_name_poolless(
-    const string &long_name, ///< [in] Name to parse
+    const std::string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successful, False otherwise.
 
   /// Parse object name
   int lfn_parse_object_name(
-    const string &long_name, ///< [in] Name to parse
+    const std::string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successful, False otherwise.
 
   /// Checks whether short_name is a hashed filename.
   bool lfn_is_hashed_filename(
-    const string &short_name ///< [in] Name to check.
+    const std::string &short_name ///< [in] Name to check.
     ); ///< @return True if short_name is hashed, False otherwise.
 
   /// Checks whether long_name must be hashed.
   bool lfn_must_hash(
-    const string &long_name ///< [in] Name to check.
+    const std::string &long_name ///< [in] Name to check.
     ); ///< @return True if long_name must be hashed, False otherwise.
 
   /// Generate hashed name.
-  string lfn_get_short_name(
+  std::string lfn_get_short_name(
     const ghobject_t &oid, ///< [in] Object for which to generate.
     int i		   ///< [in] Index of hashed name to generate.
     ); ///< @return Hashed filename.
 
   /* other common methods */
   /// Gets the base path
-  const string &get_base_path(); ///< @return Index base_path
+  const std::string &get_base_path(); ///< @return Index base_path
 
   /// Get full path the subdir
-  string get_full_path_subdir(
-    const vector<string> &rel ///< [in] The subdir.
+  std::string get_full_path_subdir(
+    const std::vector<std::string> &rel ///< [in] The subdir.
     ); ///< @return Full path to rel.
 
   /// Get full path to object
-  string get_full_path(
-    const vector<string> &rel, ///< [in] Path to object.
-    const string &name	       ///< [in] Filename of object.
+  std::string get_full_path(
+    const std::vector<std::string> &rel, ///< [in] Path to object.
+    const std::string &name	       ///< [in] Filename of object.
     ); ///< @return Fullpath to object at name in rel.
 
   /// Get mangled path component
-  string mangle_path_component(
-    const string &component ///< [in] Component to mangle
+  std::string mangle_path_component(
+    const std::string &component ///< [in] Component to mangle
     ); /// @return Mangled component
 
   /// Demangle component
-  string demangle_path_component(
-    const string &component ///< [in] Subdir name to demangle
+  std::string demangle_path_component(
+    const std::string &component ///< [in] Subdir name to demangle
     ); ///< @return Demangled path component.
 
   /// Decompose full path into object name and filename.
   int decompose_full_path(
     const char *in,      ///< [in] Full path to object.
-    vector<string> *out, ///< [out] Path to object at in.
+    std::vector<std::string> *out, ///< [out] Path to object at in.
     ghobject_t *oid,	 ///< [out] Object at in.
-    string *shortname	 ///< [out] Filename of object at in.
+    std::string *shortname	 ///< [out] Filename of object at in.
     ); ///< @return Error Code, 0 on success.
 
   /// Mangle attribute name
-  string mangle_attr_name(
-    const string &attr ///< [in] Attribute to mangle.
+  std::string mangle_attr_name(
+    const std::string &attr ///< [in] Attribute to mangle.
     ); ///< @return Mangled attribute name.
 
   /// checks whether long_name could hash to short_name

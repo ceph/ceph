@@ -2,6 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ManagedLock.h"
+#include "librbd/AsioEngine.h"
+#include "librbd/ImageCtx.h"
+#include "librbd/Watcher.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/managed_lock/AcquireRequest.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
@@ -9,13 +13,10 @@
 #include "librbd/managed_lock/ReacquireRequest.h"
 #include "librbd/managed_lock/Types.h"
 #include "librbd/managed_lock/Utils.h"
-#include "librbd/Watcher.h"
-#include "librbd/ImageCtx.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"
-#include "common/WorkQueue.h"
 #include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -63,18 +64,19 @@ using managed_lock::util::decode_lock_cookie;
 using managed_lock::util::encode_lock_cookie;
 
 template <typename I>
-ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
+ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, AsioEngine& asio_engine,
                             const string& oid, Watcher *watcher, Mode mode,
-                            bool blacklist_on_break_lock,
-                            uint32_t blacklist_expire_seconds)
+                            bool blocklist_on_break_lock,
+                            uint32_t blocklist_expire_seconds)
   : m_lock(ceph::make_mutex(unique_lock_name("librbd::ManagedLock<I>::m_lock", this))),
     m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_work_queue(work_queue),
+    m_asio_engine(asio_engine),
+    m_work_queue(asio_engine.get_work_queue()),
     m_oid(oid),
     m_watcher(watcher),
     m_mode(mode),
-    m_blacklist_on_break_lock(blacklist_on_break_lock),
-    m_blacklist_expire_seconds(blacklist_expire_seconds),
+    m_blocklist_on_break_lock(blocklist_on_break_lock),
+    m_blocklist_expire_seconds(blocklist_expire_seconds),
     m_state(STATE_UNLOCKED) {
 }
 
@@ -267,8 +269,8 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
     } else {
       on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::BreakRequest<I>::create(
-        m_ioctx, m_work_queue, m_oid, locker, m_mode == EXCLUSIVE,
-        m_blacklist_on_break_lock, m_blacklist_expire_seconds, force_break_lock,
+        m_ioctx, m_asio_engine, m_oid, locker, m_mode == EXCLUSIVE,
+        m_blocklist_on_break_lock, m_blocklist_expire_seconds, force_break_lock,
         on_finish);
       req->send();
       return;
@@ -286,16 +288,16 @@ int ManagedLock<I>::assert_header_locked() {
   {
     std::lock_guard locker{m_lock};
     rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME,
-                                    (m_mode == EXCLUSIVE ? LOCK_EXCLUSIVE :
-                                                           LOCK_SHARED),
+                                    (m_mode == EXCLUSIVE ? ClsLockType::EXCLUSIVE :
+                                                           ClsLockType::SHARED),
                                     m_cookie,
                                     managed_lock::util::get_watcher_lock_tag());
   }
 
   int r = m_ioctx.operate(m_oid, &op, nullptr);
   if (r < 0) {
-    if (r == -EBLACKLISTED) {
-      ldout(m_cct, 5) << "client is not lock owner -- client blacklisted"
+    if (r == -EBLOCKLISTED) {
+      ldout(m_cct, 5) << "client is not lock owner -- client blocklisted"
                       << dendl;
     } else if (r == -ENOENT) {
       ldout(m_cct, 5) << "client is not lock owner -- no lock detected"
@@ -509,8 +511,8 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
 
   using managed_lock::AcquireRequest;
   AcquireRequest<I>* req = AcquireRequest<I>::create(
-    m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie, m_mode == EXCLUSIVE,
-    m_blacklist_on_break_lock, m_blacklist_expire_seconds,
+    m_ioctx, m_watcher, m_asio_engine, m_oid, m_cookie, m_mode == EXCLUSIVE,
+    m_blocklist_on_break_lock, m_blocklist_expire_seconds,
     create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<AcquireRequest<I>>(req), 0);
@@ -520,10 +522,10 @@ template <typename I>
 void ManagedLock<I>::handle_acquire_lock(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
-  if (r == -EBUSY || r == -EAGAIN) {
+  if (r == -EBUSY || r == -EAGAIN || r == -EROFS) {
     ldout(m_cct, 5) << "unable to acquire exclusive lock" << dendl;
   } else if (r < 0) {
-    lderr(m_cct) << "failed to acquire exclusive lock:" << cpp_strerror(r)
+    lderr(m_cct) << "failed to acquire exclusive lock: " << cpp_strerror(r)
                << dendl;
   } else {
     ldout(m_cct, 5) << "successfully acquired exclusive lock" << dendl;
@@ -593,7 +595,7 @@ void ManagedLock<I>::send_reacquire_lock() {
   }
 
   m_new_cookie = encode_lock_cookie(watch_handle);
-  if (m_cookie == m_new_cookie) {
+  if (m_cookie == m_new_cookie && m_blocklist_on_break_lock) {
     ldout(m_cct, 10) << "skipping reacquire since cookie still valid"
                      << dendl;
     auto ctx = create_context_callback<
@@ -717,7 +719,7 @@ void ManagedLock<I>::handle_release_lock(int r) {
   std::lock_guard locker{m_lock};
   ceph_assert(m_state == STATE_RELEASING);
 
-  if (r >= 0 || r == -EBLACKLISTED || r == -ENOENT) {
+  if (r >= 0 || r == -EBLOCKLISTED || r == -ENOENT) {
     m_cookie = "";
     m_post_next_state = STATE_UNLOCKED;
   } else {

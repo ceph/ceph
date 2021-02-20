@@ -9,8 +9,11 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 #include <type_traits>
 
 #define dout_context g_ceph_context
@@ -29,26 +32,26 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void PrepareLocalImageRequest<I>::send() {
-  dout(20) << dendl;
+  dout(10) << dendl;
   get_local_image_id();
 }
 
 template <typename I>
 void PrepareLocalImageRequest<I>::get_local_image_id() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = create_context_callback<
     PrepareLocalImageRequest<I>,
     &PrepareLocalImageRequest<I>::handle_get_local_image_id>(this);
   auto req = GetMirrorImageIdRequest<I>::create(m_io_ctx, m_global_image_id,
-                                                m_local_image_id, ctx);
+                                                &m_local_image_id, ctx);
   req->send();
 }
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_local_image_id(int r) {
-  dout(20) << "r=" << r << ", "
-           << "local_image_id=" << *m_local_image_id << dendl;
+  dout(10) << "r=" << r << ", "
+           << "local_image_id=" << m_local_image_id << dendl;
 
   if (r < 0) {
     finish(r);
@@ -60,10 +63,10 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_id(int r) {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::get_local_image_name() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::dir_get_name_start(&op, *m_local_image_id);
+  librbd::cls_client::dir_get_name_start(&op, m_local_image_id);
 
   m_out_bl.clear();
   librados::AioCompletion *aio_comp = create_rados_callback<
@@ -76,52 +79,46 @@ void PrepareLocalImageRequest<I>::get_local_image_name() {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r == 0) {
     auto it = m_out_bl.cbegin();
     r = librbd::cls_client::dir_get_name_finish(&it, m_local_image_name);
   }
 
-  if (r < 0) {
-    if (r != -ENOENT) {
-      derr << "failed to retrieve image name: " << cpp_strerror(r) << dendl;
-    }
+  if (r == -ENOENT) {
+    // proceed we should have a mirror image record if we got this far
+    dout(10) << "image does not exist for local image id " << m_local_image_id
+             << dendl;
+    *m_local_image_name = "";
+  } else  if (r < 0) {
+    derr << "failed to retrieve image name: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
 
-  get_mirror_state();
+  get_mirror_info();
 }
 
 template <typename I>
-void PrepareLocalImageRequest<I>::get_mirror_state() {
-  dout(20) << dendl;
+void PrepareLocalImageRequest<I>::get_mirror_info() {
+  dout(10) << dendl;
 
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_image_get_start(&op, *m_local_image_id);
-
-  m_out_bl.clear();
-  librados::AioCompletion *aio_comp = create_rados_callback<
+  auto ctx = create_context_callback<
     PrepareLocalImageRequest<I>,
-    &PrepareLocalImageRequest<I>::handle_get_mirror_state>(this);
-  int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  aio_comp->release();
+    &PrepareLocalImageRequest<I>::handle_get_mirror_info>(this);
+  auto req = librbd::mirror::GetInfoRequest<I>::create(
+    m_io_ctx, m_work_queue, m_local_image_id, &m_mirror_image,
+    &m_promotion_state, &m_primary_mirror_uuid, ctx);
+  req->send();
 }
 
 template <typename I>
-void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  cls::rbd::MirrorImage mirror_image;
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
-  }
+void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
+  dout(10) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to retrieve image mirror state: " << cpp_strerror(r)
+    derr << "failed to retrieve local mirror image info: " << cpp_strerror(r)
          << dendl;
     finish(r);
     return;
@@ -131,43 +128,37 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
   // delete a partially formed image
   // (e.g. MIRROR_IMAGE_STATE_CREATING/DELETING)
 
-  get_tag_owner();
-}
-
-template <typename I>
-void PrepareLocalImageRequest<I>::get_tag_owner() {
-  // deduce the class type for the journal to support unit tests
-  using Journal = typename std::decay<
-    typename std::remove_pointer<decltype(std::declval<I>().journal)>
-    ::type>::type;
-
-  dout(20) << dendl;
-
-  Context *ctx = create_context_callback<
-    PrepareLocalImageRequest<I>,
-    &PrepareLocalImageRequest<I>::handle_get_tag_owner>(this);
-  Journal::get_tag_owner(m_io_ctx, *m_local_image_id, m_tag_owner,
-                         m_work_queue, ctx);
-}
-
-template <typename I>
-void PrepareLocalImageRequest<I>::handle_get_tag_owner(int r) {
-  dout(20) << "r=" << r << ", "
-           << "tag_owner=" << *m_tag_owner << dendl;
-
-  if (r < 0) {
-    derr << "failed to retrieve journal tag owner: " << cpp_strerror(r)
-         << dendl;
-    finish(r);
-    return;
+  switch (m_mirror_image.mode) {
+  case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
+    // journal-based local image exists
+    {
+      auto state_builder = journal::StateBuilder<I>::create(m_global_image_id);
+      state_builder->local_primary_mirror_uuid = m_primary_mirror_uuid;
+      *m_state_builder = state_builder;
+    }
+    break;
+  case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
+    // snapshot-based local image exists
+    *m_state_builder = snapshot::StateBuilder<I>::create(m_global_image_id);
+    break;
+  default:
+    derr << "unsupported mirror image mode " << m_mirror_image.mode << " "
+         << "for image " << m_global_image_id << dendl;
+    finish(-EOPNOTSUPP);
+    break;
   }
 
+  dout(10) << "local_image_id=" << m_local_image_id << ", "
+           << "local_promotion_state=" << m_promotion_state << ", "
+           << "local_primary_mirror_uuid=" << m_primary_mirror_uuid << dendl;
+  (*m_state_builder)->local_image_id = m_local_image_id;
+  (*m_state_builder)->local_promotion_state = m_promotion_state;
   finish(0);
 }
 
 template <typename I>
 void PrepareLocalImageRequest<I>::finish(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

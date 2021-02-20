@@ -21,41 +21,10 @@ Deployment Scenarios
 
 There are two main scenarios for deploying a Ceph cluster, which impact
 how you initially configure Cephx. Most first time Ceph users use
-``ceph-deploy`` to create a cluster (easiest). For clusters using
+``cephadm`` to create a cluster (easiest). For clusters using
 other deployment tools (e.g., Chef, Juju, Puppet, etc.), you will need
 to use the manual procedures or configure your deployment tool to
 bootstrap your monitor(s).
-
-ceph-deploy
------------
-
-When you deploy a cluster with ``ceph-deploy``, you do not have to bootstrap the
-monitor manually or create the ``client.admin`` user or keyring. The steps you
-execute in the `Storage Cluster Quick Start`_ will invoke ``ceph-deploy`` to do
-that for you.
-
-When you execute ``ceph-deploy new {initial-monitor(s)}``, Ceph will create a
-monitor keyring for you (only used to bootstrap monitors), and it will generate
-an  initial Ceph configuration file for you, which contains the following
-authentication settings, indicating that Ceph enables authentication by
-default::
-
-	auth_cluster_required = cephx
-	auth_service_required = cephx
-	auth_client_required = cephx
-
-When you execute ``ceph-deploy mon create-initial``, Ceph will bootstrap the
-initial monitor(s), retrieve a ``ceph.client.admin.keyring`` file containing the
-key for the  ``client.admin`` user. Additionally, it will also retrieve keyrings
-that give ``ceph-deploy`` and ``ceph-volume`` utilities the ability to prepare and
-activate OSDs and metadata servers.
-
-When you execute ``ceph-deploy admin {node-name}`` (**note:** Ceph must be
-installed first), you are pushing a Ceph configuration file and the
-``ceph.client.admin.keyring`` to the ``/etc/ceph``  directory of the node. You
-will be able to execute Ceph administrative functions as ``root`` on the command
-line of that node.
-
 
 Manual Deployment
 -----------------
@@ -88,43 +57,57 @@ authentication disabled. If you (or your deployment utility) have already
 generated the keys, you may skip the steps related to generating keys.
 
 #. Create a ``client.admin`` key, and save a copy of the key for your client
-   host::
+   host
 
-	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' mgr 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
+   .. prompt:: bash $
+
+     ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' mgr 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
 
    **Warning:** This will clobber any existing
    ``/etc/ceph/client.admin.keyring`` file. Do not perform this step if a
    deployment tool has already done it for you. Be careful!
 
 #. Create a keyring for your monitor cluster and generate a monitor
-   secret key. ::
+   secret key.
 
-	ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+   .. prompt:: bash $
+
+     ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
 
 #. Copy the monitor keyring into a ``ceph.mon.keyring`` file in every monitor's
    ``mon data`` directory. For example, to copy it to ``mon.a`` in cluster ``ceph``,
-   use the following::
+   use the following
 
-    cp /tmp/ceph.mon.keyring /var/lib/ceph/mon/ceph-a/keyring
+   .. prompt:: bash $
 
-#. Generate a secret key for every MGR, where ``{$id}`` is the MGR letter::
+     cp /tmp/ceph.mon.keyring /var/lib/ceph/mon/ceph-a/keyring
 
-    ceph auth get-or-create mgr.{$id} mon 'allow profile mgr' mds 'allow *' osd 'allow *' -o /var/lib/ceph/mgr/ceph-{$id}/keyring
+#. Generate a secret key for every MGR, where ``{$id}`` is the MGR letter
 
-#. Generate a secret key for every OSD, where ``{$id}`` is the OSD number::
+   .. prompt:: bash $
 
-    ceph auth get-or-create osd.{$id} mon 'allow rwx' osd 'allow *' -o /var/lib/ceph/osd/ceph-{$id}/keyring
+      ceph auth get-or-create mgr.{$id} mon 'allow profile mgr' mds 'allow *' osd 'allow *' -o /var/lib/ceph/mgr/ceph-{$id}/keyring
 
-#. Generate a secret key for every MDS, where ``{$id}`` is the MDS letter::
+#. Generate a secret key for every OSD, where ``{$id}`` is the OSD number
 
-    ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' mgr 'allow profile mds' -o /var/lib/ceph/mds/ceph-{$id}/keyring
+   .. prompt:: bash $
+
+      ceph auth get-or-create osd.{$id} mon 'allow rwx' osd 'allow *' -o /var/lib/ceph/osd/ceph-{$id}/keyring
+
+#. Generate a secret key for every MDS, where ``{$id}`` is the MDS letter
+
+   .. prompt:: bash $
+
+      ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' mgr 'allow profile mds' -o /var/lib/ceph/mds/ceph-{$id}/keyring
 
 #. Enable ``cephx`` authentication by setting the following options in the
-   ``[global]`` section of your `Ceph configuration`_ file::
+   ``[global]`` section of your `Ceph configuration`_ file
 
-    auth cluster required = cephx
-    auth service required = cephx
-    auth client required = cephx
+   .. code-block:: ini
+
+      auth_cluster_required = cephx
+      auth_service_required = cephx
+      auth_client_required = cephx
 
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.
@@ -142,11 +125,13 @@ running authentication. **We do not recommend it.** However, it may be easier
 during setup and/or troubleshooting to temporarily disable authentication.
 
 #. Disable ``cephx`` authentication by setting the following options in the
-   ``[global]`` section of your `Ceph configuration`_ file::
+   ``[global]`` section of your `Ceph configuration`_ file
 
-    auth cluster required = none
-    auth service required = none
-    auth client required = none
+   .. code-block:: ini
+
+      auth_cluster_required = none
+      auth_service_required = none
+      auth_client_required = none
 
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.
@@ -159,7 +144,7 @@ Enablement
 ----------
 
 
-``auth cluster required``
+``auth_cluster_required``
 
 :Description: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
               ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
@@ -170,7 +155,7 @@ Enablement
 :Default: ``cephx``.
 
 
-``auth service required``
+``auth_service_required``
 
 :Description: If enabled, the Ceph Storage Cluster daemons require Ceph Clients
               to authenticate with the Ceph Storage Cluster in order to access
@@ -181,7 +166,7 @@ Enablement
 :Default: ``cephx``.
 
 
-``auth client required``
+``auth_client_required``
 
 :Description: If enabled, the Ceph Client requires the Ceph Storage Cluster to
               authenticate with the Ceph Client. Valid settings are ``cephx``
@@ -202,7 +187,7 @@ and Ceph Clients require authentication keys to access the Ceph Storage Cluster.
 
 The most common way to provide these keys to the ``ceph`` administrative
 commands and clients is to include a Ceph keyring under the ``/etc/ceph``
-directory. For Cuttlefish and later releases using ``ceph-deploy``, the filename
+directory. For Octopus and later releases using ``cephadm``, the filename
 is usually ``ceph.client.admin.keyring`` (or ``$cluster.client.admin.keyring``).
 If you include the keyring under the ``/etc/ceph`` directory, you don't need to
 specify a ``keyring`` entry in your Ceph configuration file.
@@ -210,8 +195,7 @@ specify a ``keyring`` entry in your Ceph configuration file.
 We recommend copying the Ceph Storage Cluster's keyring file to nodes where you
 will run administrative commands, because it contains the ``client.admin`` key.
 
-You may use ``ceph-deploy admin`` to perform this task. See `Create an Admin
-Host`_ for details. To perform this step manually, execute the following::
+To perform this step manually, execute the following::
 
 	sudo scp {user}@{ceph-cluster-host}:/etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.admin.keyring
 
@@ -249,7 +233,7 @@ setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 Daemon Keyrings
 ---------------
 
-Administrative users or deployment tools  (e.g., ``ceph-deploy``) may generate
+Administrative users or deployment tools  (e.g., ``cephadm``) may generate
 daemon keyrings in the same way as generating user keyrings.  By default, Ceph
 stores daemons keyrings inside their data directory. The default keyring
 locations, and the capabilities necessary for the daemon to function, are shown
@@ -305,13 +289,13 @@ against messages being tampered with in flight (e.g., by a "man in the
 middle" attack).
 
 Like other parts of Ceph authentication, Ceph provides fine-grained control so
-you can enable/disable signatures for service messages between the client and
-Ceph, and you can enable/disable signatures for messages between Ceph daemons.
+you can enable/disable signatures for service messages between clients and
+Ceph, and so you can enable/disable signatures for messages between Ceph daemons.
 
 Note that even with signatures enabled data is not encrypted in
 flight.
 
-``cephx require signatures``
+``cephx_require_signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between the Ceph Client and the Ceph Storage Cluster, and
@@ -326,7 +310,7 @@ flight.
 :Default: ``false``
 
 
-``cephx cluster require signatures``
+``cephx_cluster_require_signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between Ceph daemons comprising the Ceph Storage Cluster.
@@ -336,7 +320,7 @@ flight.
 :Default: ``false``
 
 
-``cephx service require signatures``
+``cephx_service_require_signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between Ceph Clients and the Ceph Storage Cluster.
@@ -346,7 +330,7 @@ flight.
 :Default: ``false``
 
 
-``cephx sign messages``
+``cephx_sign_messages``
 
 :Description: If the Ceph version supports message signing, Ceph will sign
               all messages so they are more difficult to spoof.
@@ -358,7 +342,7 @@ flight.
 Time to Live
 ------------
 
-``auth service ticket ttl``
+``auth_service_ticket_ttl``
 
 :Description: When the Ceph Storage Cluster sends a Ceph Client a ticket for
               authentication, the Ceph Storage Cluster assigns the ticket a
@@ -368,11 +352,9 @@ Time to Live
 :Default: ``60*60``
 
 
-.. _Storage Cluster Quick Start: ../../../start/quick-ceph-deploy/
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
 .. _Operating a Cluster: ../../operations/operating
 .. _Manual Deployment: ../../../install/manual-deployment
 .. _Ceph configuration: ../ceph-conf
-.. _Create an Admin Host: ../../deployment/ceph-deploy-admin
 .. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
 .. _User Management: ../../operations/user-management

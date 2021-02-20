@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { ExecutingTask } from '../models/executing-task';
 import { FinishedTask } from '../models/finished-task';
@@ -12,7 +12,7 @@ class TaskSubscription {
   metadata: object;
   onTaskFinished: (finishedTask: FinishedTask) => any;
 
-  constructor(name, metadata, onTaskFinished) {
+  constructor(name: string, metadata: object, onTaskFinished: any) {
     this.name = name;
     this.metadata = metadata;
     this.onTaskFinished = onTaskFinished;
@@ -25,13 +25,10 @@ class TaskSubscription {
 export class TaskManagerService {
   subscriptions: Array<TaskSubscription> = [];
 
-  constructor(summaryService: SummaryService) {
-    summaryService.subscribe((data: any) => {
-      if (!data) {
-        return;
-      }
-      const executingTasks = data.executing_tasks;
-      const finishedTasks = data.finished_tasks;
+  init(summaryService: SummaryService) {
+    return summaryService.subscribe((summary) => {
+      const executingTasks = summary.executing_tasks;
+      const finishedTasks = summary.finished_tasks;
       const newSubscriptions: Array<TaskSubscription> = [];
       for (const subscription of this.subscriptions) {
         const finishedTask = <FinishedTask>this._getTask(subscription, finishedTasks);
@@ -47,11 +44,11 @@ export class TaskManagerService {
     });
   }
 
-  subscribe(name, metadata, onTaskFinished: (finishedTask: FinishedTask) => any) {
+  subscribe(name: string, metadata: object, onTaskFinished: (finishedTask: FinishedTask) => any) {
     this.subscriptions.push(new TaskSubscription(name, metadata, onTaskFinished));
   }
 
-  _getTask(subscription: TaskSubscription, tasks: Array<Task>): Task {
+  private _getTask(subscription: TaskSubscription, tasks: Array<Task>): Task {
     for (const task of tasks) {
       if (task.name === subscription.name && _.isEqual(task.metadata, subscription.metadata)) {
         return task;

@@ -23,6 +23,8 @@ Synopsis
 | **ceph-bluestore-tool** bluefs-bdev-new-db --path *osd path* --dev-target *new-device*
 | **ceph-bluestore-tool** bluefs-bdev-migrate --path *osd path* --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
 | **ceph-bluestore-tool** free-dump|free-score --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
+| **ceph-bluestore-tool** reshard --path *osd path* --sharding *new sharding* [ --sharding-ctrl *control string* ]
+| **ceph-bluestore-tool** show-sharding --path *osd path*
 
 
 Description
@@ -48,7 +50,7 @@ Commands
 
 :command:`bluefs-export`
 
-   Export the contents of BlueFS (i.e., rocksdb files) to an output directory.
+   Export the contents of BlueFS (i.e., RocksDB files) to an output directory.
 
 :command:`bluefs-bdev-sizes` --path *osd path*
 
@@ -56,7 +58,13 @@ Commands
 
 :command:`bluefs-bdev-expand` --path *osd path*
 
-   Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space.
+   Instruct BlueFS to check the size of its block devices and, if they have
+   expanded, make use of the additional space. Please note that only the new
+   files created by BlueFS will be allocated on the preferred block device if
+   it has enough free space, and the existing files that have spilled over to
+   the slow device will be gradually removed when RocksDB performs compaction.
+   In other words, if there is any data spilled over to the slow device, it
+   will be moved to the fast device over time.
 
 :command:`bluefs-bdev-new-wal` --path *osd path* --dev-target *new-device*
 
@@ -90,6 +98,21 @@ Commands
 
    Give a [0-1] number that represents quality of fragmentation in allocator.
    0 represents case when all free space is in one chunk. 1 represents worst possible fragmentation.
+
+:command:`reshard` --path *osd path* --sharding *new sharding* [ --resharding-ctrl *control string* ]
+
+   Changes sharding of BlueStore's RocksDB. Sharding is build on top of RocksDB column families.
+   This option allows to test performance of *new sharding* without need to redeploy OSD.
+   Resharding is usually a long process, which involves walking through entire RocksDB key space
+   and moving some of them to different column families.
+   Option --resharding-ctrl provides performance control over resharding process.
+   Interrupted resharding will prevent OSD from running.
+   Interrupted resharding does not corrupt data. It is always possible to continue previous resharding,
+   or select any other sharding scheme, including reverting to original one.
+
+:command:`show-sharding` --path *osd path*
+
+   Show sharding that is currently applied to BlueStore's RocksDB.
 
 Options
 =======
@@ -131,6 +154,13 @@ Options
 
    Useful for *free-dump* and *free-score* actions. Selects allocator(s).
 
+.. option:: --resharding-ctrl *control string*
+
+   Provides control over resharding process. Specifies how often refresh RocksDB iterator,
+   and how large should commit batch be before committing to RocksDB. Option format is:
+   <iterator_refresh_bytes>/<iterator_refresh_keys>/<batch_commit_bytes>/<batch_commit_keys>
+   Default: 10000000/10000/1000000/1000
+
 Device labels
 =============
 
@@ -152,6 +182,21 @@ BlueStore OSD with the *prime-osd-dir* command::
 
   ceph-bluestore-tool prime-osd-dir --dev *main device* --path /var/lib/ceph/osd/ceph-*id*
 
+BlueFS log rescue
+=====================
+
+Some versions of BlueStore were susceptible to BlueFS log growing extremaly large -
+beyond the point of making booting OSD impossible. This state is indicated by
+booting that takes very long and fails in _replay function.
+
+This can be fixed by::
+  ceph-bluestore-tool fsck --path *osd path* --bluefs_replay_recovery=true
+
+It is advised to first check if rescue process would be successfull::
+  ceph-bluestore-tool fsck --path *osd path* \
+  --bluefs_replay_recovery=true --bluefs_replay_recovery_disable_compact=true
+
+If above fsck is successful fix procedure can be applied.
 
 Availability
 ============

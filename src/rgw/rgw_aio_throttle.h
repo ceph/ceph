@@ -78,12 +78,11 @@ class BlockingAioThrottle final : public Aio, private Throttle {
   AioResultList drain() override final;
 };
 
-#ifdef HAVE_BOOST_CONTEXT
 // a throttle that yields the coroutine instead of blocking. all public
 // functions must be called within the coroutine strand
 class YieldingAioThrottle final : public Aio, private Throttle {
   boost::asio::io_context& context;
-  boost::asio::yield_context yield;
+  spawn::yield_context yield;
   struct Handler;
 
   // completion callback associated with the waiter
@@ -97,7 +96,7 @@ class YieldingAioThrottle final : public Aio, private Throttle {
 
  public:
   YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,
-                      boost::asio::yield_context yield)
+                      spawn::yield_context yield)
     : Throttle(window), context(context), yield(yield)
   {}
 
@@ -112,12 +111,10 @@ class YieldingAioThrottle final : public Aio, private Throttle {
 
   AioResultList drain() override final;
 };
-#endif // HAVE_BOOST_CONTEXT
 
 // return a smart pointer to Aio
 inline auto make_throttle(uint64_t window_size, optional_yield y)
 {
-#ifdef HAVE_BOOST_CONTEXT
   std::unique_ptr<Aio> aio;
   if (y) {
     aio = std::make_unique<YieldingAioThrottle>(window_size,
@@ -127,9 +124,6 @@ inline auto make_throttle(uint64_t window_size, optional_yield y)
     aio = std::make_unique<BlockingAioThrottle>(window_size);
   }
   return aio;
-#else
-  return std::make_optional<BlockingAioThrottle>(window_size);
-#endif
 }
 
 } // namespace rgw

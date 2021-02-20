@@ -1,0 +1,4 @@
+tasks:
+- fwd_scrub:
+    scrub_timeout: 900
+    sleep_between_iterations: 1

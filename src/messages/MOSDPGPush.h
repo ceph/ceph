@@ -26,7 +26,7 @@ public:
   pg_shard_t from;
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
-  vector<PushOp> pushes;
+  std::vector<PushOp> pushes;
   bool is_repair = false;
 
 private:
@@ -35,9 +35,7 @@ private:
 public:
   void compute_cost(CephContext *cct) {
     cost = 0;
-    for (vector<PushOp>::iterator i = pushes.begin();
-	 i != pushes.end();
-	 ++i) {
+    for (auto i = pushes.begin(); i != pushes.end(); ++i) {
       cost += i->cost(cct);
     }
   }
@@ -65,6 +63,7 @@ public:
   {}
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
@@ -98,7 +97,7 @@ public:
 
   std::string_view get_type_name() const override { return "MOSDPGPush"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "MOSDPGPush(" << pgid
 	<< " " << map_epoch << "/" << min_epoch
 	<< " " << pushes;

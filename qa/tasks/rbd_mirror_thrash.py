@@ -13,16 +13,14 @@ from gevent import sleep
 from gevent.greenlet import Greenlet
 from gevent.event import Event
 
-from teuthology import misc
 from teuthology.exceptions import CommandFailedError
-from teuthology.task import Task
 from teuthology.orchestra import run
 from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
 
-class RBDMirrorThrasher(Greenlet, Thrasher):
+class RBDMirrorThrasher(Thrasher, Greenlet):
     """
     RBDMirrorThrasher::
 
@@ -86,7 +84,7 @@ class RBDMirrorThrasher(Greenlet, Thrasher):
             self.do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
-            self.exception = e
+            self.set_thrasher_exception(e)
             self.logger.exception("exception:")
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.

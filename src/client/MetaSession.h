@@ -19,10 +19,10 @@ struct MetaRequest;
 struct MetaSession {
   mds_rank_t mds_num;
   ConnectionRef con;
-  version_t seq;
-  uint64_t cap_gen;
+  version_t seq = 0;
+  uint64_t cap_gen = 0;
   utime_t cap_ttl, last_cap_renew_request;
-  uint64_t cap_renew_seq;
+  uint64_t cap_renew_seq = 0;
   entity_addrvec_t addrs;
   feature_bitset_t mds_features;
 
@@ -33,17 +33,18 @@ struct MetaSession {
     STATE_CLOSING,
     STATE_CLOSED,
     STATE_STALE,
-  } state;
+    STATE_REJECTED,
+  } state = STATE_OPENING;
 
   enum {
     RECLAIM_NULL,
     RECLAIMING,
     RECLAIM_OK,
     RECLAIM_FAIL,
-  } reclaim_state;
+  } reclaim_state = RECLAIM_NULL;
 
-  int mds_state;
-  bool readonly;
+  int mds_state = MDSMap::STATE_NULL;
+  bool readonly = false;
 
   list<Context*> waiting_for_open;
 
@@ -55,17 +56,13 @@ struct MetaSession {
 
   ceph::ref_t<MClientCapRelease> release;
 
-  MetaSession(mds_rank_t mds_num, ConnectionRef con,
-	      const entity_addrvec_t& addrs)
-    : mds_num(mds_num), con(con),
-      seq(0), cap_gen(0), cap_renew_seq(0), addrs(addrs),
-      state(STATE_OPENING), reclaim_state(RECLAIM_NULL),
-      mds_state(MDSMap::STATE_NULL), readonly(false)
-  {}
+  MetaSession(mds_rank_t mds_num, ConnectionRef con, const entity_addrvec_t& addrs)
+    : mds_num(mds_num), con(con), addrs(addrs) {
+  }
 
   const char *get_state_name() const;
 
-  void dump(Formatter *f) const;
+  void dump(Formatter *f, bool cap_dump=false) const;
 
   void enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
       ceph_seq_t mseq, epoch_t osd_barrier);

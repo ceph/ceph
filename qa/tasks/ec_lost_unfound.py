@@ -1,12 +1,12 @@
 """
 Lost_unfound
 """
-from teuthology.orchestra import run
 import logging
-import ceph_manager
-from teuthology import misc as teuthology
-from util.rados import rados
 import time
+from tasks import ceph_manager
+from tasks.util.rados import rados
+from teuthology import misc as teuthology
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ def task(ctx, config):
     """
     Test handling of lost objects on an ec pool.
 
-    A pretty rigid cluster is brought up andtested by this task
+    A pretty rigid cluster is brought up and tested by this task
     """
     if config is None:
         config = {}

@@ -8,11 +8,11 @@ import {
   ViewChild
 } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
-import { CellTemplate } from '../../enum/cell-template.enum';
-import { CdTableColumn } from '../../models/cd-table-column';
-import { CdDatePipe } from '../../pipes/cd-date.pipe';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { TableComponent } from '../table/table.component';
 
 interface KeyValueItem {
@@ -48,10 +48,12 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   appendParentKey = true;
   @Input()
   hideEmpty = false;
+  @Input()
+  hideKeys: string[] = []; // Keys of pairs not to be displayed
 
   // If set, the classAddingTpl is used to enable different css for different values
   @Input()
-  customCss?: { [css: string]: number | string | ((any) => boolean) };
+  customCss?: { [css: string]: number | string | ((any: any) => boolean) };
 
   columns: Array<CdTableColumn> = [];
   tableData: KeyValueItem[];
@@ -100,13 +102,17 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     if (!this.data) {
       return; // Wait for data
     }
-    this.tableData = this.makePairs(this.data);
+    let pairs = this.makePairs(this.data);
+    if (this.hideKeys) {
+      pairs = pairs.filter((pair) => !this.hideKeys.includes(pair.key));
+    }
+    this.tableData = pairs;
   }
 
   private makePairs(data: any): KeyValueItem[] {
     let result: KeyValueItem[] = [];
     if (!data) {
-      return; // Wait for data
+      return undefined; // Wait for data
     } else if (_.isArray(data)) {
       result = this.makePairsFromArray(data);
     } else if (_.isObject(data)) {
@@ -124,7 +130,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   }
 
   private makePairsFromArray(data: any[]): KeyValueItem[] {
-    let temp = [];
+    let temp: any[] = [];
     const first = data[0];
     if (_.isArray(first)) {
       if (first.length === 2) {
@@ -151,7 +157,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     return temp;
   }
 
-  private makePairsFromObject(data: object): KeyValueItem[] {
+  private makePairsFromObject(data: any): KeyValueItem[] {
     return Object.keys(data).map((k) => ({
       key: k,
       value: data[k]
@@ -209,7 +215,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     return value;
   }
 
-  private isDate(s) {
+  private isDate(s: string) {
     const sep = '[ -:.TZ]';
     const n = '\\d{2}' + sep;
     //                            year     -    m - d - h : m : s . someRest  Z (if UTC)

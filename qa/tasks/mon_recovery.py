@@ -2,7 +2,7 @@
 Monitor recovery
 """
 import logging
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 
@@ -55,7 +55,7 @@ def task(ctx, config):
             manager.kill_mon(m)
 
         log.info('forming a minimal quorum for %s, then adding monitors' % mons)
-        qnum = (len(mons) / 2) + 1
+        qnum = (len(mons) // 2) + 1
         num = 0
         for m in mons:
             manager.revive_mon(m)

@@ -10,7 +10,7 @@
  * instruct non-primary to remove some objects during recovery
  */
 
-class MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
+class MOSDPGRecoveryDelete final : public MOSDFastDispatchOp {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -18,7 +18,7 @@ public:
   pg_shard_t from;
   spg_t pgid;            ///< target spg_t
   epoch_t map_epoch, min_epoch;
-  list<pair<hobject_t, eversion_t> > objects;    ///< objects to remove
+  std::list<std::pair<hobject_t, eversion_t>> objects;    ///< objects to remove
 
 private:
   uint64_t cost = 0;
@@ -58,11 +58,11 @@ public:
   {}
 
 private:
-  ~MOSDPGRecoveryDelete() {}
+  ~MOSDPGRecoveryDelete() final {}
 
 public:
   std::string_view get_type_name() const { return "recovery_delete"; }
-  void print(ostream& out) const {
+  void print(std::ostream& out) const {
     out << "MOSDPGRecoveryDelete(" << pgid << " e" << map_epoch << ","
 	<< min_epoch << " " << objects << ")";
   }
@@ -77,6 +77,7 @@ public:
     encode(objects, payload);
   }
   void decode_payload() {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(from, p);
     decode(pgid, p);

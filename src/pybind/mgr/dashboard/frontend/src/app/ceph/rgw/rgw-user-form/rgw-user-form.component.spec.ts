@@ -4,15 +4,18 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalService } from 'ngx-bootstrap/modal';
+import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { ToastrModule } from 'ngx-toastr';
-import { of as observableOf } from 'rxjs';
+import { of as observableOf, throwError } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
+import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 
@@ -29,16 +32,17 @@ describe('RgwUserFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot()
-    ],
-    providers: [BsModalService, i18nProviders]
+      ToastrModule.forRoot(),
+      NgbTooltipModule,
+      NgxPipeFunctionModule
+    ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    rgwUserService = TestBed.get(RgwUserService);
+    rgwUserService = TestBed.inject(RgwUserService);
     formHelper = new FormHelper(component.userForm);
   });
 
@@ -57,17 +61,34 @@ describe('RgwUserFormComponent', () => {
       expect(rgwUserService.addS3Key).not.toHaveBeenCalled();
     });
 
-    it('should set key', () => {
+    it('should set user defined key', () => {
       const key = new RgwUserS3Key();
       key.user = 'test1:subuser2';
+      key.access_key = 'my-access-key';
+      key.secret_key = 'my-secret-key';
       component.setS3Key(key);
       expect(component.s3Keys.length).toBe(1);
       expect(component.s3Keys[0].user).toBe('test1:subuser2');
       expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
         subuser: 'subuser2',
         generate_key: 'false',
-        access_key: undefined,
-        secret_key: undefined
+        access_key: 'my-access-key',
+        secret_key: 'my-secret-key'
+      });
+    });
+
+    it('should set params for auto-generating key', () => {
+      const key = new RgwUserS3Key();
+      key.user = 'test1:subuser2';
+      key.generate_key = true;
+      key.access_key = 'my-access-key';
+      key.secret_key = 'my-secret-key';
+      component.setS3Key(key);
+      expect(component.s3Keys.length).toBe(1);
+      expect(component.s3Keys[0].user).toBe('test1:subuser2');
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
+        subuser: 'subuser2',
+        generate_key: 'true'
       });
     });
 
@@ -134,33 +155,122 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('username validation', () => {
-    beforeEach(() => {
-      spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
-    });
-
     it('should validate that username is required', () => {
       formHelper.expectErrorChange('uid', '', 'required', true);
     });
 
     it('should validate that username is valid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
       formHelper.setValue('uid', 'ab', true);
       tick(500);
       formHelper.expectValid('uid');
     }));
 
     it('should validate that username is invalid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
       formHelper.setValue('uid', 'abc', true);
       tick(500);
       formHelper.expectError('uid', 'notUnique');
     }));
   });
 
+  describe('max buckets', () => {
+    it('disable creation (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', -1, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: -1,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('disable creation (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', -1, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: -1,
+        suspended: false
+      });
+    });
+
+    it('unlimited buckets (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', 0, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 0,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('unlimited buckets (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', 0, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 0,
+        suspended: false
+      });
+    });
+
+    it('custom (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', 1, true);
+      formHelper.setValue('max_buckets', 100, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 100,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('custom (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', 1, true);
+      formHelper.setValue('max_buckets', 100, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 100,
+        suspended: false
+      });
+    });
+  });
+
   describe('submit form', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      notificationService = TestBed.get(NotificationService);
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
     });
 
@@ -184,7 +294,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Created Object Gateway user ""'
+        `Created Object Gateway user 'null'`
       );
     });
 
@@ -195,8 +305,35 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Updated Object Gateway user ""'
+        `Updated Object Gateway user 'null'`
       );
+    });
+  });
+
+  describe('RgwUserCapabilities', () => {
+    it('capability button disabled when all capabilities are added', () => {
+      component.editing = true;
+      for (const capabilityType of RgwUserCapabilities.getAll()) {
+        const capability = new RgwUserCapability();
+        capability.type = capabilityType;
+        capability.perm = 'read';
+        component.setCapability(capability);
+      }
+
+      fixture.detectChanges();
+
+      expect(component.hasAllCapabilities(component.capabilities)).toBeTruthy();
+      const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
+      expect(capabilityButton.disabled).toBeTruthy();
+    });
+
+    it('capability button not disabled when not all capabilities are added', () => {
+      component.editing = true;
+
+      fixture.detectChanges();
+
+      const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
+      expect(capabilityButton.disabled).toBeFalsy();
     });
   });
 });

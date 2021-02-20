@@ -24,7 +24,7 @@ def get_partuuid(device):
     device
     """
     out, err, rc = process.call(
-        ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
+        ['blkid', '-c', '/dev/null', '-s', 'PARTUUID', '-o', 'value', device]
     )
     return ' '.join(out).strip()
 
@@ -98,7 +98,7 @@ def blkid(device):
     PART_ENTRY_UUID                 PARTUUID
     """
     out, err, rc = process.call(
-        ['blkid', '-p', device]
+        ['blkid', '-c', '/dev/null', '-p', device]
     )
     return _blkid_parser(' '.join(out))
 
@@ -110,7 +110,7 @@ def get_part_entry_type(device):
     used for udev rules, but it is useful in this case as it is the only
     consistent way to retrieve the GUID used by ceph-disk to identify devices.
     """
-    out, err, rc = process.call(['blkid', '-p', '-o', 'udev', device])
+    out, err, rc = process.call(['blkid', '-c', '/dev/null', '-p', '-o', 'udev', device])
     for line in out:
         if 'ID_PART_ENTRY_TYPE=' in line:
             return line.split('=')[-1].strip()
@@ -123,7 +123,7 @@ def get_device_from_partuuid(partuuid):
     device is
     """
     out, err, rc = process.call(
-        ['blkid', '-t', 'PARTUUID="%s"' % partuuid, '-o', 'device']
+        ['blkid', '-c', '/dev/null', '-t', 'PARTUUID="%s"' % partuuid, '-o', 'device']
     )
     return ' '.join(out).strip()
 
@@ -330,7 +330,7 @@ def is_device(dev):
     # use lsblk first, fall back to using stat
     TYPE = lsblk(dev).get('TYPE')
     if TYPE:
-        return TYPE == 'disk'
+        return TYPE in ['disk', 'mpath']
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
@@ -360,92 +360,6 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
     return False
-
-
-def _map_dev_paths(_path, include_abspath=False, include_realpath=False):
-    """
-    Go through all the items in ``_path`` and map them to their absolute path::
-
-        {'sda': '/dev/sda'}
-
-    If ``include_abspath`` is set, then a reverse mapping is set as well::
-
-        {'sda': '/dev/sda', '/dev/sda': 'sda'}
-
-    If ``include_realpath`` is set then the same operation is done for any
-    links found when listing, these are *not* reversed to avoid clashing on
-    existing keys, but both abspath and basename can be included. For example::
-
-        {
-            'ceph-data': '/dev/mapper/ceph-data',
-            '/dev/mapper/ceph-data': 'ceph-data',
-            '/dev/dm-0': '/dev/mapper/ceph-data',
-            'dm-0': '/dev/mapper/ceph-data'
-        }
-
-
-    In case of possible exceptions the mapping is returned empty, and the
-    exception is logged.
-    """
-    mapping = {}
-    try:
-        dev_names = os.listdir(_path)
-    except (OSError, IOError):
-        logger.exception('unable to list block devices from: %s' % _path)
-        return {}
-
-    for dev_name in dev_names:
-        mapping[dev_name] = os.path.join(_path, dev_name)
-
-    if include_abspath:
-        for k, v in list(mapping.items()):
-            mapping[v] = k
-
-    if include_realpath:
-        for abspath in list(mapping.values()):
-            if not os.path.islink(abspath):
-                continue
-
-            realpath = os.path.realpath(abspath)
-            basename = os.path.basename(realpath)
-            mapping[basename] = abspath
-            if include_abspath:
-                mapping[realpath] = abspath
-
-    return mapping
-
-
-def get_block_devs(sys_block_path="/sys/block", skip_loop=True):
-    """
-    Go through all the items in /sys/block and return them as a list.
-
-    The ``sys_block_path`` argument is set for easier testing and is not
-    required for proper operation.
-    """
-    devices = _map_dev_paths(sys_block_path).keys()
-    if skip_loop:
-        return [d for d in devices if not d.startswith('loop')]
-    return list(devices)
-
-
-def get_dev_devs(dev_path="/dev"):
-    """
-    Go through all the items in /dev and return them as a list.
-
-    The ``dev_path`` argument is set for easier testing and is not
-    required for proper operation.
-    """
-    return _map_dev_paths(dev_path, include_abspath=True)
-
-
-def get_mapper_devs(mapper_path="/dev/mapper"):
-    """
-    Go through all the items in /dev and return them as a list.
-
-    The ``dev_path`` argument is set for easier testing and is not
-    required for proper operation.
-    """
-    return _map_dev_paths(mapper_path, include_abspath=True, include_realpath=True)
 
 
 class BaseFloatUnit(float):
@@ -540,15 +454,27 @@ class Size(object):
         Total size: 2.16 GB
     """
 
+    @classmethod
+    def parse(cls, size):
+        if (len(size) > 2 and
+            size[-2].lower() in ['k', 'm', 'g', 't'] and
+            size[-1].lower() == 'b'):
+            return cls(**{size[-2:].lower(): float(size[0:-2])})
+        elif size[-1].lower() in ['b', 'k', 'm', 'g', 't']:
+            return cls(**{size[-1].lower(): float(size[0:-1])})
+        else:
+            return cls(b=float(size))
+
+
     def __init__(self, multiplier=1024, **kw):
         self._multiplier = multiplier
         # create a mapping of units-to-multiplier, skip bytes as that is
         # calculated initially always and does not need to convert
         aliases = [
-            [('kb', 'kilobytes'), self._multiplier],
-            [('mb', 'megabytes'), self._multiplier ** 2],
-            [('gb', 'gigabytes'), self._multiplier ** 3],
-            [('tb', 'terabytes'), self._multiplier ** 4],
+            [('k', 'kb', 'kilobytes'), self._multiplier],
+            [('m', 'mb', 'megabytes'), self._multiplier ** 2],
+            [('g', 'gb', 'gigabytes'), self._multiplier ** 3],
+            [('t', 'tb', 'terabytes'), self._multiplier ** 4],
         ]
         # and mappings for units-to-formatters, including bytes and aliases for
         # each
@@ -605,23 +531,47 @@ class Size(object):
     def __format__(self, spec):
         return str(self._get_best_format()).__format__(spec)
 
+    def __int__(self):
+        return int(self._b)
+
+    def __float__(self):
+        return self._b
+
     def __lt__(self, other):
-        return self._b < other._b
+        if isinstance(other, Size):
+            return self._b < other._b
+        else:
+            return self.b < other
 
     def __le__(self, other):
-        return self._b <= other._b
+        if isinstance(other, Size):
+            return self._b <= other._b
+        else:
+            return self.b <= other
 
     def __eq__(self, other):
-        return self._b == other._b
+        if isinstance(other, Size):
+            return self._b == other._b
+        else:
+            return self.b == other
 
     def __ne__(self, other):
-        return self._b != other._b
+        if isinstance(other, Size):
+            return self._b != other._b
+        else:
+            return self.b != other
 
     def __ge__(self, other):
-        return self._b >= other._b
+        if isinstance(other, Size):
+            return self._b >= other._b
+        else:
+            return self.b >= other
 
     def __gt__(self, other):
-        return self._b > other._b
+        if isinstance(other, Size):
+            return self._b > other._b
+        else:
+            return self.b > other
 
     def __add__(self, other):
         if isinstance(other, Size):
@@ -652,6 +602,12 @@ class Size(object):
             return self._b / other._b
         _b = self._b / other
         return Size(b=_b)
+
+    def __bool__(self):
+        return self.b != 0
+
+    def __nonzero__(self):
+        return self.__bool__()
 
     def __getattr__(self, unit):
         """
@@ -726,7 +682,8 @@ def get_partitions_facts(sys_block_path):
                 if not part['sectorsize']:
                     part['sectorsize'] = get_file_contents(
                         part_sys_block_path + "/queue/hw_sector_size", 512)
-                part['size'] = human_readable_size(float(part['sectors']) * 512)
+                part['size'] = float(part['sectors']) * 512
+                part['human_readable_size'] = human_readable_size(float(part['sectors']) * 512)
                 part['holders'] = []
                 for holder in os.listdir(part_sys_block_path + '/holders'):
                     part['holders'].append(holder)
@@ -761,65 +718,66 @@ def is_locked_raw_device(disk_path):
     return 0
 
 
-def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
+def get_block_devs_lsblk():
+    '''
+    This returns a list of lists with 3 items per inner list.
+    KNAME - reflects the kernel device name , for example /dev/sda or /dev/dm-0
+    NAME - the device name, for example /dev/sda or
+           /dev/mapper/<vg_name>-<lv_name>
+    TYPE - the block device type: disk, partition, lvm and such
+
+    '''
+    cmd = ['lsblk', '-plno', 'KNAME,NAME,TYPE']
+    stdout, stderr, rc = process.call(cmd)
+    # lsblk returns 1 on failure
+    if rc == 1:
+        raise OSError('lsblk returned failure, stderr: {}'.format(stderr))
+    return [re.split(r'\s+', line) for line in stdout]
+
+
+def get_devices(_sys_block_path='/sys/block'):
     """
-    Captures all available devices from /sys/block/, including its partitions,
-    along with interesting metadata like sectors, size, vendor,
-    solid/rotational, etc...
+    Captures all available block devices as reported by lsblk.
+    Additional interesting metadata like sectors, size, vendor,
+    solid/rotational, etc. is collected from /sys/block/<device>
 
     Returns a dictionary, where keys are the full paths to devices.
 
-    ..note:: dmapper devices get their path updated to what they link from, if
-            /dev/dm-0 is linked by /dev/mapper/ceph-data, then the latter gets
-            used as the key.
-
     ..note:: loop devices, removable media, and logical volumes are never included.
     """
-    # Portions of this detection process are inspired by some of the fact
-    # gathering done by Ansible in module_utils/facts/hardware/linux.py. The
-    # processing of metadata and final outcome *is very different* and fully
-    # imcompatible. There are ignored devices, and paths get resolved depending
-    # on dm devices, loop, and removable media
 
     device_facts = {}
 
-    block_devs = get_block_devs(_sys_block_path)
-    dev_devs = get_dev_devs(_dev_path)
-    mapper_devs = get_mapper_devs(_mapper_path)
+    block_devs = get_block_devs_lsblk()
 
     for block in block_devs:
-        sysdir = os.path.join(_sys_block_path, block)
-        metadata = {}
-
-        # Ensure that the diskname is an absolute path and that it never points
-        # to a /dev/dm-* device
-        diskname = mapper_devs.get(block) or dev_devs.get(block)
-        if not diskname:
+        devname = os.path.basename(block[0])
+        diskname = block[1]
+        if block[2] not in ['disk', 'mpath']:
             continue
+        sysdir = os.path.join(_sys_block_path, devname)
+        metadata = {}
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
-            if lvm.is_lv(diskname):
+            if lvm.get_device_lvs(diskname):
                 continue
 
-        metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
-        # Is the device read-only ?
-        metadata['ro'] = get_file_contents(os.path.join(sysdir, 'ro'))
-
-
-        for key in ['vendor', 'model', 'rev', 'sas_address', 'sas_device_handle']:
-            metadata[key] = get_file_contents(sysdir + "/device/" + key)
-
-        for key in ['sectors', 'size']:
-            metadata[key] = get_file_contents(os.path.join(sysdir, key), 0)
-
-        for key, _file in [('support_discard', '/queue/discard_granularity')]:
-            metadata[key] = get_file_contents(os.path.join(sysdir, _file))
-
-        metadata['partitions'] = get_partitions_facts(sysdir)
-
-        for key in ['rotational', 'nr_requests']:
-            metadata[key] = get_file_contents(sysdir + "/queue/" + key)
+        # all facts that have no defaults
+        # (<name>, <path relative to _sys_block_path>)
+        facts = [('removable', 'removable'),
+                 ('ro', 'ro'),
+                 ('vendor', 'device/vendor'),
+                 ('model', 'device/model'),
+                 ('rev', 'device/rev'),
+                 ('sas_address', 'device/sas_address'),
+                 ('sas_device_handle', 'device/sas_device_handle'),
+                 ('support_discard', 'queue/discard_granularity'),
+                 ('rotational', 'queue/rotational'),
+                 ('nr_requests', 'queue/nr_requests'),
+                ]
+        for key, file_ in facts:
+            metadata[key] = get_file_contents(os.path.join(sysdir, file_))
 
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
@@ -828,14 +786,17 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
             if m:
                 metadata['scheduler_mode'] = m.group(2)
 
-        if not metadata['sectors']:
-            metadata['sectors'] = 0
-        size = metadata['sectors'] or metadata['size']
-        metadata['sectorsize'] = get_file_contents(sysdir + "/queue/logical_block_size")
-        if not metadata['sectorsize']:
-            metadata['sectorsize'] = get_file_contents(sysdir + "/queue/hw_sector_size", 512)
-        metadata['human_readable_size'] = human_readable_size(float(size) * 512)
+        metadata['partitions'] = get_partitions_facts(sysdir)
+
+        size = get_file_contents(os.path.join(sysdir, 'size'), 0)
+
+        metadata['sectors'] = get_file_contents(os.path.join(sysdir, 'sectors'), 0)
+        fallback_sectorsize = get_file_contents(sysdir + "/queue/hw_sector_size", 512)
+        metadata['sectorsize'] = get_file_contents(sysdir +
+                                                   "/queue/logical_block_size",
+                                                   fallback_sectorsize)
         metadata['size'] = float(size) * 512
+        metadata['human_readable_size'] = human_readable_size(metadata['size'])
         metadata['path'] = diskname
         metadata['locked'] = is_locked_raw_device(metadata['path'])
 

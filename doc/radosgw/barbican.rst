@@ -39,6 +39,8 @@ Create a key in Barbican
 See Barbican documentation for `How to Create a Secret`_. Requests to
 Barbican must include a valid Keystone token in the ``X-Auth-Token`` header.
 
+.. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
+
 Example request::
 
    POST /v1/secrets HTTP/1.1

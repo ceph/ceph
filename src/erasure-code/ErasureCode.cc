@@ -167,7 +167,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
     unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;
     bufferptr buf(buffer::create_aligned(blocksize, SIMD_ALIGN));
 
-    raw.copy((k - padded_chunks) * blocksize, remainder, buf.c_str());
+    raw.begin((k - padded_chunks) * blocksize).copy(remainder, buf.c_str());
     buf.zero(remainder, blocksize - remainder);
     encoded[chunk_index(k-padded_chunks)].push_back(std::move(buf));
 
@@ -203,12 +203,6 @@ int ErasureCode::encode(const set<int> &want_to_encode,
   return 0;
 }
 
-int ErasureCode::encode_chunks(const set<int> &want_to_encode,
-                               map<int, bufferlist> *encoded)
-{
-  ceph_abort_msg("ErasureCode::encode_chunks not implemented");
-}
- 
 int ErasureCode::_decode(const set<int> &want_to_read,
 			 const map<int, bufferlist> &chunks,
 			 map<int, bufferlist> *decoded)
@@ -252,13 +246,6 @@ int ErasureCode::decode(const set<int> &want_to_read,
                         map<int, bufferlist> *decoded, int chunk_size)
 {
   return _decode(want_to_read, chunks, decoded);
-}
-
-int ErasureCode::decode_chunks(const set<int> &want_to_read,
-                               const map<int, bufferlist> &chunks,
-                               map<int, bufferlist> *decoded)
-{
-  ceph_abort_msg("ErasureCode::decode_chunks not implemented");
 }
 
 int ErasureCode::parse(const ErasureCodeProfile &profile,

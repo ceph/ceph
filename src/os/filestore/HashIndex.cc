@@ -25,6 +25,15 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferptr;
+using ceph::bufferlist;
+
 const string HashIndex::SUBDIR_ATTR = "contents";
 const string HashIndex::SETTINGS_ATTR = "settings";
 const string HashIndex::IN_PROGRESS_OP_TAG = "in_progress_op";

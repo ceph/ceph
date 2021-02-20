@@ -44,13 +44,18 @@ namespace {
   bool do_readv = false;
   bool do_verify = false;
   bool do_get = false;
+  bool do_create = false;
   bool do_delete = false;
   bool do_stat = false; // stat objects (not buckets)
   bool do_hexdump = false;
 
   bool object_open = false;
 
-  string bucket_name = "sorry_dave";
+  uint32_t owner_uid = 867;
+  uint32_t owner_gid = 5309;
+  uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
+
+  string bucket_name = "blastoff";
   string object_name = "jocaml";
 
   struct rgw_file_handle *bucket_fh = nullptr;
@@ -184,6 +189,21 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
+TEST(LibRGW, CREATE_BUCKET) {
+  if (do_create) {
+    struct stat st;
+    struct rgw_file_handle *fh;
+
+    st.st_uid = owner_uid;
+    st.st_gid = owner_gid;
+    st.st_mode = 755;
+
+    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
+			&fh, RGW_MKDIR_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+}
+
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
 		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
@@ -243,6 +263,9 @@ TEST(LibRGW, PUT_OBJECT) {
 			(void*) data.c_str(), RGW_WRITE_FLAG_NONE);
     ASSERT_EQ(ret, 0);
     ASSERT_EQ(nbytes, data.length());
+    /* commit write transaction */
+    ret = rgw_close(fs, object_fh, 0 /* flags */);
+    ASSERT_EQ(ret, 0);
   }
 }
 
@@ -371,6 +394,14 @@ TEST(LibRGW, DELETE_OBJECT) {
   }
 }
 
+TEST(LibRGW, DELETE_BUCKET) {
+  if (do_delete) {
+    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+}
+
 TEST(LibRGW, CLEANUP) {
   if (do_readv) {
     // release resources
@@ -463,6 +494,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--prelist",
 					    (char*) nullptr)) {
       do_pre_list = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--create",
+					    (char*) nullptr)) {
+      do_create = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--hexdump",
 					    (char*) nullptr)) {
       do_hexdump = true;

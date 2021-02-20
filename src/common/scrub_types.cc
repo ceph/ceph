@@ -1,5 +1,7 @@
 #include "scrub_types.h"
 
+using std::map;
+
 using namespace librados;
 
 void object_id_wrapper::encode(bufferlist& bl) const

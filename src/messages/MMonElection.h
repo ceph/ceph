@@ -21,9 +21,9 @@
 #include "mon/MonMap.h"
 #include "mon/mon_types.h"
 
-class MMonElection : public Message {
+class MMonElection final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 5;
 
 public:
@@ -40,44 +40,47 @@ public:
     default: ceph_abort(); return 0;
     }
   }
-  
+
   uuid_d fsid;
   int32_t op;
   epoch_t epoch;
-  bufferlist monmap_bl;
-  set<int32_t> quorum;
+  ceph::buffer::list monmap_bl;
+  std::set<int32_t> quorum;
   uint64_t quorum_features;
   mon_feature_t mon_features;
   ceph_release_t mon_release{ceph_release_t::unknown};
-  bufferlist sharing_bl;
-  map<string,string> metadata;
+  ceph::buffer::list sharing_bl;
+  ceph::buffer::list scoring_bl;
+  uint8_t strategy;
+  std::map<std::string,std::string> metadata;
   
   MMonElection() : Message{MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION},
     op(0), epoch(0),
     quorum_features(0),
-    mon_features(0)
+    mon_features(0),
+    strategy(0)
   { }
 
-  MMonElection(int o, epoch_t e, MonMap *m)
+  MMonElection(int o, epoch_t e, const bufferlist& bl, uint8_t s, MonMap *m)
     : Message{MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION},
       fsid(m->fsid), op(o), epoch(e),
       quorum_features(0),
-      mon_features(0)
+      mon_features(0), scoring_bl(bl), strategy(s)
   {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
   }
 private:
-  ~MMonElection() override {}
+  ~MMonElection() final {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "election"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "election(" << fsid << " " << get_opname(op)
 	<< " rel " << (int)mon_release << " e" << epoch << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     if (monmap_bl.length() && (features != CEPH_FEATURES_ALL)) {
@@ -100,8 +103,11 @@ public:
     encode(mon_features, payload);
     encode(metadata, payload);
     encode(mon_release, payload);
+    encode(scoring_bl, payload);
+    encode(strategy, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(op, p);
@@ -123,6 +129,12 @@ public:
       decode(mon_release, p);
     else
       mon_release = infer_ceph_release_from_mon_features(mon_features);
+    if (header.version >= 9) {
+      decode(scoring_bl, p);
+      decode(strategy, p);
+    } else {
+      strategy = MonMap::election_strategy::CLASSIC;
+    }
   }
 private:
   template<class T, typename... Args>

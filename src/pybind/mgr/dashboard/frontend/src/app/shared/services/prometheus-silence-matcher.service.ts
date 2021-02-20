@@ -1,8 +1,7 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import {
   AlertmanagerSilenceMatcher,
   AlertmanagerSilenceMatcherMatch
@@ -20,8 +19,6 @@ export class PrometheusSilenceMatcherService {
     severity: 'labels.severity'
   };
 
-  constructor(private i18n: I18n) {}
-
   singleMatch(
     matcher: AlertmanagerSilenceMatcher,
     rules: PrometheusRule[]
@@ -34,7 +31,7 @@ export class PrometheusSilenceMatcherService {
     rules: PrometheusRule[]
   ): AlertmanagerSilenceMatcherMatch {
     if (matchers.some((matcher) => matcher.isRegex)) {
-      return;
+      return undefined;
     }
     matchers.forEach((matcher) => {
       rules = this.getMatchedRules(matcher, rules);
@@ -65,18 +62,17 @@ export class PrometheusSilenceMatcherService {
 
   private getMatchText(rules: number, alerts: number): string {
     const msg = {
-      noRule: this.i18n('Your matcher seems to match no currently defined rule or active alert.'),
-      noAlerts: this.i18n('no active alerts'),
-      alert: this.i18n('1 active alert'),
-      alerts: this.i18n('{{n}} active alerts', { n: alerts }),
-      rule: this.i18n('Matches 1 rule'),
-      rules: this.i18n('Matches {{n}} rules', { n: rules })
+      noRule: $localize`Your matcher seems to match no currently defined rule or active alert.`,
+      noAlerts: $localize`no active alerts`,
+      alert: $localize`1 active alert`,
+      alerts: $localize`${alerts} active alerts`,
+      rule: $localize`Matches 1 rule`,
+      rules: $localize`Matches ${rules} rules`
     };
-    return rules
-      ? this.i18n('{{rules}} with {{alerts}}.', {
-          rules: rules > 1 ? msg.rules : msg.rule,
-          alerts: alerts ? (alerts > 1 ? msg.alerts : msg.alert) : msg.noAlerts
-        })
-      : msg.noRule;
+
+    const rule = rules > 1 ? msg.rules : msg.rule;
+    const alert = alerts ? (alerts > 1 ? msg.alerts : msg.alert) : msg.noAlerts;
+
+    return rules ? $localize`${rule} with ${alert}.` : msg.noRule;
   }
 }

@@ -60,6 +60,14 @@ public:
 		     uint32_t auth_method,
 		     const std::vector<uint32_t>& preferred_modes);
 
+  static bool is_secure_method(uint32_t method) {
+    return (method == CEPH_AUTH_CEPHX);
+  }
+
+  static bool is_secure_mode(uint32_t mode) {
+    return (mode == CEPH_CON_MODE_SECURE);
+  }
+
   AuthAuthorizeHandler *get_handler(int peer_type, int method);
 
   const char** get_tracked_conf_keys() const override;

@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import json
+import logging
 import os
 import re
-import json
+
 try:
     from functools import lru_cache
 except ImportError:
@@ -12,33 +14,49 @@ except ImportError:
 import cherrypy
 from cherrypy.lib.static import serve_file
 
-from . import Controller, UiApiController, BaseController, Proxy, Endpoint
-from .. import mgr, logger
+from .. import mgr
+from . import BaseController, Controller, Endpoint, Proxy, UiApiController
+
+logger = logging.getLogger("controllers.home")
 
 
-LANGUAGES = {f for f in os.listdir(mgr.get_frontend_path())
-             if os.path.isdir(os.path.join(mgr.get_frontend_path(), f))}
-LANGUAGES_PATH_MAP = {f.lower(): {'lang': f, 'path': os.path.join(mgr.get_frontend_path(), f)}
-                      for f in LANGUAGES}
-# pre-populating with the primary language subtag
-for _lang in list(LANGUAGES_PATH_MAP.keys()):
-    if '-' in _lang:
-        LANGUAGES_PATH_MAP[_lang.split('-')[0]] = {
-            'lang': LANGUAGES_PATH_MAP[_lang]['lang'], 'path': LANGUAGES_PATH_MAP[_lang]['path']}
+class LanguageMixin(object):
+    def __init__(self):
+        try:
+            self.LANGUAGES = {
+                f
+                for f in os.listdir(mgr.get_frontend_path())
+                if os.path.isdir(os.path.join(mgr.get_frontend_path(), f))
+            }
+        except FileNotFoundError:
+            logger.exception("Build directory missing")
+            self.LANGUAGES = {}
 
-
-def _get_default_language():
-    with open("{}/../package.json".format(mgr.get_frontend_path()), "r") as f:
-        config = json.load(f)
-    return config['config']['locale']
-
-
-DEFAULT_LANGUAGE = _get_default_language()
-DEFAULT_LANGUAGE_PATH = os.path.join(mgr.get_frontend_path(), DEFAULT_LANGUAGE)
+        self.LANGUAGES_PATH_MAP = {
+            f.lower(): {
+                'lang': f,
+                'path': os.path.join(mgr.get_frontend_path(), f)
+            }
+            for f in self.LANGUAGES
+        }
+        # pre-populating with the primary language subtag.
+        for lang in list(self.LANGUAGES_PATH_MAP.keys()):
+            if '-' in lang:
+                self.LANGUAGES_PATH_MAP[lang.split('-')[0]] = {
+                    'lang': self.LANGUAGES_PATH_MAP[lang]['lang'],
+                    'path': self.LANGUAGES_PATH_MAP[lang]['path']
+                }
+        with open(os.path.normpath("{}/../package.json".format(mgr.get_frontend_path())),
+                  "r") as f:
+            config = json.load(f)
+        self.DEFAULT_LANGUAGE = config['config']['locale']
+        self.DEFAULT_LANGUAGE_PATH = os.path.join(mgr.get_frontend_path(),
+                                                  self.DEFAULT_LANGUAGE)
+        super(LanguageMixin, self).__init__()
 
 
 @Controller("/", secure=False)
-class HomeController(BaseController):
+class HomeController(BaseController, LanguageMixin):
     LANG_TAG_SEQ_RE = re.compile(r'\s*([^,]+)\s*,?\s*')
     LANG_TAG_RE = re.compile(
         r'^(?P<locale>[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})?)(;q=(?P<weight>[01]\.\d{0,3}))?$')
@@ -69,18 +87,20 @@ class HomeController(BaseController):
         result.sort(key=lambda l: l[0])
         result.sort(key=lambda l: l[1], reverse=True)
         logger.debug("language preference: %s", result)
-        return [l[0] for l in result]
+        return [r[0] for r in result]
 
     def _language_dir(self, langs):
         for lang in langs:
-            if lang in LANGUAGES_PATH_MAP:
+            if lang in self.LANGUAGES_PATH_MAP:
                 logger.debug("found directory for language '%s'", lang)
-                cherrypy.response.headers['Content-Language'] = LANGUAGES_PATH_MAP[lang]['lang']
-                return LANGUAGES_PATH_MAP[lang]['path']
+                cherrypy.response.headers[
+                    'Content-Language'] = self.LANGUAGES_PATH_MAP[lang]['lang']
+                return self.LANGUAGES_PATH_MAP[lang]['path']
 
-        logger.debug("Languages '%s' not available, falling back to %s", langs, DEFAULT_LANGUAGE)
-        cherrypy.response.headers['Content-Language'] = DEFAULT_LANGUAGE
-        return DEFAULT_LANGUAGE_PATH
+        logger.debug("Languages '%s' not available, falling back to %s",
+                     langs, self.DEFAULT_LANGUAGE)
+        cherrypy.response.headers['Content-Language'] = self.DEFAULT_LANGUAGE
+        return self.DEFAULT_LANGUAGE_PATH
 
     @Proxy()
     def __call__(self, path, **params):
@@ -95,21 +115,28 @@ class HomeController(BaseController):
                 accept_lang_header = cherrypy.request.headers['Accept-Language']
                 langs = self._parse_accept_language(accept_lang_header)
             else:
-                langs = [DEFAULT_LANGUAGE.lower()]
+                langs = [self.DEFAULT_LANGUAGE.lower()]
             logger.debug("frontend language from headers: %s", langs)
 
         base_dir = self._language_dir(langs)
         full_path = os.path.join(base_dir, path)
+
+        # Block uplevel attacks
+        if not os.path.normpath(full_path).startswith(os.path.normpath(base_dir)):
+            raise cherrypy.HTTPError(403)  # Forbidden
+
         logger.debug("serving static content: %s", full_path)
         if 'Vary' in cherrypy.response.headers:
             cherrypy.response.headers['Vary'] = "{}, Accept-Language"
         else:
             cherrypy.response.headers['Vary'] = "Accept-Language"
+
+        cherrypy.response.headers['Cache-control'] = "no-cache"
         return serve_file(full_path)
 
 
 @UiApiController("/langs", secure=False)
-class LangsController(BaseController):
+class LangsController(BaseController, LanguageMixin):
     @Endpoint('GET')
     def __call__(self):
-        return list(LANGUAGES)
+        return list(self.LANGUAGES)

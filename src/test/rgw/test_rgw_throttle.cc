@@ -18,9 +18,7 @@
 #include <thread>
 #include "include/scope_guard.h"
 
-#ifdef HAVE_BOOST_CONTEXT
-#include <boost/asio/spawn.hpp>
-#endif
+#include <spawn/spawn.hpp>
 #include <gtest/gtest.h>
 
 struct RadosEnv : public ::testing::Environment {
@@ -31,13 +29,15 @@ struct RadosEnv : public ::testing::Environment {
 
   void SetUp() override {
     rados.emplace(g_ceph_context);
-    ASSERT_EQ(0, rados->start());
+    const NoDoutPrefix no_dpp(g_ceph_context, 1);
+    ASSERT_EQ(0, rados->start(null_yield, &no_dpp));
     int r = rados->pool({poolname}).create();
     if (r == -EEXIST)
       r = 0;
     ASSERT_EQ(0, r);
   }
   void TearDown() override {
+    rados->shutdown();
     rados.reset();
   }
 };
@@ -165,14 +165,13 @@ TEST_F(Aio_Throttle, ThrottleOverMax)
   EXPECT_EQ(window, max_outstanding);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(Aio_Throttle, YieldCostOverWindow)
 {
   auto obj = make_obj(__PRETTY_FUNCTION__);
 
   boost::asio::io_context context;
-  boost::asio::spawn(context,
-    [&] (boost::asio::yield_context yield) {
+  spawn::spawn(context,
+    [&] (spawn::yield_context yield) {
       YieldingAioThrottle throttle(4, context, yield);
       scoped_completion op;
       auto c = throttle.get(obj, wait_on(op), 8, 0);
@@ -193,8 +192,8 @@ TEST_F(Aio_Throttle, YieldingThrottleOverMax)
   uint64_t outstanding = 0;
 
   boost::asio::io_context context;
-  boost::asio::spawn(context,
-    [&] (boost::asio::yield_context yield) {
+  spawn::spawn(context,
+    [&] (spawn::yield_context yield) {
       YieldingAioThrottle throttle(window, context, yield);
       for (uint64_t i = 0; i < total; i++) {
         using namespace std::chrono_literals;
@@ -215,6 +214,5 @@ TEST_F(Aio_Throttle, YieldingThrottleOverMax)
   EXPECT_EQ(0u, outstanding);
   EXPECT_EQ(window, max_outstanding);
 }
-#endif // HAVE_BOOST_CONTEXT
 
 } // namespace rgw

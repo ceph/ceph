@@ -4,7 +4,13 @@
 #include <iostream>
 #include <unistd.h>
 
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
 #include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 
 #include "gtest/gtest.h"
 #include "include/Context.h"
@@ -18,7 +24,6 @@
 
 #include "tools/immutable_object_cache/ObjectCacheStore.h"
 
-namespace efs = std::experimental::filesystem;
 using namespace ceph::immutable_obj_cache;
 
 std::string test_cache_path("/tmp/test_ceph_immutable_shared_cache");
@@ -57,7 +62,8 @@ public:
     m_object_cache_store = new ObjectCacheStore(m_ceph_context);
   }
 
-  void init_object_cache_store(std::string pool_name, std::string vol_name, uint64_t vol_size, bool reset) {
+  void init_object_cache_store(std::string pool_name, std::string vol_name,
+                              uint64_t vol_size, bool reset) {
     ASSERT_EQ(0, m_object_cache_store->init(reset));
     ASSERT_EQ(0, m_object_cache_store->init_cache());
   }
@@ -66,9 +72,11 @@ public:
     ASSERT_EQ(0, m_object_cache_store->shutdown());
   }
 
-  void lookup_object_cache_store(std::string pool_name, std::string vol_name, std::string obj_name, int& ret) {
+  void lookup_object_cache_store(std::string pool_name, std::string vol_name,
+                                std::string obj_name, int& ret) {
     std::string cache_path;
-    ret = m_object_cache_store->lookup_object(pool_name, 1, 2, obj_name, cache_path);
+    ret = m_object_cache_store->lookup_object(pool_name, 1, 2, 3,
+                                            obj_name, true, cache_path);
   }
 
   void TearDown() override {
@@ -84,7 +92,7 @@ TEST_F(TestObjectStore, test_1) {
 
   std::string cache_path(test_cache_path);
 
-  efs::remove_all(test_cache_path);
+  fs::remove_all(test_cache_path);
 
   init_object_cache_store(m_temp_pool_name, m_temp_volume_name, 1000, true);
 

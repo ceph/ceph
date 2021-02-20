@@ -6,6 +6,7 @@
 
 #include "iso_8601.h"
 #include "include/timegm.h"
+#include "include/ceph_assert.h"
 
 namespace ceph {
 using std::chrono::duration_cast;
@@ -19,12 +20,12 @@ using std::uint16_t;
 
 using boost::none;
 using boost::optional;
-using boost::string_ref;
+using std::string_view;
 
 using ceph::real_clock;
 using ceph::real_time;
 
-using sriter = string_ref::const_iterator;
+using sriter = string_view::const_iterator;
 
 namespace {
 // This assumes a contiguous block of numbers in the correct order.
@@ -47,7 +48,7 @@ optional<real_time> calculate(const tm& t, uint32_t n = 0) {
 }
 }
 
-optional<real_time> from_iso_8601(const string_ref s,
+optional<real_time> from_iso_8601(const string_view s,
 				  const bool ws_terminates) noexcept {
   auto end = s.cend();
   auto read_digit = [end](sriter& c) mutable {

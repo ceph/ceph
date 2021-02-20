@@ -1,8 +1,7 @@
 import { Component, OnDestroy, OnInit, TemplateRef } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
-import { Subscription } from 'rxjs';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'cd-confirmation-modal',
@@ -11,10 +10,13 @@ import { Subscription } from 'rxjs';
 })
 export class ConfirmationModalComponent implements OnInit, OnDestroy {
   // Needed
-  bodyTpl: TemplateRef<any>;
   buttonText: string;
   titleText: string;
   onSubmit: Function;
+
+  // One of them is needed
+  bodyTpl?: TemplateRef<any>;
+  description?: TemplateRef<any>;
 
   // Optional
   bodyData?: object;
@@ -24,16 +26,10 @@ export class ConfirmationModalComponent implements OnInit, OnDestroy {
   // Component only
   boundCancel = this.cancel.bind(this);
   confirmationForm: FormGroup;
-  private onHide: Subscription;
   private canceled = false;
 
-  constructor(public modalRef: BsModalRef, private modalService: BsModalService) {
+  constructor(public activeModal: NgbActiveModal) {
     this.confirmationForm = new FormGroup({});
-    this.onHide = this.modalService.onHide.subscribe((e) => {
-      if (this.onCancel && (e || this.canceled)) {
-        this.onCancel();
-      }
-    });
   }
 
   ngOnInit() {
@@ -45,18 +41,20 @@ export class ConfirmationModalComponent implements OnInit, OnDestroy {
       throw new Error('No action name defined');
     } else if (!this.titleText) {
       throw new Error('No title defined');
-    } else if (!this.bodyTpl) {
+    } else if (!this.bodyTpl && !this.description) {
       throw new Error('No description defined');
     }
   }
 
   ngOnDestroy() {
-    this.onHide.unsubscribe();
+    if (this.onCancel && this.canceled) {
+      this.onCancel();
+    }
   }
 
   cancel() {
     this.canceled = true;
-    this.modalRef.hide();
+    this.activeModal.close();
   }
 
   stopLoadingSpinner() {

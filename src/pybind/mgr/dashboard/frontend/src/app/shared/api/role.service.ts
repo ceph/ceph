@@ -1,14 +1,13 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
-import { RoleFormModel } from '../../core/auth/role-form/role-form.model';
-import { ApiModule } from './api.module';
+import { RoleFormModel } from '~/app/core/auth/role-form/role-form.model';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class RoleService {
   constructor(private http: HttpClient) {}
@@ -17,16 +16,22 @@ export class RoleService {
     return this.http.get('api/role');
   }
 
-  delete(role: string) {
-    return this.http.delete(`api/role/${role}`);
+  delete(name: string) {
+    return this.http.delete(`api/role/${name}`);
   }
 
-  get(name) {
+  get(name: string) {
     return this.http.get(`api/role/${name}`);
   }
 
   create(role: RoleFormModel) {
     return this.http.post(`api/role`, role);
+  }
+
+  clone(name: string, newName: string) {
+    let params = new HttpParams();
+    params = params.append('new_name', newName);
+    return this.http.post(`api/role/${name}/clone`, null, { params });
   }
 
   update(role: RoleFormModel) {

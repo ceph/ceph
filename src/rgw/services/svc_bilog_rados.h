@@ -51,6 +51,7 @@ public:
 
   int get_log_status(const RGWBucketInfo& bucket_info,
                      int shard_id,
-                     map<int, string> *markers);
+                     map<int, string> *markers,
+                     optional_yield y);
 };
 

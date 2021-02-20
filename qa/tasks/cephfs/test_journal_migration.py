@@ -1,5 +1,4 @@
 
-from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.workunit import task as workunit
 
@@ -33,7 +32,7 @@ class TestJournalMigration(CephFSTestCase):
         self.assertTrue(self.fs.get_replay(status=status) is not None)
 
         # Do some client work so that the log is populated with something.
-        with self.mount_a.mounted():
+        with self.mount_a.mounted_wait():
             self.mount_a.create_files()
             self.mount_a.check_files()  # sanity, this should always pass
 
@@ -57,7 +56,7 @@ class TestJournalMigration(CephFSTestCase):
 
         # Check that files created in the initial client workload are still visible
         # in a client mount.
-        with self.mount_a.mounted():
+        with self.mount_a.mounted_wait():
             self.mount_a.check_files()
 
         # Verify that the journal really has been rewritten.
@@ -76,20 +75,18 @@ class TestJournalMigration(CephFSTestCase):
 
         self.fs.journal_tool(["event", "get", "json",
                               "--path", "/tmp/journal.json"], 0)
-        p = self.fs.tool_remote.run(
-            args=[
-                "python",
+        p = self.fs.tool_remote.sh([
+                "python3",
                 "-c",
-                "import json; print len(json.load(open('/tmp/journal.json')))"
-            ],
-            stdout=StringIO())
-        event_count = int(p.stdout.getvalue().strip())
+                "import json; print(len(json.load(open('/tmp/journal.json'))))"
+            ])
+        event_count = int(p.strip())
         if event_count < 1000:
             # Approximate value of "lots", expected from having run fsstress
             raise RuntimeError("Unexpectedly few journal events: {0}".format(event_count))
 
         # Do some client work to check that writing the log is still working
-        with self.mount_a.mounted():
+        with self.mount_a.mounted_wait():
             workunit(self.ctx, {
                 'clients': {
                     "client.{0}".format(self.mount_a.client_id): ["fs/misc/trivial_sync.sh"],

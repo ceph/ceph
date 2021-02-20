@@ -8,9 +8,9 @@
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Journal.h"
 #include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/trash/RemoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
 

@@ -1,10 +1,4 @@
-@import '~bootstrap/scss/bootstrap-grid';
-
-.dropdown-menu > .disabled > a {
-  pointer-events: auto;
+button.disabled {
   cursor: default !important;
-}
-
-::ng-deep .btn-toolbar .btn-group {
-  @extend .mr-1;
+  pointer-events: auto;
 }

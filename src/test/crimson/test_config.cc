@@ -7,9 +7,10 @@
 #include "common/config_obs.h"
 #include "crimson/common/config_proxy.h"
 
-using Config = ceph::common::ConfigProxy;
+using Config = crimson::common::ConfigProxy;
 const std::string test_uint_option = "osd_max_pgls";
 const uint64_t INVALID_VALUE = (uint64_t)(-1);
+const uint64_t EXPECTED_VALUE = 42;
 
 class ConfigObs : public ceph::md_config_obs_impl<Config> {
   uint64_t last_change = INVALID_VALUE;
@@ -31,14 +32,14 @@ class ConfigObs : public ceph::md_config_obs_impl<Config> {
   }
 public:
   ConfigObs() {
-    ceph::common::local_conf().add_observer(this);
+    crimson::common::local_conf().add_observer(this);
   }
 
   uint64_t get_last_change() const { return last_change; }
   uint64_t get_num_changes() const { return num_changes; }
   seastar::future<> stop() {
-    ceph::common::local_conf().remove_observer(this);
-    return seastar::now();
+    crimson::common::local_conf().remove_observer(this);
+    return seastar::make_ready_future<>();
   }
 };
 
@@ -46,7 +47,7 @@ seastar::sharded<ConfigObs> sharded_cobs;
 
 static seastar::future<> test_config()
 {
-  return ceph::common::sharded_conf().start(EntityName{}, string_view{"ceph"}).then([] {
+  return crimson::common::sharded_conf().start(EntityName{}, string_view{"ceph"}).then([] {
     std::vector<const char*> args;
     std::string cluster;
     std::string conf_file_list;
@@ -54,36 +55,33 @@ static seastar::future<> test_config()
                                                 CEPH_ENTITY_TYPE_CLIENT,
                                                 &cluster,
                                                 &conf_file_list);
-    auto& conf = ceph::common::local_conf();
+    auto& conf = crimson::common::local_conf();
     conf->name = init_params.name;
     conf->cluster = cluster;
     return conf.parse_config_files(conf_file_list);
   }).then([] {
-    return ceph::common::sharded_conf().invoke_on(0, &Config::start);
+    return crimson::common::sharded_conf().invoke_on(0, &Config::start);
   }).then([] {
     return sharded_cobs.start();
   }).then([] {
-    return ceph::common::sharded_conf().invoke_on_all([](Config& config) {
-      return config.set_val(test_uint_option,
-                            std::to_string(seastar::engine().cpu_id()));
-    });
+    auto& conf = crimson::common::local_conf();
+    return conf.set_val(test_uint_option, std::to_string(EXPECTED_VALUE));
   }).then([] {
-    auto expected = ceph::common::local_conf().get_val<uint64_t>(test_uint_option);
-    return ceph::common::sharded_conf().invoke_on_all([expected](Config& config) {
-      if (expected != config.get_val<uint64_t>(test_uint_option)) {
+    return crimson::common::sharded_conf().invoke_on_all([](Config& config) {
+      if (config.get_val<uint64_t>(test_uint_option) != EXPECTED_VALUE) {
         throw std::runtime_error("configurations don't match");
       }
-      if (expected != sharded_cobs.local().get_last_change()) {
+      if (sharded_cobs.local().get_last_change() != EXPECTED_VALUE) {
         throw std::runtime_error("last applied changes don't match the latest config");
       }
-      if (seastar::smp::count != sharded_cobs.local().get_num_changes()) {
+      if (sharded_cobs.local().get_num_changes() != 1) {
         throw std::runtime_error("num changes don't match actual changes");
       }
     });
   }).finally([] {
     return sharded_cobs.stop();
   }).finally([] {
-    return ceph::common::sharded_conf().stop();
+    return crimson::common::sharded_conf().stop();
   });
 }
 

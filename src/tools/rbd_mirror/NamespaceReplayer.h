@@ -5,7 +5,6 @@
 #define CEPH_RBD_MIRROR_NAMESPACE_REPLAYER_H
 
 #include "common/AsyncOpTracker.h"
-#include "common/WorkQueue.h"
 #include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 
@@ -32,6 +31,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+struct PoolMetaCache;
 template <typename> class ServiceDaemon;
 template <typename> class Throttler;
 template <typename> struct Threads;
@@ -47,35 +47,38 @@ public:
       librados::IoCtx &local_ioctx,
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
-      const std::string &remote_mirror_uuid,
-      const std::string &local_site_name,
+      const std::string &local_mirror_peer_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       Threads<ImageCtxT> *threads,
       Throttler<ImageCtxT> *image_sync_throttler,
       Throttler<ImageCtxT> *image_deletion_throttler,
       ServiceDaemon<ImageCtxT> *service_daemon,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     return new NamespaceReplayer(name, local_ioctx, remote_ioctx,
-                                 local_mirror_uuid, remote_mirror_uuid,
-                                 local_site_name, threads, image_sync_throttler,
-                                 image_deletion_throttler, service_daemon,
-                                 cache_manager_handler);
+                                 local_mirror_uuid, local_mirror_peer_uuid,
+                                 remote_pool_meta, threads,
+                                 image_sync_throttler, image_deletion_throttler,
+                                 service_daemon, cache_manager_handler,
+                                 pool_meta_cache);
   }
 
   NamespaceReplayer(const std::string &name,
                     librados::IoCtx &local_ioctx,
                     librados::IoCtx &remote_ioctx,
                     const std::string &local_mirror_uuid,
-                    const std::string &remote_mirror_uuid,
-                    const std::string &local_site_name,
+                    const std::string& local_mirror_peer_uuid,
+                    const RemotePoolMeta& remote_pool_meta,
                     Threads<ImageCtxT> *threads,
                     Throttler<ImageCtxT> *image_sync_throttler,
                     Throttler<ImageCtxT> *image_deletion_throttler,
                     ServiceDaemon<ImageCtxT> *service_daemon,
-                    journal::CacheManagerHandler *cache_manager_handler);
+                    journal::CacheManagerHandler *cache_manager_handler,
+                    PoolMetaCache* pool_meta_cache);
   NamespaceReplayer(const NamespaceReplayer&) = delete;
   NamespaceReplayer& operator=(const NamespaceReplayer&) = delete;
 
-  bool is_blacklisted() const;
+  bool is_blocklisted() const;
 
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
@@ -229,7 +232,8 @@ private:
   void handle_shut_down_local_status_updater(int r);
 
   void init_image_map(Context *on_finish);
-  void handle_init_image_map(int r, Context *on_finish);
+  void handle_init_image_map(int r, ImageMap<ImageCtxT> *image_map,
+                             Context *on_finish);
 
   void init_local_pool_watcher(Context *on_finish);
   void handle_init_local_pool_watcher(int r, Context *on_finish);
@@ -260,16 +264,18 @@ private:
                            const std::string &instance_id,
                            Context* on_finish);
 
+  std::string m_namespace_name;
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
   std::string m_local_mirror_uuid;
-  std::string m_remote_mirror_uuid;
-  std::string m_local_site_name;
+  std::string m_local_mirror_peer_uuid;
+  RemotePoolMeta m_remote_pool_meta;
   Threads<ImageCtxT> *m_threads;
   Throttler<ImageCtxT> *m_image_sync_throttler;
   Throttler<ImageCtxT> *m_image_deletion_throttler;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
 
   mutable ceph::mutex m_lock;
 

@@ -151,7 +151,14 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers)
       continue;
     }
 
-    std::vector<PeerSpec> peers{configs.begin(), configs.end()};
+    std::vector<PeerSpec> peers;
+    peers.reserve(configs.size());
+    for (auto& peer : configs) {
+      if (peer.direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+        peers.push_back(peer);
+      }
+    }
+
     for (auto& peer : peers) {
       r = resolve_peer_site_config_keys(pool_id, pool_name, &peer);
       if (r < 0) {

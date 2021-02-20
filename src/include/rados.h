@@ -90,6 +90,8 @@ struct ceph_pg {
  *
  * b <= bmask and bmask=(2**n)-1
  * e.g., b=12 -> bmask=15, b=123 -> bmask=127
+ *
+ * ** This function is released to the public domain by the author. **
  */
 static inline int ceph_stable_mod(int x, int b, int bmask)
 {
@@ -201,7 +203,9 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_MIMIC      13
 #define CEPH_RELEASE_NAUTILUS   14
 #define CEPH_RELEASE_OCTOPUS    15
-#define CEPH_RELEASE_MAX        16  /* highest + 1 */
+#define CEPH_RELEASE_PACIFIC    16
+#define CEPH_RELEASE_QUINCY     17
+#define CEPH_RELEASE_MAX        18  /* highest + 1 */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -297,6 +301,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* tiering */							    \
 	f(COPY_FROM,	__CEPH_OSD_OP(WR, DATA, 26),	"copy-from")	    \
+	f(COPY_FROM2,	__CEPH_OSD_OP(WR, DATA, 45),	"copy-from2")	    \
 	/* was copy-get-classic */					\
 	f(UNDIRTY,	__CEPH_OSD_OP(WR, DATA, 28),	"undirty")	    \
 	f(ISDIRTY,	__CEPH_OSD_OP(RD, DATA, 29),	"isdirty")	    \
@@ -321,10 +326,11 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* Extensible */						    \
 	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
-	f(SET_CHUNK,	__CEPH_OSD_OP(WR, DATA, 40),	"set-chunk")	    \
+	f(SET_CHUNK,	__CEPH_OSD_OP(CACHE, DATA, 40),	"set-chunk")	    \
 	f(TIER_PROMOTE,	__CEPH_OSD_OP(WR, DATA, 41),	"tier-promote")	    \
 	f(UNSET_MANIFEST, __CEPH_OSD_OP(WR, DATA, 42),	"unset-manifest")   \
-	f(TIER_FLUSH, __CEPH_OSD_OP(WR, DATA, 43),	"tier-flush")	    \
+	f(TIER_FLUSH, __CEPH_OSD_OP(CACHE, DATA, 43),	"tier-flush")	    \
+	f(TIER_EVICT, __CEPH_OSD_OP(CACHE, DATA, 44),	"tier-evict")	    \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
@@ -485,7 +491,8 @@ enum {
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
-#define EBLACKLISTED 108 /* blacklisted */
+#define EBLOCKLISTED 108 /* blocklisted */
+#define EBLACKLISTED 108 /* deprecated */
 
 /* xattr comparison */
 enum {
@@ -509,7 +516,16 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE = 8, /* map snap direct to
 						     * cloneid */
 	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
+	CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ = 32, /* use provided truncate_{seq,size} (copy-from2 only) */
 };
+
+#define CEPH_OSD_COPY_FROM_FLAGS			\
+	(CEPH_OSD_COPY_FROM_FLAG_FLUSH |		\
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |	\
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |		\
+	 CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |	\
+	 CEPH_OSD_COPY_FROM_FLAG_RWORDERED |		\
+	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ)
 
 enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,

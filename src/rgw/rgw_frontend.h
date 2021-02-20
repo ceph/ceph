@@ -15,9 +15,9 @@
 #include "rgw_civetweb_log.h"
 #include "civetweb/civetweb.h"
 #include "rgw_auth_registry.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
 
 namespace rgw::dmclock {
   class SyncScheduler;
@@ -42,6 +42,10 @@ public:
     const int ret = parse_config(config, config_map);
     return ret < 0 ? ret : 0;
   }
+
+  void set_default_config(RGWFrontendConfig& def_conf);
+
+  std::optional<string> get_val(const std::string& key);
 
   bool get_val(const std::string& key,
                const std::string& def_val,
@@ -205,10 +209,24 @@ public:
   }
 }; /* RGWFCGXFrontend */
 
-class RGWLoadGenFrontend : public RGWProcessFrontend {
+class RGWLoadGenFrontend : public RGWProcessFrontend, public DoutPrefixProvider {
 public:
   RGWLoadGenFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
     : RGWProcessFrontend(pe, _conf) {}
+
+  CephContext *get_cct() const { 
+    return env.store->ctx(); 
+  }
+
+  unsigned get_subsys() const
+  {
+    return ceph_subsys_rgw;
+  }
+
+  std::ostream& gen_prefix(std::ostream& out) const
+  {
+    return out << "rgw loadgen frontend: ";
+  }
 
   int init() override {
     int num_threads;
@@ -229,7 +247,7 @@ public:
     rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
-    int ret = env.store->ctl()->user->get_info_by_uid(uid, &user_info, null_yield);
+    int ret = env.store->ctl()->user->get_info_by_uid(this, uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;

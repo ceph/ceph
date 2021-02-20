@@ -1,6 +1,6 @@
-#!/usr/bin/env python
-from __future__ import print_function
+#!/usr/bin/python3
 
+import itertools
 import re
 import sys
 
@@ -23,7 +23,7 @@ def acc_lines(generator):
 def to_char(generator):
     for line in generator:
         for char in line:
-            if char is not '\n':
+            if char != '\n':
                 yield char
             else:
                 yield ' '
@@ -41,22 +41,22 @@ def remove_multiline_comments(generator):
     in_comment = False
     for char in generator:
         if in_comment:
-            if saw is "*":
-                if char is "/":
+            if saw == "*":
+                if char == "/":
                     in_comment = False
                 saw = ""
-            if char is "*":
+            if char == "*":
                 saw = "*"
             continue
-        if saw is "/":
-            if char is '*':
+        if saw == "/":
+            if char == '*':
                 in_comment = True
                 saw = ""
                 continue
             else:
                 yield saw
                 saw = ""
-        if char is '/':
+        if char == '/':
             saw = "/"
             continue
         yield char
@@ -74,14 +74,30 @@ class StateMachineRenderer(object):
         self.subgraphnum = 0
         self.clusterlabel = {}
 
+        self.color_palette = itertools.cycle([
+            "#000000",  # black
+            "#1e90ff",  # dodgerblue
+            "#ff0000",  # red
+            "#0000ff",  # blue
+            "#ffa500",  # orange
+            "#40e0d0",  # turquoise
+            "#c71585",  # mediumvioletred
+        ])
+
     def __str__(self):
-        return "-------------------\n\nstates: %s\n\n machines: %s\n\n edges: %s\n\n context %s\n\n state_contents %s\n\n--------------------" % (
-            self.states,
-            self.machines,
-            self.edges,
-            self.context,
-            self.state_contents
-            )
+        return f'''-------------------
+
+ states: {self.states}
+
+ machines: {self.machines}
+
+ edges: {self.edges}
+
+ context: {self.context}
+
+ state_contents: {self.state_contents}
+
+--------------------'''
 
     def read_input(self, input_lines):
         previous_line = None
@@ -129,7 +145,7 @@ class StateMachineRenderer(object):
             if tokens.group(2) not in self.state_contents.keys():
                 self.state_contents[tokens.group(2)] = []
             self.state_contents[tokens.group(2)].append(tokens.group(1))
-            if tokens.group(3) is not "":
+            if tokens.group(3):
                 self.machines[tokens.group(1)] = tokens.group(3)
             self.context.append((tokens.group(1), self.context_depth, ""))
             return
@@ -140,34 +156,34 @@ class StateMachineRenderer(object):
                                  line):
                 if i.group(1) not in self.edges.keys():
                     self.edges[i.group(1)] = []
-                if len(self.context) is 0:
+                if not self.context:
                     raise Exception("no context at line: " + line)
                 self.edges[i.group(1)].append((self.context[-1][0], i.group(2)))
         i = re.search("return\s+transit<\s*(\w*)\s*>()", line)
         if i is not None:
-            if len(self.context) is 0:
+            if not self.context:
                 raise Exception("no context at line: " + line)
-            if self.context[-1][2] is "":
+            if not self.context[-1][2]:
                 raise Exception("no event in context at line: " + line)
             if self.context[-1][2] not in self.edges.keys():
                 self.edges[self.context[-1][2]] = []
             self.edges[self.context[-1][2]].append((self.context[-1][0], i.group(1)))
 
-    def emit_dot(self):
+    def emit_dot(self, output):
         top_level = []
         for state in self.machines.keys():
             if state not in self.states.keys():
                 top_level.append(state)
         print('Top Level States: ', top_level, file=sys.stderr)
-        print('digraph G {')
-        print('\tsize="7,7"')
-        print('\tcompound=true;')
+        print('digraph G {', file=output)
+        print('\tsize="7,7"', file=output)
+        print('\tcompound=true;', file=output)
         for i in self.emit_state(top_level[0]):
-            print('\t' + i)
+            print('\t' + i, file=output)
         for i in self.edges.keys():
             for j in self.emit_event(i):
-                print(j)
-        print('}')
+                print(j, file=output)
+        print('}', file=output)
 
     def emit_state(self, state):
         if state in self.state_contents.keys():
@@ -175,7 +191,12 @@ class StateMachineRenderer(object):
             yield "subgraph cluster%s {" % (str(self.subgraphnum),)
             self.subgraphnum += 1
             yield """\tlabel = "%s";""" % (state,)
-            yield """\tcolor = "blue";"""
+            yield """\tcolor = "black";"""
+
+            if state in self.machines.values():
+                yield """\tstyle = "filled";"""
+                yield """\tfillcolor = "lightgrey";"""
+
             for j in self.state_contents[state]:
                 for i in self.emit_state(j):
                     yield "\t"+i
@@ -184,7 +205,7 @@ class StateMachineRenderer(object):
             found = False
             for (k, v) in self.machines.items():
                 if v == state:
-                    yield state+"[shape=Mdiamond];"
+                    yield state+"[shape=Mdiamond style=filled fillcolor=lightgrey];"
                     found = True
                     break
             if not found:
@@ -197,8 +218,12 @@ class StateMachineRenderer(object):
                 retval += (i + ",")
             retval += "]"
             return retval
+
         for (fro, to) in self.edges[event]:
-            appendix = ['label="%s"' % (event,)]
+            color = next(self.color_palette)
+            appendix = ['label="%s"' % (event,),
+                        'color="%s"' % (color,),
+                        'fontcolor="%s"' % (color,)]
             if fro in self.machines.keys():
                 appendix.append("ltail=%s" % (self.clusterlabel[fro],))
                 while fro in self.machines.keys():
@@ -210,7 +235,8 @@ class StateMachineRenderer(object):
             yield("%s -> %s %s;" % (fro, to, append(appendix)))
 
 
-INPUT_GENERATOR = do_filter(line for line in sys.stdin)
-RENDERER = StateMachineRenderer()
-RENDERER.read_input(INPUT_GENERATOR)
-RENDERER.emit_dot()
+if __name__ == '__main__':
+    INPUT_GENERATOR = do_filter(line for line in sys.stdin)
+    RENDERER = StateMachineRenderer()
+    RENDERER.read_input(INPUT_GENERATOR)
+    RENDERER.emit_dot(output=sys.stdout)

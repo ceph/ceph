@@ -4,12 +4,12 @@
 #ifndef CEPH_LIBRBD_JOURNAL_UTILS_H
 #define CEPH_LIBRBD_JOURNAL_UTILS_H
 
+#include "include/common_fwd.h"
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "cls/journal/cls_journal_types.h"
 #include <list>
 
-struct CephContext;
 
 namespace librbd {
 namespace journal {

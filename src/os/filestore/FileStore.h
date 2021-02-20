@@ -94,18 +94,18 @@ enum {
 class FSSuperblock {
 public:
   CompatSet compat_features;
-  string omap_backend;
+  std::string omap_backend;
 
   FSSuperblock() { }
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<FSSuperblock*>& o);
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<FSSuperblock*>& o);
 };
 WRITE_CLASS_ENCODER(FSSuperblock)
 
-inline ostream& operator<<(ostream& out, const FSSuperblock& sb)
+inline std::ostream& operator<<(std::ostream& out, const FSSuperblock& sb)
 {
   return out << "sb(" << sb.compat_features << "): "
              << sb.omap_backend;
@@ -120,7 +120,7 @@ public:
     return target_version;
   }
 
-  static int get_block_device_fsid(CephContext* cct, const string& path,
+  static int get_block_device_fsid(CephContext* cct, const std::string& path,
 				   uuid_d *fsid);
   struct FSPerfTracker {
     PerfCounters::avg_tracker<uint64_t> os_commit_latency_ns;
@@ -144,8 +144,8 @@ public:
   }
 
 private:
-  string internal_name;         ///< internal name, used to name the perfcounter instance
-  string basedir, journalpath;
+  std::string internal_name;         ///< internal name, used to name the perfcounter instance
+  std::string basedir, journalpath;
   osflagbits_t generic_flags;
   std::string current_fn;
   std::string current_op_seq_fn;
@@ -160,10 +160,10 @@ private:
 
   void create_backend(unsigned long f_type);
 
-  string devname;
+  std::string devname;
 
   int vdo_fd = -1;
-  string vdo_name;
+  std::string vdo_name;
 
   deque<uint64_t> snaps;
 
@@ -201,7 +201,7 @@ private:
   ceph::mutex sync_entry_timeo_lock = ceph::make_mutex("FileStore::sync_entry_timeo_lock");
   SafeTimer timer;
 
-  list<Context*> sync_waiters;
+  std::list<Context*> sync_waiters;
   bool stop;
   void sync_entry();
   struct SyncThread : public Thread {
@@ -217,7 +217,7 @@ private:
   struct Op {
     utime_t start;
     uint64_t op;
-    vector<Transaction> tls;
+    std::vector<Transaction> tls;
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
@@ -229,13 +229,13 @@ private:
     // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     ceph::mutex qlock =
       ceph::make_mutex("FileStore::OpSequencer::qlock", false);
-    list<Op*> q;
-    list<uint64_t> jq;
-    list<pair<uint64_t, Context*> > flush_commit_waiters;
+    std::list<Op*> q;
+    std::list<uint64_t> jq;
+    std::list<std::pair<uint64_t, Context*> > flush_commit_waiters;
     ceph::condition_variable cond;
-    string osr_name_str;
+    std::string osr_name_str;
     /// hash of pointers to ghobject_t's for in-flight writes
-    unordered_multimap<uint32_t,const ghobject_t*> applying;
+    std::unordered_multimap<uint32_t,const ghobject_t*> applying;
   public:
     // for apply mutual exclusion
     ceph::mutex apply_lock =
@@ -277,13 +277,12 @@ private:
       return false;
     } /// @returns true if both queues are empty
 
-    void _wake_flush_waiters(list<Context*> *to_queue) {
+    void _wake_flush_waiters(std::list<Context*> *to_queue) {
       uint64_t seq;
       if (_get_min_uncompleted(&seq))
 	seq = -1;
 
-      for (list<pair<uint64_t, Context*> >::iterator i =
-	     flush_commit_waiters.begin();
+      for (auto i = flush_commit_waiters.begin();
 	   i != flush_commit_waiters.end() && i->first < seq;
 	   flush_commit_waiters.erase(i++)) {
 	to_queue->push_back(i->second);
@@ -295,7 +294,7 @@ private:
       jq.push_back(o->op);
       _register_apply(o);
     }
-    void dequeue_journal(list<Context*> *to_queue) {
+    void dequeue_journal(std::list<Context*> *to_queue) {
       std::lock_guard l{qlock};
       jq.pop_front();
       cond.notify_all();
@@ -316,7 +315,7 @@ private:
       return q.front();
     }
 
-    Op *dequeue(list<Context*> *to_queue) {
+    Op *dequeue(std::list<Context*> *to_queue) {
       ceph_assert(to_queue);
       ceph_assert(ceph_mutex_is_locked(apply_lock));
       std::lock_guard l{qlock};
@@ -354,7 +353,7 @@ private:
       if (_get_max_uncompleted(&seq)) {
 	return true;
       } else {
-	flush_commit_waiters.push_back(make_pair(seq, c));
+	flush_commit_waiters.push_back(std::make_pair(seq, c));
 	return false;
       }
     }
@@ -374,9 +373,9 @@ private:
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
   ceph::mutex coll_lock = ceph::make_mutex("FileStore::coll_lock");
-  map<coll_t,OpSequencerRef> coll_map;
+  std::map<coll_t,OpSequencerRef> coll_map;
 
-  friend ostream& operator<<(ostream& out, const OpSequencer& s);
+  friend std::ostream& operator<<(std::ostream& out, const OpSequencer& s);
 
   FDCache fdcache;
   WBThrottle wbthrottle;
@@ -387,14 +386,19 @@ private:
   BackoffThrottle throttle_ops, throttle_bytes;
   const int m_ondisk_finisher_num;
   const int m_apply_finisher_num;
-  vector<Finisher*> ondisk_finishers;
-  vector<Finisher*> apply_finishers;
+  std::vector<Finisher*> ondisk_finishers;
+  std::vector<Finisher*> apply_finishers;
 
   ThreadPool op_tp;
   struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
     FileStore *store;
-    OpWQ(FileStore *fs, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
-      : ThreadPool::WorkQueue<OpSequencer>("FileStore::OpWQ", timeout, suicide_timeout, tp), store(fs) {}
+    OpWQ(FileStore *fs,
+	 ceph::timespan timeout,
+	 ceph::timespan suicide_timeout,
+	 ThreadPool *tp)
+      : ThreadPool::WorkQueue<OpSequencer>("FileStore::OpWQ",
+					   timeout, suicide_timeout, tp),
+	store(fs) {}
 
     bool _enqueue(OpSequencer *osr) override {
       store->op_queue.push_back(osr);
@@ -426,7 +430,7 @@ private:
 
   void _do_op(OpSequencer *o, ThreadPool::TPHandle &handle);
   void _finish_op(OpSequencer *o);
-  Op *build_op(vector<Transaction>& tls,
+  Op *build_op(std::vector<Transaction>& tls,
 	       Context *onreadable, Context *onreadable_sync,
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
@@ -464,7 +468,7 @@ public:
     const char *internal_name = "filestore", bool update_to=false);
   ~FileStore() override;
 
-  string get_type() override {
+  std::string get_type() override {
     return "filestore";
   }
 
@@ -503,13 +507,13 @@ public:
   bool is_rotational() override;
   bool is_journal_rotational() override;
 
-  void dump_perf_counters(Formatter *f) override {
+  void dump_perf_counters(ceph::Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
     f->close_section();
   }
 
-  int flush_cache(ostream *os = NULL) override;
+  int flush_cache(std::ostream *os = NULL) override;
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
@@ -519,8 +523,8 @@ public:
     return true;    // i support legacy sort order
   }
 
-  void collect_metadata(map<string,string> *pm) override;
-  int get_devices(set<string> *ls) override;
+  void collect_metadata(std::map<std::string,std::string> *pm) override;
+  int get_devices(std::set<std::string> *ls) override;
 
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
@@ -528,10 +532,10 @@ public:
 		  bool *per_pool_omap) override;
 
   int _do_transactions(
-    vector<Transaction> &tls, uint64_t op_seq,
+    std::vector<Transaction> &tls, uint64_t op_seq,
     ThreadPool::TPHandle *handle,
     const char *osr_name);
-  int do_transactions(vector<Transaction> &tls, uint64_t op_seq) override {
+  int do_transactions(std::vector<Transaction> &tls, uint64_t op_seq) override {
     return _do_transactions(tls, op_seq, nullptr, "replay");
   }
   void _do_transaction(
@@ -544,7 +548,7 @@ public:
 				   ContextQueue *commit_queue) override {
   }
 
-  int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
+  int queue_transactions(CollectionHandle& ch, std::vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
 			 ThreadPool::TPHandle *handle = nullptr) override;
 
@@ -616,19 +620,19 @@ public:
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
+    ceph::buffer::list& bl,
     uint32_t op_flags = 0) override;
   int _do_fiemap(int fd, uint64_t offset, size_t len,
-                 map<uint64_t, uint64_t> *m);
+                 std::map<uint64_t, uint64_t> *m);
   int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
-                         map<uint64_t, uint64_t> *m);
+                         std::map<uint64_t, uint64_t> *m);
   using ObjectStore::fiemap;
-  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
-  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, ceph::buffer::list& bl) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) override;
 
   int _touch(const coll_t& cid, const ghobject_t& oid);
   int _write(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
-	      const bufferlist& bl, uint32_t fadvise_flags = 0);
+	      const ceph::buffer::list& bl, uint32_t fadvise_flags = 0);
   int _zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len);
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
@@ -641,9 +645,9 @@ public:
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff, bool skip_sloppycrc=false);
   int _remove(const coll_t& cid, const ghobject_t& oid, const SequencerPosition &spos);
 
-  int _fgetattr(int fd, const char *name, bufferptr& bp);
-  int _fgetattrs(int fd, map<string,bufferptr>& aset);
-  int _fsetattrs(int fd, map<string, bufferptr> &aset);
+  int _fgetattr(int fd, const char *name, ceph::bufferptr& bp);
+  int _fgetattrs(int fd, std::map<std::string, ceph::bufferptr>& aset);
+  int _fsetattrs(int fd, std::map<std::string, ceph::bufferptr> &aset);
 
   void do_force_sync();
   void start_sync(Context *onsafe);
@@ -653,7 +657,7 @@ public:
   void sync_and_flush();
 
   int flush_journal() override;
-  int dump_journal(ostream& out) override;
+  int dump_journal(std::ostream& out) override;
 
   void set_fsid(uuid_d u) override {
     fsid = u;
@@ -664,8 +668,8 @@ public:
 
   // DEBUG read error injection, an object is removed from both on delete()
   ceph::mutex read_error_lock = ceph::make_mutex("FileStore::read_error_lock");
-  set<ghobject_t> data_error_set; // read() will return -EIO
-  set<ghobject_t> mdata_error_set; // getattr(),stat() will return -EIO
+  std::set<ghobject_t> data_error_set; // read() will return -EIO
+  std::set<ghobject_t> mdata_error_set; // getattr(),stat() will return -EIO
   void inject_data_error(const ghobject_t &oid) override;
   void inject_mdata_error(const ghobject_t &oid) override;
 
@@ -682,15 +686,15 @@ public:
   bool debug_data_eio(const ghobject_t &oid);
   bool debug_mdata_eio(const ghobject_t &oid);
 
-  int snapshot(const string& name) override;
+  int snapshot(const std::string& name) override;
 
   // attrs
   using ObjectStore::getattr;
   using ObjectStore::getattrs;
-  int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, bufferptr &bp) override;
-  int getattrs(CollectionHandle& c, const ghobject_t& oid, map<string,bufferptr>& aset) override;
+  int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, ceph::bufferptr &bp) override;
+  int getattrs(CollectionHandle& c, const ghobject_t& oid, std::map<std::string,ceph::bufferptr>& aset) override;
 
-  int _setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset,
+  int _setattrs(const coll_t& cid, const ghobject_t& oid, std::map<std::string,ceph::bufferptr>& aset,
 		const SequencerPosition &spos);
   int _rmattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 	      const SequencerPosition &spos);
@@ -707,15 +711,15 @@ public:
   int collection_bits(CollectionHandle& c) override;
   int collection_list(CollectionHandle& c,
 		      const ghobject_t& start, const ghobject_t& end, int max,
-		      vector<ghobject_t> *ls, ghobject_t *next) override {
+		      std::vector<ghobject_t> *ls, ghobject_t *next) override {
     c->flush();
     return collection_list(c->cid, start, end, max, ls, next);
   }
   int collection_list(const coll_t& cid,
 		      const ghobject_t& start, const ghobject_t& end, int max,
-		      vector<ghobject_t> *ls, ghobject_t *next);
-  int list_collections(vector<coll_t>& ls) override;
-  int list_collections(vector<coll_t>& ls, bool include_temp);
+		      std::vector<ghobject_t> *ls, ghobject_t *next);
+  int list_collections(std::vector<coll_t>& ls) override;
+  int list_collections(std::vector<coll_t>& ls, bool include_temp);
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c) override;
   int collection_empty(CollectionHandle& c, bool *empty) override {
@@ -726,22 +730,22 @@ public:
 
   // omap (see ObjectStore.h for documentation)
   using ObjectStore::omap_get;
-  int omap_get(CollectionHandle& c, const ghobject_t &oid, bufferlist *header,
-	       map<string, bufferlist> *out) override;
+  int omap_get(CollectionHandle& c, const ghobject_t &oid, ceph::buffer::list *header,
+	       std::map<std::string, ceph::buffer::list> *out) override;
   using ObjectStore::omap_get_header;
   int omap_get_header(
     CollectionHandle& c,
     const ghobject_t &oid,
-    bufferlist *out,
+    ceph::buffer::list *out,
     bool allow_eio = false) override;
   using ObjectStore::omap_get_keys;
-  int omap_get_keys(CollectionHandle& c, const ghobject_t &oid, set<string> *keys) override;
+  int omap_get_keys(CollectionHandle& c, const ghobject_t &oid, std::set<std::string> *keys) override;
   using ObjectStore::omap_get_values;
-  int omap_get_values(CollectionHandle& c, const ghobject_t &oid, const set<string> &keys,
-		      map<string, bufferlist> *out) override;
+  int omap_get_values(CollectionHandle& c, const ghobject_t &oid, const std::set<std::string> &keys,
+		      std::map<std::string, ceph::buffer::list> *out) override;
   using ObjectStore::omap_check_keys;
-  int omap_check_keys(CollectionHandle& c, const ghobject_t &oid, const set<string> &keys,
-		      set<string> *out) override;
+  int omap_check_keys(CollectionHandle& c, const ghobject_t &oid, const std::set<std::string> &keys,
+		      std::set<std::string> *out) override;
   using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(CollectionHandle& c, const ghobject_t &oid) override;
   ObjectMap::ObjectMapIterator get_omap_iterator(const coll_t& cid, const ghobject_t &oid);
@@ -775,11 +779,11 @@ public:
 
   void dump_start(const std::string& file);
   void dump_stop();
-  void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
+  void dump_transactions(std::vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
 
   virtual int apply_layout_settings(const coll_t &cid, int target_level);
 
-  void get_db_statistics(Formatter* f) override;
+  void get_db_statistics(ceph::Formatter* f) override;
 
 private:
   void _inject_failure();
@@ -788,14 +792,14 @@ private:
   int _omap_clear(const coll_t& cid, const ghobject_t &oid,
 		  const SequencerPosition &spos);
   int _omap_setkeys(const coll_t& cid, const ghobject_t &oid,
-		    const map<string, bufferlist> &aset,
+		    const std::map<std::string, ceph::buffer::list> &aset,
 		    const SequencerPosition &spos);
-  int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, const set<string> &keys,
+  int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, const std::set<std::string> &keys,
 		   const SequencerPosition &spos);
   int _omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
-		       const string& first, const string& last,
+		       const std::string& first, const std::string& last,
 		       const SequencerPosition &spos);
-  int _omap_setheader(const coll_t& cid, const ghobject_t &oid, const bufferlist &bl,
+  int _omap_setheader(const coll_t& cid, const ghobject_t &oid, const ceph::buffer::list &bl,
 		      const SequencerPosition &spos);
   int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest,
                         const SequencerPosition &spos);
@@ -821,7 +825,7 @@ private:
   bool m_osd_use_stale_snap;
   bool m_filestore_do_dump;
   std::ofstream m_filestore_dump;
-  JSONFormatter m_filestore_dump_fmt;
+  ceph::JSONFormatter m_filestore_dump_fmt;
   std::atomic<int64_t> m_filestore_kill_at = { 0 };
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
@@ -858,7 +862,7 @@ private:
   friend class TestFileStore;
 };
 
-ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);
+std::ostream& operator<<(std::ostream& out, const FileStore::OpSequencer& s);
 
 struct fiemap;
 
@@ -878,13 +882,13 @@ protected:
   size_t get_blksize() {
     return filestore->blk_size;
   }
-  const string& get_basedir_path() {
+  const std::string& get_basedir_path() {
     return filestore->basedir;
   }
-  const string& get_journal_path() {
+  const std::string& get_journal_path() {
     return filestore->journalpath;
   }
-  const string& get_current_path() {
+  const std::string& get_current_path() {
     return filestore->current_fn;
   }
   int _copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
@@ -912,11 +916,11 @@ public:
   virtual int detect_features() = 0;
   virtual int create_current() = 0;
   virtual bool can_checkpoint() = 0;
-  virtual int list_checkpoints(list<string>& ls) = 0;
-  virtual int create_checkpoint(const string& name, uint64_t *cid) = 0;
+  virtual int list_checkpoints(std::list<std::string>& ls) = 0;
+  virtual int create_checkpoint(const std::string& name, uint64_t *cid) = 0;
   virtual int sync_checkpoint(uint64_t id) = 0;
-  virtual int rollback_to(const string& name) = 0;
-  virtual int destroy_checkpoint(const string& name) = 0;
+  virtual int rollback_to(const std::string& name) = 0;
+  virtual int destroy_checkpoint(const std::string& name) = 0;
   virtual int syncfs() = 0;
   virtual bool has_fiemap() = 0;
   virtual bool has_seek_data_hole() = 0;
@@ -928,13 +932,13 @@ public:
   virtual bool has_splice() const = 0;
 
   // hooks for (sloppy) crc tracking
-  virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl) = 0;
+  virtual int _crc_update_write(int fd, loff_t off, size_t len, const ceph::buffer::list& bl) = 0;
   virtual int _crc_update_truncate(int fd, loff_t off) = 0;
   virtual int _crc_update_zero(int fd, loff_t off, size_t len) = 0;
   virtual int _crc_update_clone_range(int srcfd, int destfd,
 				      loff_t srcoff, size_t len, loff_t dstoff) = 0;
-  virtual int _crc_verify_read(int fd, loff_t off, size_t len, const bufferlist& bl,
-			       ostream *out) = 0;
+  virtual int _crc_verify_read(int fd, loff_t off, size_t len, const ceph::buffer::list& bl,
+			       std::ostream *out) = 0;
 };
 
 #endif

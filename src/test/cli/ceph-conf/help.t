@@ -28,6 +28,7 @@
     [--format plain|json|json-pretty]
                                     dump variables in plain text, json or pretty
                                     json
+    [--pid <pid>]                   Override the $pid when expanding options
   
   If there is no action given, the action will default to --lookup.
   

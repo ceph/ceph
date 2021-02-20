@@ -26,9 +26,18 @@
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << " RecoveryQueue::" << __func__ << " "
 
 class C_MDC_Recover : public MDSIOContextBase {
+public:
+  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) :
+    MDSIOContextBase(false), rq(rq_), in(i) {
+    ceph_assert(rq != NULL);
+  }
+  void print(ostream& out) const override {
+    out << "file_recover(" << in->ino() << ")";
+  }
+
+  uint64_t size = 0;
+  utime_t mtime;
 protected:
-  RecoveryQueue *rq;
-  CInode *in;
   void finish(int r) override {
     rq->_recovered(in, r, size, mtime);
   }
@@ -37,26 +46,15 @@ protected:
     return rq->mds;
   }
 
-public:
-  uint64_t size;
-  utime_t mtime;
-
-  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) :
-    MDSIOContextBase(false), rq(rq_), in(i), size(0) {
-    ceph_assert(rq != NULL);
-  }
-  void print(ostream& out) const override {
-    out << "file_recover(" << in->ino() << ")";
-  }
+  RecoveryQueue *rq;
+  CInode *in;
 };
-
 
 RecoveryQueue::RecoveryQueue(MDSRank *mds_) :
   file_recover_queue(member_offset(CInode, item_dirty_dirfrag_dir)),
   file_recover_queue_front(member_offset(CInode, item_dirty_dirfrag_nest)),
-  mds(mds_), logger(NULL), filer(mds_->objecter, mds_->finisher)
+  mds(mds_), filer(mds_->objecter, mds_->finisher)
 { }
-
 
 /**
  * Progress the queue.  Call this after enqueuing something or on
@@ -91,7 +89,7 @@ void RecoveryQueue::advance()
 
 void RecoveryQueue::_start(CInode *in)
 {
-  auto pi = in->get_projected_inode();
+  const auto& pi = in->get_projected_inode();
 
   // blech
   if (pi->client_ranges.size() && !pi->get_max_size()) {
@@ -101,13 +99,14 @@ void RecoveryQueue::_start(CInode *in)
 
   auto p = file_recovering.find(in);
   if (pi->client_ranges.size() && pi->get_max_size()) {
-    dout(10) << "starting " << in->inode.size << " " << pi->client_ranges
+    dout(10) << "starting " << pi->size << " " << pi->client_ranges
 	     << " " << *in << dendl;
     if (p == file_recovering.end()) {
       file_recovering.insert(make_pair(in, false));
 
       C_MDC_Recover *fin = new C_MDC_Recover(this, in);
-      filer.probe(in->inode.ino, &in->inode.layout, in->last,
+      auto layout = pi->layout;
+      filer.probe(in->ino(), &layout, in->last,
 		  pi->get_max_size(), &fin->size, &fin->mtime, false,
 		  0, fin);
     } else {
@@ -115,7 +114,7 @@ void RecoveryQueue::_start(CInode *in)
       dout(10) << "already working on " << *in << ", set need_restart flag" << dendl;
     }
   } else {
-    dout(10) << "skipping " << in->inode.size << " " << *in << dendl;
+    dout(10) << "skipping " << pi->size << " " << *in << dendl;
     if (p == file_recovering.end()) {
       in->state_clear(CInode::STATE_RECOVERING);
       mds->locker->eval(in, CEPH_LOCK_IFILE);
@@ -189,7 +188,7 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 
   if (r != 0) {
     dout(0) << "recovery error! " << r << dendl;
-    if (r == -EBLACKLISTED) {
+    if (r == -EBLOCKLISTED) {
       mds->respawn();
       return;
     } else {

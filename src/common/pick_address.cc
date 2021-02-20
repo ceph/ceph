@@ -13,6 +13,14 @@
  */
 
 #include "common/pick_address.h"
+
+#include <netdb.h>
+#include <string>
+#include <string.h>
+#include <vector>
+
+#include <fmt/format.h>
+
 #include "include/ipaddr.h"
 #include "include/str_list.h"
 #include "common/ceph_context.h"
@@ -24,9 +32,10 @@
 #include "common/errno.h"
 #include "common/numa.h"
 
-#include <netdb.h>
-
 #define dout_subsys ceph_subsys_
+
+using std::string;
+using std::vector;
 
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,
@@ -459,7 +468,7 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
     return {};
   }
 
-  const unsigned int prefix_len = max(sizeof(in_addr::s_addr), sizeof(in6_addr::s6_addr)) * CHAR_BIT;
+  const unsigned int prefix_len = std::max(sizeof(in_addr::s_addr), sizeof(in6_addr::s6_addr)) * CHAR_BIT;
   const struct ifaddrs *found = find_ip_in_subnet(
     ifa,
     (const struct sockaddr *) &network, prefix_len);
@@ -475,7 +484,7 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
 }
 
 
-bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_addr_t *match)
+bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entity_addr_t *match)
 {
   struct ifaddrs *ifa;
   int r = getifaddrs(&ifa);
@@ -508,15 +517,28 @@ int get_iface_numa_node(
   const std::string& iface,
   int *node)
 {
-  string fn = std::string("/sys/class/net/") + iface + "/device/numa_node";
+  enum class iface_t {
+    PHY_PORT,
+    BOND_PORT
+  } ifatype = iface_t::PHY_PORT;
+  std::string_view ifa{iface};
+  if (auto pos = ifa.find(":"); pos != ifa.npos) {
+    ifa.remove_suffix(ifa.size() - pos);
+  }
+  string fn = fmt::format("/sys/class/net/{}/device/numa_node", ifa);
+  int fd = ::open(fn.c_str(), O_RDONLY);
+  if (fd < 0) {
+    fn = fmt::format("/sys/class/net/{}/bonding/slaves", ifa);
+    fd = ::open(fn.c_str(), O_RDONLY);
+    if (fd < 0) {
+      return -errno;
+    }
+    ifatype = iface_t::BOND_PORT;
+  }
 
   int r = 0;
   char buf[1024];
   char *endptr = 0;
-  int fd = ::open(fn.c_str(), O_RDONLY);
-  if (fd < 0) {
-    return -errno;
-  }
   r = safe_read(fd, &buf, sizeof(buf));
   if (r < 0) {
     goto out;
@@ -525,13 +547,41 @@ int get_iface_numa_node(
   while (r > 0 && ::isspace(buf[--r])) {
     buf[r] = 0;
   }
-  *node = strtoll(buf, &endptr, 10);
-  if (endptr != buf + strlen(buf)) {
-    r = -EINVAL;
-    goto out;
+
+  switch (ifatype) {
+  case iface_t::PHY_PORT:
+    *node = strtoll(buf, &endptr, 10);
+    if (endptr != buf + strlen(buf)) {
+      r = -EINVAL;
+      goto out;
+    }
+    r = 0;
+    break;
+  case iface_t::BOND_PORT:
+    int bond_node = -1;
+    std::vector<std::string> sv;
+    std::string ifacestr = buf;
+    get_str_vec(ifacestr, " ", sv);
+    for (auto& iter : sv) {
+      int bn = -1;
+      r = get_iface_numa_node(iter, &bn);
+      if (r >= 0) {
+        if (bond_node == -1 || bn == bond_node) {
+          bond_node = bn;
+        } else {
+          *node = -2;
+          goto out;
+        }
+      } else {
+        goto out;
+      }
+    }
+    *node = bond_node;
+    break;
   }
-  r = 0;
- out:
+
+  out:
   ::close(fd);
   return r;
 }
+

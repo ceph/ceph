@@ -3,7 +3,7 @@
 
 namespace ceph {
   namespace buffer {
-    inline namespace v14_2_0 {
+    inline namespace v15_2_0 {
       class ptr;
       class list;
     }

@@ -30,8 +30,19 @@ struct T : public Thread {
   }
 };
 
+void usage(const char *name) {
+  cout << name << " <threads> <lines>\n"
+       << "\t threads: the number of threads for this test.\n"
+       << "\t lines: the number of log entries per thread.\n";
+}
+
 int main(int argc, const char **argv)
 {
+  if (argc < 3) {
+    usage(argv[0]);
+    return EXIT_FAILURE;
+  }
+
   int threads = atoi(argv[1]);
   int num = atoi(argv[2]);
 

@@ -12,8 +12,6 @@ You can start a development mode Ceph cluster, after compiling the source, with:
 	# check that it's there
 	bin/ceph health
 
-.. _mailing-list:
-
 .. rubric:: Mailing list
 
 The ``dev@ceph.io`` list is for discussion about the development of Ceph,
@@ -33,6 +31,10 @@ Subscribe by sending a message to ``majordomo@vger.kernel.org`` with the line::
 
 in the body of the message.
 
+.. raw:: html
+
+   <!---
+
 .. rubric:: Contents
 
 .. toctree::
@@ -43,3 +45,8 @@ in the body of the message.
    mds_internals/index*
    radosgw/index*
    ceph-volume/index*
+   crimson/index*
+
+.. raw:: html
+
+   --->

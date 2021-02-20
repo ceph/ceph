@@ -82,28 +82,23 @@ void VarLenGenerator::get_ranges_map(
 }
 
 void ObjectDesc::iterator::adjust_stack() {
-  while (!stack.empty() && pos >= stack.front().second.next) {
-    ceph_assert(pos == stack.front().second.next);
-    size = stack.front().second.size;
-    current = stack.front().first;
-    stack.pop_front();
+  while (!stack.empty() && pos >= stack.top().second.next) {
+    ceph_assert(pos == stack.top().second.next);
+    size = stack.top().second.size;
+    current = stack.top().first;
+    stack.pop();
   }
 
   if (stack.empty()) {
     cur_valid_till = std::numeric_limits<uint64_t>::max();
   } else {
-    cur_valid_till = stack.front().second.next;
+    cur_valid_till = stack.top().second.next;
   }
 
   while (current != layers.end() && !current->covers(pos)) {
     uint64_t next = current->next(pos);
     if (next < cur_valid_till) {
-      stack.push_front(
-	make_pair(
-	  current,
-	  StackState{next, size}
-	  )
-	);
+      stack.emplace(current, StackState{next, size});
       cur_valid_till = next;
     }
 

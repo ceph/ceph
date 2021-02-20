@@ -6,13 +6,14 @@ roles:
 - [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - \(OSD_DOWN\)
       - \(POOL_APP_NOT_ENABLED\)
       - \(SLOW_OPS\)
       - \(PG_AVAILABILITY\)
       - \(PG_DEGRADED\)
       - application not enabled
+      - slow request
     conf:
       osd:
         osd scrub backoff ratio: 0
@@ -21,6 +22,8 @@ overrides:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
 - exec:
     client.0:
       - ceph_test_osd_stale_read

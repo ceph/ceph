@@ -59,8 +59,8 @@ public:
     DEFAULT_CHOOSE_ARGS = -1
   };
 
-  std::map<int32_t, std::string> type_map; /* bucket/device type names */
-  std::map<int32_t, std::string> name_map; /* bucket/device names */
+  std::map<int32_t, std::string> type_map; // item(bucket/device) type id ==> item type name
+  std::map<int32_t, std::string> name_map; // item id ==> item name
   std::map<int32_t, std::string> rule_name_map;
 
   std::map<int32_t, int32_t> class_map; /* item id -> class id */
@@ -401,6 +401,14 @@ public:
     if (type_rmap.count(name))
       return type_rmap[name];
     return -1;
+  }
+  int get_validated_type_id(const std::string& name, int *id) const {
+    int retval = get_type_id(name);
+    if (retval == -1 && !type_rmap.count(name)) {
+      return -1;
+    }
+    *id = retval;
+    return 0;
   }
   const char *get_type_name(int t) const {
     auto p = type_map.find(t);
@@ -787,7 +795,7 @@ public:
   /**
    * insert an item into the map at a specific position
    *
-   * Add an item as a specific location of the hierarchy.
+   * Add an item at a specific location of the hierarchy.
    * Specifically, we look for the most specific location constraint
    * for which a bucket already exists, and then create intervening
    * buckets beneath that in order to place the item.
@@ -1331,6 +1339,7 @@ public:
       crush->max_devices = name_map.rbegin()->first + 1;
     }
     have_uniform_rules = !has_legacy_rule_ids();
+    build_rmaps();
   }
   int bucket_set_alg(int id, int alg);
 
@@ -1577,8 +1586,9 @@ public:
     crush_init_workspace(crush, work);
     crush_choose_arg_map arg_map = choose_args_get_with_fallback(
       choose_args_index);
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
-			       weight.size(), work, arg_map.args);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
+			       std::data(weight), std::size(weight),
+			       work, arg_map.args);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
@@ -1591,11 +1601,13 @@ public:
     const std::vector<std::pair<int,int>>& stack,
     const std::set<int>& overfull,
     const std::vector<int>& underfull,
+    const std::vector<int>& more_underfull,
     const std::vector<int>& orig,
     std::vector<int>::const_iterator& i,
     std::set<int>& used,
     std::vector<int> *pw,
-    int root_bucket) const;
+    int root_bucket,
+    int rule) const;
 
   int try_remap_rule(
     CephContext *cct,
@@ -1603,6 +1615,7 @@ public:
     int maxout,
     const std::set<int>& overfull,
     const std::vector<int>& underfull,
+    const std::vector<int>& more_underfull,
     const std::vector<int>& orig,
     std::vector<int> *out) const;
 

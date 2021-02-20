@@ -16,27 +16,26 @@
 #ifndef CEPH_MEXPORTDIR_H
 #define CEPH_MEXPORTDIR_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-
-class MExportDir : public Message {
+class MExportDir final : public MMDSOp {
 public:
   dirfrag_t dirfrag;
-  bufferlist export_data;
-  vector<dirfrag_t> bounds;
-  bufferlist client_map;
+  ceph::buffer::list export_data;
+  std::vector<dirfrag_t> bounds;
+  ceph::buffer::list client_map;
 
 protected:
-  MExportDir() : Message{MSG_MDS_EXPORTDIR} {}
+  MExportDir() : MMDSOp{MSG_MDS_EXPORTDIR} {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    Message{MSG_MDS_EXPORTDIR}, dirfrag(df) {
+    MMDSOp{MSG_MDS_EXPORTDIR}, dirfrag(df) {
     set_tid(tid);
   }
-  ~MExportDir() override {}
+  ~MExportDir() final {}
 
 public:
   std::string_view get_type_name() const override { return "Ex"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export(" << dirfrag << ")";
   }
 
@@ -52,6 +51,7 @@ public:
     encode(client_map, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(bounds, p);

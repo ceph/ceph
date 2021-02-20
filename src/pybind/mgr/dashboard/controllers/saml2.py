@@ -16,7 +16,7 @@ from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
 from ..tools import prepare_url_prefix
-from . import Controller, Endpoint, BaseController
+from . import BaseController, Controller, Endpoint, allow_empty_body, set_cookies
 
 
 @Controller('/auth/saml2', secure=False)
@@ -42,7 +42,8 @@ class Saml2(BaseController):
         except OneLogin_Saml2_Error:
             raise cherrypy.HTTPError(400, 'Single Sign-On is not configured.')
 
-    @Endpoint('POST', path="")
+    @Endpoint('POST', path="", version=None)
+    @allow_empty_body
     def auth_response(self, **kwargs):
         Saml2._check_python_saml()
         req = Saml2._build_req(self._request, kwargs)
@@ -70,6 +71,7 @@ class Saml2(BaseController):
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
             token = token.decode('utf-8')
+            set_cookies(url_prefix, token)
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
 
         return {
@@ -78,30 +80,31 @@ class Saml2(BaseController):
             'reason': auth.get_last_error_reason()
         }
 
-    @Endpoint(xml=True)
+    @Endpoint(xml=True, version=None)
     def metadata(self):
         Saml2._check_python_saml()
         saml_settings = OneLogin_Saml2_Settings(mgr.SSO_DB.saml2.onelogin_settings)
         return saml_settings.get_sp_metadata()
 
-    @Endpoint(json_response=False)
+    @Endpoint(json_response=False, version=None)
     def login(self):
         Saml2._check_python_saml()
         req = Saml2._build_req(self._request, {})
         auth = OneLogin_Saml2_Auth(req, mgr.SSO_DB.saml2.onelogin_settings)
         raise cherrypy.HTTPRedirect(auth.login())
 
-    @Endpoint(json_response=False)
+    @Endpoint(json_response=False, version=None)
     def slo(self):
         Saml2._check_python_saml()
         req = Saml2._build_req(self._request, {})
         auth = OneLogin_Saml2_Auth(req, mgr.SSO_DB.saml2.onelogin_settings)
         raise cherrypy.HTTPRedirect(auth.logout())
 
-    @Endpoint(json_response=False)
+    @Endpoint(json_response=False, version=None)
     def logout(self, **kwargs):
         # pylint: disable=unused-argument
         Saml2._check_python_saml()
         JwtManager.reset_user()
+        cherrypy.response.cookie['token'] = {'expires': 0, 'max-age': 0}
         url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         raise cherrypy.HTTPRedirect("{}/#/login".format(url_prefix))

@@ -15,9 +15,9 @@
 #ifndef CEPH_MMDSFRAGMENTNOTIFY_H
 #define CEPH_MMDSFRAGMENTNOTIFY_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MMDSFragmentNotify : public Message {
+class MMDSFragmentNotify final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -34,21 +34,21 @@ private:
   bool is_ack_wanted() const { return ack_wanted; }
   void mark_ack_wanted() { ack_wanted = true; }
 
-  bufferlist basebl;
+  ceph::buffer::list basebl;
 
 protected:
   MMDSFragmentNotify() :
-    Message{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
+    MMDSOp{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
-    Message{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }
-  ~MMDSFragmentNotify() override {}
+  ~MMDSFragmentNotify() final {}
 
-public:  
+public: 
   std::string_view get_type_name() const override { return "fragment_notify"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "fragment_notify(" << base_dirfrag << " " << (int)bits << ")";
   }
 
@@ -60,6 +60,7 @@ public:
     encode(ack_wanted, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(base_dirfrag, p);
     decode(bits, p);

@@ -1,12 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
 #pragma once
+#include "include/common_fwd.h"
 
-#ifdef WITH_SEASTAR
-namespace ceph::common {
+namespace TOPNSPC::common {
   class ConfigProxy;
 }
-using ConfigProxy = ceph::common::ConfigProxy;
-#else
-class ConfigProxy;
-#endif
+using TOPNSPC::common::ConfigProxy;

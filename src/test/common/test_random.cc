@@ -152,12 +152,6 @@ TEST(util, test_random)
     type_check_ok(min, max);
   }
  
-  // min > max should not explode:
-  {
-    float min = 1.0, max = 0.0;
-    type_check_ok(min, max);
-  }
-
   // When combining types, everything should convert to the largest type:
   {
     // Check with integral types:
@@ -200,6 +194,23 @@ TEST(util, test_random_class_interface)
     ceph::util::random_number_generator<int> rng(1234);   // seed
   }
  
+  // Test deduction guides:
+  {
+    { ceph::util::random_number_generator rng(1234); }
+#pragma clang diagnostic push
+    // Turn this warning off, since we're checking that the deduction
+    // guide works. (And we don't know what the seed type will
+    // actually be.)
+#pragma clang diagnostic ignored "-Wliteral-conversion"
+    { ceph::util::random_number_generator rng(1234.1234); }
+#pragma clang diagnostic pop
+
+    {
+    int x = 1234;
+    ceph::util::random_number_generator rng(x);
+    }
+  }
+
   {
     int a = rng_i();
     int b = rng_i();

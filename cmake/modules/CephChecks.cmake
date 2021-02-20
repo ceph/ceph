@@ -24,6 +24,7 @@ check_function_exists(strerror_r HAVE_Strerror_R)
 check_function_exists(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 check_function_exists(pipe2 HAVE_PIPE2)
 check_function_exists(accept4 HAVE_ACCEPT4)
+check_function_exists(sigdescr_np HAVE_SIGDESCR_NP)
 
 include(CMakePushCheckState)
 cmake_push_check_state(RESET)
@@ -38,6 +39,7 @@ cmake_pop_check_state()
 
 check_function_exists(eventfd HAVE_EVENTFD)
 check_function_exists(getprogname HAVE_GETPROGNAME)
+check_function_exists(gettid HAVE_GETTID)
 
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
 CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
@@ -66,6 +68,13 @@ CHECK_TYPE_SIZE(__s64 __S64)
 unset(CMAKE_EXTRA_INCLUDE_FILES)
 
 include(CheckSymbolExists)
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_LIBRARIES rt)
+check_symbol_exists(_POSIX_TIMERS "unistd.h;time.h" HAVE_POSIX_TIMERS)
+cmake_pop_check_state()
+if(HAVE_POSIX_TIMERS)
+  find_library(RT_LIBRARY NAMES rt)
+endif()
 check_symbol_exists(res_nquery "resolv.h" HAVE_RES_NQUERY)
 check_symbol_exists(F_SETPIPE_SZ "linux/fcntl.h" CEPH_HAVE_SETPIPE_SZ)
 check_symbol_exists(__func__ "" HAVE_FUNC)
@@ -84,14 +93,23 @@ CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
 CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
 
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+if(NOT CMAKE_CROSSCOMPILING)
   include(CheckCXXSourceRuns)
   cmake_push_check_state()
   set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
+  if(WIN32)
+    set(CMAKE_REQUIRED_LIBRARIES ws2_32)
+  endif()
+
   check_cxx_source_runs("
 #include <cstdint>
 #include <iterator>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 
 uint32_t load(char* p, size_t offset)
 {
@@ -121,9 +139,9 @@ int main(int argc, char **argv)
   if(NOT HAVE_UNALIGNED_ACCESS)
     message(FATAL_ERROR "Unaligned access is required")
   endif()
-else(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+else(NOT CMAKE_CROSSCOMPILING)
   message(STATUS "Assuming unaligned access is supported")
-endif(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+endif(NOT CMAKE_CROSSCOMPILING)
 
 # should use LINK_OPTIONS instead of LINK_LIBRARIES, if we can use cmake v3.14+
 try_compile(HAVE_LINK_VERSION_SCRIPT

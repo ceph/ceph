@@ -20,6 +20,8 @@
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
 
+using ceph::cref_t;
+using ceph::ref_t;
 
 /*******************
  * DispatchQueue
@@ -96,7 +98,10 @@ void DispatchQueue::enqueue(const ref_t<Message>& m, int priority, uint64_t id)
 
 void DispatchQueue::local_delivery(const ref_t<Message>& m, int priority)
 {
-  m->set_recv_stamp(ceph_clock_now());
+  auto local_delivery_stamp = ceph_clock_now();
+  m->set_recv_stamp(local_delivery_stamp);
+  m->set_throttle_stamp(local_delivery_stamp);
+  m->set_recv_complete_stamp(local_delivery_stamp);
   std::lock_guard l{local_delivery_lock};
   if (local_messages.empty())
     local_delivery_cond.notify_all();
@@ -210,11 +215,9 @@ void DispatchQueue::entry()
 
 void DispatchQueue::discard_queue(uint64_t id) {
   std::lock_guard l{lock};
-  list<QueueItem> removed;
+  std::list<QueueItem> removed;
   mqueue.remove_by_class(id, &removed);
-  for (list<QueueItem>::iterator i = removed.begin();
-       i != removed.end();
-       ++i) {
+  for (auto i = removed.begin(); i != removed.end(); ++i) {
     ceph_assert(!(i->is_code())); // We don't discard id 0, ever!
     const ref_t<Message>& m = i->get_message();
     remove_arrival(m);

@@ -25,7 +25,7 @@ using librbd::util::create_rados_callback;
 template <typename I>
 void GetStatusRequest<I>::send() {
   *m_mirror_image_status = cls::rbd::MirrorImageStatus(
-    {{cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
+    {{cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID,
       cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found"}});
 
   get_info();
@@ -39,7 +39,8 @@ void GetStatusRequest<I>::get_info() {
   auto ctx = create_context_callback<
     GetStatusRequest<I>, &GetStatusRequest<I>::handle_get_info>(this);
   auto req = GetInfoRequest<I>::create(m_image_ctx, m_mirror_image,
-                                       m_promotion_state, ctx);
+                                       m_promotion_state,
+                                       &m_primary_mirror_uuid, ctx);
   req->send();
 }
 
@@ -49,8 +50,10 @@ void GetStatusRequest<I>::handle_get_info(int r) {
   ldout(cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
-               << dendl;
+    if (r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+                 << dendl;
+    }
     finish(r);
     return;
   } else if (m_mirror_image->state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {

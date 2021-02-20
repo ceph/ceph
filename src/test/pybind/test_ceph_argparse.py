@@ -1,4 +1,4 @@
-#!/usr/bin/env nosetests 
+#!/usr/bin/env python3
 # -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
@@ -17,11 +17,16 @@
 
 from nose.tools import eq_ as eq
 from nose.tools import *
+from unittest import TestCase
 
-from ceph_argparse import validate_command, parse_json_funcsigs
+from ceph_argparse import validate_command, parse_json_funcsigs, validate, \
+    parse_funcsig, ArgumentError, ArgumentTooFew, ArgumentMissing, \
+    ArgumentNumber, ArgumentValid
 
 import os
+import random
 import re
+import string
 import sys
 import json
 try:
@@ -314,44 +319,6 @@ class TestMonitor(TestArgparse):
     def test_quorum_status(self):
         self.assert_valid_command(['quorum_status'])
 
-    def test_mon_status(self):
-        self.assert_valid_command(['mon_status'])
-
-    def test_sync_force(self):
-        self.assert_valid_command(['sync',
-                                   'force',
-                                   '--yes-i-really-mean-it',
-                                   '--i-know-what-i-am-doing'])
-        self.assert_valid_command(['sync',
-                                   'force',
-                                   '--yes-i-really-mean-it'])
-        self.assert_valid_command(['sync',
-                                   'force'])
-        assert_equal({}, validate_command(sigdict, ['sync']))
-        assert_equal({}, validate_command(sigdict, ['sync',
-                                                    'force',
-                                                    '--yes-i-really-mean-it',
-                                                    '--i-know-what-i-am-doing',
-                                                    'toomany']))
-
-    def test_heap(self):
-        assert_equal({}, validate_command(sigdict, ['heap']))
-        assert_equal({}, validate_command(sigdict, ['heap', 'invalid']))
-        self.assert_valid_command(['heap', 'dump'])
-        self.assert_valid_command(['heap', 'start_profiler'])
-        self.assert_valid_command(['heap', 'stop_profiler'])
-        self.assert_valid_command(['heap', 'release'])
-        self.assert_valid_command(['heap', 'stats'])
-
-    def test_quorum(self):
-        assert_equal({}, validate_command(sigdict, ['quorum']))
-        assert_equal({}, validate_command(sigdict, ['quorum', 'invalid']))
-        self.assert_valid_command(['quorum', 'enter'])
-        self.assert_valid_command(['quorum', 'exit'])
-        assert_equal({}, validate_command(sigdict, ['quorum',
-                                                    'enter',
-                                                    'toomany']))
-
     def test_tell(self):
         assert_equal({}, validate_command(sigdict, ['tell']))
         assert_equal({}, validate_command(sigdict, ['tell', 'invalid']))
@@ -501,9 +468,6 @@ class TestMon(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mon', 'add',
                                                     'name',
                                                     '400.500.600.700']))
-        assert_equal({}, validate_command(sigdict, ['mon', 'add', 'name',
-                                                    '1.2.3.4:1234',
-                                                    'toomany']))
 
     def test_remove(self):
         self.assert_valid_command(['mon', 'remove', 'name'])
@@ -567,10 +531,10 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'lspools',
                                                     'toomany']))
 
-    def test_blacklist_ls(self):
-        self.assert_valid_command(['osd', 'blacklist', 'ls'])
-        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+    def test_blocklist_ls(self):
+        self.assert_valid_command(['osd', 'blocklist', 'ls'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'blocklist']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                     'ls', 'toomany']))
 
     def test_crush_rule(self):
@@ -911,25 +875,25 @@ class TestOSD(TestArgparse):
                                                     uuid,
                                                     'toomany']))
 
-    def test_blacklist(self):
+    def test_blocklist(self):
         for action in ('add', 'rm'):
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4/567'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4/567', '600.40'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4', '600.40'])
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         'invalid',
                                                         '600.40']))
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         '1.2.3.4/567',
                                                         '-1.0']))
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         '1.2.3.4/567',
                                                         '600.40',
@@ -1267,6 +1231,74 @@ class TestConfigKey(TestArgparse):
 
     def test_list(self):
         self.check_no_arg('config-key', 'list')
+
+
+class TestValidate(TestCase):
+
+    ARGS = 0
+    KWARGS = 1
+    KWARGS_EQ = 2
+    MIXED = 3
+
+    def setUp(self):
+        self.prefix = ['some', 'random', 'cmd']
+        self.args_dict = [
+            {'name': 'variable_one', 'type': 'CephString'},
+            {'name': 'variable_two', 'type': 'CephString'},
+            {'name': 'variable_three', 'type': 'CephString'},
+            {'name': 'variable_four', 'type': 'CephInt'},
+            {'name': 'variable_five', 'type': 'CephString'}]
+        self.args = []
+        for d in self.args_dict:
+            if d['type'] == 'CephInt':
+                val = "{}".format(random.randint(0, 100))
+            elif d['type'] == 'CephString':
+                letters = string.ascii_letters
+                str_len = random.randint(5, 10)
+                val = ''.join(random.choice(letters) for _ in range(str_len))
+            else:
+                self.skipTest()
+
+            self.args.append((d['name'], val))
+
+        self.sig = parse_funcsig(self.prefix + self.args_dict)
+
+    def arg_kwarg_test(self, prefix, args, sig, arg_type=0):
+        """
+        Runs validate in different arg/kargs ways.
+
+        :param prefix: List of prefix commands (that can't be kwarged)
+        :param args: a list of kwarg, arg pairs: [(k1, v1), (k2, v2), ...]
+        :param sig: The sig to match
+        :param arg_type: how to build the args to send. As positional args (ARGS),
+                     as long kwargs (KWARGS [--k v]), other style long kwargs
+                     (KWARGS_EQ (--k=v]), and mixed (MIXED) where there will be
+                     a random mix of the above.
+        :return: None, the method will assert.
+        """
+        final_args = list(prefix)
+        for k, v in args:
+            a_type = arg_type
+            if a_type == self.MIXED:
+                a_type = random.choice((self.ARGS,
+                                          self.KWARGS,
+                                          self.KWARGS_EQ))
+            if a_type == self.ARGS:
+                final_args.append(v)
+            elif a_type == self.KWARGS:
+                final_args.extend(["--{}".format(k), v])
+            else:
+                final_args.append("--{}={}".format(k, v))
+
+        try:
+            validate(final_args, sig)
+        except (ArgumentError, ArgumentMissing,
+                ArgumentNumber, ArgumentTooFew, ArgumentValid) as ex:
+            self.fail("Validation failed: {}".format(str(ex)))
+
+    def test_args_and_kwargs_validate(self):
+        for arg_type in (self.ARGS, self.KWARGS, self.KWARGS_EQ, self.MIXED):
+            self.arg_kwarg_test(self.prefix, self.args, self.sig, arg_type)
 
 # Local Variables:
 # compile-command: "cd ../../..; cmake --build build --target get_command_descriptions -j4 &&

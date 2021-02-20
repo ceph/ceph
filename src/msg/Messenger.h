@@ -59,6 +59,27 @@ struct Interceptor {
     STOP
   };
 
+  enum STEP {
+    START_CLIENT_BANNER_EXCHANGE = 1,
+    START_SERVER_BANNER_EXCHANGE,
+    BANNER_EXCHANGE_BANNER_CONNECTING,
+    BANNER_EXCHANGE,
+    HANDLE_PEER_BANNER_BANNER_CONNECTING,
+    HANDLE_PEER_BANNER,
+    HANDLE_PEER_BANNER_PAYLOAD_HELLO_CONNECTING,
+    HANDLE_PEER_BANNER_PAYLOAD,
+    SEND_AUTH_REQUEST,
+    HANDLE_AUTH_REQUEST_ACCEPTING_SIGN,
+    SEND_CLIENT_IDENTITY,
+    SEND_SERVER_IDENTITY,
+    SEND_RECONNECT,
+    SEND_RECONNECT_OK,
+    READY,
+    HANDLE_MESSAGE,
+    READ_MESSAGE_COMPLETE,
+    SESSION_RETRY
+  };
+
   virtual ~Interceptor() {}
   virtual ACTION intercept(Connection *conn, uint32_t step) = 0;
 };
@@ -95,14 +116,6 @@ public:
 #ifdef UNIT_TESTS_BUILT
   Interceptor *interceptor = nullptr;
 #endif
-
-  /**
-   * Various Messenger conditional config/type flags to allow
-   * different "transport" Messengers to tune themselves
-   */
-  static const int HAS_HEAVY_TRAFFIC    = 0x0001;
-  static const int HAS_MANY_CONNECTIONS = 0x0002;
-  static const int HEARTBEAT            = 0x0004;
 
   /**
    *  The CephContext this Messenger uses. Many other components initialize themselves
@@ -143,15 +156,15 @@ public:
    * @param name entity name to register
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
-   * @param features bits for the local connection
-   * @param cflags general std::set of flags to configure transport resources
    */
   static Messenger *create(CephContext *cct,
                            const std::string &type,
                            entity_name_t name,
 			   std::string lname,
-                           uint64_t nonce,
-			   uint64_t cflags);
+                           uint64_t nonce);
+
+  static uint64_t get_random_nonce();
+  static uint64_t get_pid_nonce();
 
   /**
    * create a new messenger
@@ -159,7 +172,6 @@ public:
    * Create a new messenger instance.
    * Same as the above, but a slightly simpler interface for clients:
    * - Generate a random nonce
-   * - use the default feature bits
    * - get the messenger type from cct
    * - use the client entity_type
    *
@@ -413,6 +425,8 @@ public:
    */
   virtual int bind(const entity_addr_t& bind_addr) = 0;
 
+  virtual int bindv(const entity_addrvec_t& addrs);
+
   /**
    * This function performs a full restart of the Messenger component,
    * whatever that means.  Other entities who connect to this
@@ -429,10 +443,15 @@ public:
    * is true.
    * @param bind_addr The address to bind to.
    * @return 0 on success, or -1 on error, or -errno if
+   * we can be more specific about the failure.
    */
   virtual int client_bind(const entity_addr_t& bind_addr) = 0;
 
-  virtual int bindv(const entity_addrvec_t& addrs);
+  /**
+   * reset the 'client' Messenger. Mark all the existing Connections down
+   * and update 'nonce'.
+   */
+  virtual int client_reset() = 0;
 
 
   virtual bool should_use_msgr2() {
@@ -524,18 +543,22 @@ public:
    */
   virtual ConnectionRef connect_to(
     int type, const entity_addrvec_t& dest,
-    bool anon=false) = 0;
-  ConnectionRef connect_to_mon(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_MON, dest, anon);
+    bool anon=false, bool not_local_dest=false) = 0;
+  ConnectionRef connect_to_mon(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_MON, dest, anon, not_local_dest);
   }
-  ConnectionRef connect_to_mds(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_MDS, dest, anon);
+  ConnectionRef connect_to_mds(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_MDS, dest, anon, not_local_dest);
   }
-  ConnectionRef connect_to_osd(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_OSD, dest, anon);
+  ConnectionRef connect_to_osd(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_OSD, dest, anon, not_local_dest);
   }
-  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_MGR, dest, anon);
+  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_MGR, dest, anon, not_local_dest);
   }
 
   /**
@@ -641,7 +664,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const cref_t<Message>& m) {
+  bool ms_can_fast_dispatch(const ceph::cref_t<Message>& m) {
     for (const auto &dispatcher : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m))
 	return true;
@@ -655,7 +678,7 @@ public:
    * @param m The Message we are fast dispatching.
    * If none of our Dispatchers can handle it, ceph_abort().
    */
-  void ms_fast_dispatch(const ref_t<Message> &m) {
+  void ms_fast_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m)) {
@@ -666,12 +689,12 @@ public:
     ceph_abort();
   }
   void ms_fast_dispatch(Message *m) {
-    return ms_fast_dispatch(ref_t<Message>(m, false)); /* consume ref */
+    return ms_fast_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    *
    */
-  void ms_fast_preprocess(const ref_t<Message> &m) {
+  void ms_fast_preprocess(const ceph::ref_t<Message> &m) {
     for (const auto &dispatcher : fast_dispatchers) {
       dispatcher->ms_fast_preprocess2(m);
     }
@@ -683,7 +706,7 @@ public:
    *
    *  @param m The Message to deliver.
    */
-  void ms_deliver_dispatch(const ref_t<Message> &m) {
+  void ms_deliver_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : dispatchers) {
       if (dispatcher->ms_dispatch2(m))
@@ -694,7 +717,7 @@ public:
     ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
   }
   void ms_deliver_dispatch(Message *m) {
-    return ms_deliver_dispatch(ref_t<Message>(m, false)); /* consume ref */
+    return ms_deliver_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call

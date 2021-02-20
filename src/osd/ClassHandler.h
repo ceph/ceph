@@ -6,17 +6,15 @@
 #include <variant>
 
 #include "include/types.h"
+#include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 #include "objclass/objclass.h"
 
 //forward declaration
-class CephContext;
-
 class ClassHandler
 {
 public:
   CephContext *cct;
-
   struct ClassData;
 
   struct ClassMethod {
@@ -61,7 +59,7 @@ public:
     ClassHandler *handler = nullptr;
     void *handle = nullptr;
 
-    bool whitelisted = false;
+    bool allowed = false;
 
     std::map<std::string, ClassMethod> methods_map;
     std::map<std::string, ClassFilter> filters_map;
