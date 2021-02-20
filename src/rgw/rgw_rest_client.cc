@@ -548,11 +548,6 @@ int RGWRESTGenerateHTTPHeaders::set_obj_attrs(map<string, bufferlist>& rgw_attrs
   return 0;
 }
 
-static std::set<string> keep_headers = { "content-type",
-                                         "content-encoding",
-                                         "content-disposition",
-                                         "content-language" };
-
 void RGWRESTGenerateHTTPHeaders::set_http_attrs(const map<string, string>& http_attrs)
 {
   /* merge send headers */
@@ -583,6 +578,16 @@ void RGWRESTGenerateHTTPHeaders::set_policy(RGWAccessControlPolicy& policy)
     grants_by_type_add_perm(grants_by_type, perm.get_permissions(), grant);
   }
   add_grants_headers(grants_by_type, *new_env, new_info->x_meta_map);
+}
+
+void RGWRESTGenerateHTTPHeaders::set_content(const bufferlist& bl)
+{
+  static string attr("HTTP_X_AMZ_CONTENT_SHA256");
+
+  string hash = (bl.length() == 0 ? string(rgw::auth::s3::AWS4_EMPTY_PAYLOAD_HASH) :
+                             rgw::auth::s3::calc_v4_payload_hash(bl.to_str()));
+  new_env->set(attr, hash);
+  new_info->x_meta_map["x-amz-content-sha256"] = hash;
 }
 
 int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key)
@@ -741,9 +746,6 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
   
-  RGWEnv new_env;
-  req_info new_info(cct, &new_env);
-  
   string new_resource;
   string bucket_name;
   string old_resource = resource;
@@ -771,26 +773,14 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
     }
   }
 
-  RGWRESTGenerateHTTPHeaders headers_gen(cct, &new_env, &new_info);
+  headers_gen.emplace(cct, &new_env, &new_info);
 
-  headers_gen.init(method, host, resource_prefix, new_url, new_resource, params, api_name);
+  headers_gen->init(method, host, resource_prefix, new_url, new_resource, params, api_name);
 
-  headers_gen.set_http_attrs(extra_headers);
+  headers_gen->set_http_attrs(extra_headers);
 
   if (key) {
-#if 0
-    new_info.init_meta_info(nullptr);
-#endif
-
-    int ret = headers_gen.sign(*key);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
-      return ret;
-    }
-  }
-
-  for (const auto& kv: new_env.get_map()) {
-    headers.emplace_back(kv);
+    sign_key = *key;
   }
 
   if (send_data) {
@@ -798,10 +788,9 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
     set_outbl(*send_data);
     set_send_data_hint(true);
   }
-  
 
   method = new_info.method;
-  url = headers_gen.get_url();
+  url = headers_gen->get_url();
 
   return 0;
 }
@@ -820,6 +809,27 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
 
 int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
 {
+  if (!headers_gen) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likey a bug!" << dendl;
+    return -EINVAL;
+  }
+
+  if (send_len == outbl.length()) {
+    headers_gen->set_content(outbl);
+  }
+
+  if (sign_key) {
+    int r = headers_gen->sign(*sign_key);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+      return r;
+    }
+  }
+
+  for (const auto& kv: new_env.get_map()) {
+    headers.emplace_back(kv);
+  }
+
   if (!mgr) {
     return RGWHTTP::send(this);
   }

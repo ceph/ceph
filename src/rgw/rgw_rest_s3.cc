@@ -5217,6 +5217,10 @@ AWSSignerV4::prepare(const std::string& access_key_id,
   std::string credential_scope = gen_v4_scope(timestamp, region);
 
   extra_headers["x-amz-date"] = date;
+  auto iter = info.x_meta_map.find("x-amz-content-sha256");
+  if (iter != info.x_meta_map.end()) {
+    extra_headers[iter->first] = iter->second;
+  }
 
   /* craft canonical headers */
   std::string canonical_headers = \
