@@ -990,7 +990,6 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   string marker;
   bool truncated = true;
 
-  CephContext *cct = store->ctx();
   constexpr uint32_t max_entries = 1000;
 
   string logshard_oid;
