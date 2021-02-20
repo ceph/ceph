@@ -569,6 +569,7 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
     if (found != pending_conns.end()) {
       logger().warn("pending conn reset by {}", conn->get_peer_addr());
       (*found)->close();
+      pending_conns.erase(found);
       return seastar::now();
     } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
       logger().warn("active conn reset {}", conn->get_peer_addr());
