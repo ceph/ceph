@@ -3600,14 +3600,18 @@ void PrimaryLogPG::dec_all_refcount_manifest(const object_info_t& oi, OpContext*
 
   if (oi.manifest.is_chunked()) {
     object_ref_delta_t refs;
-    ObjectContextRef obc_l, obc_g;
-    get_adjacent_clones(ctx->obc, obc_l, obc_g);
+    ObjectContextRef obc_l, obc_g, obc;
+    /* in trim_object, oi and ctx can have different oid */
+    obc = get_object_context(oi.soid, false, NULL);
+    ceph_assert(obc);
+    get_adjacent_clones(obc, obc_l, obc_g);
     oi.manifest.calc_refs_to_drop_on_removal(
       obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
       obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
       refs);
 
     if (!refs.is_empty()) {
+      /* dec_refcount will use head object anyway */
       hobject_t soid = ctx->obc->obs.oi.soid;
       ctx->register_on_commit(
 	[soid, this, refs](){
@@ -8127,11 +8131,6 @@ inline int PrimaryLogPG::_delete_oid(
   }
   oi.watchers.clear();
 
-  if (oi.has_manifest()) {
-    ctx->delta_stats.num_objects_manifest--;
-    dec_all_refcount_manifest(oi, ctx);
-  }
-
   if (whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
@@ -8139,6 +8138,11 @@ inline int PrimaryLogPG::_delete_oid(
     t->create(soid);
     osd->logger->inc(l_osd_tier_whiteout);
     return 0;
+  }
+
+  if (oi.has_manifest()) {
+    ctx->delta_stats.num_objects_manifest--;
+    dec_all_refcount_manifest(oi, ctx);
   }
 
   // delete the head
