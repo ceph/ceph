@@ -2475,8 +2475,6 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-    bufferptr ptr(len);
-    bl.push_back(std::move(ptr));
 
     int r = api::Io<>::read(*ictx, ofs, len, io::ReadResult{&bl}, 0);
     tracepoint(librbd, read_exit, r);
@@ -2488,8 +2486,6 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
 		ictx->read_only, ofs, len, op_flags);
-    bufferptr ptr(len);
-    bl.push_back(std::move(ptr));
 
     int r = api::Io<>::read(*ictx, ofs, len, io::ReadResult{&bl}, op_flags);
     tracepoint(librbd, read_exit, r);
