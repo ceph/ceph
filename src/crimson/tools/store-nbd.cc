@@ -153,8 +153,14 @@ struct request_context_t {
   }
 
   bool check_magic() const {
-    // todo
-    return true;
+    auto ret = magic == NBD_REQUEST_MAGIC;
+    if (!ret) {
+      logger().error(
+	"Invalid magic {} should be {}",
+	magic,
+	NBD_REQUEST_MAGIC);
+    }
+    return ret;
   }
 
   uint32_t get_command() const {
@@ -183,6 +189,12 @@ struct request_context_t {
       logger().debug(
         "Got request, magic {}, type {}, from {}, len {}",
 	magic, type, from, len);
+
+      if (!check_magic()) {
+       throw std::system_error(
+	 std::make_error_code(
+	   std::errc::invalid_argument));
+      }
 
       if (has_input_buffer()) {
 	return in.read_exactly(len).then([this](auto buf) {
