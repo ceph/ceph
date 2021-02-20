@@ -168,6 +168,11 @@ struct request_context_t {
   seastar::future<> read_request(seastar::input_stream<char> &in) {
     return in.read_exactly(sizeof(struct nbd_request)
     ).then([this, &in](auto buf) {
+      if (buf.size() < sizeof(struct nbd_request)) {
+	throw std::system_error(
+	  std::make_error_code(
+	    std::errc::connection_reset));
+      }
       auto p = buf.get();
       magic = seastar::consume_be<uint32_t>(p);
       type = seastar::consume_be<uint32_t>(p);
