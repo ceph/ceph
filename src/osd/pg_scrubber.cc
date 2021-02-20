@@ -2161,13 +2161,14 @@ blocked_range_t::blocked_range_t(OSDService* osds, ceph::timespan waittime, spg_
     : m_osds{osds}
 {
   auto now_is = std::chrono::system_clock::now();
-  m_callbk = new LambdaContext([now_is, pg_id]([[maybe_unused]] int r) {
+  m_callbk = new LambdaContext([now_is, pg_id, osds]([[maybe_unused]] int r) {
     std::time_t now_c = std::chrono::system_clock::to_time_t(now_is);
     char buf[50];
     strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&now_c));
     lgeneric_subdout(g_ceph_context, osd, 10)
       << "PgScrubber: " << pg_id << " blocked on an object for too long (since " << buf
       << ")" << dendl;
+    osds->clog->warn() << "osd." << osds->whoami << " PgScrubber: " << pg_id << " blocked on an object for too long (since " << buf << ")";
     return;
   });
 
