@@ -94,6 +94,7 @@ public:
   int set_obj_attrs(map<string, bufferlist>& rgw_attrs);
   void set_http_attrs(const map<string, string>& http_attrs);
   void set_policy(RGWAccessControlPolicy& policy);
+  void set_content(const bufferlist& bl);
   int sign(RGWAccessKey& key);
 
   const string& get_url() { return url; }
@@ -110,7 +111,6 @@ private:
     ceph::make_mutex("RGWHTTPStreamRWRequest::write_lock");
   ReceiveCB *cb{nullptr};
   RGWWriteDrainCB *write_drain_cb{nullptr};
-  bufferlist outbl;
   bufferlist in_data;
   size_t chunk_ofs{0};
   size_t ofs{0};
@@ -120,6 +120,8 @@ private:
   bool stream_writes{false};
   bool write_stream_complete{false};
 protected:
+  bufferlist outbl;
+
   int handle_header(const string& name, const string& val) override;
 public:
   int send_data(void *ptr, size_t len, bool *pause) override;
@@ -173,6 +175,11 @@ public:
 };
 
 class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
+  std::optional<RGWAccessKey> sign_key;
+  std::optional<RGWRESTGenerateHTTPHeaders> headers_gen;
+  RGWEnv new_env;
+  req_info new_info;
+  
 protected:
   std::optional<string> api_name;
   HostStyle host_style;
@@ -180,7 +187,9 @@ public:
   RGWRESTStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWHTTPStreamRWRequest::ReceiveCB *_cb,
                          param_vec_t *_headers, param_vec_t *_params,
                          std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
-                            RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params), api_name(_api_name), host_style(_host_style) {
+                         RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params),
+                         new_info(_cct, &new_env),
+                         api_name(_api_name), host_style(_host_style) {
   }
   virtual ~RGWRESTStreamRWRequest() override {}
 
