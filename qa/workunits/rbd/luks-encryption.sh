@@ -4,6 +4,23 @@ set -ex
 CEPH_ID=${CEPH_ID:-admin}
 TMP_FILES="/tmp/passphrase /tmp/testdata1 /tmp/testdata2"
 
+_sudo()
+{
+    local cmd
+
+    if [ `id -u` -eq 0 ]
+    then
+	"$@"
+	return $?
+    fi
+
+    # Look for the command in the user path. If it fails run it as is,
+    # supposing it is in sudo path.
+    cmd=`which $1 2>/dev/null` || cmd=$1
+    shift
+    sudo -nE "${cmd}" "$@"
+}
+
 function drop_caches {
   echo 3 | sudo tee /proc/sys/vm/drop_caches
 }
@@ -20,7 +37,7 @@ function test_encryption_format() {
   sudo cryptsetup open $RAW_DEV --type $format cryptsetupdev -d /tmp/passphrase
 
   # open encryption with librbd
-  LIBRBD_DEV=$(sudo rbd -p rbd map testimg -t nbd -o encryption-format=$format,encryption-passphrase-file=/tmp/passphrase)
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg -t nbd -o encryption-format=$format,encryption-passphrase-file=/tmp/passphrase)
 
   # write via librbd && compare
   sudo dd if=/tmp/testdata1 of=$LIBRBD_DEV conv=fdatasync
@@ -45,7 +62,7 @@ function clean_up {
   sudo rm -f $TMP_FILES
   clean_up_cryptsetup
 	for device in $(get_nbd_device_paths); do
-	  sudo rbd device unmap -t nbd $device
+	  _sudo rbd device unmap -t nbd $device
   done
 	rbd ls | grep testimg > /dev/null && rbd rm testimg || true
 }
@@ -76,7 +93,7 @@ echo -n "password" > /tmp/passphrase
 rbd create testimg --size=32M
 
 # map raw data to nbd device
-RAW_DEV=$(sudo rbd -p rbd map testimg -t nbd)
+RAW_DEV=$(_sudo rbd -p rbd map testimg -t nbd)
 
 test_encryption_format luks1
 test_encryption_format luks2
