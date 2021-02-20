@@ -96,20 +96,19 @@ class RHDiskFailurePredictor(Predictor):
         # read config file as json, if it exists
         config_path = os.path.join(model_dirpath, self.CONFIG_FILE)
         if not os.path.isfile(config_path):
-            return "Missing config file: " + config_path
-        else:
-            with open(config_path) as f_conf:
-                self.model_context = json.load(f_conf)
+            raise Exception("Missing config file: " + config_path)
+        with open(config_path) as f_conf:
+            self.model_context = json.load(f_conf)
 
         # ensure all manufacturers whose context is defined in config file
         # have models and scalers saved inside model_dirpath
         for manufacturer in self.model_context:
             scaler_path = os.path.join(model_dirpath, manufacturer + "_scaler.pkl")
             if not os.path.isfile(scaler_path):
-                return "Missing scaler file: {}".format(scaler_path)
+                raise Exception(f"Missing scaler file: {scaler_path}")
             model_path = os.path.join(model_dirpath, manufacturer + "_predictor.pkl")
             if not os.path.isfile(model_path):
-                return "Missing model file: {}".format(model_path)
+                raise Exception(f"Missing model file: {model_path}")
 
         self.model_dirpath = model_dirpath
 
@@ -277,16 +276,15 @@ class PSDiskFailurePredictor(Predictor):
 
         config_path = os.path.join(model_dirpath, self.CONFIG_FILE)
         if not os.path.isfile(config_path):
-            return "Missing config file: " + config_path
-        else:
-            with open(config_path) as f_conf:
-                self.model_context = json.load(f_conf)
+            raise Exception(f"Missing config file: {config_path}")
+        with open(config_path) as f_conf:
+            self.model_context = json.load(f_conf)
 
         for model_name in self.model_context:
             model_path = os.path.join(model_dirpath, model_name)
 
             if not os.path.isfile(model_path):
-                return "Missing model file: " + model_path
+                raise Exception(f"Missing model file: {model_path}")
 
         self.model_dirpath = model_dirpath
 
