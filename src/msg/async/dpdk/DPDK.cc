@@ -29,6 +29,7 @@
 #include <rte_eal.h>
 #include <rte_pci.h>
 #include <rte_ethdev.h>
+#include <rte_ether.h>
 #include <rte_cycles.h>
 #include <rte_memzone.h>
 
@@ -53,10 +54,6 @@
 void* as_cookie(struct rte_pktmbuf_pool_private& p) {
   return &p;
 };
-
-#ifndef MARKER
-typedef void    *MARKER[0];   /**< generic marker for a point in a structure */
-#endif
 
 /******************* Net device related constatns *****************************/
 static constexpr uint16_t default_ring_size      = 512;
@@ -467,7 +464,7 @@ void DPDKQueuePair::configure_proxies(const std::map<unsigned, float>& cpu_weigh
     return;
   }
   register_packet_provider([this] {
-    Tub<Packet> p;
+    std::optional<Packet> p;
     if (!_proxy_packetq.empty()) {
       p = std::move(_proxy_packetq.front());
       _proxy_packetq.pop_front();
@@ -716,7 +713,7 @@ bool DPDKQueuePair::poll_tx() {
   return false;
 }
 
-inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
+inline std::optional<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
 {
   _frags.clear();
   _bufs.clear();
@@ -736,7 +733,7 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
       _frags.begin(), _frags.end(), make_deleter(std::move(del)));
 }
 
-inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
+inline std::optional<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
 {
   _rx_free_pkts.push_back(m);
   _num_rx_free_segs += m->nb_segs;
@@ -824,7 +821,7 @@ void DPDKQueuePair::process_packets(
     struct rte_mbuf *m = bufs[i];
     offload_info oi;
 
-    Tub<Packet> p = from_mbuf(m);
+    std::optional<Packet> p = from_mbuf(m);
 
     // Drop the packet if translation above has failed
     if (!p) {
@@ -1027,14 +1024,14 @@ void DPDKQueuePair::tx_buf::set_cluster_offload_info(const Packet& p, const DPDK
   if (oi.needs_ip_csum) {
     head->ol_flags |= PKT_TX_IP_CKSUM;
     // TODO: Take a VLAN header into an account here
-    head->l2_len = sizeof(struct ether_hdr);
+    head->l2_len = sizeof(struct rte_ether_hdr);
     head->l3_len = oi.ip_hdr_len;
   }
   if (qp.port().get_hw_features().tx_csum_l4_offload) {
     if (oi.protocol == ip_protocol_num::tcp) {
       head->ol_flags |= PKT_TX_TCP_CKSUM;
       // TODO: Take a VLAN header into an account here
-      head->l2_len = sizeof(struct ether_hdr);
+      head->l2_len = sizeof(struct rte_ether_hdr);
       head->l3_len = oi.ip_hdr_len;
 
       if (oi.tso_seg_size) {
