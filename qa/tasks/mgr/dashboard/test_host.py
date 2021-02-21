@@ -88,7 +88,7 @@ class HostControllerTest(DashboardTestCase):
                 'dev': str,
                 'path': str
             }))
-        })))
+        }, allow_unknown=True)))
 
     def test_host_daemons(self):
         hosts = self._get('{}'.format(self.URL_HOST))
