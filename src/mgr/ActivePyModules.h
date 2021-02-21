@@ -26,6 +26,7 @@
 #include "mon/MgrMap.h"
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
+#include "mon/ConfigMap.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -44,7 +45,9 @@ class ActivePyModules
   // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
+  bool have_local_config_map = false;
   std::map<std::string, std::string> store_cache;
+  ConfigMap config_map;  ///< derived from store_cache config/ keys
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
@@ -63,11 +66,13 @@ private:
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
 public:
-  ActivePyModules(PyModuleConfig &module_config,
-            std::map<std::string, std::string> store_data,
-            DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
-            Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
+  ActivePyModules(
+    PyModuleConfig &module_config,
+    std::map<std::string, std::string> store_data,
+    bool mon_provides_kv_sub,
+    DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+    LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
+    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
 
   ~ActivePyModules();
 
@@ -132,6 +137,9 @@ public:
   PyObject *get_typed_config(const std::string &module_name,
 			     const std::string &key,
 			     const std::string &prefix = "") const;
+  PyObject *get_foreign_config(
+    const std::string& who,
+    const std::string& name);
 
   void set_health_checks(const std::string& module_name,
 			 health_check_map_t&& checks);
@@ -162,6 +170,12 @@ public:
     std::stringstream *ss);
 
   std::map<std::string, std::string> get_services() const;
+
+  void update_kv_data(
+    const std::string prefix,
+    bool incremental,
+    const map<std::string, boost::optional<bufferlist>, std::less<>>& data);
+  void _refresh_config_map();
 
   // Public so that MonCommandCompletion can use it
   // FIXME: for send_command completion notifications,
