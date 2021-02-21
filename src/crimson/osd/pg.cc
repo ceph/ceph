@@ -855,10 +855,13 @@ template<RWState::State State>
 PG::load_obc_ertr::future<>
 PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
 {
+  logger().debug("{} {}", __func__, oid);
+  boost::intrusive_ptr<PG> pgref{this};
   assert(oid.is_head());
   auto [obc, existed] = shard_services.obc_registry.get_cached_obc(oid);
+  obc->append_to(obc_set_accessing);
   return obc->with_lock<State>(
-    [oid=std::move(oid), existed=existed, obc=std::move(obc),
+    [oid=std::move(oid), existed=existed, obc=obc,
      func=std::move(func), this] {
     auto loaded = load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
     if (existed) {
@@ -872,6 +875,9 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
     return loaded.safe_then([func=std::move(func)](auto obc) {
       return func(std::move(obc));
     });
+  }).finally([this, pgref, obc=std::move(obc)] {
+    logger().debug("with_head_obc: released {}", obc->get_oid());
+    obc->remove_from(obc_set_accessing);
   });
 }
 
@@ -1084,6 +1090,10 @@ seastar::future<> PG::stop()
 }
 
 void PG::on_change(ceph::os::Transaction &t) {
+  logger().debug("{}, {}", __func__, *this);
+  for (auto& obc : obc_set_accessing) {
+    obc.interrupt(::crimson::common::actingset_changed(is_primary()));
+  }
   recovery_backend->on_peering_interval_change(t);
   backend->on_actingset_changed({ is_primary() });
 }
