@@ -4,7 +4,7 @@ import re
 import logging
 import subprocess
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, TypeVar, Generic, \
+from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType
 
 from mgr_module import HandleCommandResult, MonCommandFailed
@@ -25,10 +25,10 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
 
 
-class CephadmDaemonSpec(Generic[ServiceSpecs]):
+class CephadmDaemonDeploySpec:
     # typing.NamedTuple + Generic is broken in py36
     def __init__(self, host: str, daemon_id: str,
-                 spec: Optional[ServiceSpecs] = None,
+                 service_name: str,
                  network: Optional[str] = None,
                  keyring: Optional[str] = None,
                  extra_args: Optional[List[str]] = None,
@@ -37,20 +37,14 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
                  daemon_type: Optional[str] = None,
                  ports: Optional[List[int]] = None,):
         """
-        Used for
-        * deploying new daemons. then everything is set
-        * redeploying existing daemons, then only the first three attrs are set.
-
-        Would be great to have a consistent usage where all properties are set.
+        A data struction to encapsulate `cephadm deploy ...
         """
         self.host: str = host
         self.daemon_id = daemon_id
-        daemon_type = daemon_type or (spec.service_type if spec else None)
+        self.service_name = service_name
+        daemon_type = daemon_type or (service_name.split('.')[0])
         assert daemon_type is not None
         self.daemon_type: str = daemon_type
-
-        # would be great to have the spec always available:
-        self.spec: Optional[ServiceSpecs] = spec
 
         # mons
         self.network = network
@@ -109,19 +103,19 @@ class CephadmService(metaclass=ABCMeta):
                          daemon_id: str,
                          netowrk: str,
                          spec: ServiceSpecs,
-                         daemon_type: Optional[str] = None,) -> CephadmDaemonSpec:
-        return CephadmDaemonSpec(
+                         daemon_type: Optional[str] = None,) -> CephadmDaemonDeploySpec:
+        return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
-            spec=spec,
+            service_name=spec.service_name(),
             network=netowrk,
             daemon_type=daemon_type
         )
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         raise NotImplementedError()
 
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
 
     def config(self, spec: ServiceSpec, daemon_id: str) -> None:
@@ -298,7 +292,7 @@ class CephadmService(metaclass=ABCMeta):
 
 
 class CephService(CephadmService):
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # Ceph.daemons (mon, mgr, mds, osd, etc)
         cephadm_config = self.get_config_and_keyring(
             daemon_spec.daemon_type,
@@ -382,7 +376,7 @@ class CephService(CephadmService):
 class MonService(CephService):
     TYPE = 'mon'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
         Create a new monitor on the given host.
         """
@@ -473,7 +467,7 @@ class MonService(CephService):
 class MgrService(CephService):
     TYPE = 'mgr'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
         Create a new manager instance on a host.
         """
@@ -579,7 +573,7 @@ class MdsService(CephService):
             'value': spec.service_id,
         })
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         mds_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -684,7 +678,7 @@ class RgwService(CephService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -838,7 +832,7 @@ class RgwService(CephService):
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -859,7 +853,7 @@ class RbdMirrorService(CephService):
 class CrashService(CephService):
     TYPE = 'crash'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -960,7 +954,7 @@ class CephadmExporterConfig:
 class CephadmExporter(CephadmService):
     TYPE = 'cephadm-exporter'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
         cfg = CephadmExporterConfig(self.mgr)
@@ -981,9 +975,8 @@ class CephadmExporter(CephadmService):
 
         return daemon_spec
 
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        assert daemon_spec.spec
         deps: List[str] = []
 
         cfg = CephadmExporterConfig(self.mgr)
