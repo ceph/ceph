@@ -10061,7 +10061,6 @@ void PrimaryLogPG::cancel_copy(CopyOpRef cop, bool requeue,
   copy_ops.erase(cop->obc->obs.oi.soid);
   cop->obc->stop_block();
 
-  kick_object_context_blocked(cop->obc);
   cop->results.should_requeue = requeue;
   CopyCallbackResults result(-ECANCELED, &cop->results);
   cop->cb->complete(result);
@@ -10072,13 +10071,15 @@ void PrimaryLogPG::cancel_copy(CopyOpRef cop, bool requeue,
   cop->obc = ObjectContextRef();
 }
 
-void PrimaryLogPG::cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
+void PrimaryLogPG::cancel_and_kick_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
 {
   dout(10) << __func__ << dendl;
   map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
   while (p != copy_ops.end()) {
+    ObjectContextRef obc = p->second->obc;
     // requeue this op? can I queue up all of them?
     cancel_copy((p++)->second, requeue, tids);
+    kick_object_context_blocked(obc);
   }
 }
 
@@ -12482,7 +12483,7 @@ void PrimaryLogPG::on_shutdown()
   m_scrubber->unreg_next_scrub();
 
   vector<ceph_tid_t> tids;
-  cancel_copy_ops(false, &tids);
+  cancel_and_kick_copy_ops(false, &tids);
   cancel_flush_ops(false, &tids);
   cancel_proxy_ops(false, &tids);
   cancel_manifest_ops(false, &tids);
@@ -12599,7 +12600,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   requeue_ops(waiting_for_readable);
 
   vector<ceph_tid_t> tids;
-  cancel_copy_ops(is_primary(), &tids);
+  cancel_and_kick_copy_ops(is_primary(), &tids);
   cancel_flush_ops(is_primary(), &tids);
   cancel_proxy_ops(is_primary(), &tids);
   cancel_manifest_ops(is_primary(), &tids);
