@@ -97,9 +97,9 @@ namespace dpdk {
           string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
       };
 
-      Tub<std::string> hugepages_path;
+      std::optional<std::string> hugepages_path;
       if (!c->_conf->ms_dpdk_hugepages.empty()) {
-        hugepages_path.construct(c->_conf->ms_dpdk_hugepages);
+        hugepages_path.emplace(c->_conf->ms_dpdk_hugepages);
       }
 
       // If "hugepages" is not provided and DPDK PMD drivers mode is requested -
