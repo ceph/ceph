@@ -8267,6 +8267,9 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
       if (obs.exists) {
 	t->remove(soid);
+	if (obs.oi.has_manifest()) {
+	  dec_all_refcount_manifest(obs.oi, ctx);
+	}
       }
       t->clone(soid, rollback_to_sobject);
       t->add_obc(rollback_to);
