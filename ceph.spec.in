@@ -89,7 +89,7 @@
 # SLE does not support luarocks
 %bcond_with lua_packages
 %else
-%global luarocks_package_name lua53-luarocks
+%global luarocks_package_name lua54-luarocks
 %bcond_without lua_packages
 %endif
 %else
