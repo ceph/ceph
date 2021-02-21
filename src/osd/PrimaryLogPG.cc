@@ -8191,11 +8191,16 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     ObjectContextRef promote_obc;
     cache_result_t tier_mode_result;
     if (obs.exists && obs.oi.has_manifest()) {
-      tier_mode_result =
-	maybe_handle_manifest_detail(
-	  ctx->op,
-	  true,
-	  rollback_to);
+      if (!rollback_to->obs.oi.has_manifest()) {
+	// rollback_to is not manifest object
+	tier_mode_result = cache_result_t::NOOP;
+      } else {
+	tier_mode_result =
+	  maybe_handle_manifest_detail(
+	    ctx->op,
+	    true,
+	    rollback_to);
+      }
     } else {
       tier_mode_result =
 	maybe_handle_cache_detail(
