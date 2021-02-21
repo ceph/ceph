@@ -5740,6 +5740,107 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
   }
 }
 
+TEST_F(LibRadosTwoPoolsPP, ManifestRollback) {
+  // skip test if not yet pacific
+  if (_get_required_osd_release(cluster) < "pacific") {
+    cout << "cluster is not yet pacific, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EFere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("thABe hiEF");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk3", "foo");
+  // foo snap[1]: 
+  // foo snap[0]:  
+  // foo head   :          [chunk1]                    [chunk3]
+
+  ioctx.snap_set_read(my_snaps[1]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "chunk2", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:      
+  // foo head   :          [chunk1]                    [chunk3]
+ 
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:                             
+  // foo head   :           [chunk1]                   [chunk3]
+  
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback("foo", my_snaps[0]));
+
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('t', bl[0]);
+  }
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback("foo", my_snaps[1]));
+
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('C', bl[0]);
+  }
+
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
