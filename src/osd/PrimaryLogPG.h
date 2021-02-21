@@ -1367,7 +1367,7 @@ protected:
   void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids);
-  void cancel_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_and_kick_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   friend struct C_Copyfrom;
 

@@ -1465,6 +1465,117 @@ TEST_F(LibRadosTwoPoolsPP, ListSnap){
   ioctx.selfmanaged_snap_remove(my_snaps[0]);
 }
 
+// This test case reproduces https://tracker.ceph.com/issues/49409
+TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
+  // create object
+  {
+    bufferlist bl;
+    int len = string("hi there").length() * 2;
+    // append more chrunk data make sure the second promote
+    // op coming before the first promote op finished
+    for (int i=0; i<4*1024*1024/len; ++i)
+      bl.append("hi therehi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // create two snapshot, a clone
+  vector<uint64_t> my_snaps(2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[1]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+                                                         my_snaps));
+  {
+    bufferlist bl;
+    bl.append("ciao!");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // read, trigger a promote on the head
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('c', bl[0]);
+  }
+
+  // try more times
+  int retries = 50;
+  for (int i=0; i<retries; ++i)
+  {
+    {
+      librados::AioCompletion * completion = cluster.aio_create_completion();
+      librados::AioCompletion * completion1 = cluster.aio_create_completion();
+
+      // send a snap rollback op and a snap read op parallel
+      // trigger two promote(copy) to the same snap clone obj
+      // the second snap read op is read-ordered make sure
+      // op not wait for objects_blocked_on_snap_promotion
+      ObjectWriteOperation op;
+      op.selfmanaged_snap_rollback(my_snaps[0]);
+      ASSERT_EQ(0, ioctx.aio_operate(
+        "foo", completion, &op));
+
+      ioctx.snap_set_read(my_snaps[1]);
+      std::map<uint64_t, uint64_t> extents;
+      bufferlist read_bl;
+      int rval = -1;
+      ObjectReadOperation op1;
+      op1.sparse_read(0, 8, &extents, &read_bl, &rval);
+      ASSERT_EQ(0, ioctx.aio_operate("foo", completion1, &op1, &read_bl));
+      ioctx.snap_set_read(librados::SNAP_HEAD);
+
+      completion->wait_for_safe();
+      ASSERT_EQ(0, completion->get_return_value());
+      completion->release();
+
+      completion1->wait_for_safe();
+      ASSERT_EQ(0, completion1->get_return_value());
+      completion1->release();
+    }
+
+    // evict foo snap
+    ioctx.snap_set_read(my_snaps[0]);
+    {
+      ObjectReadOperation op;
+      op.cache_evict();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, ioctx.aio_operate(
+        "foo", completion, &op,
+        librados::OPERATION_IGNORE_CACHE, NULL));
+      completion->wait_for_safe();
+      ASSERT_EQ(0, completion->get_return_value());
+      completion->release();
+    }
+    ioctx.snap_set_read(librados::SNAP_HEAD);
+  }
+
+  // cleanup
+  ioctx.selfmanaged_snap_remove(my_snaps[0]);
+  ioctx.selfmanaged_snap_remove(my_snaps[1]);
+}
+
 TEST_F(LibRadosTwoPoolsPP, TryFlush) {
   // configure cache
   bufferlist inbl;
