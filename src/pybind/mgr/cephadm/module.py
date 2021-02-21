@@ -1144,12 +1144,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 daemon_type == 'nfs' or \
                 daemon_type == 'iscsi':
             # get container image
-            ret, image, err = self.check_mon_command({
-                'prefix': 'config get',
-                'who': utils.name_to_config_section(daemon_name),
-                'key': 'container_image',
-            })
-            image = image.strip()
+            image = str(self.get_foreign_ceph_option(
+                utils.name_to_config_section(daemon_name),
+                'container_image'
+            )).strip()
         elif daemon_type == 'prometheus':
             image = self.container_image_prometheus
         elif daemon_type == 'grafana':

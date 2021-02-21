@@ -137,9 +137,7 @@ int MgrStandby::init()
       // dout(10) << "config_callback: " << k << " : " << v << dendl;
       dout(10) << "config_callback: " << k << " : " << dendl;
       if (k.substr(0, 4) == "mgr/") {
-	const std::string global_key = PyModule::config_prefix + k.substr(4);
-        py_module_registry.handle_config(global_key, v);
-
+        py_module_registry.handle_config(k, v);
 	return true;
       }
       return false;

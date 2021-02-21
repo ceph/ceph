@@ -17,7 +17,6 @@
 #include "mon/AuthMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
-#include "mon/ConfigKeyService.h"
 #include "mon/OSDMonitor.h"
 #include "mon/MDSMonitor.h"
 #include "mon/ConfigMonitor.h"

@@ -511,6 +511,12 @@ class CephadmUpgrade:
                     })
                 return
 
+            # complete mon upgrade?
+            if daemon_type == 'mon':
+                if not self.mgr.get("have_local_config_map"):
+                    logger.info('Upgrade: Restarting mgr now that mons are runnig pacific')
+                    need_upgrade_self = True
+
             if need_upgrade_self:
                 try:
                     self.mgr.mgr_service.fail_over()

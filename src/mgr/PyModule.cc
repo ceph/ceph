@@ -28,7 +28,7 @@
 #define dout_prefix *_dout << "mgr[py] "
 
 // definition for non-const static member
-std::string PyModule::config_prefix = "mgr/";
+std::string PyModule::mgr_store_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
@@ -150,8 +150,7 @@ void PyModuleConfig::set_config(
     const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = PyModule::config_prefix
-                                   + module_name + "/" + key;
+  const std::string global_key = "mgr/" + module_name + "/" + key;
   Command set_cmd;
   {
     std::ostringstream cmd_json;

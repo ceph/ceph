@@ -27,7 +27,7 @@
 #include "mon/MDSMonitor.h"
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
-#include "mon/ConfigKeyService.h"
+#include "mon/KVMonitor.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/Session.h"
@@ -9329,7 +9329,7 @@ int OSDMonitor::prepare_command_osd_new(
     || params.count("cephx_lockbox_secret")
     || params.count("dmcrypt_key");
 
-  ConfigKeyService *svc = nullptr;
+  KVMonitor *svc = nullptr;
   AuthMonitor::auth_entity_t cephx_entity, lockbox_entity;
 
   if (has_secrets) {
@@ -9373,7 +9373,7 @@ int OSDMonitor::prepare_command_osd_new(
     }
 
     if (has_lockbox) {
-      svc = mon.config_key_service.get();
+      svc = mon.kvmon();
       err = svc->validate_osd_new(uuid, dmcrypt_key, ss);
       if (err < 0) {
         return err;
@@ -9558,7 +9558,7 @@ int OSDMonitor::prepare_command_osd_destroy(
     }
   }
 
-  auto svc = mon.config_key_service.get();
+  auto svc = mon.kvmon();
   err = svc->validate_osd_destroy(id, uuid);
   if (err < 0) {
     ceph_assert(err == -ENOENT);
