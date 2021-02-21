@@ -6,3 +6,4 @@ overrides:
         mon client directed command retry: 5
     log-ignorelist:
       - \(OSD_SLOW_PING_TIME
+      - \(MON_DOWN\)
