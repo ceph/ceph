@@ -1004,10 +1004,7 @@ class CephadmServe:
             if self.mgr.mode == 'root':
                 if stdin:
                     self.log.debug('stdin: %s' % stdin)
-                script = 'injected_argv = ' + json.dumps(final_args) + '\n'
-                if stdin:
-                    script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-                script += self.mgr._cephadm
+
                 python = connr.choose_python()
                 if not python:
                     raise RuntimeError(
@@ -1016,13 +1013,24 @@ class CephadmServe:
                 try:
                     out, err, code = remoto.process.check(
                         conn,
-                        [python, '-u'],
-                        stdin=script.encode('utf-8'))
+                        [python, self.mgr.cephadm_binary_path] + final_args,
+                        stdin=stdin.encode('utf-8') if stdin is not None else None)
+                    if code == 2:
+                        out_ls, err_ls, code_ls = remoto.process.check(
+                            conn, ['ls', self.mgr.cephadm_binary_path])
+                        if code_ls == 2:
+                            self._deploy_cephadm_binary_conn(conn, host)
+                            out, err, code = remoto.process.check(
+                                conn,
+                                [python, self.mgr.cephadm_binary_path] + final_args,
+                                stdin=stdin.encode('utf-8') if stdin is not None else None)
+
                 except RuntimeError as e:
                     self.mgr._reset_con(host)
                     if error_ok:
                         return [], [str(e)], 1
                     raise
+
             elif self.mgr.mode == 'cephadm-package':
                 try:
                     out, err, code = remoto.process.check(
@@ -1091,10 +1099,20 @@ class CephadmServe:
         self.log.info(f"Deploying cephadm binary to {host}")
         with self._remote_connection(host) as tpl:
             conn, _connr = tpl
-            _out, _err, code = remoto.process.check(
-                conn,
-                ['tee', '-', self.mgr.cephadm_binary_path],
-                stdin=self.mgr._cephadm.encode('utf-8'))
+            return self._deploy_cephadm_binary_conn(conn, host)
+
+    def _deploy_cephadm_binary_conn(self, conn: "BaseConnection", host: str) -> None:
+        _out, _err, code = remoto.process.check(
+            conn,
+            ['mkdir', '-p', f'/var/lib/ceph/{self.mgr._cluster_fsid}'])
+        if code:
+            msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
+            self.log.warning(msg)
+            raise OrchestratorError(msg)
+        _out, _err, code = remoto.process.check(
+            conn,
+            ['tee', '-', self.mgr.cephadm_binary_path],
+            stdin=self.mgr._cephadm.encode('utf-8'))
         if code:
             msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
             self.log.warning(msg)
