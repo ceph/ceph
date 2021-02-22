@@ -688,10 +688,12 @@ void ActivePyModules::set_store(const std::string &module_name,
   }
 }
 
-void ActivePyModules::set_config(const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+std::pair<int, std::string> ActivePyModules::set_config(
+  const std::string &module_name,
+  const std::string &key,
+  const boost::optional<std::string>& val)
 {
-  module_config.set_config(&monc, module_name, key, val);
+  return module_config.set_config(&monc, module_name, key, val);
 }
 
 std::map<std::string, std::string> ActivePyModules::get_services() const

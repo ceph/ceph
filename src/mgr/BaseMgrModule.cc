@@ -490,9 +490,13 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
-  without_gil([&] {
-    self->py_modules->set_config(module, key, val);
+  auto [ret, msg] = without_gil([&] {
+    return self->py_modules->set_config(module, key, val);
   });
+  if (ret) {
+    PyErr_SetString(PyExc_ValueError, msg.c_str());
+    return nullptr;
+  }
   Py_RETURN_NONE;
 }
 
