@@ -2393,6 +2393,20 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_vault_ssl_clientcert
+  type: str
+  level: advanced
+  desc: Path for custom client certificate for accessing vault server
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_crypt_vault_ssl_clientkey
+  type: str
+  level: advanced
+  desc: Path for private key required for client cert
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_addr
   type: str
   level: advanced
