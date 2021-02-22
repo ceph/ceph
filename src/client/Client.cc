@@ -209,7 +209,13 @@ void Client::_reset_faked_inos()
   free_faked_inos.insert(start, (uint32_t)-1 - start + 1);
   last_used_faked_ino = 0;
   last_used_faked_root = 0;
+  #ifdef _WIN32
+  // On Windows, sizeof(ino_t) is just 2. Despite that, most "native"
+  // Windows structures, including Dokan ones, are using 64B identifiers.
+  _use_faked_inos = false;
+  #else
   _use_faked_inos = sizeof(ino_t) < 8 || cct->_conf->client_use_faked_inos;
+  #endif
 }
 
 void Client::_assign_faked_ino(Inode *in)
