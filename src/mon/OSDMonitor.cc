@@ -9080,7 +9080,6 @@ void OSDMonitor::do_osd_create(
   if (existing_id >= 0) {
     ceph_assert(existing_id < osdmap.get_max_osd());
     ceph_assert(allocated_id < 0);
-    pending_inc.new_weight[existing_id] = CEPH_OSD_OUT;
     *new_id = existing_id;
   } else if (allocated_id >= 0) {
     ceph_assert(existing_id < 0);
@@ -9129,7 +9128,10 @@ out:
     pending_inc.new_max_osd = *new_id + 1;
   }
 
-  pending_inc.new_state[*new_id] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
+  pending_inc.new_weight[*new_id] = CEPH_OSD_IN;
+  // do not set EXISTS; OSDMap::set_weight, called by apply_incremental, will
+  // set it for us.  (ugh.)
+  pending_inc.new_state[*new_id] |= CEPH_OSD_NEW;
   if (!uuid.is_zero())
     pending_inc.new_uuid[*new_id] = uuid;
 }
@@ -9460,7 +9462,6 @@ int OSDMonitor::prepare_command_osd_new(
   if (is_recreate_destroyed) {
     ceph_assert(id >= 0);
     ceph_assert(osdmap.is_destroyed(id));
-    pending_inc.new_weight[id] = CEPH_OSD_OUT;
     pending_inc.new_state[id] |= CEPH_OSD_DESTROYED;
     if ((osdmap.get_state(id) & CEPH_OSD_NEW) == 0) {
       pending_inc.new_state[id] |= CEPH_OSD_NEW;
