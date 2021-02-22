@@ -1207,6 +1207,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'prometheus': 'prometheus',
         'node-exporter': 'node-exporter',
         'crash': 'crash',
+        'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
         'cephadm-exporter': 'cephadm-exporter',
     }
