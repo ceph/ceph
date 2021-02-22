@@ -1427,6 +1427,12 @@ int CrushWrapper::update_item(
 		    << ((float)old_iweight/(float)0x10000) << " -> " << weight
 		    << dendl;
       adjust_item_weight_in_loc(cct, item, iweight, loc);
+      ret = rebuild_roots_with_classes(cct);
+      if (ret < 0) {
+	ldout(cct, 0) << __func__ << " unable to rebuild roots with classes: "
+		      << cpp_strerror(ret) << dendl;
+	return ret;
+      }
       ret = 1;
     }
     if (get_item_name(item) != name) {
