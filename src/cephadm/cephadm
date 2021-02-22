@@ -2185,11 +2185,8 @@ def get_parm(option):
         if cached_stdin is not None:
             j = cached_stdin
         else:
-            try:
-                j = injected_stdin  # type: ignore
-            except NameError:
-                j = sys.stdin.read()
-                cached_stdin = j
+            j = sys.stdin.read()
+            cached_stdin = j
     else:
         # inline json string
         if option[0] == '{' and option[-1] == '}':
@@ -7838,10 +7835,7 @@ def main():
         sys.exit(1)
 
     av: List[str] = []
-    try:
-        av = injected_argv  # type: ignore
-    except NameError:
-        av = sys.argv[1:]
+    av = sys.argv[1:]
 
     ctx = cephadm_init(av)
     if not ctx:  # error, exit
