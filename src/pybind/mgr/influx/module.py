@@ -7,7 +7,7 @@ import json
 import errno
 import time
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option
 
 try:
     from influxdb import InfluxDBClient
@@ -19,46 +19,26 @@ except ImportError:
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-            {
-                'name': 'hostname',
-                'default': None
-            },
-            {
-                'name': 'port',
-                'default': 8086
-            },
-            {
-                'name': 'database',
-                'default': 'ceph'
-            },
-            {
-                'name': 'username',
-                'default': None
-            },
-            {
-                'name': 'password',
-                'default': None
-            },
-            {
-                'name': 'interval',
-                'default': 30
-            },
-            {
-                'name': 'ssl',
-                'default': 'false'
-            },
-            {
-                'name': 'verify_ssl',
-                'default': 'true'
-            },
-            {
-                'name': 'threads',
-                'default': 5
-            },
-            {
-                'name': 'batch_size',
-                'default': 5000
-            }
+        Option(name='hostname',
+               default=None),
+        Option(name='port',
+               default=8086),
+        Option(name='database',
+               default='ceph'),
+        Option(name='username',
+               default=None),
+        Option(name='password',
+               default=None),
+        Option(name='interval',
+               default=30),
+        Option(name='ssl',
+               default='false'),
+        Option(name='verify_ssl',
+               default='true'),
+        Option(name='threads',
+               default=5),
+        Option(name='batch_size',
+               default=5000),
     ]
 
     @property
