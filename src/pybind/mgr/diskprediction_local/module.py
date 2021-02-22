@@ -13,7 +13,7 @@ from mgr_module import CommandResult, MgrModule, Option
 #  from .predictor import get_diskfailurepredictor_path
 #
 # in a command thread.  See https://tracker.ceph.com/issues/42764
-import scipy # noqa: ignore=F401
+import scipy  # noqa: ignore=F401
 from .predictor import DevSmartT, Predictor, get_diskfailurepredictor_path
 
 
@@ -130,7 +130,8 @@ class Module(MgrModule):
         health_data: Dict[str, Dict[str, Any]] = {}
         predict_datas: List[DevSmartT] = []
         try:
-            r, outb, outs = self.remote('devicehealth', 'show_device_metrics', devid=devid, sample='')
+            r, outb, outs = self.remote(
+                'devicehealth', 'show_device_metrics', devid=devid, sample='')
             if r != 0:
                 self.log.error('failed to get device %s health', devid)
                 health_data = {}
@@ -145,7 +146,8 @@ class Module(MgrModule):
             self.log.error('invalid value received for MODULE_OPTIONS.predictor_model')
             return predicted_result
         try:
-            obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+            obj_predictor.initialize(
+                "{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
         except Exception as e:
             self.log.error('Error initializing predictor: %s', e)
             return predicted_result
