@@ -6,8 +6,9 @@ import queue
 import json
 import errno
 import time
+from typing import Tuple
 
-from mgr_module import MgrModule, Option
+from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule, Option
 
 try:
     from influxdb import InfluxDBClient
@@ -418,28 +419,33 @@ class Module(MgrModule):
 
         return json.dumps(result, indent=2, sort_keys=True)
 
-    def handle_command(self, inbuf, cmd):
-        if cmd['prefix'] == 'influx config-show':
-            return 0, json.dumps(self.config, sort_keys=True), ''
-        elif cmd['prefix'] == 'influx config-set':
-            key = cmd['key']
-            value = cmd['value']
-            if not value:
-                return -errno.EINVAL, '', 'Value should not be empty or None'
+    @CLIReadCommand('influx config-show')
+    def config_show(self) -> Tuple[int, str, str]:
+        """
+        Show current configuration
+        """
+        return 0, json.dumps(self.config, sort_keys=True), ''
 
-            self.log.debug('Setting configuration option %s to %s', key, value)
-            try:
-                self.set_module_option(key, value)
-                self.set_config_option(key, value)
-                return 0, 'Configuration option {0} updated'.format(key), ''
-            except ValueError as e:
-                return -errno.EINVAL, '', str(e)
-        elif cmd['prefix'] == 'influx send':
-            self.send_to_influx()
-            return 0, 'Sending data to Influx', ''
+    @CLIWriteCommand('influx config-set')
+    def config_set(self, key: str, value: str) -> Tuple[int, str, str]:
+        if not value:
+            return -errno.EINVAL, '', 'Value should not be empty'
 
-        return (-errno.EINVAL, '',
-                "Command not found '{0}'".format(cmd['prefix']))
+        self.log.debug('Setting configuration option %s to %s', key, value)
+        try:
+            self.set_module_option(key, value)
+            self.set_config_option(key, value)
+            return 0, 'Configuration option {0} updated'.format(key), ''
+        except ValueError as e:
+            return -errno.EINVAL, '', str(e)
+
+    @CLICommand('influx send')
+    def send(self) -> Tuple[int, str, str]:
+        """
+        Force sending data to Influx
+        """
+        self.send_to_influx()
+        return 0, 'Sending data to Influx', ''
 
     def serve(self):
         if InfluxDBClient is None:
