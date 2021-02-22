@@ -1440,6 +1440,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         :param str key:
         :type val: str | None
+        :raises ValueError: if `val` cannot be parsed or it is out of the specified range
         """
         self._validate_module_option(key)
         return self._set_module_option(key, val)
