@@ -7644,11 +7644,9 @@ void Server::_commit_peer_rmdir(MDRequestRef& mdr, int r, CDentry *straydn)
   dout(10) << "_commit_peer_rmdir " << *mdr << " r=" << r << dendl;
 
   if (r == 0) {
-    if (mdr->more()->peer_update_journaled) {
-      CInode *strayin = straydn->get_projected_linkage()->get_inode();
-      if (strayin && !strayin->snaprealm)
-	mdcache->clear_dirty_bits_for_stray(strayin);
-    }
+    CInode *strayin = straydn->get_projected_linkage()->get_inode();
+    if (strayin)
+      mdcache->clear_dirty_bits_for_stray(strayin);
 
     mdr->cleanup();
     _committed_peer(mdr);
@@ -9267,9 +9265,9 @@ void Server::_commit_peer_rename(MDRequestRef& mdr, int r,
     }
 
 
-    if (straydn && mdr->more()->peer_update_journaled) {
+    if (straydn) {
       CInode *strayin = straydn->get_projected_linkage()->get_inode();
-      if (strayin && !strayin->snaprealm)
+      if (strayin)
 	mdcache->clear_dirty_bits_for_stray(strayin);
     }
 
