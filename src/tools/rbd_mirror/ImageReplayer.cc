@@ -690,18 +690,18 @@ template <typename I>
 void ImageReplayer<I>::handle_update_mirror_image_replay_status(int r) {
   dout(10) << dendl;
 
+  ceph_assert(ceph_mutex_is_locked_by_me(m_threads->timer_lock));
+
+  ceph_assert(m_update_status_task != nullptr);
+  m_update_status_task = nullptr;
+
   auto ctx = new LambdaContext([this](int) {
       update_mirror_image_status(false, boost::none);
 
-      {
-        std::unique_lock locker{m_lock};
-        std::unique_lock timer_locker{m_threads->timer_lock};
-        ceph_assert(m_update_status_task != nullptr);
-        m_update_status_task = nullptr;
+      std::unique_lock locker{m_lock};
+      std::unique_lock timer_locker{m_threads->timer_lock};
 
-        schedule_update_mirror_image_replay_status();
-      }
-
+      schedule_update_mirror_image_replay_status();
       m_in_flight_op_tracker.finish_op();
     });
 
