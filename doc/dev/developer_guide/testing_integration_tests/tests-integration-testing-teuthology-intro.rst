@@ -109,16 +109,10 @@ integration tests for all the Ceph components.
       that the integration testing infrastructure works as expected)
 
   * - `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
-    - test CephFS mounted using FUSE
-
-  * - `kcephfs <https://github.com/ceph/ceph/tree/master/qa/suites/kcephfs>`_
-    - test CephFS mounted using kernel
+    - test CephFS mounted using kernel and FUSE clients, also with multiple MDSs.
 
   * - `krbd <https://github.com/ceph/ceph/tree/master/qa/suites/krbd>`_
     - test the RBD kernel module
-
-  * - `multimds <https://github.com/ceph/ceph/tree/master/qa/suites/multimds>`_
-    - test CephFS with multiple MDSs
 
   * - `powercycle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_
     - verify the Ceph cluster behaves when machines are powered off and on
