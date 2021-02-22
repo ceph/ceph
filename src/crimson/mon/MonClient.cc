@@ -513,7 +513,9 @@ void Client::tick()
                                        active_con->renew_tickets(),
                                        active_con->renew_rotating_keyring()).then_unpack([] {});
     } else {
-      return seastar::now();
+      assert(is_hunting());
+      logger().info("{} continuing the hunt", __func__);
+      return authenticate();
     }
   });
 }
@@ -567,6 +569,7 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
     if (found != pending_conns.end()) {
       logger().warn("pending conn reset by {}", conn->get_peer_addr());
       (*found)->close();
+      pending_conns.erase(found);
       return seastar::now();
     } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
       logger().warn("active conn reset {}", conn->get_peer_addr());
@@ -1032,8 +1035,8 @@ seastar::future<> Client::reopen_session(int rank)
     });
   }).then([this] {
     if (!active_con) {
-      return seastar::make_exception_future(
-	  crimson::common::system_shutdown_exception());
+      logger().warn("cannot establish the active_con with any mon");
+      return seastar::now();
     }
     return active_con->renew_rotating_keyring();
   });
