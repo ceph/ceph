@@ -8136,6 +8136,14 @@ inline int PrimaryLogPG::_delete_oid(
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
     t->create(soid);
+    if (oi.has_manifest()) {
+      // make no references
+      dec_all_refcount_manifest(oi, ctx);
+      oi.manifest.clear();
+      oi.manifest.type = object_manifest_t::TYPE_NONE;
+      oi.clear_flag(object_info_t::FLAG_MANIFEST);
+      ctx->delta_stats.num_objects_manifest--;
+    }
     osd->logger->inc(l_osd_tier_whiteout);
     return 0;
   }
