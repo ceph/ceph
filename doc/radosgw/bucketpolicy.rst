@@ -196,7 +196,7 @@ Object Related Operations
 |s3:GetObjectTagging &        |s3:ExistingObjectTag/<tag-key>                 |                   |
 |s3:GetObjectVersionTagging   |                                               |                   |
 +-----------------------------+-----------------------------------------------+-------------------+
-|s3:DeleteObjectTagging &     |s3:ExistingOBjectTag/<tag-key>                 |                   |
+|s3:DeleteObjectTagging &     |s3:ExistingObjectTag/<tag-key>                 |                   |
 |s3:DeleteObjectVersionTagging|                                               |                   |
 +-----------------------------+-----------------------------------------------+-------------------+
 
