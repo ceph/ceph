@@ -42,6 +42,10 @@ class RGWHTTPClient : public RGWIOProvider
 
   string ca_path;
 
+  string client_cert;
+
+  string client_key;
+
   std::atomic<unsigned> stopped { 0 };
 
 
@@ -176,6 +180,14 @@ public:
 
   void set_ca_path(const string& _ca_path) {
     ca_path = _ca_path;
+  }
+
+  void set_client_cert(const string& _client_cert) {
+    client_cert = _client_cert;
+  }
+
+  void set_client_key(const string& _client_key) {
+    client_key = _client_key;
   }
 };
 

@@ -1511,6 +1511,8 @@ OPTION(rgw_crypt_vault_secret_engine, OPT_STR) // kv, transit or other supported
 OPTION(rgw_crypt_vault_namespace, OPT_STR) // Vault Namespace (only availabe in Vault Enterprise Version)
 OPTION(rgw_crypt_vault_verify_ssl, OPT_BOOL) // should we try to verify vault's ssl
 OPTION(rgw_crypt_vault_ssl_cacert, OPT_STR) // optional ca certificate for accessing vault
+OPTION(rgw_crypt_vault_ssl_clientcert, OPT_STR) // client certificate for accessing vault
+OPTION(rgw_crypt_vault_ssl_clientkey, OPT_STR) // private key for client certificate
 
 OPTION(rgw_crypt_kmip_addr, OPT_STR) // kmip server address
 OPTION(rgw_crypt_kmip_ca_path, OPT_STR) // ca for kmip servers

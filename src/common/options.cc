@@ -7183,6 +7183,14 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
     .set_description("Path for custom ca certificate for accessing vault server"),
 
+    Option("rgw_crypt_vault_ssl_clientcert", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Path for customed client certificate for accessing vault server"),
+
+    Option("rgw_crypt_vault_ssl_clientkey", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Path for private key required for client cert"),
+
     Option("rgw_crypt_kmip_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("kmip server address"),
