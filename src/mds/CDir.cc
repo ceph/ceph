@@ -775,12 +775,17 @@ void CDir::try_remove_dentries_for_stray()
       // the dentry to inode again.
       if (dn->is_any_leases())
 	dn->remove_client_leases(mdcache->mds->locker);
-      if (dn->get_num_ref() == 0)
+      if (dn->get_num_ref() == 0) {
 	remove_dentry(dn);
+      } else if (!dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+	mdcache->lru.lru_remove(dn);
+	mdcache->bottom_lru.lru_insert_mid(dn);
+	dn->state_set(CDentry::STATE_BOTTOMLRU);
+      }
     } else {
       ceph_assert(!dn->is_projected());
       CDentry::linkage_t *dnl= dn->get_linkage();
-      CInode *in = NULL;
+      CInode *in = nullptr;
       if (dnl->is_primary()) {
 	in = dnl->get_inode();
 	if (clear_dirty && in->is_dirty())
