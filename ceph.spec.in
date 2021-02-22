@@ -1262,7 +1262,7 @@ ${CMAKE} .. \
     -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
 %endif
 %if 0%{without lua_packages}
-    -DWITH_RADOSGW_LUA_PACKAGES=OFF
+    -DWITH_RADOSGW_LUA_PACKAGES=OFF \
 %endif
 %if 0%{with zbd}
     -DWITH_ZBD=ON \
