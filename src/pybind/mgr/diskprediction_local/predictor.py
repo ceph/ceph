@@ -167,13 +167,14 @@ class RHDiskFailurePredictor(Predictor):
         roll_window_size = 6
 
         # rolling means generator
+        dataset_size = disk_days_attrs.shape[0] - roll_window_size + 1
         gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0)
-               for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
+               for i in range(dataset_size))
         means = np.vstack(gen)
 
         # rolling stds generator
         gen = (disk_days_attrs[i: i + roll_window_size, ...].std(axis=0, ddof=1)
-               for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
+               for i in range(dataset_size))
         stds = np.vstack(gen)
 
         # coefficient of variation
@@ -182,8 +183,7 @@ class RHDiskFailurePredictor(Predictor):
         featurized = np.hstack((means,
                                 stds,
                                 cvs,
-                                disk_days_sa['user_capacity'][: disk_days_attrs.shape[0] - roll_window_size + 1].reshape(-1, 1)
-                                ))
+                                disk_days_sa['user_capacity'][: dataset_size].reshape(-1, 1)))
 
         # scale features
         scaler_path = os.path.join(self.model_dirpath, manufacturer + "_scaler.pkl")
