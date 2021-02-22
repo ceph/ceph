@@ -122,15 +122,14 @@ class Module(MgrModule):
                 self.log.debug('Writing points %d to Influx took %.3f seconds',
                                len(points), runtime)
             except RequestException as e:
-                self.log.exception("Failed to connect to Influx host %s:%d",
-                                   self.config['hostname'], self.config['port'])
+                hostname = self.config['hostname']
+                port = self.config['port']
+                self.log.exception(f"Failed to connect to Influx host {hostname}:{port}")
                 self.health_checks.update({
                     'MGR_INFLUX_SEND_FAILED': {
                         'severity': 'warning',
                         'summary': 'Failed to send data to InfluxDB server '
-                                   'at %s:%d due to an connection error'
-                                   % (self.config['hostname'],
-                                      self.config['port']),
+                                   f'at {hostname}:{port} due to an connection error',
                         'detail': [str(e)]
                     }
                 })
