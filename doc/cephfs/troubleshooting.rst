@@ -12,7 +12,7 @@ them. Start by looking to see if either side has stuck operations
 
 We can get hints about what's going on by dumping the MDS cache ::
 
-  ceph daemon mds.<name> dump cache /tmp/dump.txt
+  ceph daemon mds.<name> dump cache > /tmp/dump.txt
 
 .. note:: The file `dump.txt` is on the machine executing the MDS and for systemd
 	  controlled MDS services, this is in a tmpfs in the MDS container.
