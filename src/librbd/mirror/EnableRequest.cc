@@ -288,7 +288,7 @@ void EnableRequest<I>::handle_enable_non_primary_feature(int r) {
     return;
   }
 
-  image_state_update();
+  finish(0);
 }
 
 template <typename I>
