@@ -360,6 +360,9 @@
 /* Define if unit tests are built. */
 #cmakedefine UNIT_TESTS_BUILT
 
+/* Define if RBD QCOW migration format is enabled */
+#cmakedefine WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
 

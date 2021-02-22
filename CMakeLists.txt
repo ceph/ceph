@@ -232,6 +232,10 @@ CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system libur
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
 
+CMAKE_DEPENDENT_OPTION(WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+  "Enable librbd QCOW v1 migration format support" ON
+  "WITH_RBD" OFF)
+
 CMAKE_DEPENDENT_OPTION(WITH_RBD_RWL "Enable librbd persistent write back cache" OFF
   "WITH_RBD" OFF)
 
