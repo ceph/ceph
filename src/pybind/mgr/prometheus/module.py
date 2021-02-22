@@ -2,7 +2,6 @@ import cherrypy
 from collections import defaultdict
 from distutils.version import StrictVersion
 import json
-from collections import defaultdict
 import errno
 import math
 import os
