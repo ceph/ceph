@@ -8,6 +8,7 @@
 #include "common/ceph_mutex.h"
 #include "librbd/migration/QCOWFormat.h"
 #include "librbd/migration/SourceSpecBuilder.h"
+#include "acconfig.h"
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include "json_spirit/json_spirit.h"
@@ -291,6 +292,7 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
 
   expect_stream_open(*mock_stream_interface, 0);
 
+  int expected_open_ret_val = 0;
   QCowHeaderV1 qcow_header;
   memset(&qcow_header, 0, sizeof(qcow_header));
   qcow_header.magic = htobe32(QCOW_MAGIC);
@@ -304,6 +306,8 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
   probe_bl.append(std::string_view(reinterpret_cast<char*>(&qcow_header), 8));
   expect_stream_read(*mock_stream_interface, {{0, 8}}, probe_bl, 0);
 
+#ifdef WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+
   bufferlist header_bl;
   header_bl.append(std::string_view(reinterpret_cast<char*>(&qcow_header),
                                     sizeof(qcow_header)));
@@ -314,6 +318,12 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
   l1_table_bl.append_zero(16);
   expect_stream_read(*mock_stream_interface, {{1<<20, 16}}, l1_table_bl, 0);
 
+#else // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+
+  expected_open_ret_val = -ENOTSUP;
+
+#endif // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+
   expect_stream_close(*mock_stream_interface, 0);
 
   MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
@@ -321,7 +331,7 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
 
   C_SaferCond ctx1;
   mock_qcow_format.open(&ctx1);
-  ASSERT_EQ(0, ctx1.wait());
+  ASSERT_EQ(expected_open_ret_val, ctx1.wait());
 
   C_SaferCond ctx2;
   mock_qcow_format.close(&ctx2);
@@ -434,6 +444,8 @@ TEST_F(TestMockMigrationQCOWFormat, ProbeError) {
   ASSERT_EQ(0, ctx2.wait());
 }
 
+#ifdef WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+
 TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV1Error) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
@@ -475,6 +487,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV1Error) {
   mock_qcow_format.close(&ctx2);
   ASSERT_EQ(0, ctx2.wait());
 }
+
+#endif // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
 
 TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV2Error) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
