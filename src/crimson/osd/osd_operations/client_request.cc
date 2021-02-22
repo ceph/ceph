@@ -23,7 +23,7 @@ namespace crimson::osd {
 
 ClientRequest::ClientRequest(
   OSD &osd, crimson::net::ConnectionRef conn, Ref<MOSDOp> &&m)
-  : osd(osd), conn(conn), m(m), ors(get_osd_priv(conn.get()).opSequencer)
+  : osd(osd), conn(conn), m(m), ors(get_osd_priv(conn.get()).op_sequencer)
 {}
 
 ClientRequest::~ClientRequest()
