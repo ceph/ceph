@@ -1496,7 +1496,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def set_localized_store(self, key: str, val: Optional[str]) -> None:
         return self._set_localized(key, val, self.set_store)
 
-    def self_test(self) -> None:
+    def self_test(self) -> Optional[str]:
         """
         Run a self-test on the module. Override this function and implement
         a best as possible self-test for (automated) testing of the module
