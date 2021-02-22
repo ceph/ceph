@@ -2381,7 +2381,6 @@ class Firewalld(object):
             else:
                 logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
 
-            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbose_on_failure=False)
     def apply_rules(self):
         # type: () -> None
         if not self.available:
