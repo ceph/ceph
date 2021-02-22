@@ -87,30 +87,6 @@ class Module(MgrModule):
             default=100)
     ]
 
-    COMMANDS = [
-        {
-            "cmd": "zabbix config-set name=key,type=CephString "
-                   "name=value,type=CephString",
-            "desc": "Set a configuration value",
-            "perm": "rw"
-        },
-        {
-            "cmd": "zabbix config-show",
-            "desc": "Show current configuration",
-            "perm": "r"
-        },
-        {
-            "cmd": "zabbix send",
-            "desc": "Force sending data to Zabbix",
-            "perm": "rw"
-        },
-        {
-            "cmd": "zabbix discovery",
-            "desc": "Discovering Zabbix data",
-            "perm": "r"
-        },
-    ]
-
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
@@ -405,10 +381,16 @@ class Module(MgrModule):
 
     @CLIReadCommand('zabbix config-show')
     def config_show(self) -> Tuple[int, str, str]:
+        """
+        Show current configuration
+        """
         return 0, json.dumps(self.config, indent=4, sort_keys=True), ''
 
     @CLIWriteCommand('zabbix config-set')
     def config_set(self, key: str, value: str) -> Tuple[int, str, str]:
+        """
+        Set a configuration value
+        """
         if not value:
             return -errno.EINVAL, '', 'Value should not be empty or None'
 
@@ -423,6 +405,9 @@ class Module(MgrModule):
 
     @CLIReadCommand('zabbix send')
     def do_send(self) -> Tuple[int, str, str]:
+        """
+        Force sending data to Zabbix
+        """
         data = self.get_data()
         if self.send(data):
             return 0, 'Sending data to Zabbix', ''
@@ -431,6 +416,9 @@ class Module(MgrModule):
 
     @CLIReadCommand('zabbix discovery')
     def do_discovery(self) -> Tuple[int, str, str]:
+        """
+        Discovering Zabbix data
+        """
         if self.discovery():
             return 0, 'Sending discovery data to Zabbix', ''
 
