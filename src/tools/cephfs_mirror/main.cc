@@ -6,6 +6,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/async/context_pool.h"
+#include "common/Preforker.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "mon/MonClient.h"
@@ -47,11 +48,31 @@ int main(int argc, const char **argv) {
                          CODE_ENVIRONMENT_DAEMON,
                          CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
-  if (g_conf()->daemonize) {
-    global_init_daemonize(g_ceph_context);
+  Preforker forker;
+  if (global_init_prefork(g_ceph_context) >= 0) {
+    std::string err;
+    int r = forker.prefork(err);
+    if (r < 0) {
+      cerr << err << std::endl;
+      return r;
+    }
+    if (forker.is_parent()) {
+      g_ceph_context->_log->start();
+      if (forker.parent_wait(err) != 0) {
+        return -ENXIO;
+      }
+      return 0;
+    }
+    global_init_postfork_start(g_ceph_context);
   }
 
   common_init_finish(g_ceph_context);
+
+  bool daemonize = g_conf().get_val<bool>("daemonize");
+  if (daemonize) {
+    global_init_postfork_finish(g_ceph_context);
+    forker.daemonize();
+  }
 
   init_async_signal_handler();
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
@@ -82,12 +103,18 @@ int main(int argc, const char **argv) {
   }
 
   mirror->run();
+  delete mirror;
 
 cleanup:
   monc.shutdown();
 cleanup_messenger:
   msgr->shutdown();
-  delete mirror;
+  msgr->wait();
+  delete msgr;
 
-  return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+  unregister_async_signal_handler(SIGINT, handle_signal);
+  unregister_async_signal_handler(SIGTERM, handle_signal);
+  shutdown_async_signal_handler();
+
+  return forker.signal_exit(r);
 }
