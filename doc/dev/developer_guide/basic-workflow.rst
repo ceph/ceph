@@ -122,10 +122,9 @@ Add the upstream repo as a "remote" and fetch it:
    git remote add ceph https://github.com/ceph/ceph.git
    git fetch ceph
 
-Fetching is a process that downloads all objects (commits, branches) that have
-been added since the last sync. These commands download all the branches from
-``ceph/ceph.git`` to the local git repo as ``remotes/ceph/$BRANCH_NAME`` and
-can be referenced as ``ceph/$BRANCH_NAME`` in local git commands.
+These commands fetch all the branches and commits from ``ceph/ceph.git`` to the
+local git repo as ``remotes/ceph/$BRANCH_NAME`` and can be referenced as
+``ceph/$BRANCH_NAME`` in local git commands.
 
 
 Resetting Local Master to Upstream Master
