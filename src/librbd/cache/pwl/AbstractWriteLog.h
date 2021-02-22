@@ -158,7 +158,6 @@ public:
   virtual void copy_bl_to_buffer(
       WriteRequestResources *resources,
       std::unique_ptr<WriteLogOperationSet> &op_set) {}
-
 private:
  typedef std::list<pwl::C_WriteRequest<This> *> C_WriteRequests;
  typedef std::list<pwl::C_BlockIORequest<This> *> C_BlockIORequests;
@@ -393,6 +392,10 @@ protected:
       const std::shared_ptr<pwl::GenericLogEntry> log_entry) {
     return nullptr;
   }
+  virtual uint64_t get_max_extent() {
+    return 0;
+  }
+
 };
 
 } // namespace pwl

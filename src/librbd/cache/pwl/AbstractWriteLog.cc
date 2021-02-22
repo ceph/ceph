@@ -816,8 +816,35 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
+  Extents splitted_image_extents;
+  uint64_t max_extent_size = get_max_extent();
+  if (max_extent_size != 0) {
+    for (auto extent : image_extents) {
+      if (extent.second > max_extent_size) {
+	uint64_t off = extent.first;
+	uint64_t extent_bytes = extent.second;
+	int len = ceil(extent_bytes * 1.0 / max_extent_size);
+	for (int i = 0; i < len; ++i) {
+	  Extent _ext;
+	  _ext.first = off + i * max_extent_size;
+	  if (i == (len -1)) {
+	    _ext.second = extent_bytes;
+	  } else {
+	    _ext.second = max_extent_size;
+	  }
+	  extent_bytes = extent_bytes - max_extent_size;
+	  splitted_image_extents.emplace_back(_ext);
+	}
+      } else {
+	splitted_image_extents.emplace_back(extent);
+      }
+    }
+  } else {
+    splitted_image_extents = image_extents;
+  }
+
   C_WriteRequestT *write_req =
-    m_builder->create_write_request(*this, now, std::move(image_extents), std::move(bl),
+    m_builder->create_write_request(*this, now, std::move(splitted_image_extents), std::move(bl),
                                     fadvise_flags, m_lock, m_perfcounter, on_finish);
   m_perfcounter->inc(l_librbd_pwl_wr_bytes, write_req->image_extents_summary.total_bytes);
 
