@@ -27,5 +27,8 @@ class RequestsTest(DashboardTestCase):
         self._get('/api/summary')
         self.assertHeaders({
             'server': 'Ceph-Dashboard',
-            'Content-Type': 'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION)
+            'Content-Type': 'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION),
+            'Content-Security-Policy': "frame-ancestors 'self';",
+            'X-Content-Type-Options': 'nosniff',
+            'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload'
         })
