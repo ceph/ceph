@@ -10450,6 +10450,7 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
     ctx->at_version = get_next_version();
     ctx->new_obs = obc->obs;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+    --ctx->delta_stats.num_objects_dirty;
 
     /* 
     * Let's assume that there is a manifest snapshotted object, and we issue tier_flush() to head.
