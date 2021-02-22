@@ -40,6 +40,9 @@ private:
    * <start>
    *    |
    *    v
+   * GET_NAME
+   *    |
+   *    v
    * GET_SNAP_LIMIT
    *    |
    *    v
@@ -65,6 +68,9 @@ private:
 
   bufferlist m_bl;
   bufferlist m_state_bl;
+
+  void get_name();
+  void handle_get_name(int r);
 
   void get_snap_limit();
   void handle_get_snap_limit(int r);
