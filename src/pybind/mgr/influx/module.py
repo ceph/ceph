@@ -264,30 +264,6 @@ class Module(MgrModule):
                     }
                 }
 
-    def set_config_option(self, option: str, value: str) -> None:
-        if option not in self.config_keys.keys():
-            raise RuntimeError('{0} is a unknown configuration '
-                               'option'.format(option))
-
-        if option in ['port', 'interval', 'threads', 'batch_size']:
-            try:
-                value = int(value)
-            except (ValueError, TypeError):
-                raise RuntimeError('invalid {0} configured. Please specify '
-                                   'a valid integer'.format(option))
-
-        if option == 'interval' and value < 5:
-            raise RuntimeError('interval should be set to at least 5 seconds')
-
-        if option in ['ssl', 'verify_ssl']:
-            value = value.lower() == 'true'
-
-        if option == 'threads':
-            if 1 > value > 32:
-                raise RuntimeError('threads should be in range 1-32')
-
-        self.config[option] = value
-
     def init_module_config(self) -> None:
         self.config['hostname'] = \
             self.get_module_option("hostname", default=self.config_keys['hostname'])
@@ -447,7 +423,7 @@ class Module(MgrModule):
         self.log.debug('Setting configuration option %s to %s', key, value)
         try:
             self.set_module_option(key, value)
-            self.set_config_option(key, value)
+            self.config[key] = self.get_module_option(key)
             return 0, 'Configuration option {0} updated'.format(key), ''
         except ValueError as e:
             return -errno.EINVAL, '', str(e)
