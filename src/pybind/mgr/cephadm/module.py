@@ -146,6 +146,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='seconds to cache device inventory',
         ),
         Option(
+            'device_enhanced_scan',
+            type='bool',
+            default=False,
+            desc='Use libstoragemgmt during device scans',
+        ),
+        Option(
             'daemon_cache_timeout',
             type='secs',
             default=10 * 60,
