@@ -61,9 +61,13 @@ public:
     });
   }
 
-  void finish_op(OpRef& op, const spg_t& pgid) {
+  void finish_op(OpRef& op, const spg_t& pgid, bool interrutped) {
     assert(op->pos);
-    pg_ops.at(pgid).erase(*(op->pos));
+    auto curr_op_pos = *(op->pos);
+    if (interrutped) {
+      curr_op_pos->second.set_value();
+    }
+    pg_ops.at(pgid).erase(curr_op_pos);
   }
 private:
   std::map<spg_t, std::map<OpRef, seastar::promise<>, OperationComparator<T>>> pg_ops;
