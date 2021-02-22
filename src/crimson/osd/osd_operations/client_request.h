@@ -74,7 +74,9 @@ private:
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
 
-  OperationRepeatSequencer<ClientRequest>& ors;
+  OpSequencer& sequencer;
+  const uint64_t prev_op_id;
+
 private:
   bool is_misdirected(const PG& pg) const;
 };

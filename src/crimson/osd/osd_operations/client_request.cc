@@ -23,7 +23,11 @@ namespace crimson::osd {
 
 ClientRequest::ClientRequest(
   OSD &osd, crimson::net::ConnectionRef conn, Ref<MOSDOp> &&m)
-  : osd(osd), conn(conn), m(m), ors(get_osd_priv(conn.get()).op_sequencer)
+  : osd(osd),
+    conn(conn),
+    m(m),
+    sequencer(get_osd_priv(conn.get()).op_sequencer[m->get_spg()]),
+    prev_op_id(sequencer.get_last_issued())
 {}
 
 ClientRequest::~ClientRequest()
@@ -76,8 +80,8 @@ seastar::future<> ClientRequest::start()
       }).then([this, opref](Ref<PG> pgref) mutable {
 	epoch_t same_interval_since = pgref->get_interval_start_epoch();
 	logger().debug("{} same_interval_since: {}", *this, same_interval_since);
-	return ors.start_op(
-	  handle, same_interval_since, opref, pgref->get_pgid(),
+	return sequencer.start_op(
+	  handle, prev_op_id, opref->get_id(),
 	  [this, opref, pgref] {
 	  PG &pg = *pgref;
 	  if (pg.can_discard_op(*m)) {
@@ -105,19 +109,23 @@ seastar::future<> ClientRequest::start()
 	      return process_op(pgref);
 	    }
 	  });
-	}).then([this, opref, pgref]() mutable {
-	  ors.finish_op(opref, pgref->get_pgid(), false);
-	  return seastar::stop_iteration::yes;
+        }).then([this] {
+          sequencer.finish_op(get_id());
+          return seastar::stop_iteration::yes;
         }).handle_exception_type(
-          [opref, pgref, this](crimson::common::actingset_changed& e) mutable {
+          [this](crimson::common::actingset_changed& e) mutable {
           if (e.is_primary()) {
             logger().debug("operation restart, acting set changed");
+            sequencer.maybe_reset(get_id());
             return seastar::stop_iteration::no;
           } else {
-            ors.finish_op(opref, pgref->get_pgid(), true);
+            sequencer.abort();
             logger().debug("operation abort, up primary changed");
             return seastar::stop_iteration::yes;
           }
+        }).handle_exception_type(
+          [](seastar::broken_condition_variable&) {
+          return seastar::stop_iteration::yes;
         });
       });
     });
