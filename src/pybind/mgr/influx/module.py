@@ -111,7 +111,7 @@ class Module(MgrModule):
         while True:
             try:
                 points = self.queue.get()
-                if points is None:
+                if not points:
                     self.log.debug('Worker shutting down')
                     break
 
@@ -387,7 +387,7 @@ class Module(MgrModule):
         self.log.debug('Shutting down queue workers')
 
         for _ in self.workers:
-            self.queue.put(None)
+            self.queue.put([])
 
         self.queue.join()
 
