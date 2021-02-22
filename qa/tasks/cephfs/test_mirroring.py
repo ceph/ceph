@@ -596,7 +596,7 @@ class TestMirroring(CephFSTestCase):
         blocklist = self.get_blocklisted_instances()
         self.assertTrue(rados_inst in blocklist)
 
-        time.sleep(240)
+        time.sleep(500)
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                "client.mirror_remote@ceph", '/d0', 'snap0', expected_snap_count=1)
         self.verify_snapshot('d0', 'snap0')
