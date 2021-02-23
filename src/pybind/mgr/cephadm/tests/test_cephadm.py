@@ -1168,3 +1168,29 @@ Traceback (most recent call last):
                           ['--', 'inventory', '--format=json'], image='',
                           no_fsid=False),
             ]
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_activate(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test', refresh_hosts=False):
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'osds': [
+                    {
+                        'osd': 1,
+                        'up_from': 0,
+                        'uuid': 'uuid'
+                    }
+                ]
+            })
+
+            ceph_volume_lvm_list = {
+                '1': [{
+                    'tags': {
+                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                        'ceph.osd_fsid': 'uuid'
+                    }
+                }]
+            }
+            _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
+            assert cephadm_module._osd_activate(
+                ['test']).stdout == "Created osd(s) 1 on host 'test'"

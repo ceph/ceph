@@ -668,3 +668,16 @@ It is also possible to specify directly device paths in specific hosts like the 
 
 
 This can easily be done with other filters, like `size` or `vendor` as well.
+
+Activate existing OSDs
+======================
+
+In case the OS of a host was reinstalled, existing OSDs need to be activated
+again. For this use case, cephadm provides a wrapper for :ref:`ceph-volume-lvm-activate` that
+activates all existing OSDs on a host.
+
+.. prompt:: bash #
+
+   ceph cephadm osd activate <host>...
+
+This will scan all existing disks for OSDs and deploy corresponding daemons.

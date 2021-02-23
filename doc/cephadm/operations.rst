@@ -217,3 +217,4 @@ Then, run bootstrap referencing this file::
 
   cephadm bootstrap -c /root/ceph.conf ...
 
+
