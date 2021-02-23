@@ -224,7 +224,7 @@ void RGWObjManifest::obj_iterator::operator++()
   /* are we still pointing at the head? */
   if (ofs < head_size) {
     rule_iter = manifest->rules.begin();
-    RGWObjManifestRule *rule = &rule_iter->second;
+    const RGWObjManifestRule *rule = &rule_iter->second;
     ofs = std::min(head_size, obj_size);
     stripe_ofs = ofs;
     cur_stripe = 1;
@@ -236,7 +236,7 @@ void RGWObjManifest::obj_iterator::operator++()
     return;
   }
 
-  RGWObjManifestRule *rule = &rule_iter->second;
+  const RGWObjManifestRule *rule = &rule_iter->second;
 
   stripe_ofs += rule->stripe_max_size;
   cur_stripe++;

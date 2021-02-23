@@ -198,7 +198,8 @@ public:
     set_obj_size(_size);
   }
 
-  void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location);
+  void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs,
+                             string *override_prefix, rgw_obj_select *location) const;
 
   void set_trivial_rule(uint64_t tail_ofs, uint64_t stripe_max_size) {
     RGWObjManifestRule rule(0, tail_ofs, 0, stripe_max_size);
@@ -319,21 +320,21 @@ public:
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
 
-  bool empty() {
+  bool empty() const {
     if (explicit_objs)
       return objs.empty();
     return rules.empty();
   }
 
-  bool has_explicit_objs() {
+  bool has_explicit_objs() const {
     return explicit_objs;
   }
 
-  bool has_tail() {
+  bool has_tail() const {
     if (explicit_objs) {
       if (objs.size() == 1) {
-        map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
-        rgw_obj& o = iter->second.loc;
+        auto iter = objs.begin();
+        const rgw_obj& o = iter->second.loc;
         return !(obj == o);
       }
       return (objs.size() >= 2);
@@ -352,7 +353,7 @@ public:
     }
   }
 
-  const rgw_obj& get_obj() {
+  const rgw_obj& get_obj() const {
     return obj;
   }
 
@@ -361,11 +362,11 @@ public:
     tail_placement.bucket = _b;
   }
 
-  const rgw_bucket_placement& get_tail_placement() {
+  const rgw_bucket_placement& get_tail_placement() const {
     return tail_placement;
   }
 
-  const rgw_placement_rule& get_head_placement_rule() {
+  const rgw_placement_rule& get_head_placement_rule() const {
     return head_placement_rule;
   }
 
@@ -373,7 +374,7 @@ public:
     prefix = _p;
   }
 
-  const string& get_prefix() {
+  const string& get_prefix() const {
     return prefix;
   }
 
@@ -381,7 +382,7 @@ public:
     tail_instance = _ti;
   }
 
-  const string& get_tail_instance() {
+  const string& get_tail_instance() const {
     return tail_instance;
   }
 
@@ -393,20 +394,20 @@ public:
     obj_size = s;
   }
 
-  uint64_t get_obj_size() {
+  uint64_t get_obj_size() const {
     return obj_size;
   }
 
-  uint64_t get_head_size() {
+  uint64_t get_head_size() const {
     return head_size;
   }
 
-  uint64_t get_max_head_size() {
+  uint64_t get_max_head_size() const {
     return max_head_size;
   }
 
   class obj_iterator {
-    RGWObjManifest *manifest = nullptr;
+    const RGWObjManifest *manifest = nullptr;
     uint64_t part_ofs = 0;   /* where current part starts */
     uint64_t stripe_ofs = 0; /* where current stripe starts */
     uint64_t ofs = 0;        /* current position within the object */
@@ -418,26 +419,18 @@ public:
 
     rgw_obj_select location;
 
-    map<uint64_t, RGWObjManifestRule>::iterator rule_iter;
-    map<uint64_t, RGWObjManifestRule>::iterator next_rule_iter;
-
-    map<uint64_t, RGWObjManifestPart>::iterator explicit_iter;
+    map<uint64_t, RGWObjManifestRule>::const_iterator rule_iter;
+    map<uint64_t, RGWObjManifestRule>::const_iterator next_rule_iter;
+    map<uint64_t, RGWObjManifestPart>::const_iterator explicit_iter;
 
     void update_explicit_pos();
 
-
-  protected:
-
-    void set_manifest(RGWObjManifest *m) {
-      manifest = m;
-    }
-
   public:
     obj_iterator() = default;
-    explicit obj_iterator(RGWObjManifest *_m)
+    explicit obj_iterator(const RGWObjManifest *_m)
       : obj_iterator(_m, 0)
     {}
-    obj_iterator(RGWObjManifest *_m, uint64_t _ofs) : manifest(_m) {
+    obj_iterator(const RGWObjManifest *_m, uint64_t _ofs) : manifest(_m) {
       seek(_ofs);
     }
     void seek(uint64_t ofs);
@@ -494,13 +487,12 @@ public:
 
     void update_location();
 
-    friend class RGWObjManifest;
     void dump(Formatter *f) const;
   }; // class obj_iterator
 
-  obj_iterator obj_begin() { return obj_iterator{this}; }
-  obj_iterator obj_end() { return obj_iterator{this, obj_size}; }
-  obj_iterator obj_find(uint64_t ofs) {
+  obj_iterator obj_begin() const { return obj_iterator{this}; }
+  obj_iterator obj_end() const { return obj_iterator{this, obj_size}; }
+  obj_iterator obj_find(uint64_t ofs) const {
     return obj_iterator{this, std::min(ofs, obj_size)};
   }
 

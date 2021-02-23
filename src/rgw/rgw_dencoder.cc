@@ -79,7 +79,7 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     return;
   }
 
-  RGWObjManifestRule& rule = rule_iter->second;
+  const RGWObjManifestRule& rule = rule_iter->second;
 
   if (rule.part_size > 0) {
     cur_part_id = rule.start_part_num + (ofs - rule.start_ofs) / rule.part_size;
@@ -138,7 +138,7 @@ void RGWObjManifest::obj_iterator::update_explicit_pos()
   ofs = explicit_iter->first;
   stripe_ofs = ofs;
 
-  map<uint64_t, RGWObjManifestPart>::iterator next_iter = explicit_iter;
+  auto next_iter = explicit_iter;
   ++next_iter;
   if (next_iter != manifest->objs.end()) {
     stripe_size = next_iter->first - ofs;
@@ -167,7 +167,8 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   o.push_back(new RGWObjManifest);
 }
 
-void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location)
+void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe,
+                                           uint64_t ofs, string *override_prefix, rgw_obj_select *location) const
 {
   rgw_obj loc;
 
