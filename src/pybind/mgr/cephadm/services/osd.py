@@ -86,7 +86,7 @@ class OSDService(CephService):
                     code, '\n'.join(err)))
 
         # check result
-        out, err, code = CephadmServe(self.mgr)._run_cephadm(
+        osds_elems: dict = CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
             [
                 '--',
@@ -94,11 +94,6 @@ class OSDService(CephService):
                 '--format', 'json',
             ])
         before_osd_uuid_map = self.mgr.get_osd_uuid_map(only_up=True)
-        try:
-            osds_elems = json.loads('\n'.join(out))
-        except ValueError:
-            logger.exception('Cannot decode JSON: \'%s\'' % '\n'.join(out))
-            osds_elems = {}
         fsid = self.mgr._cluster_fsid
         osd_uuid_map = self.mgr.get_osd_uuid_map()
         created = []
