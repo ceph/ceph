@@ -985,11 +985,16 @@ data should remain readable and writeable, although data redundancy
 may be reduced as some PGs may end up in a degraded (but active)
 state.  It will return a success code if it is okay to stop the
 OSD(s), or an error code and informative message if it is not or if no
-conclusion can be drawn at the current time.
+conclusion can be drawn at the current time.  When ``--max <num>`` is
+provided, up to <num> OSDs IDs will return (including the provided
+OSDs) that can all be stopped simultaneously.  This allows larger sets
+of stoppable OSDs to be generated easily by providing a single
+starting OSD and a max.  Additional OSDs are drawn from adjacent locations
+in the CRUSH hierarchy.
 
 Usage::
 
-  ceph osd ok-to-stop <id> [<ids>...]
+  ceph osd ok-to-stop <id> [<ids>...] [--max <num>]
 
 Subcommand ``pause`` pauses osd.
 
