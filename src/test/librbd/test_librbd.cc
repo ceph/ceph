@@ -4886,7 +4886,7 @@ TEST_F(TestLibRBD, RebuildObjectMapViaLockOwner)
 
 TEST_F(TestLibRBD, RenameViaLockOwner)
 {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
