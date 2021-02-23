@@ -23,7 +23,7 @@ namespace crimson::osd {
 
 ClientRequest::ClientRequest(
   OSD &osd, crimson::net::ConnectionRef conn, Ref<MOSDOp> &&m)
-  : osd(osd), conn(conn), m(m), ors(get_osd_priv(conn.get()).opSequencer)
+  : osd(osd), conn(conn), m(m), ors(get_osd_priv(conn.get()).op_sequencer)
 {}
 
 ClientRequest::~ClientRequest()
@@ -106,17 +106,19 @@ seastar::future<> ClientRequest::start()
 	    }
 	  });
 	}).then([this, opref, pgref]() mutable {
-	  ors.finish_op(opref, pgref->get_pgid());
+	  ors.finish_op(opref, pgref->get_pgid(), false);
 	  return seastar::stop_iteration::yes;
-	});
-      }).handle_exception_type([](crimson::common::actingset_changed& e) {
-	if (e.is_primary()) {
-	  logger().debug("operation restart, acting set changed");
-	  return seastar::stop_iteration::no;
-	} else {
-	  logger().debug("operation abort, up primary changed");
-	  return seastar::stop_iteration::yes;
-	}
+        }).handle_exception_type(
+          [opref, pgref, this](crimson::common::actingset_changed& e) mutable {
+          if (e.is_primary()) {
+            logger().debug("operation restart, acting set changed");
+            return seastar::stop_iteration::no;
+          } else {
+            ors.finish_op(opref, pgref->get_pgid(), true);
+            logger().debug("operation abort, up primary changed");
+            return seastar::stop_iteration::yes;
+          }
+        });
       });
     });
   });
