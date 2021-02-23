@@ -391,6 +391,9 @@ class ServiceSpec(object):
                           'node-exporter osd prometheus rbd-mirror rgw ' \
                           'container cephadm-exporter ha-rgw'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw '.split()
+    MANAGED_CONFIG_OPTIONS = [
+        'mds_join_fs',
+    ]
 
     @classmethod
     def _cls(cls: Type[ServiceSpecT], service_type: str) -> Type[ServiceSpecT]:
@@ -563,6 +566,12 @@ class ServiceSpec(object):
 
         if self.placement is not None:
             self.placement.validate()
+        if self.config:
+            for k, v in self.config.items():
+                if k in self.MANAGED_CONFIG_OPTIONS:
+                    raise ServiceSpecValidationError(
+                        f'Cannot set config option {k} in spec: it is managed by cephadm'
+                    )
 
     def __repr__(self) -> str:
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
@@ -636,6 +645,12 @@ class RGWSpec(ServiceSpec):
     Settings to configure a (multisite) Ceph RGW
 
     """
+    MANAGED_CONFIG_OPTIONS = ServiceSpec.MANAGED_CONFIG_OPTIONS + [
+        'rgw_zone',
+        'rgw_realm',
+        'rgw_frontends',
+    ]
+
     def __init__(self,
                  service_type: str = 'rgw',
                  service_id: Optional[str] = None,
