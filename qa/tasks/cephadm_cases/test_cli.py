@@ -6,10 +6,11 @@ log = logging.getLogger(__name__)
 
 
 class TestCephadmCLI(MgrTestCase):
-    def _cmd(self, *args):
+    def _cmd(self, *args) -> str:
+        assert self.mgr_cluster is not None
         return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
 
-    def _orch_cmd(self, *args):
+    def _orch_cmd(self, *args) -> str:
         return self._cmd("orch", *args)
 
     def setUp(self):
