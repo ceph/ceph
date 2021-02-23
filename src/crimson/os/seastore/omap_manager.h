@@ -86,18 +86,22 @@ public:
     const std::string &key) = 0;
 
   /**
-   * Ordered scan of key-> value mapping in omap tree
+   * omap_list
+   *
+   * Scans key/value pairs in order.
    *
    * @param omap_root: omap btree root information
    * @param t: current transaction
-   * @param start: the list keys range begin > start if present,
-   *        at beginning if std::nullopt
-   * @param max_result_size: the number of list keys,
-   *        it it is not set, list all keys after string start.
-   * @retval listed key->value mapping and next key
+   * @param start: nullopt sorts before any string, behavior
+   *        based on config.inclusive
+   * @param config: see below for params
+   * @retval listed key->value and bool indicating complete
    */
   struct omap_list_config_t {
+    /// max results to return
     size_t max_result_size = 128;
+
+    /// true denotes behavior like lower_bound, upper_bound otherwise
     bool inclusive = false;
 
     omap_list_config_t(

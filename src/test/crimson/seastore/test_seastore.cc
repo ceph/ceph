@@ -52,6 +52,96 @@ struct seastore_test_t :
       coll,
       std::move(t)).get0();
   }
+
+  struct object_state_t {
+    const coll_t cid;
+    const CollectionRef coll;
+    const ghobject_t oid;
+
+    std::map<string, bufferlist> omap;
+
+    void set_omap(
+      CTransaction &t,
+      const string &key,
+      const bufferlist &val) {
+      omap[key] = val;
+      std::map<string, bufferlist> arg;
+      arg[key] = val;
+      t.omap_setkeys(
+	cid,
+	oid,
+	arg);
+    }
+
+    void set_omap(
+      SeaStore &seastore,
+      const string &key,
+      const bufferlist &val) {
+      CTransaction t;
+      set_omap(t, key, val);
+      seastore.do_transaction(
+	coll,
+	std::move(t)).get0();
+    }
+
+    void check_omap_key(
+      SeaStore &seastore,
+      const string &key) {
+      std::set<string> to_check;
+      to_check.insert(key);
+      auto result = seastore.omap_get_values(
+	coll,
+	oid,
+	to_check).unsafe_get0();
+      if (result.empty()) {
+	EXPECT_EQ(omap.find(key), omap.end());
+      } else {
+	auto iter = omap.find(key);
+	EXPECT_NE(iter, omap.end());
+	if (iter != omap.end()) {
+	  EXPECT_EQ(result.size(), 1);
+	  EXPECT_EQ(iter->second, result.begin()->second);
+	}
+      }
+    }
+
+    void check_omap(SeaStore &seastore) {
+      auto iter = seastore.get_omap_iterator(coll, oid).get0();
+      iter->seek_to_first().get0();
+      auto refiter = omap.begin();
+      while (true) {
+	if (!iter->valid() && refiter == omap.end())
+	  break;
+
+	if (!iter->valid() || refiter->first < iter->key()) {
+	  logger().debug(
+	    "check_omap: misisng omap key {}",
+	    refiter->first);
+	  EXPECT_FALSE("missing omap key");
+	  ++refiter;
+	} else if (refiter == omap.end() || refiter->first > iter->key()) {
+	  logger().debug(
+	    "check_omap: extra omap key {}",
+	    iter->key());
+	  EXPECT_FALSE("extra omap key");
+	  iter->next().get0();
+	} else {
+	  EXPECT_EQ(iter->value(), refiter->second);
+	  iter->next().get0();
+	  ++refiter;
+	}
+      }
+    }
+  };
+
+  map<ghobject_t, object_state_t> test_objects;
+  object_state_t &get_object(
+    const ghobject_t &oid) {
+    return test_objects.emplace(
+      std::make_pair(
+	oid,
+	object_state_t{coll_name, coll, oid})).first->second;
+  }
 };
 
 ghobject_t make_oid(int i) {
@@ -103,11 +193,51 @@ TEST_F(seastore_test_t, touch_stat)
       CTransaction t;
       t.touch(coll_name, test);
       do_transaction(std::move(t));
-
-      auto result = seastore->stat(
-	coll,
-	test).get0();
-      EXPECT_EQ(result.st_size, 0);
     }
+
+    auto result = seastore->stat(
+      coll,
+      test).get0();
+    EXPECT_EQ(result.st_size, 0);
+  });
+}
+
+bufferlist make_bufferlist(size_t len) {
+  bufferptr ptr(len);
+  bufferlist bl;
+  bl.append(ptr);
+  return bl;
+}
+
+TEST_F(seastore_test_t, omap_test_simple)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.set_omap(
+      *seastore,
+      "asdf",
+      make_bufferlist(128));
+    test_obj.check_omap_key(
+      *seastore,
+      "asdf");
+  });
+}
+
+TEST_F(seastore_test_t, omap_test_iterator)
+{
+  run_async([this] {
+    auto make_key = [](unsigned i) {
+      std::stringstream ss;
+      ss << "key" << i;
+      return ss.str();
+    };
+    auto &test_obj = get_object(make_oid(0));
+    for (unsigned i = 0; i < 20; ++i) {
+      test_obj.set_omap(
+	*seastore,
+	make_key(i),
+	make_bufferlist(128));
+    }
+    test_obj.check_omap(*seastore);
   });
 }
