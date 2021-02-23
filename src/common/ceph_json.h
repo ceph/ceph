@@ -339,7 +339,9 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
       std::string s = "missing mandatory field " + std::string(name);
       throw err(s);
     }
-    val = T();
+    if constexpr (std::is_default_constructible_v<T>) {
+      val = T();
+    }
     return false;
   }
 
