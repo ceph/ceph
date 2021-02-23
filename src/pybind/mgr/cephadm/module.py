@@ -46,7 +46,7 @@ from . import remotes
 from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService
+    RbdMirrorService, CrashService, CephadmService, CephfsMirrorService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.ha_rgw import HA_RGWService
@@ -416,7 +416,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, CrashService, IscsiService,
-            HA_RGWService, CustomContainerService, CephadmExporter
+            HA_RGWService, CustomContainerService, CephadmExporter, CephfsMirrorService
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -2127,6 +2127,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'ha-rgw': PlacementSpec(count=2),
                 'iscsi': PlacementSpec(count=1),
                 'rbd-mirror': PlacementSpec(count=2),
+                'cephfs-mirror': PlacementSpec(count=1),
                 'nfs': PlacementSpec(count=1),
                 'grafana': PlacementSpec(count=1),
                 'alertmanager': PlacementSpec(count=1),
