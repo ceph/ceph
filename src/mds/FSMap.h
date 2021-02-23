@@ -44,15 +44,24 @@ struct ClusterInfo {
       cluster_name(cluster_name),
       fs_name(fs_name) {
   }
+  ClusterInfo(std::string_view client_name, std::string_view cluster_name,
+              std::string_view fs_name, std::string_view mon_host)
+    : client_name(client_name),
+      cluster_name(cluster_name),
+      fs_name(fs_name),
+      mon_host(mon_host) {
+  }
 
   std::string client_name;
   std::string cluster_name;
   std::string fs_name;
+  std::string mon_host;
 
   bool operator==(const ClusterInfo &cluster_info) const {
     return client_name == cluster_info.client_name &&
            cluster_name == cluster_info.cluster_name &&
-           fs_name == cluster_info.fs_name;
+           fs_name == cluster_info.fs_name &&
+           mon_host == cluster_info.mon_host;
   }
 
   void dump(ceph::Formatter *f) const;
@@ -64,7 +73,11 @@ struct ClusterInfo {
 
 inline std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info) {
   out << "{client_name=" << cluster_info.client_name << ", cluster_name="
-      << cluster_info.cluster_name << ", fs_name=" << cluster_info.fs_name << "}";
+      << cluster_info.cluster_name << ", fs_name=" << cluster_info.fs_name;
+  if (!cluster_info.mon_host.empty()) {
+    out << ", mon_host=" << cluster_info.mon_host;
+  }
+  out << "}";
   return out;
 }
 
@@ -142,6 +155,13 @@ struct MirrorInfo {
                 std::string_view cluster_name,
                 std::string_view fs_name) {
     peers.emplace(Peer(uuid, ClusterInfo(client_name, cluster_name, fs_name)));
+  }
+  void peer_add(std::string_view uuid,
+                std::string_view client_name,
+                std::string_view cluster_name,
+                std::string_view fs_name,
+                std::string_view mon_host) {
+    peers.emplace(Peer(uuid, ClusterInfo(client_name, cluster_name, fs_name, mon_host)));
   }
   void peer_remove(std::string_view uuid) {
     peers.erase(uuid);
