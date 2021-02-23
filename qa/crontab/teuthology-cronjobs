@@ -30,7 +30,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 
 ## ********** smoke tests on master, nautilus, octopus, and pacific branches
-0 5  * * 0,2,4 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL
+0 5  * * 0,2,4 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL
 0 7  * * 1 CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL
 0 8  * * 5 CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL
 7 8  * * 6 CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL
@@ -49,11 +49,11 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 15 11 * * 3   CEPH_BRANCH=master; MACHINE_NAME=gibba; SUITE_NAME=powercycle; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 0 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
-05 03 * * 4 CEPH_BRANCH=master; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
-20 03 * * 5 CEPH_BRANCH=master; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
+05 03 * * 4 CEPH_BRANCH=master; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
+20 03 * * 5 CEPH_BRANCH=master; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
 
 ###  The suite below must run on bare-metal because it's performance suite and run 3 times to produce more data points
-57 03 * * 6 CEPH_BRANCH=master; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL -N 3
+57 03 * * 6 CEPH_BRANCH=master; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL -N 3
 
 
 ##########################
@@ -70,11 +70,11 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 25 13 * * 5   CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; SUITE_NAME=kcephfs; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 0 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
-05 05 * * 6  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
-15 05 * * 0  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
-55 05 * * 1  CEPH_BRANCH=nautilus; MACHINE_NAME=mira;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
-15 05 * * 2  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro  -e $CEPH_QA_EMAIL
-07 05 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s powercycle -k distro -e $CEPH_QA_EMAIL
+05 05 * * 6  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
+15 05 * * 0  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
+55 05 * * 1  CEPH_BRANCH=nautilus; MACHINE_NAME=mira;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
+15 05 * * 2  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s ceph-ansible -k distro  -e $CEPH_QA_EMAIL
+07 05 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s powercycle -k distro -e $CEPH_QA_EMAIL
 
 30 02 * * 4  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -m $MACHINE_NAME -s upgrade/mimic-x -e $CEPH_QA_EMAIL
 25 02 * * 5  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -m $MACHINE_NAME -s upgrade/luminous-x -e $CEPH_QA_EMAIL --suite-branch nautilus --filter ubuntu_latest,centos
@@ -82,7 +82,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 ## upgrades suites for on nautilus
 
-25 01 * * 4  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/nautilus-p2p -k distro -e $CEPH_QA_EMAIL
+25 01 * * 4  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/nautilus-p2p -k distro -e $CEPH_QA_EMAIL
 
 ## !!!! three suites below MUST use --suite-branch jewel, luminous, mimic (see https://tracker.ceph.com/issues/24021)
 ## ref: https://github.com/ceph/ceph/pull/27983; https://github.com/ceph/ceph/pull/27934; https://github.com/ceph/ceph/pull/28027
@@ -90,9 +90,9 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 ## --filter "ubuntu_16.04,ubuntu_18.04,centos_7.6,rhel_7.6" - test ONLY supported distro AFTER mimic
 ## The suites below run withoit filters
 
-47 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch jewel -t py2
-50 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch luminous -t py2
-50 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-mimic -k distro -e $CEPH_QA_EMAIL --suite-branch mimic -t py2
+47 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch jewel -t py2
+50 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch luminous -t py2
+50 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-mimic -k distro -e $CEPH_QA_EMAIL --suite-branch mimic -t py2
 
 #********** nautilus branch END
 
@@ -108,22 +108,22 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 15 12 * * 0   CEPH_BRANCH=octopus; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 0 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
-05 05 * * 1  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
-15 05 * * 2  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
-15 05 * * 3  CEPH_BRANCH=octopus; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
+05 05 * * 1  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
+15 05 * * 2  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
+15 05 * * 3  CEPH_BRANCH=octopus; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 
 ## upgrades suites for on octopus
 30 02 * * 4  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -m $MACHINE_NAME -s upgrade/mimic-x -e $CEPH_QA_EMAIL
-23 14 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
-25 01 * * 6  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/octopus-p2p -k distro -e $CEPH_QA_EMAIL
+23 14 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
+25 01 * * 6  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/octopus-p2p -k distro -e $CEPH_QA_EMAIL
 
 
 ## !!!! three suites below MUST use --suite-branch luminous, mimic, nautilus (see https://tracker.ceph.com/issues/24021)
 ## The suites below run without filters
 
-47 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch luminous -t py2
-50 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-mimic-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch mimic -t py2
-50 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-nautilus-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch nautilus
+47 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch luminous -t py2
+50 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-mimic-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch mimic -t py2
+50 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-nautilus-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch nautilus
 
 #********** octopus branch END
 
@@ -151,23 +151,23 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 17 12 * * 6   CEPH_BRANCH=pacific; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME            $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 17 12 * * 0   CEPH_BRANCH=pacific; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 1 $CEPH_BRANCH $MACHINE_NAME            $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
-07 05 * * 0,4  CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
-17 05 * * 1,5  CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
+07 05 * * 0,4  CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
+17 05 * * 1,5  CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
 
-23 14 * * 3,6 CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
+23 14 * * 3,6 CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
 
-20 01 * * 1,5  CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
+20 01 * * 1,5  CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
 
-22 14 * * 2,6 CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c   $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/octopus-x -e $CEPH_QA_EMAIL -p 70 --force-priority
+22 14 * * 2,6 CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c   $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/octopus-x -e $CEPH_QA_EMAIL -p 70 --force-priority
 
 #********** pacific branch END
 
 
 ### upgrade runs for next release (runs on master)
 ###### on smithi
-#23 14 * * 3 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
+#23 14 * * 3 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
 
-#20 01 * * 4  CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
+#20 01 * * 4  CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
 
-#22 14 * * 5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c   $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/octopus-x -e $CEPH_QA_EMAIL
+#22 14 * * 5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c   $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/octopus-x -e $CEPH_QA_EMAIL
 
