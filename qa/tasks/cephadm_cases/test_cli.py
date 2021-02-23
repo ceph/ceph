@@ -54,3 +54,10 @@ class TestCephadmCLI(MgrTestCase):
 
     def test_device_ls_wide(self):
         self._orch_cmd('device', 'ls', '--wide')
+
+    def test_cephfs_mirror(self):
+        self._orch_cmd('apply', 'cephfs-mirror')
+        self.wait_until_true(lambda: 'cephfs-mirror' in self._orch_cmd('ps'), 30)
+        self.wait_for_health_clear(30)
+        self._orch_cmd('rm', 'cephfs-mirror')
+        self.wait_until_true(lambda: 'cephfs-mirror' not in self._orch_cmd('ps'), 30)
