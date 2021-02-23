@@ -1134,8 +1134,10 @@ public:
                 const cmdmap_t &cmdmap, std::stringstream &ss) {
     string remote_spec;
     string remote_fs_name;
+    string remote_mon_host;
     cmd_getval(cmdmap, "remote_cluster_spec", remote_spec);
     cmd_getval(cmdmap, "remote_fs_name", remote_fs_name);
+    cmd_getval(cmdmap, "remote_mon_host", remote_mon_host);
 
     // verify (and extract) remote cluster specification
     auto remote_conf = extract_remote_cluster_conf(remote_spec);
@@ -1153,9 +1155,9 @@ public:
     uuid_d uuid_gen;
     uuid_gen.generate_random();
 
-    auto f = [uuid_gen, remote_conf, remote_fs_name](auto &&fs) {
+    auto f = [uuid_gen, remote_conf, remote_fs_name, remote_mon_host](auto &&fs) {
                fs->mirror_info.peer_add(stringify(uuid_gen), (*remote_conf).first,
-                                        (*remote_conf).second, remote_fs_name);
+                                        (*remote_conf).second, remote_fs_name, remote_mon_host);
              };
     fsmap.modify_filesystem(fs->fscid, std::move(f));
     return true;
