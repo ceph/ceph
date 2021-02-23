@@ -15,11 +15,14 @@ DIRECTORY_MAP_PREFIX = "dir_map_"
 
 log = logging.getLogger(__name__)
 
-def connect_to_cluster(client_name, cluster_name, desc=''):
+def connect_to_cluster(client_name, cluster_name, mon_host, desc=''):
     try:
-        log.debug(f'connecting to {desc} cluster: {client_name}/{cluster_name}')
-        r_rados = rados.Rados(rados_id=client_name, clustername=cluster_name)
-        r_rados.conf_read_file()
+        log.debug(f'connecting to {desc} cluster: {client_name}/{cluster_name} mon_host: {mon_host}')
+        if not mon_host:
+            r_rados = rados.Rados(rados_id=client_name, clustername=cluster_name)
+            r_rados.conf_read_file()
+        else:
+            r_rados = rados.Rados(rados_id=client_name, conf={'mon_host':mon_host})
         r_rados.connect()
         log.debug(f'connected to {desc} cluster')
         return r_rados
@@ -38,9 +41,9 @@ def disconnect_from_cluster(cluster_name, cluster):
     except Exception as e:
         log.error(f'error disconnecting: {e}')
 
-def connect_to_filesystem(client_name, cluster_name, fs_name, desc):
+def connect_to_filesystem(client_name, cluster_name, fs_name, mon_host, desc):
     try:
-        cluster = connect_to_cluster(client_name, cluster_name, desc)
+        cluster = connect_to_cluster(client_name, cluster_name, mon_host, desc)
         log.debug(f'connecting to {desc} filesystem: {fs_name}')
         fs = cephfs.LibCephFS(rados_inst=cluster)
         log.debug('CephFS initializing...')

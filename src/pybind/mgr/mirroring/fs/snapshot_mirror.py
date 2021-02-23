@@ -376,10 +376,11 @@ class FSSnapshotMirror:
         if rem:
             client_name = rem['client_name']
             cluster_name = rem['cluster_name']
+            mon_host = rem['mon_host']
             client_name, cluster_name = FSSnapshotMirror.split_spec(f'{client_name}@{cluster_name}')
             remote_cluster, remote_fs = connect_to_filesystem(client_name,
                                                               cluster_name,
-                                                              rem['fs_name'], 'remote')
+                                                              rem['fs_name'], mon_host, 'remote')
             try:
                 remote_fs.removexattr('/', 'ceph.mirror.info')
             except cephfs.Error as e:
@@ -389,12 +390,12 @@ class FSSnapshotMirror:
             finally:
                 disconnect_from_filesystem(cluster_name, rem['fs_name'], remote_cluster, remote_fs)
 
-    def verify_and_set_mirror_info(self, local_fs_name, remote_cluster_spec, remote_fs_name):
+    def verify_and_set_mirror_info(self, local_fs_name, remote_cluster_spec, remote_fs_name, remote_mon_host=''):
         log.debug(f'local fs={local_fs_name} remote={remote_cluster_spec}/{remote_fs_name}')
 
         client_name, cluster_name = FSSnapshotMirror.split_spec(remote_cluster_spec)
         remote_cluster, remote_fs = connect_to_filesystem(client_name, cluster_name,
-                                                          remote_fs_name, 'remote')
+                                                          remote_fs_name, remote_mon_host,'remote')
 
         local_fsid = FSSnapshotMirror.get_filesystem_id(local_fs_name, self.fs_map)
         if local_fsid is None:
@@ -485,7 +486,7 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to disable mirroring'
 
-    def peer_add(self, filesystem, remote_cluster_spec, remote_fs_name):
+    def peer_add(self, filesystem, remote_cluster_spec, remote_fs_name, remote_mon_host):
         try:
             if remote_fs_name == None:
                 remote_fs_name = filesystem
@@ -493,11 +494,13 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                self.verify_and_set_mirror_info(filesystem, remote_cluster_spec, remote_fs_name)
+                self.verify_and_set_mirror_info(filesystem, remote_cluster_spec, remote_fs_name, remote_mon_host)
                 cmd = {'prefix': 'fs mirror peer_add',
                        'fs_name': filesystem,
                        'remote_cluster_spec': remote_cluster_spec,
                        'remote_fs_name': remote_fs_name}
+                if remote_mon_host:
+                    cmd['remote_mon_host'] = remote_mon_host
                 r, outs, err = self.mgr.mon_command(cmd)
                 if r < 0:
                     log.error(f'mon command to add peer failed: {err}')

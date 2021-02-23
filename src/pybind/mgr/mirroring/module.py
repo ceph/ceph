@@ -30,10 +30,11 @@ class Module(MgrModule):
     def snapshot_mirorr_peer_add(self,
                                  fs_name: str,
                                  remote_cluster_spec: str,
-                                 remote_fs_name: Optional[str] = None):
+                                 remote_fs_name: Optional[str] = None,
+                                 remote_mon_host: Optional[str] = None):
         """Add a remote filesystem peer"""
         return self.fs_snapshot_mirror.peer_add(fs_name, remote_cluster_spec,
-                                                remote_fs_name)
+                                                remote_fs_name, remote_mon_host)
 
     @CLIWriteCommand('fs snapshot mirror peer_remove')
     def snapshot_mirror_peer_remove(self,
