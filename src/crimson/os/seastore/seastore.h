@@ -19,6 +19,7 @@
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
+#include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
 
 namespace crimson::os::seastore {
@@ -79,7 +80,10 @@ public:
     const omap_keys_t& keys) final;
 
   /// Retrieves paged set of values > start (if present)
-  read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
+  using omap_get_values_ret_bare_t = std::tuple<bool, omap_values_t>;
+  using omap_get_values_ret_t = read_errorator::future<
+    omap_get_values_ret_bare_t>;
+  omap_get_values_ret_t omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
     const std::optional<std::string> &start ///< [in] start, empty for begin
@@ -194,6 +198,14 @@ private:
 	});
       });
   }
+
+
+  friend class SeaStoreOmapIterator;
+  omap_get_values_ret_t omap_list(
+    CollectionRef ch,
+    const ghobject_t &oid,
+    const std::optional<string> &_start,
+    OMapManager::omap_list_config_t config);
 
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;

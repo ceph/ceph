@@ -372,6 +372,7 @@ struct omap_root_t {
   depth_t depth = 0;
   bool mutated = false;
 
+  omap_root_t() = default;
   omap_root_t(laddr_t addr, depth_t depth)
     : addr(addr),
       depth(depth) {}
