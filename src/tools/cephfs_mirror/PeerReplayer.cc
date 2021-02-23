@@ -14,6 +14,8 @@
 #include "PeerReplayer.h"
 #include "Utils.h"
 
+#include "json_spirit/json_spirit.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
 #undef dout_prefix
@@ -24,6 +26,8 @@ namespace cephfs {
 namespace mirror {
 
 namespace {
+
+const std::string PEER_CONFIG_KEY_PREFIX = "cephfs/mirror/peer";
 
 std::string snapshot_dir_path(CephContext *cct, const std::string &path) {
   return path + "/" + cct->_conf->client_snapdir;
@@ -49,6 +53,10 @@ std::map<std::string, std::string> decode_snap_metadata(snap_metadata *snap_meta
   }
 
   return metadata;
+}
+
+std::string peer_config_key(const std::string &fs_name, const std::string &uuid) {
+  return PEER_CONFIG_KEY_PREFIX + "/" + fs_name + "/" + uuid;
 }
 
 class PeerAdminSocketCommand {
@@ -116,11 +124,12 @@ private:
 };
 
 PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
-                           const Filesystem &filesystem, const Peer &peer,
-                           const std::set<std::string, std::less<>> &directories,
+                           RadosRef local_cluster, const Filesystem &filesystem,
+                           const Peer &peer, const std::set<std::string, std::less<>> &directories,
                            MountRef mount, ServiceDaemon *service_daemon)
   : m_cct(cct),
     m_fs_mirror(fs_mirror),
+    m_local_cluster(local_cluster),
     m_filesystem(filesystem),
     m_peer(peer),
     m_directories(directories.begin(), directories.end()),
@@ -149,7 +158,42 @@ int PeerReplayer::init() {
   auto &remote_cluster = m_peer.remote.cluster_name;
   auto remote_filesystem = Filesystem{0, m_peer.remote.fs_name};
 
-  int r = connect(remote_client, remote_cluster, &m_remote_cluster);
+  std::string key = peer_config_key(m_filesystem.fs_name, m_peer.uuid);
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key get\", "
+      "\"key\": \"" + key + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  int r = m_local_cluster->mon_command(cmd, in_bl, &out_bl, nullptr);
+  dout(5) << ": mon command r=" << r << dendl;
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  std::string mon_host;
+  std::string cephx_key;
+  if (!r) {
+    json_spirit::mValue root;
+    if (!json_spirit::read(out_bl.to_str(), root)) {
+      derr << ": invalid config-key JSON" << dendl;
+      return -EBADMSG;
+    }
+    try {
+      auto &root_obj = root.get_obj();
+      mon_host = root_obj.at("mon_host").get_str();
+      cephx_key = root_obj.at("key").get_str();
+      dout(0) << ": remote monitor host=" << mon_host << dendl;
+    } catch (std::runtime_error&) {
+      derr << ": unexpected JSON received" << dendl;
+      return -EBADMSG;
+    }
+  }
+
+  r = connect(remote_client, remote_cluster, &m_remote_cluster, mon_host, cephx_key);
   if (r < 0) {
     derr << ": error connecting to remote cluster: " << cpp_strerror(r)
          << dendl;
