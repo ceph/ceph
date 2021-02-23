@@ -143,8 +143,8 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("tail_instance", tail_instance, f);
   ::encode_json("tail_placement", tail_placement, f);
 
-  f->dump_object("begin_iter", begin_iter);
-  f->dump_object("end_iter", end_iter);
+  f->dump_object("begin_iter", obj_begin());
+  f->dump_object("end_iter", obj_end());
 }
 
 void rgw_log_entry::dump(Formatter *f) const

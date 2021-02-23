@@ -167,13 +167,9 @@ protected:
   int append_explicit(RGWObjManifest& m, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
   void append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& iter, string *override_prefix);
 
-  void update_iterators() {
-    begin_iter.seek(0);
-    end_iter.seek(obj_size);
-  }
 public:
 
-  RGWObjManifest() : begin_iter(this), end_iter(this) {}
+  RGWObjManifest() = default;
   RGWObjManifest(const RGWObjManifest& rhs) {
     *this = rhs;
   }
@@ -188,13 +184,6 @@ public:
     tail_placement = rhs.tail_placement;
     rules = rhs.rules;
     tail_instance = rhs.tail_instance;
-
-    begin_iter.set_manifest(this);
-    end_iter.set_manifest(this);
-
-    begin_iter.seek(rhs.begin_iter.get_ofs());
-    end_iter.seek(rhs.end_iter.get_ofs());
-
     return *this;
   }
 
@@ -318,7 +307,6 @@ public:
       decode(tail_placement.placement_rule, bl);
     }
 
-    update_iterators();
     DECODE_FINISH(bl);
   }
 
@@ -403,8 +391,6 @@ public:
 
   void set_obj_size(uint64_t s) {
     obj_size = s;
-
-    update_iterators();
   }
 
   uint64_t get_obj_size() {
@@ -512,12 +498,11 @@ public:
     void dump(Formatter *f) const;
   }; // class obj_iterator
 
-  const obj_iterator& obj_begin();
-  const obj_iterator& obj_end();
-  obj_iterator obj_find(uint64_t ofs);
-
-  obj_iterator begin_iter;
-  obj_iterator end_iter;
+  obj_iterator obj_begin() { return obj_iterator{this}; }
+  obj_iterator obj_end() { return obj_iterator{this, obj_size}; }
+  obj_iterator obj_find(uint64_t ofs) {
+    return obj_iterator{this, std::min(ofs, obj_size)};
+  }
 
   /*
    * simple object generator. Using a simple single rule manifest.

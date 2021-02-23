@@ -35,29 +35,7 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
 
   manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, NULL, &cur_obj);
 
-  manifest->update_iterators();
-
   return 0;
-}
-
-const RGWObjManifest::obj_iterator& RGWObjManifest::obj_begin()
-{
-  return begin_iter;
-}
-
-const RGWObjManifest::obj_iterator& RGWObjManifest::obj_end()
-{
-  return end_iter;
-}
-
-RGWObjManifest::obj_iterator RGWObjManifest::obj_find(uint64_t ofs)
-{
-  if (ofs > obj_size) {
-    ofs = obj_size;
-  }
-  RGWObjManifest::obj_iterator iter(this);
-  iter.seek(ofs);
-  return iter;
 }
 
 int RGWObjManifest::append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
@@ -356,8 +334,6 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
 
   // Normal object which not generated through copy operation 
   manifest->set_tail_instance(_obj.key.instance);
-
-  manifest->update_iterators();
 
   return 0;
 }
