@@ -45,7 +45,7 @@ from . import remotes
 from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, CephadmExporter, CephadmExporterConfig
+    RbdMirrorService, CrashService, CephadmService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.ha_rgw import HA_RGWService
@@ -53,6 +53,7 @@ from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
+from .services.exporter import CephadmExporter, CephadmExporterConfig
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
