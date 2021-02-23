@@ -25,6 +25,9 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo
+from mgr_module import MonCommandFailed
+
+from . import utils
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -448,6 +451,34 @@ class CephadmServe:
 
         return r
 
+    def _apply_service_config(self, spec: ServiceSpec) -> None:
+        if spec.config:
+            section = utils.name_to_config_section(spec.service_name())
+            for k, v in spec.config.items():
+                try:
+                    current = self.mgr.get_foreign_ceph_option(section, k)
+                except KeyError:
+                    self.log.warning(
+                        f'Ignoring invalid {spec.service_name()} config option {k}'
+                    )
+                    self.mgr.events.for_service(
+                        spec, OrchestratorEvent.ERROR, f'Invalid config option {k}'
+                    )
+                    continue
+                if current != v:
+                    self.log.debug(f'setting [{section}] {k} = {v}')
+                    try:
+                        self.mgr.check_mon_command({
+                            'prefix': 'config set',
+                            'name': k,
+                            'value': str(v),
+                            'who': section,
+                        })
+                    except MonCommandFailed as e:
+                        self.log.warning(
+                            f'Failed to set {spec.service_name()} option {k}: {e}'
+                        )
+
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
@@ -464,6 +495,8 @@ class CephadmServe:
             self.log.debug('Skipping preview_only service %s' % service_name)
             return False
         self.log.debug('Applying service %s spec' % service_name)
+
+        self._apply_service_config(spec)
 
         if service_type == 'osd':
             self.mgr.osd_service.create_from_spec(cast(DriveGroupSpec, spec))
