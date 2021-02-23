@@ -1297,6 +1297,7 @@ class DaemonDescription(object):
                  memory_usage: Optional[int] = None,
                  memory_request: Optional[int] = None,
                  memory_limit: Optional[int] = None,
+                 service_name: Optional[str] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -1320,6 +1321,8 @@ class DaemonDescription(object):
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
         self.daemon_id: Optional[str] = daemon_id
+
+        self._service_name: Optional[str] = service_name
 
         # Service version that was deployed
         self.version = version
@@ -1364,6 +1367,12 @@ class DaemonDescription(object):
         assert self.daemon_type is not None
         if self.daemon_type == 'osd' and self.osdspec_affinity:
             return self.osdspec_affinity
+
+        if self._service_name:
+            if '.' in self._service_name:
+                return self._service_name.split('.', 1)[1]
+            else:
+                return ''
 
         def _match() -> str:
             assert self.daemon_id is not None
@@ -1412,6 +1421,8 @@ class DaemonDescription(object):
         return self.daemon_id
 
     def service_name(self) -> str:
+        if self._service_name:
+            return self._service_name
         assert self.daemon_type is not None
         if daemon_type_to_service(self.daemon_type) in ServiceSpec.REQUIRES_SERVICE_ID:
             return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
