@@ -84,7 +84,15 @@ class OSDService(CephService):
             raise RuntimeError(
                 'cephadm exited with an error code: %d, stderr:%s' % (
                     code, '\n'.join(err)))
+        return self.deploy_osd_daemons_for_existing_osds(host, drive_group.service_name(),
+                                                         replace_osd_ids)
 
+    def deploy_osd_daemons_for_existing_osds(self, host: str, service_name: str,
+                                             replace_osd_ids: Optional[List[str]] = None) -> str:
+
+        if replace_osd_ids is None:
+            replace_osd_ids = self.find_destroyed_osds().get(host, [])
+            assert replace_osd_ids is not None
         # check result
         osds_elems: dict = CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
@@ -117,7 +125,7 @@ class OSDService(CephService):
 
                 created.append(osd_id)
                 daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
-                    service_name=drive_group.service_name(),
+                    service_name=service_name,
                     daemon_id=osd_id,
                     host=host,
                     daemon_type='osd',
