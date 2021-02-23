@@ -189,7 +189,8 @@ void RGWHTTPSimpleRequest::get_out_headers(map<string, string> *pheaders)
 
 static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key,
                         const string& region, const string& service,
-                        RGWEnv& env, req_info& info)
+                        RGWEnv& env, req_info& info,
+                        const bufferlist *opt_content)
 {
   /* don't sign if no key is provided */
   if (key.key.empty()) {
@@ -206,7 +207,7 @@ static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key,
 
   rgw::auth::s3::AWSSignerV4 signer(dpp);
 
-  auto sigv4_data = signer.prepare(key.id, region, service, info, true);
+  auto sigv4_data = signer.prepare(key.id, region, service, info, opt_content, true);
   auto sigv4_headers = sigv4_data.signature_factory(dpp, key.key, sigv4_data);
 
   for (auto& entry : sigv4_headers) {
@@ -332,7 +333,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     new_env.set("HTTP_X_AMZ_CONTENT_SHA256", maybe_payload_hash);
   }
 
-  int ret = sign_request(this, key, region, service, new_env, new_info);
+  int ret = sign_request(this, key, region, service, new_env, new_info, nullptr);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
@@ -606,19 +607,9 @@ void RGWRESTGenerateHTTPHeaders::set_policy(RGWAccessControlPolicy& policy)
   add_grants_headers(grants_by_type, *new_env, new_info->x_meta_map);
 }
 
-void RGWRESTGenerateHTTPHeaders::set_content(const bufferlist& bl)
+int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key, const bufferlist *opt_content)
 {
-  static string attr("HTTP_X_AMZ_CONTENT_SHA256");
-
-  string hash = (bl.length() == 0 ? string(rgw::auth::s3::AWS4_EMPTY_PAYLOAD_HASH) :
-                             rgw::auth::s3::calc_v4_payload_hash(bl.to_str()));
-  new_env->set(attr, hash);
-  new_info->x_meta_map["x-amz-content-sha256"] = hash;
-}
-
-int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key)
-{
-  int ret = sign_request(this, key, region, service, *new_env, *new_info);
+  int ret = sign_request(this, key, region, service, *new_env, *new_info, opt_content);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
@@ -675,7 +666,7 @@ void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, stri
 
 void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key)
 {
-  headers_gen.sign(key);
+  headers_gen.sign(key, nullptr);
 
   for (const auto& kv: new_env.get_map()) {
     headers.emplace_back(kv);
@@ -840,12 +831,14 @@ int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
     return -EINVAL;
   }
 
+  const bufferlist *outblp{nullptr};
+
   if (send_len == outbl.length()) {
-    headers_gen->set_content(outbl);
+    outblp = &outbl;
   }
 
   if (sign_key) {
-    int r = headers_gen->sign(*sign_key);
+    int r = headers_gen->sign(*sign_key, outblp);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
       return r;

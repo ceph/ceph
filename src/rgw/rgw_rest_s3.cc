@@ -5202,6 +5202,7 @@ AWSSignerV4::prepare(const std::string& access_key_id,
                      const string& region,
                      const string& service,
                      const req_info& info,
+                     const bufferlist *opt_content,
                      bool s3_op) const
 {
   std::string signed_hdrs;
@@ -5218,9 +5219,13 @@ AWSSignerV4::prepare(const std::string& access_key_id,
   std::string credential_scope = gen_v4_scope(timestamp, region, service);
 
   extra_headers["x-amz-date"] = date;
-  auto iter = info.x_meta_map.find("x-amz-content-sha256");
-  if (iter != info.x_meta_map.end()) {
-    extra_headers[iter->first] = iter->second;
+
+  string content_hash;
+
+  if (opt_content) {
+    content_hash = rgw::auth::s3::calc_v4_payload_hash(opt_content->to_str());
+    extra_headers["x-amz-content-sha256"] = content_hash;
+
   }
 
   /* craft canonical headers */
@@ -5241,7 +5246,11 @@ AWSSignerV4::prepare(const std::string& access_key_id,
     exp_payload_hash = payload_hash.c_str();
   } else {
     /* Get the expected hash. */
-    exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(info);
+    if (content_hash.empty()) {
+      exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(info);
+    } else {
+      exp_payload_hash = content_hash.c_str();
+    }
   }
 
   /* Craft canonical URI. Using std::move later so let it be non-const. */
