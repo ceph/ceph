@@ -1565,6 +1565,12 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight,
       }
     }
   }
+  int ret = rebuild_roots_with_classes(cct);
+  if (ret < 0) {
+    ldout(cct, 0) << __func__ << " unable to rebuild roots with classes: "
+		  << cpp_strerror(ret) << dendl;
+    return ret;
+  }
   return changed;
 }
 
