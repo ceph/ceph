@@ -48,6 +48,9 @@ os._exit = os_exit_noop
 # it's a dict, the writer doesn't need to declare 'global' for access
 
 _global_instance = None  # type: Optional[Module]
+cherrypy.config.update({
+    'response.headers.server': 'Ceph-Prometheus'
+})
 
 
 def health_status_to_number(status):
