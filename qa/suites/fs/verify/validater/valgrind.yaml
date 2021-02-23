@@ -4,7 +4,6 @@
 overrides:
   install:
     ceph:
-      flavor: notcmalloc
       debuginfo: true
   ceph:
     # Valgrind makes everything slow, so ignore slow requests and extend heartbeat grace
