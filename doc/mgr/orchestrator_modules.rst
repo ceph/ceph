@@ -279,20 +279,13 @@ Phase two is a call to  :meth:`Orchestrator.create_osds` with a Drive Group with
 
 .. py:currentmodule:: orchestrator
 
-Monitors
+Services
 --------
 
-.. automethod:: Orchestrator.add_mon
+.. automethod:: Orchestrator.add_daemon
 .. automethod:: Orchestrator.apply_mon
-
-Stateless Services
-------------------
-
-.. automethod:: Orchestrator.add_mgr
 .. automethod:: Orchestrator.apply_mgr
-.. automethod:: Orchestrator.add_mds
 .. automethod:: Orchestrator.apply_mds
-.. automethod:: Orchestrator.add_rbd_mirror
 .. automethod:: Orchestrator.apply_rbd_mirror
 
 .. py:currentmodule:: ceph.deployment.service_spec
@@ -301,7 +294,6 @@ Stateless Services
 
 .. py:currentmodule:: orchestrator
 
-.. automethod:: Orchestrator.add_rgw
 .. automethod:: Orchestrator.apply_rgw
 
 .. py:currentmodule:: ceph.deployment.service_spec
@@ -310,7 +302,6 @@ Stateless Services
 
 .. py:currentmodule:: orchestrator
 
-.. automethod:: Orchestrator.add_nfs
 .. automethod:: Orchestrator.apply_nfs
 
 Upgrades
