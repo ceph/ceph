@@ -1,3 +1,9 @@
+ceph (15.2.9-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Tue, 23 Feb 2021 14:10:13 +0000
+
 ceph (15.2.8-1) stable; urgency=medium
 
   * New upstream release
