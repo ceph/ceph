@@ -214,7 +214,7 @@ class CephCluster(object):
         (result,) = self._ctx.cluster.only(first_mon).remotes.keys()
         return result
 
-    def __init__(self, ctx):
+    def __init__(self, ctx) -> None:
         self._ctx = ctx
         self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
 
