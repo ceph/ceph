@@ -95,8 +95,7 @@ public:
   int set_obj_attrs(map<string, bufferlist>& rgw_attrs);
   void set_http_attrs(const map<string, string>& http_attrs);
   void set_policy(RGWAccessControlPolicy& policy);
-  void set_content(const bufferlist& bl);
-  int sign(RGWAccessKey& key);
+  int sign(RGWAccessKey& key, const bufferlist *opt_content);
 
   const string& get_url() { return url; }
 };

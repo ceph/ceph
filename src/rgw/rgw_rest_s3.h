@@ -1112,6 +1112,7 @@ public:
                            const string& region,
                            const string& service,
                            const req_info& info,
+                           const bufferlist *opt_content,
                            bool s3_op) const;
 };
 
