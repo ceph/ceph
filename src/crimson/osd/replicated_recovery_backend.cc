@@ -276,14 +276,12 @@ ReplicatedRecoveryBackend::prep_push(
     data_subset.insert(0, obc->obs.oi.size);
   }
   const auto& missing = pg.get_shard_missing().find(pg_shard)->second;
-  if (HAVE_FEATURE(pg.min_peer_features(), SERVER_OCTOPUS)) {
-    const auto it = missing.get_items().find(soid);
-    assert(it != missing.get_items().end());
-    data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
-    logger().debug("prep_push: {} data_subset {}", soid, data_subset);
-  }
+  const auto it = missing.get_items().find(soid);
+  assert(it != missing.get_items().end());
+  data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
+  logger().debug("prep_push: {} data_subset {} to {}",
+                 soid, data_subset, pg_shard);
 
-  logger().debug("prep_push: {} to {}", soid, pg_shard);
   auto& pi = recovery_waiter.pushing[pg_shard];
   pg.begin_peer_recover(pg_shard, soid);
   const auto pmissing_iter = pg.get_shard_missing().find(pg_shard);
@@ -299,8 +297,7 @@ ReplicatedRecoveryBackend::prep_push(
   pi.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();
   pi.recovery_progress.omap_complete =
-    (!missing_iter->second.clean_regions.omap_is_dirty() &&
-     HAVE_FEATURE(pg.min_peer_features(), SERVER_OCTOPUS));
+    !missing_iter->second.clean_regions.omap_is_dirty();
 
   return build_push_op(pi.recovery_info, pi.recovery_progress, &pi.stat).then(
     [this, soid, pg_shard](auto pop) {
@@ -323,9 +320,8 @@ void ReplicatedRecoveryBackend::prepare_pull(PullOp& po, PullInfo& pi,
 
   //TODO: skipped snap objects case for now
   po.recovery_info.copy_subset.insert(0, (uint64_t) -1);
-  if (HAVE_FEATURE(pg.min_peer_features(), SERVER_OCTOPUS))
-    po.recovery_info.copy_subset.intersection_of(
-	missing_iter->second.clean_regions.get_dirty_regions());
+  po.recovery_info.copy_subset.intersection_of(
+    missing_iter->second.clean_regions.get_dirty_regions());
   po.recovery_info.size = ((uint64_t) -1);
   po.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();
@@ -333,8 +329,7 @@ void ReplicatedRecoveryBackend::prepare_pull(PullOp& po, PullInfo& pi,
   po.soid = soid;
   po.recovery_progress.data_complete = false;
   po.recovery_progress.omap_complete =
-    !missing_iter->second.clean_regions.omap_is_dirty() &&
-    HAVE_FEATURE(pg.min_peer_features(), SERVER_OCTOPUS);
+    !missing_iter->second.clean_regions.omap_is_dirty();
   po.recovery_progress.data_recovered_to = 0;
   po.recovery_progress.first = true;
 
