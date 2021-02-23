@@ -2635,10 +2635,14 @@ def deploy_daemon_units(
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
         # some metadata about the deploy
-        metaf.write(json.dumps({
+        meta: Dict[str, Any] = {}
+        if 'meta_json' in ctx and ctx.meta_json:
+            meta = json.loads(ctx.meta_json) or {}
+        meta.update({
             'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
             'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
-        }, indent=4) + "\n")
+        })
+        metaf.write(json.dumps(meta, indent=4) + "\n")
 
         os.fchmod(f.fileno(), 0o600)
         os.fchmod(metaf.fileno(), 0o600)
@@ -7605,6 +7609,10 @@ def _get_parser():
     parser_deploy.add_argument(
         '--memory-limit',
         help='Container memory hard limit'
+    )
+    parser_deploy.add_argument(
+        '--meta-json',
+        help='JSON dict of additional metadata'
     )
 
     parser_check_host = subparsers.add_parser(
