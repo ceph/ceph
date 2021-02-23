@@ -1248,7 +1248,7 @@ public:
 		 pg_log_t&& olog,
 		 pg_shard_t from,
 		 pg_info_t &info, LogEntryHandler *rollbacker,
-		 bool &dirty_info, bool &dirty_big_info);
+		 bool &dirty_info, bool &dirty_big_info, bool *rollforwarded=nullptr);
 
   template <typename missing_type>
   static bool append_log_entries_update_missing(

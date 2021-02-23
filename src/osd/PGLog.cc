@@ -358,7 +358,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
 
 void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
                       pg_info_t &info, LogEntryHandler *rollbacker,
-                      bool &dirty_info, bool &dirty_big_info)
+                      bool &dirty_info, bool &dirty_big_info, bool *rollforwarded)
 {
   dout(10) << "merge_log " << olog << " from osd." << fromosd
            << " into " << log << dendl;
@@ -477,9 +477,10 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       this);
 
     info.last_update = log.head = olog.head;
-    if (should_rollforward) {
+    if (should_rollforward && log.get_can_rollback_to() > original_crt) {
       log.roll_forward_to(log.head, rollbacker);
       dout(10) << "crt updated after new entries merged to " << log.head << dendl;
+      if (rollforwarded) { *rollforwarded = true; }
     }
 
     // We cannot rollback into the new log entries

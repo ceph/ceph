@@ -252,10 +252,13 @@ public:
 
   void verify_sideeffects(
     const TestCase &tcase,
-    const LogHandler &handler) {
+    const LogHandler &handler,
+    bool rollforwarded) {
+
+    auto original_log = tcase.get_fulldiv();
+
     ASSERT_EQ(tcase.toremove.size(), handler.removed.size());
     ASSERT_EQ(tcase.torollback.size(), handler.rolledback.size());
-
     {
       list<pg_log_entry_t>::const_iterator titer = tcase.torollback.begin();
       list<pg_log_entry_t>::const_iterator hiter = handler.rolledback.begin();
@@ -270,6 +273,12 @@ public:
       for (; titer != tcase.toremove.end(); ++titer, ++hiter) {
 	EXPECT_EQ(*titer, *hiter);
       }
+    }
+
+    CephContext *cct = g_ceph_context;
+    lgeneric_subdout(g_ceph_context, osd, 10) << "prior PG size " << original_log.log.size() << dendl;
+    if(log.log.size() > original_log.log.size()) {
+      ASSERT_TRUE(rollforwarded);
     }
   }
 
@@ -288,13 +297,14 @@ public:
     LogHandler h;
     bool dirty_info = false;
     bool dirty_big_info = false;
+    bool rollforwarded = false;
     merge_log(
       oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
-      &h, dirty_info, dirty_big_info);
+      &h, dirty_info, dirty_big_info, &rollforwarded);
 
     ASSERT_EQ(info.last_update, oinfo.last_update);
     verify_missing(tcase, missing);
-    verify_sideeffects(tcase, h);
+    verify_sideeffects(tcase, h, rollforwarded);
   }
 
   void test_proc_replica_log(const TestCase &tcase) {
