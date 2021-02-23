@@ -43,6 +43,7 @@ class ServiceType(enum.Enum):
     mon = 'mon'
     mgr = 'mgr'
     rbd_mirror = 'rbd-mirror'
+    cephfs_mirror = 'cephfs-mirror'
     crash = 'crash'
     alertmanager = 'alertmanager'
     grafana = 'grafana'
