@@ -1356,7 +1356,7 @@ class CephManager:
     """
 
     def __init__(self, controller, ctx=None, config=None, logger=None,
-                 cluster='ceph', cephadm=False):
+                 cluster='ceph', cephadm=False) -> None:
         self.lock = threading.RLock()
         self.ctx = ctx
         self.config = config
@@ -1418,7 +1418,7 @@ class CephManager:
         kwargs['args'] = prefix + list(kwargs['args'])
         return self.controller.run(**kwargs)
 
-    def raw_cluster_cmd(self, *args, **kwargs):
+    def raw_cluster_cmd(self, *args, **kwargs) -> str:
         """
         Start ceph on a raw cluster.  Return count
         """
