@@ -5299,7 +5299,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
           }
         }
 
-        if (sync_pair.source_bs.shard_id >= bucket_status.shards_done_with_gen.size()) {
+        if (size_t(sync_pair.source_bs.shard_id) >= bucket_status.shards_done_with_gen.size()) {
           tn->log(1, SSTR("bucket shard " << sync_pair.source_bs << " index out of bounds"));
           return set_cr_done(); // return success so we don't retry
         }
