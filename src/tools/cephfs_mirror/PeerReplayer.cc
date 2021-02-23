@@ -140,9 +140,10 @@ int PeerReplayer::init() {
 
   auto &remote_client = m_peer.remote.client_name;
   auto &remote_cluster = m_peer.remote.cluster_name;
+  auto &remote_mon_host = m_peer.remote.mon_host;
   auto remote_filesystem = Filesystem{0, m_peer.remote.fs_name};
 
-  int r = connect(remote_client, remote_cluster, &m_remote_cluster);
+  int r = connect(remote_client, remote_cluster, &m_remote_cluster, remote_mon_host);
   if (r < 0) {
     derr << ": error connecting to remote cluster: " << cpp_strerror(r)
          << dendl;
