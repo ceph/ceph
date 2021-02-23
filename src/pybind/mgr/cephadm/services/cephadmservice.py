@@ -351,7 +351,7 @@ class CephService(CephadmService):
         """
         # despite this mapping entity names to daemons, self.TYPE within
         # the CephService class refers to service types, not daemon types
-        if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi", 'ha-rgw']:
+        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ha-rgw']:
             return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE == 'crash':
             if host == "":
@@ -828,4 +828,24 @@ class CrashService(CephService):
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
+        return daemon_spec
+
+
+class CephfsMirrorService(CephService):
+    TYPE = 'cephfs-mirror'
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': self.get_auth_entity(daemon_spec.daemon_id),
+            'caps': ['mon', 'allow r',
+                     'mds', 'allow r',
+                     'osd', 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*',
+                     'mgr', 'allow r'],
+        })
+
+        daemon_spec.keyring = keyring
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
