@@ -64,6 +64,7 @@ public:
     oc->bh_read_finish(poolid, oid, tid, start, length, bl, r, trust_enoent);
     trace.event("finish");
 
+    std::scoped_lock ocl{oc->oc_lock};
     // object destructor clears the list
     if (set_item.is_on_list())
       set_item.remove_myself();
@@ -86,6 +87,7 @@ public:
     : oc(_oc), rd(r), oset(os), onfinish(c), trace(trace) {
   }
   void finish(int r) override {
+    std::scoped_lock osl{oset->lock};
     if (r >= 0) {
       r = oc->_readx(rd, oset, onfinish, false, &trace);
     }
@@ -105,7 +107,8 @@ public:
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
 						      loff_t off)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ldout(oc->cct, 20) << "split " << *left << " at " << off << dendl;
 
   // split off right
@@ -126,9 +129,12 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
   right->set_length(left->length() - newleftlen);
 
   // shorten left
-  oc->bh_stat_sub(left);
-  left->set_length(newleftlen);
-  oc->bh_stat_add(left);
+  {
+    std::scoped_lock ocl{oc->oc_lock};
+    oc->bh_stat_sub(left);
+    left->set_length(newleftlen);
+    oc->bh_stat_add(left);
+  }
 
   // add right
   oc->bh_add(this, right);
@@ -165,7 +171,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
 
 void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
 
   ldout(oc->cct, 10) << "merge_left " << *left << " + " << *right << dendl;
   if (left->get_journal_tid() == 0) {
@@ -174,9 +180,12 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   right->set_journal_tid(0);
 
   oc->bh_remove(this, right);
-  oc->bh_stat_sub(left);
-  left->set_length(left->length() + right->length());
-  oc->bh_stat_add(left);
+  {
+    std::scoped_lock ocl{oc->oc_lock};
+    oc->bh_stat_sub(left);
+    left->set_length(left->length() + right->length());
+    oc->bh_stat_add(left);
+  }
 
   // data
   left->bl.claim_append(right->bl);
@@ -204,6 +213,8 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
 
 bool ObjectCacher::Object::can_merge_bh(BufferHead *left, BufferHead *right)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   if (left->end() != right->start() ||
       left->get_state() != right->get_state() ||
       !left->can_merge_journal(right))
@@ -215,7 +226,8 @@ bool ObjectCacher::Object::can_merge_bh(BufferHead *left, BufferHead *right)
 
 void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ldout(oc->cct, 10) << "try_merge_bh " << *bh << dendl;
 
   // do not merge rx buffers; last_read_tid may not match
@@ -245,6 +257,8 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 
 void ObjectCacher::Object::maybe_rebuild_buffer(BufferHead *bh)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   auto& bl = bh->bl;
   if (bl.get_num_buffers() <= 1)
     return;
@@ -260,7 +274,8 @@ void ObjectCacher::Object::maybe_rebuild_buffer(BufferHead *bh)
  */
 bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   auto p = data_lower_bound(cur);
   while (left > 0) {
     if (p == data.end())
@@ -288,7 +303,8 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
  */
 bool ObjectCacher::Object::include_all_cached_data(loff_t off, loff_t len)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   if (data.empty())
       return true;
   auto first = data.begin();
@@ -309,7 +325,8 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
                                    map<loff_t, BufferHead*>& rx,
 				   map<loff_t, BufferHead*>& errors)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ldout(oc->cct, 10) << "map_read " << ex.oid << " "
                      << ex.offset << "~" << ex.length << dendl;
 
@@ -392,6 +409,8 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
 
 void ObjectCacher::Object::audit_buffers()
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   loff_t offset = 0;
   for (auto it = data.begin(); it != data.end(); ++it) {
     if (it->first != it->second->start()) {
@@ -431,7 +450,8 @@ void ObjectCacher::Object::audit_buffers()
 ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
 							  ceph_tid_t tid)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   BufferHead *final = 0;
 
   ldout(oc->cct, 10) << "map_write oex " << ex.oid
@@ -454,6 +474,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
         oc->bh_add(this, final);
         ldout(oc->cct, 10) << "map_write adding trailing bh " << *final << dendl;
       } else {
+        std::scoped_lock ocl{oc->oc_lock};
         oc->bh_stat_sub(final);
         final->set_length(final->length() + max);
         oc->bh_stat_add(final);
@@ -523,6 +544,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
       loff_t glen = std::min(next - cur, max);
       ldout(oc->cct, 10) << "map_write gap " << cur << "~" << glen << dendl;
       if (final) {
+        std::scoped_lock ocl{oc->oc_lock};
         oc->bh_stat_sub(final);
         final->set_length(final->length() + glen);
         oc->bh_stat_add(final);
@@ -549,7 +571,10 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
 }
 
 void ObjectCacher::Object::replace_journal_tid(BufferHead *bh,
-					       ceph_tid_t tid) {
+					       ceph_tid_t tid)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ceph_tid_t bh_tid = bh->get_journal_tid();
 
   ceph_assert(tid == 0 || bh_tid <= tid);
@@ -563,7 +588,8 @@ void ObjectCacher::Object::replace_journal_tid(BufferHead *bh,
 
 void ObjectCacher::Object::truncate(loff_t s)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ldout(oc->cct, 10) << "truncate " << *this << " to " << s << dendl;
 
   std::list<Context*> waiting_for_read;
@@ -592,13 +618,17 @@ void ObjectCacher::Object::truncate(loff_t s)
   if (!waiting_for_read.empty()) {
     ldout(oc->cct, 10) <<  "restarting reads post-truncate" << dendl;
   }
+
+  oset->lock.unlock();
   finish_contexts(oc->cct, waiting_for_read, 0);
+  oset->lock.lock();
 }
 
 void ObjectCacher::Object::discard(loff_t off, loff_t len,
                                    C_GatherBuilder* commit_gather)
 {
-  ceph_assert(ceph_mutex_is_locked(oc->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ldout(oc->cct, 10) << "discard " << *this << " " << off << "~" << len
 		     << dendl;
 
@@ -661,7 +691,10 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
   if (!waiting_for_read.empty()) {
     ldout(oc->cct, 10) <<  "restarting reads post-discard" << dendl;
   }
+
+  oset->lock.unlock();
   finish_contexts(oc->cct, waiting_for_read, 0); /* restart reads */
+  oset->lock.lock();
 }
 
 
@@ -673,14 +706,14 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
 
 
 ObjectCacher::ObjectCacher(CephContext *cct_, string name,
-			   WritebackHandler& wb, ceph::mutex& l,
+			   WritebackHandler& wb,
 			   flush_set_callback_t flush_callback,
 			   void *flush_callback_arg, uint64_t max_bytes,
 			   uint64_t max_objects, uint64_t max_dirty,
 			   uint64_t target_dirty, double max_dirty_age,
 			   bool block_writes_upfront)
   : perfcounter(NULL),
-    cct(cct_), writeback_handler(wb), name(name), lock(l),
+    cct(cct_), writeback_handler(wb), name(name),
     max_dirty(max_dirty), target_dirty(target_dirty),
     max_size(max_bytes), max_objects(max_objects),
     max_dirty_age(ceph::make_timespan(max_dirty_age)),
@@ -761,7 +794,9 @@ ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid,
 					       uint64_t truncate_seq)
 {
   // XXX: Add handling of nspace in object_locator_t in cache
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
+  std::scoped_lock ocl{oc_lock};
   // have it?
   if ((uint32_t)l.pool < objects.size()) {
     if (objects[l.pool].count(oid)) {
@@ -785,11 +820,12 @@ ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid,
 
 void ObjectCacher::close_object(Object *ob)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(ob->oset->lock));
   ldout(cct, 10) << "close_object " << *ob << dendl;
   ceph_assert(ob->can_close());
 
   // ok!
+  std::scoped_lock ocl{oc_lock};
   ob_lru.lru_remove(ob);
   objects[ob->oloc.pool].erase(ob->get_soid());
   ob->set_item.remove_myself();
@@ -799,7 +835,8 @@ void ObjectCacher::close_object(Object *ob)
 void ObjectCacher::bh_read(BufferHead *bh, int op_flags,
                            const ZTracer::Trace &parent_trace)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(bh->ob->oset->lock));
+
   ldout(cct, 7) << "bh_read on " << *bh << " outstanding reads "
 		<< reads_outstanding << dendl;
 
@@ -811,7 +848,11 @@ void ObjectCacher::bh_read(BufferHead *bh, int op_flags,
   }
 
   mark_rx(bh);
-  bh->last_read_tid = ++last_read_tid;
+
+  {
+    std::scoped_lock ocl{oc_lock};
+    bh->last_read_tid = ++last_read_tid;
+  }
 
   // finisher
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob, bh->last_read_tid,
@@ -823,6 +864,7 @@ void ObjectCacher::bh_read(BufferHead *bh, int op_flags,
 			 bh->ob->truncate_size, bh->ob->truncate_seq,
 			 op_flags, trace, onfinish);
 
+  std::scoped_lock ocl{oc_lock};
   ++reads_outstanding;
 }
 
@@ -831,7 +873,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 				  uint64_t length, bufferlist &bl, int r,
 				  bool trust_enoent)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  std::unique_lock ocl{oc_lock};
+
   ldout(cct, 7) << "bh_read_finish "
 		<< oid
 		<< " tid " << tid
@@ -855,6 +898,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
     ldout(cct, 7) << "bh_read_finish no object cache" << dendl;
   } else {
     Object *ob = objects[poolid][oid];
+    ocl.unlock();
+    std::scoped_lock osl{ob->oset->lock};
 
     if (r == -ENOENT && !ob->complete) {
       // wake up *all* rx waiters, or else we risk reordering
@@ -998,6 +1043,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
   ldout(cct, 20) << "finishing waiters " << ls << dendl;
 
   finish_contexts(cct, ls, err);
+
+  ocl.lock();
   retry_waiting_reads();
 
   --reads_outstanding;
@@ -1007,8 +1054,11 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
 					int64_t *max_amount, int *max_count)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(bh->ob->oset->lock));
+
   list<BufferHead*> blist;
 
+  std::unique_lock ocl{oc_lock};
   int count = 0;
   int64_t total_len = 0;
   set<BufferHead*, BufferHead::ptr_lt>::iterator it = dirty_or_tx_bh.find(bh);
@@ -1048,7 +1098,11 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
   if (max_amount)
     *max_amount -= total_len;
 
+  ocl.unlock();
+  bh->ob->oset->lock.unlock();
   bh_write_scattered(blist);
+  bh->ob->oset->lock.lock();
+  ocl.lock();
 }
 
 class ObjectCacher::C_WriteCommit : public Context {
@@ -1070,15 +1124,26 @@ public:
       ranges.swap(_ranges);
     }
   void finish(int r) override {
+    Object *ob;
+    {
+      std::scoped_lock ocl{oc->oc_lock};
+      if (oc->objects[poolid].count(oid) == 0) {
+        ldout(oc->cct, 7) << "C_WriteCommit no object cache" << dendl;
+        return;
+      }
+      ob = oc->objects[poolid][oid];
+    }
+
+    std::scoped_lock osl{ob->oset->lock};
     oc->bh_write_commit(poolid, oid, ranges, tid, r);
     trace.event("finish");
   }
 };
+
 void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
-
   Object *ob = blist.front()->ob;
+  std::scoped_lock osl{ob->oset->lock};
   ob->get();
 
   ceph::real_time last_write;
@@ -1129,7 +1194,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
 
 void ObjectCacher::bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(bh->ob->oset->lock));
   ldout(cct, 7) << "bh_write " << *bh << dendl;
 
   bh->ob->get();
@@ -1171,16 +1236,21 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 				   vector<pair<loff_t, uint64_t> >& ranges,
 				   ceph_tid_t tid, int r)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 7) << "bh_write_commit " << oid << " tid " << tid
 		<< " ranges " << ranges << " returned " << r << dendl;
 
-  if (objects[poolid].count(oid) == 0) {
-    ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
-    return;
-  }
+  Object *ob;
+  {
+    std::scoped_lock ocl{oc_lock};
+    if (objects[poolid].count(oid) == 0) {
+      ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
+      return;
+    }
 
-  Object *ob = objects[poolid][oid];
+    ob = objects[poolid][oid];
+  }
+  ceph_assert(ceph_mutex_is_locked_by_me(ob->oset->lock));
+
   int was_dirty_or_tx = ob->oset->dirty_or_tx;
 
   for (vector<pair<loff_t, uint64_t> >::iterator p = ranges.begin();
@@ -1231,8 +1301,10 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 	// ok!  mark bh clean and error-free
 	mark_clean(bh);
 	bh->set_journal_tid(0);
-	if (bh->get_nocache())
+	if (bh->get_nocache()) {
+          std::scoped_lock ocl{oc_lock};
 	  bh_lru_rest.lru_bottouch(bh);
+	}
 	hit.push_back(make_pair(bh->start(), bh));
 	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
       } else {
@@ -1271,14 +1343,17 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
     flush_set_callback(flush_set_callback_arg, oset);
   }
 
+  oset->lock.unlock();
   if (!ls.empty())
     finish_contexts(cct, ls, r);
+  oset->lock.lock();
 }
 
 void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
+
   ceph_assert(trace != nullptr);
-  ceph_assert(ceph_mutex_is_locked(lock));
   ceph::real_time cutoff = ceph::real_clock::now();
 
   ldout(cct, 10) << "flush " << amount << dendl;
@@ -1294,7 +1369,11 @@ void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount)
     BufferHead *bh = static_cast<BufferHead*>(
       bh_lru_dirty.lru_get_next_expire());
     if (!bh) break;
-    if (bh->last_write > cutoff) break;
+
+    oc_lock.unlock();
+    std::scoped_lock osl{oc_lock};
+    if (bh->last_write > cutoff)
+      break;
 
     if (scattered_write) {
       bh_write_adjacencies(bh, cutoff, amount > 0 ? &left : NULL, NULL);
@@ -1302,13 +1381,15 @@ void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount)
       left -= bh->length();
       bh_write(bh, *trace);
     }
+    oc_lock.lock();
   }
 }
 
 
 void ObjectCacher::trim()
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  std::unique_lock ocl{oc_lock};
+
   ldout(cct, 10) << "trim  start: bytes: max " << max_size << "  clean "
 		 << get_stat_clean() << ", objects: max " << max_objects
 		 << " current " << ob_lru.lru_get_size() << dendl;
@@ -1322,12 +1403,15 @@ void ObjectCacher::trim()
     if (!bh)
       break;
 
+    ocl.unlock();
+    std::unique_lock osl{bh->ob->oset->lock};
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
     ceph_assert(bh->is_clean() || bh->is_zero() || bh->is_error());
 
     Object *ob = bh->ob;
     bh_remove(ob, bh);
     delete bh;
+    ocl.lock();
 
     --nr_clean_bh;
 
@@ -1342,8 +1426,11 @@ void ObjectCacher::trim()
     if (!ob)
       break;
 
+    ocl.unlock();
+    std::unique_lock osl{ob->oset->lock};
     ldout(cct, 10) << "trim trimming " << *ob << dendl;
     close_object(ob);
+    ocl.lock();
   }
 
   ldout(cct, 10) << "trim finish:  max " << max_size << "  clean "
@@ -1358,7 +1445,8 @@ void ObjectCacher::trim()
 bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 			     snapid_t snapid)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   for (vector<ObjectExtent>::iterator ex_it = extents.begin();
        ex_it != extents.end();
        ++ex_it) {
@@ -1384,6 +1472,8 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			ZTracer::Trace *parent_trace)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ZTracer::Trace trace;
   if (parent_trace != nullptr) {
     trace.init("read", &trace_endpoint, parent_trace);
@@ -1401,7 +1491,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			 bool external_call, ZTracer::Trace *trace)
 {
   ceph_assert(trace != nullptr);
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
   bool success = true;
   int error = 0;
   uint64_t bytes_in_cache = 0;
@@ -1429,8 +1519,10 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     sobject_t soid(ex_it->oid, rd->snap);
     Object *o = get_object(soid, ex_it->objectno, oset, ex_it->oloc,
 			   ex_it->truncate_size, oset->truncate_seq);
-    if (external_call)
+    if (external_call) {
+      std::scoped_lock ocl{oc_lock};
       touch_ob(o);
+    }
 
     // does not exist and no hits?
     if (oset->return_enoent && !o->exists) {
@@ -1484,8 +1576,10 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT"
 		       << dendl;
 	delete rd;
-	if (dontneed)
+	if (dontneed) {
+          std::scoped_lock ocl{oc_lock};
 	  bottouch_ob(o);
+	}
 	return -ENOENT;
       }
     }
@@ -1512,6 +1606,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	uint64_t rx_bytes = static_cast<uint64_t>(
 	  stat_rx + bh_it->second->length());
 	bytes_not_in_cache += bh_it->second->length();
+        std::unique_lock ocl{oc_lock};
 	if (!waitfor_read.empty() || (stat_rx > 0 && rx_bytes > max_size)) {
 	  // cache is full with concurrent reads -- wait for rx's to complete
 	  // to constrain memory growth (especially during copy-ups)
@@ -1527,10 +1622,12 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  bh_remove(o, bh_it->second);
 	  delete bh_it->second;
 	} else {
+	  ocl.unlock();
 	  bh_it->second->set_nocache(nocache);
 	  bh_read(bh_it->second, rd->fadvise_flags, *trace);
 	  if ((success && onfinish) || last != missing.end())
 	    last = bh_it;
+	  ocl.lock();
 	}
 	success = false;
       }
@@ -1548,7 +1645,10 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       for (map<loff_t, BufferHead*>::iterator bh_it = rx.begin();
 	   bh_it != rx.end();
 	   ++bh_it) {
-	touch_bh(bh_it->second); // bump in lru, so we don't lose it.
+        {
+          std::scoped_lock ocl{oc_lock};
+	  touch_bh(bh_it->second); // bump in lru, so we don't lose it.
+	}
 	if (success && onfinish) {
 	  ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
 			 << " off " << bh_it->first << dendl;
@@ -1560,9 +1660,11 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       }
 
       for (map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
-	   bh_it != hits.end();  ++bh_it)
+	   bh_it != hits.end();  ++bh_it) {
 	//bump in lru, so we don't lose it when later read
+        std::scoped_lock ocl{oc_lock};
 	touch_bh(bh_it->second);
+      }
 
     } else {
       ceph_assert(!hits.empty());
@@ -1577,6 +1679,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  error = bh->error;
 	bytes_in_cache += bh->length();
 
+        std::scoped_lock ocl{oc_lock};
 	if (bh->get_nocache() && bh->is_clean())
 	  bh_lru_rest.lru_bottouch(bh);
 	else
@@ -1645,8 +1748,10 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	ceph_assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
       }
 
-      if (dontneed && o->include_all_cached_data(ex_it->offset, ex_it->length))
+      if (dontneed && o->include_all_cached_data(ex_it->offset, ex_it->length)) {
+          std::scoped_lock ocl{oc_lock};
 	  bottouch_ob(o);
+      }
     }
   }
 
@@ -1702,20 +1807,26 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
   delete rd;
 
+  oset->lock.unlock();
   trim();
+  oset->lock.lock();
 
   return ret;
 }
 
 void ObjectCacher::retry_waiting_reads()
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
+
   list<Context *> ls;
   ls.swap(waitfor_read);
 
   while (!ls.empty() && waitfor_read.empty()) {
     Context *ctx = ls.front();
     ls.pop_front();
+    oc_lock.unlock();
     ctx->complete(0);
+    oc_lock.lock();
   }
   waitfor_read.splice(waitfor_read.end(), ls);
 }
@@ -1723,7 +1834,8 @@ void ObjectCacher::retry_waiting_reads()
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 			 ZTracer::Trace *parent_trace)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ceph::real_time now = ceph::real_clock::now();
   uint64_t bytes_written = 0;
   uint64_t bytes_written_in_flush = 0;
@@ -1796,8 +1908,10 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
       bh->set_dontneed(true);
     else if (nocache && missing)
       bh->set_nocache(true);
-    else
+    else {
+      std::scoped_lock ocl{oc_lock};
       touch_bh(bh);
+    }
 
     bh->last_write = now;
 
@@ -1817,19 +1931,23 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 
   finish_contexts(cct, wait_for_reads, 0);
 
+  oset->lock.unlock();
   //verify_stats();
   trim();
+  oset->lock.lock();
   return r;
 }
 
 class ObjectCacher::C_WaitForWrite : public Context {
 public:
-  C_WaitForWrite(ObjectCacher *oc, uint64_t len,
+  C_WaitForWrite(ObjectCacher *oc, ObjectSet *oset, uint64_t len,
                  const ZTracer::Trace &trace, Context *onfinish) :
-    m_oc(oc), m_len(len), m_trace(trace), m_onfinish(onfinish) {}
+    m_oc(oc), m_oset(oset), m_len(len), m_trace(trace),
+    m_onfinish(onfinish) {}
   void finish(int r) override;
 private:
   ObjectCacher *m_oc;
+  ObjectSet *m_oset;
   uint64_t m_len;
   ZTracer::Trace m_trace;
   Context *m_onfinish;
@@ -1837,15 +1955,17 @@ private:
 
 void ObjectCacher::C_WaitForWrite::finish(int r)
 {
-  std::lock_guard l(m_oc->lock);
   m_oc->_maybe_wait_for_writeback(m_len, &m_trace);
+
+  std::scoped_lock osl(m_oset->lock);
   m_onfinish->complete(r);
 }
 
 void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 					     ZTracer::Trace *trace)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  std::unique_lock ocl{oc_lock};
+
   ceph::mono_time start = ceph::mono_clock::now();
   int blocked = 0;
   // wait for writeback?
@@ -1871,9 +1991,7 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
     flusher_cond.notify_all();
     stat_dirty_waiting += len;
     ++stat_nr_dirty_waiters;
-    std::unique_lock l{lock, std::adopt_lock};
-    stat_cond.wait(l);
-    l.release();
+    stat_cond.wait(ocl);
     stat_dirty_waiting -= len;
     --stat_nr_dirty_waiters;
     ++blocked;
@@ -1894,18 +2012,20 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 				  ZTracer::Trace *trace, Context *onfreespace)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
   ceph_assert(trace != nullptr);
   int ret = 0;
 
   if (max_dirty > 0 && !(wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_FUA)) {
     if (block_writes_upfront) {
+      oset->lock.unlock();
       _maybe_wait_for_writeback(len, trace);
+      oset->lock.lock();
       if (onfreespace)
 	onfreespace->complete(0);
     } else {
       ceph_assert(onfreespace);
-      finisher.queue(new C_WaitForWrite(this, len, *trace, onfreespace));
+      finisher.queue(new C_WaitForWrite(this, oset, len, *trace, onfreespace));
     }
   } else {
     // write-thru!  flush what we just wrote.
@@ -1919,9 +2039,9 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
     ldout(cct, 10) << "wait_for_write waiting on write-thru of " << len
 		   << " bytes" << dendl;
     if (block_writes_upfront) {
-      std::unique_lock l{lock, std::adopt_lock};
-      cond.wait(l, [&done] { return done; });
-      l.release();
+      std::unique_lock osl{oset->lock, std::adopt_lock};
+      cond.wait(osl, [&done] { return done; });
+      osl.release();
       ldout(cct, 10) << "wait_for_write woke up, ret " << ret << dendl;
       if (onfreespace)
 	onfreespace->complete(ret);
@@ -1940,7 +2060,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 void ObjectCacher::flusher_entry()
 {
   ldout(cct, 10) << "flusher start" << dendl;
-  std::unique_lock l{lock};
+  std::unique_lock ocl{oc_lock};
   while (!flusher_stop) {
     loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() +
       get_stat_dirty();
@@ -1975,8 +2095,15 @@ void ObjectCacher::flusher_entry()
       int max = MAX_FLUSH_UNDER_LOCK;
       while ((bh = static_cast<BufferHead*>(bh_lru_dirty.
 					    lru_get_next_expire())) != 0 &&
-	     bh->last_write <= cutoff &&
 	     max > 0) {
+
+	ocl.unlock();
+        std::scoped_lock osl{bh->ob->oset->lock};
+	if (bh->last_write > cutoff) {
+	  ocl.lock();
+	  break;
+	}
+
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
 	if (scattered_write) {
 	  bh_write_adjacencies(bh, cutoff, NULL, &max);
@@ -1984,12 +2111,13 @@ void ObjectCacher::flusher_entry()
 	  bh_write(bh, trace);
 	  --max;
 	}
+	ocl.lock();
       }
       if (!max) {
 	// back off the lock to avoid starving other threads
         trace.event("backoff");
-	l.unlock();
-	l.lock();
+	ocl.unlock();
+	ocl.lock();
 	continue;
       }
     }
@@ -1998,7 +2126,7 @@ void ObjectCacher::flusher_entry()
     if (flusher_stop)
       break;
 
-    flusher_cond.wait_for(l, 1s);
+    flusher_cond.wait_for(ocl, 1s);
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -2007,7 +2135,7 @@ void ObjectCacher::flusher_entry()
    * the rados reads do come back their callback will try to access the
    * no-longer-valid ObjectCacher.
    */
-  read_cond.wait(l, [this] {
+  read_cond.wait(ocl, [this] {
     if (reads_outstanding > 0) {
       ldout(cct, 10) << "Waiting for all reads to complete. Number left: "
 		     << reads_outstanding << dendl;
@@ -2024,7 +2152,7 @@ void ObjectCacher::flusher_entry()
 
 bool ObjectCacher::set_is_empty(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
   if (oset->objects.empty())
     return true;
 
@@ -2037,7 +2165,7 @@ bool ObjectCacher::set_is_empty(ObjectSet *oset)
 
 bool ObjectCacher::set_is_cached(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
   if (oset->objects.empty())
     return false;
 
@@ -2058,7 +2186,7 @@ bool ObjectCacher::set_is_cached(ObjectSet *oset)
 
 bool ObjectCacher::set_is_dirty_or_committing(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
   if (oset->objects.empty())
     return false;
 
@@ -2082,7 +2210,7 @@ bool ObjectCacher::set_is_dirty_or_committing(ObjectSet *oset)
 // purge.  non-blocking.  violently removes dirty buffers from cache.
 void ObjectCacher::purge(Object *ob)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(ob->oset->lock));
   ldout(cct, 10) << "purge " << *ob << dendl;
 
   ob->truncate(0);
@@ -2097,7 +2225,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
                          ZTracer::Trace *trace)
 {
   ceph_assert(trace != nullptr);
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(ob->oset->lock));
   list<BufferHead*> blist;
   bool clean = true;
   ldout(cct, 10) << "flush " << *ob << " " << offset << "~" << length << dendl;
@@ -2132,7 +2260,6 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
 bool ObjectCacher::_flush_set_finish(C_GatherBuilder *gather,
 				     Context *onfinish)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
   if (gather->has_subs()) {
     gather->set_finisher(onfinish);
     gather->activate();
@@ -2148,7 +2275,8 @@ bool ObjectCacher::_flush_set_finish(C_GatherBuilder *gather,
 // returns true if already flushed
 bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ceph_assert(onfinish != NULL);
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
@@ -2166,6 +2294,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   Object *last_ob = NULL;
   set<BufferHead*, BufferHead::ptr_lt>::const_iterator it, p, q;
 
+  std::unique_lock ocl{oc_lock};
   // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
   // order. But items in oset->objects are not sorted. So the iterator can
   // point to any buffer head in the ObjectSet
@@ -2179,6 +2308,8 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   else
     backwards = false;
 
+  std::unique_lock osl{oset->lock, std::adopt_lock};
+
   for (; p != dirty_or_tx_bh.end(); p = q) {
     ++q;
     BufferHead *bh = *p;
@@ -2189,8 +2320,12 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
       if (scattered_write) {
 	if (last_ob != bh->ob) {
 	  if (!blist.empty()) {
+	    osl.unlock();
 	    bh_write_scattered(blist);
 	    blist.clear();
+	    ocl.unlock();
+	    osl.lock();
+	    ocl.lock();
 	  }
 	  last_ob = bh->ob;
 	}
@@ -2215,8 +2350,12 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 	if (scattered_write) {
 	  if (last_ob != bh->ob) {
 	    if (!blist.empty()) {
+	      osl.unlock();
 	      bh_write_scattered(blist);
 	      blist.clear();
+	      ocl.unlock();
+	      osl.lock();
+	      ocl.lock();
 	    }
 	    last_ob = bh->ob;
 	  }
@@ -2230,6 +2369,9 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
     }
   }
 
+  ocl.unlock();
+  osl.unlock();
+
   if (scattered_write && !blist.empty())
     bh_write_scattered(blist);
 
@@ -2237,12 +2379,16 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
        i != waitfor_commit.end(); ++i) {
     Object *ob = *i;
 
+    std::scoped_lock osl{ob->oset->lock};
     // we'll need to gather...
     ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid "
 		   << ob->last_write_tid << " on " << *ob << dendl;
     ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
   }
 
+  osl.lock();
+  ocl.lock();
+  osl.release();
   return _flush_set_finish(&gather, onfinish);
 }
 
@@ -2251,7 +2397,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
 			     ZTracer::Trace *trace, Context *onfinish)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
   ceph_assert(trace != nullptr);
   ceph_assert(onfinish != NULL);
   if (oset->objects.empty()) {
@@ -2271,9 +2417,13 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
        ++p) {
     ObjectExtent &ex = *p;
     sobject_t soid(ex.oid, CEPH_NOSNAP);
-    if (objects[oset->poolid].count(soid) == 0)
-      continue;
-    Object *ob = objects[oset->poolid][soid];
+    Object *ob;
+    {
+      std::scoped_lock osl{ob->oset->lock};
+      if (objects[oset->poolid].count(soid) == 0)
+        continue;
+      ob = objects[oset->poolid][soid];
+    }
 
     ldout(cct, 20) << "flush_set " << oset << " ex " << ex << " ob " << soid
 		   << " " << ob << dendl;
@@ -2293,7 +2443,6 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
 // returns true if already flushed
 bool ObjectCacher::flush_all(Context *onfinish)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
   ceph_assert(onfinish != NULL);
 
   ldout(cct, 10) << "flush_all " << dendl;
@@ -2305,26 +2454,35 @@ bool ObjectCacher::flush_all(Context *onfinish)
   list<BufferHead*> blist;
   Object *last_ob = NULL;
   set<BufferHead*, BufferHead::ptr_lt>::iterator next, it;
+
+  std::unique_lock ocl{oc_lock};
   next = it = dirty_or_tx_bh.begin();
   while (it != dirty_or_tx_bh.end()) {
     ++next;
     BufferHead *bh = *it;
     waitfor_commit.insert(bh->ob);
 
-    if (bh->is_dirty()) {
-      if (scattered_write) {
-	if (last_ob != bh->ob) {
-	  if (!blist.empty()) {
-	    bh_write_scattered(blist);
-	    blist.clear();
+    ocl.unlock();
+    {
+      std::unique_lock osl{bh->ob->oset->lock};
+      if (bh->is_dirty()) {
+        if (scattered_write) {
+	  if (last_ob != bh->ob) {
+	    if (!blist.empty()) {
+              osl.unlock();
+	      bh_write_scattered(blist);
+	      blist.clear();
+              osl.lock();
+	    }
+	    last_ob = bh->ob;
 	  }
-	  last_ob = bh->ob;
-	}
-	blist.push_back(bh);
-      } else {
-	bh_write(bh, {});
+	  blist.push_back(bh);
+        } else {
+	  bh_write(bh, {});
+        }
       }
     }
+    ocl.lock();
 
     it = next;
   }
@@ -2337,6 +2495,7 @@ bool ObjectCacher::flush_all(Context *onfinish)
        ++i) {
     Object *ob = *i;
 
+    std::scoped_lock osl{ob->oset->lock};
     // we'll need to gather...
     ldout(cct, 10) << "flush_all will wait for ack tid "
 		   << ob->last_write_tid << " on " << *ob << dendl;
@@ -2348,7 +2507,8 @@ bool ObjectCacher::flush_all(Context *onfinish)
 
 void ObjectCacher::purge_set(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   if (oset->objects.empty()) {
     ldout(cct, 10) << "purge_set on " << oset << " dne" << dendl;
     return;
@@ -2374,7 +2534,8 @@ void ObjectCacher::purge_set(ObjectSet *oset)
 
 loff_t ObjectCacher::release(Object *ob)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(ob->oset->lock));
+
   list<BufferHead*> clean;
   loff_t o_unclean = 0;
 
@@ -2416,7 +2577,8 @@ loff_t ObjectCacher::release(Object *ob)
 
 loff_t ObjectCacher::release_set(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   // return # bytes not clean (and thus not released).
   loff_t unclean = 0;
 
@@ -2455,10 +2617,11 @@ loff_t ObjectCacher::release_set(ObjectSet *oset)
 
 uint64_t ObjectCacher::release_all()
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+//  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
   ldout(cct, 10) << "release_all" << dendl;
   uint64_t unclean = 0;
 
+  std::unique_lock ocl{oc_lock};
   vector<ceph::unordered_map<sobject_t, Object*> >::iterator i
     = objects.begin();
   while (i != objects.end()) {
@@ -2469,7 +2632,13 @@ uint64_t ObjectCacher::release_all()
 
       Object *ob = p->second;
 
-      loff_t o_unclean = release(ob);
+      loff_t o_unclean;
+      ocl.unlock();
+      {
+        std::scoped_lock osl{ob->oset->lock};
+        o_unclean = release(ob);
+      }
+      ocl.lock();
       unclean += o_unclean;
 
       if (o_unclean)
@@ -2491,7 +2660,8 @@ uint64_t ObjectCacher::release_all()
 
 void ObjectCacher::clear_nonexistence(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   ldout(cct, 10) << "clear_nonexistence() " << oset << dendl;
 
   for (xlist<Object*>::iterator p = oset->objects.begin();
@@ -2516,7 +2686,8 @@ void ObjectCacher::clear_nonexistence(ObjectSet *oset)
  */
 void ObjectCacher::discard_set(ObjectSet *oset, const vector<ObjectExtent>& exls)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   bool was_dirty = oset->dirty_or_tx > 0;
 
   _discard(oset, exls, nullptr);
@@ -2532,7 +2703,8 @@ void ObjectCacher::discard_writeback(ObjectSet *oset,
                                      const vector<ObjectExtent>& exls,
                                      Context* on_finish)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   bool was_dirty = oset->dirty_or_tx > 0;
 
   C_GatherBuilder gather(cct);
@@ -2542,7 +2714,8 @@ void ObjectCacher::discard_writeback(ObjectSet *oset,
     bool flushed = was_dirty && oset->dirty_or_tx == 0;
     gather.set_finisher(new LambdaContext(
       [this, oset, flushed, on_finish](int) {
-	ceph_assert(ceph_mutex_is_locked(lock));
+        std::scoped_lock osl{oset->lock};
+
 	if (flushed && flush_set_callback)
 	  flush_set_callback(flush_set_callback_arg, oset);
 	if (on_finish)
@@ -2558,6 +2731,8 @@ void ObjectCacher::discard_writeback(ObjectSet *oset,
 void ObjectCacher::_discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
                             C_GatherBuilder* gather)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
   if (oset->objects.empty()) {
     ldout(cct, 10) << __func__ << " on " << oset << " dne" << dendl;
     return;
@@ -2579,7 +2754,7 @@ void ObjectCacher::_discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
 void ObjectCacher::_discard_finish(ObjectSet *oset, bool was_dirty,
                                    Context* on_finish)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
 
   // did we truncate off dirty data?
   if (flush_set_callback && was_dirty && oset->dirty_or_tx == 0) {
@@ -2592,13 +2767,14 @@ void ObjectCacher::_discard_finish(ObjectSet *oset, bool was_dirty,
   }
 }
 
-void ObjectCacher::verify_stats() const
+void ObjectCacher::verify_stats()// const
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 10) << "verify_stats" << dendl;
 
   loff_t clean = 0, zero = 0, dirty = 0, rx = 0, tx = 0, missing = 0,
     error = 0;
+
+  std::unique_lock ocl{oc_lock};
   for (vector<ceph::unordered_map<sobject_t, Object*> >::const_iterator i
 	 = objects.begin();
        i != objects.end();
@@ -2608,6 +2784,9 @@ void ObjectCacher::verify_stats() const
 	 p != i->end();
 	 ++p) {
       Object *ob = p->second;
+
+      ocl.unlock();
+      std::scoped_lock osl{ob->oset->lock};
       for (map<loff_t, BufferHead*>::const_iterator q = ob->data.begin();
 	   q != ob->data.end();
 	  ++q) {
@@ -2638,6 +2817,7 @@ void ObjectCacher::verify_stats() const
 	  ceph_abort();
 	}
       }
+      ocl.lock();
     }
   }
 
@@ -2655,7 +2835,9 @@ void ObjectCacher::verify_stats() const
 
 void ObjectCacher::bh_stat_add(BufferHead *bh)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(bh->ob->oset->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
+
   switch (bh->get_state()) {
   case BufferHead::STATE_MISSING:
     stat_missing += bh->length();
@@ -2691,7 +2873,9 @@ void ObjectCacher::bh_stat_add(BufferHead *bh)
 
 void ObjectCacher::bh_stat_sub(BufferHead *bh)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(bh->ob->oset->lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
+
   switch (bh->get_state()) {
   case BufferHead::STATE_MISSING:
     stat_missing -= bh->length();
@@ -2725,9 +2909,11 @@ void ObjectCacher::bh_stat_sub(BufferHead *bh)
 
 void ObjectCacher::bh_set_state(BufferHead *bh, int s)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(bh->ob->oset->lock));
+
   int state = bh->get_state();
   // move between lru lists?
+  std::scoped_lock ocl{oc_lock};
   if (s == BufferHead::STATE_DIRTY && state != BufferHead::STATE_DIRTY) {
     bh_lru_rest.lru_remove(bh);
     bh_lru_dirty.lru_insert_top(bh);
@@ -2764,9 +2950,12 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
 
 void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(ob->oset->lock));
+
   ldout(cct, 30) << "bh_add " << *ob << " " << *bh << dendl;
   ob->add_bh(bh);
+
+  std::scoped_lock ocl{oc_lock};
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_insert_top(bh);
     dirty_or_tx_bh.insert(bh);
@@ -2785,10 +2974,12 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
 
 void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(ob->oset->lock));
   ceph_assert(bh->get_journal_tid() == 0);
   ldout(cct, 30) << "bh_remove " << *ob << " " << *bh << dendl;
   ob->remove_bh(bh);
+
+  std::scoped_lock ocl{oc_lock};
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_remove(bh);
     dirty_or_tx_bh.erase(bh);
