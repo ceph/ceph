@@ -37,7 +37,8 @@ import orchestrator
 from orchestrator.module import to_format, Format
 
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, DaemonDescription, DaemonDescriptionStatus, handle_orch_error
+    CLICommandMeta, DaemonDescription, DaemonDescriptionStatus, handle_orch_error, \
+    service_to_daemon_types
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
@@ -2058,18 +2059,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return create_func_map(args)
 
     @handle_orch_error
+    def add_daemon(self, spec: ServiceSpec) -> List[str]:
+        ret: List[str] = []
+        for d_type in service_to_daemon_types(spec.service_type):
+            ret.extend(self._add_daemon(d_type, spec))
+        return ret
+
+    @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
-
-    @handle_orch_error
-    def add_mon(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mon', spec)
-
-    @handle_orch_error
-    def add_mgr(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mgr', spec)
 
     def _apply(self, spec: GenericSpec) -> str:
         if spec.service_type == 'host':
@@ -2169,16 +2167,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return self._apply(spec)
 
     @handle_orch_error
-    def add_mds(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('mds', spec)
-
-    @handle_orch_error
     def apply_mds(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
-
-    @handle_orch_error
-    def add_rgw(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('rgw', spec)
 
     @handle_orch_error
     def apply_rgw(self, spec: ServiceSpec) -> str:
@@ -2189,25 +2179,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return self._apply(spec)
 
     @handle_orch_error
-    def add_iscsi(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('iscsi', spec)
-
-    @handle_orch_error
     def apply_iscsi(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
-    def add_rbd_mirror(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('rbd-mirror', spec)
-
-    @handle_orch_error
     def apply_rbd_mirror(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
-
-    @handle_orch_error
-    def add_nfs(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('nfs', spec)
 
     @handle_orch_error
     def apply_nfs(self, spec: ServiceSpec) -> str:
@@ -2218,62 +2195,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return self.get('mgr_map').get('services', {}).get('dashboard', '')
 
     @handle_orch_error
-    def add_prometheus(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('prometheus', spec)
-
-    @handle_orch_error
     def apply_prometheus(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
-
-    @handle_orch_error
-    def add_node_exporter(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('node-exporter', spec)
 
     @handle_orch_error
     def apply_node_exporter(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
-    def add_crash(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('crash', spec)
-
-    @handle_orch_error
     def apply_crash(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
-
-    @handle_orch_error
-    def add_grafana(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('grafana', spec)
 
     @handle_orch_error
     def apply_grafana(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
-    def add_alertmanager(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('alertmanager', spec)
-
-    @handle_orch_error
     def apply_alertmanager(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
-    def add_container(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('container', spec)
-
-    @handle_orch_error
     def apply_container(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
-
-    @handle_orch_error
-    def add_cephadm_exporter(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('cephadm-exporter',
-                                spec)
 
     @handle_orch_error
     def apply_cephadm_exporter(self, spec: ServiceSpec) -> str:
