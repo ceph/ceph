@@ -291,11 +291,16 @@ class TestCephadm(object):
 
                 CephadmServe(cephadm_module)._check_daemons()
 
-                _run_cephadm.assert_called_with('test', 'mon.test', 'deploy', [
-                                                '--name', 'mon.test', '--reconfig', '--config-json', '-'],
-                                                stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
-                                                + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
-                                                image='')
+                _run_cephadm.assert_called_with(
+                    'test', 'mon.test', 'deploy', [
+                        '--name', 'mon.test',
+                        '--meta-json', '{"service_name": "mon"}',
+                        '--config-json', '-',
+                        '--reconfig',
+                    ],
+                    stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
+                    + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
+                    image='')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
