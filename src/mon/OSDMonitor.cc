@@ -1425,7 +1425,7 @@ void OSDMonitor::maybe_prime_pg_temp()
   for (auto p = pending_inc.new_weight.begin();
        !all && p != pending_inc.new_weight.end();
        ++p) {
-    if (p->second < osdmap.get_weight(p->first)) {
+    if (osdmap.exists(p->first) && p->second < osdmap.get_weight(p->first)) {
       // weight reduction
       osds.insert(p->first);
     } else {
