@@ -123,6 +123,18 @@ class CephFSMount(object):
     def netns_name(self, name):
         self._netns_name = name
 
+    def assert_that_ceph_fs_exists(self):
+        output = self.client_remote.run(args='ceph fs ls', stdout=StringIO()).\
+            stdout.getvalue()
+        if self.cephfs_name:
+            assert self.cephfs_name in output, \
+                'expected ceph fs is not present on the cluster'
+            log.info(f'Mounting Ceph FS {self.cephfs_name}; just confirmed its presence on cluster')
+        else:
+            assert 'No filesystems enabled' not in output, \
+                'ceph cluster has no ceph fs, not even the default ceph fs'
+            log.info('Mounting default Ceph FS; just confirmed its presence on cluster')
+
     def assert_and_log_minimum_mount_details(self):
         """
         Make sure we have minimum details required for mounting. Ideally, this
@@ -135,6 +147,8 @@ class CephFSMount(object):
                       '1. the client ID,\n2. the mountpoint and\n'
                       '3. the remote machine where CephFS will be mounted.\n')
             raise RuntimeError(errmsg)
+
+        self.assert_that_ceph_fs_exists()
 
         log.info('Mounting Ceph FS. Following are details of mount; remember '
                  '"None" represents Python type None -')
@@ -395,7 +409,7 @@ class CephFSMount(object):
         args = ['sudo', 'ip', 'link', 'set', 'brx.{0}'.format(self.nsid), 'up']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
-    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+    def mount(self, mntopts=[], check_status=True, **kwargs):
         """
         kwargs expects its members to be same as the arguments accepted by
         self.update_attrs().
@@ -469,22 +483,19 @@ class CephFSMount(object):
         2. Run update_attrs().
         3. Run mount().
 
-        Accepts arguments of self.mount() and self.update_attrs() with 2 exceptions -
-        1. Accepts wait too which can be True or False.
-        2. The default value of createfs is False.
+        Accepts arguments of self.mount() and self.update_attrs() with 1
+        exception: wait accepted too which can be True or False.
         """
         self.umount_wait()
         assert not self.mounted
 
         mntopts = kwargs.pop('mntopts', [])
-        createfs = kwargs.pop('createfs', False)
         check_status = kwargs.pop('check_status', True)
         wait = kwargs.pop('wait', True)
 
         self.update_attrs(**kwargs)
 
-        retval = self.mount(mntopts=mntopts, createfs=createfs,
-                            check_status=check_status)
+        retval = self.mount(mntopts=mntopts, check_status=check_status)
         # avoid this scenario (again): mount command might've failed and
         # check_status might have silenced the exception, yet we attempt to
         # wait which might lead to an error.
