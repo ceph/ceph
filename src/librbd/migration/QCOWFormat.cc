@@ -901,7 +901,12 @@ void QCOWFormat<I>::handle_probe(int r, Context* on_finish) {
 
   m_bl.clear();
   if (header_probe.version == 1) {
+#ifdef WITH_RBD_MIGRATION_FORMAT_QCOW_V1
     read_v1_header(on_finish);
+#else // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+    lderr(cct) << "QCOW is not supported" << dendl;
+    on_finish->complete(-ENOTSUP);
+#endif // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
     return;
   } else if (header_probe.version >= 2 && header_probe.version <= 3) {
     read_v2_header(on_finish);
@@ -913,6 +918,8 @@ void QCOWFormat<I>::handle_probe(int r, Context* on_finish) {
     return;
   }
 }
+
+#ifdef WITH_RBD_MIGRATION_FORMAT_QCOW_V1
 
 template <typename I>
 void QCOWFormat<I>::read_v1_header(Context* on_finish) {
@@ -1013,6 +1020,8 @@ void QCOWFormat<I>::handle_read_v1_header(int r, Context* on_finish) {
 
   read_l1_table(on_finish);
 }
+
+#endif // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
 
 template <typename I>
 void QCOWFormat<I>::read_v2_header(Context* on_finish) {
