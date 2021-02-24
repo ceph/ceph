@@ -187,7 +187,7 @@ contents of the file for the ``modules`` attribute. For ``cephfs-shell.yaml``
 the ``modules`` attribute is ``tasks.cephfs.test_cephfs_shell``. This means
 that it triggers all tests in ``qa/tasks/cephfs/test_cephfs_shell.py``.
 
-Viewing Tests Results
+Viewing Test Results
 ---------------------
 
 Pulpito Dashboard
