@@ -18,8 +18,8 @@
 
 #include "acconfig.h"
 
-#ifdef HAVE_SYS_PRCTL_H
-#include <sys/prctl.h>
+#ifdef HAVE_PTHREAD_GETNAME_NP
+#include <pthread.h>
 #endif
 
 #include <string.h>
@@ -46,19 +46,18 @@ std::ostream &operator<<(std::ostream &oss, const enum code_environment_t e)
   return oss;
 }
 
-#if defined(HAVE_SYS_PRCTL_H) && defined(PR_GET_NAME) /* Since 2.6.11 */
+#if defined(HAVE_PTHREAD_GETNAME_NP) && !defined(_WIN32)
 
 int get_process_name(char *buf, int len)
 {
   if (len <= 16) {
-    /* The man page discourages using this prctl with a buffer shorter
-     * than 16 bytes. With a 16-byte buffer, it might not be
-     * null-terminated. */
+    // The man page discourages using pthread_getname_np() with a buffer shorter
+    // than 16 bytes. With a 16-byte buffer, it might not be null-terminated.
     return -ENAMETOOLONG;
   }
   // FIPS zeroization audit 20191115: this memset is not security related.
   memset(buf, 0, len);
-  return prctl(PR_GET_NAME, buf);
+  return pthread_getname_np(pthread_self(), buf, len);
 }
 
 #elif defined(HAVE_GETPROGNAME)
