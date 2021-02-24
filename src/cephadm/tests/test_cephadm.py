@@ -1,12 +1,14 @@
 # type: ignore
 from typing import List, Optional
 import mock
-from mock import patch
+from mock import patch, call
 import os
 import sys
 import unittest
 import threading
 import time
+import errno
+import socket
 from http.server import HTTPServer
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
@@ -20,6 +22,104 @@ with patch('builtins.open', create=True):
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
 class TestCephAdm(object):
+
+    @mock.patch('cephadm.logger')
+    def test_attempt_bind(self, logger):
+        ctx = None
+        address = None
+        port = 0
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        for side_effect, expected_exception in (
+            (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
+            (os_error(errno.EAFNOSUPPORT), OSError),
+            (os_error(errno.EADDRNOTAVAIL), OSError),
+            (None, None),
+        ):
+            _socket = mock.Mock()
+            _socket.bind.side_effect = side_effect
+            try:
+                cd.attempt_bind(ctx, _socket, address, port)
+            except Exception as e:
+                assert isinstance(e, expected_exception)
+            else:
+                if expected_exception is not None:
+                    assert False
+
+    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use(self, logger, attempt_bind):
+        empty_ctx = None
+
+        assert cd.port_in_use(empty_ctx, 9100) == False
+
+        attempt_bind.side_effect = cd.PortOccupiedError('msg')
+        assert cd.port_in_use(empty_ctx, 9100) == True
+
+        os_error = OSError()
+        os_error.errno = errno.EADDRNOTAVAIL
+        attempt_bind.side_effect = os_error
+        assert cd.port_in_use(empty_ctx, 9100) == False
+
+        os_error = OSError()
+        os_error.errno = errno.EAFNOSUPPORT
+        attempt_bind.side_effect = os_error
+        assert cd.port_in_use(empty_ctx, 9100) == False
+
+    @mock.patch('socket.socket')
+    @mock.patch('cephadm.logger')
+    def test_check_ip_port_success(self, logger, _socket):
+        ctx = mock.Mock()
+        ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
+
+        for address, address_family in (
+            ('0.0.0.0', socket.AF_INET),
+            ('::', socket.AF_INET6),
+        ):
+            try:
+                cd.check_ip_port(ctx, address, 9100)
+            except:
+                assert False
+            else:
+                assert _socket.call_args == call(address_family, socket.SOCK_STREAM)
+
+    @mock.patch('socket.socket')
+    @mock.patch('cephadm.logger')
+    def test_check_ip_port_failure(self, logger, _socket):
+        ctx = mock.Mock()
+        ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        for address, address_family in (
+            ('0.0.0.0', socket.AF_INET),
+            ('::', socket.AF_INET6),
+        ):
+            for side_effect, expected_exception in (
+                (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
+                (os_error(errno.EADDRNOTAVAIL), OSError),
+                (os_error(errno.EAFNOSUPPORT), OSError),
+                (None, None),
+            ):
+                mock_socket_obj = mock.Mock()
+                mock_socket_obj.bind.side_effect = side_effect
+                _socket.return_value = mock_socket_obj
+                try:
+                    cd.check_ip_port(ctx, address, 9100)
+                except Exception as e:
+                    assert isinstance(e, expected_exception)
+                else:
+                    if side_effect is not None:
+                        assert False
+
+
     def test_is_not_fsid(self):
         assert not cd.is_fsid('no-uuid')
 
