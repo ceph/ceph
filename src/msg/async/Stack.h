@@ -338,7 +338,7 @@ class NetworkStack {
   }
 
   // direct is used in tests only
-  virtual void spawn_worker(unsigned i, std::function<void ()> &&) = 0;
+  virtual void spawn_worker(std::function<void ()> &&) = 0;
   virtual void join_worker(unsigned i) = 0;
 
   virtual bool is_ready() { return true; };

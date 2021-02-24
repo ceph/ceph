@@ -333,7 +333,7 @@ class RDMAStack : public NetworkStack {
   virtual ~RDMAStack();
   virtual bool nonblock_connect_need_writable_event() const override { return false; }
 
-  virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
+  virtual void spawn_worker(std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;
   virtual bool is_ready() override { return fork_finished.load(); };
   virtual void ready() override { fork_finished = true; };
