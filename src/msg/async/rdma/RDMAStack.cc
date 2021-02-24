@@ -783,13 +783,6 @@ RDMAStack::RDMAStack(CephContext *cct)
     rdma_dispatcher(std::make_shared<RDMADispatcher>(cct, ib))
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
-
-  unsigned num = get_num_worker();
-  for (unsigned i = 0; i < num; ++i) {
-    RDMAWorker* w = dynamic_cast<RDMAWorker*>(get_worker(i));
-    w->set_dispatcher(rdma_dispatcher);
-    w->set_ib(ib);
-  }
   ldout(cct, 20) << " creating RDMAStack:" << this << " with dispatcher:" << rdma_dispatcher.get() << dendl;
 }
 
@@ -802,7 +795,10 @@ RDMAStack::~RDMAStack()
 
 Worker* RDMAStack::create_worker(CephContext *c, unsigned worker_id)
 {
-  return new RDMAWorker(c, worker_id);
+  auto w = new RDMAWorker(c, worker_id);
+  w->set_dispatcher(rdma_dispatcher);
+  w->set_ib(ib);
+  return w;
 }
 
 void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)
