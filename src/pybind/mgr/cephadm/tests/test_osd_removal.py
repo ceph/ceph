@@ -104,13 +104,25 @@ class TestOSD:
         assert osd_obj.started is True
         assert osd_obj.stopped is False
 
-    def test_start_draining(self, osd_obj):
+    def test_start_draining_purge(self, osd_obj):
         assert osd_obj.draining is False
         assert osd_obj.drain_started_at is None
+        ret = osd_obj.start_draining()
+        osd_obj.rm_util.reweight_osd.assert_called_with(osd_obj, 0.0)
+        assert isinstance(osd_obj.drain_started_at, datetime)
+        assert osd_obj.draining is True
+        assert osd_obj.replace is False
+        assert ret is True
+
+    def test_start_draining_replace(self, osd_obj):
+        assert osd_obj.draining is False
+        assert osd_obj.drain_started_at is None
+        osd_obj.replace = True
         ret = osd_obj.start_draining()
         osd_obj.rm_util.set_osd_flag.assert_called_with([osd_obj], 'out')
         assert isinstance(osd_obj.drain_started_at, datetime)
         assert osd_obj.draining is True
+        assert osd_obj.replace is True
         assert ret is True
 
     def test_start_draining_stopped(self, osd_obj):
@@ -120,9 +132,18 @@ class TestOSD:
         assert ret is False
         assert osd_obj.draining is False
 
-    def test_stop_draining(self, osd_obj):
+    def test_stop_draining_replace(self, osd_obj):
+        osd_obj.replace = True
         ret = osd_obj.stop_draining()
         osd_obj.rm_util.set_osd_flag.assert_called_with([osd_obj], 'in')
+        assert isinstance(osd_obj.drain_stopped_at, datetime)
+        assert osd_obj.draining is False
+        assert ret is True
+
+    def test_stop_draining_purge(self, osd_obj):
+        osd_obj.original_weight = 1.0
+        ret = osd_obj.stop_draining()
+        osd_obj.rm_util.reweight_osd.assert_called_with(osd_obj, 1.0)
         assert isinstance(osd_obj.drain_stopped_at, datetime)
         assert osd_obj.draining is False
         assert ret is True

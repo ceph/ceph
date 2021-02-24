@@ -515,7 +515,6 @@ class TestCephadm(object):
                                                       replace=False,
                                                       force=False,
                                                       hostname='test',
-                                                      fullname='osd.0',
                                                       process_started_at=datetime_now(),
                                                       remove_util=cephadm_module.to_remove_osds.rm_util
                                                       ))
