@@ -246,7 +246,7 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 {
   // create a extra master thread
   //
-  funcs[i] = std::move(func);
+  funcs.push_back(std::move(func));
   int r = 0;
   r = dpdk::eal::init(cct);
   if (r < 0) {
@@ -255,16 +255,17 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
   }
   // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
   // cores
-  ceph_assert(rte_lcore_count() >= i + 1);
+  unsigned nr_worker = funcs.size();
+  ceph_assert(rte_lcore_count() >= nr_worker);
   unsigned core_id;
-  int j = i;
   RTE_LCORE_FOREACH_SLAVE(core_id) {
-    if (i-- == 0) {
+    if (--nr_worker == 0) {
       break;
     }
   }
-  dpdk::eal::execute_on_master([&]() {
-    r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[j]), core_id);
+  void *adapted_func = static_cast<void*>(funcs.back());
+  dpdk::eal::execute_on_master([adapted_func, core_id, this]() {
+    int r = rte_eal_remote_launch(dpdk_thread_adaptor, adapted_func, core_id);
     if (r < 0) {
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
       ceph_abort();
