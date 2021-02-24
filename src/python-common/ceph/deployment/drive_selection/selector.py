@@ -23,18 +23,10 @@ class DriveSelection(object):
         self.spec = spec
         self.existing_daemons = existing_daemons or 0
 
-        if self.spec.data_devices.paths:  # type: ignore
-            # re: type: ignore there is *always* a path attribute assigned to DeviceSelection
-            # it's just None if actual drivegroups are used
-            self._data = self.spec.data_devices.paths  # type: ignore
-            self._db = []  # type: List
-            self._wal = []  # type: List
-            self._journal = []  # type: List
-        else:
-            self._data = self.assign_devices(self.spec.data_devices)
-            self._wal = self.assign_devices(self.spec.wal_devices)
-            self._db = self.assign_devices(self.spec.db_devices)
-            self._journal = self.assign_devices(self.spec.journal_devices)
+        self._data = self.assign_devices(self.spec.data_devices)
+        self._wal = self.assign_devices(self.spec.wal_devices)
+        self._db = self.assign_devices(self.spec.db_devices)
+        self._journal = self.assign_devices(self.spec.journal_devices)
 
     def data_devices(self):
         # type: () -> List[Device]
@@ -110,6 +102,10 @@ class DriveSelection(object):
         if not self.spec.data_devices:
             logger.debug('data_devices is None')
             return []
+
+        if device_filter.paths:
+            logger.debug('device filter is using explicit paths')
+            return device_filter.paths
 
         devices = list()  # type: List[Device]
         for disk in self.disks:
