@@ -8,6 +8,7 @@
 #include "librbd/Types.h"
 #include "librbd/migration/FormatInterface.h"
 #include "librbd/migration/QCOW.h"
+#include "acconfig.h"
 #include "json_spirit/json_spirit.h"
 #include <boost/asio/io_context_strand.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
@@ -175,8 +176,10 @@ private:
   void probe(Context* on_finish);
   void handle_probe(int r, Context* on_finish);
 
+#ifdef WITH_RBD_MIGRATION_FORMAT_QCOW_V1
   void read_v1_header(Context* on_finish);
   void handle_read_v1_header(int r, Context* on_finish);
+#endif // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
 
   void read_v2_header(Context* on_finish);
   void handle_read_v2_header(int r, Context* on_finish);

@@ -162,8 +162,17 @@ test_import_qcow_format() {
 EOF
     cat ${TEMPDIR}/spec.json
 
+    set +e
     rbd migration prepare --import-only \
         --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+    local error_code=$?
+    set -e
+
+    if [ $error_code -eq 95 ]; then
+        echo "skipping QCOW test (librbd support disabled)"
+        return 0
+    fi
+    test $error_code -eq 0
 
     compare_images "${base_image}" "${dest_image}"
 
