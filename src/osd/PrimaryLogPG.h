@@ -1467,6 +1467,7 @@ protected:
   void dec_refcount(const hobject_t& soid, const object_ref_delta_t& refs);
   void dec_refcount_by_dirty(OpContext* ctx);
   ObjectContextRef get_prev_clone_obc(ObjectContextRef obc);
+  bool recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op);
   void get_adjacent_clones(ObjectContextRef src_obc, 
 			   ObjectContextRef& _l, ObjectContextRef& _g);
   bool inc_refcount_by_set(OpContext* ctx, object_manifest_t& tgt,
