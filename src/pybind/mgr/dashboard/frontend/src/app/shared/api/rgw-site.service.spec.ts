@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 import { RgwSiteService } from './rgw-site.service';
 
 describe('RgwSiteService', () => {
@@ -28,13 +28,17 @@ describe('RgwSiteService', () => {
 
   it('should contain site endpoint in GET request', () => {
     service.get().subscribe();
-    const req = httpTesting.expectOne(service['url']);
+    RgwHelper.getCurrentDaemon();
+    const req = httpTesting.expectOne(`${service['url']}?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
   });
 
   it('should add query param in GET request', () => {
     const query = 'placement-targets';
     service.get(query).subscribe();
-    httpTesting.expectOne(`${service['url']}?query=placement-targets`);
+    RgwHelper.getCurrentDaemon();
+    httpTesting.expectOne(
+      `${service['url']}?${RgwHelper.DAEMON_QUERY_PARAM}&query=placement-targets`
+    );
   });
 });

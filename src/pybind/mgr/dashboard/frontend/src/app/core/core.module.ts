@@ -2,9 +2,11 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { BlockUIModule } from 'ng-block-ui';
 
-import { SharedModule } from '../shared/shared.module';
+import { ContextComponent } from '~/app/core/context/context.component';
+import { SharedModule } from '~/app/shared/shared.module';
 import { ErrorComponent } from './error/error.component';
 import { BlankLayoutComponent } from './layouts/blank-layout/blank-layout.component';
 import { LoginLayoutComponent } from './layouts/login-layout/login-layout.component';
@@ -12,9 +14,17 @@ import { WorkbenchLayoutComponent } from './layouts/workbench-layout/workbench-l
 import { NavigationModule } from './navigation/navigation.module';
 
 @NgModule({
-  imports: [BlockUIModule.forRoot(), CommonModule, NavigationModule, RouterModule, SharedModule],
+  imports: [
+    BlockUIModule.forRoot(),
+    CommonModule,
+    NavigationModule,
+    NgbDropdownModule,
+    RouterModule,
+    SharedModule
+  ],
   exports: [NavigationModule],
   declarations: [
+    ContextComponent,
     WorkbenchLayoutComponent,
     BlankLayoutComponent,
     LoginLayoutComponent,
