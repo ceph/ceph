@@ -34,10 +34,10 @@ class RgwUserControllerTestCase(ControllerTestCase):
             'keys': ['test1', 'test2', 'test3'],
             'truncated': False
         }]
-        self._get('/test/api/rgw/user')
+        self._get('/test/api/rgw/user?daemon_name=dummy-daemon')
         self.assertStatus(200)
         mock_proxy.assert_has_calls([
-            mock.call('GET', 'user?list', {})
+            mock.call('dummy-daemon', 'GET', 'user?list', {})
         ])
         self.assertJsonBody(['test1', 'test2', 'test3'])
 
@@ -56,8 +56,8 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self._get('/test/api/rgw/user')
         self.assertStatus(200)
         mock_proxy.assert_has_calls([
-            mock.call('GET', 'user?list', {}),
-            mock.call('GET', 'user?list', {'marker': 'foo:bar'})
+            mock.call(None, 'GET', 'user?list', {}),
+            mock.call(None, 'GET', 'user?list', {'marker': 'foo:bar'})
         ])
         self.assertJsonBody(['test1', 'test2', 'test3', 'admin'])
 

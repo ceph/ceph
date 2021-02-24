@@ -15,10 +15,10 @@ from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):
     @classmethod
     def setUpClass(cls):
+        setattr(settings.Options, 'GRAFANA_API_HOST', settings.Setting('localhost', [str]))
+        setattr(settings.Options, 'GRAFANA_API_PORT', settings.Setting(3000, [int]))
+        setattr(settings.Options, 'GRAFANA_ENABLED', settings.Setting(False, [bool]))
         # pylint: disable=protected-access
-        settings.Options.GRAFANA_API_HOST = ('localhost', str)
-        settings.Options.GRAFANA_API_PORT = (3000, int)
-        settings.Options.GRAFANA_ENABLED = (False, bool)
         settings._OPTIONS_COMMAND_MAP = settings._options_command_map()
 
     def setUp(self):
@@ -138,9 +138,8 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # pylint: disable=protected-access
-        settings.Options.GRAFANA_API_HOST = ('localhost', str)
-        settings.Options.GRAFANA_ENABLED = (False, bool)
+        setattr(settings.Options, 'GRAFANA_API_HOST', settings.Setting('localhost', [str]))
+        setattr(settings.Options, 'GRAFANA_ENABLED', settings.Setting(False, [bool]))
 
     @classmethod
     def tearDownClass(cls):
