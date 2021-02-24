@@ -107,10 +107,13 @@ class TestCephadmService:
                          'osd', 'allow rwx']
 
         expected_call = call({'prefix': 'auth get-or-create',
-                              'entity': 'client.iscsi.a',
-                              'caps': expected_caps})
+                              'entity': 'client.iscsi.a'})
+        expected_call2 = call({'prefix': 'auth caps',
+                               'entity': 'client.iscsi.a',
+                               'caps': expected_caps})
 
         assert expected_call in mgr.check_mon_command.mock_calls
+        assert expected_call2 in mgr.check_mon_command.mock_calls
 
     def test_get_auth_entity(self):
         mgr = FakeMgr()
