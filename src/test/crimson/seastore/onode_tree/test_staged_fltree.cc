@@ -216,7 +216,8 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       ceph_assert(cursor.get_ghobj() == key);
       Values::initialize_cursor(t, cursor, value);
       insert_history.emplace_back(key, value, cursor);
-      auto cursor_ = tree.lower_bound(t, key).unsafe_get0();
+      auto cursor_ = tree.find(t, key).unsafe_get0();
+      ceph_assert(cursor_ != tree.end());
       ceph_assert(cursor_.value() == cursor.value());
       Values::validate_cursor(cursor_, key, value);
       return cursor.value();
@@ -327,7 +328,8 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
 
     for (auto& [k, v, c] : insert_history) {
       // validate values in tree keep intact
-      auto cursor = tree.lower_bound(t, k).unsafe_get0();
+      auto cursor = tree.find(t, k).unsafe_get0();
+      EXPECT_NE(cursor, tree.end());
       Values::validate_cursor(cursor, k, v);
       // validate values in cursors keep intact
       Values::validate_cursor(c, k, v);
@@ -472,10 +474,12 @@ class TestTree {
       EXPECT_EQ(tree_clone.height(t_clone).unsafe_get0(), 2);
 
       for (auto& [k, v, c] : insert_history) {
-        auto result = tree_clone.lower_bound(t_clone, k).unsafe_get0();
+        auto result = tree_clone.find(t_clone, k).unsafe_get0();
+        EXPECT_NE(result, tree_clone.end());
         Values::validate_cursor(result, k, v);
       }
-      auto result = tree_clone.lower_bound(t_clone, key).unsafe_get0();
+      auto result = tree_clone.find(t_clone, key).unsafe_get0();
+      EXPECT_NE(result, tree_clone.end());
       Values::validate_cursor(result, key, value);
       EXPECT_TRUE(last_split.match(expected));
     });
