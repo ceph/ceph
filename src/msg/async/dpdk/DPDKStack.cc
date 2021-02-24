@@ -242,7 +242,7 @@ int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
   return r;
 }
 
-void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
+void DPDKStack::spawn_worker(std::function<void ()> &&func)
 {
   // create a extra master thread
   //
