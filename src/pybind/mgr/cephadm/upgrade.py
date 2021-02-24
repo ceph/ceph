@@ -475,10 +475,11 @@ class CephadmUpgrade:
                         to_upgrade.append(d)
                     continue
 
-                # NOTE: known_ok_to_stop is an output argument for
-                # _wait_for_ok_to_stop
-                if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
-                    return
+                if d.daemon_type in ['mon', 'osd', 'mds']:
+                    # NOTE: known_ok_to_stop is an output argument for
+                    # _wait_for_ok_to_stop
+                    if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                        return
 
                 to_upgrade.append(d)
 

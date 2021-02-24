@@ -57,9 +57,9 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
 from .services.exporter import CephadmExporter, CephadmExporterConfig
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, EventStore
-from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
+from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
-from .utils import forall_hosts, cephadmNoImage
+from .utils import CEPH_TYPES, GATEWAY_TYPES, forall_hosts, cephadmNoImage
 from .configchecks import CephadmConfigChecks
 
 try:
@@ -89,8 +89,6 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
-
-CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'docker.io/ceph/ceph'
@@ -1228,8 +1226,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         image: Optional[str] = None
         if daemon_type in CEPH_TYPES or \
-                daemon_type == 'nfs' or \
-                daemon_type == 'iscsi':
+                daemon_type in GATEWAY_TYPES:
             # get container image
             image = str(self.get_foreign_ceph_option(
                 utils.name_to_config_section(daemon_name),
@@ -1736,10 +1733,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if action != 'redeploy':
                 raise OrchestratorError(
                     f'Cannot execute {action} with new image. `action` needs to be `redeploy`')
-            if daemon_type not in CEPH_TYPES:
+            if daemon_type not in CEPH_TYPES and daemon_type not in GATEWAY_TYPES:
                 raise OrchestratorError(
                     f'Cannot redeploy {daemon_type}.{daemon_id} with a new image: Supported '
-                    f'types are: {", ".join(CEPH_TYPES)}')
+                    f'types are: {", ".join(CEPH_TYPES + GATEWAY_TYPES)}')
 
             self.check_mon_command({
                 'prefix': 'config set',
