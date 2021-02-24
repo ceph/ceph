@@ -258,7 +258,7 @@ class DPDKStack : public NetworkStack {
   {}
   virtual bool support_local_listen_table() const override { return true; }
 
-  virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
+  virtual void spawn_worker(std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;
 };
 
