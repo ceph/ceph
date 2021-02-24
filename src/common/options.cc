@@ -6510,6 +6510,12 @@ std::vector<Option> get_rgw_options() {
         "If not zero, this is the HTTP return code that will be returned on a successful S3 "
         "object creation."),
 
+    Option("rgw_s3_client_max_sig_ver", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(-1)
+    .set_description("Max S3 authentication signature version")
+    .set_long_description(
+        "If greater than zero, would force max signature version to use"),
+
     Option("rgw_resolve_cname", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Support vanity domain names via CNAME")

@@ -187,10 +187,51 @@ void RGWHTTPSimpleRequest::get_out_headers(map<string, string> *pheaders)
   out_headers.clear();
 }
 
-static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key,
+static int sign_request_v2(const DoutPrefixProvider *dpp, RGWAccessKey& key,
                         const string& region, const string& service,
                         RGWEnv& env, req_info& info,
                         const bufferlist *opt_content)
+{
+  /* don't sign if no key is provided */
+  if (key.key.empty()) {
+    return 0;
+  }
+
+  auto cct = dpp->get_cct();
+
+  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+    for (const auto& i: env.get_map()) {
+      ldpp_dout(dpp, 20) << __func__ << "():> " << i.first << " -> " << rgw::crypt_sanitize::x_meta_map{i.first, i.second} << dendl;
+    }
+  }
+
+  string canonical_header;
+  if (!rgw_create_s3_canonical_header(info, NULL, canonical_header, false)) {
+    ldpp_dout(dpp, 0) << "failed to create canonical s3 header" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "generated canonical header: " << canonical_header << dendl;
+
+  string digest;
+  try {
+    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
+  } catch (int ret) {
+    return ret;
+  }
+
+  string auth_hdr = "AWS " + key.id + ":" + digest;
+  ldpp_dout(dpp, 15) << "generated auth header: " << auth_hdr << dendl;
+
+  env.set("AUTHORIZATION", auth_hdr);
+
+  return 0;
+}
+
+static int sign_request_v4(const DoutPrefixProvider *dpp, RGWAccessKey& key,
+                           const string& region, const string& service,
+                           RGWEnv& env, req_info& info,
+                           const bufferlist *opt_content)
 {
   /* don't sign if no key is provided */
   if (key.key.empty()) {
@@ -211,11 +252,25 @@ static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key,
   auto sigv4_headers = sigv4_data.signature_factory(dpp, key.key, sigv4_data);
 
   for (auto& entry : sigv4_headers) {
-    ldout(cct, 20) << __func__ << "(): sigv4 header: " << entry.first << ": " << entry.second << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): sigv4 header: " << entry.first << ": " << entry.second << dendl;
     env.set(entry.first, entry.second);
   }
 
   return 0;
+}
+
+static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key,
+                        const string& region, const string& service,
+                        RGWEnv& env, req_info& info,
+                        const bufferlist *opt_content)
+{
+  auto authv = dpp->get_cct()->_conf.get_val<int64_t>("rgw_s3_client_max_sig_ver");
+  if (authv > 0 &&
+      authv <= 3) {
+    return sign_request_v2(dpp, key, region, service, env, info, opt_content);
+  }
+
+  return sign_request_v4(dpp, key, region, service, env, info, opt_content);
 }
 
 static string extract_region_name(string&& s)
