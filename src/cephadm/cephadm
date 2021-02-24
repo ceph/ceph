@@ -3458,6 +3458,7 @@ def create_mon(
     fsid: str, mon_id: str
 ) -> None:
     mon_c = get_container(ctx, fsid, 'mon', mon_id)
+    ctx.meta_json = json.dumps({"service_name": "mon"})
     deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
 
@@ -3503,6 +3504,7 @@ def create_mgr(
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
     # Note:the default port used by the Prometheus node exporter is opened in fw
+    ctx.meta_json = json.dumps({"service_name": "mgr"})
     deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
                   config=config, keyring=mgr_keyring, ports=[9283])
 
