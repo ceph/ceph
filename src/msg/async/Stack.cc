@@ -120,8 +120,7 @@ void NetworkStack::start()
     return ;
   }
 
-  for (unsigned i = 0; i < num_workers; ++i) {
-    Worker* worker = workers[i];
+  for (Worker* worker : workers) {
     if (worker->is_init())
       continue;
     spawn_worker(add_thread(worker));
@@ -129,8 +128,9 @@ void NetworkStack::start()
   started = true;
   lk.unlock();
 
-  for (unsigned i = 0; i < num_workers; ++i)
-    workers[i]->wait_for_init();
+  for (Worker* worker : workers) {
+    worker->wait_for_init();
+  }
 }
 
 Worker* NetworkStack::get_worker()
@@ -145,10 +145,10 @@ Worker* NetworkStack::get_worker()
   // find worker with least references
   // tempting case is returning on references == 0, but in reality
   // this will happen so rarely that there's no need for special case.
-  for (unsigned i = 0; i < num_workers; ++i) {
-    unsigned worker_load = workers[i]->references.load();
+  for (Worker* worker : workers) {
+    unsigned worker_load = worker->references.load();
     if (worker_load < min_load) {
-      current_best = workers[i];
+      current_best = worker;
       min_load = worker_load;
     }
   }
@@ -162,10 +162,11 @@ Worker* NetworkStack::get_worker()
 void NetworkStack::stop()
 {
   std::lock_guard lk(pool_spin);
-  for (unsigned i = 0; i < num_workers; ++i) {
-    workers[i]->done = true;
-    workers[i]->center.wakeup();
-    join_worker(i);
+  unsigned i = 0;
+  for (Worker* worker : workers) {
+    worker->done = true;
+    worker->center.wakeup();
+    join_worker(i++);
   }
   started = false;
 }
@@ -194,10 +195,10 @@ void NetworkStack::drain()
   ldout(cct, 30) << __func__ << " started." << dendl;
   pthread_t cur = pthread_self();
   pool_spin.lock();
-  C_drain drain(num_workers);
-  for (unsigned i = 0; i < num_workers; ++i) {
-    ceph_assert(cur != workers[i]->center.get_owner());
-    workers[i]->center.dispatch_event_external(EventCallbackRef(&drain));
+  C_drain drain(get_num_worker());
+  for (Worker* worker : workers) {
+    ceph_assert(cur != worker->center.get_owner());
+    worker->center.dispatch_event_external(EventCallbackRef(&drain));
   }
   pool_spin.unlock();
   drain.wait();
