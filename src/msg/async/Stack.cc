@@ -34,9 +34,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
 
-std::function<void ()> NetworkStack::add_thread(unsigned worker_id)
+std::function<void ()> NetworkStack::add_thread(Worker* w)
 {
-  Worker *w = workers[worker_id];
   return [this, w]() {
       char tp_name[16];
       sprintf(tp_name, "msgr-worker-%u", w->id);
@@ -122,10 +121,10 @@ void NetworkStack::start()
   }
 
   for (unsigned i = 0; i < num_workers; ++i) {
-    if (workers[i]->is_init())
+    Worker* worker = workers[i];
+    if (worker->is_init())
       continue;
-    std::function<void ()> thread = add_thread(i);
-    spawn_worker(i, std::move(thread));
+    spawn_worker(add_thread(worker));
   }
   started = true;
   lk.unlock();
