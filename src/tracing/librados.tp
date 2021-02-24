@@ -1884,6 +1884,32 @@ TRACEPOINT_EVENT(librados, rados_nobjects_list_next_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_nobjects_list_next2_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_next2_exit,
+    TP_ARGS(
+        int, retval,
+        const char* const*, entry,
+        const char* const*, key,
+        const char* const*, nspace,
+        const size_t*, entry_size,
+        const size_t*, key_size,
+        const size_t*, nspace_size),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_sequencep(char, entry, entry, size_t, entry_size)
+        ceph_ctf_sequencep(char, key, key, size_t, key_size)
+        ceph_ctf_sequencep(char, nspace, nspace, size_t, nspace_size)
+    )
+)
+
+
 TRACEPOINT_EVENT(librados, rados_objects_list_open_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx),

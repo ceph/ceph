@@ -2410,6 +2410,22 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_next)(
   const char **nspace)
 {
   tracepoint(librados, rados_nobjects_list_next_enter, listctx);
+  uint32_t retval = rados_nobjects_list_next2(listctx, entry, key, nspace, NULL, NULL, NULL);
+  tracepoint(librados, rados_nobjects_list_next_exit, 0, *entry, key, nspace);
+  return retval;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_next);
+
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_next2)(
+  rados_list_ctx_t listctx,
+  const char **entry,
+  const char **key,
+  const char **nspace,
+  size_t *entry_size,
+  size_t *key_size,
+  size_t *nspace_size)
+{
+  tracepoint(librados, rados_nobjects_list_next2_enter, listctx);
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
   Objecter::NListContext *h = lh->nlc;
 
@@ -2421,11 +2437,11 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_next)(
   if (h->list.empty()) {
     int ret = lh->ctx->nlist(lh->nlc, RADOS_LIST_MAX_ENTRIES);
     if (ret < 0) {
-      tracepoint(librados, rados_nobjects_list_next_exit, ret, NULL, NULL, NULL);
+      tracepoint(librados, rados_nobjects_list_next2_exit, ret, NULL, NULL, NULL, NULL, NULL, NULL);
       return ret;
     }
     if (h->list.empty()) {
-      tracepoint(librados, rados_nobjects_list_next_exit, -ENOENT, NULL, NULL, NULL);
+      tracepoint(librados, rados_nobjects_list_next2_exit, -ENOENT, NULL, NULL, NULL, NULL, NULL, NULL);
       return -ENOENT;
     }
   }
@@ -2440,10 +2456,19 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_next)(
   }
   if (nspace)
     *nspace = h->list.front().nspace.c_str();
-  tracepoint(librados, rados_nobjects_list_next_exit, 0, *entry, key, nspace);
+
+  if (entry_size)
+    *entry_size = h->list.front().oid.size();
+  if (key_size)
+    *key_size = h->list.front().locator.size();
+  if (nspace_size)
+    *nspace_size = h->list.front().nspace.size();
+
+  tracepoint(librados, rados_nobjects_list_next2_exit, 0, entry, key, nspace,
+             entry_size, key_size, nspace_size);
   return 0;
 }
-LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_next);
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_next2);
 
 
 /*
