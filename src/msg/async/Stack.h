@@ -334,7 +334,7 @@ class NetworkStack {
   }
   void drain();
   unsigned get_num_worker() const {
-    return num_workers;
+    return workers.size();
   }
 
   // direct is used in tests only
