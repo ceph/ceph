@@ -492,6 +492,24 @@ class TestSubCmdFsAuthorize(CapsHelper):
             cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
             self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
 
+    def test_single_path_authorize_on_nonalphanumeric_fsname(self):
+        """
+        That fs authorize command works on filesystems with names having [_.-] characters
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        fs_name = "cephfs-_."
+        self.fs = self.mds_cluster.newfs(name=fs_name)
+        self.fs.wait_for_daemons()
+        self.run_cluster_cmd(f'auth caps client.{self.mount_a.client_id} '
+                             f'mon "allow r" '
+                             f'osd "allow rw pool={self.fs.get_data_pool_name()}" '
+                             f'mds allow')
+        self.mount_a.remount(cephfs_name=self.fs.name)
+        perm = 'rw'
+        filepaths, filedata, mounts, keyring = self.setup_test_env(perm)
+        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+
     def test_multiple_path_r(self):
         perm, paths = 'r', ('/dir1', '/dir2/dir22')
         filepaths, filedata, mounts, keyring = self.setup_test_env(perm, paths)
