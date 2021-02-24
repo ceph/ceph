@@ -376,7 +376,7 @@ void KVMonitor::do_osd_destroy(int32_t id, uuid_d& uuid)
     pending[iter->key()] = boost::none;
   }
 
-  paxos.trigger_propose();
+  propose_pending();
 }
 
 int KVMonitor::validate_osd_new(
@@ -417,6 +417,8 @@ void KVMonitor::do_osd_new(
   dmcrypt_key_value.append(dmcrypt_key);
 
   pending[dmcrypt_key_prefix] = dmcrypt_key_value;
+
+  propose_pending();
 }
 
 
