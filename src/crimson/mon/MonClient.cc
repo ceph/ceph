@@ -57,11 +57,6 @@ public:
     canceled
   };
   seastar::future<> handle_auth_reply(Ref<MAuthReply> m);
-  // v1
-  seastar::future<auth_result_t> authenticate_v1(
-    epoch_t epoch,
-    const EntityName& name,
-    uint32_t want_keys);
   // v2
   seastar::future<auth_result_t> authenticate_v2();
   auth::AuthClient::auth_request_t
@@ -74,8 +69,6 @@ public:
                              int result,
                              const std::vector<uint32_t>& allowed_methods,
                              const std::vector<uint32_t>& allowed_modes);
-
-  // v1 and v2
   tuple<CryptoKey, secret_t, int>
   handle_auth_done(uint64_t new_global_id,
                    const ceph::buffer::list& bl);
@@ -89,8 +82,6 @@ public:
   crimson::net::ConnectionRef get_conn();
 
 private:
-  seastar::future<> setup_session(epoch_t epoch,
-                                  const EntityName& name);
   std::unique_ptr<AuthClientHandler> create_auth(crimson::auth::method_t,
                                                  uint64_t global_id,
                                                  const EntityName& name,
@@ -111,7 +102,6 @@ private:
   clock_t::time_point auth_start;
   crimson::auth::method_t auth_method = 0;
   std::optional<seastar::promise<auth_result_t>> auth_done;
-  // v1 and v2
   const AuthRegistry& auth_registry;
   crimson::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
@@ -210,23 +200,6 @@ Connection::create_auth(crimson::auth::method_t protocol,
   return auth;
 }
 
-seastar::future<>
-Connection::setup_session(epoch_t epoch,
-                          const EntityName& name)
-{
-  auto m = ceph::make_message<MAuth>();
-  m->protocol = CEPH_AUTH_UNKNOWN;
-  m->monmap_epoch = epoch;
-  __u8 struct_v = 1;
-  encode(struct_v, m->auth_payload);
-  std::vector<crimson::auth::method_t> auth_methods;
-  auth_registry.get_supported_methods(conn->get_peer_type(), &auth_methods);
-  encode(auth_methods, m->auth_payload);
-  encode(name, m->auth_payload);
-  encode(global_id, m->auth_payload);
-  return conn->send(m);
-}
-
 seastar::future<std::optional<Connection::auth_result_t>>
 Connection::do_auth_single(Connection::request_t what)
 {
@@ -287,40 +260,6 @@ seastar::future<Connection::auth_result_t>
 Connection::do_auth(Connection::request_t what) {
   return seastar::repeat_until_value([this, what]() {
     return do_auth_single(what);
-  });
-}
-
-seastar::future<Connection::auth_result_t>
-Connection::authenticate_v1(epoch_t epoch,
-                            const EntityName& name,
-                            uint32_t want_keys)
-{
-  return conn->keepalive().then([epoch, name, this] {
-    return setup_session(epoch, name);
-  }).then([this] {
-    return reply.get_shared_future();
-  }).then([name, want_keys, this](Ref<MAuthReply> m) {
-    if (!m) {
-      logger().error("authenticate_v1 canceled on {}", name);
-      return seastar::make_ready_future<auth_result_t>(auth_result_t::canceled);
-    }
-    global_id = m->global_id;
-    auth = create_auth(m->protocol, m->global_id, name, want_keys);
-    switch (auto p = m->result_bl.cbegin();
-            auth->handle_response(m->result, p,
-				  nullptr, nullptr)) {
-    case 0:
-      // none
-      return seastar::make_ready_future<auth_result_t>(auth_result_t::success);
-    case -EAGAIN:
-      // cephx
-      return do_auth(request_t::general);
-    default:
-      ceph_assert_always(0);
-    }
-  }).handle_exception([](auto ep) {
-    logger().error("authenticate_v1 failed with {}", ep);
-    return seastar::make_ready_future<auth_result_t>(auth_result_t::canceled);
   });
 }
 
@@ -954,39 +893,20 @@ seastar::future<> Client::stop()
   return fut;
 }
 
-bool should_use_msgr2(const entity_addrvec_t& my_addrs)
-{
-  // if we are bound to v1 only, and we are connecting to a v2 peer,
-  // we cannot use the peer's v2 address. otherwise the connection
-  // is assymetrical, because they would have to use v1 to connect
-  // to us, and we would use v2, and connection race detection etc
-  // would totally break down (among other things).  or, the other
-  // end will be confused that we advertise ourselve with a v1
-  // address only (that we bound to) but connected with protocol v2.
-  // NOTE: assuming that not having an addresses assigned is the
-  // equivalent of the unbound state (`!did_bind` in ceph-osd).
-  return my_addrs.empty() || my_addrs.has_msgr2();
-}
-
 static entity_addr_t choose_client_addr(
   const entity_addrvec_t& my_addrs,
   const entity_addrvec_t& client_addrs)
 {
-  if (!should_use_msgr2(my_addrs)) {
-    logger().info("{} {} limiting to v1", __func__, client_addrs);
-    return client_addrs.legacy_addr();
-  } else {
-    // here is where we decide which of the addrs to connect to.  always prefer
-    // the first one, if we support it.
-    for (const auto& a : client_addrs.v) {
-      if (a.is_msgr2() || a.is_legacy()) {
-        // FIXME: for ipv4 vs ipv6, check whether local host can handle ipv6 before
-        // trying it?  for now, just pick whichever is listed first.
-        return a;
-      }
+  // here is where we decide which of the addrs to connect to.  always prefer
+  // the first one, if we support it.
+  for (const auto& a : client_addrs.v) {
+    if (a.is_msgr2()) {
+      // FIXME: for ipv4 vs ipv6, check whether local host can handle ipv6 before
+      // trying it?  for now, just pick whichever is listed first.
+      return a;
     }
-    return entity_addr_t{};
   }
+  return entity_addr_t{};
 }
 
 seastar::future<> Client::reopen_session(int rank)
@@ -1015,15 +935,8 @@ seastar::future<> Client::reopen_session(int rank)
       auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
       auto& mc = pending_conns.emplace_back(
 	std::make_unique<Connection>(auth_registry, conn, &keyring));
-      if (conn->get_peer_addr().is_msgr2()) {
-        return mc->authenticate_v2();
-      } else {
-        return mc->authenticate_v1(monmap.get_epoch(), entity_name, want_keys)
-          .handle_exception([conn](auto ep) {
-            conn->mark_down();
-            return seastar::make_exception_future<Connection::auth_result_t>(ep);
-          });
-      }
+      assert(conn->get_peer_addr().is_msgr2());
+      return mc->authenticate_v2();
     }).then([peer, this](auto result) {
       if (result == Connection::auth_result_t::success) {
         _finish_auth(peer);
