@@ -95,7 +95,6 @@ private:
 
 private:
   bool closed = false;
-  // v1
   seastar::shared_promise<Ref<MAuthReply>> reply;
   // v2
   using clock_t = seastar::lowres_system_clock;
