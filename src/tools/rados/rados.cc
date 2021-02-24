@@ -2723,7 +2723,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     string attr_name(nargs[obj_name ? 1 : 2]);
     if (!obj_name) {
-      *obj_name = nargs[1];
+      obj_name = nargs[1];
     }
     bufferlist bl;
     ret = detail::getxattr(io_ctx, *obj_name, attr_name, bl, use_striper);
@@ -2744,7 +2744,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     string attr_name(nargs[obj_name ? 1 : 2]);
     if (!obj_name) {
-      *obj_name = nargs[1];
+      obj_name = nargs[1];
     }
     ret = detail::rmxattr(io_ctx, *obj_name, attr_name, use_striper);
 
