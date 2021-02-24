@@ -803,8 +803,7 @@ Worker* RDMAStack::create_worker(CephContext *c, unsigned worker_id)
 
 void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 {
-  threads.resize(i+1);
-  threads[i] = std::thread(func);
+  threads.emplace_back(std::move(func));
 }
 
 void RDMAStack::join_worker(unsigned i)
