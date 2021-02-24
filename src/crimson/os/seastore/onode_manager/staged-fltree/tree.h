@@ -93,8 +93,8 @@ class Btree {
     bool operator>=(const Cursor& o) const { return (int)compare_to(o) >= 0; }
     bool operator<(const Cursor& o) const { return (int)compare_to(o) < 0; }
     bool operator<=(const Cursor& o) const { return (int)compare_to(o) <= 0; }
-    bool operator==(const Cursor& o) const { return (int)compare_to(o) != 0; }
-    bool operator!=(const Cursor& o) const { return (int)compare_to(o) == 0; }
+    bool operator==(const Cursor& o) const { return (int)compare_to(o) == 0; }
+    bool operator!=(const Cursor& o) const { return (int)compare_to(o) != 0; }
 
     btree_future<Cursor> get_next(Transaction& t) {
       assert(!is_end());
