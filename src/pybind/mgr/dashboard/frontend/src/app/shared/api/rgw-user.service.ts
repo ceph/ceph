@@ -5,7 +5,8 @@ import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo, mergeMap } from 'rxjs/operators';
 
-import { cdEncode } from '../decorators/cd-encode';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { cdEncode } from '~/app/shared/decorators/cd-encode';
 
 @cdEncode
 @Injectable({
@@ -14,7 +15,7 @@ import { cdEncode } from '../decorators/cd-encode';
 export class RgwUserService {
   private url = 'api/rgw/user';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
 
   /**
    * Get the list of users.
@@ -40,89 +41,109 @@ export class RgwUserService {
    * @return {Observable<string[]>}
    */
   enumerate() {
-    return this.http.get(this.url);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(this.url, { params: params });
+    });
   }
 
   enumerateEmail() {
-    return this.http.get(`${this.url}/get_emails`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/get_emails`, { params: params });
+    });
   }
 
   get(uid: string) {
-    return this.http.get(`${this.url}/${uid}`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/${uid}`, { params: params });
+    });
   }
 
   getQuota(uid: string) {
-    return this.http.get(`${this.url}/${uid}/quota`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/${uid}/quota`, { params: params });
+    });
   }
 
   create(args: Record<string, any>) {
-    let params = new HttpParams();
-    _.keys(args).forEach((key) => {
-      params = params.append(key, args[key]);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      _.keys(args).forEach((key) => {
+        params = params.append(key, args[key]);
+      });
+      return this.http.post(this.url, null, { params: params });
     });
-    return this.http.post(this.url, null, { params: params });
   }
 
   update(uid: string, args: Record<string, any>) {
-    let params = new HttpParams();
-    _.keys(args).forEach((key) => {
-      params = params.append(key, args[key]);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      _.keys(args).forEach((key) => {
+        params = params.append(key, args[key]);
+      });
+      return this.http.put(`${this.url}/${uid}`, null, { params: params });
     });
-    return this.http.put(`${this.url}/${uid}`, null, { params: params });
   }
 
   updateQuota(uid: string, args: Record<string, string>) {
-    let params = new HttpParams();
-    _.keys(args).forEach((key) => {
-      params = params.append(key, args[key]);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      _.keys(args).forEach((key) => {
+        params = params.append(key, args[key]);
+      });
+      return this.http.put(`${this.url}/${uid}/quota`, null, { params: params });
     });
-    return this.http.put(`${this.url}/${uid}/quota`, null, { params: params });
   }
 
   delete(uid: string) {
-    return this.http.delete(`${this.url}/${uid}`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.delete(`${this.url}/${uid}`, { params: params });
+    });
   }
 
   createSubuser(uid: string, args: Record<string, string>) {
-    let params = new HttpParams();
-    _.keys(args).forEach((key) => {
-      params = params.append(key, args[key]);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      _.keys(args).forEach((key) => {
+        params = params.append(key, args[key]);
+      });
+      return this.http.post(`${this.url}/${uid}/subuser`, null, { params: params });
     });
-    return this.http.post(`${this.url}/${uid}/subuser`, null, { params: params });
   }
 
   deleteSubuser(uid: string, subuser: string) {
-    return this.http.delete(`${this.url}/${uid}/subuser/${subuser}`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.delete(`${this.url}/${uid}/subuser/${subuser}`, { params: params });
+    });
   }
 
   addCapability(uid: string, type: string, perm: string) {
-    let params = new HttpParams();
-    params = params.append('type', type);
-    params = params.append('perm', perm);
-    return this.http.post(`${this.url}/${uid}/capability`, null, { params: params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.append('type', type);
+      params = params.append('perm', perm);
+      return this.http.post(`${this.url}/${uid}/capability`, null, { params: params });
+    });
   }
 
   deleteCapability(uid: string, type: string, perm: string) {
-    let params = new HttpParams();
-    params = params.append('type', type);
-    params = params.append('perm', perm);
-    return this.http.delete(`${this.url}/${uid}/capability`, { params: params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.append('type', type);
+      params = params.append('perm', perm);
+      return this.http.delete(`${this.url}/${uid}/capability`, { params: params });
+    });
   }
 
   addS3Key(uid: string, args: Record<string, string>) {
-    let params = new HttpParams();
-    params = params.append('key_type', 's3');
-    _.keys(args).forEach((key) => {
-      params = params.append(key, args[key]);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.append('key_type', 's3');
+      _.keys(args).forEach((key) => {
+        params = params.append(key, args[key]);
+      });
+      return this.http.post(`${this.url}/${uid}/key`, null, { params: params });
     });
-    return this.http.post(`${this.url}/${uid}/key`, null, { params: params });
   }
 
   deleteS3Key(uid: string, accessKey: string) {
-    let params = new HttpParams();
-    params = params.append('key_type', 's3');
-    params = params.append('access_key', accessKey);
-    return this.http.delete(`${this.url}/${uid}/key`, { params: params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.append('key_type', 's3');
+      params = params.append('access_key', accessKey);
+      return this.http.delete(`${this.url}/${uid}/key`, { params: params });
+    });
   }
 
   /**
