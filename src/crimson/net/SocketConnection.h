@@ -53,8 +53,7 @@ class SocketConnection : public Connection {
 
  public:
   SocketConnection(SocketMessenger& messenger,
-                   ChainedDispatchers& dispatchers,
-                   bool is_msgr2);
+                   ChainedDispatchers& dispatchers);
   ~SocketConnection() override;
 
   Messenger* get_messenger() const override;
