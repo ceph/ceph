@@ -453,7 +453,7 @@ Requires:       python%{python3_pkgversion}
 Recommends:     podman >= 2.0.2
 %endif
 %description -n cephadm
-Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed 
+Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed
 with systemd and podman.
 
 %package -n ceph-common
