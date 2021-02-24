@@ -2,6 +2,22 @@ overrides:
   install:
     ceph:
       extra_packages: [rbd-nbd]
+  ceph:
+    conf:
+      osd:
+        debug bluefs: "1/5"
+        debug bluestore: "1/5"
+        debug filestore: "1/3"
+        debug journal: "0/5"
+        debug rocksdb: "4/5"
+  ceph-deploy:
+    conf:
+      osd:
+        debug bluefs: "1/5"
+        debug bluestore: "1/5"
+        debug filestore: "1/3"
+        debug journal: "0/5"
+        debug rocksdb: "4/5"
 tasks:
 - qemu:
     all:
