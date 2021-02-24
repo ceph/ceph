@@ -297,7 +297,7 @@ class NetworkStack {
   ceph::spinlock pool_spin;
   bool started = false;
 
-  std::function<void ()> add_thread(unsigned i);
+  std::function<void ()> add_thread(Worker* w);
 
   virtual Worker* create_worker(CephContext *c, unsigned i) = 0;
 
