@@ -85,8 +85,17 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
     return nullptr;
   }
   
+  unsigned num_workers = c->_conf->ms_async_op_threads;
+  ceph_assert(num_workers > 0);
+  if (num_workers >= EventCenter::MAX_EVENTCENTER) {
+    ldout(c, 0) << __func__ << " max thread limit is "
+                  << EventCenter::MAX_EVENTCENTER << ", switching to this now. "
+                  << "Higher thread values are unnecessary and currently unsupported."
+                  << dendl;
+    num_workers = EventCenter::MAX_EVENTCENTER;
+  }
   const int InitEventNumber = 5000;
-  for (unsigned worker_id = 0; worker_id < stack->num_workers; ++worker_id) {
+  for (unsigned worker_id = 0; worker_id < num_workers; ++worker_id) {
     Worker *w = stack->create_worker(c, worker_id);
     int ret = w->center.init(InitEventNumber, worker_id, t);
     if (ret)
@@ -99,18 +108,7 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
 
 NetworkStack::NetworkStack(CephContext *c)
   : cct(c)
-{
-  ceph_assert(cct->_conf->ms_async_op_threads > 0);
-
-  num_workers = cct->_conf->ms_async_op_threads;
-  if (num_workers >= EventCenter::MAX_EVENTCENTER) {
-    ldout(cct, 0) << __func__ << " max thread limit is "
-                  << EventCenter::MAX_EVENTCENTER << ", switching to this now. "
-                  << "Higher thread values are unnecessary and currently unsupported."
-                  << dendl;
-    num_workers = EventCenter::MAX_EVENTCENTER;
-  }
-}
+{}
 
 void NetworkStack::start()
 {

@@ -293,7 +293,6 @@ class Worker {
 };
 
 class NetworkStack {
-  unsigned num_workers = 0;
   ceph::spinlock pool_spin;
   bool started = false;
 
