@@ -19,7 +19,6 @@
 #include "auth/Auth.h"
 #include "include/common_fwd.h"
 
-struct MAuthReply;
 class RotatingKeyRing;
 
 class AuthClientHandler {
