@@ -1371,7 +1371,9 @@ class CephManager:
         """
         Start ceph on a cluster.  Return success or failure information.
         """
-        kwargs['args'], kwargs['check_status'] = args, False
+        if kwargs.get('args') is None and args:
+           kwargs['args'] = args
+        kwargs['check_status'] = False
         return self.run_cluster_cmd(**kwargs).exitstatus
 
     def run_ceph_w(self, watch_channel=None):
