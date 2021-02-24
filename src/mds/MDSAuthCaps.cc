@@ -63,7 +63,7 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
       lexeme[lit("'") >> *(char_ - '\'') >> '\''];
     unquoted_path %= +char_("a-zA-Z0-9_./-");
     network_str %= +char_("/.:a-fA-F0-9][");
-    fs_name_str %= +char_("a-zA-Z0-9-_.");
+    fs_name_str %= +char_("a-zA-Z0-9_.-");
 
     // match := [path=<path>] [uid=<uid> [gids=<gid>[,<gid>...]]
     // TODO: allow fsname, and root_squash to be specified with uid, and gidlist
