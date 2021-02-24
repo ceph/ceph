@@ -143,6 +143,8 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length);
   case extent_types_t::ONODE_BLOCK:
     return alloc_new_extent<OnodeBlock>(t, length);
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length);
   case extent_types_t::EXTMAP_INNER:
     return alloc_new_extent<extentmap_manager::ExtMapInnerNode>(t, length);
   case extent_types_t::EXTMAP_LEAF:
@@ -499,8 +501,6 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   }
 }
 
-using StagedOnodeBlock = crimson::os::seastore::onode::SeastoreNodeExtent;
-
 Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
@@ -553,7 +553,7 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::ONODE_BLOCK_STAGED:
-      return get_extent<StagedOnodeBlock>(offset, length
+      return get_extent<onode::SeastoreNodeExtent>(offset, length
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
