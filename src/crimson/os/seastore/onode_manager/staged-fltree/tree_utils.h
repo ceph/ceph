@@ -285,8 +285,9 @@ class TreeBuilder {
 #ifndef NDEBUG
         auto [key, value] = kv_iter.get_kv();
         Values::validate_cursor(cursor, key, value);
-        return tree->lower_bound(t, key
+        return tree->find(t, key
         ).safe_then([this, cursor](auto cursor_) mutable {
+          assert(!cursor_.is_end());
           auto [key, value] = kv_iter.get_kv();
           ceph_assert(cursor_.get_ghobj() == key);
           ceph_assert(cursor_.value() == cursor.value());
@@ -315,7 +316,7 @@ class TreeBuilder {
             assert(c_iter != cursors->end());
             auto [k, v] = kv_iter.get_kv();
             // validate values in tree keep intact
-            return tree->lower_bound(t, k).safe_then([this, &c_iter](auto cursor) {
+            return tree->find(t, k).safe_then([this, &c_iter](auto cursor) {
               auto [k, v] = kv_iter.get_kv();
               Values::validate_cursor(cursor, k, v);
               // validate values in cursors keep intact
@@ -349,7 +350,7 @@ class TreeBuilder {
       auto iter = kvs.begin();
       while (!iter.is_end()) {
         auto [k, v] = iter.get_kv();
-        auto cursor = tree->lower_bound(t, k).unsafe_get0();
+        auto cursor = tree->find(t, k).unsafe_get0();
         Values::validate_cursor(cursor, k, v);
         ++iter;
       }
