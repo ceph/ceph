@@ -15,7 +15,7 @@ tasks:
         test_image: 'test_image-0'
         test_size: 5120  # MB
         scratch_image: 'scratch_image-0'
-        scratch_size: 5120  # MB
+        scratch_size: 15360  # MB
         fs_type: ext4
         tests: '-g auto -g blockdev -x clone'
         exclude:
