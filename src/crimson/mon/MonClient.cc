@@ -227,11 +227,11 @@ Connection::do_auth_single(Connection::request_t what)
   }).then([this] (Ref<MAuthReply> m) {
     if (!m) {
       ceph_assert(closed);
-      logger().info("do_auth: connection closed");
+      logger().info("do_auth_single: connection closed");
       return std::make_optional(auth_result_t::canceled);
     }
     logger().info(
-      "do_auth: mon {} => {} returns {}: {}",
+      "do_auth_single: mon {} => {} returns {}: {}",
       conn->get_messenger()->get_myaddr(),
       conn->get_peer_addr(), *m, m->result);
     auto p = m->result_bl.cbegin();
@@ -248,7 +248,7 @@ Connection::do_auth_single(Connection::request_t what)
     default:
       auth_result = auth_result_t::failure;
       logger().error(
-        "do_auth: got error {} on mon {}",
+        "do_auth_single: got error {} on mon {}",
         ret, conn->get_peer_addr());
       break;
     }
