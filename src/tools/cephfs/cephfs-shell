@@ -227,26 +227,30 @@ def humansize(nbytes):
     return '%s%s' % (f, suffixes[i])
 
 
-def print_long(path, is_dir, is_symlink, human_readable):
-    pretty = os.path.basename(path.decode('utf-8'))
-    info = cephfs.stat(path, follow_symlink=(not is_symlink))
-
+def style_listing(path, is_dir, is_symlink, ls_long=False):
+    if not (is_dir or is_symlink):
+        return path
+    pretty = colorama.Style.BRIGHT
     if is_symlink:
-        target_file = cephfs.readlink(path, size=255).decode('utf-8')
-        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + ' -> ' + target_file
-        pretty += colorama.Style.RESET_ALL
+        pretty += colorama.Fore.CYAN + path
+        if ls_long:
+            # Add target path
+            pretty += ' -> ' + cephfs.readlink(path, size=255).decode('utf-8')
     elif is_dir:
-        pretty = colorama.Style.BRIGHT + colorama.Fore.BLUE + pretty + '/'
-        pretty += colorama.Style.RESET_ALL
+        pretty += colorama.Fore.BLUE + path + '/'
+    pretty += colorama.Style.RESET_ALL
+    return pretty
+
+
+def print_long(path, is_dir, is_symlink, human_readable):
+    info = cephfs.stat(path, follow_symlink=(not is_symlink))
+    pretty = style_listing(os.path.basename(path.decode('utf-8')), is_dir, is_symlink, True)
     if human_readable:
-        poutput('{}\t{:10s} {} {} {} {}'.format(
-            mode_notation(info.st_mode),
-            humansize(info.st_size), info.st_uid,
-            info.st_gid, info.st_mtime, pretty))
+        sizefmt = '\t {:10s}'.format(humansize(info.st_size))
     else:
-        poutput('{} {:12d} {} {} {} {}'.format(
-            mode_notation(info.st_mode), info.st_size, info.st_uid,
-            info.st_gid, info.st_mtime, pretty))
+        sizefmt = '{:12d}'.format(info.st_size)
+    poutput(f'{mode_notation(info.st_mode)} {sizefmt} {info.st_uid} {info.st_gid} {info.st_mtime}'
+            f' {pretty}')
 
 
 def word_len(word):
@@ -843,17 +847,8 @@ class CephFSShell(Cmd):
                 elif args.long:
                     print_long(os.path.join(cephfs.getcwd(), path, filepath),
                                is_dir, is_sym_lnk, False)
-                elif is_sym_lnk:
-                    values.append(colorama.Style.BRIGHT
-                                  + colorama.Fore.CYAN
-                                  + filepath.decode('utf-8')
-                                  + colorama.Style.RESET_ALL)
-                elif is_dir:
-                    values.append(colorama.Style.BRIGHT
-                                  + colorama.Fore.BLUE
-                                  + filepath.decode('utf-8')
-                                  + '/'
-                                  + colorama.Style.RESET_ALL)
+                elif is_sym_lnk or is_dir:
+                    values.append(style_listing(filepath.decode('utf-8'), is_dir, is_sym_lnk))
                 else:
                     values.append(filepath)
             if not args.long:
