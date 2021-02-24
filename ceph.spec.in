@@ -89,7 +89,11 @@
 # SLE does not support luarocks
 %bcond_with lua_packages
 %else
+%if 0%{?sle_version} == 150200
+%global luarocks_package_name lua53-luarocks
+%else
 %global luarocks_package_name lua54-luarocks
+%endif
 %bcond_without lua_packages
 %endif
 %else
