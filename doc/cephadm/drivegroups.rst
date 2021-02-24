@@ -319,7 +319,7 @@ This can be described with two layouts.
     db_devices:
       model: MC-55-44-XZ
       limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
-    ---  
+    ---
     service_type: osd
     service_id: osd_spec_ssd
     placement:
@@ -376,7 +376,7 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
       rotational: 1
     db_devices:
       rotational: 0
-    ---    
+    ---
     service_type: osd
     service_id: osd_spec_six_to_ten
     placement:
@@ -428,5 +428,25 @@ The OSD spec for this case would look like the following (using the `model` filt
       model: NVME-QQQQ-987
 
 
-This can easily be done with other filters, like `size` or `vendor` as well.
+It is also possible to specify directly device paths in specific hosts like the following:
 
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: osd_using_paths
+    placement:
+      hosts:
+        - Node01
+        - Node02
+    data_devices:
+      paths:
+        - /dev/sdb
+    db_devices:
+      paths:
+        - /dev/sdc
+    wal_devices:
+      paths:
+        - /dev/sdd
+
+
+This can easily be done with other filters, like `size` or `vendor` as well.
