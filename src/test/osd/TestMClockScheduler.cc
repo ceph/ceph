@@ -93,7 +93,7 @@ TEST_F(mClockSchedulerTest, TestEmpty) {
 
   for (unsigned i = 100; i < 105; i+=2) {
     q.enqueue(create_item(i, client1, op_scheduler_class::client));
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
 
   ASSERT_FALSE(q.empty());
@@ -126,7 +126,7 @@ TEST_F(mClockSchedulerTest, TestSingleClientOrderedEnqueueDequeue) {
 
   for (unsigned i = 100; i < 105; ++i) {
     q.enqueue(create_item(i, client1, op_scheduler_class::client));
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
 
   auto r = get_item(q.dequeue());
@@ -150,6 +150,7 @@ TEST_F(mClockSchedulerTest, TestMultiClientOrderedEnqueueDequeue) {
   for (unsigned i = 0; i < NUM; ++i) {
     for (auto &&c: {client1, client2, client3}) {
       q.enqueue(create_item(i, c));
+      std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
   }
 
