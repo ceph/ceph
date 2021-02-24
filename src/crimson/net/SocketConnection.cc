@@ -14,7 +14,6 @@
 
 #include "SocketConnection.h"
 
-#include "ProtocolV1.h"
 #include "ProtocolV2.h"
 #include "SocketMessenger.h"
 
@@ -26,15 +25,10 @@ using namespace crimson::net;
 using crimson::common::local_conf;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   ChainedDispatchers& dispatchers,
-                                   bool is_msgr2)
-  : messenger(messenger)
+                                   ChainedDispatchers& dispatchers)
+  : messenger(messenger),
+    protocol(std::make_unique<ProtocolV2>(dispatchers, *this, messenger))
 {
-  if (is_msgr2) {
-    protocol = std::make_unique<ProtocolV2>(dispatchers, *this, messenger);
-  } else {
-    protocol = std::make_unique<ProtocolV1>(dispatchers, *this, messenger);
-  }
 #ifdef UNIT_TESTS_BUILT
   if (messenger.interceptor) {
     interceptor = messenger.interceptor;
