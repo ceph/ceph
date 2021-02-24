@@ -124,6 +124,8 @@ def mode_notation(mode):
     notation = '-'
     if mode[2] == '4':
         notation = 'd'
+    elif mode[2:4] == '12':
+        notation = 'l'
     for i in mode[-3:]:
         notation += permission_bits[i]
     return notation
@@ -225,11 +227,16 @@ def humansize(nbytes):
     return '%s%s' % (f, suffixes[i])
 
 
-def print_long(path, is_dir, human_readable):
-    info = cephfs.stat(path)
+def print_long(path, is_dir, is_symlink, human_readable):
     pretty = os.path.basename(path.decode('utf-8'))
-    if is_dir:
-        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + '/'
+    info = cephfs.stat(path, follow_symlink=(not is_symlink))
+
+    if is_symlink:
+        target_file = cephfs.readlink(path, size=255).decode('utf-8')
+        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + ' -> ' + target_file
+        pretty += colorama.Style.RESET_ALL
+    elif is_dir:
+        pretty = colorama.Style.BRIGHT + colorama.Fore.BLUE + pretty + '/'
         pretty += colorama.Style.RESET_ALL
     if human_readable:
         poutput('{}\t{:10s} {} {} {} {}'.format(
@@ -821,23 +828,29 @@ class CephFSShell(Cmd):
 
             if args.S:
                 items = sorted(items, key=lambda item: cephfs.stat(
-                    path + b'/' + item.d_name).st_size)
+                    path + b'/' + item.d_name, follow_symlink=(not item.is_symbol_file())).st_size)
 
             if args.reverse:
                 items = reversed(items)
             for item in items:
                 filepath = item.d_name
                 is_dir = item.is_dir()
+                is_sym_lnk = item.is_symbol_file()
 
                 if args.long and args.H:
                     print_long(os.path.join(cephfs.getcwd(), path, filepath),
-                               is_dir, True)
+                               is_dir, is_sym_lnk, True)
                 elif args.long:
                     print_long(os.path.join(cephfs.getcwd(), path, filepath),
-                               is_dir, False)
-                elif is_dir:
+                               is_dir, is_sym_lnk, False)
+                elif is_sym_lnk:
                     values.append(colorama.Style.BRIGHT
                                   + colorama.Fore.CYAN
+                                  + filepath.decode('utf-8')
+                                  + colorama.Style.RESET_ALL)
+                elif is_dir:
+                    values.append(colorama.Style.BRIGHT
+                                  + colorama.Fore.BLUE
                                   + filepath.decode('utf-8')
                                   + '/'
                                   + colorama.Style.RESET_ALL)
