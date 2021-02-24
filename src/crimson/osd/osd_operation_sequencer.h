@@ -105,7 +105,7 @@ private:
   seastar::condition_variable unblocked;
 };
 
-class OperationRepeatSequencer {
+class OpSequencers {
 public:
   OpSequencer& get(const spg_t& pgid) {
     return pg_ops.at(pgid);
