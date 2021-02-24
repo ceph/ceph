@@ -9741,16 +9741,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (!updated.empty()) {
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-      ss << "set osd(s) " << updated << " to class '" << device_class << "'";
-      getline(ss, rs);
-      wait_for_finished_proposal(op,
-        new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
-      return true;
-    }
-
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    ss << "set osd(s) " << updated << " to class '" << device_class << "'";
+    getline(ss, rs);
+    wait_for_finished_proposal(
+      op,
+      new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
+    return true;
  } else if (prefix == "osd crush rm-device-class") {
     bool stop = false;
     vector<string> idvec;
@@ -9803,15 +9801,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (!updated.empty()) {
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-      ss << "done removing class of osd(s): " << updated;
-      getline(ss, rs);
-      wait_for_finished_proposal(op,
-        new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
-      return true;
-    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    ss << "done removing class of osd(s): " << updated;
+    getline(ss, rs);
+    wait_for_finished_proposal(
+      op,
+      new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush class create") {
     string device_class;
     if (!cmd_getval(cmdmap, "class", device_class)) {
