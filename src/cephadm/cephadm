@@ -4640,10 +4640,10 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 elif daemon_type in ['prometheus',
                                                      'alertmanager',
                                                      'node-exporter']:
-                                    cmd = daemon_type.replace('-', '_')
+                                    daemon_type = daemon_type.replace('-', '_')
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           cmd, '--version'])
+                                                           daemon_type, '--version'])
                                     if not code and \
                                        err.startswith('%s, version ' % cmd):
                                         version = err.split(' ')[2]
