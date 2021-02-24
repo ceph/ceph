@@ -267,6 +267,9 @@ cdef nogil:
         pass
     int rados_nobjects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key, const char **nspace):
         pass
+    int rados_nobjects_list_next2(rados_list_ctx_t ctx, const char **entry, const char **key, const char **nspace,
+				  size_t *entry_size, size_t *key_size, size_t *nspace_size):
+        pass
     void rados_nobjects_list_close(rados_list_ctx_t ctx):
         pass
 
