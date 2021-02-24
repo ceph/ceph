@@ -6046,7 +6046,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
-	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE || obs.oi.has_manifest()) {
 	  result = -EINVAL;
 	  break;
 	}
@@ -6079,7 +6079,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
-	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE || obs.oi.has_manifest()) {
 	  result = -EINVAL;
 	  break;
 	}
@@ -6116,7 +6116,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_cache_evict, soid.oid.name.c_str(), soid.snap.val);
-	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE || obs.oi.has_manifest()) {
 	  result = -EINVAL;
 	  break;
 	}
