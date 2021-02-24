@@ -2,6 +2,7 @@
   <cd-navigation>
     <div class="container-fluid h-100"
          [ngClass]="{'dashboard':isDashboardPage()} ">
+      <cd-context></cd-context>
       <cd-breadcrumbs></cd-breadcrumbs>
       <router-outlet></router-outlet>
     </div>

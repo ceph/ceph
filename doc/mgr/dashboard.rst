@@ -389,10 +389,21 @@ To obtain the credentials of an existing user via `radosgw-admin`::
 
   $ radosgw-admin user info --uid=<user_id>
 
-Finally, provide the credentials to the dashboard::
+In case of having several Object Gateways, you will need the required users' credentials
+to connect to each Object Gateway.
+Finally, provide these credentials to the dashboard::
 
+  $ echo -n "{'<daemon1.id>': '<user1-access-key>', '<daemon2.id>': '<user2-access-key>', ...}" > <file-containing-access-key>
+  $ echo -n "{'<daemon1.id>': '<user1-secret-key>', '<daemon2.id>': '<user2-secret-key>', ...}" > <file-containing-secret-key>
   $ ceph dashboard set-rgw-api-access-key -i <file-containing-access-key>
   $ ceph dashboard set-rgw-api-secret-key -i <file-containing-secret-key>
+
+.. note::
+
+  Legacy way of providing credentials (connect to single Object Gateway)::
+
+  $ echo -n "<access-key>" > <file-containing-access-key>
+  $ echo -n "<secret-key>" > <file-containing-secret-key>
 
 In a simple configuration with a single RGW endpoint, this is all you
 have to do to get the Object Gateway management functionality working. The
@@ -411,7 +422,6 @@ exist and you may find yourself in the situation that you have to use them::
 
   $ ceph dashboard set-rgw-api-scheme <scheme>  # http or https
   $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
-  $ ceph dashboard set-rgw-api-user-id <user_id>
 
 If you are using a self-signed certificate in your Object Gateway setup,
 you should disable certificate verification in the dashboard to avoid refused

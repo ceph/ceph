@@ -11,7 +11,7 @@ from .. import mgr
 from ..awsauth import S3Auth
 from ..exceptions import DashboardException
 from ..rest_client import RequestException, RestClient
-from ..settings import Options, Settings
+from ..settings import Settings
 from ..tools import build_url, dict_contains_path, dict_get, json_str_to_object
 
 try:
@@ -30,7 +30,16 @@ class NoCredentialsException(RequestException):
             'the dashboard.')
 
 
-def _get_daemon_info() -> Dict[str, Any]:
+class RgwDaemon:
+    """Simple representation of a daemon."""
+    host: str
+    name: str
+    port: int
+    ssl: bool
+    zonegroup_name: str
+
+
+def _get_daemons() -> Dict[str, RgwDaemon]:
     """
     Retrieve RGW daemon info from MGR.
     Note, the service id of the RGW daemons may differ depending on the setup.
@@ -76,30 +85,31 @@ def _get_daemon_info() -> Dict[str, Any]:
     service_map = mgr.get('service_map')
     if not dict_contains_path(service_map, ['services', 'rgw', 'daemons']):
         raise LookupError('No RGW found')
-    daemon = None
-    daemons = service_map['services']['rgw']['daemons']
-    for key in daemons.keys():
-        if dict_contains_path(daemons[key], ['metadata', 'frontend_config#0']):
-            daemon = daemons[key]
-            break
-    if daemon is None:
+    daemons = {}
+    daemon_map = service_map['services']['rgw']['daemons']
+    for key in daemon_map.keys():
+        if dict_contains_path(daemon_map[key], ['metadata', 'frontend_config#0']):
+            daemon = _determine_rgw_addr(daemon_map[key])
+            daemon.name = key
+            daemon.zonegroup_name = daemon_map[key]['metadata']['zonegroup_name']
+            daemons[daemon.name] = daemon
+            logger.info('Found RGW daemon with configuration: host=%s, port=%d, ssl=%s',
+                        daemon.host, daemon.port, str(daemon.ssl))
+    if not daemons:
         raise LookupError('No RGW daemon found')
 
-    return daemon
+    return daemons
 
 
-def _determine_rgw_addr() -> Tuple[str, int, bool]:
+def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     """
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
-    daemon = _get_daemon_info()
-    addr = _parse_addr(daemon['addr'])
-    port, ssl = _parse_frontend_config(daemon['metadata']['frontend_config#0'])
+    daemon = RgwDaemon()
+    daemon.host = _parse_addr(daemon_info['addr'])
+    daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
 
-    logger.info('Auto-detected RGW configuration: addr=%s, port=%d, ssl=%s',
-                addr, port, str(ssl))
-
-    return addr, port, ssl
+    return daemon
 
 
 def _parse_addr(value) -> str:
@@ -208,46 +218,28 @@ def _parse_frontend_config(config) -> Tuple[int, bool]:
 
 
 class RgwClient(RestClient):
-    _SYSTEM_USERID = None
-    _ADMIN_PATH = None
     _host = None
     _port = None
     _ssl = None
-    _user_instances = {}  # type: Dict[str, RgwClient]
+    _user_instances = {}  # type: Dict[str, Dict[str, RgwClient]]
+    _config_instances = {}  # type: Dict[str, RgwClient]
     _rgw_settings_snapshot = None
+    _daemons: Dict[str, RgwDaemon] = {}
+    daemon: RgwDaemon
+    got_keys_from_config: bool
+    userid: str
 
     @staticmethod
-    def _load_settings():
-        # The API access key and secret key are mandatory for a minimal configuration.
-        if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
-            logger.warning('No credentials found, please consult the '
-                           'documentation about how to enable RGW for the '
-                           'dashboard.')
-            raise NoCredentialsException()
+    def _get_daemon_connection_info(daemon_name: str) -> dict:
+        try:
+            access_key = Settings.RGW_API_ACCESS_KEY[daemon_name]
+            secret_key = Settings.RGW_API_SECRET_KEY[daemon_name]
+        except TypeError:
+            # Legacy string values.
+            access_key = Settings.RGW_API_ACCESS_KEY
+            secret_key = Settings.RGW_API_SECRET_KEY
 
-        if Options.has_default_value('RGW_API_HOST') and \
-                Options.has_default_value('RGW_API_PORT') and \
-                Options.has_default_value('RGW_API_SCHEME'):
-            host, port, ssl = _determine_rgw_addr()
-        else:
-            host = Settings.RGW_API_HOST
-            port = Settings.RGW_API_PORT
-            ssl = Settings.RGW_API_SCHEME == 'https'
-
-        RgwClient._host = host
-        RgwClient._port = port
-        RgwClient._ssl = ssl
-        RgwClient._ADMIN_PATH = Settings.RGW_API_ADMIN_RESOURCE
-
-        # Create an instance using the configured settings.
-        instance = RgwClient(Settings.RGW_API_USER_ID,
-                             Settings.RGW_API_ACCESS_KEY,
-                             Settings.RGW_API_SECRET_KEY)
-
-        RgwClient._SYSTEM_USERID = instance.userid
-
-        # Append the instance to the internal map.
-        RgwClient._user_instances[RgwClient._SYSTEM_USERID] = instance
+        return {'access_key': access_key, 'secret_key': secret_key}
 
     def _get_daemon_zone_info(self):  # type: () -> dict
         return json_str_to_object(self.proxy('GET', 'config?type=zone', None, None))
@@ -263,93 +255,126 @@ class RgwClient(RestClient):
                 Settings.RGW_API_SECRET_KEY,
                 Settings.RGW_API_ADMIN_RESOURCE,
                 Settings.RGW_API_SCHEME,
-                Settings.RGW_API_USER_ID,
                 Settings.RGW_API_SSL_VERIFY)
 
     @staticmethod
-    def instance(userid):
-        # type: (Optional[str]) -> RgwClient
+    def instance(userid: Optional[str] = None,
+                 daemon_name: Optional[str] = None) -> 'RgwClient':
+        # pylint: disable=too-many-branches
+        # The API access key and secret key are mandatory for a minimal configuration.
+        if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
+            logger.warning('No credentials found, please consult the '
+                           'documentation about how to enable RGW for the '
+                           'dashboard.')
+            raise NoCredentialsException()
+
+        if not RgwClient._daemons:
+            RgwClient._daemons = _get_daemons()
+
+        if not daemon_name:
+            # Select default daemon if configured in settings:
+            if Settings.RGW_API_HOST and Settings.RGW_API_PORT:
+                for daemon in RgwClient._daemons.values():
+                    if daemon.host == Settings.RGW_API_HOST \
+                            and daemon.port == Settings.RGW_API_PORT:
+                        daemon_name = daemon.name
+                        break
+                if not daemon_name:
+                    raise LookupError('No RGW daemon found with host: {}, port: {}'.format(
+                        Settings.RGW_API_HOST,
+                        Settings.RGW_API_PORT))
+            # Select 1st daemon:
+            else:
+                daemon_name = next(iter(RgwClient._daemons.keys()))
+
         # Discard all cached instances if any rgw setting has changed
         if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
             RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
             RgwClient.drop_instance()
 
-        if not RgwClient._user_instances:
-            RgwClient._load_settings()
+        if daemon_name not in RgwClient._config_instances:
+            connection_info = RgwClient._get_daemon_connection_info(daemon_name)
+            RgwClient._config_instances[daemon_name] = RgwClient(connection_info['access_key'],
+                                                                 connection_info['secret_key'],
+                                                                 daemon_name)
 
-        if not userid:
-            userid = RgwClient._SYSTEM_USERID
+        if not userid or userid == RgwClient._config_instances[daemon_name].userid:
+            return RgwClient._config_instances[daemon_name]
 
-        if userid not in RgwClient._user_instances:
+        if daemon_name not in RgwClient._user_instances \
+                or userid not in RgwClient._user_instances[daemon_name]:
             # Get the access and secret keys for the specified user.
-            keys = RgwClient.admin_instance().get_user_keys(userid)
+            keys = RgwClient._config_instances[daemon_name].get_user_keys(userid)
             if not keys:
                 raise RequestException(
                     "User '{}' does not have any keys configured.".format(
                         userid))
+            instance = RgwClient(keys['access_key'],
+                                 keys['secret_key'],
+                                 daemon_name,
+                                 userid)
+            RgwClient._user_instances.update({daemon_name: {userid: instance}})
 
-            # Create an instance and append it to the internal map.
-            RgwClient._user_instances[userid] = RgwClient(userid,  # type: ignore
-                                                          keys['access_key'],
-                                                          keys['secret_key'])
-
-        return RgwClient._user_instances[userid]  # type: ignore
-
-    @staticmethod
-    def admin_instance():
-        return RgwClient.instance(RgwClient._SYSTEM_USERID)
+        return RgwClient._user_instances[daemon_name][userid]
 
     @staticmethod
-    def drop_instance(userid: Optional[str] = None):
+    def admin_instance(daemon_name: Optional[str] = None) -> 'RgwClient':
+        return RgwClient.instance(daemon_name=daemon_name)
+
+    @staticmethod
+    def drop_instance(instance: Optional['RgwClient'] = None):
         """
-        Drop a cached instance by name or all.
+        Drop a cached instance or all.
         """
-        if userid:
-            RgwClient._user_instances.pop(userid, None)
+        if instance:
+            if instance.got_keys_from_config:
+                del RgwClient._config_instances[instance.daemon.name]
+            else:
+                del RgwClient._user_instances[instance.daemon.name][instance.userid]
         else:
+            RgwClient._config_instances.clear()
             RgwClient._user_instances.clear()
 
     def _reset_login(self):
-        if self.userid != RgwClient._SYSTEM_USERID:
-            logger.info("Fetching new keys for user: %s", self.userid)
-            keys = RgwClient.admin_instance().get_user_keys(self.userid)
-            # pylint: disable=attribute-defined-outside-init
-            self.auth = S3Auth(keys['access_key'], keys['secret_key'],
-                               service_url=self.service_url)
-        else:
+        if self.got_keys_from_config:
             raise RequestException('Authentication failed for the "{}" user: wrong credentials'
                                    .format(self.userid), status_code=401)
+        logger.info("Fetching new keys for user: %s", self.userid)
+        keys = RgwClient.admin_instance(daemon_name=self.daemon.name).get_user_keys(self.userid)
+        self.auth = S3Auth(keys['access_key'], keys['secret_key'],
+                           service_url=self.service_url)
 
-    def __init__(self,  # pylint: disable-msg=R0913
-                 userid,
+    def __init__(self,
                  access_key,
                  secret_key,
-                 host=None,
-                 port=None,
-                 admin_path=None,
-                 ssl=False):
-
-        if not host and not RgwClient._host:
-            RgwClient._load_settings()
-        host = host if host else RgwClient._host
-        port = port if port else RgwClient._port
-        admin_path = admin_path if admin_path else RgwClient._ADMIN_PATH
-        ssl = ssl if ssl else RgwClient._ssl
+                 daemon_name,
+                 user_id=None):
+        daemon = RgwClient._daemons[daemon_name]
         ssl_verify = Settings.RGW_API_SSL_VERIFY
+        self.admin_path = Settings.RGW_API_ADMIN_RESOURCE
+        self.service_url = build_url(host=daemon.host, port=daemon.port)
 
-        self.service_url = build_url(host=host, port=port)
-        self.admin_path = admin_path
+        self.auth = S3Auth(access_key, secret_key, service_url=self.service_url)
+        super(RgwClient, self).__init__(daemon.host,
+                                        daemon.port,
+                                        'RGW',
+                                        daemon.ssl,
+                                        self.auth,
+                                        ssl_verify=ssl_verify)
+        self.got_keys_from_config = not user_id
+        try:
+            self.userid = self._get_user_id(self.admin_path) if self.got_keys_from_config \
+                else user_id
+        except RequestException as error:
+            # Avoid dashboard GUI redirections caused by status code (403, ...):
+            http_status_code = 400 if 400 <= error.status_code < 500 else error.status_code
+            raise DashboardException(msg='Error connecting to Object Gateway.',
+                                     http_status_code=http_status_code,
+                                     component='rgw')
+        self.daemon = daemon
 
-        s3auth = S3Auth(access_key, secret_key, service_url=self.service_url)
-        super(RgwClient, self).__init__(host, port, 'RGW', ssl, s3auth, ssl_verify=ssl_verify)
-
-        # If user ID is not set, then try to get it via the RGW Admin Ops API.
-        self.userid = userid if userid else self._get_user_id(self.admin_path)  # type: str
-
-        self._zonegroup_name: str = _get_daemon_info()['metadata']['zonegroup_name']
-
-        logger.info("Created new connection: user=%s, host=%s, port=%s, ssl=%d, sslverify=%d",
-                    self.userid, host, port, ssl, ssl_verify)
+        logger.info("Created new connection: daemon=%s, host=%s, port=%s, ssl=%d, sslverify=%d",
+                    daemon.name, daemon.host, daemon.port, daemon.ssl, ssl_verify)
 
     @RestClient.api_get('/', resp_structure='[0] > (ID & DisplayName)')
     def is_service_online(self, request=None):
@@ -495,7 +520,8 @@ class RgwClient(RestClient):
                 }
             )
 
-        return {'zonegroup': self._zonegroup_name, 'placement_targets': placement_targets}
+        return {'zonegroup': self.daemon.zonegroup_name,
+                'placement_targets': placement_targets}
 
     def get_realms(self):  # type: () -> List
         realms_info = self._get_realms_info()
