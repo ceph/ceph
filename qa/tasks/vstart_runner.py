@@ -47,6 +47,7 @@ from IPy import IP
 import unittest
 import platform
 import logging
+import shlex
 
 from unittest import suite, loader
 
@@ -982,6 +983,8 @@ class LocalCephManager(CephManager):
 
         Accepts arguments same as teuthology.orchestra.remote.run().
         """
+        if isinstance(kwargs['args'], str):
+            kwargs['args'] = shlex.split(kwargs['args'])
         kwargs['args'] = [CEPH_CMD] + list(kwargs['args'])
         return self.controller.run(**kwargs)
 
