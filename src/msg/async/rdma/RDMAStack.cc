@@ -800,6 +800,11 @@ RDMAStack::~RDMAStack()
   }
 }
 
+Worker* RDMAStack::create_worker(CephContext *c, unsigned worker_id)
+{
+  return new RDMAWorker(c, worker_id);
+}
+
 void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 {
   threads.resize(i+1);
