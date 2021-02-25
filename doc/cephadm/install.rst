@@ -235,24 +235,10 @@ available and unused device:
 
 Or See :ref:`cephadm-deploy-osds` for more detailed instructions.
 
+Using Ceph
+==========
 
-Deploy CephFS
-=============
-
-One or more MDS daemons is required to use the CephFS file system.
-These are created automatically if the newer ``ceph fs volume``
-interface is used to create a new file system. For more information,
-see :ref:`fs-volumes-and-subvolumes`.
-
-For example:
-
-.. prompt:: bash #
-
-  ceph fs volume create <fs_name> --placement=""<placement spec>""
-
-See :ref:`orchestrator-cli-stateless-services` for manually deploying
-MDS daemons.
-
+To use the *Ceph Filesystem*, follow :ref:`orchestrator-cli-cephfs`.
 
 To use the *Ceph Object Gateway*, follow :ref:`cephadm-deploy-rgw`.
 
