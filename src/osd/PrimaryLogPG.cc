@@ -3347,6 +3347,7 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
   }
   // snap
   SnapSet& ss = obc->ssc->snapset;
+  const OSDMapRef& osdmap = get_osdmap();
   for (vector<snapid_t>::const_reverse_iterator p = ss.clones.rbegin();
       p != ss.clones.rend();
       ++p) {
@@ -3355,6 +3356,9 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
     ObjectContextRef obc_g = nullptr;
     hobject_t clone_oid = obc->obs.oi.soid;
     clone_oid.snap = *p;
+    if (osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *p)) {
+      return -EBUSY;
+    }
     ObjectContextRef clone_obc = get_object_context(clone_oid, false);
     if (!clone_obc) {
       break;
