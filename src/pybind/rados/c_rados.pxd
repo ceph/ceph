@@ -190,7 +190,6 @@ cdef extern from "rados/librados.h" nogil:
     void rados_getxattrs_end(rados_xattrs_iter_t iter)
 
     int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx)
-    int rados_nobjects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key, const char **nspace)
     int rados_nobjects_list_next2(rados_list_ctx_t ctx,
                                   const char **entry,
                                   const char **key,
