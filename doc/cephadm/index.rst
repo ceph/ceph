@@ -42,7 +42,6 @@ versions of Ceph.
     service-management
     upgrade
     Cephadm operations <operations>
-    Cephadm CLI <../mgr/orchestrator>
     Client Setup <client-setup>
     troubleshooting
     Cephadm Feature Planning <../dev/cephadm/index>
