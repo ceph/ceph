@@ -47,7 +47,7 @@
 %bcond_with cephfs_java
 %bcond_with kafka_endpoint
 %bcond_with libradosstriper
-%ifarch x86_64 aarch64 ppc64le s390x
+%ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
 %else
 %bcond_with lttng
