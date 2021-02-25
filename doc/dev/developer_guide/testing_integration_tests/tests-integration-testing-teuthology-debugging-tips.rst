@@ -6,6 +6,9 @@ Analyzing and Debugging A Teuthology Job
 To learn more about how to schedule an integration test, refer to `Scheduling
 Test Run`_.
 
+Viewing Test Results
+--------------------
+
 When a teuthology run has been completed successfully, use `pulpito`_ dasboard
 to view the results::
 
@@ -26,6 +29,9 @@ and access `teuthology archives`_, like this for example:
 .. note:: This requires you to have access to the Sepia lab. To learn how to
           request access to the Speia lab, see: 
           https://ceph.github.io/sepia/adding_users/
+
+Identifying Failed Jobs
+-----------------------
 
 On pulpito, jobs in red specify either a failed job or a dead job.
 A job is combination of daemons and configurations that are formed using
