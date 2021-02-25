@@ -20,9 +20,9 @@
 
 typedef void (*signal_handler_t)(int);
 
-#ifdef HAVE_SIGDESCR_NP
+#if defined(HAVE_SIGDESCR_NP)
 # define sig_str(signum) sigdescr_np(signum)
-#elif HAVE_REENTRANT_STRSIGNAL
+#elif defined(HAVE_REENTRANT_STRSIGNAL)
 # define sig_str(signum) strsignal(signum)
 #else
 # define sig_str(signum) sys_siglist[signum]
