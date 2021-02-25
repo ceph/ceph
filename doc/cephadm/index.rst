@@ -34,6 +34,7 @@ versions of Ceph.
     mon
     osd
     rgw
+    mds
     nfs
     iscsi
     custom-container
