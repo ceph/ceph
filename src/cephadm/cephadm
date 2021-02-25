@@ -2283,6 +2283,12 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         mounts['/run/udev'] = '/run/udev'
     if daemon_type == 'osd':
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
+        # selinux-policy in the container may not match the host.
+        if HostFacts(ctx).selinux_enabled:
+            selinux_folder = '/var/lib/ceph/%s/selinux' % fsid
+            if not os.path.exists(selinux_folder):
+                os.makedirs(selinux_folder, mode=0o755)
+            mounts[selinux_folder] = '/sys/fs/selinux:ro'
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
 
@@ -6197,9 +6203,9 @@ class HostFacts():
 
     @property
     def kernel_security(self):
-        # type: () -> Optional[Dict[str, str]]
+        # type: () -> Dict[str, str]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
-        def _fetch_selinux() -> Optional[Dict[str, str]]:
+        def _fetch_selinux() -> Dict[str, str]:
             """Read the selinux config file to determine state"""
             security = {}
             for selinux_path in HostFacts._selinux_path_list:
@@ -6216,9 +6222,9 @@ class HostFacts():
                     else:
                         security['description'] = "SELinux: Enabled({}, {})".format(security['SELINUX'], security['SELINUXTYPE'])
                     return security
-            return None
+            return {}
 
-        def _fetch_apparmor() -> Optional[Dict[str, str]]:
+        def _fetch_apparmor() -> Dict[str, str]:
             """Read the apparmor profiles directly, returning an overview of AppArmor status"""
             security = {}
             for apparmor_path in HostFacts._apparmor_path_list:
@@ -6243,9 +6249,9 @@ class HostFacts():
                         security['description'] += "({})".format(summary_str)
 
                     return security
-            return None
+            return {}
 
-        ret = None
+        ret = {}
         if os.path.exists('/sys/kernel/security/lsm'):
             lsm = read_file(['/sys/kernel/security/lsm']).strip()
             if 'selinux' in lsm:
@@ -6258,13 +6264,18 @@ class HostFacts():
                     "description": "Linux Security Module framework is active, but is not using SELinux or AppArmor"
                 }
 
-        if ret is not None:
+        if ret:
             return ret
 
         return {
             "type": "None",
             "description": "Linux Security Module framework is not available"
         }
+
+    @property
+    def selinux_enabled(self):
+        return (self.kernel_security["type"] == "SELinux") and \
+               (self.kernel_security["description"] != "SELinux: Disabled")
 
     @property
     def kernel_parameters(self):
