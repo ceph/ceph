@@ -3570,10 +3570,10 @@ def prepare_ssh(
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
 
-    for t in ['mon', 'mgr', 'crash']:
-        if ctx.orphan_initial_daemons:
+    for t in ['mon', 'mgr']:
+        if not ctx.orphan_initial_daemons:
             logger.info('Deploying %s service with default placement...' % t)
-            cli(['orch', 'apply', t, '--unmanaged'])
+            cli(['orch', 'apply', t])
         else:
             logger.info('Deploying unmanaged %s service...' % t)
             cli(['orch', 'apply', t, '--unmanaged'])
