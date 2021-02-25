@@ -189,6 +189,10 @@ public:
     //generic_dout(10) << "lru: " << lru_get_size() << " items, " << top.size() << " top, " << bottom.size() << " bot, " << pintail.size() << " pintail" << dendl;
   }
 
+  bool is_on_lru(LRUObject *o) {
+    return o->lru_link.is_on_list();
+  }
+
 protected:
   // adjust top/bot balance, as necessary
   void adjust() {
