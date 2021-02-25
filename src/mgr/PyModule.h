@@ -176,7 +176,7 @@ public:
   
   ~PyModuleConfig();
 
-  void set_config(
+  std::pair<int, std::string> set_config(
     MonClient *monc,
     const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val);

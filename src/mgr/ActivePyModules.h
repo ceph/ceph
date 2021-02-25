@@ -131,7 +131,7 @@ public:
 
   bool get_config(const std::string &module_name,
       const std::string &key, std::string *val) const;
-  void set_config(const std::string &module_name,
+  std::pair<int, std::string> set_config(const std::string &module_name,
       const std::string &key, const boost::optional<std::string> &val);
 
   PyObject *get_typed_config(const std::string &module_name,

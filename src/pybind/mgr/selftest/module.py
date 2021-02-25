@@ -38,7 +38,8 @@ class Module(MgrModule):
         {'name': 'rwoption3', 'type': 'float'},
         {'name': 'rwoption4', 'type': 'str'},
         {'name': 'rwoption5', 'type': 'bool'},
-        {'name': 'rwoption6', 'type': 'bool', 'default': True}
+        {'name': 'rwoption6', 'type': 'bool', 'default': True},
+        {'name': 'rwoption7', 'type': 'int', 'min': 1, 'max': 42},
     ]
 
     COMMANDS = [
@@ -312,6 +313,15 @@ class Module(MgrModule):
         value = self.get_module_option("rwoption5")
         assert isinstance(value, bool)
         assert value is False
+
+        # Option value range is specified
+        try:
+            self.set_module_option("rwoption7", 43)
+        except Exception as e:
+            assert isinstance(e, ValueError)
+        else:
+            message = "should raise if value is not in specified range"
+            assert False, message
 
         # Specified module does not exist => return None.
         assert self.get_module_option_ex("foo", "bar") is None
