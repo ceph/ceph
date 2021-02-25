@@ -103,9 +103,11 @@ public:
   }
 
   // touch item -- move to head of lru
-  bool lru_touch(LRUObject *o) {
+  bool lru_touch(LRUObject *o, bool insert=true) {
     if (!o->lru) {
-      lru_insert_top(o);
+      if (insert) {
+        lru_insert_top(o);
+      }
     } else {
       ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
@@ -117,9 +119,11 @@ public:
   }
 
   // touch item -- move to midpoint (unless already higher)
-  bool lru_midtouch(LRUObject *o) {
+  bool lru_midtouch(LRUObject *o, bool insert=true) {
     if (!o->lru) {
-      lru_insert_mid(o);
+      if (insert) {
+        lru_insert_mid(o);
+      }
     } else {
       ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
@@ -132,9 +136,11 @@ public:
   }
 
   // touch item -- move to bottom
-  bool lru_bottouch(LRUObject *o) {
+  bool lru_bottouch(LRUObject *o, bool insert=true) {
     if (!o->lru) {
-      lru_insert_bot(o);
+      if (insert) {
+        lru_insert_bot(o);
+      }
     } else {
       ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
