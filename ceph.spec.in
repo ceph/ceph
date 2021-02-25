@@ -58,7 +58,7 @@
 %bcond_with libradosstriper
 %bcond_with ocf
 %endif
-%ifarch x86_64 aarch64 ppc64le s390x
+%ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
 %else
 %bcond_with lttng
