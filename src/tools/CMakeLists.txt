@@ -20,8 +20,6 @@ if(NOT WIN32)
   set(neorados_srcs
       neorados.cc)
   add_executable(neorados ${neorados_srcs})
-  target_include_directories(neorados PRIVATE
-    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
   target_link_libraries(neorados libneorados spawn ${CMAKE_DL_LIBS})
   #install(TARGETS neorados DESTINATION bin)
 endif()
