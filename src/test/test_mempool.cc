@@ -23,6 +23,8 @@
 #include "include/btree_map.h"
 #include "include/mempool.h"
 
+#include <thread>
+
 void check_usage(mempool::pool_index_t ix)
 {
   mempool::pool_t *pool = &mempool::get_pool(ix);
