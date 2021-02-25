@@ -106,21 +106,6 @@ To remove a label, run::
     where ``journal`` is the filestore journal device, ``wal`` is the bluestore
     write ahead log device, and ``all`` stands for all devices associated with the OSD
 
-.. _orchestrator-cli-cephfs:
-
-Deploying CephFS
-================
-
-In order to set up a :term:`CephFS`, execute::
-
-    ceph fs volume create <fs_name> <placement spec>
-
-where ``name`` is the name of the CephFS and ``placement`` is a
-:ref:`orchestrator-cli-placement-spec`.
-
-This command will create the required Ceph pools, create the new
-CephFS, and deploy mds servers.
-
 
 .. _orchestrator-cli-stateless-services:
 
