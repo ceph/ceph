@@ -1,7 +1,14 @@
 #!/usr/bin/python3
 
+# Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-pacific-devel'
 DEFAULT_IMAGE_IS_MASTER = False
+DEFAULT_PROMETHEUS_IMAGE = "docker.io/prom/prometheus:v2.18.1"
+DEFAULT_NODE_EXPORTER_IMAGE = "docker.io/prom/node-exporter:v0.18.1"
+DEFAULT_GRAFANA_IMAGE = "docker.io/ceph/ceph-grafana:6.7.4"
+DEFAULT_ALERT_MANAGER_IMAGE = "docker.io/prom/alertmanager:v0.20.0"
+# ------------------------------------------------------------------------------
+
 LATEST_STABLE_RELEASE = 'pacific'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
@@ -76,28 +83,13 @@ from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, 
 import re
 import uuid
 
+from configparser import ConfigParser
 from functools import wraps
 from glob import glob
+from io import StringIO
 from threading import Thread, RLock
-
-if sys.version_info >= (3, 0):
-    from io import StringIO
-else:
-    from StringIO import StringIO
-
-if sys.version_info >= (3, 2):
-    from configparser import ConfigParser
-else:
-    from ConfigParser import SafeConfigParser
-
-if sys.version_info >= (3, 0):
-    from urllib.request import urlopen
-    from urllib.error import HTTPError
-else:
-    from urllib2 import urlopen, HTTPError
-
-if sys.version_info > (3, 0):
-    unicode = str
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
 cached_stdin = None
 
@@ -240,7 +232,7 @@ class Monitoring(object):
 
     components = {
         "prometheus": {
-            "image": "docker.io/prom/prometheus:v2.18.1",
+            "image": DEFAULT_PROMETHEUS_IMAGE,
             "cpus": '2',
             "memory": '4GB',
             "args": [
@@ -253,7 +245,7 @@ class Monitoring(object):
             ],
         },
         "node-exporter": {
-            "image": "docker.io/prom/node-exporter:v0.18.1",
+            "image": DEFAULT_NODE_EXPORTER_IMAGE,
             "cpus": "1",
             "memory": "1GB",
             "args": [
@@ -261,7 +253,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "docker.io/ceph/ceph-grafana:6.7.4",
+            "image": DEFAULT_GRAFANA_IMAGE,
             "cpus": "2",
             "memory": "4GB",
             "args": [],
@@ -273,7 +265,7 @@ class Monitoring(object):
             ],
         },
         "alertmanager": {
-            "image": "docker.io/prom/alertmanager:v0.20.0",
+            "image": DEFAULT_ALERT_MANAGER_IMAGE,
             "cpus": "2",
             "memory": "2GB",
             "args": [
@@ -1391,32 +1383,10 @@ def call_timeout(ctx, command, timeout):
         logger.debug(msg)
         raise TimeoutExpired(msg)
 
-    def call_timeout_py2(command, timeout):
-        # type: (List[str], int) -> int
-        proc = subprocess.Popen(command)
-        thread = Thread(target=proc.wait)
-        thread.start()
-        thread.join(timeout)
-        if thread.is_alive():
-            proc.kill()
-            thread.join()
-            raise_timeout(command, timeout)
-        return proc.returncode
-
-    def call_timeout_py3(command, timeout):
-        # type: (List[str], int) -> int
-        try:
-            return subprocess.call(command, timeout=timeout)
-        except subprocess.TimeoutExpired as e:
-            raise_timeout(command, timeout)
-
-    ret = 1
-    if sys.version_info >= (3, 3):
-        ret = call_timeout_py3(command, timeout)
-    else:
-        # py2 subprocess has no timeout arg
-        ret = call_timeout_py2(command, timeout)
-    return ret
+    try:
+        return subprocess.call(command, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise_timeout(command, timeout)
 
 ##################################
 
@@ -1450,24 +1420,9 @@ def is_available(ctx, what, func):
 
 def read_config(fn):
     # type: (Optional[str]) -> ConfigParser
-    # bend over backwards here because py2's ConfigParser doesn't like
-    # whitespace before config option names (e.g., '\n foo = bar\n').
-    # Yeesh!
-    if sys.version_info >= (3, 2):
-        cp = ConfigParser()
-    else:
-        cp = SafeConfigParser()
-
+    cp = ConfigParser()
     if fn:
-        with open(fn, 'r') as f:
-            raw_conf = f.read()
-        nice_conf = re.sub(r'\n(\s)+', r'\n', raw_conf)
-        s_io = StringIO(nice_conf)
-        if sys.version_info >= (3, 2):
-            cp.read_file(s_io)
-        else:
-            cp.readfp(s_io)
-
+        cp.read(fn)
     return cp
 
 
@@ -2022,6 +1977,13 @@ def check_units(ctx, units, enabler=None):
     return False
 
 
+def is_container_running(ctx: CephadmContext, name: str) -> bool:
+    out, err, ret = call_throws(ctx, [
+        ctx.container_path, 'ps',
+        '--format', '{{.Names}}'])
+    return name in out
+
+
 def get_legacy_config_fsid(cluster, legacy_dir=None):
     # type: (str, Optional[str]) -> Optional[str]
     config_file = '/etc/ceph/%s.conf' % cluster
@@ -2426,11 +2388,13 @@ def get_container(ctx: CephadmContext,
     # so service can have Type=Forking
     if 'podman' in ctx.container_path:
         runtime_dir = '/run'
-        container_args.extend(['-d',
+        container_args.extend([
+            '-d', '--log-driver', 'journald',
             '--conmon-pidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, daemon_id),
             '--cidfile',
-            runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id)])
+            runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id),
+        ])
 
     return CephContainer(
         ctx,
@@ -3208,7 +3172,7 @@ def check_subnet(subnets:str) -> Tuple[int, List[int], str]:
             errors.append(f"{subnet} is not in CIDR format (address/netmask)")
             continue
         try:
-            v = ipaddress.ip_network(unicode(subnet)).version
+            v = ipaddress.ip_network(subnet).version
             versions.add(v)
         except ValueError as e:
             rc = 1
@@ -3230,7 +3194,7 @@ def wrap_ipv6(address):
     # it's already wrapped it'll not pass (like if it's a hostname) and trigger
     # the ValueError
     try:
-        if ipaddress.ip_address(unicode(address)).version == 6:
+        if ipaddress.ip_address(address).version == 6:
             return f"[{address}]"
     except ValueError:
         pass
@@ -3242,7 +3206,7 @@ def is_ipv6(address):
     # type: (str) -> bool
     address = unwrap_ipv6(address)
     try:
-        return ipaddress.ip_address(unicode(address)).version == 6
+        return ipaddress.ip_address(address).version == 6
     except ValueError:
         logger.warning("Address: {} isn't a valid IP address".format(address))
         return False
@@ -3302,8 +3266,8 @@ def prepare_mon_addresses(
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         for net, ips in list_networks(ctx).items():
-            if ipaddress.ip_address(unicode(unwrap_ipv6(base_ip))) in \
-                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
+            if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
+                    [ipaddress.ip_address(ip) for ip in ips]:
                 mon_network = net
                 logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
                                                                  mon_network))
@@ -3595,10 +3559,17 @@ def prepare_ssh(
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
 
-    if not ctx.orphan_initial_daemons:
-        for t in ['mon', 'mgr', 'crash']:
+    for t in ['mon', 'mgr', 'crash']:
+        if ctx.orphan_initial_daemons:
             logger.info('Deploying %s service with default placement...' % t)
-            cli(['orch', 'apply', t])
+            cli(['orch', 'apply', t, '--unmanaged'])
+        else:
+            logger.info('Deploying unmanaged %s service...' % t)
+            cli(['orch', 'apply', t, '--unmanaged'])
+
+    if not ctx.orphan_initial_daemons:
+        logger.info('Deploying crash service with default placement...')
+        cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
         logger.info('Enabling mgr prometheus module...')
@@ -4025,8 +3996,9 @@ def command_deploy(ctx):
 
     redeploy = False
     unit_name = get_unit_name(ctx.fsid, daemon_type, daemon_id)
+    container_name = 'ceph-%s-%s.%s' % (ctx.fsid, daemon_type, daemon_id)
     (_, state, _) = check_unit(ctx, unit_name)
-    if state == 'running':
+    if state == 'running' or is_container_running(ctx, container_name):
         redeploy = True
 
     if ctx.reconfig:
@@ -4038,8 +4010,12 @@ def command_deploy(ctx):
 
     # Get and check ports explicitly required to be opened
     daemon_ports = [] # type: List[int]
-    if ctx.tcp_ports:
-        daemon_ports = list(map(int, ctx.tcp_ports.split()))
+
+    # only check port in use if not reconfig or redeploy since service
+    # we are redeploying/reconfiguring will already be using the port
+    if not ctx.reconfig and not redeploy:
+        if ctx.tcp_ports:
+            daemon_ports = list(map(int, ctx.tcp_ports.split()))
 
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring(ctx)
@@ -4422,7 +4398,7 @@ def _parse_ipv6_route(routes, ips):
         ip = m[0][0]
         # find the network it belongs to
         net = [n for n in r.keys()
-               if ipaddress.ip_address(unicode(ip)) in ipaddress.ip_network(unicode(n))]
+               if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net:
             r[net[0]].append(ip)
 
@@ -7441,7 +7417,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--orphan-initial-daemons',
         action='store_true',
-        help='Do not create initial mon, mgr, and crash service specs')
+        help='Set mon and mgr service to `unmanaged`, Do not create the crash service')
     parser_bootstrap.add_argument(
         '--skip-monitoring-stack',
         action='store_true',
@@ -7713,7 +7689,7 @@ def main():
     except Error as e:
         if ctx.verbose:
             raise
-        sys.stderr.write('ERROR: %s\n' % e)
+        logger.error('ERROR: %s' % e)
         sys.exit(1)
     if not r:
         r = 0

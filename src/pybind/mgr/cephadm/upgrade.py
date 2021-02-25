@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional, Dict, List
 import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER
-from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service, service_to_daemon_types
+from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -25,7 +25,7 @@ class UpgradeState:
                  target_version: Optional[str] = None,
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
-                 fs_original_max_mds: Optional[Dict[str,int]] = None,
+                 fs_original_max_mds: Optional[Dict[str, int]] = None,
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -34,7 +34,7 @@ class UpgradeState:
         self.target_version: Optional[str] = target_version
         self.error: Optional[str] = error
         self.paused: bool = paused or False
-        self.fs_original_max_mds: Optional[Dict[str,int]] = fs_original_max_mds
+        self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
 
     def to_json(self) -> dict:
         return {
@@ -103,7 +103,7 @@ class CephadmUpgrade:
             (major, minor, patch) = version.split('.')
             assert int(minor) >= 0
             # patch might be a number or {number}-g{sha1}
-        except:
+        except ValueError:
             return 'version must be in the form X.Y.Z (e.g., 15.2.3)'
         if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
             return 'cephadm only supports octopus (15.2.0) or later'
@@ -572,7 +572,8 @@ class CephadmUpgrade:
                 osd_min_name = osdmap.get("require_osd_release", "argonaut")
                 osd_min = ceph_release_to_major(osd_min_name)
                 if osd_min < int(target_major):
-                    logger.info(f'Upgrade: Setting require_osd_release to {target_major} {target_major_name}')
+                    logger.info(
+                        f'Upgrade: Setting require_osd_release to {target_major} {target_major_name}')
                     ret, _, err = self.mgr.check_mon_command({
                         'prefix': 'osd require-osd-release',
                         'release': target_major_name,

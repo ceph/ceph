@@ -3,10 +3,10 @@ import pytest
 from unittest.mock import MagicMock, call
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, AuthEntity, CephadmExporter
+    RbdMirrorService, CrashService, CephadmExporter, CephadmDaemonSpec
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
-from cephadm.services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
+from cephadm.services.osd import OSDService
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 from ceph.deployment.service_spec import IscsiServiceSpec
@@ -28,6 +28,9 @@ class FakeMgr:
             self.config = cmd_dict.get('value')
             return 0, 'value set', ''
         return -1, '', 'error'
+
+    def get_minimal_ceph_conf(self) -> str:
+        return ''
 
 
 class TestCephadmService:
@@ -89,7 +92,9 @@ class TestCephadmService:
         iscsi_spec.spec.daemon_type = "iscsi"
         iscsi_spec.spec.ssl_cert = ''
 
-        iscsi_service.prepare_create(iscsi_spec)
+        iscsi_daemon_spec = CephadmDaemonSpec(host='host', daemon_id='a', spec=iscsi_spec)
+
+        iscsi_service.prepare_create(iscsi_daemon_spec)
 
         expected_caps = ['mon',
                          'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"',
@@ -117,8 +122,8 @@ class TestCephadmService:
         assert "client.crash.host" == \
             cephadm_services["crash"].get_auth_entity("id1", "host")
         with pytest.raises(OrchestratorError):
-            t = cephadm_services["crash"].get_auth_entity("id1", "")
-            t = cephadm_services["crash"].get_auth_entity("id1")
+            cephadm_services["crash"].get_auth_entity("id1", "")
+            cephadm_services["crash"].get_auth_entity("id1")
 
         assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "host")
         assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "")

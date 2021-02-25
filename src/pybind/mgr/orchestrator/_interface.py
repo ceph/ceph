@@ -105,7 +105,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
     # misuse lambda to copy `wrapper`
-    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
     wrapper_copy._prefix = prefix  # type: ignore
     wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
     wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
@@ -115,7 +115,8 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
 
 
 class InnerCliCommandCallable(Protocol):
-    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]: ...
+    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]:
+        ...
 
 
 def _cli_command(perm: str) -> InnerCliCommandCallable:
@@ -248,8 +249,8 @@ class _Promise(object):
         val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
         prefix = {
             self.INITIALIZED: '      ',
-            self.RUNNING:     '   >>>',
-            self.FINISHED:    '(done)'
+            self.RUNNING:     '   >>>',  # noqa: E241
+            self.FINISHED:    '(done)',  # noqa: E241
         }[self._state]
         return '{} {}({}),'.format(prefix, name, val)
 
@@ -703,7 +704,7 @@ class Orchestrator(object):
         return True
 
     @_hide_in_features
-    def available(self) -> Tuple[bool, str]:
+    def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Report whether we can talk to the orchestrator.  This is the
         place to give the user a meaningful message if the orchestrator
@@ -724,7 +725,9 @@ class Orchestrator(object):
                 ... if OrchestratorClientMixin().available()[0]:  # wrong.
                 ...     OrchestratorClientMixin().get_hosts()
 
-        :return: two-tuple of boolean, string
+        :return: boolean representing whether the module is available/usable
+        :return: string describing any error
+        :return: dict containing any module specific information
         """
         raise NotImplementedError()
 
@@ -886,7 +889,7 @@ class Orchestrator(object):
         """
         Applies any spec
         """
-        fns: Dict[str, function] = {
+        fns: Dict[str, Callable] = {
             'alertmanager': self.apply_alertmanager,
             'crash': self.apply_crash,
             'grafana': self.apply_grafana,
@@ -1477,6 +1480,7 @@ class ServiceDescription(object):
                  service_url: Optional[str] = None,
                  last_refresh: Optional[datetime.datetime] = None,
                  created: Optional[datetime.datetime] = None,
+                 deleted: Optional[datetime.datetime] = None,
                  size: int = 0,
                  running: int = 0,
                  events: Optional[List['OrchestratorEvent']] = None) -> None:
@@ -1503,6 +1507,7 @@ class ServiceDescription(object):
         # datetime when this info was last refreshed
         self.last_refresh: Optional[datetime.datetime] = last_refresh
         self.created: Optional[datetime.datetime] = created
+        self.deleted: Optional[datetime.datetime] = deleted
 
         self.spec: ServiceSpec = spec
 

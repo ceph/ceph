@@ -1,13 +1,10 @@
 import json
 
-import pytest
-
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
 from cephadm.inventory import SPEC_STORE_PREFIX
-from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
-from orchestrator import OrchestratorError
+from cephadm.tests.fixtures import _run_cephadm, wait, with_host
 from cephadm.serve import CephadmServe
 from tests import mock
 
@@ -77,15 +74,15 @@ def test_migrate_service_id_mon_one(cephadm_module: CephadmOrchestrator):
 
         cephadm_module.spec_store.load()
 
-        assert len(cephadm_module.spec_store.specs) == 1
-        assert cephadm_module.spec_store.specs['mon.wrong'].service_name() == 'mon'
+        assert len(cephadm_module.spec_store.all_specs) == 1
+        assert cephadm_module.spec_store.all_specs['mon.wrong'].service_name() == 'mon'
 
         cephadm_module.migration_current = 1
         cephadm_module.migration.migrate()
         assert cephadm_module.migration_current == 2
 
-        assert len(cephadm_module.spec_store.specs) == 1
-        assert cephadm_module.spec_store.specs['mon'] == ServiceSpec(
+        assert len(cephadm_module.spec_store.all_specs) == 1
+        assert cephadm_module.spec_store.all_specs['mon'] == ServiceSpec(
             service_type='mon',
             unmanaged=True,
             placement=PlacementSpec(hosts=['host1'])
@@ -119,16 +116,16 @@ def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
 
         cephadm_module.spec_store.load()
 
-        assert len(cephadm_module.spec_store.specs) == 2
-        assert cephadm_module.spec_store.specs['mon.wrong'].service_name() == 'mon'
-        assert cephadm_module.spec_store.specs['mon'].service_name() == 'mon'
+        assert len(cephadm_module.spec_store.all_specs) == 2
+        assert cephadm_module.spec_store.all_specs['mon.wrong'].service_name() == 'mon'
+        assert cephadm_module.spec_store.all_specs['mon'].service_name() == 'mon'
 
         cephadm_module.migration_current = 1
         cephadm_module.migration.migrate()
         assert cephadm_module.migration_current == 2
 
-        assert len(cephadm_module.spec_store.specs) == 1
-        assert cephadm_module.spec_store.specs['mon'] == ServiceSpec(
+        assert len(cephadm_module.spec_store.all_specs) == 1
+        assert cephadm_module.spec_store.all_specs['mon'] == ServiceSpec(
             service_type='mon',
             unmanaged=True,
             placement=PlacementSpec(count=5)
@@ -152,4 +149,4 @@ def test_migrate_service_id_mds_one(cephadm_module: CephadmOrchestrator):
         cephadm_module.spec_store.load()
 
         # there is nothing to migrate, as the spec is gone now.
-        assert len(cephadm_module.spec_store.specs) == 0
+        assert len(cephadm_module.spec_store.all_specs) == 0

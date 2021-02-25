@@ -53,7 +53,7 @@ Status
 
 ::
 
-    ceph orch status
+    ceph orch status [--detail]
 
 Show current orchestrator mode and high-level status (whether the orchestrator
 plugin is available and operational)
@@ -106,6 +106,25 @@ Many hosts can be added at once using
     hostname: node-02
 
 This can be combined with service specifications (below) to create a cluster spec file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+
+.. _orchestrator-host-labels:
+
+Host labels
+-----------
+
+The orchestrator supports assigning labels to hosts. Labels
+are free form and have no particular meaning by itself and each host
+can have multiple labels. They can be used to specify placement
+of daemons. See :ref:`orch-placement-by-labels`
+
+To add a label, run::
+
+  ceph orch host label add my_hostname my_label
+
+To remove a label, run::
+
+  ceph orch host label rm my_hostname my_label
+
 
 OSD Management
 ==============
@@ -197,6 +216,8 @@ That is, after using::
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter::
 
     ceph orch apply osd --all-available-devices --unmanaged=true
+
+* For cephadm, see also :ref:`cephadm-spec-unmanaged`.
 
 Remove an OSD
 -------------
@@ -703,7 +724,7 @@ where the properties of a service specification are:
     If set to ``true``, the orchestrator will not deploy nor
     remove any daemon associated with this service. Placement and all other
     properties will be ignored. This is useful, if this service should not
-    be managed temporarily.
+    be managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
 
 Each service type can have additional service specific properties.
 
@@ -802,6 +823,8 @@ MONs and other services may require some enhanced network specifications::
 where ``[v2:1.2.3.4:3300,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
 
+.. _orch-placement-by-labels:
+
 Placement by labels
 -------------------
 
@@ -816,6 +839,8 @@ Or in YAML:
     service_type: prometheus
     placement:
       label: "mylabel"
+
+* See :ref:`orchestrator-host-labels`
 
 
 Placement by pattern matching

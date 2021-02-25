@@ -1,4 +1,3 @@
-
 Troubleshooting
 ===============
 
@@ -7,6 +6,8 @@ a specific service no longer runs properly.
 
 As cephadm deploys daemons as containers, troubleshooting daemons is slightly
 different. Here are a few tools and commands to help investigating issues.
+
+.. _cephadm-pause:
 
 Pausing or disabling cephadm
 ----------------------------
@@ -26,6 +27,52 @@ completely with::
 This will disable all of the ``ceph orch ...`` CLI commands but the previously
 deployed daemon containers will still continue to exist and start as they
 did before.
+
+Please refer to :ref:`cephadm-spec-unmanaged` for disabling individual
+services.
+
+
+Per-service and per-daemon events
+---------------------------------
+
+In order to aid debugging failed daemon deployments, cephadm stores 
+events per service and per daemon. They often contain relevant information::
+
+  ceph orch ls --service_name=<service-name> --format yaml
+
+for example:
+
+.. code-block:: yaml
+
+  service_type: alertmanager
+  service_name: alertmanager
+  placement:
+    hosts:
+    - unknown_host
+  status:
+    ...
+    running: 1
+    size: 1
+  events:
+  - 2021-02-01T08:58:02.741162 service:alertmanager [INFO] "service was created"
+  - '2021-02-01T12:09:25.264584 service:alertmanager [ERROR] "Failed to apply: Cannot
+    place <AlertManagerSpec for service_name=alertmanager> on unknown_host: Unknown hosts"'
+
+Or per daemon::
+
+  ceph orch ceph --service-type mds --daemon-id=hostname.ppdhsz --format yaml
+
+.. code-block:: yaml
+
+  daemon_type: mds
+  daemon_id: cephfs.hostname.ppdhsz
+  hostname: hostname
+  status_desc: running
+  ...
+  events:
+  - 2021-02-01T08:59:43.845866 daemon:mds.cephfs.hostname.ppdhsz [INFO] "Reconfigured
+    mds.cephfs.hostname.ppdhsz on host 'hostname'"
+
 
 Checking cephadm logs
 ---------------------
@@ -176,3 +223,28 @@ To access the admin socket, first enter the daemon container on the host::
 
     [root@mon1 ~]# cephadm enter --name <daemon-name>
     [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
+
+
+Restoring the MON quorum
+------------------------
+
+In case the Ceph MONs cannot form a quorum, cephadm is not able
+to manage the cluster, until the quorum is restored. 
+
+In order to restore the MON quorum, remove unhealthy MONs
+form the monmap by following these steps:
+
+1. Stop all MONs. For each MON host::
+
+    ssh {mon-host}
+    cephadm unit --name mon.`hostname` stop
+
+
+2. Identify a surviving monitor and log in to that host::
+
+    ssh {mon-host} 
+    cephadm enter --name mon.`hostname`
+
+3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy` 
+
+
