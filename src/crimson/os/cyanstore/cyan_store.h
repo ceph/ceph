@@ -50,9 +50,6 @@ public:
     std::string key() final {
       return iter->first;
     }
-    virtual seastar::future<std::string> tail_key(){
-      return seastar::make_ready_future<std::string>((++obj->omap.end())->first);
-    }
     virtual ceph::buffer::list value() {
       return iter->second;
     }
