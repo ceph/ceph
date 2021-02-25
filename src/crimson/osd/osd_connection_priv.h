@@ -12,7 +12,7 @@
 namespace crimson::osd {
 
 struct OSDConnectionPriv : public crimson::net::Connection::user_private_t {
-  OperationRepeatSequencer<ClientRequest> op_sequencer;
+  OpSequencers op_sequencer;
   ClientRequest::ConnectionPipeline client_request_conn_pipeline;
   RemotePeeringEvent::ConnectionPipeline peering_request_conn_pipeline;
   RepRequest::ConnectionPipeline replicated_request_conn_pipeline;
