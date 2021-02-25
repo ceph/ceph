@@ -4888,7 +4888,7 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
 
     if not os.path.exists(data_dir_src):
         raise Error("{}.{} data directory '{}' does not exist.  "
-                    'Incorrect ID specified, or daemon alrady adopted?'.format(
+                    'Incorrect ID specified, or daemon already adopted?'.format(
                         daemon_type, daemon_id, data_dir_src))
 
     osd_fsid = None
