@@ -63,67 +63,6 @@ ActivePyModules::ActivePyModules(
 
 ActivePyModules::~ActivePyModules() = default;
 
-namespace {
-  // because the Python runtime could relinquish the GIL when performing GC
-  // and re-acquire it afterwards, we should enforce following locking policy:
-  // 1. do not acquire locks when holding the GIL, use a without_gil or
-  //    without_gil_t to guard the code which acquires non-gil locks.
-  // 2. always hold a GIL when calling python functions, for example, when
-  //    constructing a PyFormatter instance.
-  //
-  // a wrapper that provides a convenient RAII-style mechinary for acquiring
-  // and releasing GIL, like the macros of Py_BEGIN_ALLOW_THREADS and
-  // Py_END_ALLOW_THREADS.
-  struct without_gil_t {
-    without_gil_t()
-    {
-      assert(PyGILState_Check());
-      release_gil();
-    }
-    ~without_gil_t()
-    {
-      if (save) {
-        acquire_gil();
-      }
-    }
-  private:
-    void release_gil() {
-      save = PyEval_SaveThread();
-    }
-    void acquire_gil() {
-      assert(save);
-      PyEval_RestoreThread(save);
-      save = nullptr;
-    }
-    PyThreadState *save = nullptr;
-    friend struct with_gil_t;
-  };
-  struct with_gil_t {
-    with_gil_t(without_gil_t& allow_threads)
-      : allow_threads{allow_threads}
-    {
-      allow_threads.acquire_gil();
-    }
-    ~with_gil_t() {
-      allow_threads.release_gil();
-    }
-  private:
-    without_gil_t& allow_threads;
-  };
-  // invoke func with GIL acquired
-  template<typename Func>
-  auto with_gil(without_gil_t& no_gil, Func&& func)
-  {
-    with_gil_t gil{no_gil};
-    return std::invoke(std::forward<Func>(func));
-  }
-  template<typename Func>
-  auto without_gil(Func&& func) {
-    without_gil_t no_gil;
-    return std::invoke(std::forward<Func>(func));
-  }
-}
-
 void ActivePyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
                       Formatter *f)
@@ -749,10 +688,12 @@ void ActivePyModules::set_store(const std::string &module_name,
   }
 }
 
-void ActivePyModules::set_config(const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+std::pair<int, std::string> ActivePyModules::set_config(
+  const std::string &module_name,
+  const std::string &key,
+  const boost::optional<std::string>& val)
 {
-  module_config.set_config(&monc, module_name, key, val);
+  return module_config.set_config(&monc, module_name, key, val);
 }
 
 std::map<std::string, std::string> ActivePyModules::get_services() const

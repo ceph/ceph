@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <cassert>
+#include <functional>
+
 struct _ts;
 typedef struct _ts PyThreadState;
 
@@ -70,3 +73,42 @@ private:
   PyThreadState *pNewThreadState = nullptr;
 };
 
+// because the Python runtime could relinquish the GIL when performing GC
+// and re-acquire it afterwards, we should enforce following locking policy:
+// 1. do not acquire locks when holding the GIL, use a without_gil or
+//    without_gil_t to guard the code which acquires non-gil locks.
+// 2. always hold a GIL when calling python functions, for example, when
+//    constructing a PyFormatter instance.
+//
+// a wrapper that provides a convenient RAII-style mechinary for acquiring
+// and releasing GIL, like the macros of Py_BEGIN_ALLOW_THREADS and
+// Py_END_ALLOW_THREADS.
+struct without_gil_t {
+  without_gil_t();
+  ~without_gil_t();
+private:
+  void release_gil();
+  void acquire_gil();
+  PyThreadState *save = nullptr;
+  friend struct with_gil_t;
+};
+
+struct with_gil_t {
+  with_gil_t(without_gil_t& allow_threads);
+  ~with_gil_t();
+private:
+  without_gil_t& allow_threads;
+};
+
+// invoke func with GIL acquired
+template<typename Func>
+auto with_gil(without_gil_t& no_gil, Func&& func) {
+  with_gil_t gil{no_gil};
+  return std::invoke(std::forward<Func>(func));
+}
+
+template<typename Func>
+auto without_gil(Func&& func) {
+  without_gil_t no_gil;
+  return std::invoke(std::forward<Func>(func));
+}
