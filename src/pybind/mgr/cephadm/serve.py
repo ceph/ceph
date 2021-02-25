@@ -19,12 +19,12 @@ from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, \
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
-from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent
+from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
+    DaemonDescriptionStatus, daemon_type_to_service, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo
-from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -206,7 +206,7 @@ class CephadmServe:
             health_changed = True
         failed_daemons = []
         for dd in self.mgr.cache.get_daemons():
-            if dd.status is not None and dd.status < 0:
+            if dd.status is not None and dd.status == DaemonDescriptionStatus.error:
                 failed_daemons.append('daemon %s on %s is in %s state' % (
                     dd.name(), dd.hostname, dd.status_desc
                 ))
@@ -277,10 +277,10 @@ class CephadmServe:
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
-                    'running': 1,
-                    'stopped': 0,
-                    'error': -1,
-                    'unknown': -1,
+                    'running': DaemonDescriptionStatus.running,
+                    'stopped': DaemonDescriptionStatus.stopped,
+                    'error': DaemonDescriptionStatus.error,
+                    'unknown': DaemonDescriptionStatus.error,
                 }[d['state']]
             else:
                 sd.status_desc = 'unknown'
@@ -812,7 +812,8 @@ class CephadmServe:
                 if not code and daemon_spec.host in self.mgr.cache.daemons:
                     # prime cached service state with what we (should have)
                     # just created
-                    sd = daemon_spec.to_daemon_description(1, 'starting')
+                    sd = daemon_spec.to_daemon_description(
+                        DaemonDescriptionStatus.running, 'starting')
                     self.mgr.cache.add_daemon(daemon_spec.host, sd)
                     if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
                         self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
@@ -833,7 +834,7 @@ class CephadmServe:
                 if not reconfig:
                     # we have to clean up the daemon. E.g. keyrings.
                     servict_type = daemon_type_to_service(daemon_spec.daemon_type)
-                    dd = daemon_spec.to_daemon_description(-1, 'failed')
+                    dd = daemon_spec.to_daemon_description(DaemonDescriptionStatus.error, 'failed')
                     self.mgr.cephadm_services[servict_type].post_remove(dd)
                 raise
 
