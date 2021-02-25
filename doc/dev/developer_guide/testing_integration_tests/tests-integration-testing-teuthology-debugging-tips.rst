@@ -16,31 +16,31 @@ to view the results::
 
 .. _pulpito: https://pulpito.ceph.com
 
-or ssh into the teuthology server::
+or ssh into the teuthology server to view the results of the integration test:
+
+  .. prompt:: bash $
 
     ssh <username>@teuthology.front.sepia.ceph.com
 
-and access `teuthology archives`_, like this for example:
+and access `teuthology archives`_, as in this example:
 
   .. prompt:: bash $
 
      nano /a/teuthology-2021-01-06_07:01:02-rados-master-distro-basic-smithi/
 
 .. note:: This requires you to have access to the Sepia lab. To learn how to
-          request access to the Speia lab, see: 
+          request access to the Sepia lab, see: 
           https://ceph.github.io/sepia/adding_users/
 
 Identifying Failed Jobs
 -----------------------
 
-On pulpito, jobs in red specify either a failed job or a dead job.
-A job is combination of daemons and configurations that are formed using
-`qa/suites`_ yaml fragments.
-Teuthology uses these configurations and runs the tasks that are present in
-`qa/tasks`_, which are commands used for setting up the test environment and
-testing Ceph's components.
-These tasks cover a large subset of use cases and help to  
-expose the bugs that aren't caught by `make check`_ testing.
+On pulpito, a job in red means either a failed job or a dead job. A job is
+combination of daemons and configurations defined in the yaml fragments in
+`qa/suites`_ . Teuthology uses these configurations and runs the tasks listed
+in `qa/tasks`_, which are commands that set up the test environment and test
+Ceph's components. These tasks cover a large subset of use cases and help to
+expose bugs not exposed by `make check`_ testing.
 
 .. _make check: ../tests-integration-testing-teuthology-intro/#make-check
 
@@ -52,9 +52,9 @@ A job failure might be caused by one or more of the following reasons:
 
 * permutation of config values: for instance, `qa/suites/rados/thrash
   <https://github.com/ceph/ceph/tree/master/qa/suites/rados/thrash>`_ ensures
-  running thrashing tests against Ceph under stressful workloads, so that we
-  are able to catch corner-case bugs. The final setup config yaml used for
-  testing can be accessed at::
+  that we run thrashing tests against Ceph under stressful workloads so that we
+  can catch corner-case bugs. The final setup config yaml file used for testing
+  can be accessed at::
 
   /a/<job-name>/<job-id>/orig.config.yaml
 
