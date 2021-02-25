@@ -1416,7 +1416,7 @@ def call_timeout(ctx, command, timeout):
 
     def raise_timeout(command, timeout):
         # type: (List[str], int) -> NoReturn
-        msg = 'Command \'%s\' timed out after %s seconds' % (command, timeout)
+        msg = 'Command `%s` timed out after %s seconds' % (command, timeout)
         logger.debug(msg)
         raise TimeoutExpired(msg)
 
@@ -1816,15 +1816,15 @@ def copy_tree(ctx, src, dst, uid=None, gid=None):
         if os.path.isdir(dst):
             dst_dir = os.path.join(dst, os.path.basename(src_dir))
 
-        logger.debug('copy directory \'%s\' -> \'%s\'' % (src_dir, dst_dir))
+        logger.debug('copy directory `%s` -> `%s`' % (src_dir, dst_dir))
         shutil.rmtree(dst_dir, ignore_errors=True)
         shutil.copytree(src_dir, dst_dir)  # dirs_exist_ok needs python 3.8
 
         for dirpath, dirnames, filenames in os.walk(dst_dir):
-            logger.debug('chown %s:%s \'%s\'' % (uid, gid, dirpath))
+            logger.debug('chown %s:%s `%s`' % (uid, gid, dirpath))
             os.chown(dirpath, uid, gid)
             for filename in filenames:
-                logger.debug('chown %s:%s \'%s\'' % (uid, gid, filename))
+                logger.debug('chown %s:%s `%s`' % (uid, gid, filename))
                 os.chown(os.path.join(dirpath, filename), uid, gid)
 
 
@@ -1841,10 +1841,10 @@ def copy_files(ctx, src, dst, uid=None, gid=None):
         if os.path.isdir(dst):
             dst_file = os.path.join(dst, os.path.basename(src_file))
 
-        logger.debug('copy file \'%s\' -> \'%s\'' % (src_file, dst_file))
+        logger.debug('copy file `%s` -> `%s`' % (src_file, dst_file))
         shutil.copyfile(src_file, dst_file)
 
-        logger.debug('chown %s:%s \'%s\'' % (uid, gid, dst_file))
+        logger.debug('chown %s:%s `%s`' % (uid, gid, dst_file))
         os.chown(dst_file, uid, gid)
 
 
@@ -1870,7 +1870,7 @@ def move_files(ctx, src, dst, uid=None, gid=None):
         else:
             logger.debug("move file '%s' -> '%s'" % (src_file, dst_file))
             shutil.move(src_file, dst_file)
-            logger.debug('chown %s:%s \'%s\'' % (uid, gid, dst_file))
+            logger.debug('chown %s:%s `%s`' % (uid, gid, dst_file))
             os.chown(dst_file, uid, gid)
 
 
@@ -3204,7 +3204,7 @@ def _pull_image(ctx, image):
         if not any(pattern in err for pattern in ignorelist):
             raise RuntimeError('Failed command: %s' % cmd_str)
 
-        logger.info('"%s failed transiently. Retrying. waiting %s seconds...' % (cmd_str, sleep_secs))
+        logger.info('`%s` failed transiently. Retrying. waiting %s seconds...' % (cmd_str, sleep_secs))
         time.sleep(sleep_secs)
 
     raise RuntimeError('Failed command: %s: maximum retries reached' % cmd_str)
@@ -3619,7 +3619,7 @@ def prepare_ssh(
             f.write(ssh_pub)
         logger.info('Wrote public SSH key to to %s' % ctx.output_pub_ssh_key)
 
-        logger.info('Adding key to %s@localhost\'s authorized_keys...' % ctx.ssh_user)
+        logger.info('Adding key to %s@localhost authorized_keys...' % ctx.ssh_user)
         try:
             s_pwd = pwd.getpwnam(ctx.ssh_user)
         except KeyError:
@@ -4925,7 +4925,7 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
     move_files(ctx, glob(os.path.join(data_dir_src, '*')),
                data_dir_dst,
                uid=uid, gid=gid)
-    logger.debug('Remove dir \'%s\'' % (data_dir_src))
+    logger.debug('Remove dir `%s`' % (data_dir_src))
     if os.path.ismount(data_dir_src):
         call_throws(ctx, ['umount', data_dir_src])
     os.rmdir(data_dir_src)
@@ -7411,7 +7411,7 @@ def _get_parser():
         help='command')
 
     parser_unit = subparsers.add_parser(
-        'unit', help='operate on the daemon\'s systemd unit')
+        'unit', help="operate on the daemon's systemd unit")
     parser_unit.set_defaults(func=command_unit)
     parser_unit.add_argument(
         'command',
@@ -7473,7 +7473,7 @@ def _get_parser():
         help='location to write conf file to connect to new cluster')
     parser_bootstrap.add_argument(
         '--output-pub-ssh-key',
-        help='location to write the cluster\'s public SSH key')
+        help="location to write the cluster's public SSH key")
     parser_bootstrap.add_argument(
         '--skip-ssh',
         action='store_true',
