@@ -557,13 +557,6 @@ std::string AlienStore::AlienOmapIterator::key()
   return iter->key();
 }
 
-seastar::future<std::string> AlienStore::AlienOmapIterator::tail_key()
-{
-  return store->tp->submit([this] {
-    return iter->tail_key();
-  });
-}
-
 ceph::buffer::list AlienStore::AlienOmapIterator::value()
 {
   return iter->value();
