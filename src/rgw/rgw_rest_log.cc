@@ -362,12 +362,13 @@ void RGWOp_MDLog_Notify::execute(optional_yield y) {
 }
 
 void RGWOp_BILog_List::execute(optional_yield y) {
+  bool gen_specified = false;
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
          max_entries_str = s->info.args.get("max-entries"),
          bucket_instance = s->info.args.get("bucket-instance"),
-         gen_str = s->info.args.get("generation"),
+         gen_str = s->info.args.get("generation", &gen_specified),
          format_version_str = s->info.args.get("format-ver");
   std::unique_ptr<rgw::sal::Bucket> bucket;
   rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
@@ -381,11 +382,14 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   }
 
   string err;
-  const uint64_t gen = strict_strtoll(gen_str.c_str(), 10, &err);
-  if (!err.empty()) {
-    ldpp_dout(s, 5) << "Error parsing generation param " << gen_str << dendl;
-    op_ret = -EINVAL;
-    return;
+  std::optional<uint64_t> gen;
+  if (gen_specified) {
+    gen = strict_strtoll(gen_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 5) << "Error parsing generation param " << gen_str << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
   }
 
   if (!format_version_str.empty()) {
@@ -417,9 +421,9 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   const auto& logs = bucket->get_info().layout.logs;
   auto log = std::prev(logs.end());
   if (gen) {
-    log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
+    log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(*gen));
     if (log == logs.end()) {
-      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << *gen << dendl;
       op_ret = -ENOENT;
       return;
     }
