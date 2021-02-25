@@ -53,13 +53,7 @@ public:
   virtual ~OperationT() = default;
 
 private:
-  epoch_t interval_start_epoch = 0;
-  using ops_seq_iter_t =
-    typename OperationRepeatSequencer<T>::ops_sequence_t::iterator;
-  std::optional<ops_seq_iter_t> pos;
   virtual void dump_detail(ceph::Formatter *f) const = 0;
-  template <typename>
-  friend class OperationRepeatSequencer;
 };
 
 /**
