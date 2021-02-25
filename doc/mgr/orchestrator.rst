@@ -59,26 +59,6 @@ Show current orchestrator mode and high-level status (whether the orchestrator
 plugin is available and operational)
 
 
-.. _orchestrator-host-labels:
-
-Host labels
------------
-
-The orchestrator supports assigning labels to hosts. Labels
-are free form and have no particular meaning by itself and each host
-can have multiple labels. They can be used to specify placement
-of daemons. See :ref:`orch-placement-by-labels`
-
-To add a label, run::
-
-  ceph orch host label add my_hostname my_label
-
-To remove a label, run::
-
-  ceph orch host label rm my_hostname my_label
-
-
-
 ..
     Turn On Device Lights
     ^^^^^^^^^^^^^^^^^^^^^
