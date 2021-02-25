@@ -256,20 +256,18 @@ section.
 
 Naming the ceph-ci branch
 -------------------------
-There are no hard conventions (except for the case of stable branch; see
-next paragraph) for how the branch pushed on ceph-ci is named. But, to make
-builds and tests easily identitifiable on Shaman and Pulpito respectively,
-prepend it with your name. For example branch ``feature-x`` can be named
-``wip-yourname-feature-x`` while pushing on ceph-ci.
+Prepend your branch with your name before you push it to ceph-ci. For example,
+a branch named ``feature-x`` should be named ``wip-$yourname-feature-x``, where
+``$yourname`` is replaced with your name. Identifying your branch with your
+name makes your branch easily findable on Shaman and Pulpito.
 
-In case you are using one of the stable branches (e.g.  nautilis, mimic,
+If you are using one of the stable branches (for example, nautilis, mimic,
 etc.), include the name of that stable branch in your ceph-ci branch name.
-For example, ``feature-x`` PR branch should be named as
-``wip-feature-x-nautilus``. *This is not just a matter of convention but this,
-more essentially, builds your branch in the correct environment.*
+For example, the ``feature-x`` PR branch should be named 
+``wip-feature-x-nautilus``. *This is not just a convention. This ensures that your branch is built in the correct environment.*
 
-Delete the branch from ceph-ci, once it's not required anymore. If you are
-logged in at GitHub, all your branches on ceph-ci can be easily found here -
+Delete the branch from ceph-ci when you no longer need it. If you are
+logged in to GitHub, all your branches on ceph-ci can be found here:
 https://github.com/ceph/ceph-ci/branches.
 
 .. _ceph-ci: https://github.com/ceph/ceph-ci
