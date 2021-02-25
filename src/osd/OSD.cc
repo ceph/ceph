@@ -7654,20 +7654,26 @@ void OSD::sched_scrub()
 void OSD::resched_all_scrubs()
 {
   dout(10) << __func__ << ": start" << dendl;
-  OSDService::ScrubJob scrub_job;
-  if (service.first_scrub_stamp(&scrub_job)) {
-    do {
-      dout(20) << __func__ << ": examine " << scrub_job.pgid << dendl;
-
-      PGRef pg = _lookup_lock_pg(scrub_job.pgid);
+  const vector<spg_t> pgs = [this] {
+    vector<spg_t> pgs;
+    OSDService::ScrubJob job;
+    if (service.first_scrub_stamp(&job)) {
+      do {
+        pgs.push_back(job.pgid);
+      } while (service.next_scrub_stamp(job, &job));
+    }
+    return pgs;
+  }();
+  for (auto& pgid : pgs) {
+      dout(20) << __func__ << ": examine " << pgid << dendl;
+      PGRef pg = _lookup_lock_pg(pgid);
       if (!pg)
 	continue;
       if (!pg->m_planned_scrub.must_scrub && !pg->m_planned_scrub.need_auto) {
-        dout(15) << __func__ << ": reschedule " << scrub_job.pgid << dendl;
+        dout(15) << __func__ << ": reschedule " << pgid << dendl;
         pg->on_info_history_change();
       }
       pg->unlock();
-    } while (service.next_scrub_stamp(scrub_job, &scrub_job));
   }
   dout(10) << __func__ << ": done" << dendl;
 }
