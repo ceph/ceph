@@ -216,6 +216,7 @@ CEPHFSVOLUMECLIENT_VERSION_HISTORY = """
     * 3 - Allow volumes to be created without RADOS namespace isolation
     * 4 - Added get_object_and_version, put_object_versioned method to CephFSVolumeClient
     * 5 - Disallow authorize API for users not created by CephFSVolumeClient
+    * 6 - The 'volumes' key in auth-metadata-file is changed to 'subvolumes'.
 """
 
 
@@ -239,7 +240,7 @@ class CephFSVolumeClient(object):
     """
 
     # Current version
-    version = 5
+    version = 6
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
@@ -335,7 +336,10 @@ class CephFSVolumeClient(object):
         for auth_id in auth_ids:
             with self._auth_lock(auth_id):
                 auth_meta = self._auth_metadata_get(auth_id)
-                if not auth_meta or not auth_meta['volumes']:
+                # Update 'volumes' key (old style auth metadata file) to 'subvolumes' key
+                if auth_meta and 'volumes' in auth_meta:
+                    auth_meta['subvolumes'] = auth_meta.pop('volumes')
+                if not auth_meta or not auth_meta['subvolumes']:
                     # Clean up auth meta file
                     self.fs.unlink(self._auth_metadata_path(auth_id))
                     continue
@@ -351,7 +355,7 @@ class CephFSVolumeClient(object):
         """
         remove_volumes = []
 
-        for volume, volume_data in auth_meta['volumes'].items():
+        for volume, volume_data in auth_meta['subvolumes'].items():
             if not volume_data['dirty']:
                 continue
 
@@ -377,6 +381,8 @@ class CephFSVolumeClient(object):
                 # VMeta update looks clean. Ceph auth update must have been
                 # clean.
                 if vol_meta['auths'][auth_id] == want_auth:
+                    auth_meta['subvolumes'][volume]['dirty'] = False
+                    self._auth_metadata_set(auth_id, auth_meta)
                     continue
 
                 readonly = access_level == 'r'
@@ -395,13 +401,13 @@ class CephFSVolumeClient(object):
 
             # Recovered from partial auth updates for the auth ID's access
             # to a volume.
-            auth_meta['volumes'][volume]['dirty'] = False
+            auth_meta['subvolumes'][volume]['dirty'] = False
             self._auth_metadata_set(auth_id, auth_meta)
 
         for volume in remove_volumes:
-            del auth_meta['volumes'][volume]
+            del auth_meta['subvolumes'][volume]
 
-        if not auth_meta['volumes']:
+        if not auth_meta['subvolumes']:
             # Clean up auth meta file
             self.fs.unlink(self._auth_metadata_path(auth_id))
             return
@@ -916,7 +922,7 @@ class CephFSVolumeClient(object):
         decode the metadata, and 'version', the CephFSVolumeClient version
         that encoded the metadata.
         """
-        data['compat_version'] = 1
+        data['compat_version'] = 6
         data['version'] = self.version
         return self._metadata_set(self._auth_metadata_path(auth_id), data)
 
@@ -1024,9 +1030,9 @@ class CephFSVolumeClient(object):
             # Existing meta, or None, to be updated
             auth_meta = self._auth_metadata_get(auth_id)
 
-            # volume data to be inserted
+            # subvolume data to be inserted
             volume_path_str = str(volume_path)
-            volume = {
+            subvolume = {
                 volume_path_str : {
                     # The access level at which the auth_id is authorized to
                     # access the volume.
@@ -1049,9 +1055,13 @@ class CephFSVolumeClient(object):
                 auth_meta = {
                     'dirty': True,
                     'tenant_id': tenant_id.__str__() if tenant_id else None,
-                    'volumes': volume
+                    'subvolumes': subvolume
                 }
             else:
+                # Update 'volumes' key (old style auth metadata file) to 'subvolumes' key
+                if 'volumes' in auth_meta:
+                    auth_meta['subvolumes'] = auth_meta.pop('volumes')
+
                 # Disallow tenants to share auth IDs
                 if auth_meta['tenant_id'].__str__() != tenant_id.__str__():
                     msg = "auth ID: {0} is already in use".format(auth_id)
@@ -1065,7 +1075,7 @@ class CephFSVolumeClient(object):
                     tenant=auth_meta['tenant_id']
                 ))
                 auth_meta['dirty'] = True
-                auth_meta['volumes'].update(volume)
+                auth_meta['subvolumes'].update(subvolume)
 
             self._auth_metadata_set(auth_id, auth_meta)
 
@@ -1073,7 +1083,7 @@ class CephFSVolumeClient(object):
                 key = self._authorize_volume(volume_path, auth_id, readonly, existing_caps)
 
             auth_meta['dirty'] = False
-            auth_meta['volumes'][volume_path_str]['dirty'] = False
+            auth_meta['subvolumes'][volume_path_str]['dirty'] = False
             self._auth_metadata_set(auth_id, auth_meta)
 
             if tenant_id:
@@ -1230,9 +1240,13 @@ class CephFSVolumeClient(object):
             # Existing meta, or None, to be updated
             auth_meta = self._auth_metadata_get(auth_id)
 
+            # Update 'volumes' key (old style auth metadata file) to 'subvolumes' key
+            if auth_meta and 'volumes' in auth_meta:
+                auth_meta['subvolumes'] = auth_meta.pop('volumes')
+
             volume_path_str = str(volume_path)
-            if (auth_meta is None) or (not auth_meta['volumes']):
-                log.warn("deauthorized called for already-removed auth"
+            if (auth_meta is None) or (not auth_meta['subvolumes']):
+                log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for volume ID '{volume}'".format(
                     auth_id=auth_id, volume=volume_path.volume_id
                 ))
@@ -1240,8 +1254,8 @@ class CephFSVolumeClient(object):
                 self.fs.unlink(self._auth_metadata_path(auth_id))
                 return
 
-            if volume_path_str not in auth_meta['volumes']:
-                log.warn("deauthorized called for already-removed auth"
+            if volume_path_str not in auth_meta['subvolumes']:
+                log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for volume ID '{volume}'".format(
                     auth_id=auth_id, volume=volume_path.volume_id
                 ))
@@ -1251,16 +1265,16 @@ class CephFSVolumeClient(object):
                 self._recover_auth_meta(auth_id, auth_meta)
 
             auth_meta['dirty'] = True
-            auth_meta['volumes'][volume_path_str]['dirty'] = True
+            auth_meta['subvolumes'][volume_path_str]['dirty'] = True
             self._auth_metadata_set(auth_id, auth_meta)
 
             self._deauthorize_volume(volume_path, auth_id)
 
             # Filter out the volume we're deauthorizing
-            del auth_meta['volumes'][volume_path_str]
+            del auth_meta['subvolumes'][volume_path_str]
 
             # Clean up auth meta file
-            if not auth_meta['volumes']:
+            if not auth_meta['subvolumes']:
                 self.fs.unlink(self._auth_metadata_path(auth_id))
                 return
 
@@ -1272,7 +1286,7 @@ class CephFSVolumeClient(object):
             vol_meta = self._volume_metadata_get(volume_path)
 
             if (vol_meta is None) or (auth_id not in vol_meta['auths']):
-                log.warn("deauthorized called for already-removed auth"
+                log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for volume ID '{volume}'".format(
                     auth_id=auth_id, volume=volume_path.volume_id
                 ))
@@ -1444,7 +1458,7 @@ class CephFSVolumeClient(object):
         try:
             self.fs.rmdir(self._snapshot_path(dir_path, snapshot_name))
         except cephfs.ObjectNotFound:
-            log.warn("Snapshot was already gone: {0}".format(snapshot_name))
+            log.warning("Snapshot was already gone: {0}".format(snapshot_name))
 
     def create_snapshot_volume(self, volume_path, snapshot_name, mode=0o755):
         self._snapshot_create(self._get_path(volume_path), snapshot_name, mode)
@@ -1567,6 +1581,6 @@ class CephFSVolumeClient(object):
         try:
             ioctx.remove_object(object_name)
         except rados.ObjectNotFound:
-            log.warn("Object '{0}' was already removed".format(object_name))
+            log.warning("Object '{0}' was already removed".format(object_name))
         finally:
             ioctx.close()
