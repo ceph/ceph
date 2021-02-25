@@ -34,7 +34,7 @@ from mgr_util import create_self_signed_cert
 import secrets
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, DaemonDescription
+    CLICommandMeta, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
@@ -1532,7 +1532,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         sm[n].rados_config_location = spec.rados_config_location()
                 else:
                     sm[n].size = 0
-                if dd.status == 1:
+                if dd.status == DaemonDescriptionStatus.running:
                     sm[n].running += 1
                 if not sm[n].last_refresh or not dd.last_refresh or dd.last_refresh < sm[n].last_refresh:  # type: ignore
                     sm[n].last_refresh = dd.last_refresh

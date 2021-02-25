@@ -14,7 +14,7 @@ from test_orchestrator import TestOrchestrator as _TestOrchestrator
 from tests import mock
 
 from orchestrator import raise_if_exception, Completion, ProgressReference
-from orchestrator import InventoryHost, DaemonDescription, ServiceDescription
+from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus
 from orchestrator import OrchestratorValidationError
 from orchestrator.module import to_format, Format, OrchestratorCli, preview_table_osd
 
@@ -22,13 +22,14 @@ from orchestrator.module import to_format, Format, OrchestratorCli, preview_tabl
 def _test_resource(data, resource_class, extra=None):
     # ensure we can deserialize and serialize
     rsc = resource_class.from_json(data)
-    rsc.to_json()
+    assert rsc.to_json() == resource_class.from_json(rsc.to_json()).to_json()
 
     if extra:
         # if there is an unexpected data provided
-        data.update(extra)
+        data_copy = data.copy()
+        data_copy.update(extra)
         with pytest.raises(OrchestratorValidationError):
-            resource_class.from_json(data)
+            resource_class.from_json(data_copy)
 
 
 def test_inventory():
@@ -62,9 +63,13 @@ def test_daemon_description():
     json_data = {
         'hostname': 'test',
         'daemon_type': 'mon',
-        'daemon_id': 'a'
+        'daemon_id': 'a',
+        'status': -1,
     }
     _test_resource(json_data, DaemonDescription, {'abc': False})
+
+    dd = DaemonDescription.from_json(json_data)
+    assert dd.status.value == DaemonDescriptionStatus.error.value
 
 
 def test_raise():
