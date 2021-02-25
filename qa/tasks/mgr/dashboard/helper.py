@@ -176,7 +176,7 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def _request(cls, url, method, data=None, params=None, set_cookies=False):
         url = "{}{}".format(cls._base_uri, url)
-        log.info("Request %s to %s", method, url)
+        log.debug("Request %s to %s", method, url)
         headers = {}
         cookies = {}
         if cls._token:
@@ -286,7 +286,7 @@ class DashboardTestCase(MgrTestCase):
             return None
 
         if cls._resp.status_code != 202:
-            log.info("task finished immediately")
+            log.debug("task finished immediately")
             return res
 
         cls._assertIn('name', res)
@@ -298,8 +298,7 @@ class DashboardTestCase(MgrTestCase):
         res_task = None
         while retries > 0 and not res_task:
             retries -= 1
-            log.info("task (%s, %s) is still executing", task_name,
-                     task_metadata)
+            log.debug("task (%s, %s) is still executing", task_name, task_metadata)
             time.sleep(1)
             _res = cls._get('/api/task?name={}'.format(task_name))
             cls._assertEq(cls._resp.status_code, 200)
@@ -314,7 +313,7 @@ class DashboardTestCase(MgrTestCase):
             raise Exception("Waiting for task ({}, {}) to finish timed out. {}"
                             .format(task_name, task_metadata, _res))
 
-        log.info("task (%s, %s) finished", task_name, task_metadata)
+        log.debug("task (%s, %s) finished", task_name, task_metadata)
         if res_task['success']:
             if method == 'POST':
                 cls._resp.status_code = 201
@@ -400,13 +399,13 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def _ceph_cmd(cls, cmd):
         res = cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
-        log.info("command result: %s", res)
+        log.debug("command result: %s", res)
         return res
 
     @classmethod
     def _ceph_cmd_result(cls, cmd):
         exitstatus = cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd)
-        log.info("command exit status: %d", exitstatus)
+        log.debug("command exit status: %d", exitstatus)
         return exitstatus
 
     @classmethod
