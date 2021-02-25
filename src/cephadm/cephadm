@@ -1668,10 +1668,10 @@ def infer_config(func):
 
 def _get_default_image(ctx: CephadmContext):
     if DEFAULT_IMAGE_IS_MASTER:
-        warn = '''This is a development version of cephadm.
+        warn = """This is a development version of cephadm.
 For information regarding the latest stable release:
     https://docs.ceph.com/docs/{}/cephadm/install
-'''.format(LATEST_STABLE_RELEASE)
+""".format(LATEST_STABLE_RELEASE)
         for line in warn.splitlines():
             logger.warning('{}{}{}'.format(termcolor.yellow, line, termcolor.end))
     return DEFAULT_IMAGE
