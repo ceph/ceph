@@ -3,5 +3,5 @@ more-itertools==4.1.0
 PyJWT==1.6.4
 bcrypt==3.1.4
 python3-saml==1.4.1
-requests==2.20.0
+requests==2.25.1
 Routes==2.4.1
