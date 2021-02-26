@@ -5062,11 +5062,12 @@ int main(int argc, const char **argv)
         pt = &ptiter->second;
         tier_class = true;
       } else if (tier_type_specified) {
-        if (tier_type == "cloud") {
-          /* we support only cloud tier-type for now.
+        if (tier_type == "cloud-s3") {
+          /* we support only cloud-s3 tier-type for now.
            * Once set cant be reset. */
           tier_class = true;
           pt->tier_type = tier_type;
+          pt->storage_class = storage_class;
         } else {
 	      cerr << "ERROR: Invalid tier-type specified" << std::endl;
 	      return EINVAL;

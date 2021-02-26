@@ -725,10 +725,8 @@ struct RGWTierACLMapping {
 };
 WRITE_CLASS_ENCODER(RGWTierACLMapping)
 
-struct RGWZoneGroupPlacementTier {
+struct RGWZoneGroupPlacementTierS3 {
 #define DEFAULT_MULTIPART_SYNC_PART_SIZE (32 * 1024 * 1024)
-  std::string storage_class;
-  std::string tier_type;
   std::string endpoint;
   RGWAccessKey key;
   HostStyle host_style{PathStyle};
@@ -741,15 +739,11 @@ struct RGWZoneGroupPlacementTier {
   uint64_t multipart_sync_threshold{DEFAULT_MULTIPART_SYNC_PART_SIZE};
   uint64_t multipart_min_part_size{DEFAULT_MULTIPART_SYNC_PART_SIZE};
 
-  bool retain_object = false;
-
   int update_params(const JSONFormattable& config);
   int clear_params(const JSONFormattable& config);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(storage_class, bl);
-    encode(tier_type, bl);
     encode(endpoint, bl);
     encode(key, bl);
     string s = (host_style == PathStyle ? "path" : "virtual");
@@ -759,14 +753,11 @@ struct RGWZoneGroupPlacementTier {
     encode(acl_mappings, bl);
     encode(multipart_sync_threshold, bl);
     encode(multipart_min_part_size, bl);
-    encode(retain_object, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(storage_class, bl);
-    decode(tier_type, bl);
     decode(endpoint, bl);
     decode(key, bl);
     string s;
@@ -781,9 +772,47 @@ struct RGWZoneGroupPlacementTier {
     decode(acl_mappings, bl);
     decode(multipart_sync_threshold, bl);
     decode(multipart_min_part_size, bl);
-    decode(retain_object, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)
+
+struct RGWZoneGroupPlacementTier {
+  std::string tier_type;
+  std::string storage_class;
+  bool retain_object = false;
+
+  struct _tier {
+    RGWZoneGroupPlacementTierS3 s3;
+  } t;
+
+  int update_params(const JSONFormattable& config);
+  int clear_params(const JSONFormattable& config);
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(tier_type, bl);
+    encode(storage_class, bl);
+    encode(retain_object, bl);
+    if (tier_type == "cloud-s3") {
+      encode(t.s3, bl);
+    }
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(tier_type, bl);
+    decode(storage_class, bl);
+    decode(retain_object, bl);
+    if (tier_type == "cloud-s3") {
+      decode(t.s3, bl);
+    }
+    DECODE_FINISH(bl);
+  }
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };

@@ -1376,10 +1376,10 @@ public:
 
     /* init */
     string id = "cloudid";
-    string endpoint=oc.tier.endpoint; 
-    RGWAccessKey key = oc.tier.key;
-    HostStyle host_style = oc.tier.host_style;
-    string bucket_name = oc.tier.target_path;
+    string endpoint=oc.tier.t.s3.endpoint; 
+    RGWAccessKey key = oc.tier.t.s3.key;
+    HostStyle host_style = oc.tier.t.s3.host_style;
+    string bucket_name = oc.tier.t.s3.target_path;
     const RGWZoneGroup& zonegroup = oc.store->svc()->zone->get_zonegroup();
    
     if (bucket_name.empty()) {
@@ -1403,10 +1403,10 @@ public:
 
     RGWLCCloudTierCtx tier_ctx(oc.cct, oc.dpp, oc.o, oc.store, oc.bucket->get_info(),
                         oc.obj->get_obj(), oc.rctx, conn, bucket_name,
-                        oc.tier.target_storage_class, &http_manager);
-    tier_ctx.acl_mappings = oc.tier.acl_mappings;
-    tier_ctx.multipart_min_part_size = oc.tier.multipart_min_part_size;
-    tier_ctx.multipart_sync_threshold = oc.tier.multipart_sync_threshold;
+                        oc.tier.t.s3.target_storage_class, &http_manager);
+    tier_ctx.acl_mappings = oc.tier.t.s3.acl_mappings;
+    tier_ctx.multipart_min_part_size = oc.tier.t.s3.multipart_min_part_size;
+    tier_ctx.multipart_sync_threshold = oc.tier.t.s3.multipart_sync_threshold;
     tier_ctx.storage_class = oc.tier.storage_class;
 
     bool al_tiered = false;
@@ -1463,8 +1463,8 @@ public:
 
     r = get_tier_target(zonegroup, target_placement, target_placement.storage_class, oc.tier);
 
-    if (!r && oc.tier.tier_type == "cloud") {
-      ldpp_dout(oc.dpp, 20) << "Found cloud tier: " << target_placement.storage_class << dendl;
+    if (!r && oc.tier.tier_type == "cloud-s3") {
+      ldpp_dout(oc.dpp, 20) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       r = transition_obj_to_cloud(oc);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj to cloud (r=" << r << ")"

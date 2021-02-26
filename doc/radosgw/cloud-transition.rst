@@ -4,7 +4,7 @@ Cloud Transition
 
 This feature enables data transition to a remote cloud service as part of `Lifecycle Configuration <https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html>`__ via `Storage Classes <https://docs.ceph.com/en/latest/radosgw/placement/#storage-classes>`__. The transition is unidirectional; data cannot be transitioned back from the remote zone. The goal of this feature is to enable data transition to multiple cloud providers. The currently supported cloud providers are those that are compatible with AWS (S3).
 
-Special storage class of tier type cloud is used to configure the remote cloud object store service to which the data needs to be transitioned to. These are defined in terms of zonegroup placement targets and unlike regular storage classes, do not need a data pool. Any additions or modifications need period commit to get reflected.
+Special storage class of tier type ``cloud-s3`` is used to configure the remote cloud S3 object store service to which the data needs to be transitioned to. These are defined in terms of zonegroup placement targets and unlike regular storage classes, do not need a data pool. Any additions or modifications need period commit to get reflected.
 
 User credentials for the remote cloud object store service need to be configured. Note that source ACLs will not
 be preserved. It is possible to map permissions of specific source users to specific destination users.
@@ -36,19 +36,19 @@ Cloud Transition Specific Configurables:
 
 * ``access_key`` (string)
 
-The remote cloud access key that will be used for a specific connection.
+The remote cloud S3 access key that will be used for a specific connection.
 
 * ``secret`` (string)
 
-The secret key for the remote cloud service.
+The secret key for the remote cloud S3 service.
 
 * ``endpoint`` (string)
 
-URL of remote cloud service endpoint.
+URL of remote cloud S3 service endpoint.
 
 * ``host_style`` (path | virtual)
 
-Type of host style to be used when accessing remote cloud endpoint (default: ``path``).
+Type of host style to be used when accessing remote cloud S3 endpoint (default: ``path``).
 
 * ``acls`` (array)
 
@@ -114,16 +114,16 @@ Minimum parts size to use when transitioning objects using multipart upload.
 How to Configure
 ~~~~~~~~~~~~~~~~
 
-See `Adding a Storage Class <https://docs.ceph.com/en/latest/radosgw/placement/#adding-a-storage-class>`__ for how to configure storage-class for a zonegroup. The cloud transition requires a creation of a special storage class with tier type defined as ``cloud``
+See `Adding a Storage Class <https://docs.ceph.com/en/latest/radosgw/placement/#adding-a-storage-class>`__ for how to configure storage-class for a zonegroup. The cloud transition requires a creation of a special storage class with tier type defined as ``cloud-s3``
 
-Note: Once a storage class is created of ``--tier-type=cloud``, it cannot be later modified to any other storage class type.
+Note: Once a storage class is created of ``--tier-type=cloud-s3``, it cannot be later modified to any other storage class type.
 
 ::
 
     # radosgw-admin zonegroup placement add --rgw-zonegroup={zone-group-name} \
                                             --placement-id={placement-id} \
                                             --storage-class={storage-class-name} \
-                                            --tier-type=cloud 
+                                            --tier-type=cloud-s3 
 
 For example:
 
@@ -131,7 +131,7 @@ For example:
 
     # radosgw-admin zonegroup placement add --rgw-zonegroup=default \
                                             --placement-id=default-placement \
-                                            --storage-class=CLOUDTIER --tier-type=cloud
+                                            --storage-class=CLOUDTIER --tier-type=cloud-s3
     [
         {
             "key": "default-placement",
@@ -146,18 +146,20 @@ For example:
                     {
                         "key": "CLOUDTIER",
                         "val": {
+                            "tier_type": "cloud-s3",
                             "storage_class": "CLOUDTIER",
-                            "tier_type": "cloud",
-                            "endpoint": "",
-                            "access_key": "",
-                            "secret": "",
-                            "host_style": "path",
-                            "tier_storage_class": "",
-                            "target_path": "",
-                            "acl_mappings": [],
-                            "multipart_sync_threshold": 33554432,
-                            "multipart_min_part_size": 33554432,
-                            "retain_object": "false"
+                            "retain_object": "false",
+                            "s3": {
+                                "endpoint": "",
+                                "access_key": "",
+                                "secret": "",
+                                "host_style": "path",
+                                "target_storage_class": "",
+                                "target_path": "",
+                                "acl_mappings": [],
+                                "multipart_sync_threshold": 33554432,
+                                "multipart_min_part_size": 33554432
+                            }
                         }
                     }
                 ]
@@ -325,3 +327,5 @@ Future Work
 * Support s3:RestoreObject operation on cloud transitioned objects.
 
 * Federation between RGW and Cloud services.
+
+* Support transition to other cloud provideres (like Azure).
