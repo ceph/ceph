@@ -281,6 +281,35 @@ class Monitoring(object):
         },
     }  # type: ignore
 
+    @staticmethod
+    def get_version(ctx, container_id, daemon_type):
+        # type: (CephadmContext, str, str) -> str
+        """
+        :param: daemon_type Either "prometheus", "alertmanager" or "node-exporter"
+        """
+        assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter')
+        cmd = daemon_type.replace('-', '_')
+        code = -1
+        err = ''
+        version = ''
+        if daemon_type == 'alertmanager':
+            for cmd in ['alertmanager', 'prometheus-alertmanager']:
+                _, err, code = call(ctx, [
+                        ctx.container_path, 'exec', container_id, cmd,
+                        '--version'
+                    ], verbosity=CallVerbosity.SILENT)
+                if code == 0:
+                    break
+            cmd = 'alertmanager'  # reset cmd for version extraction
+        else:
+            _, err, code = call(ctx, [
+                ctx.container_path, 'exec', container_id, cmd, '--version'
+            ])
+        if code == 0 and \
+            err.startswith('%s, version ' % cmd):
+            version = err.split(' ')[2]
+        return version
+
 ##################################
 def populate_files(config_dir, config_files, uid, gid):
     # type: (str, Dict, int, int) -> None
@@ -4562,24 +4591,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 elif daemon_type in ['prometheus',
                                                      'alertmanager',
                                                      'node-exporter']:
-                                    cmd = daemon_type.replace('-', '_')
-                                    if daemon_type == 'alertmanager':
-                                        for cmd in ['alertmanager', 'prometheus-alertmanager']:
-                                            out, err, code = call(ctx, [
-                                                    container_path, 'exec', container_id, cmd,
-                                                    '--version'
-                                                ], verbosity=CallVerbosity.SILENT)
-                                            if code == 0:
-                                                break
-                                        cmd = 'alertmanager'  # reset cmd for version extraction
-                                    else:
-                                        out, err, code = call(ctx, [
-                                            container_path, 'exec', container_id, cmd, '--version'
-                                        ])
-                                    if not code and \
-                                       err.startswith('%s, version ' % cmd):
-                                        version = err.split(' ')[2]
-                                        seen_versions[image_id] = version
+                                    version = Monitoring.get_version(ctx, container_id, daemon_type)
+                                    seen_versions[image_id] = version
                                 elif daemon_type == 'haproxy':
                                     out, err, code = call(ctx,
                                         [container_path, 'exec', container_id,
