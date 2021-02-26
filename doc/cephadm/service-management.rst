@@ -5,7 +5,7 @@ Service Management
 Service Status
 ==============
 
-A service is a group of daemons that are configured togeter.
+A service is a group of daemons that are configured together.
 
 Print a list of services known to the orchestrator. The list can be limited to
 services on a particular host with the optional --host parameter and/or
