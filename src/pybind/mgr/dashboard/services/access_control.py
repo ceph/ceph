@@ -7,6 +7,7 @@ import errno
 import json
 import threading
 import time
+import six
 
 import bcrypt
 
@@ -24,6 +25,8 @@ from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
 def password_hash(password, salt_password=None):
     if not password:
         return None
+    if six.PY2:
+        password = unicode(password, 'utf-8') if isinstance(password, str) else password
     if not salt_password:
         salt_password = bcrypt.gensalt()
     else:
