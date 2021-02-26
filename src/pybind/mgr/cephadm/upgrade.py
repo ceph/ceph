@@ -213,7 +213,8 @@ class CephadmUpgrade:
             return True
         return False
 
-    def _wait_for_ok_to_stop(self, s: DaemonDescription) -> bool:
+    def _wait_for_ok_to_stop(self, s: DaemonDescription,
+                             known: Optional[List[str]] = None) -> bool:
         # only wait a little bit; the service might go away for something
         assert s.daemon_type is not None
         assert s.daemon_id is not None

@@ -1248,7 +1248,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         okay: bool = True
         for daemon_type, daemon_ids in daemon_map.items():
             r = self.cephadm_services[daemon_type_to_service(
-                daemon_type)].ok_to_stop(daemon_ids, force)
+                daemon_type)].ok_to_stop(daemon_ids, force=force)
             if r.retval:
                 okay = False
                 # collect error notifications so user can see every daemon causing host

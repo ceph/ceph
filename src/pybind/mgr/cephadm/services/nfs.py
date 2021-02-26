@@ -1,6 +1,6 @@
 import errno
 import logging
-from typing import Dict, Tuple, Any, List, cast
+from typing import Dict, Tuple, Any, List, cast, Optional
 
 from mgr_module import HandleCommandResult
 
@@ -156,7 +156,10 @@ class NFSService(CephService):
         super().post_remove(daemon)
         self.remove_rgw_keyring(daemon)
 
-    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+    def ok_to_stop(self,
+                   daemon_ids: List[str],
+                   force: bool = False,
+                   known: Optional[List[str]] = None) -> HandleCommandResult:
         # if only 1 nfs, alert user (this is not passable with --force)
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'NFS', 1, True)
         if warn:
