@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=- requirements.in
 #
-ansible==2.8.19
+ansible==2.9.18
     # via teuthology
 apache-libcloud==3.3.1
     # via teuthology
