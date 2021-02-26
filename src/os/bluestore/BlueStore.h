@@ -1192,12 +1192,20 @@ public:
 	&Buffer::lru_item> > buffer_lru_list_t;
 
     onode_lru_list_t onode_lru;
+    onode_lru_list_t::iterator last_pinned;
 
     buffer_lru_list_t buffer_lru;
     uint64_t buffer_size = 0;
 
+    void _onode_lru_erase(onode_lru_list_t::iterator it) {
+      if (it == last_pinned) {
+        last_pinned = onode_lru.end();
+      }
+      onode_lru.erase(it);
+    }
+
   public:
-    LRUCache(CephContext* cct) : Cache(cct) {}
+    LRUCache(CephContext* cct) : Cache(cct), last_pinned(onode_lru.end()){}
     uint64_t _get_num_onodes() override {
       return onode_lru.size();
     }
@@ -1209,7 +1217,7 @@ public:
     }
     void _rm_onode(OnodeRef& o) override {
       auto q = onode_lru.iterator_to(*o);
-      onode_lru.erase(q);
+      _onode_lru_erase(q);
     }
     void _touch_onode(OnodeRef& o) override;
 
@@ -1285,6 +1293,7 @@ public:
 	&Buffer::lru_item> > buffer_list_t;
 
     onode_lru_list_t onode_lru;
+    onode_lru_list_t::iterator last_pinned;
 
     buffer_list_t buffer_hot;      ///< "Am" hot buffers
     buffer_list_t buffer_warm_in;  ///< "A1in" newly warm buffers
@@ -1301,8 +1310,14 @@ public:
 
     uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
 
+    void _onode_lru_erase(onode_lru_list_t::iterator it) {
+      if (it == last_pinned) {
+        last_pinned = onode_lru.end();
+      }
+      onode_lru.erase(it);
+    }
   public:
-    TwoQCache(CephContext* cct) : Cache(cct) {}
+    TwoQCache(CephContext* cct) : Cache(cct), last_pinned(onode_lru.end()){}
     uint64_t _get_num_onodes() override {
       return onode_lru.size();
     }
@@ -1314,7 +1329,7 @@ public:
     }
     void _rm_onode(OnodeRef& o) override {
       auto q = onode_lru.iterator_to(*o);
-      onode_lru.erase(q);
+      _onode_lru_erase(q);
     }
     void _touch_onode(OnodeRef& o) override;
 
