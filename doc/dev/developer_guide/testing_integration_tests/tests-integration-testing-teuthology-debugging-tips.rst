@@ -84,17 +84,23 @@ will include the command that failed.
 Reporting the Issue
 -------------------
 
-After you have triaged the cause of the failure and you have determined that the
-failure was not caused by the developer's code change, this might indicate a 
-known failure for the upstream branch (in our case, the upstream branch is
-octopus). If the failure was not caused by a developer's code change, go to 
-https://tracker.ceph.com and look for tracker issues related to the failure by using keywords spotted in the failure under investigation.
+In short: first check to see if your job failure was caused by a known issue,
+and if it wasn't, raise a tracker ticket. 
 
-If a similar issue has been reported via a tracker.ceph.com ticket, add to it a
-link to the new test run and any relevant feedback. If you don't find a ticket
-referring to an issue similar to the one that you have discovered, create a new
-tracker ticket for it. If you are not familiar with the cause of failure, ask
-one of the team members for help.
+After you have triaged the cause of the failure and you have determined that it
+wasn't caused by the changes that you made to the code, this might indicate
+that you have encountered a known failure in the upstream branch (in the
+example we're considering in this section, the upstream branch is "octopus").
+If the failure was not caused by the changes you made to the code, go to
+https://tracker.ceph.com and look for tracker issues related to the failure by
+using keywords spotted in the failure under investigation.
+
+If you find a similar issue on https://tracker.ceph.com, leave a comment on
+that issue explaining the failure as you understand it and make sure to
+include a link to your recent test run. If you don't find a similar issue,
+create a new tracker ticket for this issue and explain the cause of your job's
+failure as thoroughly as you can. If you're not sure what caused the job's
+failure, ask one of the team members for help.
 
 Debugging an issue using interactive-on-error
 ---------------------------------------------
