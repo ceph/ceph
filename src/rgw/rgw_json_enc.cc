@@ -153,7 +153,7 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("tail_placement", tail_placement, f);
   ::encode_json("tier_type", tier_type, f);
   
-  if (tier_type == "cloud") {
+  if (tier_type == "cloud-s3") {
     ::encode_json("tier_config", tier_config, f);
   }
 
@@ -1451,8 +1451,17 @@ void RGWTierACLMapping::decode_json(JSONObj *obj)
 
 void RGWZoneGroupPlacementTier::dump(Formatter *f) const
 {
-  encode_json("storage_class", storage_class, f);
   encode_json("tier_type", tier_type, f);
+  encode_json("storage_class", storage_class, f);
+  encode_json("retain_object", retain_object, f);
+
+  if (tier_type == "cloud-s3") {
+    encode_json("s3", t.s3, f);
+  }
+}
+
+void RGWZoneGroupPlacementTierS3::dump(Formatter *f) const
+{
   encode_json("endpoint", endpoint, f);
   encode_json("access_key", key.id, f);
   encode_json("secret", key.key, f);
@@ -1463,13 +1472,21 @@ void RGWZoneGroupPlacementTier::dump(Formatter *f) const
   encode_json("acl_mappings", acl_mappings, f);
   encode_json("multipart_sync_threshold", multipart_sync_threshold, f);
   encode_json("multipart_min_part_size", multipart_min_part_size, f);
-  encode_json("retain_object", retain_object, f);
 }
 
 void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("storage_class", storage_class, obj);
   JSONDecoder::decode_json("tier_type", tier_type, obj);
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
+  JSONDecoder::decode_json("retain_object", retain_object, obj);
+
+  if (tier_type == "cloud-s3") {
+    JSONDecoder::decode_json("s3", t.s3, obj);
+  }
+}
+
+void RGWZoneGroupPlacementTierS3::decode_json(JSONObj *obj)
+{
   JSONDecoder::decode_json("endpoint", endpoint, obj);
   JSONDecoder::decode_json("access_key", key.id, obj);
   JSONDecoder::decode_json("secret", key.key, obj);
@@ -1485,7 +1502,6 @@ void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("acl_mappings", acl_mappings, obj);
   JSONDecoder::decode_json("multipart_sync_threshold", multipart_sync_threshold, obj);
   JSONDecoder::decode_json("multipart_min_part_size", multipart_min_part_size, obj);
-  JSONDecoder::decode_json("retain_object", retain_object, obj);
 }
 
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const

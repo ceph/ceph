@@ -2099,6 +2099,26 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
 {
   int r = -1;
 
+  if (config.exists("retain_object")) {
+    string s = config["retain_object"];
+    if (s == "true") {
+      retain_object = true;
+    } else {
+      retain_object = false;
+    }
+  }
+
+  if (tier_type == "cloud-s3") {
+    r = t.s3.update_params(config);
+  }
+
+  return r;
+}
+
+int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
+{
+  int r = -1;
+
   if (config.exists("endpoint")) {
     endpoint = config["endpoint"];
   }
@@ -2123,15 +2143,6 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
   if (config.exists("secret")) {
     key.key = config["secret"];
   }
-  if (config.exists("retain_object")) {
-    string s = config["retain_object"];
-    if (s == "true") {
-      retain_object = true;
-    } else {
-      retain_object = false;
-    }
-  }
-
   if (config.exists("multipart_sync_threshold")) {
     r = conf_to_uint64(config, "multipart_sync_threshold", &multipart_sync_threshold);
     if (r < 0) {
@@ -2168,6 +2179,19 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
 }
 int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
 {
+  if (config.exists("retain_object")) {
+    retain_object = false;
+  }
+
+  if (tier_type == "cloud-s3") {
+    t.s3.clear_params(config);
+  }
+
+  return 0;
+}
+
+int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
+{
   if (config.exists("endpoint")) {
     endpoint.clear();
   }
@@ -2186,9 +2210,6 @@ int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
   }
   if (config.exists("secret")) {
     key.key.clear();
-  }
-  if (config.exists("retain_object")) {
-    retain_object = false;
   }
   if (config.exists("multipart_sync_threshold")) {
     multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;
