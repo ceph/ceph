@@ -1,7 +1,7 @@
 import os
 import random
 import heapq
-from fractions import gcd
+from math import gcd
 from functools import reduce
 
 def lcm(a, b):

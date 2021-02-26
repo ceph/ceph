@@ -11,7 +11,7 @@ netaddr
 paramiko
 psutil >= 2.1.0
 configparser
-ansible>=2.0
+ansible>=2.8,<2.10
 prettytable
 manhole
 humanfriendly
@@ -33,7 +33,7 @@ boto3
 cryptography>=2.7
 nose
 pip-tools
-pytest
+pytest==3.7.1
 requests
 tox
 xmltodict
