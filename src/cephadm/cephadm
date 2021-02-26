@@ -4563,9 +4563,19 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                                      'alertmanager',
                                                      'node-exporter']:
                                     cmd = daemon_type.replace('-', '_')
-                                    out, err, code = call(ctx,
-                                        [container_path, 'exec', container_id,
-                                         cmd, '--version'])
+                                    if daemon_type == 'alertmanager':
+                                        for cmd in ['alertmanager', 'prometheus-alertmanager']:
+                                            out, err, code = call(ctx, [
+                                                    container_path, 'exec', container_id, cmd,
+                                                    '--version'
+                                                ], verbosity=CallVerbosity.SILENT)
+                                            if code == 0:
+                                                break
+                                        cmd = 'alertmanager'  # reset cmd for version extraction
+                                    else:
+                                        out, err, code = call(ctx, [
+                                            container_path, 'exec', container_id, cmd, '--version'
+                                        ])
                                     if not code and \
                                        err.startswith('%s, version ' % cmd):
                                         version = err.split(' ')[2]
