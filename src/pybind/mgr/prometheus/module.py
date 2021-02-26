@@ -9,7 +9,7 @@ import re
 import socket
 import threading
 import time
-from mgr_module import MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT
+from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT
 from mgr_util import get_default_addr, profile_method
 from rbd import RBD
 from collections import namedtuple
@@ -242,14 +242,6 @@ class MetricCollectionThread(threading.Thread):
 
 
 class Module(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "prometheus file_sd_config",
-            "desc": "Return file_sd compatible prometheus config for mgr cluster",
-            "perm": "r"
-        },
-    ]
-
     MODULE_OPTIONS = [
         Option(
             'server_addr'
@@ -1180,7 +1172,11 @@ class Module(MgrModule):
 
         return ''.join(_metrics) + '\n'
 
+    @CLIReadCommand('prometheus file_sd_config')
     def get_file_sd_config(self):
+        '''
+        Return file_sd compatible prometheus config for mgr cluster
+        '''
         servers = self.list_servers()
         targets = []
         for server in servers:
@@ -1202,13 +1198,6 @@ class Module(MgrModule):
     def self_test(self):
         self.collect()
         self.get_file_sd_config()
-
-    def handle_command(self, inbuf, cmd):
-        if cmd['prefix'] == 'prometheus file_sd_config':
-            return self.get_file_sd_config()
-        else:
-            return (-errno.EINVAL, '',
-                    "Command not found '{0}'".format(cmd['prefix']))
 
     def serve(self):
 
