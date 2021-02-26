@@ -63,29 +63,32 @@ More details about config.yaml can be found at `detailed test config`_
 Triaging the cause of failure
 ------------------------------
 
-To triage a job failure, open the teuthology log for it using either the job
-name or the job id (from the pulpito page):
+When a job fails, you will need to read its teuthology log in order to triage
+the cause of its failure. Use the job's name and id from pulpito to locate your
+failed job's teuthology log::
 
    http://qa-proxy.ceph.com/<job-name>/<job-id>/teuthology.log
 
-Open the log file:
+Open the log file::
 
    /a/<job-name>/<job-id>/teuthology.log
 
-for example in our case::
+For example:
 
-  nano /a/teuthology-2021-01-06_07:01:02-rados-master-distro-basic-smithi/5759282/teuthology.log
+  .. prompt:: bash $ 
 
-A job failure is recorded in the teuthology log as a Traceback and is 
+     nano /a/teuthology-2021-01-06_07:01:02-rados-master-distro-basic-smithi/5759282/teuthology.log
+
+Every job failure is recorded in the teuthology log as a Traceback and is 
 added to the job summary.
 
-To analyze a job failure, locate the ``Traceback`` keyword and examine the call
-stack and logs for issues that caused the failure. Usually the traceback
-will include the command that failed.
+Find the ``Traceback`` keyword and search the call stack and the logs for
+issues that caused the failure. Usually the traceback will include the command
+that failed.
 
-.. note:: the teuthology logs are deleted every once in a while, if you are
-          unable to access example link, please feel free to refer any other 
-          case from http://pulpito.front.sepia.ceph.com/
+.. note:: The teuthology logs are deleted from time to time. If you are unable
+          to access the link in this example, just use any other case from
+          http://pulpito.front.sepia.ceph.com/
 
 Reporting the Issue
 -------------------
