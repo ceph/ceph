@@ -191,8 +191,8 @@ cdef make_ex(ret, msg):
 class DirEntry(namedtuple('DirEntry',
                ['d_ino', 'd_off', 'd_reclen', 'd_type', 'd_name'])):
     DT_DIR = 0x4
-    DT_REG = 0xA
-    DT_LNK = 0xC
+    DT_REG = 0x8
+    DT_LNK = 0xA
     def is_dir(self):
         return self.d_type == self.DT_DIR
 
