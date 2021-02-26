@@ -174,6 +174,9 @@ class CephFSTestCase(CephTestCase):
         for m in self.mounts:
             m.teardown()
 
+        # To prevent failover messages during Unwind of ceph task
+        self.mds_cluster.delete_all_filesystems()
+
         for i, m in enumerate(self.mounts):
             m.client_id = self._original_client_ids[i]
 
