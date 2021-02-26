@@ -254,8 +254,8 @@ class CephadmService(metaclass=ABCMeta):
                    force: bool = False,
                    known: Optional[List[str]] = None) -> HandleCommandResult:
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
-        out = f'It is presumed safe to stop {names}'
-        err = f'It is NOT safe to stop {names}'
+        out = f'It is presumed safe to stop {",".join(names)}'
+        err = f'It is NOT safe to stop {",".join(names)} at this time'
 
         if self.TYPE not in ['mon', 'osd', 'mds']:
             logger.info(out)
