@@ -157,6 +157,7 @@ class CephadmUpgrade:
                 self._save_upgrade_state()
                 return 'Resumed upgrade to %s' % self.target_image
             return 'Upgrade to %s in progress' % self.target_image
+        self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
             target_name=target_name,
             progress_id=str(uuid.uuid4())
@@ -173,6 +174,7 @@ class CephadmUpgrade:
         if self.upgrade_state.paused:
             return 'Upgrade to %s already paused' % self.target_image
         self.upgrade_state.paused = True
+        self.mgr.log.info('Upgrade: Paused upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         return 'Paused upgrade to %s' % self.target_image
 
@@ -182,6 +184,7 @@ class CephadmUpgrade:
         if not self.upgrade_state.paused:
             return 'Upgrade to %s not paused' % self.target_image
         self.upgrade_state.paused = False
+        self.mgr.log.info('Upgrade: Resumed upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         self.mgr.event.set()
         return 'Resumed upgrade to %s' % self.target_image
@@ -193,6 +196,7 @@ class CephadmUpgrade:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
         target_image = self.target_image
+        self.mgr.log.info('Upgrade: Stopped')
         self.upgrade_state = None
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
