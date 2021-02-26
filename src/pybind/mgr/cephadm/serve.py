@@ -271,6 +271,10 @@ class CephadmServe:
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
             sd.container_image_digests = d.get('container_image_digests')
+            sd.memory_usage = d.get('memory_usage')
+            sd.memory_request = d.get('memory_request')
+            sd.memory_limit = d.get('memory_limit')
+            sd._service_name = d.get('service_name')
             sd.version = d.get('version')
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
@@ -797,8 +801,6 @@ class CephadmServe:
                     self._registry_login(daemon_spec.host, self.mgr.registry_url,
                                          self.mgr.registry_username, self.mgr.registry_password)
 
-                daemon_spec.extra_args.extend(['--config-json', '-'])
-
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
@@ -807,6 +809,10 @@ class CephadmServe:
                     daemon_spec.host, daemon_spec.name(), 'deploy',
                     [
                         '--name', daemon_spec.name(),
+                        '--meta-json', json.dumps({
+                            'service_name': daemon_spec.service_name,
+                        }),
+                        '--config-json', '-',
                     ] + daemon_spec.extra_args,
                     stdin=json.dumps(daemon_spec.final_config),
                     image=image)
