@@ -402,7 +402,7 @@ class Module(MgrModule):
 
     def _test_remote_calls(self):
         # Test making valid call
-        self.remote("influx", "handle_command", "", {"prefix": "influx self-test"})
+        self.remote("influx", "self_test")
 
         # Test calling module that exists but isn't enabled
         # (arbitrarily pick a non-always-on module to use)
@@ -423,7 +423,7 @@ class Module(MgrModule):
 
         # Test calling module that doesn't exist
         try:
-            self.remote("idontexist", "handle_command", {"prefix": "influx self-test"})
+            self.remote("idontexist", "self_test")
         except ImportError:
             pass
         else:
@@ -431,7 +431,7 @@ class Module(MgrModule):
 
         # Test calling method that doesn't exist
         try:
-            self.remote("influx", "idontexist", {"prefix": "influx self-test"})
+            self.remote("influx", "idontexist")
         except NameError:
             pass
         else:
