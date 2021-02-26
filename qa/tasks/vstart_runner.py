@@ -149,8 +149,13 @@ class LocalRemoteProcess(object):
     def __init__(self, args, subproc, check_status, stdout, stderr):
         self.args = args
         self.subproc = subproc
-        self.stdout = stdout or BytesIO()
-        self.stderr = stderr or BytesIO()
+        self.stdout = stdout
+        self.stderr = stderr
+        # this variable is meant for instance of this class named fuse_daemon.
+        # child process of the command launched with sudo must be killed,
+        # since killing parent process alone has no impact on the child
+        # process.
+        self.fuse_pid = -1
 
         self.check_status = check_status
         self.exitstatus = self.returncode = None
@@ -167,10 +172,14 @@ class LocalRemoteProcess(object):
         out, err = self.subproc.communicate()
         if isinstance(self.stdout, StringIO):
             self.stdout.write(out.decode(errors='ignore'))
+        elif self.stdout is None:
+            pass
         else:
             self.stdout.write(out)
         if isinstance(self.stderr, StringIO):
             self.stderr.write(err.decode(errors='ignore'))
+        elif self.stderr is None:
+            pass
         else:
             self.stderr.write(err)
 
@@ -190,8 +199,18 @@ class LocalRemoteProcess(object):
 
         if self.subproc.poll() is not None:
             out, err = self.subproc.communicate()
-            self.stdout.write(out)
-            self.stderr.write(err)
+            if isinstance(self.stdout, StringIO):
+                self.stdout.write(out.decode(errors='ignore'))
+            elif self.stdout is None:
+                pass
+            else:
+                self.stdout.write(out)
+            if isinstance(self.stderr, StringIO):
+                self.stderr.write(err.decode(errors='ignore'))
+            elif self.stderr is None:
+                pass
+            else:
+                self.stderr.write(err)
             self.exitstatus = self.returncode = self.subproc.returncode
             return True
         else:
@@ -352,9 +371,9 @@ class LocalDaemon(object):
         """
         Return PID as an integer or None if not found
         """
-        ps_txt = six.ensure_str(self.controller.run(
-            args=["ps", "ww", "-u"+str(os.getuid())]
-        ).stdout.getvalue()).strip()
+        ps_txt = self.controller.run(args=["ps", "ww", "-u"+str(os.getuid())],
+                                     stdout=StringIO()).\
+            stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
 
         for line in lines:
@@ -499,15 +518,14 @@ class LocalFuseMount(FuseMount):
                 args=["mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
                 check_status=False
             )
-            p = self.client_remote.run(
-                args=["ls", "/sys/fs/fuse/connections"],
-                check_status=False
-            )
+
+            p = self.client_remote.run(args=["ls", "/sys/fs/fuse/connections"],
+                                       check_status=False, stdout=StringIO())
             if p.exitstatus != 0:
                 log.warning("ls conns failed with {0}, assuming none".format(p.exitstatus))
                 return []
 
-            ls_str = six.ensure_str(p.stdout.getvalue().strip())
+            ls_str = p.stdout.getvalue().strip()
             if ls_str:
                 return [int(n) for n in ls_str.split("\n")]
             else:
@@ -576,7 +594,7 @@ class LocalFuseMount(FuseMount):
         to make the process killable.
         """
         return self.client_remote.run(args=[py_version, '-c', pyscript],
-                                      wait=False)
+                                      wait=False, stdout=StringIO())
 
 class LocalCephManager(CephManager):
     def __init__(self):
@@ -621,9 +639,9 @@ class LocalCephManager(CephManager):
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
-                                        list(args), **kwargs)
-        return six.ensure_str(proc.stdout.getvalue())
+        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] +\
+                                   list(args), **kwargs, stdout=StringIO())
+        return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
@@ -633,12 +651,15 @@ class LocalCephManager(CephManager):
         proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
         return proc.exitstatus
 
-    def admin_socket(self, daemon_type, daemon_id, command, check_status=True, timeout=None):
+    def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
+                     timeout=None, stdout=None):
+        if stdout is None:
+            stdout = StringIO()
+
         return self.controller.run(
-            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command,
-            check_status=check_status,
-            timeout=timeout
-        )
+            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon",
+                  "{0}.{1}".format(daemon_type, daemon_id)] + command,
+            check_status=check_status, timeout=timeout, stdout=stdout)
 
 
 class LocalCephCluster(CephCluster):
@@ -939,10 +960,8 @@ def exec_test():
     remote = LocalRemote()
 
     # Tolerate no MDSs or clients running at start
-    ps_txt = six.ensure_str(remote.run(
-        args=["ps", "-u"+str(os.getuid())],
-        stdout=StringIO()
-    ).stdout.getvalue().strip())
+    ps_txt = remote.run(args=["ps", "-u"+str(os.getuid())],
+                        stdout=StringIO()).stdout.getvalue().strip()
     lines = ps_txt.split("\n")[1:]
     for line in lines:
         if 'ceph-fuse' in line or 'ceph-mds' in line:
@@ -1005,9 +1024,9 @@ def exec_test():
             p = remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "auth", "get-or-create", client_name,
                                  "osd", "allow rw",
                                  "mds", "allow",
-                                 "mon", "allow r"])
+                                 "mon", "allow r"], stdout=StringIO())
 
-            open("./keyring", "ab").write(p.stdout.getvalue())
+            open("./keyring", "at").write(p.stdout.getvalue())
 
         mount = LocalFuseMount(ctx, test_dir, client_id)
         mounts.append(mount)
