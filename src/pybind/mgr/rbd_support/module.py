@@ -2,192 +2,51 @@
 RBD support module
 """
 
+import enum
 import errno
+import functools
+import inspect
 import rados
 import rbd
 import traceback
+from typing import cast, Any, Callable, Optional, Tuple, TypeVar
 
-from mgr_module import MgrModule
+from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule, Option
 
 from .common import NotAuthorizedError
-from .mirror_snapshot_schedule import MirrorSnapshotScheduleHandler
-from .perf import PerfHandler
+from .mirror_snapshot_schedule import image_validator, namespace_validator, \
+    LevelSpec, MirrorSnapshotScheduleHandler
+from .perf import PerfHandler, OSD_PERF_QUERY_COUNTERS
 from .task import TaskHandler
 from .trash_purge_schedule import TrashPurgeScheduleHandler
 
 
-class Module(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "rbd mirror snapshot schedule add "
-                   "name=level_spec,type=CephString "
-                   "name=interval,type=CephString "
-                   "name=start_time,type=CephString,req=false ",
-            "desc": "Add rbd mirror snapshot schedule",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd mirror snapshot schedule remove "
-                   "name=level_spec,type=CephString "
-                   "name=interval,type=CephString,req=false "
-                   "name=start_time,type=CephString,req=false ",
-            "desc": "Remove rbd mirror snapshot schedule",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd mirror snapshot schedule list "
-                   "name=level_spec,type=CephString,req=false ",
-            "desc": "List rbd mirror snapshot schedule",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd mirror snapshot schedule status "
-                   "name=level_spec,type=CephString,req=false ",
-            "desc": "Show rbd mirror snapshot schedule status",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd perf image stats "
-                   "name=pool_spec,type=CephString,req=false "
-                   "name=sort_by,type=CephChoices,strings="
-                   "write_ops|write_bytes|write_latency|"
-                   "read_ops|read_bytes|read_latency,"
-                   "req=false ",
-            "desc": "Retrieve current RBD IO performance stats",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd perf image counters "
-                   "name=pool_spec,type=CephString,req=false "
-                   "name=sort_by,type=CephChoices,strings="
-                   "write_ops|write_bytes|write_latency|"
-                   "read_ops|read_bytes|read_latency,"
-                   "req=false ",
-            "desc": "Retrieve current RBD IO performance counters",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd task add flatten "
-                   "name=image_spec,type=CephString",
-            "desc": "Flatten a cloned image asynchronously in the background",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd task add remove "
-                   "name=image_spec,type=CephString",
-            "desc": "Remove an image asynchronously in the background",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd task add trash remove "
-                   "name=image_id_spec,type=CephString",
-            "desc": "Remove an image from the trash asynchronously in the background",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd task add migration execute "
-                   "name=image_spec,type=CephString",
-            "desc": "Execute an image migration asynchronously in the background",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd task add migration commit "
-                   "name=image_spec,type=CephString",
-            "desc": "Commit an executed migration asynchronously in the background",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd task add migration abort "
-                   "name=image_spec,type=CephString",
-            "desc": "Abort a prepared migration asynchronously in the background",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd task cancel "
-                   "name=task_id,type=CephString ",
-            "desc": "Cancel a pending or running asynchronous task",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd task list "
-                   "name=task_id,type=CephString,req=false ",
-            "desc": "List pending or running asynchronous tasks",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd trash purge schedule add "
-                   "name=level_spec,type=CephString "
-                   "name=interval,type=CephString "
-                   "name=start_time,type=CephString,req=false ",
-            "desc": "Add rbd trash purge schedule",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd trash purge schedule remove "
-                   "name=level_spec,type=CephString "
-                   "name=interval,type=CephString,req=false "
-                   "name=start_time,type=CephString,req=false ",
-            "desc": "Remove rbd trash purge schedule",
-            "perm": "w"
-        },
-        {
-            "cmd": "rbd trash purge schedule list "
-                   "name=level_spec,type=CephString,req=false ",
-            "desc": "List rbd trash purge schedule",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd trash purge schedule status "
-                   "name=level_spec,type=CephString,req=false ",
-            "desc": "Show rbd trash purge schedule status",
-            "perm": "r"
-        }
-    ]
-    MODULE_OPTIONS = [
-        {'name': MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME},
-        {'name': MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME_MAX_CONCURRENT_SNAP_CREATE, 'type': 'int', 'default': 10},
-        {'name': TrashPurgeScheduleHandler.MODULE_OPTION_NAME},
-    ]
+class ImageSortBy(enum.Enum):
+    write_ops = 'write_ops'
+    write_bytes = 'write_bytes'
+    write_latency = 'write_latency'
+    read_ops = 'read_ops'
+    read_bytes = 'read_bytes'
+    read_latency = 'read_latency'
 
-    mirror_snapshot_schedule = None
-    perf = None
-    task = None
-    trash_purge_schedule = None
 
-    def __init__(self, *args, **kwargs):
-        super(Module, self).__init__(*args, **kwargs)
-        self.rados.wait_for_latest_osdmap()
-        self.mirror_snapshot_schedule = MirrorSnapshotScheduleHandler(self)
-        self.perf = PerfHandler(self)
-        self.task = TaskHandler(self)
-        self.trash_purge_schedule = TrashPurgeScheduleHandler(self)
+FuncT = TypeVar('FuncT', bound=Callable)
 
-    def handle_command(self, inbuf, cmd):
+
+def with_latest_osdmap(func: FuncT) -> FuncT:
+    @functools.wraps(func)
+    def wrapper(self: 'Module', *args: Any, **kwargs: Any) -> Tuple[int, str, str]:
         # ensure we have latest pools available
         self.rados.wait_for_latest_osdmap()
-
-        prefix = cmd['prefix']
         try:
             try:
-                if prefix.startswith('rbd mirror snapshot schedule '):
-                    return self.mirror_snapshot_schedule.handle_command(
-                        inbuf, prefix[29:], cmd)
-                elif prefix.startswith('rbd perf '):
-                    return self.perf.handle_command(inbuf, prefix[9:], cmd)
-                elif prefix.startswith('rbd task '):
-                    return self.task.handle_command(inbuf, prefix[9:], cmd)
-                elif prefix.startswith('rbd trash purge schedule '):
-                    return self.trash_purge_schedule.handle_command(
-                        inbuf, prefix[25:], cmd)
-
+                return func(self, *args, **kwargs)
             except NotAuthorizedError:
                 raise
-            except Exception as ex:
+            except Exception:
                 # log the full traceback but don't send it to the CLI user
-                self.log.fatal("Fatal runtime error: {}\n{}".format(
-                    ex, traceback.format_exc()))
+                self.log.exception("Fatal runtime error: ")
                 raise
-
         except rados.Error as ex:
             return -ex.errno, "", str(ex)
         except rbd.OSError as ex:
@@ -201,4 +60,207 @@ class Module(MgrModule):
         except NotAuthorizedError as ex:
             return -errno.EACCES, "", str(ex)
 
-        raise NotImplementedError(cmd['prefix'])
+    wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+    return cast(FuncT, wrapper)
+
+
+class Module(MgrModule):
+    MODULE_OPTIONS = [
+        Option(name=MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME),
+        Option(name=MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME_MAX_CONCURRENT_SNAP_CREATE,
+               type='int',
+               default=10),
+        Option(name=TrashPurgeScheduleHandler.MODULE_OPTION_NAME),
+    ]
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super(Module, self).__init__(*args, **kwargs)
+        self.rados.wait_for_latest_osdmap()
+        self.mirror_snapshot_schedule = MirrorSnapshotScheduleHandler(self)
+        self.perf = PerfHandler(self)
+        self.task = TaskHandler(self)
+        self.trash_purge_schedule = TrashPurgeScheduleHandler(self)
+
+    @CLIWriteCommand('rbd mirror snapshot schedule add')
+    @with_latest_osdmap
+    def mirror_snapshot_schedule_add(self,
+                                     level_spec: str,
+                                     interval: str,
+                                     start_time: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Add rbd mirror snapshot schedule
+        """
+        spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
+        return self.mirror_snapshot_schedule.add_schedule(spec, interval, start_time)
+
+    @CLIWriteCommand('rbd mirror snapshot schedule remove')
+    @with_latest_osdmap
+    def mirror_snapshot_schedule_remove(self,
+                                        level_spec: str,
+                                        interval: Optional[str] = None,
+                                        start_time: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Remove rbd mirror snapshot schedule
+        """
+        spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
+        return self.mirror_snapshot_schedule.remove_schedule(spec, interval, start_time)
+
+    @CLIReadCommand('rbd mirror snapshot schedule list')
+    @with_latest_osdmap
+    def mirror_snapshot_schedule_list(self,
+                                      level_spec: str) -> Tuple[int, str, str]:
+        """
+        List rbd mirror snapshot schedule
+        """
+        spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
+        return self.mirror_snapshot_schedule.list(spec)
+
+    @CLIReadCommand('rbd mirror snapshot schedule status')
+    @with_latest_osdmap
+    def mirror_snapshot_schedule_status(self,
+                                        level_spec: str) -> Tuple[int, str, str]:
+        """
+        Show rbd mirror snapshot schedule status
+        """
+        spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
+        return self.mirror_snapshot_schedule.status(spec)
+
+    @CLIReadCommand('rbd perf image stats')
+    @with_latest_osdmap
+    def perf_image_stats(self,
+                         pool_spec: Optional[str] = None,
+                         sort_by: Optional[ImageSortBy] = None) -> Tuple[int, str, str]:
+        """
+        Retrieve current RBD IO performance stats
+        """
+        with self.perf.lock:
+            sort_by_name = sort_by.name if sort_by else OSD_PERF_QUERY_COUNTERS[0]
+            return self.perf.get_perf_stats(pool_spec, sort_by_name)
+
+    @CLIReadCommand('rbd perf image counters')
+    @with_latest_osdmap
+    def perf_image_counters(self,
+                            pool_spec: Optional[str] = None,
+                            sort_by: Optional[ImageSortBy] = None) -> Tuple[int, str, str]:
+        """
+        Retrieve current RBD IO performance counters
+        """
+        with self.perf.lock:
+            sort_by_name = sort_by.name if sort_by else OSD_PERF_QUERY_COUNTERS[0]
+            return self.perf.get_perf_counters(pool_spec, sort_by_name)
+
+    @CLIWriteCommand('rbd task add flatten')
+    @with_latest_osdmap
+    def task_add_flatten(self, image_spec: str) -> Tuple[int, str, str]:
+        """
+        Flatten a cloned image asynchronously in the background
+        """
+        with self.task.lock:
+            return self.task.queue_flatten(image_spec)
+
+    @CLIWriteCommand('rbd task add remove')
+    @with_latest_osdmap
+    def task_add_remove(self, image_spec: str) -> Tuple[int, str, str]:
+        """
+        Remove an image asynchronously in the background
+        """
+        with self.task.lock:
+            return self.task.queue_remove(image_spec)
+
+    @CLIWriteCommand('rbd task add trash remove')
+    @with_latest_osdmap
+    def task_add_trash_remove(self, image_spec: str) -> Tuple[int, str, str]:
+        """
+        Remove an image from the trash asynchronously in the background
+        """
+        with self.task.lock:
+            return self.task.queue_trash_remove(image_spec)
+
+    @CLIWriteCommand('rbd task add migration execute')
+    @with_latest_osdmap
+    def task_add_migration_execute(self, image_spec: str) -> Tuple[int, str, str]:
+        """
+        Execute an image migration asynchronously in the background
+        """
+        with self.task.lock:
+            return self.task.queue_migration_execute(image_spec)
+
+    @CLIWriteCommand('rbd task add migration commit')
+    @with_latest_osdmap
+    def task_add_migration_commit(self, image_spec: str) -> Tuple[int, str, str]:
+        """
+        Commit an executed migration asynchronously in the background
+        """
+        with self.task.lock:
+            return self.task.queue_migration_commit(image_spec)
+
+    @CLIWriteCommand('rbd task add migration abort')
+    @with_latest_osdmap
+    def task_add_migration_abort(self, image_spec: str) -> Tuple[int, str, str]:
+        """
+        Abort a prepared migration asynchronously in the background
+        """
+        with self.task.lock:
+            return self.task.queue_migration_abort(image_spec)
+
+    @CLIWriteCommand('rbd task cancel')
+    @with_latest_osdmap
+    def task_cancel(self, task_id: str) -> Tuple[int, str, str]:
+        """
+        Cancel a pending or running asynchronous task
+        """
+        with self.task.lock:
+            return self.task.task_cancel(task_id)
+
+    @CLIReadCommand('rbd task list')
+    @with_latest_osdmap
+    def task_list(self, task_id: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        List pending or running asynchronous tasks
+        """
+        with self.task.lock:
+            return self.task.task_list(task_id)
+
+    @CLIWriteCommand('rbd trash purge schedule add')
+    @with_latest_osdmap
+    def trash_purge_schedule_add(self,
+                                 level_spec: str,
+                                 interval: str,
+                                 start_time: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Add rbd trash purge schedule
+        """
+        spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
+        return self.trash_purge_schedule.add_schedule(spec, interval, start_time)
+
+    @CLIWriteCommand('rbd trash purge schedule remove')
+    @with_latest_osdmap
+    def trash_purge_schedule_remove(self,
+                                    level_spec: str,
+                                    interval: Optional[str] = None,
+                                    start_time: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Remove rbd trash purge schedule
+        """
+        spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
+        return self.trash_purge_schedule.remove_schedule(spec, interval, start_time)
+
+    @CLIReadCommand('rbd trash purge schedule list')
+    @with_latest_osdmap
+    def trash_purge_schedule_list(self,
+                                  level_spec: str) -> Tuple[int, str, str]:
+        """
+        List rbd trash purge schedule
+        """
+        spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
+        return self.trash_purge_schedule.list(spec)
+
+    @CLIReadCommand('rbd trash purge schedule status')
+    @with_latest_osdmap
+    def trash_purge_schedule_status(self,
+                                    level_spec: str) -> Tuple[int, str, str]:
+        """
+        Show rbd trash purge schedule status
+        """
+        spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
+        return self.trash_purge_schedule.status(spec)
