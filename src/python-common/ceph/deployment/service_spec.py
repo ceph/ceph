@@ -391,6 +391,9 @@ class ServiceSpec(object):
                           'node-exporter osd prometheus rbd-mirror rgw ' \
                           'container cephadm-exporter ha-rgw'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw '.split()
+    MANAGED_CONFIG_OPTIONS = [
+        'mds_join_fs',
+    ]
 
     @classmethod
     def _cls(cls: Type[ServiceSpecT], service_type: str) -> Type[ServiceSpecT]:
@@ -429,6 +432,7 @@ class ServiceSpec(object):
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  count: Optional[int] = None,
+                 config: Optional[Dict[str, str]] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  ):
@@ -441,6 +445,10 @@ class ServiceSpec(object):
             self.service_id = service_id
         self.unmanaged = unmanaged
         self.preview_only = preview_only
+
+        self.config: Optional[Dict[str, str]] = None
+        if config:
+            self.config = {k.replace(' ', '_'): v for k, v in config.items()}
 
     @classmethod
     @handle_type_error
@@ -465,6 +473,8 @@ class ServiceSpec(object):
 
             service_type: nfs
             service_id: foo
+            config:
+              some_option: the_value
             spec:
               pool: mypool
               namespace: myns
@@ -556,6 +566,12 @@ class ServiceSpec(object):
 
         if self.placement is not None:
             self.placement.validate()
+        if self.config:
+            for k, v in self.config.items():
+                if k in self.MANAGED_CONFIG_OPTIONS:
+                    raise ServiceSpecValidationError(
+                        f'Cannot set config option {k} in spec: it is managed by cephadm'
+                    )
 
     def __repr__(self) -> str:
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
@@ -584,12 +600,14 @@ class NFSServiceSpec(ServiceSpec):
                  namespace: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
-                 preview_only: bool = False
+                 preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
             'nfs', service_id=service_id,
-            placement=placement, unmanaged=unmanaged, preview_only=preview_only)
+            placement=placement, unmanaged=unmanaged, preview_only=preview_only,
+            config=config)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
@@ -627,6 +645,12 @@ class RGWSpec(ServiceSpec):
     Settings to configure a (multisite) Ceph RGW
 
     """
+    MANAGED_CONFIG_OPTIONS = ServiceSpec.MANAGED_CONFIG_OPTIONS + [
+        'rgw_zone',
+        'rgw_realm',
+        'rgw_frontends',
+    ]
+
     def __init__(self,
                  service_type: str = 'rgw',
                  service_id: Optional[str] = None,
@@ -640,6 +664,7 @@ class RGWSpec(ServiceSpec):
                  unmanaged: bool = False,
                  ssl: bool = False,
                  preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
                  ):
         assert service_type == 'rgw', service_type
         if service_id:
@@ -657,7 +682,7 @@ class RGWSpec(ServiceSpec):
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only)
+            preview_only=preview_only, config=config)
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
@@ -713,12 +738,14 @@ class IscsiServiceSpec(ServiceSpec):
                  ssl_key: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
-                 preview_only: bool = False
+                 preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
                  ):
         assert service_type == 'iscsi'
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
-                                               preview_only=preview_only)
+                                               preview_only=preview_only,
+                                               config=config)
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
@@ -758,12 +785,13 @@ class AlertManagerSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  user_data: Optional[Dict[str, Any]] = None,
+                 config: Optional[Dict[str, str]] = None,
                  ):
         assert service_type == 'alertmanager'
         super(AlertManagerSpec, self).__init__(
             'alertmanager', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only)
+            preview_only=preview_only, config=config)
 
         # Custom configuration.
         #
@@ -789,6 +817,7 @@ class HA_RGWSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'ha-rgw',
                  service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  virtual_ip_interface: Optional[str] = None,
                  virtual_ip_address: Optional[str] = None,
@@ -810,7 +839,8 @@ class HA_RGWSpec(ServiceSpec):
                  definitive_host_list: Optional[List[HostPlacementSpec]] = None
                  ):
         assert service_type == 'ha-rgw'
-        super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id, placement=placement)
+        super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id,
+                                         placement=placement, config=config)
 
         self.virtual_ip_interface = virtual_ip_interface
         self.virtual_ip_address = virtual_ip_address
@@ -878,6 +908,7 @@ class CustomContainerSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'container',
                  service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -901,7 +932,7 @@ class CustomContainerSpec(ServiceSpec):
         super(CustomContainerSpec, self).__init__(
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only)
+            preview_only=preview_only, config=config)
 
         self.image = image
         self.entrypoint = entrypoint
