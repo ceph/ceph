@@ -19,8 +19,14 @@ public:
 
   ~AlienCollection() {}
 
+  template <typename Func, typename Result = std::invoke_result_t<Func>>
+  seastar::futurize_t<Result> with_lock(Func&& func) {
+    return seastar::with_lock(mutex, std::forward<Func>(func));
+  }
+
 private:
   ObjectStore::CollectionHandle collection;
+  seastar::shared_mutex mutex;
   friend AlienStore;
 };
 }
