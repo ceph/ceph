@@ -63,6 +63,7 @@ def health_status_to_number(status):
         return 1
     elif status == 'HEALTH_ERR':
         return 2
+    raise ValueError(f'unknown status "{status}"')
 
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
