@@ -15,9 +15,9 @@ import time
 from datetime import datetime, timedelta
 from threading import Event
 from collections import defaultdict
-from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar, TYPE_CHECKING
+from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar, TYPE_CHECKING, Union
 
-from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, Union
+from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, ServiceInfoT
 
 
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
@@ -586,10 +586,11 @@ class Module(MgrModule):
                 'num': len([h for h in servers if h['hostname']]),
             }
             for t in ['mon', 'mds', 'osd', 'mgr']:
-                hosts['num_with_' + t] = len(
-                    [h for h in servers
-                     if len([s for s in h['services'] if s['type'] == t])]
-                )
+                nr_services = sum(1 for host in servers if
+                                  any(service for service in cast(List[ServiceInfoT],
+                                                                  host['services'])
+                                      if service['type'] == t))
+                hosts['num_with_' + t] = nr_services
             report['hosts'] = hosts
 
             report['usage'] = {
