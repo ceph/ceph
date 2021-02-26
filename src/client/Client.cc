@@ -9081,34 +9081,42 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
  * the resulting Inode object in one operation, so that caller
  * can safely assume inode will still be there after return.
  */
-int Client::_lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
+int Client::_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode)
 {
-  ldout(cct, 8) << __func__ << " enter(" << ino << ")" << dendl;
+  ldout(cct, 8) << __func__ << " enter(" << vino << ")" << dendl;
 
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPINO);
-  filepath path(ino);
+  filepath path(vino.ino);
   req->set_filepath(path);
+
+  /*
+   * The MDS expects either a "real" snapid here or 0. The special value
+   * carveouts for the snapid are all at the end of the range so we can
+   * just look for any snapid below this value.
+   */
+  if (vino.snapid < CEPH_NOSNAP)
+    req->head.args.lookupino.snapid = vino.snapid;
 
   int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   if (r == 0 && inode != NULL) {
-    vinodeno_t vino(ino, CEPH_NOSNAP);
     unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
     ceph_assert(p != inode_map.end());
     *inode = p->second;
     _ll_get(*inode);
   }
-  ldout(cct, 8) << __func__ << " exit(" << ino << ") = " << r << dendl;
+  ldout(cct, 8) << __func__ << " exit(" << vino << ") = " << r << dendl;
   return r;
 }
 
 int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
+  vinodeno_t vino(ino, CEPH_NOSNAP);
   std::scoped_lock lock(client_lock);
-  return _lookup_ino(ino, perms, inode);
+  return _lookup_vino(vino, perms, inode);
 }
 
 /**
@@ -11320,8 +11328,8 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   return r;
 }
 
-int Client::ll_lookup_inode(
-    struct inodeno_t ino,
+int Client::ll_lookup_vino(
+    vinodeno_t vino,
     const UserPerm& perms,
     Inode **inode)
 {
@@ -11331,46 +11339,45 @@ int Client::ll_lookup_inode(
     return -ENOTCONN;
 
   std::scoped_lock lock(client_lock);
-  ldout(cct, 3) << "ll_lookup_inode " << ino  << dendl;
+  ldout(cct, 3) << __func__ << " " << vino << dendl;
 
-  // Num1: get inode and *inode
-  int r = _lookup_ino(ino, perms, inode);
+  // Check the cache first
+  unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
+  if (p != inode_map.end()) {
+    *inode = p->second;
+    _ll_get(*inode);
+    return 0;
+  }
+
+  uint64_t snapid = vino.snapid;
+
+  // for snapdir, find the non-snapped dir inode
+  if (snapid == CEPH_SNAPDIR)
+    vino.snapid = CEPH_NOSNAP;
+
+  int r = _lookup_vino(vino, perms, inode);
   if (r)
     return r;
-
   ceph_assert(*inode != NULL);
 
-  if (!(*inode)->dentries.empty()) {
-    ldout(cct, 8) << __func__ << " dentry already present" << dendl;
-    return 0;
+  if (snapid == CEPH_SNAPDIR) {
+    Inode *tmp = *inode;
+
+    // open the snapdir and put the inode ref
+    *inode = open_snapdir(tmp);
+    _ll_forget(tmp, 1);
+    _ll_get(*inode);
   }
-
-  if ((*inode)->is_root()) {
-    ldout(cct, 8) << "ino is root, no parent" << dendl;
-    return 0;
-  }
-
-  // Num2: Request the parent inode, so that we can look up the name
-  Inode *parent;
-  r = _lookup_parent(*inode, perms, &parent);
-  if (r) {
-    _ll_forget(*inode, 1);  
-    return r;
-  }
-
-  ceph_assert(parent != NULL);
-
-  // Num3: Finally, get the name (dentry) of the requested inode
-  r = _lookup_name(*inode, parent, perms);
-  if (r) {
-    // Unexpected error
-    _ll_forget(parent, 1);
-    _ll_forget(*inode, 1);
-    return r;
-  }
-
-  _ll_forget(parent, 1);
   return 0;
+}
+
+int Client::ll_lookup_inode(
+    struct inodeno_t ino,
+    const UserPerm& perms,
+    Inode **inode)
+{
+  vinodeno_t vino(ino, CEPH_NOSNAP);
+  return ll_lookup_vino(vino, perms, inode);
 }
 
 int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
