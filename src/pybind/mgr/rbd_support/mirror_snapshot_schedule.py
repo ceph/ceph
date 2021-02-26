@@ -7,7 +7,7 @@ import traceback
 
 from datetime import datetime
 from threading import Condition, Lock, Thread
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple, Union
 
 from .common import get_rbd_pools
 from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
@@ -241,7 +241,7 @@ class CreateSnapshotRequests:
         self.log.debug("CreateSnapshotRequests.get_mirror_mode: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
-        def cb(comp: rados.Completion, mode: str) -> None:
+        def cb(comp: rados.Completion, mode: int) -> None:
             self.handle_get_mirror_mode(image_spec, image, comp, mode)
 
         try:
@@ -256,7 +256,7 @@ class CreateSnapshotRequests:
                                image_spec: ImageSpec,
                                image: rbd.Image,
                                comp: rados.Completion,
-                               mode: str) -> None:
+                               mode: int) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
@@ -287,7 +287,7 @@ class CreateSnapshotRequests:
         self.log.debug("CreateSnapshotRequests.get_mirror_info: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
-        def cb(comp: rados.Completion, info: str) -> None:
+        def cb(comp: rados.Completion, info: Dict[str, Union[str, int]]) -> None:
             self.handle_get_mirror_info(image_spec, image, comp, info)
 
         try:
@@ -302,7 +302,7 @@ class CreateSnapshotRequests:
                                image_spec: ImageSpec,
                                image: rbd.Image,
                                comp: rados.Completion,
-                               info: str) -> None:
+                               info: Dict[str, Union[str, int]]) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
@@ -334,7 +334,7 @@ class CreateSnapshotRequests:
             "CreateSnapshotRequests.create_snapshot for {}/{}/{}".format(
                 pool_id, namespace, image_id))
 
-        def cb(comp: rados.Completion, snap_id: str) -> None:
+        def cb(comp: rados.Completion, snap_id: int) -> None:
             self.handle_create_snapshot(image_spec, image, comp, snap_id)
 
         try:
@@ -350,7 +350,7 @@ class CreateSnapshotRequests:
                                image_spec: ImageSpec,
                                image: rbd.Image,
                                comp: rados.Completion,
-                               snap_id: str) -> None:
+                               snap_id: int) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
