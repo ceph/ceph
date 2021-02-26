@@ -33,7 +33,7 @@ boto3
 cryptography>=2.7
 nose
 pip-tools
-pytest
+pytest==3.7.1
 requests
 tox
 xmltodict
