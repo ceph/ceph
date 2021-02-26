@@ -8,9 +8,9 @@ overrides:
       - slow requests are blocked
     conf:
       global:
-        osd heartbeat grace: 40
-      mds:
+        osd heartbeat grace: 60
         mds heartbeat grace: 60
+        mds beacon grace: 60
       mon:
         mon osd crush smoke test: false
       osd:
