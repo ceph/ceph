@@ -10,7 +10,8 @@ from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, \
+    ServiceSpecValidationError
 from ceph.utils import datetime_now
 
 from mgr_util import to_pretty_timedelta, format_dimless
@@ -1062,6 +1063,15 @@ Usage:
             specs: List[Union[ServiceSpec, HostSpec]] = []
             for s in content:
                 spec = json_to_generic_spec(s)
+
+                # validate the config (we need MgrModule for that)
+                if isinstance(spec, ServiceSpec) and spec.config:
+                    for k, v in spec.config.items():
+                        try:
+                            self.get_foreign_ceph_option('mon', k)
+                        except KeyError:
+                            raise ServiceSpecValidationError(f'Invalid config option {k} in spec')
+
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
                 specs.append(spec)
