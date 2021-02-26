@@ -181,8 +181,8 @@ Ceph configuration file.
 ``osd_pool_default_min_size``
 
 :Description: Sets the minimum number of written replicas for objects in the
-             pool in order to acknowledge a write operation to the client.  If
-             minimum is not met, Ceph will not acknowledge the write to the
+             pool in order to acknowledge an I/O operation to the client.  If
+             minimum is not met, Ceph will not acknowledge the I/O to the
              client, **which may result in data loss**. This setting ensures
              a minimum number of replicas when operating in ``degraded`` mode.
 
