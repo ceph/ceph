@@ -146,7 +146,7 @@ class Module(MgrModule):
             self.interval = 0
             self.proxy = ''
             self.channel_basic = True
-            self.channel_indent = False
+            self.channel_ident = False
             self.channel_crash = True
             self.channel_device = True
 
@@ -327,6 +327,8 @@ class Module(MgrModule):
             r.append('crash')
         if self.channel_device:
             r.append('device')
+        if self.channel_ident:
+            r.append('ident')
         return r
 
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
