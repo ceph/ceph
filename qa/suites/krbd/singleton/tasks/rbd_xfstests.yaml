@@ -25,6 +25,7 @@ tasks:
         - generic/045
         - generic/046
         - generic/223
+        - ext4/002  # removed upstream
         - ext4/304
         - generic/388
         - generic/405
