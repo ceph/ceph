@@ -1666,6 +1666,10 @@ int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
 /* Low Level */
 struct Inode *ceph_ll_get_inode(struct ceph_mount_info *cmount,
 				vinodeno_t vino);
+
+int ceph_ll_lookup_vino(struct ceph_mount_info *cmount, vinodeno_t vino,
+			Inode **inode);
+
 int ceph_ll_lookup_inode(
     struct ceph_mount_info *cmount,
     struct inodeno_t ino,
