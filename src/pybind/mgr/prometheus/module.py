@@ -2,7 +2,6 @@ import cherrypy
 from collections import defaultdict
 from distutils.version import StrictVersion
 import json
-import errno
 import math
 import os
 import re
@@ -43,7 +42,8 @@ if cherrypy is not None:
 def os_exit_noop(status: int) -> None:
     pass
 
-os._exit = os_exit_noop  # type: ignore
+
+os._exit = os_exit_noop   # type: ignore
 
 # to access things in class Module from subclass Root.  Because
 # it's a dict, the writer doesn't need to declare 'global' for access
