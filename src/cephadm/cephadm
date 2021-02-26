@@ -6628,7 +6628,6 @@ class CephadmDaemon():
 
     daemon_type = 'cephadm-exporter'
     default_port = 9443
-    bin_name = 'cephadm'
     key_name = 'key'
     crt_name = 'crt'
     token_name = 'token'
@@ -6723,11 +6722,9 @@ class CephadmDaemon():
 
     @property
     def binary_path(self):
-        return os.path.join(
-            self.ctx.data_dir,
-            self.fsid,
-            CephadmDaemon.bin_name
-        )
+        path = os.path.realpath(__file__)
+        assert os.path.isfile(path)
+        return path
 
     def _handle_thread_exception(self, exc, thread_type):
         e_msg = f'{exc.__class__.__name__} exception: {str(exc)}'
