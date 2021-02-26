@@ -301,7 +301,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     def __init__(self, *args: Any, **kwargs: Any):
         super(CephadmOrchestrator, self).__init__(*args, **kwargs)
-        self._cluster_fsid = self.get('mon_map')['fsid']
+        self._cluster_fsid: str = self.get('mon_map')['fsid']
         self.last_monmap: Optional[datetime.datetime] = None
 
         # for serve()
@@ -356,6 +356,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         except (IOError, TypeError) as e:
             raise RuntimeError("unable to read cephadm at '%s': %s" % (
                 path, str(e)))
+
+        self.cephadm_binary_path = self._get_cephadm_binary_path()
 
         self._worker_pool = multiprocessing.pool.ThreadPool(10)
 
@@ -442,6 +444,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_cephadm_service(self, service_type: str) -> CephadmService:
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES
         return self.cephadm_services[service_type]
+
+    def _get_cephadm_binary_path(self) -> str:
+        import hashlib
+        m = hashlib.sha256()
+        m.update(self._cephadm.encode())
+        return f'/var/lib/ceph/{self._cluster_fsid}/cephadm.{m.hexdigest()}'
 
     def _kick_serve_loop(self) -> None:
         self.log.debug('_kick_serve_loop')
