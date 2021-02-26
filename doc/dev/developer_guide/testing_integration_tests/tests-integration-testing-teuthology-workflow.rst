@@ -238,10 +238,13 @@ example, for the above test ID, the link is - http://pulpito.front.sepia.ceph.co
 
 Re-running Tests
 ----------------
-You can pass ``--rerun`` option, with test ID as an argument to it, to
-``teuthology-suite`` command. Generally, this is useful in cases where teuthology test
-batch has some failed/dead jobs that we might want to retrigger. We can trigger
-jobs based on their status using::
+
+The ``teuthology-suite`` command has a ``--rerun`` option, which allows you to
+re-run tests. This is handy when your test has failed or is dead. The
+``--rerun`` option takes the name of a teuthology run as an argument, as you
+can see in the example below:
+
+.. prompt:: bash $ 
 
    teuthology-suite -v \
     -m smithi \
@@ -251,8 +254,8 @@ jobs based on their status using::
     -R fail,dead,queued,running \
     -e $CEPH_QA_MAIL
 
-The meaning of the rest the options is already covered in `Triggering Tests`_
-section.
+The meaning and function of the other options is covered in the table in the
+`Triggering Tests`_ section.
 
 Naming the ceph-ci branch
 -------------------------
