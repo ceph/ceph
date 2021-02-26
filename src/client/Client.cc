@@ -5771,6 +5771,31 @@ out:
   return r;
 }
 
+int Client::may_delete(const char *relpath, const UserPerm& perms) {
+  ldout(cct, 20) << __func__ << " " << relpath << "; " << perms << dendl;
+
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  filepath path(relpath);
+  string name = path.last_dentry();
+  path.pop_dentry();
+  InodeRef dir;
+
+  std::scoped_lock lock(client_lock);
+  int r = path_walk(path, &dir, perms);
+  if (r < 0)
+    return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_delete(dir.get(), name.c_str(), perms);
+    if (r < 0)
+      return r;
+  }
+
+  return 0;
+}
+
 int Client::may_hardlink(Inode *in, const UserPerm& perms)
 {
   ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
