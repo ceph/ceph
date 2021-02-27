@@ -3904,7 +3904,21 @@ public:
     int r = results.get<0>();
     if (ctx) {
       promote_results = results;
-      pg->execute_ctx(ctx);
+      if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_redirect()) {
+	ctx->user_at_version = results_data->user_version;
+      }
+      if (r >= 0) {
+	ctx->pg->execute_ctx(ctx);
+      } else {
+	if (r != -ECANCELED) { 
+	  if (ctx->op)
+	    ctx->pg->osd->reply_op_error(ctx->op, r);
+	} else if (results_data->should_requeue) {
+	  if (ctx->op)
+	    ctx->pg->requeue_op(ctx->op);
+	}
+	ctx->pg->close_op_ctx(ctx);
+      }
     } else {
       pg->finish_promote_manifest(r, results_data, obc);
     }
