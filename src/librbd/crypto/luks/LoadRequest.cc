@@ -212,7 +212,7 @@ void LoadRequest<I>::read_volume_key() {
 
 template <typename I>
 void LoadRequest<I>::finish(int r) {
-  explicit_bzero(&m_passphrase[0], m_passphrase.size());
+  ceph_memzero_s(&m_passphrase[0], m_passphrase.size(), m_passphrase.size());
   m_on_finish->complete(r);
   delete this;
 }
