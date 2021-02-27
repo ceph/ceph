@@ -82,7 +82,7 @@ function TEST_ok_to_stop() {
     ceph osd ok-to-stop 1
     ceph osd ok-to-stop 2
     ceph osd ok-to-stop 3
-    expect_failure $dir degraded ceph osd ok-to-stop 0 1
+    expect_failure $dir bad_become_inactive ceph osd ok-to-stop 0 1
 
     ceph osd pool set foo min_size 1
     sleep 1
@@ -92,8 +92,8 @@ function TEST_ok_to_stop() {
     ceph osd ok-to-stop 1 2
     ceph osd ok-to-stop 2 3
     ceph osd ok-to-stop 3 4
-    expect_failure $dir degraded ceph osd ok-to-stop 0 1 2
-    expect_failure $dir degraded ceph osd ok-to-stop 0 1 2 3
+    expect_failure $dir bad_become_inactive ceph osd ok-to-stop 0 1 2
+    expect_failure $dir bad_become_inactive ceph osd ok-to-stop 0 1 2 3
 }
 
 main safe-to-destroy "$@"

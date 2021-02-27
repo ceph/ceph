@@ -157,7 +157,8 @@ COMMAND("osd purge " \
 COMMAND("osd safe-to-destroy name=ids,type=CephString,n=N",
 	"check whether osd(s) can be safely destroyed without reducing data durability",
 	"osd", "r")
-COMMAND("osd ok-to-stop name=ids,type=CephString,n=N",
+COMMAND("osd ok-to-stop name=ids,type=CephString,n=N "\
+	"name=max,type=CephInt,req=false",
 	"check whether osd(s) can be safely stopped without reducing immediate"\
 	" data availability", "osd", "r")
 
