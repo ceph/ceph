@@ -3882,7 +3882,11 @@ public:
   void finish(PrimaryLogPG::CopyCallbackResults results) override {
     PrimaryLogPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    pg->finish_promote(r, results_data, obc);
+    if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked()) {
+      pg->finish_promote_manifest(r, results_data, obc);
+    } else {
+      pg->finish_promote(r, results_data, obc);
+    }
     pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now() - start);
   }
 };
@@ -3894,7 +3898,7 @@ class PromoteManifestCallback: public PrimaryLogPG::CopyCallback {
   PrimaryLogPG::OpContext *ctx;
   PrimaryLogPG::CopyCallbackResults promote_results;
 public:
-  PromoteManifestCallback(ObjectContextRef obc_, PrimaryLogPG *pg_, PrimaryLogPG::OpContext *ctx = NULL)
+  PromoteManifestCallback(ObjectContextRef obc_, PrimaryLogPG *pg_, PrimaryLogPG::OpContext *ctx)
     : obc(obc_),
       pg(pg_),
       start(ceph_clock_now()), ctx(ctx) {}
@@ -3902,25 +3906,21 @@ public:
   void finish(PrimaryLogPG::CopyCallbackResults results) override {
     PrimaryLogPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    if (ctx) {
-      promote_results = results;
-      if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_redirect()) {
-	ctx->user_at_version = results_data->user_version;
-      }
-      if (r >= 0) {
-	ctx->pg->execute_ctx(ctx);
-      } else {
-	if (r != -ECANCELED) { 
-	  if (ctx->op)
-	    ctx->pg->osd->reply_op_error(ctx->op, r);
-	} else if (results_data->should_requeue) {
-	  if (ctx->op)
-	    ctx->pg->requeue_op(ctx->op);
-	}
-	ctx->pg->close_op_ctx(ctx);
-      }
+    promote_results = results;
+    if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_redirect()) {
+      ctx->user_at_version = results_data->user_version;
+    }
+    if (r >= 0) {
+      ctx->pg->execute_ctx(ctx);
     } else {
-      pg->finish_promote_manifest(r, results_data, obc);
+      if (r != -ECANCELED) { 
+	if (ctx->op)
+	  ctx->pg->osd->reply_op_error(ctx->op, r);
+      } else if (results_data->should_requeue) {
+	if (ctx->op)
+	  ctx->pg->requeue_op(ctx->op);
+      }
+      ctx->pg->close_op_ctx(ctx);
     }
     pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now() - start);
   }
@@ -4003,7 +4003,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
   } else {
     if (obc->obs.oi.manifest.is_chunked()) {
       src_hoid = obc->obs.oi.soid;
-      cb = new PromoteManifestCallback(obc, this);
+      cb = new PromoteCallback(obc, this);
     } else if (obc->obs.oi.manifest.is_redirect()) {
       object_locator_t src_oloc(obc->obs.oi.manifest.redirect_target);
       my_oloc = src_oloc;
