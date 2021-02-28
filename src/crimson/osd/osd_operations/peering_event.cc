@@ -53,14 +53,12 @@ seastar::future<> PeeringEvent::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  return [this] {
-    if (delay) {
-      return seastar::sleep(std::chrono::milliseconds(
-		std::lround(delay*1000)));
-    } else {
-      return seastar::now();
-    }
-  }().then([this] {
+  auto maybe_delay = seastar::now();
+  if (delay) {
+    maybe_delay = seastar::sleep(
+      std::chrono::milliseconds(std::lround(delay * 1000)));
+  }
+  return maybe_delay.then([this] {
     return get_pg();
   }).then([this](Ref<PG> pg) {
     if (!pg) {
