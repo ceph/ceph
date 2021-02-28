@@ -5,6 +5,7 @@
 
 #include "mon/Monitor.h"
 #include "mon/ConfigMonitor.h"
+#include "mon/KVMonitor.h"
 #include "mon/MgrMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "messages/MConfig.h"
@@ -112,7 +113,7 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     bufferlist metabl;
     ::encode(ceph_clock_now(), metabl);
     ::encode(pending_description, metabl);
-    t->put(CONFIG_PREFIX, history, metabl);
+    t->put(KV_PREFIX, history, metabl);
   }
   for (auto& p : pending) {
     string key = KEY_PREFIX + p.first;
@@ -121,17 +122,17 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       if (p.second && *p.second == q->second) {
 	continue;
       }
-      t->put(CONFIG_PREFIX, history + "-" + p.first, q->second);
+      t->put(KV_PREFIX, history + "-" + p.first, q->second);
     } else if (!p.second) {
       continue;
     }
     if (p.second) {
       dout(20) << __func__ << " set " << key << dendl;
-      t->put(CONFIG_PREFIX, key, *p.second);
-      t->put(CONFIG_PREFIX, history + "+" + p.first, *p.second);
+      t->put(KV_PREFIX, key, *p.second);
+      t->put(KV_PREFIX, history + "+" + p.first, *p.second);
     } else {
       dout(20) << __func__ << " rm " << key << dendl;
-      t->erase(CONFIG_PREFIX, key);
+      t->erase(KV_PREFIX, key);
     }
   }
 }
@@ -764,7 +765,7 @@ void ConfigMonitor::load_config()
   };
 
   unsigned num = 0;
-  KeyValueDB::Iterator it = mon.store->get_iterator(CONFIG_PREFIX);
+  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(KEY_PREFIX);
   config_map.clear();
   current.clear();
@@ -776,18 +777,9 @@ void ConfigMonitor::load_config()
 
     current[key] = it->value();
 
-    auto last_slash = key.rfind('/');
     string name;
     string who;
-    if (last_slash == std::string::npos) {
-      name = key;
-    } else if (auto mgrpos = key.find("/mgr/"); mgrpos != std::string::npos) {
-      name = key.substr(mgrpos + 1);
-      who = key.substr(0, mgrpos);
-    } else {
-      name = key.substr(last_slash + 1);
-      who = key.substr(0, last_slash);
-    }
+    config_map.parse_key(key, &name, &who);
 
     // has this option been renamed?
     {
@@ -809,8 +801,10 @@ void ConfigMonitor::load_config()
     }
     if (!opt) {
       dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
-      // FIXME: this will be leaked!
+      config_map.stray_options.push_back(
+	std::unique_ptr<Option>(
+	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+      opt = config_map.stray_options.back().get();
     }
 
     string err;
@@ -873,7 +867,7 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
 {
   ch->version = v;
   string prefix = HISTORY_PREFIX + stringify(v) + "/";
-  KeyValueDB::Iterator it = mon.store->get_iterator(CONFIG_PREFIX);
+  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(prefix);
   while (it->valid() && it->key().find(prefix) == 0) {
     if (it->key() == prefix) {

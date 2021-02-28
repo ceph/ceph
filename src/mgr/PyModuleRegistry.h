@@ -66,6 +66,14 @@ public:
   void handle_config(const std::string &k, const std::string &v);
   void handle_config_notify();
 
+  void update_kv_data(
+    const std::string prefix,
+    bool incremental,
+    const map<std::string, boost::optional<bufferlist>, std::less<>>& data) {
+    ceph_assert(active_modules);
+    active_modules->update_kv_data(prefix, incremental, data);
+  }
+
   /**
    * Get references to all modules (whether they have loaded and/or
    * errored) or not.
@@ -99,6 +107,7 @@ public:
   void active_start(
                 DaemonStateIndex &ds, ClusterState &cs,
                 const std::map<std::string, std::string> &kv_store,
+		bool mon_provides_kv_sub,
                 MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
                 Objecter &objecter_, Client &client_, Finisher &f,
                 DaemonServer &server);

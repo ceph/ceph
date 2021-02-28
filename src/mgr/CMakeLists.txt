@@ -5,6 +5,7 @@ if(WITH_MGR)
   set(mgr_srcs
     ${CMAKE_SOURCE_DIR}/src/ceph_mgr.cc
     ${CMAKE_SOURCE_DIR}/src/mon/PGMap.cc
+    ${CMAKE_SOURCE_DIR}/src/mon/ConfigMap.cc
     ActivePyModule.cc
     ActivePyModules.cc
     BaseMgrModule.cc
