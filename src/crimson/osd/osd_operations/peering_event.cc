@@ -90,8 +90,8 @@ seastar::future<> PeeringEvent::start()
     }
   }).then([this] {
     return shard_services.send_pg_temp();
-  }).then([this, ref=std::move(ref)] {
-    logger().debug("{}: complete", *this);
+  }).finally([ref=std::move(ref)] {
+    logger().debug("{}: complete", *ref);
   });
 }
 
