@@ -27,10 +27,18 @@ Install cephadm
 The ``cephadm`` command can 
 
 #. bootstrap a new cluster
-#. launch a containerized shell with a working Ceph CLI, and 
-#. aid in debugging containerized Ceph daemons.
+#. launch a containerized shell with a working Ceph CLI
+#. aid in debugging containerized Ceph daemons
 
-There are a few ways to install cephadm:
+There are two ways to install ``cephadm``:
+
+#. a :ref:`curl-based installation<cephadm_install_curl>` method
+#. :ref:`distribution-specific installation methods<cephadm_install_distros>`
+
+.. _cephadm_install_curl:
+
+curl-based installation
+-----------------------
 
 * Use ``curl`` to fetch the most recent version of the
   standalone script. 
@@ -73,16 +81,23 @@ There are a few ways to install cephadm:
 
     /usr/sbin/cephadm
 
+.. _cephadm_install_distros:
 
-* Some commercial Linux distributions (e.g., RHEL, SLE) may already
-  include up-to-date Ceph packages.  In that case, you can install
-  cephadm directly.  For example:
+distribution-specific installations
+-----------------------------------
+
+.. important:: The methods of installing ``cephadm`` in this section are distinct from the curl-based method above. Use either the curl-based method above or one of the methods in this section, but not both the curl-based method and one of these.
+
+Some Linux distributions  may already include up-to-date Ceph packages.  In
+that case, you can install cephadm directly. For example:
+
+  In Ubuntu:
 
   .. prompt:: bash #
 
      dnf install -y cephadm   
 
-  or
+  In SUSE:
 
   .. prompt:: bash #
 
