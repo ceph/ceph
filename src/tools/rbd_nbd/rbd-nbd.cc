@@ -1660,7 +1660,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     std::string passphrase((std::istreambuf_iterator<char>(file)),
                            (std::istreambuf_iterator<char>()));
     auto sg = make_scope_guard([&] {
-      explicit_bzero(&passphrase[0], passphrase.size()); });
+      ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size()); });
     file.close();
     if (!passphrase.empty() && passphrase[passphrase.length() - 1] == '\n') {
       passphrase.erase(passphrase.length() - 1);
