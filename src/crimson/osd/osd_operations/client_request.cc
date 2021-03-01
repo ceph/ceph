@@ -65,24 +65,23 @@ seastar::future<> ClientRequest::start()
 {
   logger().debug("{}: start", *this);
 
-  IRef opref = this;
   return crimson::common::handle_system_shutdown(
-    [this, opref=std::move(opref)]() mutable {
-    return seastar::repeat([this, opref]() mutable {
+    [this, opref=IRef{this}]() mutable {
+    return seastar::repeat([this, opref=std::move(opref)]() mutable {
       logger().debug("{}: in repeat", *this);
       return with_blocking_future(handle.enter(cp().await_map))
-      .then([this]() {
+      .then([this] {
 	return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_min_epoch()));
       }).then([this](epoch_t epoch) {
 	return with_blocking_future(handle.enter(cp().get_pg));
       }).then([this] {
 	return with_blocking_future(osd.wait_for_pg(m->get_spg()));
-      }).then([this, opref](Ref<PG> pgref) mutable {
+      }).then([this](Ref<PG> pgref) mutable {
 	epoch_t same_interval_since = pgref->get_interval_start_epoch();
 	logger().debug("{} same_interval_since: {}", *this, same_interval_since);
 	return sequencer.start_op(
-	  handle, prev_op_id, opref->get_id(),
-	  [this, opref, pgref] {
+	  handle, prev_op_id, get_id(),
+	  [this, pgref] {
 	  PG &pg = *pgref;
 	  if (pg.can_discard_op(*m)) {
 	    logger().debug("{} op discarded, {}, same_primary_since: {}",
