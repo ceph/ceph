@@ -211,12 +211,29 @@ class Module(MgrModule):
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    def notify(self, notify_type, notify_id):
-        # create device_health_metrics pool if it doesn't exist
+    def notify(self, notify_type: str, notify_id: str) -> None:
         if notify_type == "osd_map" and self.enable_monitoring:
-            if not self.has_device_pool:
-                self.create_device_pool()
-                self.has_device_pool = True
+            # create device_health_metrics pool if it doesn't exist
+            self.maybe_create_device_pool()
+
+    def have_enough_osds(self) -> bool:
+        # wait until we have enough OSDs to allow the pool to be healthy
+        up = 0
+        for osd in self.get("osd_map")["osds"]:
+            if osd["up"]:
+                up += 1
+
+        need = int(self.get_ceph_option("osd_pool_default_size"))
+        return up >= need
+
+    def maybe_create_device_pool(self) -> bool:
+        if not self.has_device_pool:
+            if not self.have_enough_osds():
+                self.log.warning("Not enough OSDs yet to create monitoring pool")
+                return False
+            self.create_device_pool()
+            self.has_device_pool = True
+        return True
 
     def create_device_pool(self):
         self.log.debug('create %s pool' % self.pool_name)
@@ -294,24 +311,17 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def open_connection(self, create_if_missing=True):
-        osdmap = self.get("osd_map")
-        assert osdmap is not None
-        if len(osdmap['osds']) == 0:
-            return None
-        if not self.has_device_pool:
-            if not create_if_missing:
+    def open_connection(self, create_if_missing: bool = True) -> rados.Ioctx:
+        if create_if_missing:
+            if not self.maybe_create_device_pool():
                 return None
-            if self.enable_monitoring:
-                self.create_device_pool()
-                self.has_device_pool = True
         ioctx = self.rados.open_ioctx(self.pool_name)
         return ioctx
 
     def scrape_daemon(self, daemon_type, daemon_id):
         ioctx = self.open_connection()
         if not ioctx:
-            return 0, "", ""
+            return -errno.EAGAIN, "", "device_health_metrics pool not yet available"
         raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
@@ -326,7 +336,7 @@ class Module(MgrModule):
         assert osdmap is not None
         ioctx = self.open_connection()
         if not ioctx:
-            return 0, "", ""
+            return -errno.EAGAIN, "", "device_health_metrics pool not yet available"
         did_device = {}
         ids = []
         for osd in osdmap['osds']:
@@ -360,7 +370,7 @@ class Module(MgrModule):
         (daemon_type, daemon_id) = daemons[0].split('.')
         ioctx = self.open_connection()
         if not ioctx:
-            return 0, "", ""
+            return -errno.EAGAIN, "", "device_health_metrics pool not yet available"
         raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id,
                                                devid=devid)
         if raw_smart_data:
