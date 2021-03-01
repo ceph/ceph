@@ -175,7 +175,7 @@ public:
         boost::asio::ssl::context::no_sslv2 |
         boost::asio::ssl::context::single_dh_use);
     ctx.use_certificate_chain(
-        boost::asio::buffer(CERT.data(), CERT.size()));
+        boost::asio::buffer(CERTIFICATE.data(), CERTIFICATE.size()));
     ctx.use_private_key(
         boost::asio::buffer(KEY.data(), KEY.size()),
         boost::asio::ssl::context::file_format::pem);
@@ -184,7 +184,7 @@ public:
   }
 
   // dummy self-signed cert for localhost
-  const std::string CERT =
+  const std::string CERTIFICATE =
       "-----BEGIN CERTIFICATE-----\n"
       "MIIDXzCCAkegAwIBAgIUYH6rAaq66LC6yJ3XK1WEMIfmY4cwDQYJKoZIhvcNAQEL\n"
       "BQAwPzELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAlZBMQ8wDQYDVQQHDAZNY0xlYW4x\n"
