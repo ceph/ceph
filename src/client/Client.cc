@@ -391,13 +391,7 @@ void Client::tear_down_cache()
   // close root ino
   ceph_assert(inode_map.size() <= 1 + root_parents.size());
   if (root && inode_map.size() == 1 + root_parents.size()) {
-    delete root;
-    root = 0;
-    root_ancestor = 0;
-    while (!root_parents.empty())
-      root_parents.erase(root_parents.begin());
-    inode_map.clear();
-    _reset_faked_inos();
+    root.reset();
   }
 
   ceph_assert(inode_map.empty());
@@ -416,7 +410,7 @@ Inode *Client::get_root()
 {
   std::scoped_lock l(client_lock);
   root->ll_get();
-  return root;
+  return root.get();
 }
 
 
@@ -430,7 +424,7 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
 		<< (disconnected ? "DISCONNECTED ":"")
 		<< "inode " << in->ino
 		<< " " << path
-		<< " ref " << in->get_num_ref()
+		<< " ref " << in->get_nref()
 		<< " " << *in << dendl;
 
   if (f) {
@@ -470,7 +464,7 @@ void Client::dump_cache(Formatter *f)
     f->open_array_section("cache");
 
   if (root)
-    dump_inode(f, root, did, true);
+    dump_inode(f, root.get(), did, true);
 
   // make a second pass to catch anything disconnected
   for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
@@ -705,15 +699,9 @@ void Client::trim_cache(bool trim_kernel_dcache)
     _invalidate_kernel_dcache();
 
   // hose root?
-  if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1 + root_parents.size()) {
+  if (lru.lru_get_size() == 0 && root && root->get_nref() == 1 && inode_map.size() == 1 + root_parents.size()) {
     ldout(cct, 15) << "trim_cache trimmed root " << root << dendl;
-    delete root;
-    root = 0;
-    root_ancestor = 0;
-    while (!root_parents.empty())
-      root_parents.erase(root_parents.begin());
-    inode_map.clear();
-    _reset_faked_inos();
+    root.reset();
   }
 }
 
@@ -892,7 +880,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     if (!root) {
       root = in;
       if (use_faked_inos())
-        _assign_faked_root(root);
+        _assign_faked_root(root.get());
       root_ancestor = in;
       cwd = root;
     } else if (is_mounting()) {
@@ -3168,8 +3156,11 @@ void Client::_put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << __func__ << " on " << *in << " n = " << n << dendl;
 
-  int left = in->_put(n);
-  if (left == 0) {
+  int left = in->get_nref();
+  ceph_assert(left >= n + 1);
+  in->iput(n);
+  left -= n;
+  if (left == 1) { // the last one will be held by the inode_map
     // release any caps
     remove_all_caps(in);
 
@@ -3180,14 +3171,13 @@ void Client::_put_inode(Inode *in, int n)
     if (use_faked_inos())
       _release_faked_ino(in);
 
-    if (in == root) {
-      root = 0;
+    if (root == nullptr) {
       root_ancestor = 0;
       while (!root_parents.empty())
         root_parents.erase(root_parents.begin());
     }
 
-    delete in;
+    in->iput();
   }
 }
 
@@ -3338,12 +3328,12 @@ void Client::get_cap_ref(Inode *in, int cap)
   if ((cap & CEPH_CAP_FILE_BUFFER) &&
       in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
     ldout(cct, 5) << __func__ << " got first FILE_BUFFER ref on " << *in << dendl;
-    in->get();
+    in->iget();
   }
   if ((cap & CEPH_CAP_FILE_CACHE) &&
       in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
     ldout(cct, 5) << __func__ << " got first FILE_CACHE ref on " << *in << dendl;
-    in->get();
+    in->iget();
   }
   in->get_cap_ref(cap);
 }
@@ -5398,7 +5388,7 @@ void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
 
 void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
 {
-  int ref = in->get_num_ref();
+  int ref = in->get_nref();
   ldout(cct, 5) << __func__ << " in " << *in <<dendl;
 
   if (in->dir && !in->dir->dentries.empty()) {
@@ -5422,13 +5412,13 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
     }
   }
 
-  if (ref > 0 && (in->flags & I_SNAPDIR_OPEN)) {
+  if (ref > 1 && (in->flags & I_SNAPDIR_OPEN)) {
     InodeRef snapdir = open_snapdir(in);
     _try_to_trim_inode(snapdir.get(), false);
     --ref;
   }
 
-  if (ref > 0) {
+  if (ref > 1) {
     auto q = in->dentries.begin();
     while (q != in->dentries.end()) {
       Dentry *dn = *q;
@@ -6236,7 +6226,7 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
   }
 
   ceph_assert(root);
-  _ll_get(root);
+  _ll_get(root.get());
 
   // trace?
   if (!cct->_conf->client_trace.empty()) {
@@ -6397,6 +6387,7 @@ void Client::_unmount(bool abort)
   });
 
   cwd.reset();
+  root.reset();
 
   // clean up any unclosed files
   while (!fd_map.empty()) {
@@ -10563,7 +10554,7 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
   ldout(cct, 10) << __func__ << " " << *cwd << dendl;
 
   Inode *in = cwd.get();
-  while (in != root) {
+  while (in != root.get()) {
     ceph_assert(in->dentries.size() < 2); // dirs can't be hard-linked
 
     // A cwd or ancester is unlinked
@@ -10666,7 +10657,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
   ceph_assert(root != nullptr);
-  Inode *quota_root = root->quota.is_enable() ? root : get_quota_root(root, perms);
+  InodeRef quota_root = root->quota.is_enable() ? root : get_quota_root(root.get(), perms);
 
   // get_quota_root should always give us something
   // because client quotas are always enabled
@@ -11539,7 +11530,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
 void Client::_ll_get(Inode *in)
 {
   if (in->ll_ref == 0) {
-    in->get();
+    in->iget();
     if (in->is_dir() && !in->dentries.empty()) {
       ceph_assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->get(); // pin dentry
@@ -15372,7 +15363,7 @@ void Client::handle_conf_change(const ConfigProxy& conf,
 
 void intrusive_ptr_add_ref(Inode *in)
 {
-  in->get();
+  in->iget();
 }
 
 void intrusive_ptr_release(Inode *in)
