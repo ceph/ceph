@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - pauserd,pausewr flag\(s\) set
 
 tasks:

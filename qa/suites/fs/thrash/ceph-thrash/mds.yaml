@@ -3,5 +3,5 @@ tasks:
 
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - Replacing daemon mds

@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - Replacing daemon mds
       - \(MDS_INSUFFICIENT_STANDBY\)
       - \(MDS_ALL_DOWN\)

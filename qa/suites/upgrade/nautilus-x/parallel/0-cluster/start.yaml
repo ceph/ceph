@@ -28,7 +28,7 @@ roles:
   - client.3
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
     - scrub mismatch
     - ScrubResult
     - wrongly marked

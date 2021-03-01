@@ -5,7 +5,7 @@ tasks:
       # tests may leave mgrs broken, so don't try and call into them
       # to invoke e.g. pg dump during teardown.
       wait-for-scrub: false
-      log-whitelist:
+      log-ignorelist:
         - overall HEALTH_
         - \(MGR_DOWN\)
         - \(DEVICE_IDENT_ON\)
