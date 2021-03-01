@@ -57,7 +57,10 @@ extern void rgw_parse_url_bucket(const string& bucket,
 // conforms to the type declaration of RGWRados::check_filter_t.
 extern bool rgw_bucket_object_check_filter(const string& oid);
 
-extern void init_default_bucket_layout(CephContext *cct, RGWBucketInfo& info, const RGWZone& zone);
+void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
+				const RGWZone& zone,
+				std::optional<uint32_t> shards,
+				std::optional<rgw::BucketIndexType> type);
 
 struct RGWBucketCompleteInfo {
   RGWBucketInfo info;
