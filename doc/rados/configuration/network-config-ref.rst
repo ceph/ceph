@@ -187,6 +187,7 @@ section of your Ceph configuration file.
 		# ... elided configuration
 		public_network = {public-network/netmask}
 
+.. _cluster-network:
 
 Cluster Network
 ---------------
