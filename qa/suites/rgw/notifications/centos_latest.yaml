@@ -1,6 +1,0 @@
-os_type: centos
-os_version: "8.1"
-overrides:
-  selinux:
-    whitelist:
-      - scontext=system_u:system_r:logrotate_t:s0
