@@ -2,6 +2,7 @@ tasks:
 - tox: [ client.0 ]
 - kafka:
     client.0:
+      kafka_version: 2.6.0
 - notification-tests:
     client.0:
       force-branch: wip-rgw-bucket-tests-separation-new
