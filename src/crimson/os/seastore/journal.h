@@ -408,6 +408,7 @@ private:
   );
 
 };
+using JournalRef = std::unique_ptr<Journal>;
 
 }
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)

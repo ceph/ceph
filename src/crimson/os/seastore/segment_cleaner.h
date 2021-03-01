@@ -685,5 +685,6 @@ private:
     segments[segment].state = Segment::segment_state_t::OPEN;
   }
 };
+using SegmentCleanerRef = std::unique_ptr<SegmentCleaner>;
 
 }
