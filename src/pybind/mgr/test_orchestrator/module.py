@@ -205,37 +205,21 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         The drivegroup file must only contain one spec at a time.
         """
+        return self._create_osds(drive_group)
+
+    def _create_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> str
 
         drive_group.validate()
         all_hosts = raise_if_exception(self.get_hosts())
-
-
-        def get_hosts_func(label=None, as_hostspec=False):
-            if as_hostspec:
-                return all_hosts
-            return [h.hostname for h in all_hosts]
-
-        if not drive_group.placement.filter_matching_hosts(get_hosts_func):
+        if not drive_group.placement.filter_matching_hostspecs(all_hosts):
             raise orchestrator.OrchestratorValidationError('failed to match')
         return ''
 
     @handle_orch_error
     def apply_drivegroups(self, specs):
         # type: (List[DriveGroupSpec]) -> List[str]
-        drive_group = specs[0]
-
-        all_hosts = raise_if_exception(self.get_hosts())
-
-        drive_group.validate()
-
-        def get_hosts_func(label=None, as_hostspec=False):
-            if as_hostspec:
-                return all_hosts
-            return [h.hostname for h in all_hosts]
-
-        if not drive_group.placement.filter_matching_hosts(get_hosts_func):
-            raise orchestrator.OrchestratorValidationError('failed to match')
-        return []
+        return [self._create_osds(dg) for dg in specs]
 
     @handle_orch_error
     def remove_daemons(self, names):
@@ -335,4 +319,3 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert all([isinstance(h[0], str) for h in spec.placement.hosts])
         assert all([isinstance(h[1], str) or h[1] is None for h in spec.placement.hosts])
         return spec.one_line_str()
-
