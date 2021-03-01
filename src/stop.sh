@@ -161,13 +161,35 @@ if [ $stop_all -eq 1 ]; then
         do_killcephadm
     fi
 
-    for p in $ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd ; do
-        for try in 0 1 1 1 1 ; do
-            if ! pkill -u $MYUID $p ; then
-                break
+    # killing processes
+    to_kill="$ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd"
+    for p in $to_kill ; do
+        if pkill -u $MYUID $p; then
+	    still_runs="$still_runs $p"
+	fi
+    done
+
+    # wait for processes to close
+    for try in 1 1 2 3 5 8 ; do
+        to_kill="$still_runs"
+	still_runs=""
+        for p in $to_kill ; do
+            if pkill -u $MYUID $p -0; then
+		still_runs="$still_runs $p"
             fi
-            sleep $try
         done
+        if [ -z "$still_runs" ] ; then
+            break
+        fi
+        sleep $try
+    done
+
+    # kill and print if some left
+    for p in $still_runs ; do
+        if pkill -u $MYUID $p -0; then
+            echo "TIMEOUT! $p did not orderly shutdown, killing it hard"
+            pkill -u $MYUID $p -SIGKILL
+        fi
     done
 
     pkill -u $MYUID -f valgrind.bin.\*ceph-mon
