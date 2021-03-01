@@ -114,7 +114,7 @@ struct CapSnap {
 #define I_CAP_DROPPED		(1 << 4)
 #define I_ERROR_FILELOCK	(1 << 5)
 
-struct Inode {
+struct Inode : RefCountedObject {
   Client *client;
 
   // -- the actual inode --
@@ -229,7 +229,6 @@ struct Inode {
   uint64_t wanted_max_size = 0;
   uint64_t requested_max_size = 0;
 
-  int       _ref = 0;      // ref count. 1 for each dentry, fh that links to me.
   uint64_t  ll_ref = 0;   // separate ref count for ll client
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
   string    symlink;  // symlink content, if it's a symlink
@@ -250,12 +249,10 @@ struct Inode {
   void make_short_path(filepath& p);
   void make_nosnap_relative_path(filepath& p);
 
-  void get();
-  int _put(int n=1);
-
-  int get_num_ref() {
-    return _ref;
-  }
+  // The ref count. 1 for each dentry, fh, inode_map,
+  // cwd that links to me.
+  void iget() { get(); }
+  void iput(int n=1) { ceph_assert(n >= 0); while (n--) put(); }
 
   void ll_get() {
     ll_ref++;

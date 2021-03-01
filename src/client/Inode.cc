@@ -40,7 +40,7 @@ ostream& operator<<(ostream &out, const Inode &in)
 {
   out << in.vino() << "("
       << "faked_ino=" << in.faked_ino
-      << " ref=" << in._ref
+      << " nref=" << in.get_nref()
       << " ll_ref=" << in.ll_ref
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
@@ -379,7 +379,7 @@ Dir *Inode::open_dir()
     ceph_assert(dentries.size() < 2); // dirs can't be hard-linked
     if (!dentries.empty())
       get_first_parent()->get();      // pin dentry
-    get();                  // pin inode
+    iget();                  // pin inode
   }
   return dir;
 }
@@ -396,22 +396,6 @@ bool Inode::check_mode(const UserPerm& perms, unsigned want)
 
   return (mode & want) == want;
 }
-
-void Inode::get() {
-  _ref++;
-  lsubdout(client->cct, client, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-				    << " now " << _ref << dendl;
-}
-
-//private method to put a reference; see Client::put_inode()
-int Inode::_put(int n) {
-  _ref -= n;
-  lsubdout(client->cct, client, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-				    << " now " << _ref << dendl;
-  ceph_assert(_ref >= 0);
-  return _ref;
-}
-
 
 void Inode::dump(Formatter *f) const
 {
@@ -558,7 +542,7 @@ void Inode::dump(Formatter *f) const
   if (requested_max_size != max_size)
     f->dump_unsigned("requested_max_size", requested_max_size);
 
-  f->dump_int("ref", _ref);
+  f->dump_int("nref", get_nref());
   f->dump_int("ll_ref", ll_ref);
 
   if (!dentries.empty()) {
@@ -790,7 +774,7 @@ void Inode::mark_caps_dirty(int caps)
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << " " << ccap_string(dirty_caps) << " -> "
            << ccap_string(dirty_caps | caps) << dendl;
   if (caps && !caps_dirty())
-    get();
+    iget();
   dirty_caps |= caps;
   client->get_dirty_list().push_back(&dirty_cap_item);
 }
