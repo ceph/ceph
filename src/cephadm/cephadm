@@ -2264,6 +2264,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[selinux_folder] = '/sys/fs/selinux:ro'
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
+        mounts['/etc/lvm'] = '/etc/lvm'
 
     try:
         if ctx.shared_ceph_folder:  # make easy manager modules/ceph-volume development
