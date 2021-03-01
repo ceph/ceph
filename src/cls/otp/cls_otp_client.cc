@@ -22,7 +22,7 @@ using namespace librados;
 #include "cls/otp/cls_otp_ops.h"
 #include "cls/otp/cls_otp_client.h"
 
-#include "rgw/rgw_common.h" /* for gen_random_bytes() */
+#include "common/random_string.h" /* for gen_rand_alphanumeric */
 
 namespace rados {
   namespace cls {
@@ -61,9 +61,7 @@ namespace rados {
         op.id = id;
         op.val = val;
 #define TOKEN_LEN 16
-        char buf[TOKEN_LEN + 1];
-        gen_rand_alphanumeric(cct, buf, sizeof(buf));;
-        op.token = buf;
+        op.token = gen_rand_alphanumeric(cct, TOKEN_LEN);
         
         bufferlist in;
         bufferlist out;
@@ -74,7 +72,7 @@ namespace rados {
         }
 
         cls_otp_get_result_op op2;
-        op2.token = buf;
+        op2.token = op.token;
         bufferlist in2;
         bufferlist out2;
         encode(op2, in2);
