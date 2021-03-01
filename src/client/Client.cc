@@ -1893,9 +1893,6 @@ int Client::make_request(MetaRequest *request,
       break;
     }
 
-    if (wait_for_async_dirop(request))
-      continue;
-
     // choose mds
     Inode *hash_diri = NULL;
     mds_rank_t mds = choose_target_mds(request, &hash_diri);
@@ -1936,14 +1933,17 @@ int Client::make_request(MetaRequest *request,
       session = &mds_sessions.at(mds);
     }
 
+    // send request.
+    send_request(request, session);
+
+    if (wait_for_async_dirop(request))
+      continue;
+
     if (request->async_dirop_cb) {
       (this->*request->async_dirop_cb)(request, session, 0);
       if (request->async)
-	request->perms.unshare_gids();
+        request->perms.unshare_gids();
     }
-
-    // send request.
-    send_request(request, session);
 
     if (request->async)
       break;
