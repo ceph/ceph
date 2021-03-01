@@ -41,6 +41,8 @@
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
+%global luarocks_package_name luarocks
+%bcond_without lua_packages
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
@@ -58,6 +60,21 @@
 #Compat macro for _fillupdir macro introduced in Nov 2017
 %if ! %{defined _fillupdir}
 %global _fillupdir /var/adm/fillup-templates
+%endif
+#luarocks
+%if 0%{?is_opensuse}
+# openSUSE
+%bcond_without lua_packages
+%if 0%{?sle_version}
+# openSUSE Leap
+%global luarocks_package_name lua53-luarocks
+%else
+# openSUSE Tumbleweed
+%global luarocks_package_name lua54-luarocks
+%endif
+%else
+# SLE
+%bcond_with lua_packages
 %endif
 %endif
 %bcond_with seastar
@@ -82,23 +99,6 @@
 %else
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
 %endif
-%endif
-
-%if 0%{?suse_version}
-%if !0%{?is_opensuse}
-# SLE does not support luarocks
-%bcond_with lua_packages
-%else
-%if 0%{?sle_version} == 150200
-%global luarocks_package_name lua53-luarocks
-%else
-%global luarocks_package_name lua54-luarocks
-%endif
-%bcond_without lua_packages
-%endif
-%else
-%global luarocks_package_name luarocks
-%bcond_without lua_packages
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
