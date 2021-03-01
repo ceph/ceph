@@ -1215,6 +1215,24 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       }
     }
     r = 0;
+  } else if (prefix == "fs lsflags") {
+    string fs_name;
+    cmd_getval(cmdmap, "fs_name", fs_name);
+    const auto &fs = fsmap.get_filesystem(fs_name);
+    if (!fs) {
+      ss << "filesystem '" << fs_name << "' not found";
+      r = -ENOENT;
+    } else {
+      const MDSMap &mds_map = fs->mds_map;
+      if (f) {
+        mds_map.dump_flags_state(f.get());
+        f->flush(ds);
+      }
+      else {
+        mds_map.print_flags(ds);
+      }
+      r = 0;
+    }
   }
 
 out:
