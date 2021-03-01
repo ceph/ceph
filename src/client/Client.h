@@ -1057,7 +1057,7 @@ protected:
 
   std::map<snapid_t, int> ll_snap_ref;
 
-  Inode*                 root = nullptr;
+  InodeRef               root = nullptr;
   map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor = nullptr;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
