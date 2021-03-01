@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #pragma once
 
@@ -24,7 +24,8 @@ public:
   class AlienOmapIterator final : public OmapIterator {
   public:
     AlienOmapIterator(ObjectMap::ObjectMapIterator& it,
-	AlienStore* store) : iter(it), store(store) {}
+        AlienStore* store, const CollectionRef& ch)
+      : iter(it), store(store), ch(ch) {}
     seastar::future<> seek_to_first();
     seastar::future<> upper_bound(const std::string& after);
     seastar::future<> lower_bound(const std::string& to);
@@ -36,6 +37,7 @@ public:
   private:
     ObjectMap::ObjectMapIterator iter;
     AlienStore* store;
+    CollectionRef ch;
   };
   AlienStore(const std::string& path, const ConfigValues& values);
   ~AlienStore() final;
