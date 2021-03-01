@@ -119,5 +119,6 @@ private:
   std::unique_ptr<CephContext> cct;
   seastar::gate transaction_gate;
   std::unordered_map<coll_t, CollectionRef> coll_map;
+  std::vector<uint64_t> _parse_cpu_cores();
 };
 }

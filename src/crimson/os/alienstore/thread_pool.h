@@ -86,7 +86,7 @@ class ThreadPool {
   bool is_stopping() const {
     return stopping.load(std::memory_order_relaxed);
   }
-  static void pin(unsigned cpu_id);
+  static void pin(const std::vector<uint64_t>& cpus);
   seastar::semaphore& local_free_slots() {
     return submit_queue.local().free_slots;
   }
@@ -102,7 +102,7 @@ public:
    * @note each @c Task has its own crimson::thread::Condition, which possesses
    * an fd, so we should keep the size of queue under a reasonable limit.
    */
-  ThreadPool(size_t n_threads, size_t queue_sz, long cpu);
+  ThreadPool(size_t n_threads, size_t queue_sz, std::vector<uint64_t> cpus);
   ~ThreadPool();
   seastar::future<> start();
   seastar::future<> stop();

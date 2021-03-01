@@ -63,17 +63,10 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   g_ceph_context = cct.get();
   cct->_conf.set_config_values(values);
   store = std::make_unique<BlueStore>(cct.get(), path);
-
-  long cpu_id = 0;
-  if (long nr_cpus = sysconf(_SC_NPROCESSORS_ONLN); nr_cpus != -1) {
-    cpu_id = nr_cpus - 1;
-  } else {
-    logger().error("{}: unable to get nproc: {}", __func__, errno);
-    cpu_id = -1;
-  }
   const auto num_threads =
     cct->_conf.get_val<uint64_t>("crimson_alien_op_num_threads");
-  tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_id);
+  std::vector<uint64_t> cpu_cores = _parse_cpu_cores();
+  tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_cores);
 }
 
 seastar::future<> AlienStore::start()
@@ -565,6 +558,28 @@ ceph::buffer::list AlienStore::AlienOmapIterator::value()
 int AlienStore::AlienOmapIterator::status() const
 {
   return iter->status();
+}
+
+std::vector<uint64_t> AlienStore::_parse_cpu_cores()
+{
+  std::vector<uint64_t> cpu_cores;
+  auto cpu_string =
+    cct->_conf.get_val<std::string>("crimson_alien_thread_cpu_cores");
+
+  std::string token;
+  std::istringstream token_stream(cpu_string);
+  while (std::getline(token_stream, token, ',')) {
+    std::istringstream cpu_stream(token);
+    std::string cpu;
+    std::getline(cpu_stream, cpu, '-');
+    uint64_t start_cpu = std::stoull(cpu);
+    std::getline(cpu_stream, cpu, '-');
+    uint64_t end_cpu = std::stoull(cpu);
+    for (uint64_t i = start_cpu; i < end_cpu; i++) {
+      cpu_cores.push_back(i);
+    }
+  }
+  return cpu_cores;
 }
 
 }
