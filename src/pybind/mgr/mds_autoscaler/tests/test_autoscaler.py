@@ -12,11 +12,10 @@ except ImportError:
 from mds_autoscaler.module import MDSAutoscaler
 
 
-
-@pytest.yield_fixture()
+@pytest.fixture()
 def mds_autoscaler_module():
 
-    yield MDSAutoscaler('cephadm', 0, 0)
+    yield MDSAutoscaler('mds_autoscaler', 0, 0)
 
 
 class TestCephadm(object):
@@ -56,7 +55,6 @@ class TestCephadm(object):
         apply = OrchResult(result='')
         _apply_mds.return_value = apply
 
-
         _get.return_value = {
             'filesystems': [
                 {
@@ -68,6 +66,7 @@ class TestCephadm(object):
                             }
                         ],
                         'standby_count_wanted': 2,
+                        'max_mds': 1
                     }
                 }
             ],
