@@ -43,6 +43,9 @@
 %bcond_without ocf
 %global luarocks_package_name luarocks
 %bcond_without lua_packages
+%bcond_without rbd_rwl_cache
+%bcond_without rbd_ssd_cache
+%global _system_pmdk 0
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
@@ -52,8 +55,14 @@
 %bcond_with libradosstriper
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
+%global _system_pmdk 1
+%bcond_without rbd_rwl_cache
+%bcond_without rbd_ssd_cache
 %else
 %bcond_with lttng
+%global _system_pmdk 0
+%bcond_with rbd_rwl_cache
+%bcond_with rbd_ssd_cache
 %endif
 %bcond_with ocf
 %bcond_with selinux
@@ -79,8 +88,6 @@
 %endif
 %bcond_with seastar
 %bcond_with jaeger
-%bcond_without rbd_rwl_cache
-%bcond_without rbd_ssd_cache
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
@@ -312,6 +319,10 @@ BuildRequires:  rdma-core-devel
 BuildRequires:	liblz4-devel >= 1.7
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
+%if 0%{?_system_pmdk}
+BuildRequires:  libpmem-devel
+BuildRequires:  libpmemobj-devel
+%endif
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
@@ -1283,6 +1294,9 @@ cmake .. \
 %endif
 %if 0%{with rbd_ssd_cache}
     -DWITH_RBD_SSD_CACHE:BOOL=ON \
+%endif
+%if 0%{?_system_pmdk}
+    -DWITH_SYSTEM_PMDK:BOOL=ON \
 %endif
 %if 0%{?suse_version}
     -DBOOST_J:STRING=%{jobs} \
