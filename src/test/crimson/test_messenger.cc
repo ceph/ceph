@@ -49,8 +49,7 @@ static entity_addr_t get_server_addr() {
 }
 
 static seastar::future<> test_echo(unsigned rounds,
-                                   double keepalive_ratio,
-                                   bool v2)
+                                   double keepalive_ratio)
 {
   struct test_state {
     struct Server final
@@ -220,8 +219,8 @@ static seastar::future<> test_echo(unsigned rounds,
     };
   };
 
-  logger().info("test_echo(rounds={}, keepalive_ratio={}, v2={}):",
-                rounds, keepalive_ratio, v2);
+  logger().info("test_echo(rounds={}, keepalive_ratio={}):",
+                rounds, keepalive_ratio);
   auto server1 = seastar::make_shared<test_state::Server>();
   auto server2 = seastar::make_shared<test_state::Server>();
   auto client1 = seastar::make_shared<test_state::Client>(rounds, keepalive_ratio);
@@ -229,13 +228,8 @@ static seastar::future<> test_echo(unsigned rounds,
   // start servers and clients
   auto addr1 = get_server_addr();
   auto addr2 = get_server_addr();
-  if (v2) {
-    addr1.set_type(entity_addr_t::TYPE_MSGR2);
-    addr2.set_type(entity_addr_t::TYPE_MSGR2);
-  } else {
-    addr1.set_type(entity_addr_t::TYPE_LEGACY);
-    addr2.set_type(entity_addr_t::TYPE_LEGACY);
-  }
+  addr1.set_type(entity_addr_t::TYPE_MSGR2);
+  addr2.set_type(entity_addr_t::TYPE_MSGR2);
   return seastar::when_all_succeed(
       server1->init(entity_name_t::OSD(0), "server1", 1, addr1),
       server2->init(entity_name_t::OSD(1), "server2", 2, addr2),
@@ -270,7 +264,7 @@ static seastar::future<> test_echo(unsigned rounds,
   });
 }
 
-static seastar::future<> test_concurrent_dispatch(bool v2)
+static seastar::future<> test_concurrent_dispatch()
 {
   struct test_state {
     struct Server final
@@ -340,15 +334,11 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
     };
   };
 
-  logger().info("test_concurrent_dispatch(v2={}):", v2);
+  logger().info("test_concurrent_dispatch():");
   auto server = seastar::make_shared<test_state::Server>();
   auto client = seastar::make_shared<test_state::Client>();
   auto addr = get_server_addr();
-  if (v2) {
-    addr.set_type(entity_addr_t::TYPE_MSGR2);
-  } else {
-    addr.set_type(entity_addr_t::TYPE_LEGACY);
-  }
+  addr.set_type(entity_addr_t::TYPE_MSGR2);
   addr.set_family(AF_INET);
   return seastar::when_all_succeed(
       server->init(entity_name_t::OSD(4), "server3", 5, addr),
@@ -378,7 +368,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
   });
 }
 
-seastar::future<> test_preemptive_shutdown(bool v2) {
+seastar::future<> test_preemptive_shutdown() {
   struct test_state {
     class Server final
       : public crimson::net::Dispatcher {
@@ -465,15 +455,11 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
     };
   };
 
-  logger().info("test_preemptive_shutdown(v2={}):", v2);
+  logger().info("test_preemptive_shutdown():");
   auto server = seastar::make_shared<test_state::Server>();
   auto client = seastar::make_shared<test_state::Client>();
   auto addr = get_server_addr();
-  if (v2) {
-    addr.set_type(entity_addr_t::TYPE_MSGR2);
-  } else {
-    addr.set_type(entity_addr_t::TYPE_LEGACY);
-  }
+  addr.set_type(entity_addr_t::TYPE_MSGR2);
   addr.set_family(AF_INET);
   return seastar::when_all_succeed(
     server->init(entity_name_t::OSD(6), "server4", 7, addr),
@@ -3608,17 +3594,11 @@ seastar::future<int> do_test(seastar::app_template& app)
     ceph_assert(v2_testpeer_addr.parse(
         config["v2-testpeer-addr"].as<std::string>().c_str(), nullptr));
     auto v2_testpeer_islocal = config["v2-testpeer-islocal"].as<bool>();
-    return test_echo(rounds, keepalive_ratio, false)
-   .then([rounds, keepalive_ratio] {
-      return test_echo(rounds, keepalive_ratio, true);
+    return test_echo(rounds, keepalive_ratio)
+    .then([] {
+      return test_concurrent_dispatch();
     }).then([] {
-      return test_concurrent_dispatch(false);
-    }).then([] {
-      return test_concurrent_dispatch(true);
-    }).then([] {
-      return test_preemptive_shutdown(false);
-    }).then([] {
-      return test_preemptive_shutdown(true);
+      return test_preemptive_shutdown();
     }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
       return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
     }).then([] {
