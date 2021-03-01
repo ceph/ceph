@@ -5,7 +5,9 @@ overrides:
   ceph:
     # Valgrind makes everything slow, so ignore slow requests and extend heartbeat grace
     log-ignorelist:
-      - slow requests are blocked
+      - slow request
+      - SLOW_OPS
+      - MON_DOWN
     conf:
       global:
         osd heartbeat grace: 60
