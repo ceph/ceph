@@ -1334,12 +1334,16 @@ def call(ctx: CephadmContext,
     async def tee(reader: asyncio.StreamReader) -> str:
         collected = StringIO()
         async for line in reader:
-            message = line.decode('utf-8')
-            collected.write(message)
-            if verbosity == CallVerbosity.VERBOSE:
-                logger.info(prefix + message.rstrip())
-            elif verbosity != CallVerbosity.SILENT:
-                logger.debug(prefix + message.rstrip())
+            try:
+                message = line.decode('utf-8')
+            except UnicodeDecodeError as e:
+                logger.info('failed to decode line: {}'.format(line))
+            else:
+                collected.write(message)
+                if verbosity == CallVerbosity.VERBOSE:
+                    logger.info(prefix + message.rstrip())
+                elif verbosity != CallVerbosity.SILENT:
+                    logger.debug(prefix + message.rstrip())
         return collected.getvalue()
 
     async def run_with_timeout() -> Tuple[str, str, int]:
