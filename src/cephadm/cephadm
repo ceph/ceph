@@ -54,12 +54,10 @@ import ipaddress
 import json
 import logging
 from logging.config import dictConfig
-from operator import truediv
 import os
 import platform
 import pwd
 import random
-import select
 import shutil
 import socket
 import string
