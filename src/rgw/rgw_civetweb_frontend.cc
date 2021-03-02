@@ -66,10 +66,11 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 
   RGWRequest req(env.store->getRados()->get_new_req_id());
   int http_ret = 0;
+  ceph::coarse_real_clock::duration latency{};
   //assert (scheduler != nullptr);
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
                             *env.auth_registry, &client_io, env.olog,
-                            null_yield, scheduler.get(), nullptr, &http_ret);
+                            null_yield, scheduler.get(), nullptr, &latency, &http_ret);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;
