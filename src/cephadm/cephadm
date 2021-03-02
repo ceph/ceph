@@ -50,6 +50,7 @@ import platform
 import pwd
 import random
 import select
+import shlex
 import shutil
 import socket
 import string
@@ -1736,7 +1737,7 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
             '--setgroup', 'ceph',
             '--default-log-to-file=false',
             '--default-log-to-stderr=true',
-            '--default-log-stderr-prefix="debug "',
+            '--default-log-stderr-prefix=debug ',
         ]
         if daemon_type == 'mon':
             r += [
@@ -2201,10 +2202,15 @@ def _write_container_cmd_to_bash(file_obj, container, comment=None, background=F
     file_obj.write('! '+ ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
     # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
     if 'podman' in container_path:
-        file_obj.write('! '+ ' '.join(container.rm_cmd(storage=True)) + ' 2> /dev/null\n')
+        file_obj.write(
+            '! '
+            + ' '.join([shlex.quote(a) for a in container.rm_cmd(storage=True)])
+            + ' 2> /dev/null\n')
 
     # container run command
-    file_obj.write(' '.join(container.run_cmd()) + (' &' if background else '') + '\n')
+    file_obj.write(
+        ' '.join([shlex.quote(a) for a in container.run_cmd()])
+        + (' &' if background else '') + '\n')
 
 
 def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
