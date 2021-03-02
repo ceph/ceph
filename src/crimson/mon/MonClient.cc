@@ -513,7 +513,9 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
       logger().warn("active conn reset {}", conn->get_peer_addr());
       active_con.reset();
       return reopen_session(-1).then([this] {
-	send_pendings();
+	if (active_con) {
+	  send_pendings();
+	}
 	return seastar::now();
       });
     } else {
@@ -754,7 +756,9 @@ seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
   } else {
     logger().warn("mon.{} went away", cur_mon);
     return reopen_session(-1).then([this] {
-      send_pendings();
+      if (active_con) {
+        send_pendings();
+      }
       return seastar::now();
     });
   }
@@ -873,7 +877,9 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
 seastar::future<> Client::authenticate()
 {
   return reopen_session(-1).then([this] {
-    send_pendings();
+    if (active_con) {
+      send_pendings();
+    }
     return seastar::now();
   });
 }
@@ -1016,13 +1022,11 @@ seastar::future<> Client::send_message(MessageRef m)
 
 void Client::send_pendings()
 {
-  if (active_con) {
-    for (auto& m : pending_messages) {
-      (void) active_con->get_conn()->send(m.msg);
-      m.pr.set_value();
-    }
-    pending_messages.clear();
+  for (auto& m : pending_messages) {
+    (void) active_con->get_conn()->send(m.msg);
+    m.pr.set_value();
   }
+  pending_messages.clear();
 }
 
 bool Client::sub_want(const std::string& what, version_t start, unsigned flags)
