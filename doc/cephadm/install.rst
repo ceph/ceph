@@ -93,10 +93,21 @@ There are a few ways to install cephadm:
 Bootstrap a new cluster
 =======================
 
-You need to know which *IP address* to use for the cluster's first
-monitor daemon.  This is normally just the IP for the first host.  If there
-are multiple networks and interfaces, be sure to choose one that will
-be accessible by any host accessing the Ceph cluster.
+What to know before you bootstrap
+---------------------------------
+
+The first step in creating a new Ceph cluster is running the ``cephadm
+bootstrap`` command on the Ceph cluster's first host. The act of running the
+``cephadm bootstrap`` command on the Ceph cluster's first host creates the Ceph
+cluster's first "monitor daemon", and that monitor daemon needs an IP address.
+You must pass the IP address of the Ceph cluster's first host to the ``ceph
+bootstrap`` command, so you'll need to know the IP address of that host.
+
+.. note:: If there are multiple networks and interfaces, be sure to choose one
+   that will be accessible by any host accessing the Ceph cluster.
+
+Running the bootstrap command
+-----------------------------
 
 Run the ``ceph bootstrap`` command:
 
@@ -108,54 +119,67 @@ This command will:
 
 * Create a monitor and manager daemon for the new cluster on the local
   host.
-* Generate a new SSH key for the Ceph cluster and adds it to the root
+* Generate a new SSH key for the Ceph cluster and add it to the root
   user's ``/root/.ssh/authorized_keys`` file.
-* Write a minimal configuration file needed to communicate with the
-  new cluster to ``/etc/ceph/ceph.conf``.
+* Write a minimal configuration file to ``/etc/ceph/ceph.conf``. This
+  file is needed to communicate with the new cluster.
 * Write a copy of the ``client.admin`` administrative (privileged!)
   secret key to ``/etc/ceph/ceph.client.admin.keyring``.
-* Write a copy of the public key to
-  ``/etc/ceph/ceph.pub``.
+* Write a copy of the public key to ``/etc/ceph/ceph.pub``.
 
-The default bootstrap behavior will work for the vast majority of
-users.  See below for a few options that may be useful for some users,
-or run ``cephadm bootstrap -h`` to see all available options:
+Further information about cephadm bootstrap 
+-------------------------------------------
 
-* In larger Ceph clusters, network separation between the public
-  network traffic and cluster traffic which handles replication,
-  recovery and heartbeats between OSD daemons, can lead to performance
-  improvements. To define the `cluster network`_ you can supply the
-  ``--cluster-network`` option to the ``bootstrap`` subcommand. This
-  parameter must define a subnet in CIDR notation, for example
-  10.90.90.0/24 or fe80::/64.
+The default bootstrap behavior will work for most users. But if you'd like
+immediately to know more about ``cephadm bootstrap``, read the list below.  
 
-* Bootstrap writes the files needed to access the new cluster to ``/etc/ceph``,
-  so that any Ceph packages installed on the host itself (e.g., to access the
-  command line interface) can easily find them.
+Also, you can run ``cephadm bootstrap -h`` to see all of ``cephadm``'s
+available options.
+
+* Larger Ceph clusters perform better when (external to the Ceph cluster)
+  public network traffic is separated from (internal to the Ceph cluster)
+  cluster traffic. The internal cluster traffic handles replication, recovery,
+  and heartbeats between OSD daemons.  You can define the :ref:`cluster
+  network<cluster-network>` by supplying the ``--cluster-network`` option to the ``bootstrap``
+  subcommand. This parameter must define a subnet in CIDR notation (for example
+  ``10.90.90.0/24`` or ``fe80::/64``).
+
+* ``cephadm bootstrap`` writes to ``/etc/ceph`` the files needed to access
+  the new cluster. This central location makes it possible for Ceph
+  packages installed on the host (e.g., packages that give access to the
+  cephadm command line interface) to find these files.
 
   Daemon containers deployed with cephadm, however, do not need
   ``/etc/ceph`` at all.  Use the ``--output-dir *<directory>*`` option
-  to put them in a different directory (like ``.``), avoiding any
-  potential conflicts with existing Ceph configuration (cephadm or
+  to put them in a different directory (for example, ``.``). This may help
+  avoid conflicts with an existing Ceph configuration (cephadm or
   otherwise) on the same host.
 
 * You can pass any initial Ceph configuration options to the new
   cluster by putting them in a standard ini-style configuration file
   and using the ``--config *<config-file>*`` option.
 
-* You can choose the ssh user cephadm will use to connect to hosts by
-  using the ``--ssh-user *<user>*`` option. The ssh key will be added
-  to ``/home/*<user>*/.ssh/authorized_keys``. This user will require
-  passwordless sudo access.
+* The ``--ssh-user *<user>*`` option makes it possible to choose which ssh
+  user cephadm will use to connect to hosts. The associated ssh key will be
+  added to ``/home/*<user>*/.ssh/authorized_keys``. The user that you 
+  designate with this option must have passwordless sudo access.
 
 * If you are using a container on an authenticated registry that requires
-  login you may add the three arguments ``--registry-url <url of registry>``,
-  ``--registry-username <username of account on registry>``,
-  ``--registry-password <password of account on registry>`` OR
-  ``--registry-json <json file with login info>``. Cephadm will attempt
-  to login to this registry so it may pull your container and then store
-  the login info in its config database so other hosts added to the cluster
-  may also make use of the authenticated registry.
+  login, you may add the three arguments:
+ 
+  #. ``--registry-url <url of registry>``
+
+  #. ``--registry-username <username of account on registry>``
+
+  #. ``--registry-password <password of account on registry>`` 
+
+  OR
+
+  * ``--registry-json <json file with login info>`` 
+  
+  Cephadm will attempt to log in to this registry so it can pull your container
+  and then store the login info in its config database. Other hosts added to
+  the cluster will then also be able to make use of the authenticated registry.
 
 .. _cephadm-enable-cli:
 
