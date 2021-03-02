@@ -1241,6 +1241,9 @@ CEPH_RBD_API int rbd_aio_mirror_image_get_info(rbd_image_t image,
                                                rbd_mirror_image_info_t *mirror_image_info,
                                                size_t info_size,
                                                rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_mirror_image_get_mode(rbd_image_t image,
+                                               rbd_mirror_image_mode_t *mode,
+                                               rbd_completion_t c);
 
 CEPH_RBD_API int rbd_aio_mirror_image_get_global_status(
     rbd_image_t image,
@@ -1250,6 +1253,11 @@ CEPH_RBD_API int rbd_aio_mirror_image_get_status(
     rbd_image_t image, rbd_mirror_image_status_t *mirror_image_status,
     size_t status_size, rbd_completion_t c)
   CEPH_RBD_DEPRECATED;
+
+CEPH_RBD_API int rbd_aio_mirror_image_create_snapshot(rbd_image_t image,
+                                                      uint32_t flags,
+                                                      uint64_t *snap_id,
+                                                      rbd_completion_t c);
 
 // RBD groups support functions
 CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);

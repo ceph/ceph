@@ -35,6 +35,7 @@
 #include "json_spirit/json_spirit.h"
 
 #include <algorithm>
+#include <bitset>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -350,6 +351,39 @@ struct C_ImageGetGlobalStatus : public C_ImageGetInfo {
         site_status.up});
     }
     C_ImageGetInfo::finish(0);
+  }
+};
+
+template <typename I>
+struct C_ImageSnapshotCreate : public Context {
+  I *ictx;
+  uint64_t *snap_id;
+  Context *on_finish;
+
+  cls::rbd::MirrorImage mirror_image;
+  mirror::PromotionState promotion_state;
+  std::string primary_mirror_uuid;
+
+  C_ImageSnapshotCreate(I *ictx, uint64_t *snap_id, Context *on_finish)
+    : ictx(ictx), snap_id(snap_id), on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0 && r != -ENOENT) {
+      on_finish->complete(r);
+      return;
+    }
+
+    if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
+        mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+      lderr(ictx->cct) << "snapshot based mirroring is not enabled" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+
+    auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
+      ictx, mirror_image.global_image_id, CEPH_NOSNAP, 0U, snap_id, on_finish);
+    req->send();
   }
 };
 
@@ -1970,36 +2004,48 @@ int Mirror<I>::image_info_list(
 }
 
 template <typename I>
-int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
+int Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
+                                     uint64_t *snap_id) {
+  C_SaferCond ctx;
+  Mirror<I>::image_snapshot_create(ictx, flags, snap_id, &ctx);
+
+  return ctx.wait();
+}
+
+template <typename I>
+void Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
+                                      uint64_t *snap_id, Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  int r = ictx->state->refresh_if_required();
-  if (r < 0) {
-    return r;
+  if (flags != 0U) {
+    lderr(cct) << "invalid snap create flags: " << std::bitset<32>(flags)
+               << dendl;
+    on_finish->complete(-EINVAL);
+    return;
   }
 
-  cls::rbd::MirrorImage mirror_image;
-  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
-                                   &mirror_image);
-  if (r == -ENOENT) {
-    return -EINVAL;
-  } else if (r < 0) {
-    lderr(cct) << "failed to retrieve mirror image" << dendl;
-    return r;
-  }
+  auto on_refresh = new LambdaContext(
+    [ictx, snap_id, on_finish](int r) {
+      if (r < 0) {
+        lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
+        on_finish->complete(r);
+        return;
+      }
 
-  if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
-      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-    lderr(cct) << "snapshot based mirroring is not enabled" << dendl;
-    return -EINVAL;
-  }
+      auto ctx = new C_ImageSnapshotCreate<I>(ictx, snap_id, on_finish);
+      auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
+                                                   &ctx->promotion_state,
+                                                   &ctx->primary_mirror_uuid,
+                                                   ctx);
+      req->send();
+    });
 
-  C_SaferCond on_finish;
-  auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
-    ictx, mirror_image.global_image_id, CEPH_NOSNAP, 0U, snap_id, &on_finish);
-  req->send();
-  return on_finish.wait();
+  if (ictx->state->is_refresh_required()) {
+    ictx->state->refresh(on_refresh);
+  } else {
+    on_refresh->complete(0);
+  }
 }
 
 } // namespace api
