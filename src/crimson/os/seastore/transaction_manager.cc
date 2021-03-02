@@ -181,6 +181,7 @@ TransactionManager::refs_ret TransactionManager::dec_ref(
         [this, &t, &refcnt] (auto &laddr) {
         return dec_ref(t, laddr).safe_then([&refcnt] (auto ref) {
           refcnt.push_back(ref);
+          return ref_ertr::now();
         });
       }).safe_then([&refcnt] {
         return ref_ertr::make_ready_future<std::vector<unsigned>>(std::move(refcnt));
