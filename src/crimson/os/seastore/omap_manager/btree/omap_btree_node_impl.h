@@ -69,7 +69,7 @@ struct OMapInnerNode
   list_ret list(
     omap_context_t oc,
     const std::optional<std::string> &start,
-    size_t max_result_size) final;
+    omap_list_config_t config) final;
 
   clear_ret clear(omap_context_t oc) final;
 
@@ -183,7 +183,7 @@ struct OMapLeafNode
   list_ret list(
     omap_context_t oc,
     const std::optional<std::string> &start,
-    size_t max_result_size) final;
+    omap_list_config_t config) final;
 
   clear_ret clear(
     omap_context_t oc) final;
