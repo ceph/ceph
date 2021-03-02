@@ -235,6 +235,7 @@ OMapInnerNode::list(
 		child_result.begin(),
 		child_result.end());
 	      biter++;
+	      (void)max_result_size;
 	      assert(child_complete || result.size() == max_result_size);
 	      return list_ertr::make_ready_future<bool>(false);
 	    });

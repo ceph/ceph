@@ -19,7 +19,7 @@ namespace {
 namespace crimson::os::seastore::collection_manager {
 
 constexpr static segment_off_t MIN_FLAT_BLOCK_SIZE = 4<<10;
-constexpr static segment_off_t MAX_FLAT_BLOCK_SIZE = 4<<20;
+[[maybe_unused]] constexpr static segment_off_t MAX_FLAT_BLOCK_SIZE = 4<<20;
 
 FlatCollectionManager::FlatCollectionManager(
   TransactionManager &tm)
