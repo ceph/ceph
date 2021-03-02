@@ -5,6 +5,8 @@ from __future__ import absolute_import
 import time
 
 import jwt
+from teuthology.orchestra.run import \
+    CommandFailedError  # pylint: disable=import-error
 
 from .helper import DashboardTestCase, JObj, JLeaf
 
@@ -28,6 +30,10 @@ class AuthTest(DashboardTestCase):
             self.assertIn('update', perms)
             self.assertIn('create', perms)
             self.assertIn('delete', perms)
+
+    def test_login_without_password(self):
+        with self.assertRaises(CommandFailedError):
+            self.create_user('admin2', '', ['administrator'], force_password=True)
 
     def test_a_set_login_credentials(self):
         # test with Authorization header
@@ -93,29 +99,6 @@ class AuthTest(DashboardTestCase):
             "code": "invalid_credentials",
             "detail": "Invalid credentials"
         })
-
-    def test_login_without_password(self):
-        # test with Authorization header
-        self.create_user('admin2', '', ['administrator'])
-        self._post("/api/auth", {'username': 'admin2', 'password': ''})
-        self.assertStatus(400)
-        self.assertJsonBody({
-            "component": "auth",
-            "code": "invalid_credentials",
-            "detail": "Invalid credentials"
-        })
-        self.delete_user('admin2')
-
-        # test with Cookies set
-        self.create_user('admin2', '', ['administrator'])
-        self._post("/api/auth", {'username': 'admin2', 'password': ''}, set_cookies=True)
-        self.assertStatus(400)
-        self.assertJsonBody({
-            "component": "auth",
-            "code": "invalid_credentials",
-            "detail": "Invalid credentials"
-        })
-        self.delete_user('admin2')
 
     def test_lockout_user(self):
         # test with Authorization header
@@ -288,8 +271,9 @@ class AuthTest(DashboardTestCase):
         self._get("/api/host")
         self.assertStatus(200)
         time.sleep(1)
-        self._ceph_cmd(['dashboard', 'ac-user-set-password', '--force-password',
-                        'user', 'user2'])
+        self._ceph_cmd_with_secret(['dashboard', 'ac-user-set-password', '--force-password',
+                                    'user'],
+                                   'user2')
         time.sleep(1)
         self._get("/api/host")
         self.assertStatus(401)
@@ -312,8 +296,9 @@ class AuthTest(DashboardTestCase):
         self._get("/api/host", set_cookies=True)
         self.assertStatus(200)
         time.sleep(1)
-        self._ceph_cmd(['dashboard', 'ac-user-set-password', '--force-password',
-                        'user', 'user2'])
+        self._ceph_cmd_with_secret(['dashboard', 'ac-user-set-password', '--force-password',
+                                    'user'],
+                                   'user2')
         time.sleep(1)
         self._get("/api/host", set_cookies=True)
         self.assertStatus(401)

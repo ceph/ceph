@@ -51,7 +51,10 @@ function TEST_dashboard() {
         tries=$((tries+1))
         sleep 1
     done
-    ceph_adm dashboard set-login-credentials admin admin
+
+    DASHBOARD_ADMIN_SECRET_FILE="/tmp/dashboard-admin-secret.txt"
+    printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
+    ceph_adm dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}" --force-password
 
     tries=0
     while [[ $tries < 30 ]] ; do

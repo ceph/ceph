@@ -4,8 +4,12 @@ from __future__ import absolute_import
 
 import json
 import logging
-from collections import namedtuple
+import random
+import re
+import string
 import time
+from collections import namedtuple
+from typing import List
 
 import requests
 import six
@@ -65,14 +69,13 @@ class DashboardTestCase(MgrTestCase):
                 raise ex
 
         user_create_args = [
-            'dashboard', 'ac-user-create', username, password
+            'dashboard', 'ac-user-create', username
         ]
         if force_password:
             user_create_args.append('--force-password')
         if cmd_args:
             user_create_args.extend(cmd_args)
-        cls._ceph_cmd(user_create_args)
-
+        cls._ceph_cmd_with_secret(user_create_args, password)
         if roles:
             set_roles_args = ['dashboard', 'ac-user-set-roles', username]
             for idx, role in enumerate(roles):
@@ -432,6 +435,22 @@ class DashboardTestCase(MgrTestCase):
         exitstatus = cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd)
         log.info("command exit status: %d", exitstatus)
         return exitstatus
+
+    @classmethod
+    def _ceph_cmd_with_secret(cls, cmd: List[str], secret: str, return_exit_code: bool = False):
+        cmd.append('-i')
+        cmd.append('{}'.format(cls._ceph_create_tmp_file(secret)))
+        if return_exit_code:
+            return cls._ceph_cmd_result(cmd)
+        return cls._ceph_cmd(cmd)
+
+    @classmethod
+    def _ceph_create_tmp_file(cls, content: str) -> str:
+        """Create a temporary file in the remote cluster"""
+        file_name = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+        file_path = '/tmp/{}'.format(file_name)
+        cls._cmd(['sh', '-c', 'echo -n {} > {}'.format(content, file_path)])
+        return file_path
 
     def set_config_key(self, key, value):
         self._ceph_cmd(['config-key', 'set', key, value])
