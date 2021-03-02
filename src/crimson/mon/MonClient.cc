@@ -516,8 +516,8 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
     } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
       logger().warn("active conn reset {}", conn->get_peer_addr());
       active_con.reset();
-      return reopen_session(-1).then([this] {
-        if (active_con) {
+      return reopen_session(-1).then([this](bool opened) {
+        if (opened) {
           return on_session_opened();
         } else {
           return seastar::now();
@@ -760,8 +760,8 @@ seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
     }
   } else {
     logger().warn("mon.{} went away", cur_mon);
-    return reopen_session(-1).then([this] {
-      if (active_con) {
+    return reopen_session(-1).then([this](bool opened) {
+      if (opened) {
         return on_session_opened();
       } else {
         return seastar::now();
@@ -886,8 +886,8 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
 
 seastar::future<> Client::authenticate()
 {
-  return reopen_session(-1).then([this] {
-    if (active_con) {
+  return reopen_session(-1).then([this](bool opened) {
+    if (opened) {
       return on_session_opened();
     } else {
       return seastar::now();
@@ -925,7 +925,7 @@ static entity_addr_t choose_client_addr(
   return entity_addr_t{};
 }
 
-seastar::future<> Client::reopen_session(int rank)
+seastar::future<bool> Client::reopen_session(int rank)
 {
   logger().info("{} to mon.{}", __func__, rank);
   vector<unsigned> mons;
@@ -963,8 +963,11 @@ seastar::future<> Client::reopen_session(int rank)
       return seastar::make_exception_future(ep);
     });
   }).then([this] {
-    if (!active_con) {
+    if (active_con) {
+      return true;
+    } else {
       logger().warn("cannot establish the active_con with any mon");
+      return false;
     }
   });
 }

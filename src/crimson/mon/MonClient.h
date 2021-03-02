@@ -168,7 +168,11 @@ private:
   seastar::future<> authenticate();
 
   bool is_hunting() const;
-  seastar::future<> reopen_session(int rank);
+  // @param rank, rank of the monitor to be connected, if it is less than 0,
+  //              try to connect to all monitors in monmap, until one of them
+  //              is connected.
+  // @return true if a connection is established to a monitor
+  seastar::future<bool> reopen_session(int rank);
   std::vector<unsigned> get_random_mons(unsigned n) const;
   seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
   void _finish_auth(const entity_addr_t& peer);
