@@ -518,5 +518,6 @@ private:
   /// Replace prev with next
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
 };
+using CacheRef = std::unique_ptr<Cache>;
 
 }

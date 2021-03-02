@@ -86,7 +86,7 @@ private:
   std::map<std::string, MgrMap::ModuleOption> options;
 
 public:
-  static std::string config_prefix;
+  static std::string mgr_store_prefix;
 
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
@@ -176,7 +176,7 @@ public:
   
   ~PyModuleConfig();
 
-  void set_config(
+  std::pair<int, std::string> set_config(
     MonClient *monc,
     const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val);

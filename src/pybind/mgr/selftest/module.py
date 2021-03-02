@@ -38,7 +38,8 @@ class Module(MgrModule):
         {'name': 'rwoption3', 'type': 'float'},
         {'name': 'rwoption4', 'type': 'str'},
         {'name': 'rwoption5', 'type': 'bool'},
-        {'name': 'rwoption6', 'type': 'bool', 'default': True}
+        {'name': 'rwoption6', 'type': 'bool', 'default': True},
+        {'name': 'rwoption7', 'type': 'int', 'min': 1, 'max': 42},
     ]
 
     COMMANDS = [
@@ -313,6 +314,15 @@ class Module(MgrModule):
         assert isinstance(value, bool)
         assert value is False
 
+        # Option value range is specified
+        try:
+            self.set_module_option("rwoption7", 43)
+        except Exception as e:
+            assert isinstance(e, ValueError)
+        else:
+            message = "should raise if value is not in specified range"
+            assert False, message
+
         # Specified module does not exist => return None.
         assert self.get_module_option_ex("foo", "bar") is None
 
@@ -392,7 +402,7 @@ class Module(MgrModule):
 
     def _test_remote_calls(self):
         # Test making valid call
-        self.remote("influx", "handle_command", "", {"prefix": "influx self-test"})
+        self.remote("influx", "self_test")
 
         # Test calling module that exists but isn't enabled
         # (arbitrarily pick a non-always-on module to use)
@@ -413,7 +423,7 @@ class Module(MgrModule):
 
         # Test calling module that doesn't exist
         try:
-            self.remote("idontexist", "handle_command", {"prefix": "influx self-test"})
+            self.remote("idontexist", "self_test")
         except ImportError:
             pass
         else:
@@ -421,7 +431,7 @@ class Module(MgrModule):
 
         # Test calling method that doesn't exist
         try:
-            self.remote("influx", "idontexist", {"prefix": "influx self-test"})
+            self.remote("influx", "idontexist")
         except NameError:
             pass
         else:

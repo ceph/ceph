@@ -518,7 +518,7 @@ class HostCache():
         def alter(host: str, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
             dd = copy(dd_orig)
             if host in self.mgr.offline_hosts:
-                dd.status = -1
+                dd.status = orchestrator.DaemonDescriptionStatus.error
                 dd.status_desc = 'host is offline'
             dd.events = self.mgr.events.get_for_daemon(dd.name())
             return dd
@@ -666,7 +666,7 @@ class HostCache():
         ):
             return True
         created = self.mgr.spec_store.get_created(spec)
-        if created and created > self.last_device_change[host]:
+        if not created or created > self.last_device_change[host]:
             return True
         return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host]
 

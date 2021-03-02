@@ -153,8 +153,14 @@ struct request_context_t {
   }
 
   bool check_magic() const {
-    // todo
-    return true;
+    auto ret = magic == NBD_REQUEST_MAGIC;
+    if (!ret) {
+      logger().error(
+	"Invalid magic {} should be {}",
+	magic,
+	NBD_REQUEST_MAGIC);
+    }
+    return ret;
   }
 
   uint32_t get_command() const {
@@ -168,6 +174,11 @@ struct request_context_t {
   seastar::future<> read_request(seastar::input_stream<char> &in) {
     return in.read_exactly(sizeof(struct nbd_request)
     ).then([this, &in](auto buf) {
+      if (buf.size() < sizeof(struct nbd_request)) {
+	throw std::system_error(
+	  std::make_error_code(
+	    std::errc::connection_reset));
+      }
       auto p = buf.get();
       magic = seastar::consume_be<uint32_t>(p);
       type = seastar::consume_be<uint32_t>(p);
@@ -178,6 +189,12 @@ struct request_context_t {
       logger().debug(
         "Got request, magic {}, type {}, from {}, len {}",
 	magic, type, from, len);
+
+      if (!check_magic()) {
+       throw std::system_error(
+	 std::make_error_code(
+	   std::errc::invalid_argument));
+      }
 
       if (has_input_buffer()) {
 	return in.read_exactly(len).then([this](auto buf) {
@@ -493,10 +510,6 @@ seastar::future<> NBDHandler::run()
 class TMDriver final : public BlockDriver {
   const config_t config;
   std::unique_ptr<segment_manager::block::BlockSegmentManager> segment_manager;
-  std::unique_ptr<SegmentCleaner> segment_cleaner;
-  std::unique_ptr<Journal> journal;
-  std::unique_ptr<Cache> cache;
-  LBAManagerRef lba_manager;
   std::unique_ptr<TransactionManager> tm;
 
 public:
@@ -513,42 +526,34 @@ public:
     logger().debug("Writing offset {}", offset);
     assert(offset % segment_manager->get_block_size() == 0);
     assert(ptr.length() == (size_t)segment_manager->get_block_size());
-    return crimson::do_until(
-      [this, offset, ptr=std::move(ptr)] {
-	return seastar::do_with(
-	  tm->create_transaction(),
-	  ptr,
-	  [this, offset](auto &t, auto &ptr) mutable {
-	    return tm->dec_ref(
+    return repeat_eagain([this, offset, ptr=std::move(ptr)] {
+      return seastar::do_with(
+	tm->create_transaction(),
+	ptr,
+	[this, offset](auto &t, auto &ptr) mutable {
+	  return tm->dec_ref(
+	    *t,
+	    offset
+	  ).safe_then([](auto){}).handle_error(
+	    crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
+	    crimson::ct_error::pass_further_all{}
+	  ).safe_then([=, &t, &ptr] {
+	    logger().debug("dec_ref complete");
+	    return tm->alloc_extent<TestBlock>(
 	      *t,
-	      offset
-	    ).safe_then([](auto){}).handle_error(
-	      crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
-	      crimson::ct_error::pass_further_all{}
-	    ).safe_then([=, &t, &ptr] {
-	      logger().debug("dec_ref complete");
-	      return tm->alloc_extent<TestBlock>(
-		*t,
-		offset,
-		ptr.length());
-	    }).safe_then([=, &t, &ptr](auto ext) mutable {
-	      assert(ext->get_laddr() == (size_t)offset);
-	      assert(ext->get_bptr().length() == ptr.length());
-	      ext->get_bptr().swap(ptr);
-	      logger().debug("submitting transaction");
-	      return tm->submit_transaction(std::move(t));
-	    }).safe_then([] {
-	      return true;
-	    }).handle_error(
-	      [](const crimson::ct_error::eagain &e) {
-		return seastar::make_ready_future<bool>(false);
-	      },
-	      crimson::ct_error::pass_further_all{}
-	    );
+	      offset,
+	      ptr.length());
+	  }).safe_then([=, &t, &ptr](auto ext) mutable {
+	    assert(ext->get_laddr() == (size_t)offset);
+	    assert(ext->get_bptr().length() == ptr.length());
+	    ext->get_bptr().swap(ptr);
+	    logger().debug("submitting transaction");
+	    return tm->submit_transaction(std::move(t));
 	  });
-      }).handle_error(
-	crimson::ct_error::assert_all{"store-nbd write"}
-      );
+	});
+    }).handle_error(
+      crimson::ct_error::assert_all{"store-nbd write"}
+    );
   }
 
   seastar::future<bufferlist> read(
@@ -559,63 +564,57 @@ public:
     assert(size % (size_t)segment_manager->get_block_size() == 0);
     auto blptrret = std::make_unique<bufferlist>();
     auto &blret = *blptrret;
-    return crimson::do_until(
-      [=, &blret] {
-	return seastar::do_with(
-	  tm->create_transaction(),
-	  [=, &blret](auto &t) {
-	    return tm->read_extents<TestBlock>(*t, offset, size
-	    ).safe_then([=, &blret](auto ext_list) mutable {
-	      size_t cur = offset;
-	      for (auto &i: ext_list) {
-		if (cur != i.first) {
-		  assert(cur < i.first);
-		  blret.append_zero(i.first - cur);
-		  cur = i.first;
-		}
-		blret.append(i.second->get_bptr());
-		cur += i.second->get_bptr().length();
+    return repeat_eagain([=, &blret] {
+      return seastar::do_with(
+	tm->create_transaction(),
+	[=, &blret](auto &t) {
+	  return tm->read_extents<TestBlock>(*t, offset, size
+	  ).safe_then([=, &blret](auto ext_list) mutable {
+	    size_t cur = offset;
+	    for (auto &i: ext_list) {
+	      if (cur != i.first) {
+		assert(cur < i.first);
+		blret.append_zero(i.first - cur);
+		cur = i.first;
 	      }
-	      if (blret.length() != size) {
-		assert(blret.length() < size);
-		blret.append_zero(size - blret.length());
-	      }
-	      return seastar::make_ready_future<bool>(true);
-	    }).handle_error(
-	      [](const crimson::ct_error::eagain &e) {
-		return seastar::make_ready_future<bool>(false);
-	      },
-	      crimson::ct_error::pass_further_all{}
-	    );
+	      blret.append(i.second->get_bptr());
+	      cur += i.second->get_bptr().length();
+	    }
+	    if (blret.length() != size) {
+	      assert(blret.length() < size);
+	      blret.append_zero(size - blret.length());
+	    }
 	  });
-      }).handle_error(
-	crimson::ct_error::assert_all{"store-nbd read"}
-      ).then([blptrret=std::move(blptrret)]() mutable {
-	logger().debug("read complete");
-	return std::move(*blptrret);
-      });
+	});
+    }).handle_error(
+      crimson::ct_error::assert_all{"store-nbd read"}
+    ).then([blptrret=std::move(blptrret)]() mutable {
+      logger().debug("read complete");
+      return std::move(*blptrret);
+    });
   }
 
   void init() {
-    segment_cleaner = std::make_unique<SegmentCleaner>(
+    auto segment_cleaner = std::make_unique<SegmentCleaner>(
       SegmentCleaner::config_t::default_from_segment_manager(
 	*segment_manager),
       true);
-    journal = std::make_unique<Journal>(*segment_manager);
-    cache = std::make_unique<Cache>(*segment_manager);
-    lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
-    tm = std::make_unique<TransactionManager>(
-      *segment_manager, *segment_cleaner, *journal, *cache, *lba_manager);
+    auto journal = std::make_unique<Journal>(*segment_manager);
+    auto cache = std::make_unique<Cache>(*segment_manager);
+    auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
+
     journal->set_segment_provider(&*segment_cleaner);
-    segment_cleaner->set_extent_callback(&*tm);
+
+    tm = std::make_unique<TransactionManager>(
+      *segment_manager,
+      std::move(segment_cleaner),
+      std::move(journal),
+      std::move(cache),
+      std::move(lba_manager));
   }
 
   void clear() {
     tm.reset();
-    lba_manager.reset();
-    cache.reset();
-    journal.reset();
-    segment_cleaner.reset();
   }
 
   size_t get_size() const final {

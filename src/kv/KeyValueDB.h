@@ -264,6 +264,8 @@ public:
 
 private:
   // This class filters a WholeSpaceIterator by a prefix.
+  // Performs as a dummy wrapper over WholeSpaceIterator
+  // if prefix is empty
   class PrefixIteratorImpl : public IteratorImpl {
     const std::string prefix;
     WholeSpaceIterator generic_iter;
@@ -273,10 +275,14 @@ private:
     ~PrefixIteratorImpl() override { }
 
     int seek_to_first() override {
-      return generic_iter->seek_to_first(prefix);
+      return prefix.empty() ?
+	generic_iter->seek_to_first() :
+	generic_iter->seek_to_first(prefix);
     }
     int seek_to_last() override {
-      return generic_iter->seek_to_last(prefix);
+      return prefix.empty() ?
+	generic_iter->seek_to_last() :
+	generic_iter->seek_to_last(prefix);
     }
     int upper_bound(const std::string &after) override {
       return generic_iter->upper_bound(prefix, after);
@@ -287,7 +293,11 @@ private:
     bool valid() override {
       if (!generic_iter->valid())
 	return false;
-      return generic_iter->raw_key_is_prefixed(prefix);
+      if (prefix.empty())
+        return true;
+      return prefix.empty() ?
+	      true :
+	      generic_iter->raw_key_is_prefixed(prefix);
     }
     int next() override {
       return generic_iter->next();

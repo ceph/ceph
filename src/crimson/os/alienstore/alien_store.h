@@ -120,6 +120,5 @@ private:
   std::unique_ptr<CephContext> cct;
   seastar::gate transaction_gate;
   std::unordered_map<coll_t, CollectionRef> coll_map;
-  seastar::shared_mutex tp_mutex;
 };
 }

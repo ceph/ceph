@@ -1,7 +1,7 @@
 .. _mgr-cephadm-monitoring:
 
-Monitoring Stack with Cephadm
-=============================
+Monitoring Services
+===================
 
 Ceph Dashboard uses `Prometheus <https://prometheus.io/>`_, `Grafana
 <https://grafana.com/>`_, and related tools to store and visualize detailed

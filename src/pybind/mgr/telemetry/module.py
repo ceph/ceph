@@ -15,9 +15,9 @@ import time
 from datetime import datetime, timedelta
 from threading import Event
 from collections import defaultdict
-from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar, TYPE_CHECKING
+from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar, TYPE_CHECKING, Union
 
-from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, Union
+from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, ServiceInfoT
 
 
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
@@ -146,7 +146,7 @@ class Module(MgrModule):
             self.interval = 0
             self.proxy = ''
             self.channel_basic = True
-            self.channel_indent = False
+            self.channel_ident = False
             self.channel_crash = True
             self.channel_device = True
 
@@ -327,6 +327,8 @@ class Module(MgrModule):
             r.append('crash')
         if self.channel_device:
             r.append('device')
+        if self.channel_ident:
+            r.append('ident')
         return r
 
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
@@ -586,10 +588,11 @@ class Module(MgrModule):
                 'num': len([h for h in servers if h['hostname']]),
             }
             for t in ['mon', 'mds', 'osd', 'mgr']:
-                hosts['num_with_' + t] = len(
-                    [h for h in servers
-                     if len([s for s in h['services'] if s['type'] == t])]
-                )
+                nr_services = sum(1 for host in servers if
+                                  any(service for service in cast(List[ServiceInfoT],
+                                                                  host['services'])
+                                      if service['type'] == t))
+                hosts['num_with_' + t] = nr_services
             report['hosts'] = hosts
 
             report['usage'] = {

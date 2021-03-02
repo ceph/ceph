@@ -402,8 +402,7 @@ int map_device_using_suprocess(std::string arguments, int timeout_ms)
   status = WaitForMultipleObjects(2, wait_events, FALSE, timeout_ms);
   switch(status) {
     case WAIT_OBJECT_0:
-      if (!GetOverlappedResultEx(pipe_handle, &connect_o,
-                                 &bytes_read, timeout_ms, TRUE)) {
+      if (!GetOverlappedResult(pipe_handle, &connect_o, &bytes_read, TRUE)) {
         err = GetLastError();
         derr << "Couln't establish a connection with the child process. "
              << "Error: " << win32_strerror(err) << dendl;
@@ -440,8 +439,7 @@ int map_device_using_suprocess(std::string arguments, int timeout_ms)
   status = WaitForMultipleObjects(2, wait_events, FALSE, timeout_ms);
   switch(status) {
     case WAIT_OBJECT_0:
-      if (!GetOverlappedResultEx(pipe_handle, &read_o,
-                                 &bytes_read, timeout_ms, TRUE)) {
+      if (!GetOverlappedResult(pipe_handle, &read_o, &bytes_read, TRUE)) {
         err = GetLastError();
         derr << "Receiving child process reply failed with: "
              << win32_strerror(err) << dendl;
@@ -1205,7 +1203,7 @@ static int do_unmap(Config *cfg, bool unregister)
   if (unregister) {
     err = remove_config_from_registry(cfg);
     if (err) {
-      derr << "rbd-nbd: failed to unregister device: "
+      derr << "rbd-wnbd: failed to unregister device: "
            << cfg->devpath << ". Error: " << err << dendl;
       return -EINVAL;
     }
@@ -1249,7 +1247,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
   } else if (format == "xml") {
     f.reset(new XMLFormatter(pretty_format));
   } else if (!format.empty() && format != "plain") {
-    derr << "rbd-nbd: invalid output format: " << format << dendl;
+    derr << "rbd-wnbd: invalid output format: " << format << dendl;
     return -EINVAL;
   }
 
@@ -1324,7 +1322,7 @@ static int do_show_mapped_device(std::string format, bool pretty_format,
   } else if (format == "xml") {
     f.reset(new XMLFormatter(pretty_format));
   } else {
-    derr << "rbd-nbd: invalid output format: " << format << dendl;
+    derr << "rbd-wnbd: invalid output format: " << format << dendl;
     return -EINVAL;
   }
 
@@ -1345,6 +1343,7 @@ static int do_show_mapped_device(std::string format, bool pretty_format,
   }
 
   auto conn_props = conn_info.Properties;
+  cfg.active = conn_info.DiskNumber > 0 && is_process_running(conn_props.Pid);
   f->open_object_section("device");
   f->dump_int("id", conn_props.Pid ? conn_props.Pid : -1);
   f->dump_string("device", cfg.devpath);
@@ -1452,41 +1451,41 @@ static int parse_args(std::vector<const char*>& args,
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->wnbd_log_level,
                                      err, "--wnbd-log-level", (char *)NULL)) {
       if (!err.str().empty()) {
-        *err_msg << "rbd-nbd: " << err.str();
+        *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
       if (cfg->wnbd_log_level < 0) {
-        *err_msg << "rbd-nbd: Invalid argument for wnbd-log-level";
+        *err_msg << "rbd-wnbd: Invalid argument for wnbd-log-level";
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->io_req_workers,
                                      err, "--io-req-workers", (char *)NULL)) {
       if (!err.str().empty()) {
-        *err_msg << "rbd-nbd: " << err.str();
+        *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
       if (cfg->io_req_workers <= 0) {
-        *err_msg << "rbd-nbd: Invalid argument for io-req-workers";
+        *err_msg << "rbd-wnbd: Invalid argument for io-req-workers";
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->io_reply_workers,
                                      err, "--io-reply-workers", (char *)NULL)) {
       if (!err.str().empty()) {
-        *err_msg << "rbd-nbd: " << err.str();
+        *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
       if (cfg->io_reply_workers <= 0) {
-        *err_msg << "rbd-nbd: Invalid argument for io-reply-workers";
+        *err_msg << "rbd-wnbd: Invalid argument for io-reply-workers";
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->service_thread_count,
                                      err, "--service-thread-count", (char *)NULL)) {
       if (!err.str().empty()) {
-        *err_msg << "rbd-nbd: " << err.str();
+        *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
       if (cfg->service_thread_count <= 0) {
-        *err_msg << "rbd-nbd: Invalid argument for service-thread-count";
+        *err_msg << "rbd-wnbd: Invalid argument for service-thread-count";
         return -EINVAL;
       }
     } else if (ceph_argparse_flag(args, i, "--hard-disconnect", (char *)NULL)) {
@@ -1499,11 +1498,11 @@ static int parse_args(std::vector<const char*>& args,
                                      err, "--soft-disconnect-timeout",
                                      (char *)NULL)) {
       if (!err.str().empty()) {
-        *err_msg << "rbd-nbd: " << err.str();
+        *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
       if (cfg->soft_disconnect_timeout < 0) {
-        *err_msg << "rbd-nbd: Invalid argument for soft-disconnect-timeout";
+        *err_msg << "rbd-wnbd: Invalid argument for soft-disconnect-timeout";
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i,
@@ -1511,11 +1510,11 @@ static int parse_args(std::vector<const char*>& args,
                                      err, "--start-timeout",
                                      (char *)NULL)) {
       if (!err.str().empty()) {
-        *err_msg << "rbd-nbd: " << err.str();
+        *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
       if (cfg->service_start_timeout <= 0) {
-        *err_msg << "rbd-nbd: Invalid argument for start-timeout";
+        *err_msg << "rbd-wnbd: Invalid argument for start-timeout";
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i,
@@ -1523,11 +1522,11 @@ static int parse_args(std::vector<const char*>& args,
                                      err, "--map-timeout",
                                      (char *)NULL)) {
       if (!err.str().empty()) {
-        *err_msg << "rbd-nbd: " << err.str();
+        *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
       if (cfg->image_map_timeout <= 0) {
-        *err_msg << "rbd-nbd: Invalid argument for map-timeout";
+        *err_msg << "rbd-wnbd: Invalid argument for map-timeout";
         return -EINVAL;
       }
     } else {

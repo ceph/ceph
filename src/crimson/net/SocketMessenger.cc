@@ -134,13 +134,14 @@ seastar::future<> SocketMessenger::start(
   dispatchers.assign(_dispatchers);
   if (listener) {
     // make sure we have already bound to a valid address
-    ceph_assert(get_myaddr().is_legacy() || get_myaddr().is_msgr2());
+    ceph_assert(get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
 
     return listener->accept([this] (SocketRef socket, entity_addr_t peer_addr) {
       assert(seastar::this_shard_id() == master_sid);
-      SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
-          *this, dispatchers, get_myaddr().is_msgr2());
+      assert(get_myaddr().is_msgr2());
+      SocketConnectionRef conn =
+        seastar::make_shared<SocketConnection>(*this, dispatchers);
       conn->start_accept(std::move(socket), peer_addr);
       return seastar::now();
     });
@@ -154,15 +155,17 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
   assert(seastar::this_shard_id() == master_sid);
 
   // make sure we connect to a valid peer_addr
-  ceph_assert(peer_addr.is_legacy() || peer_addr.is_msgr2());
+  if (!peer_addr.is_msgr2()) {
+    ceph_abort_msg("ProtocolV1 is no longer supported");
+  }
   ceph_assert(peer_addr.get_port() > 0);
 
   if (auto found = lookup_conn(peer_addr); found) {
     logger().debug("{} connect to existing", *found);
     return found->shared_from_this();
   }
-  SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
-      *this, dispatchers, peer_addr.is_msgr2());
+  SocketConnectionRef conn =
+    seastar::make_shared<SocketConnection>(*this, dispatchers);
   conn->start_connect(peer_addr, peer_name);
   return conn->shared_from_this();
 }

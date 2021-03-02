@@ -174,7 +174,6 @@ set(crimson_net_srcs
   net/SocketMessenger.cc
   net/Socket.cc
   net/Protocol.cc
-  net/ProtocolV1.cc
   net/ProtocolV2.cc
   net/chained_dispatchers.cc)
 add_library(crimson STATIC

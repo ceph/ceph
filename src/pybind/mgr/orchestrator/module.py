@@ -10,7 +10,8 @@ from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, \
+    ServiceSpecValidationError
 from ceph.utils import datetime_now
 
 from mgr_util import to_pretty_timedelta, format_dimless
@@ -21,7 +22,7 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
     ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, \
-    GenericSpec
+    GenericSpec, DaemonDescriptionStatus
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -648,12 +649,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     status = s.status_desc
                 else:
                     status = {
-                        -1: 'error',
-                        0: 'stopped',
-                        1: 'running',
+                        DaemonDescriptionStatus.error: 'error',
+                        DaemonDescriptionStatus.stopped: 'stopped',
+                        DaemonDescriptionStatus.running: 'running',
                         None: '<unknown>'
                     }[s.status]
-                if s.status == 1 and s.started:
+                if s.status == DaemonDescriptionStatus.running and s.started:
                     status += ' (%s)' % to_pretty_timedelta(now - s.started)
 
                 table.add_row((
@@ -1062,6 +1063,15 @@ Usage:
             specs: List[Union[ServiceSpec, HostSpec]] = []
             for s in content:
                 spec = json_to_generic_spec(s)
+
+                # validate the config (we need MgrModule for that)
+                if isinstance(spec, ServiceSpec) and spec.config:
+                    for k, v in spec.config.items():
+                        try:
+                            self.get_foreign_ceph_option('mon', k)
+                        except KeyError:
+                            raise ServiceSpecValidationError(f'Invalid config option {k} in spec')
+
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
                 specs.append(spec)

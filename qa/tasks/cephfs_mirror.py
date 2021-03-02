@@ -41,8 +41,15 @@ class CephFSMirror(Task):
             'term',
             ]
 
+        if 'valgrind' in self.config:
+            args = misc.get_valgrind_args(
+                testdir, 'cephfs-mirror-{id}'.format(id=self.client),
+                args, self.config.get('valgrind'))
+
         args.extend([
             'cephfs-mirror',
+            '--cluster',
+            self.cluster_name,
             '--id',
             self.client_id,
             ])

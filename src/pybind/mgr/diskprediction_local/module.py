@@ -3,45 +3,36 @@ diskprediction with local predictor
 """
 import json
 import datetime
-import _strptime
 from threading import Event
 import time
-
-from mgr_module import MgrModule, CommandResult
-
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from mgr_module import CommandResult, MgrModule, Option
 # Importing scipy early appears to avoid a future deadlock when
 # we try to do
 #
 #  from .predictor import get_diskfailurepredictor_path
 #
 # in a command thread.  See https://tracker.ceph.com/issues/42764
-import scipy
+import scipy  # noqa: ignore=F401
+from .predictor import DevSmartT, Predictor, get_diskfailurepredictor_path
 
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
-TIME_DAYS = 24*60*60
+TIME_DAYS = 24 * 60 * 60
 TIME_WEEK = TIME_DAYS * 7
 
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {
-            'name': 'sleep_interval',
-            'default': str(600),
-        },
-        {
-            'name': 'predict_interval',
-            'default': str(86400),
-        },
-        {
-            'name': 'predictor_model',
-            'default': 'prophetstor',
-        },
+        Option(name='sleep_interval',
+               default=600),
+        Option(name='predict_interval',
+               default=86400),
+        Option(name='predictor_model',
+               default='prophetstor')
     ]
 
-    COMMANDS = []
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         # options
         for opt in self.MODULE_OPTIONS:
@@ -49,8 +40,13 @@ class Module(MgrModule):
         # other
         self._run = True
         self._event = Event()
+        # for mypy which does not run the code
+        if TYPE_CHECKING:
+            self.sleep_interval = 0
+            self.predict_interval = 0
+            self.predictor_model = ''
 
-    def config_notify(self):
+    def config_notify(self) -> None:
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
@@ -59,24 +55,19 @@ class Module(MgrModule):
         if self.get_ceph_option('device_failure_prediction_mode') == 'local':
             self._event.set()
 
-    def refresh_config(self):
+    def refresh_config(self) -> None:
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    def handle_command(self, _, cmd):
-        self.log.debug('handle_command cmd: %s', cmd)
-        raise NotImplementedError(cmd['prefix'])
-
-    def self_test(self):
+    def self_test(self) -> None:
         self.log.debug('self_test enter')
         ret, out, err = self.predict_all_devices()
         assert ret == 0
-        return 0, 'self test succeed', ''
 
-    def serve(self):
+    def serve(self) -> None:
         self.log.info('Starting diskprediction local module')
         self.config_notify()
         last_predicted = None
@@ -96,7 +87,7 @@ class Module(MgrModule):
                 if not last_predicted:
                     next_predicted = now
                 else:
-                    predicted_frequency = int(self.predict_interval) or 86400
+                    predicted_frequency = self.predict_interval or 86400
                     seconds = (last_predicted - datetime.datetime.utcfromtimestamp(0)).total_seconds()
                     seconds -= seconds % predicted_frequency
                     seconds += predicted_frequency
@@ -113,18 +104,18 @@ class Module(MgrModule):
                     last_predicted = now
                     self.set_store('last_predicted', last_predicted.strftime(TIME_FORMAT))
 
-            sleep_interval = int(self.sleep_interval) or 60
+            sleep_interval = self.sleep_interval or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             self._event.wait(sleep_interval)
             self._event.clear()
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.log.info('Stopping')
         self._run = False
         self._event.set()
 
     @staticmethod
-    def _convert_timestamp(predicted_timestamp, life_expectancy_day):
+    def _convert_timestamp(predicted_timestamp: int, life_expectancy_day: int) -> str:
         """
         :param predicted_timestamp: unit is nanoseconds
         :param life_expectancy_day: unit is seconds
@@ -134,12 +125,13 @@ class Module(MgrModule):
         return datetime.datetime.fromtimestamp(
             predicted_timestamp / (1000 ** 3) + life_expectancy_day).strftime('%Y-%m-%d')
 
-    def _predict_life_expentancy(self, devid):
+    def _predict_life_expentancy(self, devid: str) -> str:
         predicted_result = ''
-        health_data = {}
-        predict_datas = []
+        health_data: Dict[str, Dict[str, Any]] = {}
+        predict_datas: List[DevSmartT] = []
         try:
-            r, outb, outs = self.remote('devicehealth', 'show_device_metrics', devid=devid, sample='')
+            r, outb, outs = self.remote(
+                'devicehealth', 'show_device_metrics', devid=devid, sample='')
             if r != 0:
                 self.log.error('failed to get device %s health', devid)
                 health_data = {}
@@ -149,23 +141,15 @@ class Module(MgrModule):
             self.log.error('failed to get device %s health data due to %s', devid, str(e))
 
         # initialize appropriate disk failure predictor model
-        from .predictor import get_diskfailurepredictor_path
-        if self.predictor_model == 'prophetstor':
-            from .predictor import PSDiskFailurePredictor
-            obj_predictor = PSDiskFailurePredictor()
-            ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
-            if ret is not None:
-                self.log.error('Error initializing predictor')
-                return predicted_result
-        elif self.predictor_model == 'redhat':
-            from .predictor import RHDiskFailurePredictor
-            obj_predictor = RHDiskFailurePredictor()
-            ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
-            if ret is not None:
-                self.log.error('Error initializing predictor')
-                return predicted_result
-        else:
+        obj_predictor = Predictor.create(self.predictor_model)
+        if obj_predictor is None:
             self.log.error('invalid value received for MODULE_OPTIONS.predictor_model')
+            return predicted_result
+        try:
+            obj_predictor.initialize(
+                "{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+        except Exception as e:
+            self.log.error('Error initializing predictor: %s', e)
             return predicted_result
 
         if len(health_data) >= 6:
@@ -194,22 +178,25 @@ class Module(MgrModule):
                     # get normalized smart values
                     if attr.get('value') is not None:
                         dev_smart['smart_%s_normalized' % attr.get('id')] = \
-                                    attr.get('value')
+                            attr.get('value')
                 # add power on hours manually if not available in smart attributes
-                if s_val.get('power_on_time', {}).get('hours') is not None:
-                    dev_smart['smart_9_raw'] = int(s_val['power_on_time']['hours'])
+                power_on_time = s_val.get('power_on_time', {}).get('hours')
+                if power_on_time is not None:
+                    dev_smart['smart_9_raw'] = int(power_on_time)
                 # add device capacity
-                if s_val.get('user_capacity') is not None:
-                    if s_val.get('user_capacity').get('bytes') is not None:
-                        dev_smart['user_capacity'] = s_val.get('user_capacity').get('bytes')
-                    else:
-                        self.log.debug('user_capacity not found in smart attributes list')
+                user_capacity = s_val.get('user_capacity', {}).get('bytes')
+                if user_capacity is not None:
+                    dev_smart['user_capacity'] = user_capacity
+                else:
+                    self.log.debug('user_capacity not found in smart attributes list')
                 # add device model
-                if s_val.get('model_name') is not None:
-                    dev_smart['model_name'] = s_val.get('model_name')
+                model_name = s_val.get('model_name')
+                if model_name is not None:
+                    dev_smart['model_name'] = model_name
                 # add vendor
-                if s_val.get('vendor') is not None:
-                    dev_smart['vendor'] = s_val.get('vendor')
+                vendor = s_val.get('vendor')
+                if vendor is not None:
+                    dev_smart['vendor'] = vendor
                 # if smart data was found, then add that to list
                 if dev_smart:
                     predict_datas.append(dev_smart)
@@ -222,7 +209,7 @@ class Module(MgrModule):
             predicted_result = obj_predictor.predict(predict_datas)
         return predicted_result
 
-    def predict_life_expectancy(self, devid):
+    def predict_life_expectancy(self, devid: str) -> Tuple[int, str, str]:
         result = self._predict_life_expentancy(devid)
         if result.lower() == 'good':
             return 0, '>6w', ''
@@ -233,7 +220,7 @@ class Module(MgrModule):
         else:
             return 0, 'unknown', ''
 
-    def _reset_device_life_expectancy(self, device_id):
+    def _reset_device_life_expectancy(self, device_id: str) -> int:
         result = CommandResult('')
         self.send_command(result, 'mon', '', json.dumps({
             'prefix': 'device rm-life-expectancy',
@@ -245,7 +232,10 @@ class Module(MgrModule):
                 'failed to reset device life expectancy, %s' % outs)
         return ret
 
-    def _set_device_life_expectancy(self, device_id, from_date, to_date=None):
+    def _set_device_life_expectancy(self,
+                                    device_id: str,
+                                    from_date: str,
+                                    to_date: Optional[str] = None) -> int:
         result = CommandResult('')
 
         if to_date is None:
@@ -267,7 +257,7 @@ class Module(MgrModule):
                 'failed to set device life expectancy, %s' % outs)
         return ret
 
-    def predict_all_devices(self):
+    def predict_all_devices(self) -> Tuple[int, str, str]:
         self.log.debug('predict_all_devices')
         devices = self.get('devices').get('devices', [])
         for devInfo in devices:
@@ -284,7 +274,7 @@ class Module(MgrModule):
 
             if result.lower() == 'good':
                 life_expectancy_day_min = (TIME_WEEK * 6) + TIME_DAYS
-                life_expectancy_day_max = None
+                life_expectancy_day_max = 0
             elif result.lower() == 'warning':
                 life_expectancy_day_min = (TIME_WEEK * 2)
                 life_expectancy_day_max = (TIME_WEEK * 6)
@@ -292,16 +282,16 @@ class Module(MgrModule):
                 life_expectancy_day_min = 0
                 life_expectancy_day_max = (TIME_WEEK * 2) - TIME_DAYS
             else:
-                predicted = None
-                life_expectancy_day_min = None
-                life_expectancy_day_max = None
+                predicted = 0
+                life_expectancy_day_min = 0
+                life_expectancy_day_max = 0
 
             if predicted and devInfo['devid'] and life_expectancy_day_min:
                 from_date = None
                 to_date = None
                 try:
-                    if life_expectancy_day_min:
-                        from_date = self._convert_timestamp(predicted, life_expectancy_day_min)
+                    assert life_expectancy_day_min
+                    from_date = self._convert_timestamp(predicted, life_expectancy_day_min)
 
                     if life_expectancy_day_max:
                         to_date = self._convert_timestamp(predicted, life_expectancy_day_max)

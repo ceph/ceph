@@ -646,7 +646,7 @@ devices_schema = JList(JObj({
         'dev': str,
         'path': str
     }))
-}))
+}, allow_unknown=True))
 
 
 class _ValError(Exception):

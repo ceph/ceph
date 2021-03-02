@@ -23,7 +23,6 @@
 #include "include/compat.h"
 #include "common/Cycles.h"
 #include "common/deleter.h"
-#include "common/Tub.h"
 #include "RDMAStack.h"
 
 #define dout_subsys ceph_subsys_ms

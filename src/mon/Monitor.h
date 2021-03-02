@@ -99,7 +99,6 @@ enum {
   l_mon_last,
 };
 
-class ConfigKeyService;
 class PaxosService;
 
 class AdminSocketHook;
@@ -678,14 +677,16 @@ public:
     return (class ConfigMonitor*) paxos_service[PAXOS_CONFIG].get();
   }
 
+  class KVMonitor *kvmon() {
+    return (class KVMonitor*) paxos_service[PAXOS_KV].get();
+  }
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class MonmapMonitor;
   friend class LogMonitor;
-  friend class ConfigKeyService;
-
-  std::unique_ptr<ConfigKeyService> config_key_service;
+  friend class KVMonitor;
 
   // -- sessions --
   MonSessionMap session_map;
@@ -1077,7 +1078,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_NAUTILUS CompatSet::Feature(11, "nautilus ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_OCTOPUS CompatSet::Feature(12, "octopus ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_PACIFIC CompatSet::Feature(13, "pacific ondisk layout")
-#define CEPH_MON_FEATURE_INCOMPAT_QUINCY CompatSet::Feature(13, "quincy ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_QUINCY CompatSet::Feature(14, "quincy ondisk layout")
 // make sure you add your feature to Monitor::get_supported_features
 
 

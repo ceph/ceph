@@ -540,7 +540,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     unquoted_word %= +char_("a-zA-Z0-9_./-");
     str %= quoted_string | unquoted_word;
     network_str %= +char_("/.:a-fA-F0-9][");
-    fs_name_str %= +char_("a-zA-Z0-9-_.");
+    fs_name_str %= +char_("a-zA-Z0-9_.-");
 
     spaces = +(lit(' ') | lit('\n') | lit('\t'));
 

@@ -77,4 +77,5 @@ public:
   int destructive_repair();
 
   int print_stats() const;
+  int build_size_histogram(const string& prefix) const;
 };

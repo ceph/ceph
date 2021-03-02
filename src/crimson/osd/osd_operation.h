@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "crimson/common/operation.h"
+#include "crimson/osd/osd_operation_sequencer.h"
 #include "crimson/osd/scheduler/scheduler.h"
 
 namespace crimson::osd {

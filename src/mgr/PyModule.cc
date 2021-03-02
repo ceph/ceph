@@ -28,7 +28,7 @@
 #define dout_prefix *_dout << "mgr[py] "
 
 // definition for non-const static member
-std::string PyModule::config_prefix = "mgr/";
+std::string PyModule::mgr_store_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
@@ -145,13 +145,12 @@ PyModuleConfig::PyModuleConfig(PyModuleConfig &mconfig)
 PyModuleConfig::~PyModuleConfig() = default;
 
 
-void PyModuleConfig::set_config(
+std::pair<int, std::string> PyModuleConfig::set_config(
     MonClient *monc,
     const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = PyModule::config_prefix
-                                   + module_name + "/" + key;
+  const std::string global_key = "mgr/" + module_name + "/" + key;
   Command set_cmd;
   {
     std::ostringstream cmd_json;
@@ -178,6 +177,7 @@ void PyModuleConfig::set_config(
     } else {
       config.erase(global_key);
     }
+    return {0, ""};
   } else {
     if (val) {
       dout(0) << "`config set mgr " << global_key << " " << val << "` failed: "
@@ -187,6 +187,7 @@ void PyModuleConfig::set_config(
         << cpp_strerror(set_cmd.r) << dendl;
     }
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+    return {set_cmd.r, set_cmd.outs};
   }
 }
 

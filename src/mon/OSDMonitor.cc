@@ -27,7 +27,7 @@
 #include "mon/MDSMonitor.h"
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
-#include "mon/ConfigKeyService.h"
+#include "mon/KVMonitor.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/Session.h"
@@ -1422,7 +1422,7 @@ void OSDMonitor::maybe_prime_pg_temp()
   for (auto p = pending_inc.new_weight.begin();
        !all && p != pending_inc.new_weight.end();
        ++p) {
-    if (p->second < osdmap.get_weight(p->first)) {
+    if (osdmap.exists(p->first) && p->second < osdmap.get_weight(p->first)) {
       // weight reduction
       osds.insert(p->first);
     } else {
@@ -9045,7 +9045,6 @@ void OSDMonitor::do_osd_create(
   if (existing_id >= 0) {
     ceph_assert(existing_id < osdmap.get_max_osd());
     ceph_assert(allocated_id < 0);
-    pending_inc.new_weight[existing_id] = CEPH_OSD_OUT;
     *new_id = existing_id;
   } else if (allocated_id >= 0) {
     ceph_assert(existing_id < 0);
@@ -9094,7 +9093,10 @@ out:
     pending_inc.new_max_osd = *new_id + 1;
   }
 
-  pending_inc.new_state[*new_id] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
+  pending_inc.new_weight[*new_id] = CEPH_OSD_IN;
+  // do not set EXISTS; OSDMap::set_weight, called by apply_incremental, will
+  // set it for us.  (ugh.)
+  pending_inc.new_state[*new_id] |= CEPH_OSD_NEW;
   if (!uuid.is_zero())
     pending_inc.new_uuid[*new_id] = uuid;
 }
@@ -9329,7 +9331,7 @@ int OSDMonitor::prepare_command_osd_new(
     || params.count("cephx_lockbox_secret")
     || params.count("dmcrypt_key");
 
-  ConfigKeyService *svc = nullptr;
+  KVMonitor *svc = nullptr;
   AuthMonitor::auth_entity_t cephx_entity, lockbox_entity;
 
   if (has_secrets) {
@@ -9373,7 +9375,7 @@ int OSDMonitor::prepare_command_osd_new(
     }
 
     if (has_lockbox) {
-      svc = mon.config_key_service.get();
+      svc = mon.kvmon();
       err = svc->validate_osd_new(uuid, dmcrypt_key, ss);
       if (err < 0) {
         return err;
@@ -9425,7 +9427,6 @@ int OSDMonitor::prepare_command_osd_new(
   if (is_recreate_destroyed) {
     ceph_assert(id >= 0);
     ceph_assert(osdmap.is_destroyed(id));
-    pending_inc.new_weight[id] = CEPH_OSD_OUT;
     pending_inc.new_state[id] |= CEPH_OSD_DESTROYED;
     if ((osdmap.get_state(id) & CEPH_OSD_NEW) == 0) {
       pending_inc.new_state[id] |= CEPH_OSD_NEW;
@@ -9558,7 +9559,7 @@ int OSDMonitor::prepare_command_osd_destroy(
     }
   }
 
-  auto svc = mon.config_key_service.get();
+  auto svc = mon.kvmon();
   err = svc->validate_osd_destroy(id, uuid);
   if (err < 0) {
     ceph_assert(err == -ENOENT);
@@ -9896,16 +9897,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (!updated.empty()) {
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
-      ss << "set osd(s) " << updated << " to class '" << device_class << "'";
-      getline(ss, rs);
-      wait_for_finished_proposal(op,
-        new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
-      return true;
-    }
-
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    ss << "set osd(s) " << updated << " to class '" << device_class << "'";
+    getline(ss, rs);
+    wait_for_finished_proposal(
+      op,
+      new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
+    return true;
  } else if (prefix == "osd crush rm-device-class") {
     bool stop = false;
     vector<string> idvec;
@@ -9958,15 +9957,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (!updated.empty()) {
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
-      ss << "done removing class of osd(s): " << updated;
-      getline(ss, rs);
-      wait_for_finished_proposal(op,
-        new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
-      return true;
-    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    ss << "done removing class of osd(s): " << updated;
+    getline(ss, rs);
+    wait_for_finished_proposal(
+      op,
+      new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush class create") {
     string device_class;
     if (!cmd_getval(cmdmap, "class", device_class)) {

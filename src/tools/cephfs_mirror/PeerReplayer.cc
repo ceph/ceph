@@ -187,6 +187,7 @@ void PeerReplayer::shutdown() {
   }
   m_replayers.clear();
   ceph_unmount(m_remote_mount);
+  ceph_release(m_remote_mount);
   m_remote_mount = nullptr;
   m_remote_cluster.reset();
 }
@@ -913,7 +914,8 @@ int PeerReplayer::synchronize(const std::string &dir_path, uint64_t snap_id,
     return r;
   }
 
-  snap_metadata snap_meta[] = {{PRIMARY_SNAP_ID_KEY.c_str(), stringify(snap_id).c_str()}};
+  auto snap_id_str{stringify(snap_id)};
+  snap_metadata snap_meta[] = {{PRIMARY_SNAP_ID_KEY.c_str(), snap_id_str.c_str()}};
   r = ceph_mksnap(m_remote_mount, dir_path.c_str(), snap_name.c_str(), 0755,
                   snap_meta, 1);
   if (r < 0) {

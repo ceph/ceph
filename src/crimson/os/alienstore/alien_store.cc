@@ -363,7 +363,8 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
     std::move(done),
     [this, ch, id] (auto &txn, auto &done) {
       return seastar::with_gate(transaction_gate, [this, ch, id, &txn, &done] {
-	return tp_mutex.lock().then ([this, ch, id, &txn, &done] {
+	AlienCollection* alien_coll = static_cast<AlienCollection*>(ch.get());
+	return alien_coll->with_lock([this, ch, id, &txn, &done] {
 	  Context *crimson_wrapper =
 	    ceph::os::Transaction::collect_all_contexts(txn);
 	  return tp->submit([this, ch, id, crimson_wrapper, &txn, &done] {
@@ -373,7 +374,6 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	  });
 	}).then([this, &done] (int r) {
 	  assert(r == 0);
-	  tp_mutex.unlock();
 	  return done.get_future();
 	});
       });

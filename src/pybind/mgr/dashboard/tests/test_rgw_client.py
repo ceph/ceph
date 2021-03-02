@@ -3,34 +3,35 @@
 import unittest
 
 try:
-    from unittest.mock import patch
+    from unittest.mock import MagicMock, patch
 except ImportError:
-    from mock import patch  # type: ignore
+    from mock import MagicMock, patch  # type: ignore
 
-from ..services.rgw_client import RgwClient, _parse_frontend_config
+from ..services.rgw_client import NoCredentialsException, RgwClient, \
+    RgwDaemon, _parse_frontend_config
 from ..settings import Settings
 from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
-def _dummy_daemon_info():
-    return {
-        'addr': '172.20.0.2:0/256594694',
-        'metadata': {
-            'zonegroup_name': 'zonegroup2-realm1'
-        }
-    }
+def _get_daemons_stub():
+    daemon = RgwDaemon()
+    daemon.host = 'rgw.1.myorg.com'
+    daemon.port = 8000
+    daemon.ssl = True
+    daemon.name = 'rgw.1.myorg.com'
+    daemon.zonegroup_name = 'zonegroup2-realm1'
+    return {daemon.name: daemon}
 
 
-@patch('dashboard.services.rgw_client._get_daemon_info', _dummy_daemon_info)
+@patch('dashboard.services.rgw_client._get_daemons', _get_daemons_stub)
+@patch('dashboard.services.rgw_client.RgwClient._get_user_id', MagicMock(
+    return_value='dummy_admin'))
 class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
     def setUp(self):
-        RgwClient._user_instances.clear()  # pylint: disable=protected-access
         self.mock_kv_store()
         self.CONFIG_KEY_DICT.update({
             'RGW_API_ACCESS_KEY': 'klausmustermann',
             'RGW_API_SECRET_KEY': 'supergeheim',
-            'RGW_API_HOST': 'localhost',
-            'RGW_API_USER_ID': 'rgwadmin'
         })
 
     def test_ssl_verify(self):
@@ -42,6 +43,24 @@ class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
         Settings.RGW_API_SSL_VERIFY = False
         instance = RgwClient.admin_instance()
         self.assertFalse(instance.session.verify)
+
+    def test_no_credentials(self):
+        self.CONFIG_KEY_DICT.update({
+            'RGW_API_ACCESS_KEY': '',
+            'RGW_API_SECRET_KEY': '',
+        })
+        with self.assertRaises(NoCredentialsException) as cm:
+            RgwClient.admin_instance()
+        self.assertIn('No RGW credentials found', str(cm.exception))
+
+    def test_default_daemon_wrong_settings(self):
+        self.CONFIG_KEY_DICT.update({
+            'RGW_API_HOST': 'localhost',
+            'RGW_API_PORT': '7990',
+        })
+        with self.assertRaises(LookupError) as cm:
+            RgwClient.admin_instance()
+        self.assertIn('No RGW daemon found with host:', str(cm.exception))
 
     @patch.object(RgwClient, '_get_daemon_zone_info')
     def test_get_placement_targets_from_zone(self, zone_info):

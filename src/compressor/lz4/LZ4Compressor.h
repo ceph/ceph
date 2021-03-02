@@ -15,13 +15,13 @@
 #ifndef CEPH_LZ4COMPRESSOR_H
 #define CEPH_LZ4COMPRESSOR_H
 
+#include <optional>
 #include <lz4.h>
 
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "common/config.h"
-#include "common/Tub.h"
 
 
 class LZ4Compressor : public Compressor {
@@ -102,14 +102,13 @@ class LZ4Compressor : public Compressor {
 #endif
     using ceph::decode;
     uint32_t count;
-    std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs;
     decode(count, p);
-    compressed_pairs.resize(count);
+    std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs(count);
     uint32_t total_origin = 0;
-    for (unsigned i = 0; i < count; ++i) {
-      decode(compressed_pairs[i].first, p);
-      decode(compressed_pairs[i].second, p);
-      total_origin += compressed_pairs[i].first;
+    for (auto& [dst_size, src_size] : compressed_pairs) {
+      decode(dst_size, p);
+      decode(src_size, p);
+      total_origin += dst_size;
     }
     compressed_len -= (sizeof(uint32_t) + sizeof(uint32_t) * count * 2);
 
@@ -119,11 +118,11 @@ class LZ4Compressor : public Compressor {
 
     ceph::buffer::ptr cur_ptr = p.get_current_ptr();
     ceph::buffer::ptr *ptr = &cur_ptr;
-    Tub<ceph::buffer::ptr> data_holder;
+    optional<ceph::buffer::ptr> data_holder;
     if (compressed_len != cur_ptr.length()) {
-      data_holder.construct(compressed_len);
+      data_holder.emplace(compressed_len);
       p.copy_deep(compressed_len, *data_holder);
-      ptr = data_holder.get();
+      ptr = &*data_holder;
     }
 
     char *c_in = ptr->c_str();

@@ -3,10 +3,45 @@ from __future__ import absolute_import
 
 import errno
 import inspect
+from ast import literal_eval
+from typing import Any
 
 from mgr_module import CLICheckNonemptyFileInput
 
 from . import mgr
+
+
+class Setting:
+    """
+    Setting representation that allows to set a default value and a list of allowed data types.
+    :param default_value: The name of the bucket.
+    :param types: a list consisting of the primary/preferred type and, optionally,
+    secondary/legacy types for backward compatibility.
+    """
+
+    def __init__(self, default_value: Any, types: list):
+        if not isinstance(types, list):
+            raise ValueError('Setting types must be a list.')
+        default_value_type = type(default_value)
+        if default_value_type not in types:
+            raise ValueError('Default value type not allowed.')
+        self.default_value = default_value
+        self.types = types
+
+    def types_as_str(self):
+        return ','.join([x.__name__ for x in self.types])
+
+    def cast(self, value):
+        for type_index, setting_type in enumerate(self.types):
+            try:
+                if setting_type.__name__ == 'bool' and str(value).lower() == 'false':
+                    return False
+                elif setting_type.__name__ == 'dict':
+                    return literal_eval(value)
+                return setting_type(value)
+            except (SyntaxError, TypeError, ValueError) as error:
+                if type_index == len(self.types) - 1:
+                    raise error
 
 
 class Options(object):
@@ -19,93 +54,84 @@ class Options(object):
         GRAFANA_API_HOST = ('localhost', str)
         GRAFANA_API_PORT = (3000, int)
     """
-    ENABLE_BROWSABLE_API = (True, bool)
-    REST_REQUESTS_TIMEOUT = (45, int)
+    ENABLE_BROWSABLE_API = Setting(True, [bool])
+    REST_REQUESTS_TIMEOUT = Setting(45, [int])
 
     # AUTHENTICATION ATTEMPTS
-    ACCOUNT_LOCKOUT_ATTEMPTS = (10, int)
+    ACCOUNT_LOCKOUT_ATTEMPTS = Setting(10, [int])
 
     # API auditing
-    AUDIT_API_ENABLED = (False, bool)
-    AUDIT_API_LOG_PAYLOAD = (True, bool)
+    AUDIT_API_ENABLED = Setting(False, [bool])
+    AUDIT_API_LOG_PAYLOAD = Setting(True, [bool])
 
     # RGW settings
-    RGW_API_HOST = ('', str)
-    RGW_API_PORT = (80, int)
-    RGW_API_ACCESS_KEY = ('', str)
-    RGW_API_SECRET_KEY = ('', str)
-    RGW_API_ADMIN_RESOURCE = ('admin', str)
-    RGW_API_SCHEME = ('http', str)
-    RGW_API_USER_ID = ('', str)
-    RGW_API_SSL_VERIFY = (True, bool)
+    RGW_API_HOST = Setting('', [dict, str])
+    RGW_API_PORT = Setting(80, [dict, int])
+    RGW_API_ACCESS_KEY = Setting('', [dict, str])
+    RGW_API_SECRET_KEY = Setting('', [dict, str])
+    RGW_API_ADMIN_RESOURCE = Setting('admin', [str])
+    RGW_API_SCHEME = Setting('http', [str])
+    RGW_API_USER_ID = Setting('', [dict, str])
+    RGW_API_SSL_VERIFY = Setting(True, [bool])
 
     # Grafana settings
-    GRAFANA_API_URL = ('', str)
-    GRAFANA_FRONTEND_API_URL = ('', str)
-    GRAFANA_API_USERNAME = ('admin', str)
-    GRAFANA_API_PASSWORD = ('admin', str)
-    GRAFANA_API_SSL_VERIFY = (True, bool)
-    GRAFANA_UPDATE_DASHBOARDS = (False, bool)
+    GRAFANA_API_URL = Setting('', [str])
+    GRAFANA_FRONTEND_API_URL = Setting('', [str])
+    GRAFANA_API_USERNAME = Setting('admin', [str])
+    GRAFANA_API_PASSWORD = Setting('admin', [str])
+    GRAFANA_API_SSL_VERIFY = Setting(True, [bool])
+    GRAFANA_UPDATE_DASHBOARDS = Setting(False, [bool])
 
     # NFS Ganesha settings
-    GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = ('', str)
+    GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = Setting('', [str])
 
     # Prometheus settings
-    PROMETHEUS_API_HOST = ('', str)
-    PROMETHEUS_API_SSL_VERIFY = (True, bool)
-    ALERTMANAGER_API_HOST = ('', str)
-    ALERTMANAGER_API_SSL_VERIFY = (True, bool)
+    PROMETHEUS_API_HOST = Setting('', [str])
+    PROMETHEUS_API_SSL_VERIFY = Setting(True, [bool])
+    ALERTMANAGER_API_HOST = Setting('', [str])
+    ALERTMANAGER_API_SSL_VERIFY = Setting(True, [bool])
 
     # iSCSI management settings
-    ISCSI_API_SSL_VERIFICATION = (True, bool)
+    ISCSI_API_SSL_VERIFICATION = Setting(True, [bool])
 
     # user management settings
     # Time span of user passwords to expire in days.
     # The default value is '0' which means that user passwords are
     # never going to expire.
-    USER_PWD_EXPIRATION_SPAN = (0, int)
+    USER_PWD_EXPIRATION_SPAN = Setting(0, [int])
     # warning levels to notify the user that the password is going
     # to expire soon
-    USER_PWD_EXPIRATION_WARNING_1 = (10, int)
-    USER_PWD_EXPIRATION_WARNING_2 = (5, int)
+    USER_PWD_EXPIRATION_WARNING_1 = Setting(10, [int])
+    USER_PWD_EXPIRATION_WARNING_2 = Setting(5, [int])
 
     # Password policy
-    PWD_POLICY_ENABLED = (True, bool)
+    PWD_POLICY_ENABLED = Setting(True, [bool])
     # Individual checks
-    PWD_POLICY_CHECK_LENGTH_ENABLED = (True, bool)
-    PWD_POLICY_CHECK_OLDPWD_ENABLED = (True, bool)
-    PWD_POLICY_CHECK_USERNAME_ENABLED = (False, bool)
-    PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED = (False, bool)
-    PWD_POLICY_CHECK_COMPLEXITY_ENABLED = (False, bool)
-    PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED = (False, bool)
-    PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_LENGTH_ENABLED = Setting(True, [bool])
+    PWD_POLICY_CHECK_OLDPWD_ENABLED = Setting(True, [bool])
+    PWD_POLICY_CHECK_USERNAME_ENABLED = Setting(False, [bool])
+    PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED = Setting(False, [bool])
+    PWD_POLICY_CHECK_COMPLEXITY_ENABLED = Setting(False, [bool])
+    PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED = Setting(False, [bool])
+    PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED = Setting(False, [bool])
     # Settings
-    PWD_POLICY_MIN_LENGTH = (8, int)
-    PWD_POLICY_MIN_COMPLEXITY = (10, int)
-    PWD_POLICY_EXCLUSION_LIST = (','.join(['osd', 'host',
-                                           'dashboard', 'pool',
-                                           'block', 'nfs',
-                                           'ceph', 'monitors',
-                                           'gateway', 'logs',
-                                           'crush', 'maps']),
-                                 str)
+    PWD_POLICY_MIN_LENGTH = Setting(8, [int])
+    PWD_POLICY_MIN_COMPLEXITY = Setting(10, [int])
+    PWD_POLICY_EXCLUSION_LIST = Setting(','.join(['osd', 'host', 'dashboard', 'pool',
+                                                  'block', 'nfs', 'ceph', 'monitors',
+                                                  'gateway', 'logs', 'crush', 'maps']),
+                                        [str])
 
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
-            getattr(Settings, name) == getattr(Options, name)[0]
+            getattr(Settings, name) == getattr(Options, name).default_value
 
 
 class SettingsMeta(type):
     def __getattr__(cls, attr):
-        default, stype = getattr(Options, attr)
-        if stype == bool and str(mgr.get_module_option(
-                attr,
-                default)).lower() == 'false':
-            value = False
-        else:
-            value = stype(mgr.get_module_option(attr, default))
-        return value
+        setting = getattr(Options, attr)
+        return setting.cast(mgr.get_module_option(attr, setting.default_value))
 
     def __setattr__(cls, attr, value):
         if not attr.startswith('_') and hasattr(Options, attr):
@@ -128,14 +154,14 @@ def _options_command_map():
         return not inspect.isroutine(member)
 
     cmd_map = {}
-    for option, value in inspect.getmembers(Options, filter_attr):
+    for option, setting in inspect.getmembers(Options, filter_attr):
         if option.startswith('_'):
             continue
         key_get = 'dashboard get-{}'.format(option.lower().replace('_', '-'))
         key_set = 'dashboard set-{}'.format(option.lower().replace('_', '-'))
         key_reset = 'dashboard reset-{}'.format(option.lower().replace('_', '-'))
         cmd_map[key_get] = {'name': option, 'type': None}
-        cmd_map[key_set] = {'name': option, 'type': value[1]}
+        cmd_map[key_set] = {'name': option, 'type': setting.types_as_str()}
         cmd_map[key_reset] = {'name': option, 'type': None}
     return cmd_map
 
@@ -191,11 +217,11 @@ def options_schema_list():
         return not inspect.isroutine(member)
 
     result = []
-    for option, value in inspect.getmembers(Options, filter_attr):
+    for option, setting in inspect.getmembers(Options, filter_attr):
         if option.startswith('_'):
             continue
-        result.append({'name': option, 'default': value[0],
-                       'type': value[1].__name__})
+        result.append({'name': option, 'default': setting.default_value,
+                       'type': setting.types_as_str()})
 
     return result
 
@@ -219,10 +245,8 @@ def handle_option_command(cmd, inbuf):
                 return value, stdout, stderr
         else:
             value = cmd['value']
-        value = opt['type'](value)
-        if opt['type'] == bool and cmd['value'].lower() == 'false':
-            value = False
-        setattr(Settings, opt['name'], value)
+        setting = getattr(Options, opt['name'])
+        setattr(Settings, opt['name'], setting.cast(value))
         return 0, 'Option {} updated'.format(opt['name']), ''
 
 

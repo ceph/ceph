@@ -1628,6 +1628,14 @@ extern "C" struct Inode *ceph_ll_get_inode(class ceph_mount_info *cmount,
 }
 
 
+extern "C" int ceph_ll_lookup_vino(
+    struct ceph_mount_info *cmount,
+    vinodeno_t vino,
+    Inode **inode)
+{
+  return (cmount->get_client())->ll_lookup_vino(vino, cmount->default_perms, inode);
+}
+
 /**
  * Populates the client cache with the requested inode, and its
  * parent dentry.

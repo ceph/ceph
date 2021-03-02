@@ -428,11 +428,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             sd.hostname = p['hostname']
             sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
             status = {
-                'Pending': -1,
-                'Running': 1,
-                'Succeeded': 0,
-                'Failed': -1,
-                'Unknown': -1,
+                'Pending': orchestrator.DaemonDescriptionStatus.error,
+                'Running': orchestrator.DaemonDescriptionStatus.running,
+                'Succeeded': orchestrator.DaemonDescriptionStatus.stopped,
+                'Failed': orchestrator.DaemonDescriptionStatus.error,
+                'Unknown': orchestrator.DaemonDescriptionStatus.error,
             }[p['phase']]
             sd.status = status
             sd.status_desc = p['phase']

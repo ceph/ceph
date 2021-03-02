@@ -27,14 +27,14 @@ from ceph.deployment.service_spec import \
     HostPlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
-from cephadm.services.cephadmservice import CephadmDaemonSpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from mgr_module import MgrModule, HandleCommandResult, Option
 from mgr_util import create_self_signed_cert
 import secrets
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, DaemonDescription
+    CLICommandMeta, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
@@ -1144,12 +1144,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 daemon_type == 'nfs' or \
                 daemon_type == 'iscsi':
             # get container image
-            ret, image, err = self.check_mon_command({
-                'prefix': 'config get',
-                'who': utils.name_to_config_section(daemon_name),
-                'key': 'container_image',
-            })
-            image = image.strip()
+            image = str(self.get_foreign_ceph_option(
+                utils.name_to_config_section(daemon_name),
+                'container_image'
+            )).strip()
         elif daemon_type == 'prometheus':
             image = self.container_image_prometheus
         elif daemon_type == 'grafana':
@@ -1534,7 +1532,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         sm[n].rados_config_location = spec.rados_config_location()
                 else:
                     sm[n].size = 0
-                if dd.status == 1:
+                if dd.status == DaemonDescriptionStatus.running:
                     sm[n].running += 1
                 if not sm[n].last_refresh or not dd.last_refresh or dd.last_refresh < sm[n].last_refresh:  # type: ignore
                     sm[n].last_refresh = dd.last_refresh
@@ -1594,6 +1592,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def service_action(self, action: str, service_name: str) -> List[str]:
         dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
+        if not dds:
+            raise OrchestratorError(f'No daemons exist under service name "{service_name}".'
+                                    + ' View currently running services using "ceph orch ls"')
         self.log.info('%s service %s' % (action.capitalize(), service_name))
         return [
             self._schedule_daemon_action(dd.name(), action)
@@ -1601,10 +1602,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ]
 
     def _daemon_action(self, daemon_type: str, daemon_id: str, host: str, action: str, image: Optional[str] = None) -> str:
-        daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
+        dd = DaemonDescription(
+            hostname=host,
+            daemon_type=daemon_type,
+            daemon_id=daemon_id
+        )
+        daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
             daemon_type=daemon_type,
+            service_name=dd.service_name(),
         )
 
         self._daemon_action_set_image(action, image, daemon_type, daemon_id)
@@ -1903,7 +1910,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _add_daemon(self,
                     daemon_type: str,
                     spec: ServiceSpec,
-                    create_func: Callable[..., CephadmDaemonSpec]) -> List[str]:
+                    create_func: Callable[..., CephadmDaemonDeploySpec]) -> List[str]:
         """
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
@@ -1928,7 +1935,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         daemons: List[DaemonDescription],
                         hosts: List[HostPlacementSpec],
                         count: int,
-                        create_func: Callable[..., CephadmDaemonSpec]) -> List[str]:
+                        create_func: Callable[..., CephadmDaemonDeploySpec]) -> List[str]:
         if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
@@ -1936,7 +1943,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         did_config = False
         service_type = daemon_type_to_service(daemon_type)
 
-        args = []  # type: List[CephadmDaemonSpec]
+        args = []  # type: List[CephadmDaemonDeploySpec]
         for host, network, name in hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              prefix=spec.service_id,
@@ -1960,7 +1967,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             )
             daemons.append(sd)
 
-        @forall_hosts
+        @ forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = create_func(*args)
             return CephadmServe(self)._create_daemon(daemon_spec)
@@ -2277,7 +2284,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                 replace=replace,
                                                 force=force,
                                                 hostname=daemon.hostname,
-                                                fullname=daemon.name(),
                                                 process_started_at=datetime_now(),
                                                 remove_util=self.to_remove_osds.rm_util))
             except NotFoundError:

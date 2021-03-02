@@ -58,8 +58,6 @@
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 
-#include "messages/MAuthReply.h"
-
 #include "messages/MTimeCheck2.h"
 #include "messages/MPing.h"
 
@@ -85,7 +83,7 @@
 #include "MgrMonitor.h"
 #include "MgrStatMonitor.h"
 #include "ConfigMonitor.h"
-#include "mon/ConfigKeyService.h"
+#include "KVMonitor.h"
 #include "mon/HealthMonitor.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
@@ -248,8 +246,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(*this, *paxos, "mgrstat"));
   paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
   paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
-
-  config_key_service = std::make_unique<ConfigKeyService>(*this, *paxos);
+  paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv"));
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);
@@ -1369,7 +1366,6 @@ set<string> Monitor::get_sync_targets_names()
   for (auto& svc : paxos_service) {
     svc->get_store_prefixes(targets);
   }
-  config_key_service->get_store_prefixes(targets);
   return targets;
 }
 
@@ -3064,7 +3060,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       const FSMap *fsmapp = &fsmap_copy;
 
       if (fsmapp->filesystem_count() > 0 and mdsmon()->should_print_status()){
-        ss << "    mds: " << spacing << *fsmapp << "\n";
+        ss << "    mds: " << spacing;
+	fsmapp->print_daemon_summary(ss);
+	ss << "\n";
       }
 
       ss << "    osd: " << spacing;
@@ -3094,6 +3092,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
     }
 
     ss << "\n \n  data:\n";
+    mdsmon()->print_fs_summary(ss);
     mgrstatmon()->print_summary(NULL, &ss);
 
     auto& pem = mgrstatmon()->get_progress_events();
@@ -3533,7 +3532,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
 
   if (module == "config-key") {
-    config_key_service->dispatch(op);
+    kvmon()->dispatch(op);
     return;
   }
 
@@ -5216,6 +5215,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       mgrstatmon()->check_sub(s->sub_map[p->first]);
     } else if (p->first == "config") {
       configmon()->check_sub(s);
+    } else if (p->first.find("kv:") == 0) {
+      kvmon()->check_sub(s->sub_map[p->first]);
     }
   }
 

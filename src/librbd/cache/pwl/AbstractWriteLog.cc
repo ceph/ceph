@@ -671,6 +671,12 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   // TODO: handle writesame and discard case in later PRs
   CephContext *cct = m_image_ctx.cct;
   utime_t now = ceph_clock_now();
+
+  on_finish = new LambdaContext(
+  [this, on_finish](int r) {
+    m_async_op_tracker.finish_op();
+    on_finish->complete(r);
+  });
   C_ReadRequest *read_ctx = m_builder->create_read_request(
       cct, now, m_perfcounter, bl, on_finish);
   ldout(cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
@@ -685,6 +691,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   std::vector<WriteLogCacheEntry*> log_entries_to_read;
   std::vector<bufferlist*> bls_to_read;
 
+  m_async_op_tracker.start_op();
   Context *ctx = new LambdaContext(
     [this, read_ctx, fadvise_flags](int r) {
       if (read_ctx->miss_extents.empty()) {

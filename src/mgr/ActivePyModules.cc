@@ -24,9 +24,10 @@
 
 #include "mgr/MgrContext.h"
 
-// For ::config_prefix
+// For ::mgr_store_prefix
 #include "PyModule.h"
 #include "PyModuleRegistry.h"
+#include "PyUtil.h"
 
 #include "ActivePyModules.h"
 #include "DaemonKey.h"
@@ -37,85 +38,30 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
-          std::map<std::string, std::string> store_data,
-          DaemonStateIndex &ds, ClusterState &cs,
-          MonClient &mc, LogChannelRef clog_,
-          LogChannelRef audit_clog_, Objecter &objecter_,
-          Client &client_, Finisher &f, DaemonServer &server,
-          PyModuleRegistry &pmr)
-  : module_config(module_config_), daemon_state(ds), cluster_state(cs),
-    monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
-    client(client_), finisher(f),
-    cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
-    server(server), py_module_registry(pmr)
+ActivePyModules::ActivePyModules(
+  PyModuleConfig &module_config_,
+  std::map<std::string, std::string> store_data,
+  bool mon_provides_kv_sub,
+  DaemonStateIndex &ds, ClusterState &cs,
+  MonClient &mc, LogChannelRef clog_,
+  LogChannelRef audit_clog_, Objecter &objecter_,
+  Client &client_, Finisher &f, DaemonServer &server,
+  PyModuleRegistry &pmr)
+: module_config(module_config_), daemon_state(ds), cluster_state(cs),
+  monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
+  client(client_), finisher(f),
+  cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
+  server(server), py_module_registry(pmr)
 {
   store_cache = std::move(store_data);
+  // we can only trust our ConfigMap if the mon cluster has provided
+  // kv sub since our startup.
+  have_local_config_map = mon_provides_kv_sub;
+  _refresh_config_map();
   cmd_finisher.start();
 }
 
 ActivePyModules::~ActivePyModules() = default;
-
-namespace {
-  // because the Python runtime could relinquish the GIL when performing GC
-  // and re-acquire it afterwards, we should enforce following locking policy:
-  // 1. do not acquire locks when holding the GIL, use a without_gil or
-  //    without_gil_t to guard the code which acquires non-gil locks.
-  // 2. always hold a GIL when calling python functions, for example, when
-  //    constructing a PyFormatter instance.
-  //
-  // a wrapper that provides a convenient RAII-style mechinary for acquiring
-  // and releasing GIL, like the macros of Py_BEGIN_ALLOW_THREADS and
-  // Py_END_ALLOW_THREADS.
-  struct without_gil_t {
-    without_gil_t()
-    {
-      assert(PyGILState_Check());
-      release_gil();
-    }
-    ~without_gil_t()
-    {
-      if (save) {
-        acquire_gil();
-      }
-    }
-  private:
-    void release_gil() {
-      save = PyEval_SaveThread();
-    }
-    void acquire_gil() {
-      assert(save);
-      PyEval_RestoreThread(save);
-      save = nullptr;
-    }
-    PyThreadState *save = nullptr;
-    friend struct with_gil_t;
-  };
-  struct with_gil_t {
-    with_gil_t(without_gil_t& allow_threads)
-      : allow_threads{allow_threads}
-    {
-      allow_threads.acquire_gil();
-    }
-    ~with_gil_t() {
-      allow_threads.release_gil();
-    }
-  private:
-    without_gil_t& allow_threads;
-  };
-  // invoke func with GIL acquired
-  template<typename Func>
-  auto with_gil(without_gil_t& no_gil, Func&& func)
-  {
-    with_gil_t gil{no_gil};
-    return std::invoke(std::forward<Func>(func));
-  }
-  template<typename Func>
-  auto without_gil(Func&& func) {
-    without_gil_t no_gil;
-    return std::invoke(std::forward<Func>(func));
-  }
-}
 
 void ActivePyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
@@ -479,6 +425,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       mgr_map.dump(&f);
       return f.get();
     });
+  } else if (what == "have_local_config_map") {
+    with_gil_t with_gil{no_gil};
+    f.dump_bool("have_local_config_map", have_local_config_map);
+    return f.get();
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     with_gil_t with_gil{no_gil};
@@ -586,7 +536,7 @@ bool ActivePyModules::get_store(const std::string &module_name,
   without_gil_t no_gil;
   std::lock_guard l(lock);
 
-  const std::string global_key = PyModule::config_prefix
+  const std::string global_key = PyModule::mgr_store_prefix
     + module_name + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;
@@ -616,8 +566,7 @@ PyObject *ActivePyModules::dispatch_remote(
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
-  const std::string global_key = PyModule::config_prefix
-    + module_name + "/" + key;
+  const std::string global_key = "mgr/" + module_name + "/" + key;
 
   dout(20) << " key: " << global_key << dendl;
 
@@ -679,7 +628,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
   std::lock_guard l(lock);
   std::lock_guard lock(module_config.lock);
 
-  const std::string base_prefix = PyModule::config_prefix
+  const std::string base_prefix = PyModule::mgr_store_prefix
                                     + module_name + "/";
   const std::string global_prefix = base_prefix + prefix;
   dout(4) << __func__ << " prefix: " << global_prefix << dendl;
@@ -697,12 +646,15 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
 void ActivePyModules::set_store(const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = PyModule::config_prefix
+  const std::string global_key = PyModule::mgr_store_prefix
                                    + module_name + "/" + key;
 
   Command set_cmd;
   {
     std::lock_guard l(lock);
+
+    // NOTE: this isn't strictly necessary since we'll also get an MKVData
+    // update from the mon due to our subscription *before* our command is acked.
     if (val) {
       store_cache[global_key] = *val;
     } else {
@@ -736,10 +688,12 @@ void ActivePyModules::set_store(const std::string &module_name,
   }
 }
 
-void ActivePyModules::set_config(const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+std::pair<int, std::string> ActivePyModules::set_config(
+  const std::string &module_name,
+  const std::string &key,
+  const boost::optional<std::string>& val)
 {
-  module_config.set_config(&monc, module_name, key, val);
+  return module_config.set_config(&monc, module_name, key, val);
 }
 
 std::map<std::string, std::string> ActivePyModules::get_services() const
@@ -754,6 +708,96 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
   }
 
   return result;
+}
+
+void ActivePyModules::update_kv_data(
+  const std::string prefix,
+  bool incremental,
+  const map<std::string, boost::optional<bufferlist>, std::less<>>& data)
+{
+  std::lock_guard l(lock);
+  bool do_config = false;
+  if (!incremental) {
+    dout(10) << "full update on " << prefix << dendl;
+    auto p = store_cache.lower_bound(prefix);
+    while (p != store_cache.end() && p->first.find(prefix) == 0) {
+      dout(20) << " rm prior " << p->first << dendl;
+      p = store_cache.erase(p);
+    }
+  } else {
+    dout(10) << "incremental update on " << prefix << dendl;
+  }
+  for (auto& i : data) {
+    if (i.second) {
+      dout(20) << " set " << i.first << " = " << i.second->to_str() << dendl;
+      store_cache[i.first] = i.second->to_str();
+    } else {
+      dout(20) << " rm " << i.first << dendl;
+      store_cache.erase(i.first);
+    }
+    if (i.first.find("config/") == 0) {
+      do_config = true;
+    }
+  }
+  if (do_config) {
+    _refresh_config_map();
+  }
+}
+
+void ActivePyModules::_refresh_config_map()
+{
+  dout(10) << dendl;
+  config_map.clear();
+  for (auto p = store_cache.lower_bound("config/");
+       p != store_cache.end() && p->first.find("config/") == 0;
+       ++p) {
+    string key = p->first.substr(7);
+    if (key.find("mgr/") == 0) {
+      // NOTE: for now, we ignore module options.  see also ceph_foreign_option_get().
+      continue;
+    }
+    string value = p->second;
+    string name;
+    string who;
+    config_map.parse_key(key, &name, &who);
+
+    const Option *opt = g_conf().find_option(name);
+    if (!opt) {
+      config_map.stray_options.push_back(
+	std::unique_ptr<Option>(
+	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+      opt = config_map.stray_options.back().get();
+    }
+
+    string err;
+    int r = opt->pre_validate(&value, &err);
+    if (r < 0) {
+      dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
+	       << value << "' for " << name << dendl;
+    }
+
+    MaskedOption mopt(opt);
+    mopt.raw_value = value;
+    string section_name;
+    if (who.size() &&
+	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+      derr << __func__ << " invalid mask for key " << key << dendl;
+    } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      dout(10) << __func__ << " NO_MON_UPDATE option '"
+	       << name << "' = '" << value << "' for " << name
+	       << dendl;
+    } else {
+      Section *section = &config_map.global;;
+      if (section_name.size() && section_name != "global") {
+	if (section_name.find('.') != std::string::npos) {
+	  section = &config_map.by_id[section_name];
+	} else {
+	  section = &config_map.by_type[section_name];
+	}
+      }
+      section->options.insert(make_pair(name, std::move(mopt)));
+    }
+  }
 }
 
 PyObject* ActivePyModules::with_perf_counters(
@@ -969,6 +1013,102 @@ PyObject *ActivePyModules::get_osdmap()
     return newmap;
   });
   return construct_with_capsule("mgr_module", "OSDMap", (void*)newmap);
+}
+
+PyObject *ActivePyModules::get_foreign_config(
+  const std::string& who,
+  const std::string& name)
+{
+  dout(10) << "ceph_foreign_option_get " << who << " " << name << dendl;
+
+  // NOTE: for now this will only work with build-in options, not module options.
+  const Option *opt = g_conf().find_option(name);
+  if (!opt) {
+    dout(4) << "ceph_foreign_option_get " << name << " not found " << dendl;
+    PyErr_Format(PyExc_KeyError, "option not found: %s", name.c_str());
+    return nullptr;
+  }
+
+  // If the monitors are not yet running pacific, we cannot rely on our local
+  // ConfigMap
+  if (!have_local_config_map) {
+    dout(20) << "mon cluster wasn't pacific when we started: falling back to 'config get'"
+	     << dendl;
+    without_gil_t no_gil;
+    Command cmd;
+    {
+      std::lock_guard l(lock);
+      cmd.run(
+	&monc,
+	"{\"prefix\": \"config get\","s +
+	"\"who\": \""s + who + "\","s +
+	"\"key\": \""s + name + "\"}");
+    }
+    cmd.wait();
+    dout(10) << "ceph_foreign_option_get (mon command) " << who << " " << name << " = "
+	     << cmd.outbl.to_str() << dendl;
+    with_gil_t gil(no_gil);
+    return get_python_typed_option_value(opt->type, cmd.outbl.to_str());
+  }
+
+  // mimic the behavor of mon/ConfigMonitor's 'config get' command
+  EntityName entity;
+  if (!entity.from_str(who) &&
+      !entity.from_str(who + ".")) {
+    dout(5) << "unrecognized entity '" << who << "'" << dendl;
+    PyErr_Format(PyExc_KeyError, "invalid entity: %s", who.c_str());
+    return nullptr;
+  }
+
+  without_gil_t no_gil;
+  lock.lock();
+
+  // FIXME: this is super inefficient, since we generate the entire daemon
+  // config just to extract one value from it!
+
+  std::map<std::string,std::string,std::less<>> config;
+  cluster_state.with_osdmap([&](const OSDMap &osdmap) {
+      map<string,string> crush_location;
+      string device_class;
+      if (entity.is_osd()) {
+	osdmap.crush->get_full_location(who, &crush_location);
+	int id = atoi(entity.get_id().c_str());
+	const char *c = osdmap.crush->get_item_class(id);
+	if (c) {
+	  device_class = c;
+	}
+	dout(10) << __func__ << " crush_location " << crush_location
+		 << " class " << device_class << dendl;
+      }
+
+      std::map<std::string,pair<std::string,const MaskedOption*>> src;
+      config = config_map.generate_entity_map(
+	entity,
+	crush_location,
+	osdmap.crush.get(),
+	device_class,
+	&src);
+    });
+
+  // get a single value
+  string value;
+  auto p = config.find(name);
+  if (p != config.end()) {
+    value = p->second;
+  } else {
+    if (!entity.is_client() &&
+	!boost::get<boost::blank>(&opt->daemon_value)) {
+      value = Option::to_str(opt->daemon_value);
+    } else {
+      value = Option::to_str(opt->value);
+    }
+  }
+
+  dout(10) << "ceph_foreign_option_get (configmap) " << who << " " << name << " = "
+	   << value << dendl;
+  lock.unlock();
+  with_gil_t with_gil(no_gil);
+  return get_python_typed_option_value(opt->type, value);
 }
 
 void ActivePyModules::set_health_checks(const std::string& module_name,

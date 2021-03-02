@@ -333,7 +333,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
   }
 }
 
-Tub<l3_protocol::l3packet> ipv4::get_packet() {
+std::optional<l3_protocol::l3packet> ipv4::get_packet() {
   // _packetq will be mostly empty here unless it hold remnants of previously
   // fragmented packet
   if (_packetq.empty()) {
@@ -350,7 +350,7 @@ Tub<l3_protocol::l3packet> ipv4::get_packet() {
     }
   }
 
-  Tub<l3_protocol::l3packet> p;
+  std::optional<l3_protocol::l3packet> p;
   if (!_packetq.empty()) {
     p = std::move(_packetq.front());
     _packetq.pop_front();

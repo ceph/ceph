@@ -229,7 +229,7 @@ Restoring the MON quorum
 ------------------------
 
 In case the Ceph MONs cannot form a quorum, cephadm is not able
-to manage the cluster, until the quorum is restored. 
+to manage the cluster, until the quorum is restored.
 
 In order to restore the MON quorum, remove unhealthy MONs
 form the monmap by following these steps:
@@ -242,9 +242,46 @@ form the monmap by following these steps:
 
 2. Identify a surviving monitor and log in to that host::
 
-    ssh {mon-host} 
+    ssh {mon-host}
     cephadm enter --name mon.`hostname`
 
-3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy` 
+3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`
 
+
+Manually deploying a MGR daemon
+-------------------------------
+cephadm requires a MGR daemon in order to manage the cluster. In case the cluster
+the last MGR of a cluster was removed, follow these steps in order to deploy 
+a MGR ``mgr.hostname.smfvfd`` on a random host of your cluster manually. 
+
+Disable the cephadm scheduler, in order to prevent cephadm from removing the new 
+MGR. See :ref:`cephadm-enable-cli`::
+
+  ceph config-key set mgr/cephadm/pause true
+
+Then get or create the auth entry for the new MGR::
+
+  ceph auth get-or-create mgr.hostname.smfvfd mon "profile mgr" osd "allow *" mds "allow *"
+
+Get the ceph.conf::
+
+  ceph config generate-minimal-conf
+
+Get the container image::
+
+  ceph config get "mgr.hostname.smfvfd" container_image
+
+Create a file ``config-json.json`` which contains the information neccessary to deploy
+the daemon:
+
+.. code-block:: json
+
+  {
+    "config": "# minimal ceph.conf for 8255263a-a97e-4934-822c-00bfe029b28f\n[global]\n\tfsid = 8255263a-a97e-4934-822c-00bfe029b28f\n\tmon_host = [v2:192.168.0.1:40483/0,v1:192.168.0.1:40484/0]\n",
+    "keyring": "[mgr.hostname.smfvfd]\n\tkey = V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4=\n"
+  }
+
+Deploy the daemon::
+
+  cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 

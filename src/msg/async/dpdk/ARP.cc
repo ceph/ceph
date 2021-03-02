@@ -48,9 +48,9 @@ arp::arp(interface* netif):
     )
 {}
 
-Tub<l3_protocol::l3packet> arp::get_packet()
+std::optional<l3_protocol::l3packet> arp::get_packet()
 {
-  Tub<l3_protocol::l3packet> p;
+  std::optional<l3_protocol::l3packet> p;
   if (!_packetq.empty()) {
     p = std::move(_packetq.front());
     _packetq.pop_front();

@@ -1420,16 +1420,20 @@ cdef class ObjectIterator(object):
             const char *key_ = NULL
             const char *locator_ = NULL
             const char *nspace_ = NULL
+            size_t key_size_ = 0
+            size_t locator_size_ = 0
+            size_t nspace_size_ = 0
 
         with nogil:
-            ret = rados_nobjects_list_next(self.ctx, &key_, &locator_, &nspace_)
+            ret = rados_nobjects_list_next2(self.ctx, &key_, &locator_, &nspace_,
+                                            &key_size_, &locator_size_, &nspace_size_)
 
         if ret < 0:
             raise StopIteration()
 
-        key = decode_cstr(key_)
-        locator = decode_cstr(locator_) if locator_ != NULL else None
-        nspace = decode_cstr(nspace_) if nspace_ != NULL else None
+        key = decode_cstr(key_[:key_size_])
+        locator = decode_cstr(locator_[:locator_size_]) if locator_ != NULL else None
+        nspace = decode_cstr(nspace_[:nspace_size_]) if nspace_ != NULL else None
         return Object(self.ioctx, key, locator, nspace)
 
     def __dealloc__(self):
