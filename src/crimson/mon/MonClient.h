@@ -155,7 +155,7 @@ private:
   seastar::future<> handle_log_ack(Ref<MLogAck> m);
   seastar::future<> handle_config(Ref<MConfig> m);
 
-  void send_pendings();
+  void on_session_opened();
 private:
   seastar::future<> load_keyring();
   seastar::future<> authenticate();
