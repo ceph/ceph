@@ -1039,6 +1039,8 @@ seastar::future<> Client::reopen_session(int rank)
       return seastar::now();
     }
     return active_con->renew_rotating_keyring();
+  }).then([this] {
+    return sub.reload() ? renew_subs() : seastar::now();
   });
 }
 
