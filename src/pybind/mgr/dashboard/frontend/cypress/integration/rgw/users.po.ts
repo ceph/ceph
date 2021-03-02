@@ -9,10 +9,13 @@ export class UsersPageHelper extends PageHelper {
   pages = pages;
 
   @PageHelper.restrictTo(pages.create.url)
-  create(username: string, fullname: string, email: string, maxbuckets: string) {
-    // Enter in  username
-    cy.get('#uid').type(username);
-
+  create(tenant: string, user_id: string, fullname: string, email: string, maxbuckets: string) {
+    // Enter in user_id
+    cy.get('#user_id').type(user_id);
+    // Show Tenanat
+    cy.get('#show_tenant').click({ force: true });
+    // Enter in tenant
+    cy.get('#tenant').type(tenant);
     // Enter in full name
     cy.get('#display_name').click().type(fullname);
 
@@ -26,7 +29,7 @@ export class UsersPageHelper extends PageHelper {
 
     // Click the create button and wait for user to be made
     cy.contains('button', 'Create User').click();
-    this.getFirstTableCell(username).should('exist');
+    this.getFirstTableCell(tenant + '$' + user_id).should('exist');
   }
 
   @PageHelper.restrictTo(pages.index.url)
@@ -54,26 +57,27 @@ export class UsersPageHelper extends PageHelper {
   }
 
   invalidCreate() {
+    const tenant = '000invalid_tenant';
     const uname = '000invalid_create_user';
     // creating this user in order to check that you can't give two users the same name
     this.navigateTo('create');
-    this.create(uname, 'xxx', 'xxx@xxx', '1');
+    this.create(tenant, uname, 'xxx', 'xxx@xxx', '1');
 
     this.navigateTo('create');
 
     // Username
-    cy.get('#uid')
+    cy.get('#user_id')
       // No username had been entered. Field should be invalid
       .should('have.class', 'ng-invalid')
       // Try to give user already taken name. Should make field invalid.
-      .type(uname)
-      .blur()
-      .should('have.class', 'ng-invalid');
-    cy.contains('#uid + .invalid-feedback', 'The chosen user ID is already in use.');
+      .type(uname);
+    cy.get('#show_tenant').click({ force: true });
+    cy.get('#tenant').type(tenant).should('have.class', 'ng-invalid');
+    cy.contains('#tenant + .invalid-feedback', 'The chosen user ID exists in this tenant.');
 
     // check that username field is marked invalid if username has been cleared off
-    cy.get('#uid').clear().blur().should('have.class', 'ng-invalid');
-    cy.contains('#uid + .invalid-feedback', 'This field is required.');
+    cy.get('#user_id').clear().blur().should('have.class', 'ng-invalid');
+    cy.contains('#user_id + .invalid-feedback', 'This field is required.');
 
     // Full name
     cy.get('#display_name')
@@ -96,14 +100,15 @@ export class UsersPageHelper extends PageHelper {
     cy.contains('#max_buckets + .invalid-feedback', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(uname);
+    this.delete(tenant + '$' + uname);
   }
 
   invalidEdit() {
+    const tenant = '000invalid_tenant';
     const uname = '000invalid_edit_user';
     // creating this user to edit for the test
     this.navigateTo('create');
-    this.create(uname, 'xxx', 'xxx@xxx', '50');
+    this.create(tenant, uname, 'xxx', 'xxx@xxx', '50');
 
     this.navigateEdit(name);
 
@@ -129,6 +134,6 @@ export class UsersPageHelper extends PageHelper {
     cy.contains('#max_buckets + .invalid-feedback', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(uname);
+    this.delete(tenant + '$' + uname);
   }
 }
