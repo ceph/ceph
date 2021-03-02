@@ -218,12 +218,12 @@ OMapInnerNode::list(
 	  return omap_load_extent(
 	    oc, laddr,
 	    get_meta().depth - 1
-	  ).safe_then([&, max_result_size, oc, this] (auto &&extent) {
+	  ).safe_then([&, max_result_size, oc] (auto &&extent) {
 	    return extent->list(
 	      oc,
 	      start,
 	      max_result_size - result.size()
-	    ).safe_then([&, max_result_size, this](auto &&child_ret) mutable {
+	    ).safe_then([&, max_result_size](auto &&child_ret) mutable {
 	      auto &[child_complete, child_result] = child_ret;
 	      if (result.size() && child_result.size()) {
 		assert(child_result.begin()->first > result.rbegin()->first);
