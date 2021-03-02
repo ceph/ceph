@@ -397,6 +397,10 @@ crimson::net::ConnectionRef Connection::get_conn() {
   return conn;
 }
 
+Client::mon_command_t::mon_command_t(ceph::ref_t<MMonCommand> req)
+  : req(req)
+{}
+
 Client::Client(crimson::net::Messenger& messenger,
                crimson::common::AuthHandler& auth_handler)
   // currently, crimson is OSD-only
@@ -827,9 +831,9 @@ seastar::future<> Client::handle_mon_command_ack(Ref<MMonCommandAck> m)
   const auto tid = m->get_tid();
   if (auto found = mon_commands.find(tid);
       found != mon_commands.end()) {
-    auto& result = found->second;
+    auto& command = found->second;
     logger().trace("{} {}", __func__, tid);
-    result.set_value(std::make_tuple(m->r, m->rs, std::move(m->get_data())));
+    command.result.set_value(std::make_tuple(m->r, m->rs, std::move(m->get_data())));
     mon_commands.erase(found);
   } else {
     logger().warn("{} {} not found", __func__, tid);
@@ -1001,9 +1005,11 @@ Client::run_command(std::string&& cmd,
   m->set_tid(tid);
   m->cmd = {std::move(cmd)};
   m->set_data(std::move(bl));
-  auto& req = mon_commands[tid];
-  return send_message(m).then([&req] {
-    return req.get_future();
+  [[maybe_unused]] auto [command, added] =
+    mon_commands.try_emplace(tid, m);
+  assert(added);
+  return send_message(m).then([&result=command->second.result] {
+    return result.get_future();
   });
 }
 
@@ -1029,6 +1035,11 @@ seastar::future<> Client::on_session_opened()
     }
     pending_messages.clear();
     return seastar::now();
+  }).then([this] {
+    return seastar::parallel_for_each(mon_commands,
+      [this](auto &tid_command) {
+      return send_message(tid_command.second.req);
+    });
   });
 }
 
