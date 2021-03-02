@@ -246,9 +246,7 @@ static int sign_request_v4(const DoutPrefixProvider *dpp, RGWAccessKey& key,
     }
   }
 
-  rgw::auth::s3::AWSSignerV4 signer(dpp);
-
-  auto sigv4_data = signer.prepare(key.id, region, service, info, opt_content, true);
+  auto sigv4_data = rgw::auth::s3::AWSSignerV4::prepare(dpp, key.id, region, service, info, opt_content, true);
   auto sigv4_headers = sigv4_data.signature_factory(dpp, key.key, sigv4_data);
 
   for (auto& entry : sigv4_headers) {

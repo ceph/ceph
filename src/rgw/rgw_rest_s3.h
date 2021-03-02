@@ -1108,12 +1108,13 @@ public:
     signature_factory_t signature_factory;
   };
 
-  prepare_result_t prepare(const std::string& access_key_id,
-                           const string& region,
-                           const string& service,
-                           const req_info& info,
-                           const bufferlist *opt_content,
-                           bool s3_op) const;
+  static prepare_result_t prepare(const DoutPrefixProvider *dpp,
+                                  const std::string& access_key_id,
+                                  const string& region,
+                                  const string& service,
+                                  const req_info& info,
+                                  const bufferlist *opt_content,
+                                  bool s3_op);
 };
 
 
