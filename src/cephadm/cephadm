@@ -182,7 +182,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "docker.io/ceph/ceph-grafana:6.6.2",
+            "image": "docker.io/ceph/ceph-grafana:6.7.4",
             "cpus": "2",
             "memory": "4GB",
             "args": [],
