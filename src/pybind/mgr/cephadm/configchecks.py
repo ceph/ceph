@@ -2,6 +2,8 @@ import json
 import ipaddress
 import logging
 
+from mgr_module import ServiceInfoT
+
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast, Tuple, Callable
 
 if TYPE_CHECKING:
@@ -347,13 +349,14 @@ class CephadmConfigChecks:
         service_map: Dict[str, Optional[Dict[str, str]]] = {}
 
         for server in self.mgr.list_servers():
-            for service in server.get('services', []):
-                service_map.update(
-                    {
-                        f"{service['type']}.{service['id']}":
-                        self.mgr.get_metadata(service['type'], service['id'])
-                    }
-                )
+            for service in cast(List[ServiceInfoT], server.get('services', [])):
+                if service:
+                    service_map.update(
+                        {
+                            f"{service['type']}.{service['id']}":
+                            self.mgr.get_metadata(service['type'], service['id'])
+                        }
+                    )
         return service_map
 
     def _check_kernel_lsm(self) -> None:
