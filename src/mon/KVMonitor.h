@@ -55,4 +55,15 @@ public:
   void check_all_subs();
 
   bool maybe_send_update(Subscription *sub);
+
+
+  // used by other services to adjust kv content; note that callers MUST ensure that
+  // propose_pending() is called and a commit is forced to provide atomicity and
+  // proper subscriber notifications.
+  void enqueue_set(const std::string& key, bufferlist &v) {
+    pending[key] = v;
+  }
+  void enqueue_rm(const std::string& key) {
+    pending[key] = boost::none;
+  }
 };
