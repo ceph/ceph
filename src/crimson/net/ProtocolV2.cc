@@ -1825,7 +1825,9 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
 
     msg->encode(conn.features, 0);
 
-    ceph_assert(!msg->get_seq() && "message already has seq");
+    if (const auto seq = msg->get_seq(); seq) {
+      logger().info("{} already has seq={}, reassigning", *msg, seq);
+    }
     msg->set_seq(++conn.out_seq);
 
     ceph_msg_header &header = msg->get_header();
