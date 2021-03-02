@@ -129,7 +129,7 @@ struct omap_manager_test_t :
     const omap_root_t &omap_root,
     Transaction &t,
     const std::optional<std::string> &start,
-    size_t max = MAX_SIZE) {
+    size_t max = 128) {
 
     if (start) {
       logger().debug("list on {}", *start);
@@ -137,8 +137,10 @@ struct omap_manager_test_t :
       logger().debug("list on start");
     }
 
+    auto config = OMapManager::omap_list_config_t::with_max(max);
+    config.max_result_size = max;
     auto [complete, results] = omap_manager->omap_list(
-      omap_root, t, start, max
+      omap_root, t, start, config
     ).unsafe_get0();
 
     auto it = start ?
