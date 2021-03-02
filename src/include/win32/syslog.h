@@ -25,7 +25,6 @@
 #define LOG_NOTICE      5       /* normal but significant condition */
 #define LOG_INFO        6       /* informational */
 #define LOG_DEBUG       7       /* debug-level messages */
-#define LOG_NDELAY      8       /* don't delay open */
 
 #define LOG_KERN      (0<<3)  /* kernel messages */
 #define LOG_USER      (1<<3)  /* user-level messages */
@@ -49,14 +48,17 @@
 #define LOG_LOCAL6      (22<<3) /* reserved for local use */
 #define LOG_LOCAL7      (23<<3) /* reserved for local use */
 
+#define	LOG_PRIMASK	0x07	/* mask to extract priority part (internal) */
+				/* extract priority */
+#define	LOG_PRI(p)	((p) & LOG_PRIMASK)
+
+
 static inline void
 openlog(const char *ident, int option, int facility)
 {
 }
 
-static inline void
-syslog(int priority, const char *format, ...)
-{
-}
+void
+syslog(int priority, const char *format, ...);
 
 #endif /* syslog.h */
