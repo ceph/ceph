@@ -719,7 +719,8 @@ class OSDRemovalQueue(object):
                 if not osd.destroy():
                     raise orchestrator.OrchestratorError(
                         f"Could not destroy {osd}")
-                logger.info(f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
+                logger.info(
+                    f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
             else:
                 # purge from osdmap
                 if not osd.purge():
