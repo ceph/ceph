@@ -53,7 +53,7 @@ int Mantle::balance(std::string_view script,
   if (luaL_loadstring(L, script.data())) {
     mantle_dout(0) << "WARNING: mantle could not load balancer: "
             << lua_tostring(L, -1) << mantle_dendl;
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   /* tell the balancer which mds is making the decision */
@@ -84,20 +84,20 @@ int Mantle::balance(std::string_view script,
   if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
     mantle_dout(0) << "WARNING: mantle could not execute script: "
             << lua_tostring(L, -1) << mantle_dendl;
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   /* parse response by iterating over Lua stack */
   if (lua_istable(L, -1) == 0) {
     mantle_dout(0) << "WARNING: mantle script returned a malformed response" << mantle_dendl;
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   /* fill in return value */
   for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1)) {
     if (!lua_isinteger(L, -2) || !lua_isnumber(L, -1)) {
       mantle_dout(0) << "WARNING: mantle script returned a malformed response" << mantle_dendl;
-      return -EINVAL;
+      return -CEPHFS_EINVAL;
     }
     mds_rank_t rank(lua_tointeger(L, -2));
     my_targets[rank] = lua_tonumber(L, -1);
