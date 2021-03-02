@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
@@ -35,6 +36,7 @@ class MAuthReply;
 struct MMonMap;
 struct MMonSubscribeAck;
 struct MMonGetVersionReply;
+struct MMonCommand;
 struct MMonCommandAck;
 struct MLogAck;
 struct MConfig;
@@ -67,7 +69,12 @@ class Client : public crimson::net::Dispatcher,
   ceph_tid_t last_mon_command_id = 0;
   using command_result_t =
     seastar::future<std::tuple<std::int32_t, string, ceph::bufferlist>>;
-  std::map<ceph_tid_t, typename command_result_t::promise_type> mon_commands;
+  struct mon_command_t {
+    ceph::ref_t<MMonCommand> req;
+    typename command_result_t::promise_type result;
+    mon_command_t(ceph::ref_t<MMonCommand> req);
+  };
+  std::vector<mon_command_t> mon_commands;
 
   MonSub sub;
 
@@ -82,8 +89,8 @@ public:
     return monmap.fsid;
   }
   get_version_t get_version(const std::string& map);
-  command_result_t run_command(const std::vector<std::string>& cmd,
-			       const bufferlist& bl);
+  command_result_t run_command(std::string&& cmd,
+                               bufferlist&& bl);
   seastar::future<> send_message(MessageRef);
   bool sub_want(const std::string& what, version_t start, unsigned flags);
   void sub_got(const std::string& what, version_t have);
@@ -155,13 +162,17 @@ private:
   seastar::future<> handle_log_ack(Ref<MLogAck> m);
   seastar::future<> handle_config(Ref<MConfig> m);
 
-  void send_pendings();
+  seastar::future<> on_session_opened();
 private:
   seastar::future<> load_keyring();
   seastar::future<> authenticate();
 
   bool is_hunting() const;
-  seastar::future<> reopen_session(int rank);
+  // @param rank, rank of the monitor to be connected, if it is less than 0,
+  //              try to connect to all monitors in monmap, until one of them
+  //              is connected.
+  // @return true if a connection to monitor is established
+  seastar::future<bool> reopen_session(int rank);
   std::vector<unsigned> get_random_mons(unsigned n) const;
   seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
   void _finish_auth(const entity_addr_t& peer);
