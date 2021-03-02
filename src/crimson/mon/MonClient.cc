@@ -397,6 +397,10 @@ crimson::net::ConnectionRef Connection::get_conn() {
   return conn;
 }
 
+Client::mon_command_t::mon_command_t(ceph::ref_t<MMonCommand> req)
+  : req(req)
+{}
+
 Client::Client(crimson::net::Messenger& messenger,
                crimson::common::AuthHandler& auth_handler)
   // currently, crimson is OSD-only
@@ -512,9 +516,12 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
     } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
       logger().warn("active conn reset {}", conn->get_peer_addr());
       active_con.reset();
-      return reopen_session(-1).then([this] {
-	send_pendings();
-	return seastar::now();
+      return reopen_session(-1).then([this](bool opened) {
+        if (opened) {
+          return on_session_opened();
+        } else {
+          return seastar::now();
+        }
       });
     } else {
       return seastar::now();
@@ -753,9 +760,12 @@ seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
     }
   } else {
     logger().warn("mon.{} went away", cur_mon);
-    return reopen_session(-1).then([this] {
-      send_pendings();
-      return seastar::now();
+    return reopen_session(-1).then([this](bool opened) {
+      if (opened) {
+        return on_session_opened();
+      } else {
+        return seastar::now();
+      }
     });
   }
 }
@@ -819,11 +829,15 @@ Client::handle_get_version_reply(Ref<MMonGetVersionReply> m)
 seastar::future<> Client::handle_mon_command_ack(Ref<MMonCommandAck> m)
 {
   const auto tid = m->get_tid();
-  if (auto found = mon_commands.find(tid);
+  if (auto found = std::find_if(mon_commands.begin(),
+                                mon_commands.end(),
+                                [tid](auto& cmd) {
+                                  return cmd.req->get_tid() == tid;
+                                });
       found != mon_commands.end()) {
-    auto& result = found->second;
+    auto& command = *found;
     logger().trace("{} {}", __func__, tid);
-    result.set_value(std::make_tuple(m->r, m->rs, std::move(m->get_data())));
+    command.result.set_value(std::make_tuple(m->r, m->rs, std::move(m->get_data())));
     mon_commands.erase(found);
   } else {
     logger().warn("{} {} not found", __func__, tid);
@@ -872,9 +886,12 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
 
 seastar::future<> Client::authenticate()
 {
-  return reopen_session(-1).then([this] {
-    send_pendings();
-    return seastar::now();
+  return reopen_session(-1).then([this](bool opened) {
+    if (opened) {
+      return on_session_opened();
+    } else {
+      return seastar::now();
+    }
   });
 }
 
@@ -908,7 +925,7 @@ static entity_addr_t choose_client_addr(
   return entity_addr_t{};
 }
 
-seastar::future<> Client::reopen_session(int rank)
+seastar::future<bool> Client::reopen_session(int rank)
 {
   logger().info("{} to mon.{}", __func__, rank);
   vector<unsigned> mons;
@@ -929,14 +946,11 @@ seastar::future<> Client::reopen_session(int rank)
       return seastar::now();
     }
     logger().info("connecting to mon.{}", rank);
-    return seastar::futurize_invoke(
-        [peer, this] () -> seastar::future<Connection::auth_result_t> {
-      auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
-      auto& mc = pending_conns.emplace_back(
-	std::make_unique<Connection>(auth_registry, conn, &keyring));
-      assert(conn->get_peer_addr().is_msgr2());
-      return mc->authenticate_v2();
-    }).then([peer, this](auto result) {
+    auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
+    auto& mc = pending_conns.emplace_back(
+      std::make_unique<Connection>(auth_registry, conn, &keyring));
+    assert(conn->get_peer_addr().is_msgr2());
+    return mc->authenticate_v2().then([peer, this](auto result) {
       if (result == Connection::auth_result_t::success) {
         _finish_auth(peer);
       }
@@ -946,13 +960,12 @@ seastar::future<> Client::reopen_session(int rank)
       return seastar::make_exception_future(ep);
     });
   }).then([this] {
-    if (!active_con) {
+    if (active_con) {
+      return true;
+    } else {
       logger().warn("cannot establish the active_con with any mon");
-      return seastar::now();
+      return false;
     }
-    return active_con->renew_rotating_keyring();
-  }).then([this] {
-    return sub.reload() ? renew_subs() : seastar::now();
   });
 }
 
@@ -988,41 +1001,49 @@ void Client::_finish_auth(const entity_addr_t& peer)
 }
 
 Client::command_result_t
-Client::run_command(const std::vector<std::string>& cmd,
-                    const bufferlist& bl)
+Client::run_command(std::string&& cmd,
+                    bufferlist&& bl)
 {
   auto m = make_message<MMonCommand>(monmap.fsid);
   auto tid = ++last_mon_command_id;
   m->set_tid(tid);
-  m->cmd = cmd;
-  m->set_data(bl);
-  auto& req = mon_commands[tid];
-  return send_message(m).then([&req] {
-    return req.get_future();
+  m->cmd = {std::move(cmd)};
+  m->set_data(std::move(bl));
+  mon_commands.emplace_back(m);
+  auto& command = mon_commands.back();
+  return send_message(command.req).then([&result=command.result] {
+    return result.get_future();
   });
 }
 
 seastar::future<> Client::send_message(MessageRef m)
 {
   if (active_con) {
-    if (!pending_messages.empty()) {
-      send_pendings();
-    }
+    assert(pending_messages.empty());
     return active_con->get_conn()->send(m);
+  } else {
+    auto& delayed = pending_messages.emplace_back(m);
+    return delayed.pr.get_future();
   }
-  auto& delayed = pending_messages.emplace_back(m);
-  return delayed.pr.get_future();
 }
 
-void Client::send_pendings()
+seastar::future<> Client::on_session_opened()
 {
-  if (active_con) {
+  return active_con->renew_rotating_keyring().then([this] {
+    return sub.reload() ? renew_subs() : seastar::now();
+  }).then([this] {
     for (auto& m : pending_messages) {
       (void) active_con->get_conn()->send(m.msg);
       m.pr.set_value();
     }
     pending_messages.clear();
-  }
+    return seastar::now();
+  }).then([this] {
+    return seastar::parallel_for_each(mon_commands,
+      [this](auto &command) {
+      return send_message(command.req);
+    });
+  });
 }
 
 bool Client::sub_want(const std::string& what, version_t start, unsigned flags)
