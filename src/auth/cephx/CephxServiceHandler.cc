@@ -281,11 +281,14 @@ int CephxServiceHandler::handle_request(
 	    }
 	  }
 	  encode(cbl, *result_bl);
-	  // provite all of the other tickets at the same time
+	  // provide requested service tickets at the same time
 	  vector<CephXSessionAuthInfo> info_vec;
 	  for (uint32_t service_id = 1; service_id <= req.other_keys;
 	       service_id <<= 1) {
-	    if (req.other_keys & service_id) {
+	    // skip CEPH_ENTITY_TYPE_AUTH: auth ticket is already encoded
+	    // (possibly encrypted with the old session key)
+	    if ((req.other_keys & service_id) &&
+		service_id != CEPH_ENTITY_TYPE_AUTH) {
 	      ldout(cct, 10) << " adding key for service "
 			     << ceph_entity_type_name(service_id) << dendl;
 	      CephXSessionAuthInfo svc_info;
@@ -345,7 +348,10 @@ int CephxServiceHandler::handle_request(
       int service_err = 0;
       for (uint32_t service_id = 1; service_id <= ticket_req.keys;
 	   service_id <<= 1) {
-        if (ticket_req.keys & service_id) {
+        // skip CEPH_ENTITY_TYPE_AUTH: auth ticket must be obtained with
+        // CEPHX_GET_AUTH_SESSION_KEY
+        if ((ticket_req.keys & service_id) &&
+            service_id != CEPH_ENTITY_TYPE_AUTH) {
 	  ldout(cct, 10) << " adding key for service "
 			 << ceph_entity_type_name(service_id) << dendl;
           CephXSessionAuthInfo info;
