@@ -957,11 +957,7 @@ seastar::future<> Client::reopen_session(int rank)
   }).then([this] {
     if (!active_con) {
       logger().warn("cannot establish the active_con with any mon");
-      return seastar::now();
     }
-    return active_con->renew_rotating_keyring();
-  }).then([this] {
-    return sub.reload() ? renew_subs() : seastar::now();
   });
 }
 
@@ -1024,12 +1020,16 @@ seastar::future<> Client::send_message(MessageRef m)
 
 seastar::future<> Client::on_session_opened()
 {
-  for (auto& m : pending_messages) {
-    (void) active_con->get_conn()->send(m.msg);
-    m.pr.set_value();
-  }
-  pending_messages.clear();
-  return seastar::now();
+  return active_con->renew_rotating_keyring().then([this] {
+    return sub.reload() ? renew_subs() : seastar::now();
+  }).then([this] {
+    for (auto& m : pending_messages) {
+      (void) active_con->get_conn()->send(m.msg);
+      m.pr.set_value();
+    }
+    pending_messages.clear();
+    return seastar::now();
+  });
 }
 
 bool Client::sub_want(const std::string& what, version_t start, unsigned flags)
