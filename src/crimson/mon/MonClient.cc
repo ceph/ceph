@@ -946,14 +946,11 @@ seastar::future<bool> Client::reopen_session(int rank)
       return seastar::now();
     }
     logger().info("connecting to mon.{}", rank);
-    return seastar::futurize_invoke(
-        [peer, this] () -> seastar::future<Connection::auth_result_t> {
-      auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
-      auto& mc = pending_conns.emplace_back(
-	std::make_unique<Connection>(auth_registry, conn, &keyring));
-      assert(conn->get_peer_addr().is_msgr2());
-      return mc->authenticate_v2();
-    }).then([peer, this](auto result) {
+    auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
+    auto& mc = pending_conns.emplace_back(
+      std::make_unique<Connection>(auth_registry, conn, &keyring));
+    assert(conn->get_peer_addr().is_msgr2());
+    return mc->authenticate_v2().then([peer, this](auto result) {
       if (result == Connection::auth_result_t::success) {
         _finish_auth(peer);
       }
