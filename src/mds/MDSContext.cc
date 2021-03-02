@@ -107,7 +107,7 @@ void MDSIOContextBase::complete(int r) {
     return;
   }
 
-  if (r == -EBLOCKLISTED) {
+  if (r == -CEPHFS_EBLOCKLISTED) {
     derr << "MDSIOContextBase: blocklisted!  Restarting..." << dendl;
     mds->respawn();
   } else {
