@@ -32,7 +32,7 @@ FlatCollectionManager::mkfs(Transaction &t)
   logger().debug("FlatCollectionManager: {}", __func__);
   return tm.alloc_extent<CollectionNode>(
     t, L_ADDR_MIN, MIN_FLAT_BLOCK_SIZE
-  ).safe_then([this](auto&& root_extent) {
+  ).safe_then([](auto&& root_extent) {
     coll_root_t coll_root = coll_root_t(
       root_extent->get_laddr(),
       MIN_FLAT_BLOCK_SIZE
@@ -100,14 +100,14 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
       __builtin_unreachable();
     });
   });
-
 }
+
 FlatCollectionManager::list_ret
 FlatCollectionManager::list(const coll_root_t &coll_root, Transaction &t)
 {
   logger().debug("FlatCollectionManager: {}", __func__);
   return get_coll_root(coll_root, t)
-    .safe_then([this, &t] (auto extent) {
+    .safe_then([] (auto extent) {
     return extent->list();
   });
 }

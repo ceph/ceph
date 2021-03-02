@@ -372,7 +372,7 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	    auto c = static_cast<AlienCollection*>(ch.get());
 	    return store->queue_transaction(c->collection, std::move(txn));
 	  });
-	}).then([this, &done] (int r) {
+	}).then([&done] (int r) {
 	  assert(r == 0);
 	  return done.get_future();
 	});
