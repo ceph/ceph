@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/nautilus latest
+   install ceph/octopus latest
 tasks:
 - install:
-    branch: nautilus
+    branch: octopus
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -12,7 +12,7 @@ tasks:
       - ceph-mgr-cephadm
       - cephadm
     extra_packages: ['librados2']
-- print: "**** done installing nautilus"
+- print: "**** done installing octopus"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -34,5 +34,5 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client nautilus
+      - ceph osd set-require-min-compat-client octopus
 - print: "**** done ceph"
