@@ -82,8 +82,8 @@ public:
     return monmap.fsid;
   }
   get_version_t get_version(const std::string& map);
-  command_result_t run_command(const std::vector<std::string>& cmd,
-			       const bufferlist& bl);
+  command_result_t run_command(std::string&& cmd,
+                               bufferlist&& bl);
   seastar::future<> send_message(MessageRef);
   bool sub_want(const std::string& what, version_t start, unsigned flags);
   void sub_got(const std::string& what, version_t have);
