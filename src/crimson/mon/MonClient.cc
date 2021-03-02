@@ -829,9 +829,13 @@ Client::handle_get_version_reply(Ref<MMonGetVersionReply> m)
 seastar::future<> Client::handle_mon_command_ack(Ref<MMonCommandAck> m)
 {
   const auto tid = m->get_tid();
-  if (auto found = mon_commands.find(tid);
+  if (auto found = std::find_if(mon_commands.begin(),
+                                mon_commands.end(),
+                                [tid](auto& cmd) {
+                                  return cmd.req->get_tid() == tid;
+                                });
       found != mon_commands.end()) {
-    auto& command = found->second;
+    auto& command = *found;
     logger().trace("{} {}", __func__, tid);
     command.result.set_value(std::make_tuple(m->r, m->rs, std::move(m->get_data())));
     mon_commands.erase(found);
@@ -1005,10 +1009,9 @@ Client::run_command(std::string&& cmd,
   m->set_tid(tid);
   m->cmd = {std::move(cmd)};
   m->set_data(std::move(bl));
-  [[maybe_unused]] auto [command, added] =
-    mon_commands.try_emplace(tid, m);
-  assert(added);
-  return send_message(m).then([&result=command->second.result] {
+  mon_commands.emplace_back(m);
+  auto& command = mon_commands.back();
+  return send_message(command.req).then([&result=command.result] {
     return result.get_future();
   });
 }
@@ -1037,8 +1040,8 @@ seastar::future<> Client::on_session_opened()
     return seastar::now();
   }).then([this] {
     return seastar::parallel_for_each(mon_commands,
-      [this](auto &tid_command) {
-      return send_message(tid_command.second.req);
+      [this](auto &command) {
+      return send_message(command.req);
     });
   });
 }

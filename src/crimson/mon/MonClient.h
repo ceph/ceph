@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
@@ -73,7 +74,7 @@ class Client : public crimson::net::Dispatcher,
     typename command_result_t::promise_type result;
     mon_command_t(ceph::ref_t<MMonCommand> req);
   };
-  std::map<ceph_tid_t, mon_command_t> mon_commands;
+  std::vector<mon_command_t> mon_commands;
 
   MonSub sub;
 
