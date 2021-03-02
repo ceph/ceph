@@ -309,7 +309,7 @@ class Monitoring(object):
                 ctx.container_path, 'exec', container_id, cmd, '--version'
             ])
         if code == 0 and \
-            err.startswith('%s, version ' % cmd):
+                err.startswith('%s, version ' % cmd):
             version = err.split(' ')[2]
         return version
 
