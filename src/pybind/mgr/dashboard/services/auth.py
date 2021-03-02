@@ -123,7 +123,7 @@ class JwtManager(object):
 
     @classmethod
     def blocklist_token(cls, token):
-        token = jwt.decode(token, verify=False)
+        token = jwt.decode(token, verify=False, algorithms=cls.JWT_ALGORITHM)
         blocklist_json = mgr.get_store(cls.JWT_TOKEN_BLOCKLIST_KEY)
         if not blocklist_json:
             blocklist_json = "{}"
