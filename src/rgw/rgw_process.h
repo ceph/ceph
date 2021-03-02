@@ -186,6 +186,7 @@ extern int process_request(rgw::sal::RGWRadosStore* store,
                            optional_yield y,
                            rgw::dmclock::Scheduler *scheduler,
                            std::string* user,
+                           ceph::coarse_real_clock::duration* latency,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
