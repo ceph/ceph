@@ -5198,12 +5198,13 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
 }
 
 AWSSignerV4::prepare_result_t
-AWSSignerV4::prepare(const std::string& access_key_id,
+AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
+                     const std::string& access_key_id,
                      const string& region,
                      const string& service,
                      const req_info& info,
                      const bufferlist *opt_content,
-                     bool s3_op) const
+                     bool s3_op)
 {
   std::string signed_hdrs;
 
@@ -5233,8 +5234,8 @@ AWSSignerV4::prepare(const std::string& access_key_id,
     gen_v4_canonical_headers(info, extra_headers, &signed_hdrs);
 
   using sanitize = rgw::crypt_sanitize::log_content;
-  ldout(cct, 10) << "canonical headers format = "
-                 << sanitize{canonical_headers} << dendl;
+  ldpp_dout(dpp, 10) << "canonical headers format = "
+                     << sanitize{canonical_headers} << dendl;
 
   bool is_non_s3_op = !s3_op;
 
@@ -5259,6 +5260,8 @@ AWSSignerV4::prepare(const std::string& access_key_id,
 
   /* Craft canonical query string. std::moving later so non-const here. */
   auto canonical_qs = rgw::auth::s3::gen_v4_canonical_qs(info);
+
+  auto cct = dpp->get_cct();
 
   /* Craft canonical request. */
   auto canonical_req_hash = \
