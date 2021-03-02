@@ -3,7 +3,6 @@ This module is a thin wrapper around libcephfs.
 """
 
 from cpython cimport PyObject, ref, exc
-from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 
@@ -19,7 +18,6 @@ ELSE:
 
 from collections import namedtuple
 from datetime import datetime
-import errno
 import os
 import time
 
@@ -54,6 +52,48 @@ CEPH_SETATTR_ATIME = 0x10
 CEPH_SETATTR_SIZE  = 0x20
 CEPH_SETATTR_CTIME = 0x40
 CEPH_SETATTR_BTIME = 0x200
+
+# errno definitions
+cdef enum:
+    CEPHFS_EBLOCKLISTED = 108
+    CEPHFS_EPERM = 1
+    CEPHFS_ESTALE = 116
+    CEPHFS_ENOSPC = 28
+    CEPHFS_ETIMEDOUT = 110
+    CEPHFS_EIO = 5
+    CEPHFS_ENOTCONN = 107
+    CEPHFS_EEXIST = 17
+    CEPHFS_EINTR = 4
+    CEPHFS_EINVAL = 22
+    CEPHFS_EBADF = 9
+    CEPHFS_EROFS = 30
+    CEPHFS_EAGAIN = 11
+    CEPHFS_EACCES = 13
+    CEPHFS_ELOOP = 40
+    CEPHFS_EISDIR = 21
+    CEPHFS_ENOENT = 2
+    CEPHFS_ENOTDIR = 20
+    CEPHFS_ENAMETOOLONG = 36
+    CEPHFS_EBUSY = 16
+    CEPHFS_EDQUOT = 122
+    CEPHFS_EFBIG = 27
+    CEPHFS_ERANGE = 34
+    CEPHFS_ENXIO = 6
+    CEPHFS_ECANCELED = 125
+    CEPHFS_ENODATA = 61
+    CEPHFS_EOPNOTSUPP = 95
+    CEPHFS_EXDEV = 18
+    CEPHFS_ENOMEM = 12
+    CEPHFS_ENOTRECOVERABLE = 131
+    CEPHFS_ENOSYS = 38
+    CEPHFS_EWOULDBLOCK = CEPHFS_EAGAIN
+    CEPHFS_ENOTEMPTY = 39
+    CEPHFS_EDEADLK = 35
+    CEPHFS_EDEADLOCK = CEPHFS_EDEADLK
+    CEPHFS_EDOM = 33
+    CEPHFS_EMLINK = 31
+    CEPHFS_ETIME = 62
+    CEPHFS_EOLDSNAPC = 85
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -138,37 +178,21 @@ class DiskQuotaExceeded(OSError):
     pass
 
 
-IF UNAME_SYSNAME == "FreeBSD":
-    cdef errno_to_exception =  {
-        errno.EPERM      : PermissionError,
-        errno.ENOENT     : ObjectNotFound,
-        errno.EIO        : IOError,
-        errno.ENOSPC     : NoSpace,
-        errno.EEXIST     : ObjectExists,
-        errno.ENOATTR    : NoData,
-        errno.EINVAL     : InvalidValue,
-        errno.EOPNOTSUPP : OperationNotSupported,
-        errno.ERANGE     : OutOfRange,
-        errno.EWOULDBLOCK: WouldBlock,
-        errno.ENOTEMPTY  : ObjectNotEmpty,
-        errno.EDQUOT     : DiskQuotaExceeded,
-    }
-ELSE:
-    cdef errno_to_exception =  {
-        errno.EPERM      : PermissionError,
-        errno.ENOENT     : ObjectNotFound,
-        errno.EIO        : IOError,
-        errno.ENOSPC     : NoSpace,
-        errno.EEXIST     : ObjectExists,
-        errno.ENODATA    : NoData,
-        errno.EINVAL     : InvalidValue,
-        errno.EOPNOTSUPP : OperationNotSupported,
-        errno.ERANGE     : OutOfRange,
-        errno.EWOULDBLOCK: WouldBlock,
-        errno.ENOTEMPTY  : ObjectNotEmpty,
-        errno.ENOTDIR    : NotDirectory,
-        errno.EDQUOT     : DiskQuotaExceeded,
-    }
+cdef errno_to_exception =  {
+    CEPHFS_EPERM      : PermissionError,
+    CEPHFS_ENOENT     : ObjectNotFound,
+    CEPHFS_EIO        : IOError,
+    CEPHFS_ENOSPC     : NoSpace,
+    CEPHFS_EEXIST     : ObjectExists,
+    CEPHFS_ENODATA    : NoData,
+    CEPHFS_EINVAL     : InvalidValue,
+    CEPHFS_EOPNOTSUPP : OperationNotSupported,
+    CEPHFS_ERANGE     : OutOfRange,
+    CEPHFS_EWOULDBLOCK: WouldBlock,
+    CEPHFS_ENOTEMPTY  : ObjectNotEmpty,
+    CEPHFS_ENOTDIR    : NotDirectory,
+    CEPHFS_EDQUOT     : DiskQuotaExceeded,
+}
 
 
 cdef make_ex(ret, msg):
@@ -224,7 +248,7 @@ cdef class DirResult(object):
 
     def __enter__(self):
         if not self.handle:
-            raise make_ex(errno.EBADF, "dir is not open")
+            raise make_ex(CEPHFS_EBADF, "dir is not open")
         self.lib.require_state("mounted")
         with nogil:
             ceph_rewinddir(self.lib.cluster, self.handle)
@@ -266,14 +290,14 @@ cdef class DirResult(object):
 
     def rewinddir(self):
         if not self.handle:
-            raise make_ex(errno.EBADF, "dir is not open")
+            raise make_ex(CEPHFS_EBADF, "dir is not open")
         self.lib.require_state("mounted")
         with nogil:
             ceph_rewinddir(self.lib.cluster, self.handle)
 
     def telldir(self):
         if not self.handle:
-            raise make_ex(errno.EBADF, "dir is not open")
+            raise make_ex(CEPHFS_EBADF, "dir is not open")
         self.lib.require_state("mounted")
         with nogil:
             ret = ceph_telldir(self.lib.cluster, self.handle)
@@ -283,7 +307,7 @@ cdef class DirResult(object):
 
     def seekdir(self, offset):
         if not self.handle:
-            raise make_ex(errno.EBADF, "dir is not open")
+            raise make_ex(CEPHFS_EBADF, "dir is not open")
         if not isinstance(offset, int):
             raise TypeError('offset must be an int')
         self.lib.require_state("mounted")
@@ -404,7 +428,7 @@ cdef class LibCephFS(object):
         self.state = "uninitialized"
         if rados_inst is not None:
             if auth_id is not None or conffile is not None or conf is not None:
-                raise make_ex(errno.EINVAL,
+                raise make_ex(CEPHFS_EINVAL,
                               "May not pass RADOS instance as well as other configuration")
 
             self.create_with_rados(rados_inst)
@@ -570,9 +594,9 @@ cdef class LibCephFS(object):
                     ret = ceph_conf_get(self.cluster, _option, ret_buf, length)
                 if ret == 0:
                     return decode_cstr(ret_buf)
-                elif ret == -errno.ENAMETOOLONG:
+                elif ret == -CEPHFS_ENAMETOOLONG:
                     length = length * 2
-                elif ret == -errno.ENOENT:
+                elif ret == -CEPHFS_ENOENT:
                     return None
                 else:
                     raise make_ex(ret, "error calling conf_get")
@@ -1225,7 +1249,7 @@ cdef class LibCephFS(object):
                     elif access_flags > 0 and c == '+':
                         access_flags = 3;
                     else:
-                        raise make_ex(errno.EOPNOTSUPP,
+                        raise make_ex(CEPHFS_EOPNOTSUPP,
                                       "open flags doesn't support %s" % c)
 
                 if access_flags == 1:
@@ -2570,7 +2594,7 @@ cdef class LibCephFS(object):
                 if ret > 0:
                     dict_result["pool_name"] = decode_cstr(buf)
                     return dict_result
-                elif ret == -errno.ERANGE:
+                elif ret == -CEPHFS_ERANGE:
                     buflen = buflen * 2
                 else:
                     raise make_ex(ret, "error in get_file_pool_name")
@@ -2596,7 +2620,7 @@ cdef class LibCephFS(object):
                 if ret > 0:
                     dict_result["pool_name"] = decode_cstr(buf)
                     break
-                elif ret == -errno.ERANGE:
+                elif ret == -CEPHFS_ERANGE:
                     buflen = buflen * 2
                 else:
                     raise make_ex(ret, "error in get_default_data_pool_name")

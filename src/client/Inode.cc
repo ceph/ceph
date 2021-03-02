@@ -696,13 +696,13 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
    * allow it, with an unusual error to make it clear.
    */
   if (!client->get_deleg_timeout())
-    return -ETIME;
+    return -CEPHFS_ETIME;
 
   // Just say no if we have any recalled delegs still outstanding
   if (has_recalled_deleg()) {
     lsubdout(client->cct, client, 10) << __func__ <<
 	  ": has_recalled_deleg" << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   // check vs. currently open files on this inode
@@ -711,17 +711,17 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
     if (open_count_for_write()) {
       lsubdout(client->cct, client, 10) << __func__ <<
 	    ": open for write" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   case CEPH_DELEGATION_WR:
     if (open_count() > 1) {
       lsubdout(client->cct, client, 10) << __func__ << ": open" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   default:
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   /*
@@ -742,7 +742,7 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
   if (!caps_issued_mask(need)) {
     lsubdout(client->cct, client, 10) << __func__ << ": cap mismatch, have="
       << ccap_string(caps_issued()) << " need=" << ccap_string(need) << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   for (list<Delegation>::iterator d = delegations.begin();

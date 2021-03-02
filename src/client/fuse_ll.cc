@@ -53,6 +53,60 @@
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 
+static const ceph::unordered_map<int,int> cephfs_errno_to_system_errno = {
+  {CEPHFS_EBLOCKLISTED,    ESHUTDOWN},
+  {CEPHFS_EPERM,           EPERM},
+  {CEPHFS_ESTALE,          ESTALE},
+  {CEPHFS_ENOSPC,          ENOSPC},
+  {CEPHFS_ETIMEDOUT,       ETIMEDOUT},
+  {CEPHFS_EIO,             EIO},
+  {CEPHFS_ENOTCONN,        ENOTCONN},
+  {CEPHFS_EEXIST,          EEXIST},
+  {CEPHFS_EINTR,           EINTR},
+  {CEPHFS_EINVAL,          EINVAL},
+  {CEPHFS_EBADF,           EBADF},
+  {CEPHFS_EROFS,           EROFS},
+  {CEPHFS_EAGAIN,          EAGAIN},
+  {CEPHFS_EACCES,          EACCES},
+  {CEPHFS_ELOOP,           ELOOP},
+  {CEPHFS_EISDIR,          EISDIR},
+  {CEPHFS_ENOENT,          ENOENT},
+  {CEPHFS_ENOTDIR,         ENOTDIR},
+  {CEPHFS_ENAMETOOLONG,    ENAMETOOLONG},
+  {CEPHFS_EBUSY,           EBUSY},
+  {CEPHFS_EDQUOT,          EDQUOT},
+  {CEPHFS_EFBIG,           EFBIG},
+  {CEPHFS_ERANGE,          ERANGE},
+  {CEPHFS_ENXIO,           ENXIO},
+  {CEPHFS_ECANCELED,       ECANCELED},
+  {CEPHFS_ENODATA,         ENODATA},
+  {CEPHFS_EOPNOTSUPP,      EOPNOTSUPP},
+  {CEPHFS_EXDEV,           EXDEV},
+  {CEPHFS_ENOMEM,          ENOMEM},
+  {CEPHFS_ENOTRECOVERABLE, ENOTRECOVERABLE},
+  {CEPHFS_ENOSYS,          ENOSYS},
+  {CEPHFS_ENOTEMPTY,       ENOTEMPTY},
+  {CEPHFS_EDEADLK,         EDEADLK},
+  {CEPHFS_EDOM,            EDOM},
+  {CEPHFS_EMLINK,          EMLINK},
+  {CEPHFS_ETIME,           ETIME},
+  {CEPHFS_EOLDSNAPC,       EIO} // forcing to EIO for now
+};
+
+/* Requirements:
+ * cephfs_errno >= 0
+ */
+static int get_sys_errno(int cephfs_errno)
+{
+  if (cephfs_errno == 0)
+    return 0;
+
+  auto it = cephfs_errno_to_system_errno.find(cephfs_errno);
+  if (it != cephfs_errno_to_system_errno.end())
+    return it->second;
+  return EIO;
+}
+
 static uint32_t new_encode_dev(dev_t dev)
 {
 	unsigned major = MAJOR(dev);
@@ -121,7 +175,7 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
 
   gid_t *gids = new (std::nothrow) gid_t[c];
   if (!gids) {
-    return -ENOMEM;
+    return -get_sys_errno(CEPHFS_ENOMEM);
   }
   c = fuse_req_getgroups(req, c, gids);
   if (c < 0) {
@@ -131,7 +185,7 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
   }
   return c;
 #endif
-  return -ENOSYS;
+  return -get_sys_errno(CEPHFS_ENOSYS);
 }
 
 static void get_fuse_groups(UserPerm& perms, fuse_req_t req)
@@ -172,7 +226,7 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   {
     r = cfuse->client->lookup_ino(parent, perms, &i1);
     if (r < 0) {
-      fuse_reply_err(req, -r);
+      fuse_reply_err(req, get_sys_errno(-r));
       return;
     }
   }
@@ -184,7 +238,7 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   // XXX NB, we dont iput(i2) because FUSE will do so in a matching
@@ -254,7 +308,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   if (r == 0)
     fuse_reply_attr(req, attr, 0);
   else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -276,7 +330,7 @@ static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_setxattr(in, name, value, size, flags, perms);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -296,7 +350,7 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
   else if (r >= 0) 
     fuse_reply_buf(req, buf, r);
   else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -321,7 +375,7 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   else if (r >= 0)
     fuse_reply_buf(req, buf, r);
   else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -336,7 +390,7 @@ static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino,
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_removexattr(in, name, perms);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -358,7 +412,7 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
     fi->fh = (uint64_t)dirp;
     fuse_reply_open(req, fi);
   } else {
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   cfuse->iput(in); // iput required
@@ -378,7 +432,7 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
     buf[r] = '\0';
     fuse_reply_readlink(req, buf);
   } else {
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   cfuse->iput(in); // iput required
@@ -403,7 +457,7 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   // XXX NB, we dont iput(i2) because FUSE will do so in a matching
@@ -457,7 +511,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   // XXX NB, we dont iput(i2) because FUSE will do so in a matching
@@ -474,7 +528,7 @@ static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
   get_fuse_groups(perm, req);
 
   int r = cfuse->client->ll_unlink(in, name, perm);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -488,7 +542,7 @@ static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_rmdir(in, name, perms);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -511,7 +565,7 @@ static void fuse_ll_symlink(fuse_req_t req, const char *existing,
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   // XXX NB, we dont iput(i2) because FUSE will do so in a matching
@@ -534,7 +588,7 @@ static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
   get_fuse_groups(perm, req);
 
   int r = cfuse->client->ll_rename(in, name, nin, newname, perm);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iputs required
   cfuse->iput(nin);
@@ -576,7 +630,7 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
      * On error however, we must put that reference.
      */
     cfuse->iput(in);
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   cfuse->iput(nin);
@@ -607,7 +661,7 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
 #endif
     fuse_reply_open(req, fi);
   } else {
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   }
 
   cfuse->iput(in); // iput required
@@ -642,7 +696,7 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     iov.insert(iov.begin(), {0}); // the first one is reserved for fuse_out_header
     fuse_reply_iov(req, &iov[0], iov.size());
   } else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
 }
 
 static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
@@ -654,7 +708,7 @@ static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
   if (r >= 0)
     fuse_reply_write(req, r);
   else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
 }
 
 static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino,
@@ -663,7 +717,7 @@ static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   int r = cfuse->client->ll_flush(fh);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 }
 
 #ifdef FUSE_IOCTL_COMPAT
@@ -711,7 +765,7 @@ static void fuse_ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   Fh *fh = (Fh*)fi->fh;
   int r = cfuse->client->ll_fallocate(fh, mode, offset, length);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 }
 
 #endif
@@ -722,7 +776,7 @@ static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   int r = cfuse->client->ll_release(fh);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 }
 
 static void fuse_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
@@ -731,7 +785,7 @@ static void fuse_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   int r = cfuse->client->ll_fsync(fh, datasync);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 }
 
 struct readdir_context {
@@ -784,10 +838,10 @@ static void fuse_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   rc.snap = cfuse->fino_snap(ino);
 
   int r = cfuse->client->readdir_r_cb(dirp, fuse_ll_add_dirent, &rc);
-  if (r == 0 || r == -ENOSPC)  /* ignore ENOSPC from our callback */
+  if (r == 0 || r == -CEPHFS_ENOSPC)  /* ignore ENOSPC from our callback */
     fuse_reply_buf(req, rc.buf, rc.pos);
   else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   delete[] rc.buf;
 }
 
@@ -806,7 +860,7 @@ static void fuse_ll_fsyncdir(fuse_req_t req, fuse_ino_t ino, int datasync,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   dir_result_t *dirp = reinterpret_cast<dir_result_t*>(fi->fh);
   int r = cfuse->client->ll_fsyncdir(dirp);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 }
 
 static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
@@ -818,7 +872,7 @@ static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->inode_permission(in, perms, mask);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
   cfuse->iput(in);
 }
 
@@ -853,7 +907,7 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 #endif
     fuse_reply_create(req, &fe, fi);
   } else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
   // XXX NB, we dont iput(i2) because FUSE will do so in a matching
   // fuse_ll_forget()
   cfuse->iput(i1); // iput required
@@ -872,7 +926,7 @@ static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
   if (r == 0)
     fuse_reply_statfs(req, &stbuf);
   else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
 
   cfuse->iput(in); // iput required
 }
@@ -887,7 +941,7 @@ static void fuse_ll_getlk(fuse_req_t req, fuse_ino_t ino,
   if (r == 0)
     fuse_reply_lock(req, lock);
   else
-    fuse_reply_err(req, -r);
+    fuse_reply_err(req, get_sys_errno(-r));
 }
 
 static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino,
@@ -905,7 +959,7 @@ static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino,
   }
 
   int r = cfuse->client->ll_setlk(fh, lock, fi->lock_owner, sleep);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 }
 
 static void fuse_ll_interrupt(fuse_req_t req, void* data)
@@ -941,7 +995,7 @@ static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino,
   }
 
   int r = cfuse->client->ll_flock(fh, cmd, fi->lock_owner);
-  fuse_reply_err(req, -r);
+  fuse_reply_err(req, get_sys_errno(-r));
 }
 #endif
 
