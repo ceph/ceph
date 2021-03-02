@@ -125,10 +125,18 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
 
   char *cmd_json = nullptr;
   char *tag = nullptr;
+  char *inbuf_ptr = nullptr;
+  Py_ssize_t inbuf_len = 0;
+  bufferlist inbuf = {};
+
   PyObject *completion = nullptr;
-  if (!PyArg_ParseTuple(args, "Ossss:ceph_send_command",
-        &completion, &type, &name, &cmd_json, &tag)) {
+  if (!PyArg_ParseTuple(args, "Ossssz#:ceph_send_command",
+        &completion, &type, &name, &cmd_json, &tag, &inbuf_ptr, &inbuf_len)) {
     return nullptr;
+  }
+
+  if (inbuf_ptr) {
+    inbuf.append(inbuf_ptr, (unsigned)inbuf_len);
   }
 
   auto set_fn = PyObject_GetAttrString(completion, "complete");
@@ -164,7 +172,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     self->py_modules->get_monc().start_mon_command(
         name,
         {cmd_json},
-        {},
+        inbuf,
         &command_c->outbl,
         &command_c->outs,
         new C_OnFinisher(c, &self->py_modules->cmd_finisher));
@@ -184,7 +192,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     self->py_modules->get_objecter().osd_command(
         osd_id,
         {cmd_json},
-        {},
+        inbuf,
         &tid,
         &command_c->outbl,
         &command_c->outs,
@@ -193,7 +201,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     int r = self->py_modules->get_client().mds_command(
         name,
         {cmd_json},
-        {},
+        inbuf,
         &command_c->outbl,
         &command_c->outs,
         new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
@@ -219,7 +227,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     self->py_modules->get_objecter().pg_command(
         pgid,
         {cmd_json},
-        {},
+        inbuf,
         &tid,
         &command_c->outbl,
         &command_c->outs,
@@ -349,7 +357,7 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
   self->py_modules->set_health_checks(self->this_module->get_name(),
                                       std::move(out_checks));
   PyEval_RestoreThread(tstate);
-  
+
   Py_RETURN_NONE;
 }
 
