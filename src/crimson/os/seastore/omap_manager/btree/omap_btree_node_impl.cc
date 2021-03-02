@@ -209,7 +209,8 @@ OMapInnerNode::list(
     [=, &start](auto &biter, auto &eiter, auto &ret) {
       auto &[complete, result] = ret;
       return crimson::do_until(
-	[&, max_result_size, oc, this]() -> list_ertr::future<bool> {
+	[&, &complete=complete, &result=result, max_result_size, oc, this]()
+	-> list_ertr::future<bool> {
 	  if (biter == eiter  || result.size() == max_result_size) {
 	    complete = biter == eiter;
 	    return list_ertr::make_ready_future<bool>(true);
