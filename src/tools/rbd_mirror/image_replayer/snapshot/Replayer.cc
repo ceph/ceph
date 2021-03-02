@@ -432,17 +432,19 @@ void Replayer<I>::scan_local_mirror_snapshots(
           prune_snap_ids.insert(local_snap_id);
         }
       } else {
-        // start snap will be last complete mirror snapshot or initial
-        // image revision
-        m_local_snap_id_end = local_snap_id;
-
         if (mirror_ns->last_copied_object_number == 0) {
           // snapshot might be missing image state, object-map, etc, so just
           // delete and re-create it if we haven't started copying data
-          // objects
+          // objects. Also only prune this snapshot since we will need the
+          // previous mirror snapshot for syncing.
+          prune_snap_ids.clear();
           prune_snap_ids.insert(local_snap_id);
           break;
         }
+
+        // start snap will be last complete mirror snapshot or initial
+        // image revision
+        m_local_snap_id_end = local_snap_id;
       }
     } else if (mirror_ns->is_primary()) {
       if (mirror_ns->complete) {

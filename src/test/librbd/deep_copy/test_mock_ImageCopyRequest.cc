@@ -55,7 +55,7 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
       librados::snap_t src_snap_id_start,
       librados::snap_t dst_snap_id_start,
       const SnapMap &snap_map,
-      uint64_t object_number, bool flatten, Handler* handler,
+      uint64_t object_number, uint32_t flags, Handler* handler,
       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     std::lock_guard locker{s_instance->lock};

@@ -32,12 +32,6 @@ namespace api {
 
 namespace {
 
-enum ObjectDiffState {
-  OBJECT_DIFF_STATE_NONE    = 0,
-  OBJECT_DIFF_STATE_UPDATED = 1,
-  OBJECT_DIFF_STATE_HOLE    = 2
-};
-
 struct DiffContext {
   DiffIterate<>::Callback callback;
   void *callback_arg;
@@ -381,7 +375,8 @@ int DiffIterate<I>::execute() {
 
       if (fast_diff_enabled) {
         const uint64_t object_no = p->second.front().objectno;
-        if (object_diff_state[object_no] == OBJECT_DIFF_STATE_NONE &&
+        uint8_t diff_state = object_diff_state[object_no];
+        if (diff_state == object_map::DIFF_STATE_HOLE &&
             from_snap_id == 0 && !diff_context.parent_diff.empty()) {
           // no data in child object -- report parent diff instead
           for (auto& oe : p->second) {
@@ -399,9 +394,9 @@ int DiffIterate<I>::execute() {
               }
             }
           }
-        } else if (object_diff_state[object_no] != OBJECT_DIFF_STATE_NONE) {
-          bool updated = (object_diff_state[object_no] ==
-                            OBJECT_DIFF_STATE_UPDATED);
+        } else if (diff_state == object_map::DIFF_STATE_HOLE_UPDATED ||
+                   diff_state == object_map::DIFF_STATE_DATA_UPDATED) {
+          bool updated = (diff_state == object_map::DIFF_STATE_DATA_UPDATED);
           for (std::vector<ObjectExtent>::iterator q = p->second.begin();
                q != p->second.end(); ++q) {
             r = m_callback(off + q->offset, q->length, updated, m_callback_arg);

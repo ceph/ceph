@@ -186,7 +186,7 @@ int ImageCopyRequest<I>::send_next_object_copy() {
     bool skip = true;
     for (auto src_ono : src_objects) {
       if (src_ono >= m_object_diff_state.size() ||
-          m_object_diff_state[src_ono] != object_map::DIFF_STATE_NONE) {
+          m_object_diff_state[src_ono] != object_map::DIFF_STATE_HOLE) {
         skip = false;
         break;
       }
@@ -201,13 +201,18 @@ int ImageCopyRequest<I>::send_next_object_copy() {
   ldout(m_cct, 20) << "object_num=" << ono << dendl;
   ++m_current_ops;
 
+  uint32_t flags = 0;
+  if (m_flatten) {
+    flags |= OBJECT_COPY_REQUEST_FLAG_FLATTEN;
+  }
+
   Context *ctx = new LambdaContext(
     [this, ono](int r) {
       handle_object_copy(ono, r);
     });
   auto req = ObjectCopyRequest<I>::create(
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_dst_snap_id_start,
-    m_snap_map, ono, m_flatten, m_handler, ctx);
+    m_snap_map, ono, flags, m_handler, ctx);
   req->send();
   return 0;
 }
