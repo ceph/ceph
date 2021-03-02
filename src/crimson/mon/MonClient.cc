@@ -1011,13 +1011,12 @@ Client::run_command(const std::vector<std::string>& cmd,
 seastar::future<> Client::send_message(MessageRef m)
 {
   if (active_con) {
-    if (!pending_messages.empty()) {
-      send_pendings();
-    }
+    assert(pending_messages.empty());
     return active_con->get_conn()->send(m);
+  } else {
+    auto& delayed = pending_messages.emplace_back(m);
+    return delayed.pr.get_future();
   }
-  auto& delayed = pending_messages.emplace_back(m);
-  return delayed.pr.get_future();
 }
 
 void Client::send_pendings()
