@@ -514,9 +514,10 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
       active_con.reset();
       return reopen_session(-1).then([this] {
         if (active_con) {
-          on_session_opened();
+          return on_session_opened();
+        } else {
+          return seastar::now();
         }
-        return seastar::now();
       });
     } else {
       return seastar::now();
@@ -757,9 +758,10 @@ seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
     logger().warn("mon.{} went away", cur_mon);
     return reopen_session(-1).then([this] {
       if (active_con) {
-        on_session_opened();
+        return on_session_opened();
+      } else {
+        return seastar::now();
       }
-      return seastar::now();
     });
   }
 }
@@ -878,9 +880,10 @@ seastar::future<> Client::authenticate()
 {
   return reopen_session(-1).then([this] {
     if (active_con) {
-      on_session_opened();
+      return on_session_opened();
+    } else {
+      return seastar::now();
     }
-    return seastar::now();
   });
 }
 
@@ -1019,13 +1022,14 @@ seastar::future<> Client::send_message(MessageRef m)
   }
 }
 
-void Client::on_session_opened()
+seastar::future<> Client::on_session_opened()
 {
   for (auto& m : pending_messages) {
     (void) active_con->get_conn()->send(m.msg);
     m.pr.set_value();
   }
   pending_messages.clear();
+  return seastar::now();
 }
 
 bool Client::sub_want(const std::string& what, version_t start, unsigned flags)
