@@ -993,14 +993,14 @@ void Client::_finish_auth(const entity_addr_t& peer)
 }
 
 Client::command_result_t
-Client::run_command(const std::vector<std::string>& cmd,
-                    const bufferlist& bl)
+Client::run_command(std::string&& cmd,
+                    bufferlist&& bl)
 {
   auto m = make_message<MMonCommand>(monmap.fsid);
   auto tid = ++last_mon_command_id;
   m->set_tid(tid);
-  m->cmd = cmd;
-  m->set_data(bl);
+  m->cmd = {std::move(cmd)};
+  m->set_data(std::move(bl));
   auto& req = mon_commands[tid];
   return send_message(m).then([&req] {
     return req.get_future();

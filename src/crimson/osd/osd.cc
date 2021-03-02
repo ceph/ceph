@@ -404,7 +404,7 @@ seastar::future<> OSD::_add_me_to_crush()
       "weight": {:.4f},
       "args": [{}]
     }})", whoami, weight, loc);
-    return monc->run_command({cmd}, {});
+    return monc->run_command(std::move(cmd), {});
   }).then([](auto&& command_result) {
     [[maybe_unused]] auto [code, message, out] = std::move(command_result);
     if (code) {
