@@ -35,6 +35,7 @@ class MAuthReply;
 struct MMonMap;
 struct MMonSubscribeAck;
 struct MMonGetVersionReply;
+struct MMonCommand;
 struct MMonCommandAck;
 struct MLogAck;
 struct MConfig;
@@ -67,7 +68,12 @@ class Client : public crimson::net::Dispatcher,
   ceph_tid_t last_mon_command_id = 0;
   using command_result_t =
     seastar::future<std::tuple<std::int32_t, string, ceph::bufferlist>>;
-  std::map<ceph_tid_t, typename command_result_t::promise_type> mon_commands;
+  struct mon_command_t {
+    ceph::ref_t<MMonCommand> req;
+    typename command_result_t::promise_type result;
+    mon_command_t(ceph::ref_t<MMonCommand> req);
+  };
+  std::map<ceph_tid_t, mon_command_t> mon_commands;
 
   MonSub sub;
 
