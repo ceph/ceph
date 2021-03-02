@@ -454,7 +454,7 @@ class Device(object):
             # assuming 4M extents here
             extent_size = 4194304
             vg_free = int(self.size / extent_size) * extent_size
-            if self.size % 4194304 == 0:
+            if self.size % extent_size == 0:
                 # If the extent size divides size exactly, deduct on extent for
                 # LVM metadata
                 vg_free -= extent_size
