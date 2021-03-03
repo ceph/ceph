@@ -30,24 +30,9 @@ Those versions are expected to work:
 Stability
 ---------
 
-Cephadm is a new feature in the Octopus release and has seen limited
-use in production and at scale.  We would like users to try cephadm,
-especially for new clusters, but please be aware that some
-functionality is still rough around the edges.  We expect fairly
-frequent updates and improvements over the first several bug fix
-releases of Octopus.
-
-Cephadm management of the following components are currently well-supported:
-
-- Monitors
-- Managers
-- OSDs
-- CephFS file systems
-- rbd-mirror
-- NFS
-- iSCSI
-
-The following components are working with cephadm, but the
+Cephadm is actively in development. Please be aware that some
+functionality is still rough around the edges. Especially the 
+following components are working with cephadm, but the
 documentation is not as complete as we would like, and there may be some
 changes in the near future:
 
@@ -56,13 +41,8 @@ changes in the near future:
 Cephadm support for the following features is still under development:
 
 - RGW-HA
+- Cephadm exporter daemon
+- cephfs-mirror
 
-If you run into problems, you can always pause cephadm with::
-
-  ceph orch pause
-
-Or turn cephadm off completely with::
-
-  ceph orch set backend ''
-  ceph mgr module disable cephadm
+In case you encounter issues, see also :ref:`cephadm-pause`.
 
