@@ -303,6 +303,8 @@
      --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,
                                the trimming process will sleep the specified msec for every 1000 entries trimmed
      --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)
+     --enable-feature          enable a zone/zonegroup feature
+     --disable-feature         disable a zone/zonegroup feature
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
