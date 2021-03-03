@@ -2417,6 +2417,16 @@ static void tab_dump(const string& header, int width, const list<string>& entrie
   }
 }
 
+// return features that are supported but not enabled
+static auto get_disabled_features(const rgw::zone_features::set& enabled) {
+  auto features = rgw::zone_features::set{rgw::zone_features::supported.begin(),
+                                          rgw::zone_features::supported.end()};
+  for (const auto& feature : enabled) {
+    features.erase(feature);
+  }
+  return features;
+}
+
 
 static void sync_status(Formatter *formatter)
 {
@@ -2428,6 +2438,14 @@ static void sync_status(Formatter *formatter)
   cout << std::setw(width) << "realm" << std::setw(1) << " " << zone->get_realm_id() << " (" << zone->get_realm_name() << ")" << std::endl;
   cout << std::setw(width) << "zonegroup" << std::setw(1) << " " << zonegroup.get_id() << " (" << zonegroup.get_name() << ")" << std::endl;
   cout << std::setw(width) << "zone" << std::setw(1) << " " << zone->get_id() << " (" << zone->get_name() << ")" << std::endl;
+
+  const auto& rzg =
+    static_cast<const rgw::sal::RadosZoneGroup&>(zonegroup).get_group();
+
+  cout << std::setw(width) << "zonegroup features enabled: " << rzg.enabled_features << std::endl;
+  if (auto d = get_disabled_features(rzg.enabled_features); !d.empty()) {
+    cout << std::setw(width) << "                   disabled: " << d << std::endl;
+  }
 
   list<string> md_status;
 
