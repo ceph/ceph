@@ -5,11 +5,11 @@ import logging
 from io import StringIO
 from textwrap import dedent
 
-from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
 from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
+from tasks.ceph_manager import get_valgrind_args
 from tasks.cephfs.mount import CephFSMount
 
 log = logging.getLogger(__name__)
@@ -101,13 +101,13 @@ class FuseMount(CephFSMount):
 
         cwd = self.test_dir
         if self.client_config.get('valgrind') is not None:
-            run_cmd = misc.get_valgrind_args(
+            run_cmd = get_valgrind_args(
                 self.test_dir,
                 'client.{id}'.format(id=self.client_id),
                 run_cmd,
                 self.client_config.get('valgrind'),
             )
-            cwd = None # misc.get_valgrind_args chdir for us
+            cwd = None # get_valgrind_args chdir for us
 
         netns_prefix = ['sudo', 'nsenter',
                         '--net=/var/run/netns/{0}'.format(self.netns_name)]
