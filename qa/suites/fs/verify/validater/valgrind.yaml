@@ -13,6 +13,8 @@ overrides:
         osd heartbeat grace: 60
         mds heartbeat grace: 60
         mds beacon grace: 60
+      mds:
+        mds valgrind exit: true
       mon:
         mon osd crush smoke test: false
       osd:
@@ -20,6 +22,8 @@ overrides:
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       mds: [--tool=memcheck]
+    watchdog:
+      daemon_restart: normal
   ceph-fuse:
     client.0:
       valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
