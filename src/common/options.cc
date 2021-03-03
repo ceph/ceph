@@ -665,6 +665,16 @@ std::vector<Option> get_global_options() {
     .set_description("port number for the remote graylog server")
     .add_see_also("log_graylog_host"),
 
+    Option("log_to_journald", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .set_description("send log lines to journald")
+    .add_see_also("err_to_journald"),
+
+    Option("err_to_journald", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .set_description("send critical error log lines to journald")
+    .add_see_also("log_to_journald"),
+
     Option("log_coarse_timestamps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("timestamp log entries from coarse system clock "

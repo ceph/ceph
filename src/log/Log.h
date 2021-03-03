@@ -22,6 +22,7 @@ namespace ceph {
 namespace logging {
 
 class Graylog;
+class JournaldLogger;
 class SubsystemMap;
 
 class Log : private Thread
@@ -58,10 +59,12 @@ class Log : private Thread
   int m_syslog_log = -2, m_syslog_crash = -2;
   int m_stderr_log = -1, m_stderr_crash = -1;
   int m_graylog_log = -3, m_graylog_crash = -3;
+  int m_journald_log = -3, m_journald_crash = -3;
 
   std::string m_log_stderr_prefix;
 
   std::shared_ptr<Graylog> m_graylog;
+  std::unique_ptr<JournaldLogger> m_journald;
 
   std::vector<char> m_log_buf;
 
@@ -106,6 +109,11 @@ public:
 
   void start_graylog();
   void stop_graylog();
+
+  void set_journald_level(int log, int crash);
+
+  void start_journald_logger();
+  void stop_journald_logger();
 
   std::shared_ptr<Graylog> graylog() { return m_graylog; }
 
