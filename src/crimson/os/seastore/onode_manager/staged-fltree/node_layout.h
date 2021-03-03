@@ -386,7 +386,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        *    the estimated left_node_size <= target_split_size;
        * B. the fair one takes a further step to calculate the next slot of
        *    P KiB, and if left_node_size + P/2 < target_split_size, compensate
-       *    the split position to include the next slot; (TODO)
+       *    the split position to include the next slot;
        *
        * Say that the node_block_size = N KiB, the largest allowed
        * insert_size = 1/I * N KiB (I > 1). We want to identify the minimal 'I'
