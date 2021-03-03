@@ -3004,7 +3004,9 @@ public:
     if (r == 0) {
       // ok
     } else if (r == -EINVAL) {
-      // probably this is not manifest object 
+      // modifying manifeset object makes existing chunk_map clear
+      // as a result, the modified object is no longer manifest object 
+      // this casues to return -EINVAL
     } else if (r == -ENOENT) {
       // may have raced with a remove?
     } else {
