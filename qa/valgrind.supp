@@ -5,7 +5,13 @@
    fun:free
    ...
 }
-
+{
+   operator delete[] in Rados::shutdown
+   Memcheck:Free
+   fun:_ZdaPvm
+   ...
+   fun:_ZN8librados7v14_2_05Rados8shutdownEv
+}
 {
    older boost mersenne twister uses uninitialized memory for randomness
    Memcheck:Cond
