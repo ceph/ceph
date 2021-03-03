@@ -251,6 +251,7 @@ public:
   const EntityName& get_myname();
   entity_name_t get_myrank();
   version_t queue(LogEntry &entry);
+  void reset();
 
 private:
   Message *_get_mon_log_message();
