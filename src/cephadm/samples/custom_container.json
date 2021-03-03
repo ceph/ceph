@@ -2,8 +2,8 @@
     "image": "docker.io/prom/alertmanager:v0.20.0",
     "ports": [9093, 9094],
     "args": [
-        "-p 9093:9093",
-        "-p 9094:9094"
+        "-p", "9093:9093",
+        "-p", "9094:9094"
     ],
     "dirs": ["etc/alertmanager"],
     "files": {
