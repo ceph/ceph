@@ -293,6 +293,7 @@ BuildRequires:	systemd-rpm-macros
 %{?systemd_requires}
 PreReq:		%fillup_prereq
 BuildRequires:	fdupes
+BuildRequires:  memory-constraints
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
 BuildRequires:	mozilla-nss-devel
@@ -1200,8 +1201,7 @@ done
 %endif
 
 %if 0%{?suse_version}
-# the following setting fixed an OOM condition we once encountered in the OBS
-RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
+%limit_build -m 2600
 %endif
 
 export CPPFLAGS="$java_inc"
@@ -1284,7 +1284,11 @@ cmake .. \
 %if 0%{with rbd_ssd_cache}
     -DWITH_RBD_SSD_CACHE:BOOL=ON \
 %endif
+%if 0%{?suse_version}
+    -DBOOST_J:STRING=%{jobs} \
+%else
     -DBOOST_J:STRING=%{_smp_build_ncpus} \
+%endif
     -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
