@@ -602,14 +602,14 @@ public:
   int process() override {
     list<RGWCoroutinesStack*> stacks;
     auto meta = new RGWCoroutinesStack(store->ctx(), &crs);
-    meta->call(create_meta_log_trim_cr(this, store, &http,
+    meta->call(create_meta_log_trim_cr(this, static_cast<rgw::sal::RGWRadosStore*>(store), &http,
                                        cct->_conf->rgw_md_log_max_shards,
                                        trim_interval));
     stacks.push_back(meta);
 
     if (store->svc()->zone->sync_module_exports_data()) {
       auto data = new RGWCoroutinesStack(store->ctx(), &crs);
-      data->call(create_data_log_trim_cr(store, &http,
+      data->call(create_data_log_trim_cr(static_cast<rgw::sal::RGWRadosStore*>(store), &http,
                                          cct->_conf->rgw_data_log_num_shards,
                                          trim_interval));
       stacks.push_back(data);

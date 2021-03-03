@@ -102,7 +102,7 @@ namespace rgw {
   {
     LookupFHResult fhr{nullptr, 0};
     std::string bucket_name{path};
-    RGWStatBucketRequest req(cct, rgwlib.get_store()->get_user(user.user_id), bucket_name, bs);
+    RGWStatBucketRequest req(cct, user->clone(), bucket_name, bs);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
@@ -197,7 +197,7 @@ namespace rgw {
 	if (type == RGW_FS_TYPE_DIRECTORY)
 	  continue;
 
-	RGWStatObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
 	int rc = rgwlib.get_fe()->execute_req(&req);
@@ -234,7 +234,7 @@ namespace rgw {
 	  continue;
 
 	obj_path += "/";
-	RGWStatObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
 	int rc = rgwlib.get_fe()->execute_req(&req);
@@ -266,7 +266,7 @@ namespace rgw {
       case 2:
       {
 	std::string object_name{path};
-	RGWStatLeafRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+	RGWStatLeafRequest req(cct, user->clone(),
 			       parent, object_name);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc == 0) &&
@@ -319,8 +319,7 @@ namespace rgw {
     if (rgw_fh->deleted())
       return -ESTALE;
 
-    RGWReadRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
-		       rgw_fh, offset, length, buffer);
+    RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
@@ -342,8 +341,7 @@ namespace rgw {
     if (rgw_fh->deleted())
       return -ESTALE;
 
-    RGWReadRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
-		       rgw_fh, offset, length, buffer);
+    RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
@@ -400,15 +398,14 @@ namespace rgw {
       } else {
 	/* delete object w/key "<bucket>/" (uxattrs), if any */
 	string oname{"/"};
-	RGWDeleteObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-				bkt_fh->bucket_name(), oname);
+	RGWDeleteObjRequest req(cct, user->clone(), bkt_fh->bucket_name(), oname);
 	rc = rgwlib.get_fe()->execute_req(&req);
 	/* don't care if ENOENT */
 	unref(bkt_fh);
       }
 
       string bname{name};
-      RGWDeleteBucketRequest req(cct, rgwlib.get_store()->get_user(user.user_id), bname);
+      RGWDeleteBucketRequest req(cct, user->clone(), bname);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
@@ -444,8 +441,7 @@ namespace rgw {
 	}
 	oname += "/";
       }
-      RGWDeleteObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id), parent->bucket_name(),
-			      oname);
+      RGWDeleteObjRequest req(cct, user->clone(), parent->bucket_name(), oname);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
@@ -522,8 +518,7 @@ namespace rgw {
       switch (ix) {
       case 0:
       {
-	RGWCopyObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			      src_fh, dst_fh, src_name, dst_name);
+	RGWCopyObjRequest req(cct, user->clone(), src_fh, dst_fh, src_name, dst_name);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
@@ -644,8 +639,7 @@ namespace rgw {
 	return mkr;
       }
 
-      RGWCreateBucketRequest req(get_context(),
-				 rgwlib.get_store()->get_user(user.user_id), bname);
+      RGWCreateBucketRequest req(get_context(), user->clone(), bname);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -671,8 +665,7 @@ namespace rgw {
 	return mkr;
       }
 
-      RGWPutObjRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
-			   parent->bucket_name(), dir_name, bl);
+      RGWPutObjRequest req(get_context(), user->clone(), parent->bucket_name(), dir_name, bl);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -731,8 +724,7 @@ namespace rgw {
 
     /* create it */
     buffer::list bl;
-    RGWPutObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			 parent->bucket_name(), obj_name, bl);
+    RGWPutObjRequest req(cct, user->clone(), parent->bucket_name(), obj_name, bl);
     MkObjResult mkr{nullptr, -EINVAL};
 
     rc = rgwlib.get_fe()->execute_req(&req);
@@ -843,8 +835,7 @@ namespace rgw {
       buffer::copy(link_path, strlen(link_path)));
 #endif
 
-    RGWPutObjRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
-			 parent->bucket_name(), obj_name, bl);
+    RGWPutObjRequest req(get_context(), user->clone(), parent->bucket_name(), obj_name, bl);
 
     /* save attrs */
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -918,8 +909,7 @@ namespace rgw {
       obj_name += "/";
     }
 
-    RGWSetAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			   rgw_fh->bucket_name(), obj_name);
+    RGWSetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
     rgw_fh->create_stat(st, mask);
     rgw_fh->encode_attrs(ux_key, ux_attrs);
@@ -936,8 +926,7 @@ namespace rgw {
     if (rc == -ENOENT) {
       /* special case:  materialize placeholder dir */
       buffer::list bl;
-      RGWPutObjRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id), rgw_fh->bucket_name(),
-			   obj_name, bl);
+      RGWPutObjRequest req(get_context(), user->clone(), rgw_fh->bucket_name(), obj_name, bl);
 
       rgw_fh->encode_attrs(ux_key, ux_attrs); /* because std::moved */
 
@@ -991,8 +980,7 @@ namespace rgw {
     int rc, rc2, rc3;
     string obj_name{rgw_fh->relative_object_name2()};
 
-    RGWGetAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			   rgw_fh->bucket_name(), obj_name);
+    RGWGetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
     for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
       auto& xattr = attrs->xattrs[ix];
@@ -1075,8 +1063,7 @@ namespace rgw {
     int rc, rc2, rc3;
     string obj_name{rgw_fh->relative_object_name2()};
 
-    RGWGetAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			   rgw_fh->bucket_name(), obj_name);
+    RGWGetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
     rc = rgwlib.get_fe()->execute_req(&req);
     rc2 = req.get_ret();
@@ -1125,8 +1112,7 @@ namespace rgw {
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name2()};
 
-    RGWSetAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			   rgw_fh->bucket_name(), obj_name);
+    RGWSetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
     for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
       auto& xattr = attrs->xattrs[ix];
@@ -1168,8 +1154,7 @@ namespace rgw {
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name2()};
 
-    RGWRMAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			  rgw_fh->bucket_name(), obj_name);
+    RGWRMAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
     for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
       auto& xattr = attrs->xattrs[ix];
@@ -1210,8 +1195,7 @@ namespace rgw {
       << " update old versioned fh : " << obj_name
       << dendl;
 
-    RGWSetAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
-			   rgw_fh->bucket_name(), obj_name);
+    RGWSetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
     rgw_fh->encode_attrs(ux_key, ux_attrs);
 
@@ -1802,7 +1786,7 @@ namespace rgw {
     state->object->set_bucket(state->bucket.get());
 
     auto compression_type =
-      get_store()->svc()->zone->get_zone_params().get_compression_type(
+      get_store()->get_zone()->get_params().get_compression_type(
 	state->bucket->get_placement_rule());
 
     /* not obviously supportable */

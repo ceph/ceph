@@ -30,7 +30,7 @@ namespace rgw {
     OpsLogSocket* olog;
     rgw::LDAPHelper* ldh{nullptr};
     RGWREST rest; // XXX needed for RGWProcessEnv
-    rgw::sal::RGWRadosStore* store;
+    rgw::sal::RGWStore* store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
@@ -38,7 +38,7 @@ namespace rgw {
       {}
     ~RGWLib() {}
 
-    rgw::sal::RGWRadosStore* get_store() { return store; }
+    rgw::sal::RGWStore* get_store() { return store; }
 
     RGWLibFrontend* get_fe() { return fe; }
 
@@ -74,7 +74,7 @@ namespace rgw {
       return user_info;
     }
 
-    int set_uid(rgw::sal::RGWRadosStore* store, const rgw_user& uid);
+    int set_uid(rgw::sal::RGWStore* store, const rgw_user& uid);
 
     int write_data(const char *buf, int len);
     int read_data(char *buf, int len);
@@ -121,7 +121,7 @@ namespace rgw {
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
-    static int init_from_header(rgw::sal::RGWRadosStore *store,
+    static int init_from_header(rgw::sal::RGWStore *store,
 				struct req_state *s);
   }; /* RGWHandler_Lib */
 
@@ -131,13 +131,12 @@ namespace rgw {
     std::unique_ptr<rgw::sal::RGWUser> tuser; // Don't use this.  It's empty except during init.
   public:
     CephContext* cct;
-    boost::optional<RGWSysObjectCtx> sysobj_ctx;
 
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user)
-      :  RGWRequest(rgwlib.get_store()->getRados()->get_new_req_id()),
+      :  RGWRequest(rgwlib.get_store()->get_new_req_id()),
 	 tuser(std::move(_user)), cct(_cct)
       {}
 
@@ -161,12 +160,9 @@ namespace rgw {
       RGWRequest::init_state(_s);
       RGWHandler::init(rados_ctx->get_store(), _s, io);
 
-      sysobj_ctx.emplace(store->svc()->sysobj);
-
       get_state()->obj_ctx = rados_ctx;
-      get_state()->sysobj_ctx = &(sysobj_ctx.get());
-      get_state()->req_id = store->svc()->zone_utils->unique_id(id);
-      get_state()->trans_id = store->svc()->zone_utils->unique_trans_id(id);
+      get_state()->req_id = store->zone_unique_id(id);
+      get_state()->trans_id = store->zone_unique_trans_id(id);
       get_state()->bucket_tenant = tuser->get_tenant();
       get_state()->set_user(tuser);
 
@@ -203,19 +199,15 @@ namespace rgw {
 	RGWRequest::init_state(&rstate);
 	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
-	sysobj_ctx.emplace(store->svc()->sysobj);
-
-	get_state()->cio = &io_ctx;
 	get_state()->obj_ctx = &rados_ctx;
-	get_state()->sysobj_ctx = &(sysobj_ctx.get());
-	get_state()->req_id = store->svc()->zone_utils->unique_id(id);
-	get_state()->trans_id = store->svc()->zone_utils->unique_trans_id(id);
+	get_state()->req_id = store->zone_unique_id(id);
+	get_state()->trans_id = store->zone_unique_trans_id(id);
 
 	ldpp_dout(get_state(), 2) << "initializing for trans_id = "
 	    << get_state()->trans_id.c_str() << dendl;
       }
 
-    inline rgw::sal::RGWRadosStore* get_store() { return store; }
+    inline rgw::sal::RGWStore* get_store() { return store; }
     inline RGWLibIO& get_io() { return io_ctx; }
     inline RGWObjectCtx& get_octx() { return rados_ctx; }
 

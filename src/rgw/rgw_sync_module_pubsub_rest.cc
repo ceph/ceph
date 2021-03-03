@@ -40,7 +40,7 @@ public:
     dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
-        store->svc()->zone->get_zonegroup().get_name(),
+        store->get_zone()->get_zonegroup().get_name(),
         s->user->get_tenant(), topic_name);
     topic_arn = arn.to_string();
     return 0;
@@ -171,7 +171,7 @@ public:
       return -EINVAL;
     }
 
-    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->getRados()->get_sync_module().get());
+    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
     const auto& conf = psmodule->get_effective_conf();
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
@@ -374,7 +374,7 @@ public:
 
 void RGWPSCreateNotif_ObjStore::execute(optional_yield y)
 {
-  ps.emplace(store, s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
 
   auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->create_notification(topic_name, events, y);
@@ -411,7 +411,7 @@ void RGWPSDeleteNotif_ObjStore::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(store, s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->remove_notification(topic_name, y);
   if (op_ret < 0) {
@@ -450,7 +450,7 @@ public:
 
 void RGWPSListNotifs_ObjStore::execute(optional_yield y)
 {
-  ps.emplace(store, s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->get_topics(&result);
   if (op_ret < 0) {
@@ -496,7 +496,7 @@ public:
 };
 
 // factory for ceph specific PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::RGWRadosStore *store,
+RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::RGWStore *store,
 						struct req_state* const s,
 						const rgw::auth::StrategyRegistry& auth_registry,
 						const std::string& frontend_prefix)

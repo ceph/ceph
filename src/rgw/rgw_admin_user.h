@@ -26,11 +26,11 @@ namespace rgw {
 
   class RGWLibAdmin
   {
-    rgw::sal::RGWRadosStore *store;
+    rgw::sal::RGWStore *store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
-    rgw::sal::RGWRadosStore* get_store()
+    rgw::sal::RGWStore* get_store()
     {
       return store;
     }

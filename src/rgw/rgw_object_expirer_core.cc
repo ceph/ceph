@@ -105,7 +105,7 @@ int RGWObjExpStore::objexp_hint_add(const ceph::real_time& delete_at,
   cls_timeindex_add(op, utime_t(delete_at), keyext, hebl);
 
   string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key, cct->_conf->rgw_objexp_hints_num_shards));
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, shard_name));
+  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_params().log_pool, shard_name));
   int r = obj.open();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -127,7 +127,7 @@ int RGWObjExpStore::objexp_hint_list(const string& oid,
   cls_timeindex_list(op, utime_t(start_time), utime_t(end_time), marker, max_entries, entries,
         out_marker, truncated);
 
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, oid));
+  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_params().log_pool, oid));
   int r = obj.open();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -174,7 +174,7 @@ int RGWObjExpStore::objexp_hint_trim(const string& oid,
                                const string& from_marker,
                                const string& to_marker)
 {
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, oid));
+  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_params().log_pool, oid));
   int r = obj.open();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -190,32 +190,12 @@ int RGWObjExpStore::objexp_hint_trim(const string& oid,
   return 0;
 }
 
-int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
-                                       const string& bucket_name,
-                                       const string& bucket_id,
-                                       RGWBucketInfo& bucket_info)
-{
-  /*
-   * XXX Here's where it gets tricky. We went to all the trouble of
-   * punching the tenant through the objexp_hint_entry, but now we
-   * find that our instances do not actually have tenants. They are
-   * unique thanks to IDs. So the tenant string is not needed...
-
-   * XXX reloaded: it turns out tenants were needed after all since bucket ids
-   * are ephemeral, good call encoding tenant info!
-   */
-
-  return store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name,
-				bucket_info, nullptr, null_yield, nullptr);
-
-}
-
 int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
 
-  int ret = init_bucket_info(hint.tenant, hint.bucket_name,
-          hint.bucket_id, bucket_info);
+  int ret = store->get_bucket(dpp, nullptr, rgw_bucket(hint.tenant, hint.bucket_name, hint.bucket_id), &bucket, null_yield);
   if (-ENOENT == ret) {
     ldpp_dout(dpp, 15) << "NOTICE: cannot find bucket = " \
         << hint.bucket_name << ". The object must be already removed" << dendl;
@@ -233,10 +213,9 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
     key.instance = "null";
   }
 
-  rgw_obj obj(bucket_info.bucket, key);
-  store->getRados()->set_atomic(&rctx, obj);
-  ret = store->getRados()->delete_obj(dpp, rctx, bucket_info, obj,
-          bucket_info.versioning_status(), 0, hint.exp_time);
+  std::unique_ptr<rgw::sal::RGWObject> obj = bucket->get_object(key);
+  obj->set_atomic(&rctx);
+  ret = obj->delete_object(dpp, &rctx, null_yield);
 
   return ret;
 }
@@ -255,7 +234,7 @@ void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 15) << "got removal hint for: " << iter->key_ts.sec() \
         << " - " << iter->key_ext << dendl;
 
-    int ret = objexp_hint_parse(store->getRados()->ctx(), *iter, &hint);
+    int ret = objexp_hint_parse(store->ctx(), *iter, &hint);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
@@ -319,7 +298,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(&store->getRados()->objexp_pool_ctx, shard);
+  int ret = l.lock_exclusive(&static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */
     ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
     return false;
@@ -355,7 +334,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
     marker = out_marker;
   } while (truncated);
 
-  l.unlock(&store->getRados()->objexp_pool_ctx, shard);
+  l.unlock(&static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
   return done;
 }
 

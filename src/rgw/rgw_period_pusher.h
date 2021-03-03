@@ -13,7 +13,7 @@
 
 namespace rgw {
 namespace sal {
-class RGWRadosStore;
+class RGWStore;
 }
 }
 
@@ -29,7 +29,7 @@ using RGWZonesNeedPeriod = RGWPeriod;
 class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
-  explicit RGWPeriodPusher(rgw::sal::RGWRadosStore* store, optional_yield y);
+  explicit RGWPeriodPusher(rgw::sal::RGWStore* store, optional_yield y);
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones
@@ -40,13 +40,13 @@ class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
   void pause() override;
 
   /// continue processing notifications with a new RGWRados instance
-  void resume(rgw::sal::RGWRadosStore* store) override;
+  void resume(rgw::sal::RGWStore* store) override;
 
  private:
   void handle_notify(RGWZonesNeedPeriod&& period);
 
   CephContext *const cct;
-  rgw::sal::RGWRadosStore* store;
+  rgw::sal::RGWStore* store;
 
   std::mutex mutex;
   epoch_t realm_epoch{0}; //< the current realm epoch being sent

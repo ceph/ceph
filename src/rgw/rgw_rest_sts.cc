@@ -82,7 +82,7 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   }
   auto provider_arn = rgw::ARN(idp_url, "oidc-provider", tenant);
   string p_arn = provider_arn.to_string();
-  RGWOIDCProvider provider(cct, ctl, p_arn, tenant);
+  RGWOIDCProvider provider(cct, store, p_arn, tenant);
   auto ret = provider.get(dpp);
   if (ret < 0) {
     return boost::none;
@@ -582,7 +582,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
 }
 
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
-                            rgw::sal::RGWRadosStore *store,
+                            rgw::sal::RGWStore *store,
                             const rgw::auth::StrategyRegistry& auth_registry,
                             struct req_state *s, optional_yield y)
 {
@@ -628,7 +628,7 @@ RGWOp *RGWHandler_REST_STS::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_STS::init(rgw::sal::RGWRadosStore *store,
+int RGWHandler_REST_STS::init(rgw::sal::RGWStore *store,
                               struct req_state *s,
                               rgw::io::BasicClient *cio)
 {
@@ -693,7 +693,7 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_STS::get_handler(rgw::sal::RGWRadosStore *store,
+RGWRESTMgr_STS::get_handler(rgw::sal::RGWStore *store,
 			    struct req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)

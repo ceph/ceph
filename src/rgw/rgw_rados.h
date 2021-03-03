@@ -225,20 +225,20 @@ public:
 };
 
 class RGWObjectCtx {
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
   void *s{nullptr};
 
   std::map<rgw_obj, RGWObjState> objs_state;
 public:
-  explicit RGWObjectCtx(rgw::sal::RGWRadosStore *_store) : store(_store) {}
-  explicit RGWObjectCtx(rgw::sal::RGWRadosStore *_store, void *_s) : store(_store), s(_s) {}
+  explicit RGWObjectCtx(rgw::sal::RGWStore *_store) : store(_store) {}
+  explicit RGWObjectCtx(rgw::sal::RGWStore *_store, void *_s) : store(_store), s(_s) {}
 
   void *get_private() {
     return s;
   }
 
-  rgw::sal::RGWRadosStore *get_store() {
+  rgw::sal::RGWStore *get_store() {
     return store;
   }
 
@@ -342,35 +342,10 @@ class RGWMetaSyncStatusManager;
 class RGWDataSyncStatusManager;
 class RGWCoroutinesManagerRegistry;
 
-class RGWGetBucketStats_CB : public RefCountedObject {
-protected:
-  rgw_bucket bucket;
-  map<RGWObjCategory, RGWStorageStats> *stats;
-public:
-  explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
-  ~RGWGetBucketStats_CB() override {}
-  virtual void handle_response(int r) = 0;
-  virtual void set_response(map<RGWObjCategory, RGWStorageStats> *_stats) {
-    stats = _stats;
-  }
-};
-
-class RGWGetUserStats_CB : public RefCountedObject {
-protected:
-  rgw_user user;
-  RGWStorageStats stats;
-public:
-  explicit RGWGetUserStats_CB(const rgw_user& _user) : user(_user) {}
-  ~RGWGetUserStats_CB() override {}
-  virtual void handle_response(int r) = 0;
-  virtual void set_response(RGWStorageStats& _stats) {
-    stats = _stats;
-  }
-};
-
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
 namespace rgw { namespace sal {
+  class RGWStore;
   class RGWRadosStore;
   class MPRadosSerializer;
   class LCRadosSerializer;

@@ -38,11 +38,8 @@ int RGWRole::store_info(bool exclusive, optional_yield y)
   bufferlist bl;
   encode(*this, bl);
 
-  auto svc = ctl->svc;
-
-  auto obj_ctx = ctl->svc->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
-                            bl, exclusive, NULL, real_time(), y, NULL);
+  return store->put_system_obj(store->get_zone()->get_params().roles_pool, oid,
+			       bl, exclusive, NULL, real_time(), y, NULL);
 }
 
 int RGWRole::store_name(bool exclusive, optional_yield y)
@@ -56,23 +53,17 @@ int RGWRole::store_name(bool exclusive, optional_yield y)
   using ceph::encode;
   encode(nameToId, bl);
 
-  auto svc = ctl->svc;
-
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
-			    bl, exclusive, NULL, real_time(), y, NULL);
+  return store->put_system_obj(store->get_zone()->get_params().roles_pool, oid,
+			       bl, exclusive, NULL, real_time(), y, NULL);
 }
 
 int RGWRole::store_path(bool exclusive, optional_yield y)
 {
   string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
 
-  auto svc = ctl->svc;
-
   bufferlist bl;
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
-			    bl, exclusive, NULL, real_time(), y, NULL);
+  return store->put_system_obj(store->get_zone()->get_params().roles_pool, oid,
+			       bl, exclusive, NULL, real_time(), y, NULL);
 }
 
 int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -118,9 +109,7 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
   sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
-  auto svc = ctl->svc;
-
-  auto& pool = svc->zone->get_zone_params().roles_pool;
+  auto& pool = store->get_zone()->get_params().roles_pool;
   ret = store_info(exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
@@ -135,7 +124,7 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
 
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
-    int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+    int info_ret = store->delete_system_obj(pool, oid, nullptr, y);
     if (info_ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
@@ -149,14 +138,14 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
                   << path << ": " << cpp_strerror(-ret) << dendl;
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
-    int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+    int info_ret = store->delete_system_obj(pool, oid, nullptr, y);
     if (info_ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
     }
     //Delete role name that was stored in previous call
     oid = tenant + get_names_oid_prefix() + name;
-    int name_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+    int name_ret = store->delete_system_obj(pool, oid, nullptr, y);
     if (name_ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-name_ret) << dendl;
@@ -168,8 +157,7 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
 
 int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().roles_pool;
+  auto& pool = store->get_zone()->get_params().roles_pool;
 
   int ret = read_name(dpp, y);
   if (ret < 0) {
@@ -187,7 +175,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
   // Delete id
   string oid = get_info_oid_prefix() + id;
-  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+  ret = store->delete_system_obj(pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-ret) << dendl;
@@ -195,7 +183,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
   // Delete name
   oid = tenant + get_names_oid_prefix() + name;
-  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+  ret = store->delete_system_obj(pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
@@ -203,7 +191,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
   // Delete path
   oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
-  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+  ret = store->delete_system_obj(pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
                   << path << ": " << cpp_strerror(-ret) << dendl;
@@ -238,7 +226,7 @@ int RGWRole::get_by_id(const DoutPrefixProvider *dpp, optional_yield y)
 
 int RGWRole::update(optional_yield y)
 {
-  auto& pool = ctl->svc->zone->get_zone_params().roles_pool;
+  auto& pool = store->get_zone()->get_params().roles_pool;
 
   int ret = store_info(false, y);
   if (ret < 0) {
@@ -314,13 +302,11 @@ void RGWRole::decode_json(JSONObj *obj)
 
 int RGWRole::read_id(const DoutPrefixProvider *dpp, const string& role_name, const string& tenant, string& role_id, optional_yield y)
 {
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().roles_pool;
+  auto& pool = store->get_zone()->get_params().roles_pool;
   string oid = tenant + get_names_oid_prefix() + role_name;
   bufferlist bl;
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y, dpp);
+  int ret = store->get_system_obj(dpp, pool, oid, bl, NULL, NULL, y);
   if (ret < 0) {
     return ret;
   }
@@ -341,13 +327,11 @@ int RGWRole::read_id(const DoutPrefixProvider *dpp, const string& role_name, con
 
 int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().roles_pool;
+  auto& pool = store->get_zone()->get_params().roles_pool;
   string oid = get_info_oid_prefix() + id;
   bufferlist bl;
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y, dpp);
+  int ret = store->get_system_obj(dpp, pool, oid, bl, NULL, NULL, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from pool: " << pool.name <<
                   ": " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -369,13 +353,11 @@ int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 
 int RGWRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().roles_pool;
+  auto& pool = store->get_zone()->get_params().roles_pool;
   string oid = tenant + get_names_oid_prefix() + name;
   bufferlist bl;
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y, dpp);
+  int ret = store->get_system_obj(dpp, pool, oid, bl, NULL, NULL, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
@@ -442,15 +424,15 @@ void RGWRole::update_trust_policy(string& trust_policy)
   this->trust_policy = trust_policy;
 }
 
-int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp, 
-                                      RGWRados *store,
+int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
+				      rgw::sal::RGWStore *store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,
                                       vector<RGWRole>& roles,
 				      optional_yield y)
 {
-  auto pool = store->svc.zone->get_zone_params().roles_pool;
+  auto pool = store->get_zone()->get_params().roles_pool;
   string prefix;
 
   // List all roles if path prefix is empty
@@ -492,7 +474,7 @@ int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
       //Get id from info oid prefix + id
       string id = it.substr(pos + role_oid_prefix.length());
 
-      RGWRole role(cct, store->pctl);
+      RGWRole role(cct, store);
       role.set_id(id);
       int ret = role.read_info(dpp, y);
       if (ret < 0) {

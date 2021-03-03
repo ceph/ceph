@@ -10,6 +10,10 @@
 
 #include <atomic>
 
+namespace rgw { namespace sal {
+  class RGWStore;
+} }
+
 class RGWSI_Zone;
 
 template <class T>
@@ -77,7 +81,9 @@ class RGWRESTConn
 public:
 
   RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle);
+  RGWRESTConn(CephContext *_cct, rgw::sal::RGWStore* store, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle);
   RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle);
+  RGWRESTConn(CephContext *_cct, rgw::sal::RGWStore* store, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle);
 
   // custom move needed for atomic
   RGWRESTConn(RGWRESTConn&& other);
@@ -199,8 +205,14 @@ public:
   S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle) :
     RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _host_style) {}
 
+  S3RESTConn(CephContext *_cct, rgw::sal::RGWStore* store, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle) :
+    RGWRESTConn(_cct, store, _remote_id, endpoints, _host_style) {}
+
   S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle):
     RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _cred, _host_style) {}
+
+  S3RESTConn(CephContext *_cct, rgw::sal::RGWStore* store, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle):
+    RGWRESTConn(_cct, store, _remote_id, endpoints, _cred, _host_style) {}
   ~S3RESTConn() override = default;
 
   void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup) override {

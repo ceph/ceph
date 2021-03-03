@@ -4,7 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 #include "include/str_list.h"
 
@@ -34,7 +34,12 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
-  rgw_user uid(uid_str);
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(uid_str));
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+
+  if (!bucket_name.empty()) {
+    store->get_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
+  }
 
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
@@ -53,7 +58,7 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
     }
   }
 
-  op_ret = RGWUsage::show(store->getRados(), uid, bucket_name, start, end, show_entries, show_summary, &categories, flusher);
+  op_ret = RGWUsage::show(this, store, user.get(), bucket.get(), start, end, show_entries, show_summary, &categories, flusher);
 }
 
 class RGWOp_Usage_Delete : public RGWRESTOp {
@@ -76,12 +81,17 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
-  rgw_user uid(uid_str);
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(uid_str));
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+
+  if (!bucket_name.empty()) {
+    store->get_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
+  }
 
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
 
-  if (uid.empty() &&
+  if (rgw::sal::RGWUser::empty(user.get()) &&
       !bucket_name.empty() &&
       !start &&
       end == (uint64_t)-1) {
@@ -93,7 +103,7 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
     }
   }
 
-  op_ret = RGWUsage::trim(store->getRados(), uid, bucket_name, start, end);
+  op_ret = RGWUsage::trim(this, store, user.get(), bucket.get(), start, end);
 }
 
 RGWOp *RGWHandler_Usage::op_get()

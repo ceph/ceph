@@ -1596,7 +1596,6 @@ struct req_state : DoutPrefixProvider {
   Clock::duration time_elapsed() const { return Clock::now() - time; }
 
   RGWObjectCtx *obj_ctx{nullptr};
-  RGWSysObjectCtx *sysobj_ctx{nullptr};
   string dialect;
   string req_id;
   string trans_id;

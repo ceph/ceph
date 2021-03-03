@@ -37,7 +37,7 @@ seed::~seed()
   store = NULL;
 }
 
-void seed::init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store)
+void seed::init(struct req_state *p_req, rgw::sal::RGWStore *p_store)
 {
   s = p_req;
   store = p_store;
@@ -249,15 +249,8 @@ int seed::save_torrent_file(optional_yield y)
 {
   int op_ret = 0;
   string key = RGW_OBJ_TORRENT;
-  rgw_obj obj(s->bucket->get_key(), s->object->get_name());
 
-  rgw_raw_obj raw_obj;
-  store->getRados()->obj_to_raw(s->bucket->get_info().placement_rule, obj, &raw_obj);
-
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(raw_obj);
-
-  op_ret = sysobj.omap().set(key, bl, y);
+  op_ret = s->object->omap_set_val_by_key(key, bl, false, y);
   if (op_ret < 0)
   {
     ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;
