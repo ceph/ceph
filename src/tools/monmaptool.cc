@@ -195,7 +195,7 @@ int main(int argc, const char **argv)
   bool show_features = false;
   bool generate = false;
   bool filter = false;
-  ceph_release_t min_mon_release{0};
+  ceph_release_t min_mon_release = ceph_release_t::unknown;
   map<string,entity_addr_t> add;
   map<string,entity_addrvec_t> addv;
   list<string> rm;
@@ -348,6 +348,9 @@ int main(int argc, const char **argv)
     }
     monmap.strategy = static_cast<MonMap::election_strategy>(
 		  g_conf().get_val<uint64_t>("mon_election_default_strategy"));
+    if (min_mon_release == ceph_release_t::unknown) {
+      min_mon_release = ceph_release_t::octopus;
+    }
     // TODO: why do we not use build_initial in our normal path here!?!?!
     modified = true;
   }

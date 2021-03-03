@@ -47,11 +47,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
   uint8_t v = 4;
-  if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
-    v = 1;
-  } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-    v = 3;
-  }
+  assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
   encode(num_pg_active, bl);
@@ -60,16 +56,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(pg_pool_sum, bl, features);
   encode(pg_sum, bl, features);
   encode(osd_sum, bl, features);
-  if (v >= 2) {
-    encode(num_pg_by_state, bl);
-  } else {
-    uint32_t n = num_pg_by_state.size();
-    encode(n, bl);
-    for (auto p : num_pg_by_state) {
-      encode((int32_t)p.first, bl);
-      encode(p.second, bl);
-    }
-  }
+  encode(num_pg_by_state, bl);
   encode(num_pg_by_osd, bl);
   encode(num_pg_by_pool, bl);
   encode(osd_last_seq, bl);
@@ -78,18 +65,15 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(pg_sum_delta, bl, features);
   encode(stamp_delta, bl);
   encode(avail_space_by_rule, bl);
-  if (struct_v >= 3) {
-    encode(purged_snaps, bl);
-  }
-  if (struct_v >= 4) {
-    encode(osd_sum_by_class, bl, features);
-  }
+  encode(purged_snaps, bl);
+  encode(osd_sum_by_class, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(4, p);
+  assert(struct_v >= 4);
   decode(num_pg, p);
   decode(num_pg_active, p);
   decode(num_pg_unknown, p);
@@ -97,16 +81,7 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(pg_pool_sum, p);
   decode(pg_sum, p);
   decode(osd_sum, p);
-  if (struct_v >= 2) {
-    decode(num_pg_by_state, p);
-  } else {
-    map<int32_t, int32_t> nps;
-    decode(nps, p);
-    num_pg_by_state.clear();
-    for (auto i : nps) {
-      num_pg_by_state[i.first] = i.second;
-    }
-  }
+  decode(num_pg_by_state, p);
   decode(num_pg_by_osd, p);
   decode(num_pg_by_pool, p);
   decode(osd_last_seq, p);
@@ -115,12 +90,8 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(pg_sum_delta, p);
   decode(stamp_delta, p);
   decode(avail_space_by_rule, p);
-  if (struct_v >= 3) {
-    decode(purged_snaps, p);
-  }
-  if (struct_v >= 4) {
-    decode(osd_sum_by_class, p);
-  }
+  decode(purged_snaps, p);
+  decode(osd_sum_by_class, p);
   DECODE_FINISH(p);
 }
 

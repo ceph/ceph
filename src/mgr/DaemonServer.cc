@@ -1229,20 +1229,13 @@ bool DaemonServer::_handle_command(
       return true;
     }
     for (auto& con : p->second) {
-      if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
-	vector<spg_t> pgs = { spgid };
-	con->send_message(new MOSDScrub2(monc->get_fsid(),
-					 epoch,
-					 pgs,
-					 scrubop == "repair",
-					 scrubop == "deep-scrub"));
-      } else {
-	vector<pg_t> pgs = { pgid };
-	con->send_message(new MOSDScrub(monc->get_fsid(),
-					pgs,
-					scrubop == "repair",
-					scrubop == "deep-scrub"));
-      }
+      assert(HAVE_FEATURE(con->get_features(), SERVER_OCTOPUS));
+      vector<spg_t> pgs = { spgid };
+      con->send_message(new MOSDScrub2(monc->get_fsid(),
+				       epoch,
+				       pgs,
+				       scrubop == "repair",
+				       scrubop == "deep-scrub"));
     }
     ss << "instructing pg " << spgid << " on osd." << acting_primary
        << " to " << scrubop;

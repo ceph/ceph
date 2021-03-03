@@ -734,9 +734,7 @@ void MgrMonitor::on_active()
     return;
   }
   mon.clog->debug() << "mgrmap e" << map.epoch << ": " << map;
-  if (!HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_NAUTILUS)) {
-    return;
-  }
+  assert(HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_NAUTILUS));
   if (pending_map.always_on_modules == always_on_modules) {
     return;
   }
