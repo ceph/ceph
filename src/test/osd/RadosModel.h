@@ -2422,18 +2422,20 @@ public:
       snap(0)
   {}
 
-  void get_rand_off_len(uint64_t &rand_offset, uint32_t &rand_length, uint32_t max_len) {
-    rand_offset = rand() % max_len;
-    rand_length = rand() % max_len;
-    rand_offset = rand_offset - (rand_offset % 512);
-    rand_length = rand_length - (rand_length % 512);
+  pair<uint64_t, uint64_t> get_rand_off_len(uint32_t max_len) {
+    pair<uint64_t, uint64_t> r (0, 0);
+    r.first = rand() % max_len;
+    r.second = rand() % max_len;
+    r.first = r.first - (r.first % 512);
+    r.second = r.second - (r.second % 512);
 
-    while (rand_offset + rand_length > max_len || rand_length == 0) {
-      rand_offset = rand() % max_len;
-      rand_length = rand() % max_len;
-      rand_offset = rand_offset - (rand_offset % 512);
-      rand_length = rand_length - (rand_length % 512);
+    while (r.first + r.second > max_len || r.second == 0) {
+      r.first = rand() % max_len;
+      r.second = rand() % max_len;
+      r.first = r.first - (r.first % 512);
+      r.second = r.second - (r.second % 512);
     }
+    return r;
   }
 
   void _begin() override
@@ -2458,16 +2460,19 @@ public:
     } else {
       max_len = src_value.most_recent_gen()->get_length(src_value.most_recent());
     }
+    pair<uint64_t, uint64_t> off_len; // first: offset, second: length
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
-      get_rand_off_len(offset, length, max_len);
+      off_len = get_rand_off_len(max_len);
     } else if (src_value.version != 0 && !src_value.deleted()) {
       op.assert_version(src_value.version);
-      get_rand_off_len(offset, length, max_len);
+      off_len = get_rand_off_len(max_len);
     } else if (src_value.deleted()) {
-      offset = 0;
-      length = max_len;
+      off_len.first = 0;
+      off_len.second = max_len;
     }
+    offset = off_len.first;
+    length = off_len.second;
     tgt_offset = offset;
 
     string target_oid;
