@@ -66,7 +66,9 @@ cephadm:
   - doc/man/8/cephadm.rst
   - qa/suites/rados/cephadm/**
   - qa/tasks/cephadm.py
+  - qa/tasks/cephadm_cases
   - qa/tasks/mgr/test_cephadm_orchestrator.py
+  - qa/tasks/mgr/test_orchestrator_cli.py
   - qa/workunits/cephadm/**
   - src/cephadm/**
   - src/pybind/mgr/cephadm/**
