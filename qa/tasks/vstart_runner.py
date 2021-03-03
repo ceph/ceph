@@ -158,6 +158,8 @@ else:
     BIN_PREFIX = "./"
     SRC_PREFIX = "./"
 
+CEPH_CMD = os.path.join(BIN_PREFIX, 'ceph')
+
 
 def rm_nonascii_chars(var):
     var = var.replace(b'\xe2\x80\x98', b'\'')
@@ -970,7 +972,7 @@ class LocalCephManager(CephManager):
                               This can be 'cluster', 'audit', ...
         :type watch_channel: str
         """
-        args = [os.path.join(BIN_PREFIX, "ceph"), "-w"]
+        args = [CEPH_CMD, "-w"]
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
@@ -984,7 +986,7 @@ class LocalCephManager(CephManager):
 
         Accepts arguments same as teuthology.orchestra.remote.run().
         """
-        kwargs['args'] = [os.path.join(BIN_PREFIX,'ceph')]+list(kwargs['args'])
+        kwargs['args'] = [CEPH_CMD] + list(kwargs['args'])
         return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs):
@@ -1009,10 +1011,9 @@ class LocalCephManager(CephManager):
         if stdout is None:
             stdout = StringIO()
 
-        return self.controller.run(
-            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon",
-                  "{0}.{1}".format(daemon_type, daemon_id)] + command,
-            check_status=check_status, timeout=timeout, stdout=stdout)
+        args=[CEPH_CMD, "daemon", f'{daemon_type}', f'{daemon_id}'] + command
+        return self.controller.run(args=args, check_status=check_status,
+                                   timeout=timeout, stdout=stdout)
 
     def get_mon_socks(self):
         """
@@ -1646,7 +1647,7 @@ def exec_test():
         client_name = "client.{0}".format(client_id)
 
         if client_name not in open("./keyring").read():
-            p = remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "auth", "get-or-create", client_name,
+            p = remote.run(args=[CEPH_CMD, "auth", "get-or-create", client_name,
                                  "osd", "allow rw",
                                  "mds", "allow",
                                  "mon", "allow r"], stdout=StringIO())
@@ -1680,7 +1681,7 @@ def exec_test():
 
     # For the benefit of polling tests like test_full -- in teuthology land we set this
     # in a .yaml, here it's just a hardcoded thing for the developer's pleasure.
-    remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "tell", "osd.*", "injectargs", "--osd-mon-report-interval", "5"])
+    remote.run(args=[CEPH_CMD, "tell", "osd.*", "injectargs", "--osd-mon-report-interval", "5"])
     ceph_cluster.set_ceph_conf("osd", "osd_mon_report_interval", "5")
 
     # Vstart defaults to two segments, which very easily gets a "behind on trimming" health warning
