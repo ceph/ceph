@@ -15,7 +15,11 @@ namespace rgw::notify {
     ObjectRemoved                        = 0xF0,
     ObjectRemovedDelete                  = 0x10,
     ObjectRemovedDeleteMarkerCreated     = 0x20,
-    UnknownEvent                         = 0x100
+    // lifecycle events (RGW extension)
+    ObjectExpiration                     = 0x40,
+    ObjectNoncurrentExpiration           = 0x80,
+    ObjectDeleteMarkerExpiration         = 0x100,
+    UnknownEvent                         = 0x200
   };
 
   using EventTypeList = std::vector<EventType>;
