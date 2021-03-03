@@ -1387,13 +1387,16 @@ def run_daemon(ctx, config, type_):
                 profile_path = '/var/log/ceph/profiling-logger/%s.prof' % (role)
                 run_cmd.extend(['env', 'CPUPROFILE=%s' % profile_path])
 
-            if config.get('valgrind') is not None:
+            vc = config.get('valgrind')
+            if vc is not None:
                 valgrind_args = None
-                if type_ in config['valgrind']:
-                    valgrind_args = config['valgrind'][type_]
-                if role in config['valgrind']:
-                    valgrind_args = config['valgrind'][role]
-                run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args)
+                if type_ in vc:
+                    valgrind_args = vc[type_]
+                if role in vc:
+                    valgrind_args = vc[role]
+                exit_on_first_error = vc.get('exit_on_first_error', True)
+                run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args,
+                    exit_on_first_error=exit_on_first_error)
 
             run_cmd.extend(run_cmd_tail)
             log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
