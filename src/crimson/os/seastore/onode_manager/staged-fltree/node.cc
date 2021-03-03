@@ -95,6 +95,13 @@ void tree_cursor_t::assert_next_to(
 #endif
 }
 
+tree_cursor_t::future<Ref<tree_cursor_t>>
+tree_cursor_t::erase(context_t c, bool get_next)
+{
+  assert(is_tracked());
+  return ref_leaf_node->erase(c, position, get_next);
+}
+
 MatchKindCMP tree_cursor_t::compare_to(
     const tree_cursor_t& o, value_magic_t magic) const
 {
@@ -320,6 +327,23 @@ node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
       });
     }
   );
+}
+
+node_future<std::size_t> Node::erase(
+    context_t c, const key_hobj_t& key)
+{
+  return lower_bound(c, key).safe_then([c] (auto result) {
+    if (result.match() != MatchKindBS::EQ) {
+      return node_ertr::make_ready_future<std::size_t>(0);
+    }
+    auto ref_cursor = result.p_cursor;
+    return ref_cursor->erase(c, false
+    ).safe_then([ref_cursor] (auto next_cursor) {
+      assert(ref_cursor->is_invalid());
+      assert(!next_cursor);
+      return std::size_t(1);
+    });
+  });
 }
 
 node_future<tree_stats_t> Node::get_tree_stats(context_t c)
@@ -868,6 +892,14 @@ LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
         get_or_track_cursor(next_pos, index_key, p_value_header));
   }
+}
+
+node_future<Ref<tree_cursor_t>>
+LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
+{
+  ceph_abort("not implemented");
+  return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+      tree_cursor_t::get_invalid());
 }
 
 node_future<> LeafNode::extend_value(
