@@ -1011,53 +1011,6 @@ class LocalCephManager(CephManager):
         return self.controller.run(args=args, check_status=check_status,
                                    timeout=timeout, stdout=stdout)
 
-    def get_mon_socks(self):
-        """
-        Get monitor sockets.
-
-        :return socks: tuple of strings; strings are individual sockets.
-        """
-        from json import loads
-
-        output = loads(self.raw_cluster_cmd('--format=json', 'mon', 'dump'))
-        socks = []
-        for mon in output['mons']:
-            for addrvec_mem in mon['public_addrs']['addrvec']:
-                socks.append(addrvec_mem['addr'])
-        return tuple(socks)
-
-    def get_msgrv1_mon_socks(self):
-        """
-        Get monitor sockets that use msgrv2 to operate.
-
-        :return socks: tuple of strings; strings are individual sockets.
-        """
-        from json import loads
-
-        output = loads(self.raw_cluster_cmd('--format=json', 'mon', 'dump'))
-        socks = []
-        for mon in output['mons']:
-            for addrvec_mem in mon['public_addrs']['addrvec']:
-                if addrvec_mem['type'] == 'v1':
-                    socks.append(addrvec_mem['addr'])
-        return tuple(socks)
-
-    def get_msgrv2_mon_socks(self):
-        """
-        Get monitor sockets that use msgrv2 to operate.
-
-        :return socks: tuple of strings; strings are individual sockets.
-        """
-        from json import loads
-
-        output = loads(self.raw_cluster_cmd('--format=json', 'mon', 'dump'))
-        socks = []
-        for mon in output['mons']:
-            for addrvec_mem in mon['public_addrs']['addrvec']:
-                if addrvec_mem['type'] == 'v2':
-                    socks.append(addrvec_mem['addr'])
-        return tuple(socks)
-
 
 class LocalCephCluster(CephCluster):
     def __init__(self, ctx):
