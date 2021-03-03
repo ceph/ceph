@@ -41,7 +41,8 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(
 		     g_ceph_context,
-		     cct->_conf.get_val<std::string>("ms_type"),
+		     cct->_conf.get_val<std::string>("ms_public_type").empty() ?
+			cct->_conf.get_val<std::string>("ms_type") : cct->_conf.get_val<std::string>("ms_public_type"),
 		     entity_name_t::MGR(),
 		     "mgr",
 		     Messenger::get_pid_nonce())),
