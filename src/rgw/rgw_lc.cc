@@ -27,7 +27,7 @@
 #include "rgw_string.h"
 #include "rgw_multi.h"
 #include "rgw_sal.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
@@ -239,7 +239,7 @@ void *RGWLC::LCWorker::entry() {
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store) {
+void RGWLC::initialize(CephContext *_cct, rgw::sal::RGWStore *_store) {
   cct = _cct;
   store = _store;
   sal_lc = store->get_lifecycle();
@@ -508,12 +508,12 @@ struct op_env {
   using LCWorker = RGWLC::LCWorker;
 
   lc_op op;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   LCWorker* worker;
   rgw::sal::RGWBucket* bucket;
   LCObjsLister& ol;
 
-  op_env(lc_op& _op, rgw::sal::RGWRadosStore *_store, LCWorker* _worker,
+  op_env(lc_op& _op, rgw::sal::RGWStore *_store, LCWorker* _worker,
 	 rgw::sal::RGWBucket* _bucket, LCObjsLister& _ol)
     : op(_op), store(_store), worker(_worker), bucket(_bucket),
       ol(_ol) {}
@@ -529,7 +529,7 @@ struct lc_op_ctx {
   boost::optional<std::string> next_key_name;
   ceph::real_time effective_mtime;
 
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   rgw::sal::RGWBucket* bucket;
   lc_op& op; // ok--refers to expanded env.op
   LCObjsLister& ol;
@@ -583,15 +583,16 @@ static int remove_expired_obj(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool
   }
 
   obj = bucket->get_object(obj_key);
+  std::unique_ptr<rgw::sal::RGWObject::DeleteOp> del_op = obj->get_delete_op(&oc.rctx);
 
-  ACLOwner obj_owner;
-  obj_owner.set_id(rgw_user {meta.owner});
-  obj_owner.set_name(meta.owner_display_name);
-  ACLOwner bucket_owner;
-  bucket_owner.set_id(bucket_info.owner);
+  del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
+  del_op->params.obj_owner.set_id(rgw_user {meta.owner});
+  del_op->params.obj_owner.set_name(meta.owner_display_name);
+  del_op->params.bucket_owner.set_id(bucket_info.owner);
+  del_op->params.unmod_since = meta.mtime;
+  del_op->params.marker_version_id = version_id;
 
-  return obj->delete_object(dpp, &oc.rctx, obj_owner, bucket_owner, meta.mtime, false, 0,
-			    version_id, null_yield);
+  return del_op->delete_obj(dpp, null_yield);
 } /* remove_expired_obj */
 
 class LCOpAction {
@@ -846,7 +847,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::RGWBucket* target,
 	return;
       }
       RGWObjectCtx rctx(store);
-      int ret = abort_multipart_upload(this, store, cct, &rctx, target->get_info(), mp_obj);
+      int ret = abort_multipart_upload(this, store, cct, &rctx, target, mp_obj);
       if (ret == 0) {
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
@@ -1255,7 +1256,7 @@ public:
     target_placement.inherit_from(oc.bucket->get_placement_rule());
     target_placement.storage_class = transition.storage_class;
 
-    if (!oc.store->svc()->zone->get_zone_params().
+    if (!oc.store->get_zone()->get_params().
 	valid_placement(target_placement)) {
       ldpp_dout(oc.dpp, 0) << "ERROR: non existent dest placement: "
 			   << target_placement
@@ -1948,7 +1949,7 @@ static std::string get_lc_shard_name(const rgw_bucket& bucket){
 }
 
 template<typename F>
-static int guard_lc_modify(rgw::sal::RGWRadosStore* store,
+static int guard_lc_modify(rgw::sal::RGWStore* store,
 			   rgw::sal::Lifecycle* sal_lc,
 			   const rgw_bucket& bucket, const string& cookie,
 			   const F& f) {
@@ -1997,26 +1998,25 @@ static int guard_lc_modify(rgw::sal::RGWRadosStore* store,
   return ret;
 }
 
-int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
-                         const map<string, bufferlist>& bucket_attrs,
+int RGWLC::set_bucket_config(rgw::sal::RGWBucket* bucket,
+                         const rgw::sal::RGWAttrs& bucket_attrs,
                          RGWLifecycleConfiguration *config)
 {
-  map<string, bufferlist> attrs = bucket_attrs;
+  rgw::sal::RGWAttrs attrs = bucket_attrs;
   bufferlist lc_bl;
   config->encode(lc_bl);
 
   attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
   int ret =
-    store->ctl()->bucket->set_bucket_instance_attrs(
-      bucket_info, attrs, &bucket_info.objv_tracker, null_yield, this);
+    bucket->set_instance_attrs(this, attrs, null_yield);
   if (ret < 0)
     return ret;
 
-  rgw_bucket& bucket = bucket_info.bucket;
+  rgw_bucket& b = bucket->get_key();
 
 
-  ret = guard_lc_modify(store, sal_lc.get(), bucket, cookie,
+  ret = guard_lc_modify(store, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    const rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->set_entry(oid, entry);
@@ -2025,25 +2025,23 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
   return ret;
 }
 
-int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
-                                const map<string, bufferlist>& bucket_attrs)
+int RGWLC::remove_bucket_config(rgw::sal::RGWBucket* bucket,
+                                const rgw::sal::RGWAttrs& bucket_attrs)
 {
-  map<string, bufferlist> attrs = bucket_attrs;
+  rgw::sal::RGWAttrs attrs = bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
-  int ret =
-    store->ctl()->bucket->set_bucket_instance_attrs(
-      bucket_info, attrs, &bucket_info.objv_tracker, null_yield, this);
+  int ret = bucket->set_instance_attrs(this, attrs, null_yield);
 
-  rgw_bucket& bucket = bucket_info.bucket;
+  rgw_bucket& b = bucket->get_key();
 
   if (ret < 0) {
     ldout(cct, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
-        << bucket.name << " returned err=" << ret << dendl;
+        << b.name << " returned err=" << ret << dendl;
     return ret;
   }
 
 
-  ret = guard_lc_modify(store, sal_lc.get(), bucket, cookie,
+  ret = guard_lc_modify(store, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    const rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->rm_entry(oid, entry);
@@ -2060,17 +2058,16 @@ RGWLC::~RGWLC()
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
+int fix_lc_shard_entry(rgw::sal::RGWStore* store,
 		       rgw::sal::Lifecycle* sal_lc,
-		       const RGWBucketInfo& bucket_info,
-		       const map<std::string,bufferlist>& battrs)
+		       rgw::sal::RGWBucket* bucket)
 {
-  if (auto aiter = battrs.find(RGW_ATTR_LC);
-      aiter == battrs.end()) {
+  if (auto aiter = bucket->get_attrs().find(RGW_ATTR_LC);
+      aiter == bucket->get_attrs().end()) {
     return 0;    // No entry, nothing to fix
   }
 
-  auto shard_name = get_lc_shard_name(bucket_info.bucket);
+  auto shard_name = get_lc_shard_name(bucket->get_key());
   std::string lc_oid;
   get_lc_oid(store->ctx(), shard_name, &lc_oid);
 
@@ -2087,7 +2084,7 @@ int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
   }
   ldout(store->ctx(), 5) << "lc_get_entry errored ret code=" << ret << dendl;
   if (ret == -ENOENT) {
-    ldout(store->ctx(), 1) << "No entry for bucket=" << bucket_info.bucket.name
+    ldout(store->ctx(), 1) << "No entry for bucket=" << bucket
 			   << " creating " << dendl;
     // TODO: we have too many ppl making cookies like this!
     char cookie_buf[COOKIE_LEN + 1];
@@ -2095,7 +2092,7 @@ int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
     std::string cookie = cookie_buf;
 
     ret = guard_lc_modify(
-      store, sal_lc, bucket_info.bucket, cookie,
+      store, sal_lc, bucket->get_key(), cookie,
       [&lc_oid](rgw::sal::Lifecycle* slc,
 			      const string& oid,
 			      const rgw::sal::Lifecycle::LCEntry& entry) {

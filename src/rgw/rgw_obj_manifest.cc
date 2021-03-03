@@ -138,9 +138,9 @@ int RGWObjManifest::append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
   return 0;
 }
 
-int RGWObjManifest::append(RGWObjManifest& m, RGWSI_Zone *zone_svc)
+int RGWObjManifest::append(RGWObjManifest& m, rgw::sal::Zone* zone_svc)
 {
-  return append(m, zone_svc->get_zonegroup(), zone_svc->get_zone_params());
+  return append(m, zone_svc->get_zonegroup(), zone_svc->get_params());
 }
 
 void RGWObjManifest::append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& miter,

@@ -4,7 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_bucket.h"
 #include "rgw_rest_bucket.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 #include "include/str_list.h"
 
@@ -255,8 +255,8 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
   }
   rgw_user uid(uid_str);
   bool bucket_arg_existed = false;
-  std::string bucket;
-  RESTArgs::get_string(s, "bucket", bucket, &bucket, &bucket_arg_existed);
+  std::string bucket_name;
+  RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name, &bucket_arg_existed);
   if (! bucket_arg_existed) {
     op_ret = -EINVAL;
     return;
@@ -282,13 +282,12 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
     }
   }
   if (use_http_params) {
-    RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
-    op_ret = store->getRados()->get_bucket_info(store->svc(), uid.tenant, bucket, bucket_info, NULL, s->yield, s, &attrs);
+    std::unique_ptr<rgw::sal::RGWBucket> bucket;
+    op_ret = store->get_bucket(s, nullptr, uid.tenant, bucket_name, &bucket, s->yield);
     if (op_ret < 0) {
       return;
     }
-    RGWQuotaInfo *old_quota = &bucket_info.quota;
+    RGWQuotaInfo *old_quota = &bucket->get_info().quota;
     int64_t old_max_size_kb = rgw_rounded_kb(old_quota->max_size);
     int64_t max_size_kb;
     RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
@@ -299,7 +298,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
 
   RGWBucketAdminOpState op_state;
   op_state.set_user_id(uid);
-  op_state.set_bucket_name(bucket);
+  op_state.set_bucket_name(bucket_name);
   op_state.set_quota(quota);
 
   op_ret = RGWBucketAdminOp::set_quota(store, op_state, s);

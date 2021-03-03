@@ -63,17 +63,16 @@ std::string script_oid(context ctx, const std::string& tenant) {
 }
 
 
-int read_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, optional_yield y, context ctx, std::string& script)
+int read_script(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, std::string& script)
 {
-  RGWSysObjectCtx obj_ctx(store->svc()->sysobj->init_obj_ctx());
   RGWObjVersionTracker objv_tracker;
 
-  rgw_raw_obj obj(store->svc()->zone->get_zone_params().log_pool, script_oid(ctx, tenant));
+  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
 
   bufferlist bl;
   
-  const auto rc = rgw_get_system_obj(
-      obj_ctx,
+  const auto rc = store->get_system_obj(
+      dpp,
       obj.pool, 
       obj.oid,
       bl,
@@ -97,18 +96,16 @@ int read_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, optio
   return 0;
 }
 
-int write_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
+int write_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
 {
-  RGWSysObjectCtx obj_ctx(store->svc()->sysobj->init_obj_ctx());
   RGWObjVersionTracker objv_tracker;
 
-  rgw_raw_obj obj(store->svc()->zone->get_zone_params().log_pool, script_oid(ctx, tenant));
+  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
 
   bufferlist bl;
   ceph::encode(script, bl);
 
-  const auto rc = rgw_put_system_obj(
-      obj_ctx,
+  const auto rc = store->put_system_obj(
       obj.pool,
       obj.oid,
       bl,
@@ -124,14 +121,13 @@ int write_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, opti
   return 0;
 }
 
-int delete_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, optional_yield y, context ctx)
+int delete_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx)
 {
   RGWObjVersionTracker objv_tracker;
 
-  rgw_raw_obj obj(store->svc()->zone->get_zone_params().log_pool, script_oid(ctx, tenant));
+  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
 
-  const auto rc = rgw_delete_system_obj(
-      store->svc()->sysobj, 
+  const auto rc = store->delete_system_obj(
       obj.pool,
       obj.oid,
       &objv_tracker,
@@ -150,7 +146,7 @@ const std::string PACKAGE_LIST_OBJECT_NAME = "lua_package_allowlist";
 
 namespace bp = boost::process;
 
-int add_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::string& package_name, bool allow_compilation) {
+int add_package(rgw::sal::RGWStore* store, optional_yield y, const std::string& package_name, bool allow_compilation) {
   // verify that luarocks can load this oackage
   const auto p = bp::search_path("luarocks");
   if (p.empty()) {
@@ -183,7 +179,7 @@ int add_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::str
   std::map<std::string, bufferlist> new_package{{package_name, empty_bl}};
   librados::ObjectWriteOperation op;
   op.omap_set(new_package);
-  ret = rgw_rados_operate(*(store->getRados()->get_lc_pool_ctx()), 
+  ret = rgw_rados_operate(*(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_lc_pool_ctx()),
       PACKAGE_LIST_OBJECT_NAME, &op, y);
 
   if (ret < 0) {
@@ -192,10 +188,10 @@ int add_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::str
   return 0;
 }
 
-int remove_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::string& package_name) {
+int remove_package(rgw::sal::RGWStore* store, optional_yield y, const std::string& package_name) {
   librados::ObjectWriteOperation op;
   op.omap_rm_keys(std::set<std::string>({package_name}));
-  const auto ret = rgw_rados_operate(*(store->getRados()->get_lc_pool_ctx()), 
+  const auto ret = rgw_rados_operate(*(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_lc_pool_ctx()),
     PACKAGE_LIST_OBJECT_NAME, &op, y);
 
   if (ret < 0) {
@@ -205,7 +201,7 @@ int remove_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::
   return 0;
 }
 
-int list_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& packages) {
+int list_packages(rgw::sal::RGWStore* store, optional_yield y, packages_t& packages) {
   constexpr auto max_chunk = 1024U;
   std::string start_after;
   bool more = true;
@@ -214,7 +210,7 @@ int list_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& 
     librados::ObjectReadOperation op;
     packages_t packages_chunk;
     op.omap_get_keys2(start_after, max_chunk, &packages_chunk, &more, &rval);
-    const auto ret = rgw_rados_operate(*(store->getRados()->get_lc_pool_ctx()),
+    const auto ret = rgw_rados_operate(*(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_lc_pool_ctx()),
       PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y);
   
     if (ret < 0) {
@@ -227,7 +223,7 @@ int list_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& 
   return 0;
 }
 
-int install_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& failed_packages, std::string& output) {
+int install_packages(rgw::sal::RGWStore* store, optional_yield y, packages_t& failed_packages, std::string& output) {
   // luarocks directory cleanup
   boost::system::error_code ec;
   const auto& luarocks_path = store->get_luarocks_path();

@@ -22,7 +22,7 @@ public:
   void join() override;
 
   void pause_for_new_config() override;
-  void unpause_with_new_config(rgw::sal::RGWRadosStore *store,
+  void unpause_with_new_config(rgw::sal::RGWStore *store,
                                rgw_auth_registry_ptr_t auth_registry) override;
 };
 

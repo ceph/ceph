@@ -33,13 +33,10 @@ int RGWOIDCProvider::store_url(const string& url, bool exclusive,
   using ceph::encode;
   string oid = tenant + get_url_oid_prefix() + url;
 
-  auto svc = ctl->svc;
-
   bufferlist bl;
   encode(*this, bl);
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().oidc_pool, oid,
-                            bl, exclusive, NULL, real_time(), y);
+  return store->put_system_obj(store->get_zone()->get_params().oidc_pool, oid,
+			       bl, exclusive, NULL, real_time(), y);
 }
 
 int RGWOIDCProvider::get_tenant_url_from_arn(string& tenant, string& url)
@@ -95,9 +92,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
-  auto svc = ctl->svc;
-
-  auto& pool = svc->zone->get_zone_params().oidc_pool;
+  auto& pool = store->get_zone()->get_params().oidc_pool;
   ret = store_url(idp_url, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
@@ -110,8 +105,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
 
 int RGWOIDCProvider::delete_obj(optional_yield y)
 {
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().oidc_pool;
+  auto& pool = store->get_zone()->get_params().oidc_pool;
 
   string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
@@ -128,7 +122,7 @@ int RGWOIDCProvider::delete_obj(optional_yield y)
 
   // Delete url
   string oid = tenant + get_url_oid_prefix() + url;
-  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+  ret = store->delete_system_obj(pool, oid, NULL, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
                   << provider_url << ": " << cpp_strerror(-ret) << dendl;
@@ -188,13 +182,11 @@ void RGWOIDCProvider::decode_json(JSONObj *obj)
 
 int RGWOIDCProvider::read_url(const DoutPrefixProvider *dpp, const string& url, const string& tenant)
 {
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().oidc_pool;
+  auto& pool = store->get_zone()->get_params().oidc_pool;
   string oid = tenant + get_url_oid_prefix() + url;
   bufferlist bl;
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield, dpp);
+  int ret = store->get_system_obj(dpp, pool, oid, bl, NULL, NULL, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -243,13 +235,12 @@ bool RGWOIDCProvider::validate_input()
   return true;
 }
 
-int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *store,
-                                    const string& tenant,
-                                    vector<RGWOIDCProvider>& providers)
+int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp,
+				   rgw::sal::RGWStore* store,
+				   const string& tenant,
+				   vector<RGWOIDCProvider>& providers)
 {
-  auto ctl = store->pctl;
-  auto svc = ctl->svc;
-  auto pool = store->svc.zone->get_zone_params().oidc_pool;
+  auto pool = store->get_zone()->get_params().oidc_pool;
   string prefix = tenant + oidc_url_oid_prefix;
 
   //Get the filtered objects
@@ -265,11 +256,10 @@ int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *stor
       return r;
     }
     for (const auto& iter : oids) {
-      RGWOIDCProvider provider(ctl->cct, store->pctl);
+      RGWOIDCProvider provider(store->ctx(), store);
       bufferlist bl;
-      auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-      int ret = rgw_get_system_obj(obj_ctx, pool, iter, bl, NULL, NULL, null_yield, dpp);
+      int ret = store->get_system_obj(dpp, pool, iter, bl, NULL, NULL, null_yield);
       if (ret < 0) {
         return ret;
       }

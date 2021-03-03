@@ -30,7 +30,7 @@ int RequestLog(lua_State* L)
   const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(4)));
   const std::string op_name(reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(5))));
   if (store && s) {
-    const auto rc = rgw_log_op(store->getRados(), rest, s, op_name, olog);
+    const auto rc = rgw_log_op(store, rest, s, op_name, olog);
     lua_pushinteger(L, rc);
   } else {
     ldout(s->cct, 1) << "Lua ERROR: missing rados store, cannot use ops log"  << dendl;
@@ -769,7 +769,7 @@ struct RequestMetaTable : public EmptyMetaTable {
 };
 
 int execute(
-    rgw::sal::RGWRadosStore* store,
+    rgw::sal::RGWStore* store,
     RGWREST* rest,
     OpsLogSocket* olog,
     req_state* s, 

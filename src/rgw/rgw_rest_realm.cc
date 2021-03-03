@@ -73,7 +73,7 @@ void RGWOp_Period_Get::execute(optional_yield y)
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  op_ret = period.init(store->ctx(), store->svc()->sysobj, realm_id, y, realm_name);
+  op_ret = period.init(store->ctx(), static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj, realm_id, y, realm_name);
   if (op_ret < 0)
     ldout(store->ctx(), 5) << "failed to read period" << dendl;
 }
@@ -96,7 +96,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   auto cct = store->ctx();
 
   // initialize the period without reading from rados
-  period.init(cct, store->svc()->sysobj, y, false);
+  period.init(cct, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj, y, false);
 
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
@@ -108,9 +108,9 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   // require period.realm_id to match our realm
-  if (period.get_realm() != store->svc()->zone->get_realm().get_id()) {
+  if (period.get_realm() != store->get_zone()->get_realm().get_id()) {
     error_stream << "period with realm id " << period.get_realm()
-        << " doesn't match current realm " << store->svc()->zone->get_realm().get_id() << std::endl;
+        << " doesn't match current realm " << store->get_zone()->get_realm().get_id() << std::endl;
     op_ret = -EINVAL;
     return;
   }
@@ -119,7 +119,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   // period that we haven't restarted with yet. we also don't want to modify
   // the objects in use by RGWRados
   RGWRealm realm(period.get_realm());
-  op_ret = realm.init(cct, store->svc()->sysobj, y);
+  op_ret = realm.init(cct, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj, y);
   if (op_ret < 0) {
     lderr(cct) << "failed to read current realm: "
         << cpp_strerror(-op_ret) << dendl;
@@ -127,7 +127,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   RGWPeriod current_period;
-  op_ret = current_period.init(cct, store->svc()->sysobj, realm.get_id(), y);
+  op_ret = current_period.init(cct, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj, realm.get_id(), y);
   if (op_ret < 0) {
     lderr(cct) << "failed to read current period: "
         << cpp_strerror(-op_ret) << dendl;
@@ -144,7 +144,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   // if it's not period commit, nobody is allowed to push to the master zone
-  if (period.get_master_zone() == store->svc()->zone->get_zone_params().get_id()) {
+  if (period.get_master_zone() == store->get_zone()->get_params().get_id()) {
     ldout(cct, 10) << "master zone rejecting period id="
         << period.get_id() << " epoch=" << period.get_epoch() << dendl;
     op_ret = -EINVAL; // XXX: error code
@@ -171,7 +171,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
     return;
   }
 
-  auto period_history = store->svc()->mdlog->get_period_history();
+  auto period_history = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->mdlog->get_period_history();
 
   // decide whether we can set_current_period() or set_latest_epoch()
   if (period.get_id() != current_period.get_id()) {
@@ -247,7 +247,7 @@ class RGWHandler_Period : public RGWHandler_Auth_S3 {
 
 class RGWRESTMgr_Period : public RGWRESTMgr {
  public:
-  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
 			       struct req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
@@ -280,7 +280,7 @@ void RGWOp_Realm_Get::execute(optional_yield y)
 
   // read realm
   realm.reset(new RGWRealm(id, name));
-  op_ret = realm->init(g_ceph_context, store->svc()->sysobj, y);
+  op_ret = realm->init(g_ceph_context, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj, y);
   if (op_ret < 0)
     lderr(store->ctx()) << "failed to read realm id=" << id
         << " name=" << name << dendl;
@@ -321,10 +321,10 @@ void RGWOp_Realm_List::execute(optional_yield y)
 {
   {
     // read default realm
-    RGWRealm realm(store->ctx(), store->svc()->sysobj);
+    RGWRealm realm(store->ctx(), static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj);
     [[maybe_unused]] int ret = realm.read_default_id(default_id, y);
   }
-  op_ret = store->svc()->zone->list_realms(realms);
+  op_ret = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->list_realms(realms);
   if (op_ret < 0)
     lderr(store->ctx()) << "failed to list realms" << dendl;
 }
@@ -364,7 +364,7 @@ RGWRESTMgr_Realm::RGWRESTMgr_Realm()
 }
 
 RGWHandler_REST*
-RGWRESTMgr_Realm::get_handler(rgw::sal::RGWRadosStore *store,
+RGWRESTMgr_Realm::get_handler(rgw::sal::RGWStore *store,
 			      struct req_state*,
                               const rgw::auth::StrategyRegistry& auth_registry,
                               const std::string&)

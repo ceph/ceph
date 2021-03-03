@@ -456,12 +456,11 @@ class PSSubscription {
   public:
     InitBucketLifecycleCR(RGWDataSyncCtx *_sc,
            PSConfigRef& _conf,
-           RGWBucketInfo& _bucket_info,
-           std::map<string, bufferlist>& _bucket_attrs) : RGWCoroutine(_sc->cct),
+           rgw::sal::RGWBucket* _bucket) : RGWCoroutine(_sc->cct),
                                                      sc(_sc), sync_env(_sc->env),
                                                      conf(_conf) {
-      lc_config.bucket_info = _bucket_info;
-      lc_config.bucket_attrs = _bucket_attrs;
+      lc_config.bucket = _bucket;
+      lc_config.bucket_attrs = _bucket->get_attrs();
       retention_days = conf->events_retention_days;
     }
 
@@ -549,18 +548,17 @@ class PSSubscription {
           if (retcode == 0) {
             {
               auto& result = sub->get_bucket_info_result;
-              sub->bucket_info = &result->bucket_info;
+              sub->bucket_info = &result->bucket->get_info();
 
-              int ret = sub->data_access->get_bucket(result->bucket_info, result->attrs, &sub->bucket);
+              int ret = sub->data_access->get_bucket(result->bucket->get_info(), result->bucket->get_attrs(), &sub->bucket);
               if (ret < 0) {
-                ldpp_dout(sync_env->dpp, 1) << "ERROR: data_access.get_bucket() bucket=" << result->bucket_info.bucket << " failed, ret=" << ret << dendl;
+                ldpp_dout(sync_env->dpp, 1) << "ERROR: data_access.get_bucket() bucket=" << result->bucket << " failed, ret=" << ret << dendl;
                 return set_cr_error(ret);
               }
             }
 
             yield call(new InitBucketLifecycleCR(sc, conf,
-                                                 sub->get_bucket_info_result->bucket_info,
-                                                 sub->get_bucket_info_result->attrs));
+                                                 sub->get_bucket_info_result->bucket.get()));
             if (retcode < 0) {
               ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to init lifecycle on bucket (bucket=" << sub_conf->data_bucket_name << ") ret=" << retcode << dendl;
               return set_cr_error(retcode);

@@ -69,7 +69,7 @@ public:
     dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
-        store->svc()->zone->get_zonegroup().get_name(),
+        store->get_zone()->get_zonegroup().get_name(),
         s->user->get_tenant(), topic_name);
     topic_arn = arn.to_string();
     return 0;
@@ -492,14 +492,14 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(store, s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   ceph_assert(b);
   std::string data_bucket_prefix = "";
   std::string data_oid_prefix = "";
   bool push_only = true;
-  if (store->getRados()->get_sync_module()) {
-    const auto psmodule = dynamic_cast<RGWPSSyncModuleInstance*>(store->getRados()->get_sync_module().get());
+  if (store->get_sync_module()) {
+    const auto psmodule = dynamic_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
     if (psmodule) {
       const auto& conf = psmodule->get_effective_conf();
       data_bucket_prefix = conf["data_bucket_prefix"];
@@ -635,7 +635,7 @@ void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(store, s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   ceph_assert(b);
 
@@ -734,7 +734,7 @@ public:
 };
 
 void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
-  ps.emplace(store, s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   ceph_assert(b);
   

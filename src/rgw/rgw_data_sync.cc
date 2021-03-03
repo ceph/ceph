@@ -2644,7 +2644,7 @@ int RGWDataSyncStatusManager::init()
   const RGWZoneParams& zone_params = store->svc()->zone->get_zone_params();
 
   if (sync_module == nullptr) { 
-    sync_module = store->getRados()->get_sync_module();
+    sync_module = store->get_sync_module();
   }
 
   conn = store->svc()->zone->get_zone_conn(source_zone);

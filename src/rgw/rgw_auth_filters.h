@@ -123,7 +123,7 @@ public:
 
 template <typename T>
 class ThirdPartyAccountApplier : public DecoratedApplier<T> {
-  /* const */RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const rgw_user acct_user_override;
 
 public:
@@ -133,11 +133,11 @@ public:
   static const rgw_user UNKNOWN_ACCT;
 
   template <typename U>
-  ThirdPartyAccountApplier(RGWCtl* const ctl,
+  ThirdPartyAccountApplier(rgw::sal::RGWStore* store,
                            const rgw_user &acct_user_override,
                            U&& decoratee)
     : DecoratedApplier<T>(std::move(decoratee)),
-      ctl(ctl),
+      store(store),
       acct_user_override(acct_user_override) {
   }
 
@@ -179,16 +179,21 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
   } else {
     /* Compatibility mechanism for multi-tenancy. For more details refer to
      * load_acct_info method of rgw::auth::RemoteApplier. */
+    std::unique_ptr<rgw::sal::RGWUser> user;
+
     if (acct_user_override.tenant.empty()) {
       const rgw_user tenanted_uid(acct_user_override.id, acct_user_override.id);
+      user = store->get_user(tenanted_uid);
 
-      if (ctl->user->get_info_by_uid(dpp, tenanted_uid, &user_info, null_yield) >= 0) {
+      if (user->load_by_id(dpp, null_yield) >= 0) {
+	user_info = user->get_info();
         /* Succeeded. */
         return;
       }
     }
 
-    const int ret = ctl->user->get_info_by_uid(dpp, acct_user_override, &user_info, null_yield);
+    user = store->get_user(acct_user_override);
+    const int ret = user->load_by_id(dpp, null_yield);
     if (ret < 0) {
       /* We aren't trying to recover from ENOENT here. It's supposed that creating
        * someone else's account isn't a thing we want to support in this filter. */
@@ -198,15 +203,15 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
         throw ret;
       }
     }
-
+    user_info = user->get_info();
   }
 }
 
 template <typename T> static inline
-ThirdPartyAccountApplier<T> add_3rdparty(RGWCtl* const ctl,
+ThirdPartyAccountApplier<T> add_3rdparty(rgw::sal::RGWStore* store,
                                          const rgw_user &acct_user_override,
                                          T&& t) {
-  return ThirdPartyAccountApplier<T>(ctl, acct_user_override,
+  return ThirdPartyAccountApplier<T>(store, acct_user_override,
                                      std::forward<T>(t));
 }
 
@@ -214,19 +219,19 @@ ThirdPartyAccountApplier<T> add_3rdparty(RGWCtl* const ctl,
 template <typename T>
 class SysReqApplier : public DecoratedApplier<T> {
   CephContext* const cct;
-  /*const*/ RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const RGWHTTPArgs& args;
   mutable boost::tribool is_system;
 
 public:
   template <typename U>
   SysReqApplier(CephContext* const cct,
-                /*const*/ RGWCtl* const ctl,
+		rgw::sal::RGWStore* store,
                 const req_state* const s,
                 U&& decoratee)
     : DecoratedApplier<T>(std::forward<T>(decoratee)),
       cct(cct),
-      ctl(ctl),
+      store(store),
       args(s->info.args),
       is_system(boost::logic::indeterminate) {
   }
@@ -257,12 +262,12 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
       /* We aren't writing directly to user_info for consistency and security
        * reasons. rgw_get_user_info_by_uid doesn't trigger the operator=() but
        * calls ::decode instead. */
-      RGWUserInfo euser_info;
-      if (ctl->user->get_info_by_uid(dpp, effective_uid, &euser_info, null_yield) < 0) {
+      std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(effective_uid);
+      if (user->load_by_id(dpp, null_yield) < 0) {
         //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
         throw -EACCES;
       }
-      user_info = euser_info;
+      user_info = user->get_info();
     }
   }
 }
@@ -284,10 +289,10 @@ void SysReqApplier<T>::modify_request_state(const DoutPrefixProvider* dpp, req_s
 
 template <typename T> static inline
 SysReqApplier<T> add_sysreq(CephContext* const cct,
-                            /* const */ RGWCtl* const ctl,
+			    rgw::sal::RGWStore* store,
                             const req_state* const s,
                             T&& t) {
-  return SysReqApplier<T>(cct, ctl, s, std::forward<T>(t));
+  return SysReqApplier<T>(cct, store, s, std::forward<T>(t));
 }
 
 } /* namespace auth */

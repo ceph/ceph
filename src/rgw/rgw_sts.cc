@@ -152,7 +152,7 @@ void AssumedRoleUser::dump(Formatter *f) const
 }
 
 int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
-                                              rgw::sal::RGWRadosStore *store,
+                                              rgw::sal::RGWStore *store,
                                               const string& roleId,
                                               const rgw::ARN& roleArn,
                                               const string& roleSessionName)
@@ -283,7 +283,7 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
   if (auto r_arn = rgw::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
-    RGWRole role(cct, store->getRados()->pctl, roleName, r_arn->account);
+    RGWRole role(cct, store, roleName, r_arn->account);
     if (int ret = role.get(dpp, y); ret < 0) {
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 0) << "Role doesn't exist: " << roleName << dendl;
@@ -315,16 +315,17 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
 int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y)
 {
   int ret = 0;
-  RGWUserInfo info;
-  if (ret = rgw_get_user_info_by_uid(dpp, store->ctl()->user, user_id, info, y); ret < 0) {
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(user_id);
+  if ((ret = user->load_by_id(dpp, y)) < 0) {
     return -ERR_NO_SUCH_ENTITY;
   }
 
-  info.assumed_role_arn = arn;
+  user->get_info().assumed_role_arn = arn;
 
-  RGWObjVersionTracker objv_tracker;
-  if (ret = rgw_store_user_info(dpp, store->ctl()->user, info, &info, &objv_tracker, real_time(),
-				false, y); ret < 0) {
+  ret = user->store_info(dpp, y, RGWUserCtl::PutParams()
+			    .set_old_info(&user->get_info())
+			    .set_exclusive(false));
+  if (ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
   return ret;

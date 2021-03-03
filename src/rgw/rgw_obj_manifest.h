@@ -327,7 +327,7 @@ public:
 
   int append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
-  int append(RGWObjManifest& m, RGWSI_Zone *zone_svc);
+  int append(RGWObjManifest& m, rgw::sal::Zone* zone);
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
 

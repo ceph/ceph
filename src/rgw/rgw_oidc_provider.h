@@ -9,9 +9,8 @@
 #include "common/ceph_context.h"
 #include "common/ceph_json.h"
 
-#include "rgw/rgw_rados.h"
+#include "rgw/rgw_sal.h"
 
-class RGWCtl;
 
 class RGWOIDCProvider
 {
@@ -25,7 +24,7 @@ class RGWOIDCProvider
   static constexpr int MAX_OIDC_URL_LEN = 255;
 
   CephContext *cct;
-  RGWCtl *ctl;
+  rgw::sal::RGWStore* store;
   string id;
   string provider_url;
   string arn;
@@ -41,13 +40,13 @@ class RGWOIDCProvider
 
 public:
   RGWOIDCProvider(CephContext *cct,
-                    RGWCtl *ctl,
+                    rgw::sal::RGWStore* store,
                     string provider_url,
                     string tenant,
                     vector<string> client_ids,
                     vector<string> thumbprints)
   : cct(cct),
-    ctl(ctl),
+    store(store),
     provider_url(std::move(provider_url)),
     tenant(std::move(tenant)),
     client_ids(std::move(client_ids)),
@@ -55,26 +54,26 @@ public:
   }
 
   RGWOIDCProvider(CephContext *cct,
-                    RGWCtl *ctl,
+                    rgw::sal::RGWStore* store,
                     string arn,
                     string tenant)
   : cct(cct),
-    ctl(ctl),
+    store(store),
     arn(std::move(arn)),
     tenant(std::move(tenant)) {
   }
 
   RGWOIDCProvider(CephContext *cct,
-                    RGWCtl *ctl,
+                    rgw::sal::RGWStore* store,
                     string tenant)
   : cct(cct),
-    ctl(ctl),
+    store(store),
     tenant(std::move(tenant)) {}
 
   RGWOIDCProvider(CephContext *cct,
-          RGWCtl *ctl)
+          rgw::sal::RGWStore* store)
   : cct(cct),
-    ctl(ctl) {}
+    store(store) {}
 
   RGWOIDCProvider() {}
 
@@ -118,9 +117,10 @@ public:
   void decode_json(JSONObj *obj);
 
   static const string& get_url_oid_prefix();
-  static int get_providers(const DoutPrefixProvider *dpp, RGWRados *store,
-                            const string& tenant,
-                            vector<RGWOIDCProvider>& providers);
+  static int get_providers(const DoutPrefixProvider *dpp,
+			   rgw::sal::RGWStore* store,
+			   const string& tenant,
+			   vector<RGWOIDCProvider>& providers);
 };
 WRITE_CLASS_ENCODER(RGWOIDCProvider)
 #endif /* CEPH_RGW_OIDC_PROVIDER_H */

@@ -355,7 +355,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::RGWRadosStore *store, struct req_state *s, stringstream& ss) override;
+  int get_policy_from_state(rgw::sal::RGWStore *store, struct req_state *s, stringstream& ss) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };
@@ -591,7 +591,7 @@ public:
 class RGW_Auth_S3 {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       rgw::sal::RGWRadosStore *store,
+                       rgw::sal::RGWStore *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s, optional_yield y);
 };
@@ -611,7 +611,7 @@ public:
   static int validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& bucket);
 
-  int init(rgw::sal::RGWRadosStore *store,
+  int init(rgw::sal::RGWStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override {
@@ -625,7 +625,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(rgw::sal::RGWRadosStore *store, struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(rgw::sal::RGWStore *store, struct req_state *s, int default_formatter, bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
@@ -633,7 +633,7 @@ public:
     }
   ~RGWHandler_REST_S3() override = default;
 
-  int init(rgw::sal::RGWRadosStore *store,
+  int init(rgw::sal::RGWStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
@@ -765,7 +765,7 @@ public:
 
   ~RGWRESTMgr_S3() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+  RGWHandler_REST *get_handler(rgw::sal::RGWStore *store,
 			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
@@ -1091,7 +1091,7 @@ class LDAPEngine : public AWSEngine {
   using result_t = rgw::auth::Engine::result_t;
 
 protected:
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const rgw::auth::RemoteApplier::Factory* const apl_factory;
 
   acl_strategy_t get_acl_strategy() const;
@@ -1108,11 +1108,11 @@ protected:
 			optional_yield y) const override;
 public:
   LDAPEngine(CephContext* const cct,
-             RGWCtl* const ctl,
+             rgw::sal::RGWStore* store,
              const VersionAbstractor& ver_abstractor,
              const rgw::auth::RemoteApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      ctl(ctl),
+      store(store),
       apl_factory(apl_factory) {
     init(cct);
   }
@@ -1128,7 +1128,7 @@ public:
 };
 
 class LocalEngine : public AWSEngine {
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
@@ -1142,11 +1142,11 @@ class LocalEngine : public AWSEngine {
 			optional_yield y) const override;
 public:
   LocalEngine(CephContext* const cct,
-              RGWCtl* const ctl,
+              rgw::sal::RGWStore* store,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      ctl(ctl),
+      store(store),
       apl_factory(apl_factory) {
   }
 
@@ -1158,7 +1158,7 @@ public:
 };
 
 class STSEngine : public AWSEngine {
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const rgw::auth::LocalApplier::Factory* const local_apl_factory;
   const rgw::auth::RemoteApplier::Factory* const remote_apl_factory;
   const rgw::auth::RoleApplier::Factory* const role_apl_factory;
@@ -1183,13 +1183,13 @@ class STSEngine : public AWSEngine {
 			optional_yield y) const override;
 public:
   STSEngine(CephContext* const cct,
-              RGWCtl* const ctl,
+              rgw::sal::RGWStore* store,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const local_apl_factory,
               const rgw::auth::RemoteApplier::Factory* const remote_apl_factory,
               const rgw::auth::RoleApplier::Factory* const role_apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      ctl(ctl),
+      store(store),
       local_apl_factory(local_apl_factory),
       remote_apl_factory(remote_apl_factory),
       role_apl_factory(role_apl_factory) {

@@ -366,7 +366,7 @@ class StrategyRegistry;
 class WebIdentityApplier : public IdentityApplier {
 protected:
   CephContext* const cct;
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   string role_session;
   string role_tenant;
   rgw::web_idp::WebTokenClaims token_claims;
@@ -379,12 +379,12 @@ protected:
                       RGWUserInfo& user_info) const;     /* out */
 public:
   WebIdentityApplier( CephContext* const cct,
-                      RGWCtl* const ctl,
+                      rgw::sal::RGWStore* store,
                       const string& role_session,
                       const string& role_tenant,
                       const rgw::web_idp::WebTokenClaims& token_claims)
     : cct(cct),
-      ctl(ctl),
+      store(store),
       role_session(role_session),
       role_tenant(role_tenant),
       token_claims(token_claims) {
@@ -521,7 +521,7 @@ protected:
   CephContext* const cct;
 
   /* Read-write is intensional here due to RGWUserInfo creation process. */
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
 
   /* Supplemental strategy for extracting permissions from ACLs. Its results
    * will be combined (ORed) with a default strategy that is responsible for
@@ -539,13 +539,13 @@ protected:
 
 public:
   RemoteApplier(CephContext* const cct,
-                RGWCtl* const ctl,
+                rgw::sal::RGWStore* store,
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
 		rgw::auth::ImplicitTenants& implicit_tenant_context,
                 rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit)
     : cct(cct),
-      ctl(ctl),
+      store(store),
       extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info),
       implicit_tenant_context(implicit_tenant_context),

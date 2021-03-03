@@ -368,22 +368,22 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
                                               const string& display_name,
                                               RGWUserInfo& user_info) const      /* out */
 {
-  user_info.user_id = acct_user;
-  user_info.display_name = display_name;
-  user_info.type = TYPE_WEB;
-
-  user_info.max_buckets =
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(acct_user);
+  user->get_info().display_name = display_name;
+  user->get_info().type = TYPE_WEB;
+  user->get_info().max_buckets =
     cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
-  rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
-  rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+  rgw_apply_default_bucket_quota(user->get_info().bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
 
-  int ret = ctl->user->store_info(dpp, user_info, null_yield,
-                                  RGWUserCtl::PutParams().set_exclusive(true));
+  int ret = user->store_info(dpp, null_yield,
+			     RGWUserCtl::PutParams().set_exclusive(true));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
-                  << user_info.user_id << " ret=" << ret << dendl;
+                  << user << " ret=" << ret << dendl;
     throw ret;
   }
+  user_info = user->get_info();
 }
 
 void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const {
@@ -392,22 +392,26 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(federated_user);
+
   //Check in oidc namespace
-  if (ctl->user->get_info_by_uid(dpp, federated_user, &user_info, null_yield) >= 0) {
+  if (user->load_by_id(dpp, null_yield) >= 0) {
     /* Succeeded. */
+    user_info = user->get_info();
     return;
   }
 
-  federated_user.ns.clear();
+  user->clear_ns();
   //Check for old users which wouldn't have been created in oidc namespace
-  if (ctl->user->get_info_by_uid(dpp, federated_user, &user_info, null_yield) >= 0) {
+  if (user->load_by_id(dpp, null_yield) >= 0) {
     /* Succeeded. */
+    user_info = user->get_info();
     return;
   }
 
   //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
   RGWStorageStats stats;
-  int ret = ctl->user->read_stats(federated_user, &stats, null_yield);
+  int ret = user->read_stats(null_yield, &stats);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
     return;
@@ -581,30 +585,29 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
 {
   rgw_user new_acct_user = acct_user;
 
-  if (info.acct_type) {
-    //ldap/keystone for s3 users
-    user_info.type = info.acct_type;
-  }
-
   /* An upper layer may enforce creating new accounts within their own
    * tenants. */
   if (new_acct_user.tenant.empty() && implicit_tenant) {
     new_acct_user.tenant = new_acct_user.id;
   }
 
-  user_info.user_id = new_acct_user;
-  user_info.display_name = info.acct_name;
-
-  user_info.max_buckets =
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(new_acct_user);
+  user->get_info().display_name = info.acct_name;
+  if (info.acct_type) {
+    //ldap/keystone for s3 users
+    user->get_info().type = info.acct_type;
+  }
+  user->get_info().max_buckets =
     cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
-  rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
-  rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+  rgw_apply_default_bucket_quota(user->get_info().bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
+  user_info = user->get_info();
 
-  int ret = ctl->user->store_info(dpp, user_info, null_yield,
-                                  RGWUserCtl::PutParams().set_exclusive(true));
+  int ret = user->store_info(dpp, null_yield,
+			     RGWUserCtl::PutParams().set_exclusive(true));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
-                  << user_info.user_id << " ret=" << ret << dendl;
+                  << user << " ret=" << ret << dendl;
     throw ret;
   }
 }
@@ -619,6 +622,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   auto implicit_value = implicit_tenant_context.get_value();
   bool implicit_tenant = implicit_value.implicit_tenants_for_(implicit_tenant_bit);
   bool split_mode = implicit_value.is_split_mode();
+  std::unique_ptr<rgw::sal::RGWUser> user;
 
   /* Normally, empty "tenant" field of acct_user means the authenticated
    * identity has the legacy, global tenant. However, due to inclusion
@@ -641,18 +645,23 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 	;	/* suppress lookup for id used by "other" protocol */
   else if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
+    user = store->get_user(tenanted_uid);
 
-    if (ctl->user->get_info_by_uid(dpp, tenanted_uid, &user_info, null_yield) >= 0) {
+    if (user->load_by_id(dpp, null_yield) >= 0) {
       /* Succeeded. */
+      user_info = user->get_info();
       return;
     }
   }
 
+  user = store->get_user(acct_user);
+
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
-  else if (ctl->user->get_info_by_uid(dpp, acct_user, &user_info, null_yield) >= 0) {
-      /* Succeeded. */
-      return;
+  else if (user->load_by_id(dpp, null_yield) >= 0) {
+    /* Succeeded. */
+    user_info = user->get_info();
+    return;
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
