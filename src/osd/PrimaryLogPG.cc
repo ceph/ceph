@@ -2328,7 +2328,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       return;
   }
 
-  if (obc.get() && obc->obs.exists && obc->obs.oi.has_manifest()) {
+  if (obc.get() && obc->obs.exists) {
     if (recover_adjacent_clones(obc, op)) {
       return;
     }
@@ -2469,6 +2469,11 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   ObjectContextRef obc)
 {
   ceph_assert(obc);
+  if (!obc->obs.oi.has_manifest()) {
+    dout(20) << __func__ << ": " << obc->obs.oi.soid 
+	     << " is not manifest object " << dendl;
+    return cache_result_t::NOOP;
+  }
   if (op->get_req<MOSDOp>()->get_flags() & CEPH_OSD_FLAG_IGNORE_REDIRECT) {
     dout(20) << __func__ << ": ignoring redirect due to flag" << dendl;
     return cache_result_t::NOOP;
@@ -8213,16 +8218,11 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     ObjectContextRef promote_obc;
     cache_result_t tier_mode_result;
     if (obs.exists && obs.oi.has_manifest()) {
-      if (!rollback_to->obs.oi.has_manifest()) {
-	// rollback_to is not manifest object
-	tier_mode_result = cache_result_t::NOOP;
-      } else {
-	tier_mode_result =
-	  maybe_handle_manifest_detail(
-	    ctx->op,
-	    true,
-	    rollback_to);
-      }
+      tier_mode_result =
+	maybe_handle_manifest_detail(
+	  ctx->op,
+	  true,
+	  rollback_to);
     } else {
       tier_mode_result =
 	maybe_handle_cache_detail(
