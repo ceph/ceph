@@ -287,6 +287,8 @@ public:
       "err_to_graylog",
       "log_graylog_host",
       "log_graylog_port",
+      "log_to_journald",
+      "err_to_journald",
       "log_coarse_timestamps",
       "fsid",
       "host",
@@ -348,6 +350,18 @@ public:
 
     if (log->graylog() && (changed.count("log_graylog_host") || changed.count("log_graylog_port"))) {
       log->graylog()->set_destination(conf->log_graylog_host, conf->log_graylog_port);
+    }
+
+    // journald
+    if (changed.count("log_to_journald") || changed.count("err_to_journald")) {
+      int l = conf.get_val<bool>("log_to_journald") ? 99 : (conf.get_val<bool>("err_to_journald") ? -1 : -2);
+      log->set_journald_level(l, l);
+
+      if (l > -2) {
+        log->start_journald_logger();
+      } else {
+        log->stop_journald_logger();
+      }
     }
 
     if (changed.find("log_coarse_timestamps") != changed.end()) {

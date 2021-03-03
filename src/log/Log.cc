@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Graylog.h"
+#include "common/Journald.h"
 #include "common/valgrind.h"
 
 #include "include/ceph_assert.h"
@@ -178,6 +179,27 @@ void Log::stop_graylog()
   m_graylog.reset();
 }
 
+void Log::set_journald_level(int log, int crash)
+{
+  std::scoped_lock lock(m_flush_mutex);
+  m_journald_log = log;
+  m_journald_crash = crash;
+}
+
+void Log::start_journald_logger()
+{
+  std::scoped_lock lock(m_flush_mutex);
+  if (!m_journald) {
+    m_journald = std::make_unique<JournaldLogger>(m_subs);
+  }
+}
+
+void Log::stop_journald_logger()
+{
+  std::scoped_lock lock(m_flush_mutex);
+  m_journald.reset();
+}
+
 void Log::submit_entry(Entry&& e)
 {
   std::unique_lock lock(m_queue_mutex);
@@ -260,6 +282,7 @@ void Log::_flush(EntryVector& t, bool crash)
     bool do_syslog = m_syslog_crash >= prio && should_log;
     bool do_stderr = m_stderr_crash >= prio && should_log;
     bool do_graylog2 = m_graylog_crash >= prio && should_log;
+    bool do_journald = m_journald_crash >= prio && should_log;
 
     if (do_fd || do_syslog || do_stderr) {
       const std::size_t cur = m_log_buf.size();
@@ -304,6 +327,10 @@ void Log::_flush(EntryVector& t, bool crash)
 
     if (do_graylog2 && m_graylog) {
       m_graylog->log_entry(e);
+    }
+
+    if (do_journald && m_journald) {
+      m_journald->log_entry(e);
     }
 
     m_recent.push_back(std::move(e));
