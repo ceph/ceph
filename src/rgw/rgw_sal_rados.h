@@ -85,7 +85,7 @@ public:
     return group.zones.size();
   }
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
-  const RGWZoneGroup& get_group() { return group; }
+  const RGWZoneGroup& get_group() const { return group; }
 };
 
 class RadosZone : public Zone {
