@@ -25,13 +25,14 @@
 /src/python-common/ceph/deployment              @ceph/orchestrators
 /qa/workunits/cephadm                           @ceph/orchestrators
 /qa/tasks/cephadm.py                            @ceph/orchestrators
+/qa/tasks/cephadm_cases                         @ceph/orchestrators
 /qa/tasks/mgr/test_orchestrator_cli.py          @ceph/orchestrators
 /qa/tasks/mgr/test_cephadm_orchestrator.py      @ceph/orchestrators
 /qa/suites/rados/cephadm                        @ceph/orchestrators
 /doc/mgr/orchestrator.rst                       @ceph/orchestrators
 /doc/mgr/orchestrator_modules.rst               @ceph/orchestrators
 /doc/cephadm                                    @ceph/orchestrators
-/doc/dev/cephadm.rst                            @ceph/orchestrators
+/doc/dev/cephadm                                @ceph/orchestrators
 /doc/man/8/cephadm.rst                          @ceph/orchestrators
 
 #ceph-volume
