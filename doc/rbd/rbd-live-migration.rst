@@ -188,7 +188,7 @@ encoded as follows::
         {
             "type": "qcow",
             "stream": {
-                <stream unique parameters for HEAD, non-snapshot revision>
+                <stream unique parameters>
             }
         }
 
@@ -216,7 +216,7 @@ its base ``source-spec`` JSON is encoded as follows::
 The inclusion of the ``snapshots`` array is optional and currently only supports
 thick-provisioned ``raw`` snapshot exports.
 
-Additional formats such as QCOW2, RBD export-format v2, and RBD export-diff
+Additional formats such as RBD export-format v2 and RBD export-diff
 snapshots will be added in a future release.
 
 Streams
