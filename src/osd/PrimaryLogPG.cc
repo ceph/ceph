@@ -8329,6 +8329,12 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       else
 	obs.oi.clear_omap_digest();
 
+      if (rollback_to->obs.oi.has_manifest() && rollback_to->obs.oi.manifest.is_chunked()) {
+	obs.oi.set_flag(object_info_t::FLAG_MANIFEST);
+	obs.oi.manifest.type = rollback_to->obs.oi.manifest.type;
+	obs.oi.manifest.chunk_map = rollback_to->obs.oi.manifest.chunk_map;
+      }
+
       if (rollback_to->obs.oi.is_omap()) {
 	dout(10) << __func__ << " setting omap flag on " << obs.oi.soid << dendl;
 	obs.oi.set_flag(object_info_t::FLAG_OMAP);
