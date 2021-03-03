@@ -68,18 +68,7 @@ public:
     header.compat_version = COMPAT_VERSION;
     using ceph::encode;
     paxos_encode();
-    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-      header.version = 6;
-      header.compat_version = 6;
-      encode(sb, payload);
-      hb_back_addrs.legacy_addr().encode(payload, features);
-      cluster_addrs.legacy_addr().encode(payload, features);
-      encode(boot_epoch, payload);
-      hb_front_addrs.legacy_addr().encode(payload, features);
-      encode(metadata, payload);
-      encode(osd_features, payload);
-      return;
-    }
+    assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
     encode(sb, payload);
     encode(hb_back_addrs, payload, features);
     encode(cluster_addrs, payload, features);
@@ -92,20 +81,7 @@ public:
     auto p = payload.cbegin();
     using ceph::decode;
     paxos_decode(p);
-    if (header.version < 7) {
-      entity_addr_t a;
-      decode(sb, p);
-      decode(a, p);
-      hb_back_addrs = entity_addrvec_t(a);
-      decode(a, p);
-      cluster_addrs = entity_addrvec_t(a);
-      decode(boot_epoch, p);
-      decode(a, p);
-      hb_front_addrs = entity_addrvec_t(a);
-      decode(metadata, p);
-      decode(osd_features, p);
-      return;
-    }
+    assert(header.version >= 7);
     decode(sb, p);
     decode(hb_back_addrs, p);
     decode(cluster_addrs, p);

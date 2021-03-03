@@ -1173,12 +1173,7 @@ void PeeringState::send_lease()
 
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    psdout(20) << __func__ << " no-op, upacting_features 0x" << std::hex
-	       << upacting_features << std::dec
-	       << " does not include SERVER_OCTOPUS" << dendl;
-    return;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   if (!is_nonprimary()) {
     psdout(20) << __func__ << " no-op, !nonprimary" << dendl;
     return;
@@ -1220,9 +1215,7 @@ void PeeringState::proc_lease(const pg_lease_t& l)
 
 void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    return;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   auto now = pl->get_mnow();
   bool was_min = false;
   for (unsigned i = 0; i < acting.size(); ++i) {
@@ -1248,9 +1241,7 @@ void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 
 void PeeringState::proc_renew_lease()
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    return;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   renew_lease(pl->get_mnow());
   send_lease();
   schedule_renew_lease();
@@ -1278,9 +1269,7 @@ void PeeringState::recalc_readable_until()
 
 bool PeeringState::check_prior_readable_down_osds(const OSDMapRef& map)
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    return false;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   bool changed = false;
   auto p = prior_readable_down_osds.begin();
   while (p != prior_readable_down_osds.end()) {
@@ -1674,31 +1663,28 @@ PeeringState::select_replicated_primary(
       !primary->second.is_incomplete() &&
       primary->second.last_update >=
         auth_log_shard->second.log_tail) {
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        primary->second.stats.stats.sum.num_objects_missing;
-      auto auth_version = auth_log_shard->second.last_update.version;
-      auto primary_version = primary->second.last_update.version;
-      if (auth_version > primary_version) {
-        approx_missing_objects += auth_version - primary_version;
-      } else {
-        approx_missing_objects += primary_version - auth_version;
-      }
-      if ((uint64_t)approx_missing_objects >
-          force_auth_primary_missing_objects) {
-        primary = auth_log_shard;
-        ss << "up_primary: " << up_primary << ") has approximate "
-           << approx_missing_objects
-           << "(>" << force_auth_primary_missing_objects <<") "
-           << "missing objects, osd." << auth_log_shard_id
-           << " selected as primary instead"
-           << std::endl;
-      } else {
-        ss << "up_primary: " << up_primary << ") selected as primary"
-           << std::endl;
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      primary->second.stats.stats.sum.num_objects_missing;
+    auto auth_version = auth_log_shard->second.last_update.version;
+    auto primary_version = primary->second.last_update.version;
+    if (auth_version > primary_version) {
+      approx_missing_objects += auth_version - primary_version;
     } else {
-      ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
+      approx_missing_objects += primary_version - auth_version;
+    }
+    if ((uint64_t)approx_missing_objects >
+        force_auth_primary_missing_objects) {
+      primary = auth_log_shard;
+      ss << "up_primary: " << up_primary << ") has approximate "
+         << approx_missing_objects
+         << "(>" << force_auth_primary_missing_objects <<") "
+         << "missing objects, osd." << auth_log_shard_id
+         << " selected as primary instead"
+         << std::endl;
+    } else {
+      ss << "up_primary: " << up_primary << ") selected as primary"
+         << std::endl;
     }
   } else {
     ceph_assert(!auth_log_shard->second.is_incomplete());
@@ -2153,13 +2139,10 @@ bool PeeringState::recoverable(const vector<int> &want) const
   }
 
   if (num_want_acting < pool.info.min_size) {
-    const bool recovery_ec_pool_below_min_size=
+    const bool recovery_ec_pool_below_min_size =
       HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_OCTOPUS);
-
-    if (pool.info.is_erasure() && !recovery_ec_pool_below_min_size) {
-      psdout(10) << __func__ << " failed, ec recovery below min size not supported by pre-octopus" << dendl;
-      return false;
-    } else if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
+    assert(recovery_ec_pool_below_min_size);
+    if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
       psdout(10) << __func__ << " failed, recovery below min size not enabled" << dendl;
       return false;
     }
@@ -2204,21 +2187,15 @@ void PeeringState::choose_async_recovery_ec(
     // past the authoritative last_update the same as those equal to it.
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        shard_info.stats.stats.sum.num_objects_missing;
-      if (auth_version > candidate_version) {
-        approx_missing_objects += auth_version - candidate_version;
-      }
-      if (static_cast<uint64_t>(approx_missing_objects) >
-         cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.emplace(approx_missing_objects, shard_i);
-      }
-    } else {
-      if (auth_version > candidate_version &&
-          (auth_version - candidate_version) > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.insert(make_pair(auth_version - candidate_version, shard_i));
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects) >
+       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -2264,28 +2241,17 @@ void PeeringState::choose_async_recovery_replicated(
     // logs plus historical missing objects as the cost of recovery
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        shard_info.stats.stats.sum.num_objects_missing;
-      if (auth_version > candidate_version) {
-        approx_missing_objects += auth_version - candidate_version;
-      } else {
-        approx_missing_objects += candidate_version - auth_version;
-      }
-      if (static_cast<uint64_t>(approx_missing_objects)  >
-         cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.emplace(approx_missing_objects, shard_i);
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
     } else {
-      size_t approx_entries;
-      if (auth_version > candidate_version) {
-        approx_entries = auth_version - candidate_version;
-      } else {
-        approx_entries = candidate_version - auth_version;
-      }
-      if (approx_entries > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.insert(make_pair(approx_entries, shard_i));
-      }
+      approx_missing_objects += candidate_version - auth_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects)  >
+       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -2757,10 +2723,9 @@ void PeeringState::activate(
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    if (HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-      renew_lease(pl->get_mnow());
-      // do not schedule until we are actually activated
-    }
+    assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
+    renew_lease(pl->get_mnow());
+    // do not schedule until we are actually activated
 
     // adjust purged_snaps: PG may have been inactive while snaps were pruned
     // from the removed_snaps_queue in the osdmap.  update local purged_snaps
@@ -6323,15 +6288,14 @@ void PeeringState::Active::all_activated_and_committed()
   ceph_assert(!ps->acting_recovery_backfill.empty());
   ceph_assert(ps->blocked_by.empty());
 
-  if (HAVE_FEATURE(ps->upacting_features, SERVER_OCTOPUS)) {
-    // this is overkill when the activation is quick, but when it is slow it
-    // is important, because the lease was renewed by the activate itself but we
-    // don't know how long ago that was, and simply scheduling now may leave
-    // a gap in lease coverage.  keep it simple and aggressively renew.
-    ps->renew_lease(pl->get_mnow());
-    ps->send_lease();
-    ps->schedule_renew_lease();
-  }
+  assert(HAVE_FEATURE(ps->upacting_features, SERVER_OCTOPUS));
+  // this is overkill when the activation is quick, but when it is slow it
+  // is important, because the lease was renewed by the activate itself but we
+  // don't know how long ago that was, and simply scheduling now may leave
+  // a gap in lease coverage.  keep it simple and aggressively renew.
+  ps->renew_lease(pl->get_mnow());
+  ps->send_lease();
+  ps->schedule_renew_lease();
 
   // Degraded?
   ps->update_calc_stats();

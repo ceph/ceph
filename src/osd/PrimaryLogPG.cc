@@ -798,11 +798,8 @@ void PrimaryLogPG::maybe_force_recovery()
 
 bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 {
-  if (!HAVE_FEATURE(recovery_state.get_min_upacting_features(),
-		    SERVER_OCTOPUS)) {
-    dout(20) << __func__ << " not all upacting has SERVER_OCTOPUS" << dendl;
-    return true;
-  }
+  assert(HAVE_FEATURE(recovery_state.get_min_upacting_features(),
+		      SERVER_OCTOPUS));
   if (state_test(PG_STATE_WAIT)) {
     dout(10) << __func__ << " PG is WAIT state" << dendl;
   } else if (!state_test(PG_STATE_LAGGY)) {
@@ -833,10 +830,8 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
 bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
 {
-  if (!HAVE_FEATURE(recovery_state.get_min_upacting_features(),
-		    SERVER_OCTOPUS)) {
-    return true;
-  }
+  assert(HAVE_FEATURE(recovery_state.get_min_upacting_features(),
+		      SERVER_OCTOPUS));
   if (!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) {
     return true; // not laggy
   }
