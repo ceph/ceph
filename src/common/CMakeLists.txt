@@ -101,7 +101,9 @@ set(common_srcs
   pretty_binary.cc
   utf8.c
   util.cc
-  version.cc)
+  version.cc
+  async/yield_context.cc
+  )
 
 if(WIN32)
   if(MINGW)
@@ -177,6 +179,8 @@ target_compile_definitions(common-common-objs PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
   "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
+target_include_directories(common-common-objs PRIVATE
+  $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
 
 set(common_mountcephfs_srcs
   armor.c

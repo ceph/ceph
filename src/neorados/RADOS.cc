@@ -435,6 +435,11 @@ void Op::cmp_omap(const bc::flat_map<
 		  int>>& assertions) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_cmp(assertions, nullptr);
 }
+void Op::cmp_omap(const std::map<
+		  std::string, std::pair<cb::list,
+		  int>>& assertions) {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_cmp(assertions, nullptr);
+}
 
 void Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
@@ -538,11 +543,25 @@ void ReadOp::stat(std::uint64_t* size, ceph::real_time* mtime,
 
 void ReadOp::get_omap_keys(std::optional<std::string_view> start_after,
 			   std::uint64_t max_return,
+			   std::set<std::string>* keys,
+			   bool* done,
+			   bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_get_keys(start_after, max_return,
+						     ec, keys, done);
+}
+
+void ReadOp::get_omap_keys(std::optional<std::string_view> start_after,
+			   std::uint64_t max_return,
 			   bc::flat_set<std::string>* keys,
 			   bool* done,
 			   bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_keys(start_after, max_return,
 						     ec, keys, done);
+}
+
+void ReadOp::get_xattrs(std::map<std::string, cb::list>* kv,
+			bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.getxattrs(ec, kv);
 }
 
 void ReadOp::get_xattrs(bc::flat_map<std::string,
@@ -554,12 +573,29 @@ void ReadOp::get_xattrs(bc::flat_map<std::string,
 void ReadOp::get_omap_vals(std::optional<std::string_view> start_after,
 			   std::optional<std::string_view> filter_prefix,
 			   uint64_t max_return,
+			   std::map<std::string, cb::list>* kv,
+			   bool* done,
+			   bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_get_vals(start_after, filter_prefix,
+						     max_return, ec, kv, done);
+}
+
+void ReadOp::get_omap_vals(std::optional<std::string_view> start_after,
+			   std::optional<std::string_view> filter_prefix,
+			   uint64_t max_return,
 			   bc::flat_map<std::string,
 			   cb::list>* kv,
 			   bool* done,
 			   bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_vals(start_after, filter_prefix,
 						     max_return, ec, kv, done);
+}
+
+void ReadOp::get_omap_vals_by_keys(
+  const std::set<std::string>& keys,
+  std::map<std::string, cb::list>* kv,
+  bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_get_vals_by_keys(keys, ec, kv);
 }
 
 void ReadOp::get_omap_vals_by_keys(
@@ -632,6 +668,11 @@ void WriteOp::rollback(uint64_t snapid) {
 }
 
 void WriteOp::set_omap(
+  const std::map<std::string, cb::list>& map) {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_set(map);
+}
+
+void WriteOp::set_omap(
   const bc::flat_map<std::string, cb::list>& map) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_set(map);
 }
@@ -642,6 +683,11 @@ void WriteOp::set_omap_header(bufferlist&& bl) {
 
 void WriteOp::clear_omap() {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_clear();
+}
+
+void WriteOp::rm_omap_keys(
+  const std::set<std::string>& to_rm) {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_rm_keys(to_rm);
 }
 
 void WriteOp::rm_omap_keys(

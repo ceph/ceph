@@ -13,9 +13,9 @@
  *
  */
 
-#include "include/rados/librados.hpp"
-
 #include "rgw_aio_throttle.h"
+#include "rgw_error_code.h"
+#include "rgw_rados.h"
 
 namespace rgw {
 
@@ -29,18 +29,17 @@ bool Throttle::waiter_ready() const
   }
 }
 
-AioResultList BlockingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
+AioResultList BlockingAioThrottle::get(neo_obj_ref obj,
                                        OpFunc&& f,
                                        uint64_t cost, uint64_t id)
 {
-  auto p = std::make_unique<Pending>();
-  p->obj = obj;
+  auto p = std::make_unique<Pending>(std::move(obj));
   p->id = id;
   p->cost = cost;
 
   std::unique_lock lock{mutex};
   if (cost > window) {
-    p->result = -EDEADLK; // would never succeed
+    p->result = rgw_errc::requirement_exceeds_limit; // would never succeed
     completed.push_back(*p);
   } else {
     // wait for the write size to become available
@@ -120,17 +119,16 @@ auto YieldingAioThrottle::async_wait(CompletionToken&& token)
   return init.result.get();
 }
 
-AioResultList YieldingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
+AioResultList YieldingAioThrottle::get(neo_obj_ref obj,
                                        OpFunc&& f,
                                        uint64_t cost, uint64_t id)
 {
-  auto p = std::make_unique<Pending>();
-  p->obj = obj;
+  auto p = std::make_unique<Pending>(std::move(obj));
   p->id = id;
   p->cost = cost;
 
   if (cost > window) {
-    p->result = -EDEADLK; // would never succeed
+    p->result = rgw_errc::requirement_exceeds_limit; // would never succeed
     completed.push_back(*p);
   } else {
     // wait for the write size to become available
@@ -199,4 +197,5 @@ AioResultList YieldingAioThrottle::drain()
   }
   return std::move(completed);
 }
+
 } // namespace rgw

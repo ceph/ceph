@@ -336,7 +336,7 @@ int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *st
 
   rgw_obj obj(bucket, key);
 
-  return store->getRados()->delete_obj(dpp, rctx, bucket_info, obj, bucket_info.versioning_status());
+  return store->getRados()->delete_obj(dpp, rctx, bucket_info, obj, bucket_info.versioning_status(), null_yield);
 }
 
 static int aio_wait(librados::AioCompletion *handle)

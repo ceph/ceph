@@ -470,11 +470,14 @@ int RGWOrphanSearch::pop_and_handle_stat_op(map<int, list<string> >& oids, std::
 {
   RGWRados::Object::Stat& front_op = ops.front();
 
-  int ret = front_op.wait();
-  if (ret < 0) {
-    if (ret != -ENOENT) {
-      lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+  int ret = 0;
+  auto ec = front_op.wait();
+  if (ec) {
+    if (ec != bs::errc::no_such_file_or_directory) {
+      lderr(store->ctx()) << "ERROR: stat_async() returned error: "
+			  << ec.message() << dendl;
     }
+    ret = ceph::from_error_code(ec);
     goto done;
   }
   ret = handle_stat_result(oids, front_op.result);
@@ -586,10 +589,10 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
       RGWRados::Object::Stat& op = stat_ops.back();
 
 
-      ret = op.stat_async();
-      if (ret < 0) {
-        lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
-        return ret;
+      auto ec = op.stat_async();
+      if (ec) {
+        lderr(store->ctx()) << "ERROR: stat_async() returned error: " << ec << dendl;
+        return ceph::from_error_code(ec);
       }
       if (stat_ops.size() >= max_concurrent_ios) {
         ret = pop_and_handle_stat_op(oids, stat_ops);
@@ -1059,7 +1062,7 @@ int RGWRadosList::pop_and_handle_stat_op(
   std::set<std::string> obj_oids;
   RGWRados::Object::Stat& front_op = ops.front();
 
-  int ret = front_op.wait();
+  int ret = ceph::from_error_code(front_op.wait());
   if (ret < 0) {
     if (ret != -ENOENT) {
       lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
@@ -1255,7 +1258,7 @@ int RGWRadosList::process_bucket(
 	  stat_ops.push_back(RGWRados::Object::Stat(&op_target));
 	  RGWRados::Object::Stat& op = stat_ops.back();
 
-	  ret = op.stat_async();
+	  ret = ceph::from_error_code(op.stat_async());
 	  if (ret < 0) {
 	    lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
 	      cpp_strerror(-ret) << dendl;
@@ -1478,14 +1481,13 @@ int RGWRadosList::do_incomplete_multipart(
   constexpr int max_uploads = 1000;
   constexpr int max_parts = 1000;
   static const std::string mp_ns = RGW_OBJ_NS_MULTIPART;
-  static MultipartMetaFilter mp_filter;
 
   int ret;
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
   list_op.params.ns = mp_ns;
-  list_op.params.filter = &mp_filter;
+  list_op.params.filter = MultipartMetaFilter{};
   // use empty string for initial list_op.params.marker
   // use empty strings for list_op.params.{prefix,delim}
 

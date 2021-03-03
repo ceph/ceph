@@ -4,8 +4,8 @@
 #pragma once
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_tools.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_core_types.h"
 
@@ -16,22 +16,24 @@ struct rgw_cache_entry_info;
 
 class RGWSI_SysObj_Core : public RGWServiceInstance
 {
-  friend class RGWServices_Def;
+  friend struct RGWServices_Def;
   friend class RGWSI_SysObj;
 
 protected:
-  RGWSI_RADOS *rados_svc{nullptr};
-  RGWSI_Zone *zone_svc{nullptr};
+  nr::RADOS* rados;
+  RGWSI_Zone* zone_svc;
 
   using GetObjState = RGWSI_SysObj_Core_GetObjState;
   using PoolListImplInfo = RGWSI_SysObj_Core_PoolListImplInfo;
 
-  void core_init(RGWSI_RADOS *_rados_svc,
+  void core_init(nr::RADOS* _rados,
                  RGWSI_Zone *_zone_svc) {
-    rados_svc = _rados_svc;
+    rados = _rados;
     zone_svc = _zone_svc;
   }
-  int get_rados_obj(RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
+  int get_rados_obj(RGWSI_Zone* zone_svc,
+		    const rgw_raw_obj& obj,
+		    neo_obj_ref* pobj, optional_yield y);
 
   virtual int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                        map<string, bufferlist> *attrs, bufferlist *first_chunk,
@@ -101,16 +103,19 @@ protected:
 
   virtual int pool_list_prefixed_objs(const rgw_pool& pool,
                                       const string& prefix,
-                                      std::function<void(const string&)> cb);
+                                      std::function<void(const string&)> cb,
+				      optional_yield y);
 
   virtual int pool_list_objects_init(const rgw_pool& pool,
                                      const std::string& marker,
                                      const std::string& prefix,
-                                     RGWSI_SysObj::Pool::ListCtx *ctx);
+                                     RGWSI_SysObj::Pool::ListCtx *ctx,
+				     optional_yield y);
   virtual int pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& ctx,
                                      int max,
                                      vector<string> *oids,
-                                     bool *is_truncated);
+                                     bool *is_truncated,
+				     optional_yield y);
 
   virtual int pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
                                            string *marker);

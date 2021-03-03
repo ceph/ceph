@@ -103,10 +103,8 @@ public:
  * the name provided is such. It will also extract the key used for
  * bucket index shard calculation from the adorned name.
  */
-class MultipartMetaFilter : public RGWAccessListFilter {
+class MultipartMetaFilter {
 public:
-  MultipartMetaFilter() {}
-
   /**
    * @param name [in] The object name as it appears in the bucket index.
    * @param key [out] An output parameter that will contain the bucket
@@ -114,7 +112,7 @@ public:
    * @return true if the name provided is in the form of a multipart meta
    *         object, false otherwise
    */
-  bool filter(const string& name, string& key) override;
+  bool operator ()(std::string_view name, std::string_view key);
 };
 
 class RGWSI_Tier_RADOS : public RGWServiceInstance

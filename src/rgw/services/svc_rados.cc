@@ -66,7 +66,7 @@ int RGWSI_RADOS::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
 int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
                               librados::NObjectIterator& iter,
                               uint32_t num, vector<rgw_bucket_dir_entry>& objs,
-                              RGWAccessListFilter *filter,
+                              const RGWAccessListFilter& filter,
                               bool *is_truncated)
 {
   if (iter == io_ctx.nobjects_end())
@@ -81,7 +81,7 @@ int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
     ldout(cct, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
     // fill it in with initial values; we may correct later
-    if (filter && !filter->filter(oid, oid))
+    if (filter && !filter(oid, oid))
       continue;
 
     e.key = oid;
@@ -291,7 +291,8 @@ int RGWSI_RADOS::Pool::open(const OpenParams& params)
   return rados_svc->open_pool_ctx(pool, state.ioctx, params);
 }
 
-int RGWSI_RADOS::Pool::List::init(const string& marker, RGWAccessListFilter *filter)
+int RGWSI_RADOS::Pool::List::init(const string& marker,
+				  RGWAccessListFilter filter)
 {
   if (ctx.initialized) {
     return -EINVAL;
@@ -313,7 +314,7 @@ int RGWSI_RADOS::Pool::List::init(const string& marker, RGWAccessListFilter *fil
   }
 
   ctx.iter = ctx.ioctx.nobjects_begin(oc);
-  ctx.filter = filter;
+  ctx.filter = std::move(filter);
   ctx.initialized = true;
 
   return 0;

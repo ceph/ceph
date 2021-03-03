@@ -22,12 +22,12 @@ RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
 }
 
 void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
-                      RGWSI_RADOS * _rados_svc,
+                      RGWRados* _rados,
                       RGWSI_SyncModules * _sync_modules_svc,
 		      RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
   sysobj_svc = _sysobj_svc;
-  rados_svc = _rados_svc;
+  rados = _rados;
   sync_modules_svc = _sync_modules_svc;
   bucket_sync_svc = _bucket_sync_svc;
 
@@ -72,11 +72,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   }
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
-
-  ret = rados_svc->start(y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
 
   ret = realm->init(cct, sysobj_svc, y);
   if (ret < 0 && ret != -ENOENT) {
@@ -267,44 +262,44 @@ void RGWSI_Zone::shutdown()
   }
 }
 
-int RGWSI_Zone::list_regions(list<string>& regions)
+int RGWSI_Zone::list_regions(list<string>& regions, optional_yield y)
 {
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.list_prefixed_objs(region_info_oid_prefix, &regions);
+  return syspool.list_prefixed_objs(region_info_oid_prefix, &regions, y);
 }
 
-int RGWSI_Zone::list_zonegroups(list<string>& zonegroups)
+int RGWSI_Zone::list_zonegroups(list<string>& zonegroups, optional_yield y)
 {
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups);
+  return syspool.list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups, y);
 }
 
-int RGWSI_Zone::list_zones(list<string>& zones)
+int RGWSI_Zone::list_zones(list<string>& zones, optional_yield y)
 {
   RGWZoneParams zoneparams;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zoneparams.get_pool(cct));
 
-  return syspool.list_prefixed_objs(zone_names_oid_prefix, &zones);
+  return syspool.list_prefixed_objs(zone_names_oid_prefix, &zones, y);
 }
 
-int RGWSI_Zone::list_realms(list<string>& realms)
+int RGWSI_Zone::list_realms(list<string>& realms, optional_yield y)
 {
   RGWRealm realm(cct, sysobj_svc);
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
-  return syspool.list_prefixed_objs(realm_names_oid_prefix, &realms);
+  return syspool.list_prefixed_objs(realm_names_oid_prefix, &realms, y);
 }
 
-int RGWSI_Zone::list_periods(list<string>& periods)
+int RGWSI_Zone::list_periods(list<string>& periods, optional_yield y)
 {
   RGWPeriod period;
   list<string> raw_periods;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
-  int ret = syspool.list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods);
+  int ret = syspool.list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods, y);
   if (ret < 0) {
     return ret;
   }
@@ -385,7 +380,7 @@ int RGWSI_Zone::replace_region_with_zonegroup(const DoutPrefixProvider *dpp, opt
 
   /* convert regions to zonegroups */
   list<string> regions;
-  ret = list_regions(regions);
+  ret = list_regions(regions, null_yield);
   if (ret < 0 && ret != -ENOENT) {
     ldout(cct, 0) <<  __func__ << " failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1165,16 +1160,14 @@ read_omap:
   }
 
   if (ret < 0 || m.empty()) {
-    vector<rgw_pool> pools;
     string s = string("default.") + default_storage_pool_suffix;
-    pools.push_back(rgw_pool(s));
-    vector<int> retcodes;
     bufferlist bl;
-    ret = rados_svc->pool().create(pools, &retcodes);
-    if (ret < 0)
-      return ret;
-    ret = sysobj.omap().set(s, bl, y);
-    if (ret < 0)
+    auto res = rados->acquire_pool_id(rgw_pool(s).name, false, y,
+				      true);
+    if (!res)
+      return ceph::from_error_code(res.error());
+    ret = sysobj.omap().set(s, bl, null_yield);
+    if (ret)
       return ret;
     m[s] = bl;
   }
@@ -1231,9 +1224,9 @@ int RGWSI_Zone::update_placement_map(optional_yield y)
 
 int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool, optional_yield y)
 {
-  int ret = rados_svc->pool(new_pool).lookup();
-  if (ret < 0) { // DNE, or something
-    return ret;
+  auto pool = rados->acquire_pool(new_pool, false, null_yield);
+  if (!pool) {
+    return ceph::from_error_code(pool.error());
   }
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
@@ -1241,7 +1234,7 @@ int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool, optional_yield y)
   auto sysobj = obj_ctx.get_obj(obj);
 
   bufferlist empty_bl;
-  ret = sysobj.omap().set(new_pool.to_str(), empty_bl, y);
+  auto ret = sysobj.omap().set(new_pool.to_str(), empty_bl, y);
 
   // don't care about return value
   update_placement_map(y);
@@ -1306,4 +1299,3 @@ bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
 
   return true;
 }
-

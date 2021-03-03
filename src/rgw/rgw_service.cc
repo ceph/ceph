@@ -33,6 +33,7 @@
 #include "rgw_datalog.h"
 #include "rgw_metadata.h"
 #include "rgw_otp.h"
+#include "rgw_rados.h"
 #include "rgw_user.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -44,6 +45,7 @@ RGWServices_Def::~RGWServices_Def()
 }
 
 int RGWServices_Def::init(CephContext *cct,
+			  RGWRados* rgwrados,
 			  bool have_cache,
                           bool raw,
 			  bool run_sync,
@@ -79,7 +81,7 @@ int RGWServices_Def::init(CephContext *cct,
 
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
-  finisher->init();
+  finisher->init(&rgwrados->io_context());
   bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
@@ -95,19 +97,19 @@ int RGWServices_Def::init(CephContext *cct,
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
-  notify->init(zone.get(), rados.get(), finisher.get());
+  notify->init(zone.get(), rgwrados, finisher.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
-  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
+  zone->init(sysobj.get(), rgwrados, sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());
-  sysobj_core->core_init(rados.get(), zone.get());
+  sysobj_core->core_init(&rgwrados->neorados(), zone.get());
   if (have_cache) {
-    sysobj_cache->init(rados.get(), zone.get(), notify.get());
-    sysobj->init(rados.get(), sysobj_cache.get());
+    sysobj_cache->init(&rgwrados->neorados(), zone.get(), notify.get());
+    sysobj->init(&rgwrados->neorados(), sysobj_cache.get());
   } else {
-    sysobj->init(rados.get(), sysobj_core.get());
+    sysobj->init(&rgwrados->neorados(), sysobj_core.get());
   }
   user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
@@ -275,11 +277,12 @@ void RGWServices_Def::shutdown()
 }
 
 
-int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWServices::do_init(CephContext *_cct, RGWRados* rgwr, bool have_cache,
+			 bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
 {
   cct = _cct;
 
-  int r = _svc.init(cct, have_cache, raw, run_sync, y, dpp);
+  int r = _svc.init(cct, rgwr, have_cache, raw, run_sync, y, dpp);
   if (r < 0) {
     return r;
   }
@@ -432,4 +435,3 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
 
   return 0;
 }
-

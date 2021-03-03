@@ -194,7 +194,7 @@ int RGWSI_MetaBackend_SObj::remove_entry(RGWSI_MetaBackend::Context *_ctx,
 }
 
 int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
-                                      const string& marker)
+                                      const string& marker, optional_yield y)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
@@ -207,14 +207,14 @@ int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
   ctx->list.op.emplace(ctx->list.pool->op());
 
   string prefix = ctx->module->get_oid_prefix();
-  ctx->list.op->init(marker, prefix);
+  ctx->list.op->init(marker, prefix, y);
 
   return 0;
 }
 
 int RGWSI_MetaBackend_SObj::list_next(RGWSI_MetaBackend::Context *_ctx,
                                       int max, list<string> *keys,
-                                      bool *truncated)
+                                      bool *truncated, optional_yield y)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
@@ -222,7 +222,7 @@ int RGWSI_MetaBackend_SObj::list_next(RGWSI_MetaBackend::Context *_ctx,
 
   keys->clear();
 
-  int ret = ctx->list.op->get_next(max, &oids, truncated);
+  int ret = ctx->list.op->get_next(max, &oids, truncated, y);
   if (ret < 0 && ret != -ENOENT)
     return ret;
   if (ret == -ENOENT) {

@@ -529,7 +529,7 @@ int RGWMetadataHandler_GenericMetaBE::list_keys_init(const string& marker, void 
 {
   auto op = std::make_unique<RGWSI_MetaBackend_Handler::Op_ManagedCtx>(be_handler);
 
-  int ret = op->list_init(marker);
+  int ret = op->list_init(marker, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -543,7 +543,7 @@ int RGWMetadataHandler_GenericMetaBE::list_keys_next(void *handle, int max, list
 {
   auto op = static_cast<RGWSI_MetaBackend_Handler::Op_ManagedCtx *>(handle);
 
-  int ret = op->list_next(max, &keys, truncated);
+  int ret = op->list_next(max, &keys, truncated, null_yield);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }

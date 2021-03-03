@@ -15,13 +15,13 @@
 
 #pragma once
 
-#include "include/rados/librados_fwd.hpp"
 #include <memory>
 #include "common/ceph_mutex.h"
 #include "common/async/completion.h"
 #include "common/async/yield_context.h"
-#include "services/svc_rados.h"
 #include "rgw_aio.h"
+
+namespace ba = boost::asio;
 
 namespace rgw {
 
@@ -61,12 +61,15 @@ class BlockingAioThrottle final : public Aio, private Throttle {
   struct Pending : AioResultEntry {
     BlockingAioThrottle *parent = nullptr;
     uint64_t cost = 0;
-    librados::AioCompletion *completion = nullptr;
+
+    Pending(neo_obj_ref o)
+      : AioResultEntry(std::move(o)) {}
   };
  public:
-  BlockingAioThrottle(uint64_t window) : Throttle(window) {}
+  BlockingAioThrottle(uint64_t window)
+    : Throttle(window) {}
 
-  AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
+  AioResultList get(neo_obj_ref obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;
 
   void put(AioResult& r) override final;
@@ -81,7 +84,7 @@ class BlockingAioThrottle final : public Aio, private Throttle {
 // a throttle that yields the coroutine instead of blocking. all public
 // functions must be called within the coroutine strand
 class YieldingAioThrottle final : public Aio, private Throttle {
-  boost::asio::io_context& context;
+  ba::io_context& context;
   spawn::yield_context yield;
   struct Handler;
 
@@ -92,15 +95,20 @@ class YieldingAioThrottle final : public Aio, private Throttle {
   template <typename CompletionToken>
   auto async_wait(CompletionToken&& token);
 
-  struct Pending : AioResultEntry { uint64_t cost = 0; };
+  struct Pending : AioResultEntry {
+    uint64_t cost = 0;
+
+    Pending(neo_obj_ref o)
+      : AioResultEntry(std::move(o)) {}
+  };
 
  public:
-  YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,
-                      spawn::yield_context yield)
+  YieldingAioThrottle(uint64_t window, ba::io_context& context,
+		      spawn::yield_context yield)
     : Throttle(window), context(context), yield(yield)
   {}
 
-  AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
+  AioResultList get(neo_obj_ref obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;
 
   void put(AioResult& r) override final;

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "rgw/rgw_tools.h"
 #include "rgw/rgw_service.h"
 
 #include "include/rados/librados.hpp"
@@ -10,21 +11,6 @@
 #include "common/RWLock.h"
 
 class RGWAsyncRadosProcessor;
-
-class RGWAccessListFilter {
-public:
-  virtual ~RGWAccessListFilter() {}
-  virtual bool filter(const string& name, string& key) = 0;
-};
-
-struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
-  string prefix;
-
-  explicit RGWAccessListFilterPrefix(const string& _prefix) : prefix(_prefix) {}
-  bool filter(const string& name, string& key) override {
-    return (prefix.compare(key.substr(0, prefix.size())) == 0);
-  }
-};
 
 class RGWSI_RADOS : public RGWServiceInstance
 {
@@ -56,7 +42,7 @@ private:
   int pool_iterate(librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
                    uint32_t num, vector<rgw_bucket_dir_entry>& objs,
-                   RGWAccessListFilter *filter,
+                   const RGWAccessListFilter& filter,
                    bool *is_truncated);
 
 public:
@@ -118,13 +104,13 @@ public:
         bool initialized{false};
         librados::IoCtx ioctx;
         librados::NObjectIterator iter;
-        RGWAccessListFilter *filter{nullptr};
+        RGWAccessListFilter filter;
       } ctx;
 
       List() {}
       List(Pool *_pool) : pool(_pool) {}
 
-      int init(const string& marker, RGWAccessListFilter *filter = nullptr);
+      int init(const string& marker, RGWAccessListFilter filter = nullptr);
       int get_next(int max,
                    std::vector<string> *oids,
                    bool *is_truncated);

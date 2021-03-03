@@ -236,7 +236,7 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
   rgw_obj obj(bucket_info.bucket, key);
   store->getRados()->set_atomic(&rctx, obj);
   ret = store->getRados()->delete_obj(dpp, rctx, bucket_info, obj,
-          bucket_info.versioning_status(), 0, hint.exp_time);
+          bucket_info.versioning_status(), null_yield, 0, hint.exp_time);
 
   return ret;
 }

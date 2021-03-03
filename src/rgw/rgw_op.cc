@@ -90,8 +90,6 @@ static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
 static void forward_req_info(CephContext *cct, req_info& info, const std::string& bucket_name);
 
-static MultipartMetaFilter mp_filter;
-
 // this probably should belong in the rgw_iam_policy_keywords, I'll get it to it
 // at some point
 static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
@@ -6130,7 +6128,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   // remove the upload obj
   string version_id;
-  int r = meta_obj->delete_object(this, s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0, version_id, null_yield);
+  int r = meta_obj->delete_object(this, s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0, version_id, y);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer->clear_locked();

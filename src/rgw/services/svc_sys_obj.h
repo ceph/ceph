@@ -6,8 +6,8 @@
 #include "common/static_ptr.h"
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_tools.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
 #include "svc_sys_obj_core_types.h"
 
@@ -51,7 +51,7 @@ public:
       Obj& source;
 
       ceph::static_ptr<RGWSI_SysObj_Obj_GetObjState, sizeof(RGWSI_SysObj_Core_GetObjState)> state;
-      
+
       RGWObjVersionTracker *objv_tracker{nullptr};
       map<string, bufferlist> *attrs{nullptr};
       bool raw_attrs{false};
@@ -230,19 +230,19 @@ public:
 
       Op(Pool& _source) : source(_source) {}
 
-      int init(const std::string& marker, const std::string& prefix);
-      int get_next(int max, std::vector<string> *oids, bool *is_truncated);
+      int init(const std::string& marker, const std::string& prefix, optional_yield y);
+      int get_next(int max, std::vector<string> *oids, bool *is_truncated, optional_yield y);
       int get_marker(string *marker);
     };
 
-    int list_prefixed_objs(const std::string& prefix, std::function<void(const string&)> cb);
+    int list_prefixed_objs(const std::string& prefix, std::function<void(const string&)> cb, optional_yield y);
 
     template <typename Container>
     int list_prefixed_objs(const string& prefix,
-                           Container *result) {
+                           Container *result, optional_yield y) {
       return list_prefixed_objs(prefix, [&](const string& val) {
         result->push_back(val);
-      });
+      }, y);
     }
 
     Op op() {
@@ -251,18 +251,18 @@ public:
   };
 
   friend class Obj;
-  friend class Obj::ROp;
-  friend class Obj::WOp;
+  friend struct Obj::ROp;
+  friend struct Obj::WOp;
   friend class Pool;
-  friend class Pool::Op;
+  friend struct Pool::Op;
 
 protected:
-  RGWSI_RADOS *rados_svc{nullptr};
+  nr::RADOS* rados{nullptr};
   RGWSI_SysObj_Core *core_svc{nullptr};
 
-  void init(RGWSI_RADOS *_rados_svc,
+  void init(nr::RADOS* _rados,
             RGWSI_SysObj_Core *_core_svc) {
-    rados_svc = _rados_svc;
+    rados = _rados;
     core_svc = _core_svc;
   }
 

@@ -236,7 +236,7 @@ int abort_multipart_upload(const DoutPrefixProvider *dpp,
         string oid = mp_obj.get_part(obj_iter->second.num);
         obj.init_ns(bucket_info.bucket, oid, RGW_OBJ_NS_MULTIPART);
         obj.index_hash_source = mp_obj.get_key();
-        ret = store->getRados()->delete_obj(dpp, *obj_ctx, bucket_info, obj, 0);
+        ret = store->getRados()->delete_obj(dpp, *obj_ctx, bucket_info, obj, 0, null_yield);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
@@ -297,13 +297,12 @@ int list_bucket_multiparts(const DoutPrefixProvider *dpp,
 {
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
-  MultipartMetaFilter mp_filter;
 
   list_op.params.prefix = prefix;
   list_op.params.delim = delim;
   list_op.params.marker = marker;
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
-  list_op.params.filter = &mp_filter;
+  list_op.params.filter = MultipartMetaFilter{};
 
   return(list_op.list_objects(dpp, max_uploads, objs, common_prefixes, is_truncated, null_yield));
 }
