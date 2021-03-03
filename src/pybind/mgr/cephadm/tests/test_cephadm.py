@@ -289,7 +289,7 @@ class TestCephadm(object):
                 _run_cephadm.assert_called_with(
                     'test', 'mon.test', 'deploy', [
                         '--name', 'mon.test',
-                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null}',
+                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null, "deployed_by": []}',
                         '--config-json', '-',
                         '--reconfig',
                     ],
