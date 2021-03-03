@@ -962,8 +962,14 @@ bool RGWSI_Zone::need_to_log_metadata() const
 
 bool RGWSI_Zone::can_reshard() const
 {
-  return current_period->get_id().empty() ||
-    (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup());
+  if (current_period->get_id().empty()) {
+    return true; // no realm
+  }
+  if (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup()) {
+    return true; // single zone/zonegroup
+  }
+  // 'resharding' feature enabled in zonegroup
+  return zonegroup->supports(rgw::zone_features::resharding);
 }
 
 /**
