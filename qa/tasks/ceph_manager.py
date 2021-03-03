@@ -68,7 +68,7 @@ def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
     teuthology.feed_many_stdins_and_close(conf_fp, writes)
     run.wait(writes)
 
-def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True):
+def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True, cd=True):
     """
     Build a command line for running valgrind.
 
@@ -118,10 +118,10 @@ def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True):
             '--exit-on-first-error=yes',
             '--error-exitcode=42',
         ])
-    args = [
-        'cd', testdir,
-        run.Raw('&&'),
-    ] + preamble + extra_args + v
+    args = []
+    if cd:
+        args += ['cd', testdir, run.Raw('&&')]
+    args += preamble + extra_args + v
     log.debug('running %s under valgrind with args %s', name, args)
     return args
 
