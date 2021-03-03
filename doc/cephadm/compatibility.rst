@@ -1,7 +1,34 @@
+
+===========================
+Compatibility and Stability
+===========================
+
+Compatibility with Podman Versions
+----------------------------------
+
+Podman and Ceph have different end-of-life strategies that
+might make it challenging to find compatible Podman and Ceph 
+versions
+
+Those versions are expected to work:
+
+
++-----------+---------------------------------------+
+|  Ceph     |                 Podman                |
++-----------+-------+-------+-------+-------+-------+
+|           | 1.9   |  2.0  |  2.1  |  2.2  |  3.0  |
++===========+=======+=======+=======+=======+=======+
+| <= 15.2.5 | True  | False | False | False | False |
++-----------+-------+-------+-------+-------+-------+
+| >= 15.2.6 | True  | True  | True  | False | False |
++-----------+-------+-------+-------+-------+-------+
+| >= 16.2.1 | False | True  | True  | False | True  |
++-----------+-------+-------+-------+-------+-------+
+
 .. _cephadm-stability:
 
 Stability
-=========
+---------
 
 Cephadm is a new feature in the Octopus release and has seen limited
 use in production and at scale.  We would like users to try cephadm,
