@@ -279,6 +279,7 @@ class CephadmServe:
             sd.memory_request = d.get('memory_request')
             sd.memory_limit = d.get('memory_limit')
             sd._service_name = d.get('service_name')
+            sd.deployed_by = d.get('deployed_by')
             sd.version = d.get('version')
             sd.ports = d.get('ports')
             sd.ip = d.get('ip')
@@ -880,6 +881,7 @@ class CephadmServe:
                             'service_name': daemon_spec.service_name,
                             'ports': daemon_spec.ports,
                             'ip': daemon_spec.ip,
+                            'deployed_by': self.mgr.get_active_mgr_digests(),
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
