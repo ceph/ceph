@@ -18,14 +18,11 @@
 /**
  * tree.h
  *
- * An example implementation to expose tree interfaces to users. The current
- * interface design is based on:
- * - ceph::os::Transaction::create/touch/remove()
- * - ceph::ObjectStore::collection_list()
- * - ceph::BlueStore::get_onode()
- * - db->get_iterator(PREFIIX_OBJ) by ceph::BlueStore::fsck()
- *
- * TODO: Redesign the interfaces based on real onode manager requirements.
+ * A special-purpose and b-tree-based implementation that:
+ * - Fulfills requirements of OnodeManager to index ordered onode key-values;
+ * - Runs above seastore block and transaction layer;
+ * - Specially optimized for onode key structures and seastore
+ *   delta/transaction semantics;
  */
 
 namespace crimson::os::seastore::onode {
@@ -110,6 +107,21 @@ class Btree {
         auto ret = Cursor{this_obj.p_tree, next_cursor};
         assert(this_obj < ret);
         return ret;
+      });
+    }
+
+    btree_future<Cursor> erase(Transaction& t) {
+      assert(!is_end());
+      auto this_obj = *this;
+      return p_cursor->erase(p_tree->get_context(t), true
+      ).safe_then([this_obj, this] (Ref<tree_cursor_t> next_cursor) {
+        assert(p_cursor->is_invalid());
+        if (next_cursor) {
+          assert(!next_cursor->is_end());
+          return Cursor{p_tree, next_cursor};
+        } else {
+          return Cursor{p_tree};
+        }
       });
     }
 
@@ -213,6 +225,10 @@ class Btree {
     );
   }
 
+  btree_future<Cursor> get_next(Transaction& t, Cursor& cursor) {
+    return cursor.get_next(t);
+  }
+
   /*
    * modifiers
    */
@@ -236,27 +252,29 @@ class Btree {
     );
   }
 
-  btree_future<size_t> erase(Transaction& t, const ghobject_t& obj) {
-    // TODO
-    return btree_ertr::make_ready_future<size_t>(0u);
+  btree_future<std::size_t> erase(Transaction& t, const ghobject_t& obj) {
+    return seastar::do_with(
+      full_key_t<KeyT::HOBJ>(obj),
+      [this, &t](auto& key) -> btree_future<std::size_t> {
+        return get_root(t).safe_then([this, &t, &key](auto root) {
+          return root->erase(get_context(t), key);
+        });
+      }
+    );
   }
 
-  btree_future<Cursor> erase(Transaction &t, Cursor& pos) {
-    // TODO
-    return btree_ertr::make_ready_future<Cursor>(
-        Cursor::make_end(this));
+  btree_future<Cursor> erase(Transaction& t, Cursor& pos) {
+    return pos.erase(t);
   }
 
-  btree_future<Cursor> erase(Transaction &t, Cursor& first, Cursor& last) {
-    // TODO
-    return btree_ertr::make_ready_future<Cursor>(
-        Cursor::make_end(this));
-  }
-
-  btree_future<Cursor> erase(Transaction &t, Value &value) {
-    // TODO
-    return btree_ertr::make_ready_future<Cursor>(
-        Cursor::make_end(this));
+  btree_future<> erase(Transaction& t, Value& value) {
+    assert(value.is_tracked());
+    auto ref_cursor = value.p_cursor;
+    return ref_cursor->erase(get_context(t), false
+    ).safe_then([ref_cursor] (auto next_cursor) {
+      assert(ref_cursor->is_invalid());
+      assert(!next_cursor);
+    });
   }
 
   /*

@@ -128,6 +128,9 @@ class tree_cursor_t final
   /// Check that this is next to prv
   void assert_next_to(const tree_cursor_t&, value_magic_t) const;
 
+  /// Erases the key-value pair from tree.
+  future<Ref<tree_cursor_t>> erase(context_t, bool get_next);
+
   MatchKindCMP compare_to(const tree_cursor_t&, value_magic_t) const;
 
   // public to Value
@@ -352,6 +355,15 @@ class Node
   node_future<std::pair<Ref<tree_cursor_t>, bool>> insert(
       context_t, const key_hobj_t&, value_config_t);
 
+  /**
+   * erase
+   *
+   * Removes a key-value pair from the sub-tree formed by this node.
+   *
+   * Returns the number of erased key-value pairs (0 or 1).
+   */
+  node_future<std::size_t> erase(context_t, const key_hobj_t&);
+
   /// Recursively collects the statistics of the sub-tree formed by this node
   node_future<tree_stats_t> get_tree_stats(context_t);
 
@@ -558,6 +570,17 @@ class LeafNode final : public Node {
   const char* read() const;
   std::tuple<key_view_t, const value_header_t*> get_kv(const search_position_t&) const;
   node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
+
+  /**
+   * erase
+   *
+   * Removes a key-value pair from the position.
+   *
+   * If get_next is true, returns the cursor pointing to the next key-value
+   * pair that followed the erased element, which can be nullptr if is end.
+   */
+  node_future<Ref<tree_cursor_t>> erase(
+      context_t, const search_position_t&, bool get_next);
 
   template <bool VALIDATE>
   void do_track_cursor(tree_cursor_t& cursor) {

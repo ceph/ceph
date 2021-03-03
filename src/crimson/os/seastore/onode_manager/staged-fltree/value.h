@@ -233,6 +233,9 @@ class Value {
   NodeExtentManager& nm;
   const ValueBuilder& vb;
   Ref<tree_cursor_t> p_cursor;
+
+  template <typename ValueImpl>
+  friend class Btree;
 };
 
 /**
