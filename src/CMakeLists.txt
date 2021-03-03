@@ -393,6 +393,9 @@ set(libcommon_files
   librbd/Features.cc
   librbd/io/IoOperations.cc
   ${mds_files})
+if(WITH_CACHE_REPLICA)
+  list(APPEND libcommon_files mon/ReplicaDaemonMap.cc)
+endif()
 if(WITH_JAEGER)
   list(APPEND libcommon_files common/tracer.cc)
 endif()

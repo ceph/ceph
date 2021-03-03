@@ -26,6 +26,10 @@ set(lib_mon_srcs
   ../osd/OSDCap.cc
   $<TARGET_OBJECTS:mgr_cap_obj>)
 
+if(WITH_CACHE_REPLICA)
+  list(APPEND lib_mon_srcs ReplicaMonitor.cc)
+endif()
+
 if(HAVE_GSSAPI)
   list(APPEND lib_mon_srcs
     ${CMAKE_SOURCE_DIR}/src/auth/krb/KrbServiceHandler.cpp)

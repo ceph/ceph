@@ -118,6 +118,9 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
+if(WITH_CACHE_REPLICA)
+  target_sources(crimson-common PRIVATE ${PROJECT_SOURCE_DIR}/src/mon/ReplicaDaemonMap.cc)
+endif()
 
 target_compile_definitions(crimson-common PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
