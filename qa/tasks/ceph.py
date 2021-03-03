@@ -21,7 +21,7 @@ import socket
 import yaml
 
 from paramiko import SSHException
-from tasks.ceph_manager import CephManager, write_conf
+from tasks.ceph_manager import CephManager, write_conf, get_valgrind_args
 from tarfile import ReadError
 from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
@@ -1385,9 +1385,7 @@ def run_daemon(ctx, config, type_):
                     valgrind_args = config['valgrind'][type_]
                 if role in config['valgrind']:
                     valgrind_args = config['valgrind'][role]
-                run_cmd = teuthology.get_valgrind_args(testdir, role,
-                                                       run_cmd,
-                                                       valgrind_args)
+                run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args)
 
             run_cmd.extend(run_cmd_tail)
             log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
