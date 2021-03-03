@@ -422,10 +422,6 @@ class LocalRemote(object):
             local_bin = os.path.join(BIN_PREFIX, args[0])
             if os.path.exists(local_bin):
                 args = [local_bin] + args[1:]
-            else:
-                log.debug("'{0}' is not a binary in the Ceph build dir".format(
-                    args[0]
-                ))
 
         log.debug('> ' +
                  ' '.join([str(a.value) if isinstance(a, Raw) else a for a in args]))
