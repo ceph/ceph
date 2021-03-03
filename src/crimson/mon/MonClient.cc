@@ -1010,9 +1010,8 @@ Client::run_command(std::string&& cmd,
   m->set_tid(tid);
   m->cmd = {std::move(cmd)};
   m->set_data(std::move(bl));
-  mon_commands.emplace_back(m);
-  auto& command = mon_commands.back();
-  return send_message(command.req).then([&result=command.result] {
+  auto& command = mon_commands.emplace_back(make_message<MMonCommand>(*m));
+  return send_message(std::move(m)).then([&result=command.result] {
     return result.get_future();
   });
 }
@@ -1042,7 +1041,7 @@ seastar::future<> Client::on_session_opened()
   }).then([this] {
     return seastar::parallel_for_each(mon_commands,
       [this](auto &command) {
-      return send_message(command.req);
+      return send_message(make_message<MMonCommand>(*command.req));
     });
   });
 }
