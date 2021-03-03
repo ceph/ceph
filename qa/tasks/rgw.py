@@ -9,6 +9,7 @@ from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.exceptions import ConfigError
+from tasks.ceph_manager import get_valgrind_args
 from tasks.util import get_remote_for_role
 from tasks.util.rgw import rgwadmin, wait_for_radosgw
 from tasks.util.rados import (create_ec_pool,
@@ -153,7 +154,7 @@ def start_rgw(ctx, config, clients):
             ])
 
         if client_config.get('valgrind'):
-            cmd_prefix = teuthology.get_valgrind_args(
+            cmd_prefix = get_valgrind_args(
                 testdir,
                 client_with_cluster,
                 cmd_prefix,

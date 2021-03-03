@@ -8,6 +8,7 @@ from teuthology.orchestra import run
 from teuthology import misc
 from teuthology.exceptions import ConfigError
 from teuthology.task import Task
+from tasks.ceph_manager import get_valgrind_args
 from tasks.util import get_remote_for_role
 
 log = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ class RBDMirror(Task):
             ]
 
         if 'valgrind' in self.config:
-            args = misc.get_valgrind_args(
+            args = get_valgrind_args(
                 testdir,
                 'rbd-mirror-{id}'.format(id=self.client),
                 args,
