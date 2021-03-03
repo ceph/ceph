@@ -141,7 +141,7 @@ public:
   int list_jobs(map<string,RGWOrphanSearchState> &job_list);
 
 
-  int store_entries(const string& oid, const map<string, bufferlist>& entries);
+  int store_entries(const DoutPrefixProvider *dpp, const string& oid, const map<string, bufferlist>& entries);
   int read_entries(const string& oid, const string& marker, map<string, bufferlist> *entries, bool *truncated);
 };
 
@@ -172,7 +172,7 @@ class RGWOrphanSearch {
     list<string>::iterator end;
   };
 
-  int log_oids(map<int, string>& log_shards, map<int, list<string> >& oids);
+  int log_oids(const DoutPrefixProvider *dpp, map<int, string>& log_shards, map<int, list<string> >& oids);
 
 #define RGW_ORPHANSEARCH_HASH_PRIME 7877
   int orphan_shard(const string& str) {
@@ -198,8 +198,8 @@ public:
 
   int create(const string& job_name, int num_shards);
 
-  int build_all_oids_index();
-  int build_buckets_instance_index();
+  int build_all_oids_index(const DoutPrefixProvider *dpp);
+  int build_buckets_instance_index(const DoutPrefixProvider *dpp);
   int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const string& bucket_instance_id, map<int, list<string> >& oids);
   int build_linked_oids_index(const DoutPrefixProvider *dpp);
   int compare_oid_indexes();

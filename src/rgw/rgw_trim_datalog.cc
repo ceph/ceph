@@ -26,6 +26,7 @@
 namespace {
 
 class DatalogTrimImplCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
   int shard;
@@ -33,9 +34,9 @@ class DatalogTrimImplCR : public RGWSimpleCoroutine {
   std::string* last_trim_marker;
 
  public:
-  DatalogTrimImplCR(rgw::sal::RGWRadosStore* store, int shard,
+  DatalogTrimImplCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store, int shard,
 		    const std::string& marker, std::string* last_trim_marker)
-  : RGWSimpleCoroutine(store->ctx()), store(store), shard(shard),
+  : RGWSimpleCoroutine(store->ctx()), dpp(dpp), store(store), shard(shard),
     marker(marker), last_trim_marker(last_trim_marker) {
     set_description() << "Datalog trim shard=" << shard
 		      << " marker=" << marker;
@@ -44,12 +45,12 @@ class DatalogTrimImplCR : public RGWSimpleCoroutine {
   int send_request() override {
     set_status() << "sending request";
     cn = stack->create_completion_notifier();
-    return store->svc()->datalog_rados->trim_entries(shard, marker,
+    return store->svc()->datalog_rados->trim_entries(dpp, shard, marker,
 						     cn->completion());
   }
   int request_complete() override {
     int r = cn->completion()->get_return_value();
-    ldout(cct, 20) << __PRETTY_FUNCTION__ << "(): trim of shard=" << shard
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << "(): trim of shard=" << shard
 		  << " marker=" << marker << " returned r=" << r << dendl;
 
     set_status() << "request complete; ret=" << r;
@@ -95,6 +96,7 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
 
 class DataLogTrimCR : public RGWCoroutine {
   using TrimCR = DatalogTrimImplCR;
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   RGWHTTPManager *http;
   const int num_shards;
@@ -105,9 +107,9 @@ class DataLogTrimCR : public RGWCoroutine {
   int ret{0};
 
  public:
-  DataLogTrimCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
+  DataLogTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                    int num_shards, std::vector<std::string>& last_trim)
-    : RGWCoroutine(store->ctx()), store(store), http(http),
+    : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards),
       zone_id(store->svc()->zone->get_zone().id),
       peer_status(store->svc()->zone->get_zone_data_notify_to_map().size()),
@@ -122,7 +124,7 @@ class DataLogTrimCR : public RGWCoroutine {
 int DataLogTrimCR::operate()
 {
   reenter(this) {
-    ldout(cct, 10) << "fetching sync status for zone " << zone_id << dendl;
+    ldpp_dout(dpp, 10) << "fetching sync status for zone " << zone_id << dendl;
     set_status("fetching sync status");
     yield {
       // query data sync status from each sync peer
@@ -135,7 +137,7 @@ int DataLogTrimCR::operate()
 
       auto p = peer_status.begin();
       for (auto& c : store->svc()->zone->get_zone_data_notify_to_map()) {
-        ldout(cct, 20) << "query sync status from " << c.first << dendl;
+        ldpp_dout(dpp, 20) << "query sync status from " << c.first << dendl;
         using StatusCR = RGWReadRESTResourceCR<rgw_data_sync_status>;
         spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
               false);
@@ -152,11 +154,11 @@ int DataLogTrimCR::operate()
     drain_all();
 
     if (ret < 0) {
-      ldout(cct, 4) << "failed to fetch sync status from all peers" << dendl;
+      ldpp_dout(dpp, 4) << "failed to fetch sync status from all peers" << dendl;
       return set_cr_error(ret);
     }
 
-    ldout(cct, 10) << "trimming log shards" << dendl;
+    ldpp_dout(dpp, 10) << "trimming log shards" << dendl;
     set_status("trimming log shards");
     yield {
       // determine the minimum marker for each shard
@@ -168,10 +170,10 @@ int DataLogTrimCR::operate()
         if (m <= last_trim[i]) {
           continue;
         }
-        ldout(cct, 10) << "trimming log shard " << i
+        ldpp_dout(dpp, 10) << "trimming log shard " << i
             << " at marker=" << m
             << " last_trim=" << last_trim[i] << dendl;
-        spawn(new TrimCR(store, i, m, &last_trim[i]),
+        spawn(new TrimCR(dpp, store, i, m, &last_trim[i]),
               true);
       }
     }
@@ -180,15 +182,16 @@ int DataLogTrimCR::operate()
   return 0;
 }
 
-RGWCoroutine* create_admin_data_log_trim_cr(rgw::sal::RGWRadosStore *store,
+RGWCoroutine* create_admin_data_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store,
                                             RGWHTTPManager *http,
                                             int num_shards,
                                             std::vector<std::string>& markers)
 {
-  return new DataLogTrimCR(store, http, num_shards, markers);
+  return new DataLogTrimCR(dpp, store, http, num_shards, markers);
 }
 
 class DataLogTrimPollCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   RGWHTTPManager *http;
   const int num_shards;
@@ -198,9 +201,9 @@ class DataLogTrimPollCR : public RGWCoroutine {
   std::vector<std::string> last_trim; //< last trimmed marker per shard
 
  public:
-  DataLogTrimPollCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
+  DataLogTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                     int num_shards, utime_t interval)
-    : RGWCoroutine(store->ctx()), store(store), http(http),
+    : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards), interval(interval),
       lock_oid(store->svc()->datalog_rados->get_oid(0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
@@ -226,13 +229,13 @@ int DataLogTrimPollCR::operate()
                                           interval.sec()));
       if (retcode < 0) {
         // if the lock is already held, go back to sleep and try again later
-        ldout(cct, 4) << "failed to lock " << lock_oid << ", trying again in "
+        ldpp_dout(dpp, 4) << "failed to lock " << lock_oid << ", trying again in "
             << interval.sec() << "s" << dendl;
         continue;
       }
 
       set_status("trimming");
-      yield call(new DataLogTrimCR(store, http, num_shards, last_trim));
+      yield call(new DataLogTrimCR(dpp, store, http, num_shards, last_trim));
 
       // note that the lock is not released. this is intentional, as it avoids
       // duplicating this work in other gateways
@@ -241,9 +244,9 @@ int DataLogTrimPollCR::operate()
   return 0;
 }
 
-RGWCoroutine* create_data_log_trim_cr(rgw::sal::RGWRadosStore *store,
+RGWCoroutine* create_data_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store,
                                       RGWHTTPManager *http,
                                       int num_shards, utime_t interval)
 {
-  return new DataLogTrimPollCR(store, http, num_shards, interval);
+  return new DataLogTrimPollCR(dpp, store, http, num_shards, interval);
 }

@@ -64,59 +64,59 @@ int pull_period(RGWRESTConn* conn, const std::string& period_id,
 
 } // anonymous namespace
 
-int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period,
+int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
 			  optional_yield y)
 {
   // try to read the period from rados
   period.set_id(period_id);
   period.set_epoch(0);
-  int r = period.init(cct, svc.sysobj, y);
+  int r = period.init(dpp, cct, svc.sysobj, y);
   if (r < 0) {
     if (svc.zone->is_meta_master()) {
       // can't pull if we're the master
-      ldout(cct, 1) << "metadata master failed to read period "
+      ldpp_dout(dpp, 1) << "metadata master failed to read period "
           << period_id << " from local storage: " << cpp_strerror(r) << dendl;
       return r;
     }
-    ldout(cct, 14) << "pulling period " << period_id
+    ldpp_dout(dpp, 14) << "pulling period " << period_id
         << " from master" << dendl;
     // request the period from the master zone
     r = pull_period(svc.zone->get_master_conn(), period_id,
                     svc.zone->get_realm().get_id(), period, y);
     if (r < 0) {
-      lderr(cct) << "failed to pull period " << period_id << dendl;
+      ldpp_dout(dpp, -1) << "failed to pull period " << period_id << dendl;
       return r;
     }
     // write the period to rados
-    r = period.store_info(true, y);
+    r = period.store_info(dpp, true, y);
     if (r == -EEXIST) {
       r = 0;
     } else if (r < 0) {
-      lderr(cct) << "failed to store period " << period_id << dendl;
+      ldpp_dout(dpp, -1) << "failed to store period " << period_id << dendl;
       return r;
     }
     // update latest epoch
-    r = period.update_latest_epoch(period.get_epoch(), y);
+    r = period.update_latest_epoch(dpp, period.get_epoch(), y);
     if (r == -EEXIST) {
       // already have this epoch (or a more recent one)
       return 0;
     }
     if (r < 0) {
-      lderr(cct) << "failed to update latest_epoch for period "
+      ldpp_dout(dpp, -1) << "failed to update latest_epoch for period "
           << period_id << dendl;
       return r;
     }
     // reflect period objects if this is the latest version
     if (svc.zone->get_realm().get_current_period() == period_id) {
-      r = period.reflect(y);
+      r = period.reflect(dpp, y);
       if (r < 0) {
         return r;
       }
     }
-    ldout(cct, 14) << "period " << period_id
+    ldpp_dout(dpp, 14) << "period " << period_id
         << " pulled and written to local storage" << dendl;
   } else {
-    ldout(cct, 14) << "found period " << period_id
+    ldpp_dout(dpp, 14) << "found period " << period_id
         << " in local storage" << dendl;
   }
   return 0;

@@ -1572,7 +1572,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 	  << dendl;
 
   do {
-    int ret = lock->try_lock(lock_duration, null_yield);
+    int ret = lock->try_lock(this, lock_duration, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       /* already locked by another lc processor */
       ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to acquire lock on "
@@ -1715,7 +1715,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
     utime_t time(max_lock_secs, 0);
 
-    int ret = lock->try_lock(time, null_yield);
+    int ret = lock->try_lock(this, time, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       /* already locked by another lc processor */
       ldpp_dout(this, 0) << "RGWLC::process() failed to acquire lock on "
@@ -1948,7 +1948,8 @@ static std::string get_lc_shard_name(const rgw_bucket& bucket){
 }
 
 template<typename F>
-static int guard_lc_modify(rgw::sal::RGWRadosStore* store,
+static int guard_lc_modify(const DoutPrefixProvider *dpp, 
+                           rgw::sal::RGWRadosStore* store,
 			   rgw::sal::Lifecycle* sal_lc,
 			   const rgw_bucket& bucket, const string& cookie,
 			   const F& f) {
@@ -1973,21 +1974,21 @@ static int guard_lc_modify(rgw::sal::RGWRadosStore* store,
   int ret;
 
   do {
-    ret = lock->try_lock(time, null_yield);
+    ret = lock->try_lock(dpp, time, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
-      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
+      ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
           << oid << ", sleep 5, try again" << dendl;
       sleep(5); // XXX: return retryable error
       continue;
     }
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
+      ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
           << oid << ", ret=" << ret << dendl;
       break;
     }
     ret = f(sal_lc, oid, entry);
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to set entry on "
+      ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to set entry on "
           << oid << ", ret=" << ret << dendl;
     }
     break;
@@ -2016,7 +2017,7 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
   rgw_bucket& bucket = bucket_info.bucket;
 
 
-  ret = guard_lc_modify(store, sal_lc.get(), bucket, cookie,
+  ret = guard_lc_modify(this, store, sal_lc.get(), bucket, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    const rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->set_entry(oid, entry);
@@ -2037,13 +2038,13 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
   rgw_bucket& bucket = bucket_info.bucket;
 
   if (ret < 0) {
-    ldout(cct, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
+    ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
         << bucket.name << " returned err=" << ret << dendl;
     return ret;
   }
 
 
-  ret = guard_lc_modify(store, sal_lc.get(), bucket, cookie,
+  ret = guard_lc_modify(this, store, sal_lc.get(), bucket, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    const rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->rm_entry(oid, entry);
@@ -2060,7 +2061,8 @@ RGWLC::~RGWLC()
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
+int fix_lc_shard_entry(const DoutPrefixProvider *dpp, 
+                       rgw::sal::RGWRadosStore* store,
 		       rgw::sal::Lifecycle* sal_lc,
 		       const RGWBucketInfo& bucket_info,
 		       const map<std::string,bufferlist>& battrs)
@@ -2082,19 +2084,19 @@ int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
   // We are not dropping the old marker here as that would be caught by the next LC process update
   int ret = sal_lc->get_entry(lc_oid, shard_name, entry);
   if (ret == 0) {
-    ldout(store->ctx(), 5) << "Entry already exists, nothing to do" << dendl;
+    ldpp_dout(dpp, 5) << "Entry already exists, nothing to do" << dendl;
     return ret; // entry is already existing correctly set to marker
   }
-  ldout(store->ctx(), 5) << "lc_get_entry errored ret code=" << ret << dendl;
+  ldpp_dout(dpp, 5) << "lc_get_entry errored ret code=" << ret << dendl;
   if (ret == -ENOENT) {
-    ldout(store->ctx(), 1) << "No entry for bucket=" << bucket_info.bucket.name
+    ldpp_dout(dpp, 1) << "No entry for bucket=" << bucket_info.bucket.name
 			   << " creating " << dendl;
     // TODO: we have too many ppl making cookies like this!
     char cookie_buf[COOKIE_LEN + 1];
     gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
     std::string cookie = cookie_buf;
 
-    ret = guard_lc_modify(
+    ret = guard_lc_modify(dpp,
       store, sal_lc, bucket_info.bucket, cookie,
       [&lc_oid](rgw::sal::Lifecycle* slc,
 			      const string& oid,

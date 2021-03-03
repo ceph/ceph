@@ -27,7 +27,7 @@
 const string RGWOIDCProvider::oidc_url_oid_prefix = "oidc_url.";
 const string RGWOIDCProvider::oidc_arn_prefix = "arn:aws:iam::";
 
-int RGWOIDCProvider::store_url(const string& url, bool exclusive,
+int RGWOIDCProvider::store_url(const DoutPrefixProvider *dpp, const string& url, bool exclusive,
 			       optional_yield y)
 {
   using ceph::encode;
@@ -38,7 +38,7 @@ int RGWOIDCProvider::store_url(const string& url, bool exclusive,
   bufferlist bl;
   encode(*this, bl);
   auto obj_ctx = svc->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().oidc_pool, oid,
+  return rgw_put_system_obj(dpp, obj_ctx, svc->zone->get_zone_params().oidc_pool, oid,
                             bl, exclusive, NULL, real_time(), y);
 }
 
@@ -98,7 +98,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   auto svc = ctl->svc;
 
   auto& pool = svc->zone->get_zone_params().oidc_pool;
-  ret = store_url(idp_url, exclusive, y);
+  ret = store_url(dpp, idp_url, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
                   << provider_url << ": " << cpp_strerror(-ret) << dendl;
@@ -108,7 +108,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   return 0;
 }
 
-int RGWOIDCProvider::delete_obj(optional_yield y)
+int RGWOIDCProvider::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().oidc_pool;
@@ -116,21 +116,21 @@ int RGWOIDCProvider::delete_obj(optional_yield y)
   string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to parse arn" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to parse arn" << dendl;
     return -EINVAL;
   }
 
   if (this->tenant != tenant) {
-    ldout(cct, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
+    ldpp_dout(dpp, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
                   << tenant << ": " << dendl;
     return -EINVAL;
   }
 
   // Delete url
   string oid = tenant + get_url_oid_prefix() + url;
-  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
+  ret = rgw_delete_system_obj(dpp, svc->sysobj, pool, oid, NULL, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
                   << provider_url << ": " << cpp_strerror(-ret) << dendl;
   }
 

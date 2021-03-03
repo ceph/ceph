@@ -87,6 +87,7 @@ string render_log_object_name(const string& format,
 
 /* usage logger */
 class UsageLogger {
+  const DoutPrefixProvider *dpp;
   CephContext *cct;
   RGWRados *store;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
@@ -111,7 +112,7 @@ class UsageLogger {
   }
 public:
 
-  UsageLogger(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
+  UsageLogger(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store) : dpp(_dpp), cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
     timer.init();
     std::lock_guard l{timer_lock};
     set_timer();
@@ -165,15 +166,15 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    store->log_usage(old_map);
+    store->log_usage(dpp, old_map);
   }
 };
 
 static UsageLogger *usage_logger = NULL;
 
-void rgw_log_usage_init(CephContext *cct, RGWRados *store)
+void rgw_log_usage_init(const DoutPrefixProvider *dpp, CephContext *cct, RGWRados *store)
 {
-  usage_logger = new UsageLogger(cct, store);
+  usage_logger = new UsageLogger(dpp, cct, store);
 }
 
 void rgw_log_usage_finalize()
@@ -225,7 +226,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!s->is_err())
     data.successful_ops = 1;
 
-  ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
+  ldpp_dout(s, 30) << "log_usage: bucket_name=" << bucket_name
 	<< " tenant=" << s->bucket_tenant
 	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
 	<< bytes_received << ", success=" << data.successful_ops << dendl;

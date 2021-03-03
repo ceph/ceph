@@ -39,9 +39,9 @@ class RGWRole
   string tenant;
   uint64_t max_session_duration;
 
-  int store_info(bool exclusive, optional_yield y);
-  int store_name(bool exclusive, optional_yield y);
-  int store_path(bool exclusive, optional_yield y);
+  int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   int read_id(const DoutPrefixProvider *dpp, const string& role_name, const string& tenant, string& role_id, optional_yield y);
   int read_name(const DoutPrefixProvider *dpp, optional_yield y);
   int read_info(const DoutPrefixProvider *dpp, optional_yield y);
@@ -145,7 +145,7 @@ public:
   int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
   int get(const DoutPrefixProvider *dpp, optional_yield y);
   int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
-  int update(optional_yield y);
+  int update(const DoutPrefixProvider *dpp, optional_yield y);
   void update_trust_policy(string& trust_policy);
   void set_perm_policy(const string& policy_name, const string& perm_policy);
   vector<string> get_role_policy_names();

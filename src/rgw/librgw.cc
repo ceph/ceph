@@ -581,7 +581,7 @@ namespace rgw {
     ldh->init();
     ldh->bind();
 
-    rgw_log_usage_init(g_ceph_context, store->getRados());
+    rgw_log_usage_init(&dp, g_ceph_context, store->getRados());
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 

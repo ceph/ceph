@@ -734,14 +734,14 @@ RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const rgw_bu
   return new RGWBucketSyncPolicyHandler(this, bucket, sync_policy);
 }
 
-int RGWBucketSyncPolicyHandler::init(optional_yield y)
+int RGWBucketSyncPolicyHandler::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int r = bucket_sync_svc->get_bucket_sync_hints(bucket.value_or(rgw_bucket()),
+  int r = bucket_sync_svc->get_bucket_sync_hints(dpp, bucket.value_or(rgw_bucket()),
 						 &source_hints,
 						 &target_hints,
 						 y);
   if (r < 0) {
-    ldout(bucket_sync_svc->ctx(), 0) << "ERROR: failed to initialize bucket sync policy handler: get_bucket_sync_hints() on bucket="
+    ldpp_dout(dpp, 0) << "ERROR: failed to initialize bucket sync policy handler: get_bucket_sync_hints() on bucket="
       << bucket << " returned r=" << r << dendl;
     return r;
   }

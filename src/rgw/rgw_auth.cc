@@ -407,7 +407,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
 
   //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
   RGWStorageStats stats;
-  int ret = ctl->user->read_stats(federated_user, &stats, null_yield);
+  int ret = ctl->user->read_stats(dpp, federated_user, &stats, null_yield);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
     return;

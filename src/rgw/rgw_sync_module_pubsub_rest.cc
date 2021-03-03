@@ -377,12 +377,12 @@ void RGWPSCreateNotif_ObjStore::execute(optional_yield y)
   ps.emplace(store, s->owner.get_id().tenant);
 
   auto b = ps->get_bucket(bucket_info.bucket);
-  op_ret = b->create_notification(topic_name, events, y);
+  op_ret = b->create_notification(this, topic_name, events, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to create notification for topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to create notification for topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully created notification for topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully created notification for topic '" << topic_name << "'" << dendl;
 }
 
 // command: DELETE /notifications/bucket/<bucket>?topic=<topic-name>
@@ -413,7 +413,7 @@ void RGWPSDeleteNotif_ObjStore::execute(optional_yield y) {
 
   ps.emplace(store, s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
-  op_ret = b->remove_notification(topic_name, y);
+  op_ret = b->remove_notification(this, topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove notification from topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;

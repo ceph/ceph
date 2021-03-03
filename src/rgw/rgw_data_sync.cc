@@ -95,7 +95,7 @@ bool RGWReadDataSyncStatusMarkersCR::spawn_next()
     return false;
   }
   using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
-  spawn(new CR(env->async_rados, env->svc->sysobj,
+  spawn(new CR(env->dpp, env->async_rados, env->svc->sysobj,
                rgw_raw_obj(env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
                &markers[shard_id]),
         false);
@@ -160,7 +160,7 @@ int RGWReadDataSyncStatusCoroutine::operate()
     using ReadInfoCR = RGWSimpleRadosReadCR<rgw_data_sync_info>;
     yield {
       bool empty_on_enoent = false; // fail on ENOENT
-      call(new ReadInfoCR(sync_env->async_rados, sync_env->svc->sysobj,
+      call(new ReadInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                           rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(sc->source_zone)),
                           &sync_status->sync_info, empty_on_enoent));
     }
@@ -515,7 +515,7 @@ public:
         return set_cr_error(retcode);
       }
       using WriteInfoCR = RGWSimpleRadosWriteCR<rgw_data_sync_info>;
-      yield call(new WriteInfoCR(sync_env->async_rados, sync_env->svc->sysobj,
+      yield call(new WriteInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                  rgw_raw_obj{pool, sync_status_oid},
                                  status->sync_info));
       if (retcode < 0) {
@@ -560,7 +560,7 @@ public:
           marker.timestamp = info.last_update;
           const auto& oid = RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, i);
           using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_data_sync_marker>;
-          spawn(new WriteMarkerCR(sync_env->async_rados, sync_env->svc->sysobj,
+          spawn(new WriteMarkerCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                   rgw_raw_obj{pool, oid}, marker), true);
         }
       }
@@ -573,7 +573,7 @@ public:
       }
 
       status->sync_info.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
-      yield call(new WriteInfoCR(sync_env->async_rados, sync_env->svc->sysobj,
+      yield call(new WriteInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                  rgw_raw_obj{pool, sync_status_oid},
                                  status->sync_info));
       if (retcode < 0) {
@@ -880,18 +880,18 @@ public:
           int shard_id = (int)iter->first;
           rgw_data_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
-          spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, sync_env->svc->sysobj,
+          spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                                 rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
                                                                 marker),
                 true);
         }
       } else {
-        yield call(sync_env->error_logger->log_error_cr(sc->conn->get_remote_id(), "data.init", "",
+        yield call(sync_env->error_logger->log_error_cr(sync_env->dpp, sc->conn->get_remote_id(), "data.init", "",
                                                         EIO, string("failed to build bucket instances map")));
       }
       while (collect(&ret, NULL)) {
         if (ret < 0) {
-          yield call(sync_env->error_logger->log_error_cr(sc->conn->get_remote_id(), "data.init", "",
+          yield call(sync_env->error_logger->log_error_cr(sync_env->dpp, sc->conn->get_remote_id(), "data.init", "",
                                                           -ret, string("failed to store sync status: ") + cpp_strerror(-ret)));
           req_ret = ret;
         }
@@ -934,7 +934,7 @@ public:
 
     tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
 
-    return new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, sync_env->svc->sysobj,
+    return new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                            rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
   }
@@ -1351,7 +1351,7 @@ public:
       if (sync_status < 0) {
         // write actual sync failures for 'radosgw-admin sync error list'
         if (sync_status != -EBUSY && sync_status != -EAGAIN) {
-          yield call(sync_env->error_logger->log_error_cr(sc->conn->get_remote_id(), "data", complete->key,
+          yield call(sync_env->error_logger->log_error_cr(sync_env->dpp, sc->conn->get_remote_id(), "data", complete->key,
                                                           -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
           if (retcode < 0) {
             tn->log(0, SSTR("ERROR: failed to log sync failure: retcode=" << retcode));
@@ -1615,7 +1615,7 @@ public:
         sync_marker.state = rgw_data_sync_marker::IncrementalSync;
         sync_marker.marker = sync_marker.next_step_marker;
         sync_marker.next_step_marker.clear();
-        call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, sync_env->svc->sysobj,
+        call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                              rgw_raw_obj(pool, status_oid),
                                                              sync_marker));
       }
@@ -1812,7 +1812,7 @@ public:
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
-    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, sync_env->svc->sysobj,
+    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                           rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
                                                           &sync_marker);
   }
@@ -1945,7 +1945,7 @@ public:
   }
 
   RGWCoroutine *set_sync_info_cr() {
-    return new RGWSimpleRadosWriteCR<rgw_data_sync_info>(sync_env->async_rados, sync_env->svc->sysobj,
+    return new RGWSimpleRadosWriteCR<rgw_data_sync_info>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                          rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(sc->source_zone)),
                                                          sync_status.sync_info);
   }
@@ -2806,7 +2806,7 @@ public:
         if (write_status) {
           map<string, bufferlist> attrs;
           status.encode_all_attrs(attrs);
-          call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, sync_env->svc->sysobj, obj, attrs, &objv_tracker));
+          call(new RGWSimpleRadosWriteAttrsCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj, obj, attrs, &objv_tracker));
         } else {
           call(new RGWRadosRemoveCR(store, obj, &objv_tracker));
         }
@@ -2947,7 +2947,7 @@ public:
 int RGWReadBucketPipeSyncStatusCoroutine::operate()
 {
   reenter(this) {
-    yield call(new RGWSimpleRadosReadAttrsCR(sync_env->async_rados, sync_env->svc->sysobj,
+    yield call(new RGWSimpleRadosReadAttrsCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                              rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, oid),
                                              &attrs, true, objv_tracker));
     if (retcode == -ENOENT) {
@@ -3070,7 +3070,7 @@ int RGWReadPendingBucketShardsCoroutine::operate()
   reenter(this){
     //read sync status marker
     using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
-    yield call(new CR(sync_env->async_rados, sync_env->svc->sysobj,
+    yield call(new CR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                       rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, status_oid),
                       sync_marker));
     if (retcode < 0) {
@@ -3364,7 +3364,7 @@ public:
     sync_marker.encode_attr(attrs);
 
     tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
-    return new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, sync_env->svc->sysobj,
+    return new RGWSimpleRadosWriteAttrsCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                           rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, marker_oid),
                                           attrs, &objv_tracker);
   }
@@ -3396,7 +3396,7 @@ class RGWWriteBucketShardIncSyncStatus : public RGWCoroutine {
     reenter(this) {
       sync_marker.encode_attr(attrs);
 
-      yield call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, sync_env->svc->sysobj,
+      yield call(new RGWSimpleRadosWriteAttrsCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                 obj, attrs, &objv_tracker));
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -3645,7 +3645,7 @@ public:
         }
       }
       if (!error_ss.str().empty()) {
-        yield call(sync_env->error_logger->log_error_cr(sc->conn->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
+        yield call(sync_env->error_logger->log_error_cr(sync_env->dpp, sc->conn->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
       }
 done:
       if (sync_status == 0) {
@@ -3842,7 +3842,7 @@ int RGWBucketShardFullSyncCR::operate()
         sync_info.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
         map<string, bufferlist> attrs;
         sync_info.encode_state_attr(attrs);
-        call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, sync_env->svc->sysobj,
+        call(new RGWSimpleRadosWriteAttrsCR(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                             rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, status_oid),
                                             attrs));
       }
@@ -4244,12 +4244,13 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
                    const rgw_bucket& _source_bucket) : sync_env(_sync_env),
                                                        source_bucket(_source_bucket) {}
     int operate() override {
-      int r = sync_env->svc->bucket_sync->get_bucket_sync_hints(source_bucket,
+      int r = sync_env->svc->bucket_sync->get_bucket_sync_hints(sync_env->dpp, 
+                                                                source_bucket,
                                                                 nullptr,
                                                                 &targets,
                                                                 null_yield);
       if (r < 0) {
-        ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): failed to fetch bucket sync hints for bucket=" << source_bucket << dendl;
+        ldpp_dout(sync_env->dpp, 0) << "ERROR: " << __func__ << "(): failed to fetch bucket sync hints for bucket=" << source_bucket << dendl;
         return r;
       }
 

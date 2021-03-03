@@ -133,7 +133,7 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
     }
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info, y);
+  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y);
   if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -153,7 +153,7 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
   RGWPubSub ps(store, info.owner.tenant);
   RGWPubSub::Bucket ps_bucket(&ps, info.bucket);
-  const auto ps_ret = ps_bucket.remove_notifications(y);
+  const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
     lderr(store->ctx()) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
   }
@@ -226,9 +226,9 @@ int RGWRadosBucket::read_bucket_stats(const DoutPrefixProvider *dpp, optional_yi
       return ret;
 }
 
-int RGWRadosBucket::sync_user_stats(optional_yield y)
+int RGWRadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, y);
+  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y);
 }
 
 int RGWRadosBucket::update_container_stats(const DoutPrefixProvider *dpp)
@@ -573,7 +573,7 @@ int RGWRadosObject::omap_get_vals_by_keys(const std::string& oid,
   return cur_ioctx.omap_get_vals_by_keys(oid, keys, vals);
 }
 
-int RGWRadosObject::omap_set_val_by_key(const std::string& key, bufferlist& val,
+int RGWRadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 					bool must_exist, optional_yield y)
 {
   rgw_raw_obj raw_meta_obj;
@@ -584,7 +584,7 @@ int RGWRadosObject::omap_set_val_by_key(const std::string& key, bufferlist& val,
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_meta_obj);
 
-  return sysobj.omap().set_must_exist(must_exist).set(key, val, y);
+  return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
 }
 
 MPSerializer* RGWRadosObject::get_serializer(const std::string& lock_name)
@@ -1091,7 +1091,7 @@ int RGWRadosStore::create_bucket(const DoutPrefixProvider *dpp,
 
   if (*existed) {
     rgw_placement_rule selected_placement_rule;
-    ret = svc()->zone->select_bucket_placement(u.get_info(),
+    ret = svc()->zone->select_bucket_placement(dpp, u.get_info(),
 					       zid, placement_rule,
 					       &selected_placement_rule, nullptr, y);
     if (selected_placement_rule != info.placement_rule) {
@@ -1127,9 +1127,9 @@ std::unique_ptr<Lifecycle> RGWRadosStore::get_lifecycle(void)
   return std::unique_ptr<Lifecycle>(new RadosLifecycle(this));
 }
 
-int RGWRadosStore::delete_raw_obj(const rgw_raw_obj& obj)
+int RGWRadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
 {
-  return rados->delete_raw_obj(obj);
+  return rados->delete_raw_obj(dpp, obj);
 }
 
 void RGWRadosStore::get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj)
@@ -1155,12 +1155,12 @@ MPRadosSerializer::MPRadosSerializer(RGWRadosStore* store, RGWRadosObject* obj, 
   store->getRados()->open_pool_ctx(meta_pool, ioctx, true);
 }
 
-int MPRadosSerializer::try_lock(utime_t dur, optional_yield y)
+int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
   op.assert_exists();
   lock.set_duration(dur);
   lock.lock_exclusive(&op);
-  int ret = rgw_rados_operate(ioctx, oid, &op, y);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, y);
   if (! ret) {
     locked = true;
   }
@@ -1174,7 +1174,7 @@ LCRadosSerializer::LCRadosSerializer(RGWRadosStore* store, const std::string& _o
   lock.set_cookie(cookie);
 }
 
-int LCRadosSerializer::try_lock(utime_t dur, optional_yield y)
+int LCRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
   lock.set_duration(dur);
   return lock.lock_exclusive(ioctx, oid);

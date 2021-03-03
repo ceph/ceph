@@ -286,7 +286,7 @@ public:
 
   int put_pre(const DoutPrefixProvider *dpp) override;
   int put(const DoutPrefixProvider *dpp) override;
-  virtual int put_check() {
+  virtual int put_check(const DoutPrefixProvider *dpp) {
     return 0;
   }
   virtual int put_checked(const DoutPrefixProvider *dpp);

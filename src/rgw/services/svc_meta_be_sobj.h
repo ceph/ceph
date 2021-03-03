@@ -132,13 +132,15 @@ public:
 
   int call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb) override;
 
-  int pre_modify(RGWSI_MetaBackend::Context *ctx,
+  int pre_modify(const DoutPrefixProvider *dpp, 
+                 RGWSI_MetaBackend::Context *ctx,
                  const string& key,
                  RGWMetadataLogData& log_data,
                  RGWObjVersionTracker *objv_tracker,
                  RGWMDLogStatus op_type,
                  optional_yield y);
-  int post_modify(RGWSI_MetaBackend::Context *ctx,
+  int post_modify(const DoutPrefixProvider *dpp, 
+                  RGWSI_MetaBackend::Context *ctx,
                   const string& key,
                   RGWMetadataLogData& log_data,
                   RGWObjVersionTracker *objv_tracker, int ret,
@@ -150,12 +152,14 @@ public:
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y,
                 const DoutPrefixProvider *dpp) override;
-  int put_entry(RGWSI_MetaBackend::Context *ctx,
+  int put_entry(const DoutPrefixProvider *dpp, 
+                RGWSI_MetaBackend::Context *ctx,
                 const string& key,
                 RGWSI_MetaBackend::PutParams& params,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y) override;
-  int remove_entry(RGWSI_MetaBackend::Context *ctx,
+  int remove_entry(const DoutPrefixProvider *dpp, 
+                   RGWSI_MetaBackend::Context *ctx,
                    const string& key,
                    RGWSI_MetaBackend::RemoveParams& params,
                    RGWObjVersionTracker *objv_tracker,

@@ -104,7 +104,7 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 }
 
 
-int RGWMetadataLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl) {
   if (!svc.zone->need_to_log_metadata())
     return 0;
 
@@ -114,7 +114,7 @@ int RGWMetadataLog::add_entry(const string& hash_key, const string& section, con
   rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
   mark_modified(shard_id);
   real_time now = real_clock::now();
-  return svc.cls->timelog.add(oid, now, section, key, bl, null_yield);
+  return svc.cls->timelog.add(dpp, oid, now, section, key, bl, null_yield);
 }
 
 int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
@@ -125,13 +125,13 @@ int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
   return 0;
 }
 
-int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
 
   mark_modified(shard_id);
   rgw_shard_name(prefix, shard_id, oid);
-  return svc.cls->timelog.add(oid, entries, completion, false, null_yield);
+  return svc.cls->timelog.add(dpp, oid, entries, completion, false, null_yield);
 }
 
 void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
@@ -154,7 +154,7 @@ void RGWMetadataLog::complete_list_entries(void *handle) {
   delete ctx;
 }
 
-int RGWMetadataLog::list_entries(void *handle,
+int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
 				 int max_entries,
 				 list<cls_log_entry>& entries,
 				 string *last_marker,
@@ -167,7 +167,7 @@ int RGWMetadataLog::list_entries(void *handle,
   }
 
   std::string next_marker;
-  int ret = svc.cls->timelog.list(ctx->cur_oid, ctx->from_time, ctx->end_time,
+  int ret = svc.cls->timelog.list(dpp, ctx->cur_oid, ctx->from_time, ctx->end_time,
                                   max_entries, entries, ctx->marker,
                                   &next_marker, truncated, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
@@ -184,14 +184,14 @@ int RGWMetadataLog::list_entries(void *handle,
   return 0;
 }
 
-int RGWMetadataLog::get_info(int shard_id, RGWMetadataLogInfo *info)
+int RGWMetadataLog::get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
   cls_log_header header;
 
-  int ret = svc.cls->timelog.info(oid, &header, null_yield);
+  int ret = svc.cls->timelog.info(dpp, oid, &header, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -232,13 +232,13 @@ int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfoCompletion *c
                                      completion->get_completion());
 }
 
-int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_time& end_time,
+int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, const real_time& from_time, const real_time& end_time,
                          const string& start_marker, const string& end_marker)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return svc.cls->timelog.trim(oid, from_time, end_time, start_marker,
+  return svc.cls->timelog.trim(dpp, oid, from_time, end_time, start_marker,
                                end_marker, nullptr, null_yield);
 }
   
@@ -435,7 +435,7 @@ int RGWMetadataHandlerPut_SObj::put_pre(const DoutPrefixProvider *dpp)
 
 int RGWMetadataHandlerPut_SObj::put(const DoutPrefixProvider *dpp)
 {
-  int ret = put_check();
+  int ret = put_check(dpp);
   if (ret != 0) {
     return ret;
   }

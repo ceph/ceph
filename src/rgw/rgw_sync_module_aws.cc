@@ -1438,11 +1438,11 @@ public:
 
   int operate() override {
     reenter(this) {
-      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->svc->sysobj,
+      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                                  status_obj, &status, false));
 
       if (retcode < 0 && retcode != -ENOENT) {
-        ldout(sc->cct, 0) << "ERROR: failed to read sync status of object " << src_obj << " retcode=" << retcode << dendl;
+        ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to read sync status of object " << src_obj << " retcode=" << retcode << dendl;
         return retcode;
       }
 
@@ -1495,15 +1495,15 @@ public:
         }
 
         if (retcode < 0) {
-          ldout(sc->cct, 0) << "ERROR: failed to sync obj=" << src_obj << ", sync via multipart upload, upload_id=" << status.upload_id << " part number " << status.cur_part << " (error: " << cpp_strerror(-retcode) << ")" << dendl;
+          ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to sync obj=" << src_obj << ", sync via multipart upload, upload_id=" << status.upload_id << " part number " << status.cur_part << " (error: " << cpp_strerror(-retcode) << ")" << dendl;
           ret_err = retcode;
           yield call(new RGWAWSStreamAbortMultipartUploadCR(sc, target->conn.get(), dest_obj, status_obj, status.upload_id));
           return set_cr_error(ret_err);
         }
 
-        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->svc->sysobj, status_obj, status));
+        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj, status_obj, status));
         if (retcode < 0) {
-          ldout(sc->cct, 0) << "ERROR: failed to store multipart upload state, retcode=" << retcode << dendl;
+          ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to store multipart upload state, retcode=" << retcode << dendl;
           /* continue with upload anyway */
         }
         ldout(sc->cct, 20) << "sync of object=" << src_obj << " via multipart upload, finished sending part #" << status.cur_part << " etag=" << pcur_part_info->etag << dendl;
@@ -1511,7 +1511,7 @@ public:
 
       yield call(new RGWAWSCompleteMultipartCR(sc, target->conn.get(), dest_obj, status.upload_id, status.parts));
       if (retcode < 0) {
-        ldout(sc->cct, 0) << "ERROR: failed to complete multipart upload of obj=" << src_obj << " (error: " << cpp_strerror(-retcode) << ")" << dendl;
+        ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to complete multipart upload of obj=" << src_obj << " (error: " << cpp_strerror(-retcode) << ")" << dendl;
         ret_err = retcode;
         yield call(new RGWAWSStreamAbortMultipartUploadCR(sc, target->conn.get(), dest_obj, status_obj, status.upload_id));
         return set_cr_error(ret_err);
@@ -1520,7 +1520,7 @@ public:
       /* remove status obj */
       yield call(new RGWRadosRemoveCR(sync_env->store, status_obj));
       if (retcode < 0) {
-        ldout(sc->cct, 0) << "ERROR: failed to abort multipart upload obj=" << src_obj << " upload_id=" << status.upload_id << " part number " << status.cur_part << " (" << cpp_strerror(-retcode) << ")" << dendl;
+        ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to abort multipart upload obj=" << src_obj << " upload_id=" << status.upload_id << " part number " << status.cur_part << " (" << cpp_strerror(-retcode) << ")" << dendl;
         /* ignore error, best effort */
       }
       return set_cr_done();

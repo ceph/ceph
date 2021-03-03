@@ -58,13 +58,15 @@ protected:
                      bool generic_prepare,
                      const DoutPrefixProvider *dpp);
 
-  virtual int pre_modify(Context *ctx,
+  virtual int pre_modify(const DoutPrefixProvider *dpp, 
+                         Context *ctx,
                          const std::string& key,
                          RGWMetadataLogData& log_data,
                          RGWObjVersionTracker *objv_tracker,
                          RGWMDLogStatus op_type,
                          optional_yield y);
-  virtual int post_modify(Context *ctx,
+  virtual int post_modify(const DoutPrefixProvider *dpp, 
+                          Context *ctx,
                           const std::string& key,
                           RGWMetadataLogData& log_data,
                           RGWObjVersionTracker *objv_tracker, int ret,
@@ -144,12 +146,14 @@ public:
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y,
                         const DoutPrefixProvider *dpp) = 0;
-  virtual int put_entry(RGWSI_MetaBackend::Context *ctx,
+  virtual int put_entry(const DoutPrefixProvider *dpp, 
+                        RGWSI_MetaBackend::Context *ctx,
                         const std::string& key,
                         RGWSI_MetaBackend::PutParams& params,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y) = 0;
-  virtual int remove_entry(Context *ctx,
+  virtual int remove_entry(const DoutPrefixProvider *dpp, 
+                           Context *ctx,
                            const std::string& key,
                            RGWSI_MetaBackend::RemoveParams& params,
                            RGWObjVersionTracker *objv_tracker,

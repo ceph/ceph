@@ -305,6 +305,7 @@ private:
 
 
 class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
+  const DoutPrefixProvider *dpp;
   RGWSysObjectCtx obj_ctx;
   rgw_raw_obj obj;
   const bool want_attrs;
@@ -312,7 +313,8 @@ class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
 protected:
   int _send_request() override;
 public:
-  RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
+  RGWAsyncGetSystemObj(const DoutPrefixProvider *dpp, 
+                       RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                        bool want_attrs, bool raw_attrs);
 
@@ -322,6 +324,7 @@ public:
 };
 
 class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
+  const DoutPrefixProvider *dpp;
   RGWSI_SysObj *svc;
   rgw_raw_obj obj;
   bool exclusive;
@@ -330,7 +333,8 @@ class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
 protected:
   int _send_request() override;
 public:
-  RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
+  RGWAsyncPutSystemObj(const DoutPrefixProvider *dpp, RGWCoroutine *caller, 
+                       RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                        bool _exclusive, bufferlist _bl);
 
@@ -338,6 +342,7 @@ public:
 };
 
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
+  const DoutPrefixProvider *dpp;
   RGWSI_SysObj *svc;
   rgw_raw_obj obj;
   map<string, bufferlist> attrs;
@@ -345,7 +350,7 @@ class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
 protected:
   int _send_request() override;
 public:
-  RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
+  RGWAsyncPutSystemObjAttrs(const DoutPrefixProvider *dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                        map<string, bufferlist> _attrs);
 
@@ -383,6 +388,7 @@ public:
 
 template <class T>
 class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   RGWAsyncRadosProcessor *async_rados;
   RGWSI_SysObj *svc;
 
@@ -394,11 +400,12 @@ class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   RGWAsyncGetSystemObj *req{nullptr};
 
 public:
-  RGWSimpleRadosReadCR(RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
+  RGWSimpleRadosReadCR(const DoutPrefixProvider *_dpp, 
+                      RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
 		      const rgw_raw_obj& _obj,
 		      T *_result, bool empty_on_enoent = true,
 		      RGWObjVersionTracker *objv_tracker = nullptr)
-    : RGWSimpleCoroutine(_svc->ctx()), async_rados(_async_rados), svc(_svc),
+    : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados), svc(_svc),
       obj(_obj), result(_result),
       empty_on_enoent(empty_on_enoent), objv_tracker(objv_tracker) {}
   ~RGWSimpleRadosReadCR() override {
@@ -423,7 +430,7 @@ public:
 template <class T>
 int RGWSimpleRadosReadCR<T>::send_request()
 {
-  req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(), svc,
+  req = new RGWAsyncGetSystemObj(dpp, this, stack->create_completion_notifier(), svc,
 			         objv_tracker, obj, false, false);
   async_rados->queue(req);
   return 0;
@@ -460,6 +467,7 @@ int RGWSimpleRadosReadCR<T>::request_complete()
 }
 
 class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   RGWAsyncRadosProcessor *async_rados;
   RGWSI_SysObj *svc;
 
@@ -470,10 +478,11 @@ class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
   RGWAsyncGetSystemObj *req = nullptr;
 
 public:
-  RGWSimpleRadosReadAttrsCR(RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
+  RGWSimpleRadosReadAttrsCR(const DoutPrefixProvider *_dpp, RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
                             const rgw_raw_obj& _obj, map<string, bufferlist> *_pattrs,
                             bool _raw_attrs, RGWObjVersionTracker* objv_tracker = nullptr)
     : RGWSimpleCoroutine(_svc->ctx()),
+      dpp(_dpp),
       async_rados(_async_rados), svc(_svc),
       obj(_obj),
       pattrs(_pattrs),
@@ -497,6 +506,7 @@ public:
 
 template <class T>
 class RGWSimpleRadosWriteCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   RGWAsyncRadosProcessor *async_rados;
   RGWSI_SysObj *svc;
   bufferlist bl;
@@ -505,10 +515,11 @@ class RGWSimpleRadosWriteCR : public RGWSimpleCoroutine {
   RGWAsyncPutSystemObj *req{nullptr};
 
 public:
-  RGWSimpleRadosWriteCR(RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
+  RGWSimpleRadosWriteCR(const DoutPrefixProvider *_dpp, 
+                      RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
 		      const rgw_raw_obj& _obj,
 		      const T& _data, RGWObjVersionTracker *objv_tracker = nullptr)
-    : RGWSimpleCoroutine(_svc->ctx()), async_rados(_async_rados),
+    : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados),
       svc(_svc), obj(_obj), objv_tracker(objv_tracker) {
     encode(_data, bl);
   }
@@ -525,7 +536,7 @@ public:
   }
 
   int send_request() override {
-    req = new RGWAsyncPutSystemObj(this, stack->create_completion_notifier(),
+    req = new RGWAsyncPutSystemObj(dpp, this, stack->create_completion_notifier(),
 			           svc, objv_tracker, obj, false, std::move(bl));
     async_rados->queue(req);
     return 0;
@@ -540,6 +551,7 @@ public:
 };
 
 class RGWSimpleRadosWriteAttrsCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   RGWAsyncRadosProcessor *async_rados;
   RGWSI_SysObj *svc;
   RGWObjVersionTracker *objv_tracker;
@@ -549,11 +561,12 @@ class RGWSimpleRadosWriteAttrsCR : public RGWSimpleCoroutine {
   RGWAsyncPutSystemObjAttrs *req = nullptr;
 
 public:
-  RGWSimpleRadosWriteAttrsCR(RGWAsyncRadosProcessor *_async_rados,
+  RGWSimpleRadosWriteAttrsCR(const DoutPrefixProvider *_dpp, 
+                             RGWAsyncRadosProcessor *_async_rados,
                              RGWSI_SysObj *_svc, const rgw_raw_obj& _obj,
                              map<string, bufferlist> _attrs,
                              RGWObjVersionTracker *objv_tracker = nullptr)
-    : RGWSimpleCoroutine(_svc->ctx()), async_rados(_async_rados),
+    : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados),
       svc(_svc), objv_tracker(objv_tracker), obj(_obj),
       attrs(std::move(_attrs)) {
   }
@@ -569,7 +582,7 @@ public:
   }
 
   int send_request() override {
-    req = new RGWAsyncPutSystemObjAttrs(this, stack->create_completion_notifier(),
+    req = new RGWAsyncPutSystemObjAttrs(dpp, this, stack->create_completion_notifier(),
 			           svc, objv_tracker, obj, std::move(attrs));
     async_rados->queue(req);
     return 0;
@@ -1316,6 +1329,7 @@ public:
 };
 
 class RGWRadosTimelogAddCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   list<cls_log_entry> entries;
 
@@ -1324,7 +1338,7 @@ class RGWRadosTimelogAddCR : public RGWSimpleCoroutine {
   boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
-  RGWRadosTimelogAddCR(rgw::sal::RGWRadosStore *_store, const string& _oid,
+  RGWRadosTimelogAddCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *_store, const string& _oid,
 		        const cls_log_entry& entry);
 
   int send_request() override;
@@ -1332,6 +1346,7 @@ public:
 };
 
 class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
  protected:
@@ -1342,7 +1357,8 @@ class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
   std::string to_marker;
 
  public:
-  RGWRadosTimelogTrimCR(rgw::sal::RGWRadosStore *store, const std::string& oid,
+  RGWRadosTimelogTrimCR(const DoutPrefixProvider *dpp, 
+                        rgw::sal::RGWRadosStore *store, const std::string& oid,
                         const real_time& start_time, const real_time& end_time,
                         const std::string& from_marker,
                         const std::string& to_marker);
@@ -1358,12 +1374,14 @@ class RGWSyncLogTrimCR : public RGWRadosTimelogTrimCR {
  public:
   static constexpr const char* max_marker = "99999999";
 
-  RGWSyncLogTrimCR(rgw::sal::RGWRadosStore *store, const std::string& oid,
+  RGWSyncLogTrimCR(const DoutPrefixProvider *dpp, 
+                   rgw::sal::RGWRadosStore *store, const std::string& oid,
                    const std::string& to_marker, std::string *last_trim_marker);
   int request_complete() override;
 };
 
 class RGWAsyncStatObj : public RGWAsyncRadosRequest {
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo bucket_info;
   rgw_obj obj;
@@ -1374,15 +1392,16 @@ class RGWAsyncStatObj : public RGWAsyncRadosRequest {
 protected:
   int _send_request() override;
 public:
-  RGWAsyncStatObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *store,
+  RGWAsyncStatObj(const DoutPrefixProvider *dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *store,
                   const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
                   real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
                   RGWObjVersionTracker *objv_tracker = nullptr)
-	  : RGWAsyncRadosRequest(caller, cn), store(store), obj(obj), psize(psize),
+	  : RGWAsyncRadosRequest(caller, cn), dpp(dpp), store(store), obj(obj), psize(psize),
 	  pmtime(pmtime), pepoch(pepoch), objv_tracker(objv_tracker) {}
 };
 
 class RGWStatObjCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   RGWAsyncRadosProcessor *async_rados;
   RGWBucketInfo bucket_info;
@@ -1393,7 +1412,7 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   RGWObjVersionTracker *objv_tracker;
   RGWAsyncStatObj *req = nullptr;
  public:
-  RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, rgw::sal::RGWRadosStore *store,
+  RGWStatObjCR(const DoutPrefixProvider *dpp, RGWAsyncRadosProcessor *async_rados, rgw::sal::RGWRadosStore *store,
 	  const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
 	  real_time* pmtime = nullptr, uint64_t *pepoch = nullptr,
 	  RGWObjVersionTracker *objv_tracker = nullptr);

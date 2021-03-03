@@ -69,19 +69,20 @@ class RGWSI_User_RADOS : public RGWSI_User
   int remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
                        optional_yield y, const DoutPrefixProvider *dpp);
 
-  int remove_key_index(RGWSI_MetaBackend::Context *ctx, const RGWAccessKey& access_key, optional_yield y);
-  int remove_email_index(RGWSI_MetaBackend::Context *ctx, const string& email, optional_yield y);
-  int remove_swift_name_index(RGWSI_MetaBackend::Context *ctx, const string& swift_name, optional_yield y);
+  int remove_key_index(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const RGWAccessKey& access_key, optional_yield y);
+  int remove_email_index(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const string& email, optional_yield y);
+  int remove_swift_name_index(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const string& swift_name, optional_yield y);
 
   /* admin management */
-  int cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add, optional_yield y);
-  int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry, optional_yield y);
-  int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket, optional_yield y);
+  int cls_user_update_buckets(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add, optional_yield y);
+  int cls_user_add_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket_entry& entry, optional_yield y);
+  int cls_user_remove_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket& bucket, optional_yield y);
 
   /* quota stats */
-  int cls_user_flush_bucket_stats(rgw_raw_obj& user_obj,
+  int cls_user_flush_bucket_stats(const DoutPrefixProvider *dpp, rgw_raw_obj& user_obj,
                                   const RGWBucketEnt& ent, optional_yield y);
-  int cls_user_list_buckets(rgw_raw_obj& obj,
+  int cls_user_list_buckets(const DoutPrefixProvider *dpp, 
+                            rgw_raw_obj& obj,
                             const string& in_marker,
                             const string& end_marker,
                             const int max_entries,
@@ -90,8 +91,8 @@ class RGWSI_User_RADOS : public RGWSI_User
                             bool * const truncated,
                             optional_yield y);
 
-  int cls_user_reset_stats(const rgw_user& user, optional_yield y);
-  int cls_user_get_header(const rgw_user& user, cls_user_header *header, optional_yield y);
+  int cls_user_reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
+  int cls_user_get_header(const DoutPrefixProvider *dpp, const rgw_user& user, cls_user_header *header, optional_yield y);
   int cls_user_get_header_async(const string& user, RGWGetUserHeader_CB *cb);
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
@@ -169,16 +170,19 @@ public:
 
   /* user buckets directory */
 
-  int add_bucket(RGWSI_MetaBackend::Context *ctx,
+  int add_bucket(const DoutPrefixProvider *dpp, 
+                 RGWSI_MetaBackend::Context *ctx,
                  const rgw_user& user,
                  const rgw_bucket& bucket,
                  ceph::real_time creation_time,
                  optional_yield y) override;
-  int remove_bucket(RGWSI_MetaBackend::Context *ctx,
+  int remove_bucket(const DoutPrefixProvider *dpp, 
+                    RGWSI_MetaBackend::Context *ctx,
                     const rgw_user& user,
                     const rgw_bucket& _bucket,
                     optional_yield y) override;
-  int list_buckets(RGWSI_MetaBackend::Context *ctx,
+  int list_buckets(const DoutPrefixProvider *dpp, 
+                   RGWSI_MetaBackend::Context *ctx,
                    const rgw_user& user,
                    const string& marker,
                    const string& end_marker,
@@ -188,17 +192,21 @@ public:
                    optional_yield y) override;
 
   /* quota related */
-  int flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+  int flush_bucket_stats(const DoutPrefixProvider *dpp, 
+                         RGWSI_MetaBackend::Context *ctx,
                          const rgw_user& user,
                          const RGWBucketEnt& ent, optional_yield y) override;
 
-  int complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
+  int complete_flush_stats(const DoutPrefixProvider *dpp, 
+                           RGWSI_MetaBackend::Context *ctx,
 			   const rgw_user& user, optional_yield y) override;
 
-  int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+  int reset_bucket_stats(const DoutPrefixProvider *dpp, 
+                         RGWSI_MetaBackend::Context *ctx,
 			 const rgw_user& user,
                          optional_yield y) override;
-  int read_stats(RGWSI_MetaBackend::Context *ctx,
+  int read_stats(const DoutPrefixProvider *dpp, 
+                 RGWSI_MetaBackend::Context *ctx,
 		 const rgw_user& user, RGWStorageStats *stats,
 		 ceph::real_time *last_stats_sync,              /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update,

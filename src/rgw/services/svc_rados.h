@@ -166,9 +166,9 @@ public:
 
     int open();
 
-    int operate(librados::ObjectWriteOperation *op, optional_yield y,
+    int operate(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation *op, optional_yield y,
 		int flags = 0);
-    int operate(librados::ObjectReadOperation *op, bufferlist *pbl,
+    int operate(const DoutPrefixProvider *dpp, librados::ObjectReadOperation *op, bufferlist *pbl,
                 optional_yield y, int flags = 0);
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
     int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
@@ -177,7 +177,7 @@ public:
     int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
     int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
     int unwatch(uint64_t handle);
-    int notify(bufferlist& bl, uint64_t timeout_ms,
+    int notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms,
                bufferlist *pbl, optional_yield y);
     void notify_ack(uint64_t notify_id,
                     uint64_t cookie,

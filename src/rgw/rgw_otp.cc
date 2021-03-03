@@ -126,7 +126,7 @@ class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
 
     RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
 
-    int ret = svc.otp->store_all(be_ctx,
+    int ret = svc.otp->store_all(dpp, be_ctx,
                                  entry,
                                  obj->devices,
                                  obj->mtime,
@@ -145,7 +145,7 @@ class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
 
     RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
 
-    return svc.otp->remove_all(be_ctx,
+    return svc.otp->remove_all(dpp, be_ctx,
                                entry,
                                &objv_tracker,
                                y);
@@ -184,21 +184,23 @@ int RGWOTPCtl::read_all(const rgw_user& uid,
   });
 }
 
-int RGWOTPCtl::store_all(const RGWOTPInfo& info,
+int RGWOTPCtl::store_all(const DoutPrefixProvider *dpp, 
+                         const RGWOTPInfo& info,
                          optional_yield y,
                          const PutParams& params)
 {
   return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->store_all(ctx, info.uid, info.devices, params.mtime, params.objv_tracker, y);
+    return svc.otp->store_all(dpp, ctx, info.uid, info.devices, params.mtime, params.objv_tracker, y);
   });
 }
 
-int RGWOTPCtl::remove_all(const rgw_user& uid,
+int RGWOTPCtl::remove_all(const DoutPrefixProvider *dpp,
+                          const rgw_user& uid,
                           optional_yield y,
                           const RemoveParams& params)
 {
   return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->remove_all(ctx, uid, params.objv_tracker, y);
+    return svc.otp->remove_all(dpp, ctx, uid, params.objv_tracker, y);
   });
 }
 

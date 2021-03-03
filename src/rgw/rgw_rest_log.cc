@@ -48,14 +48,14 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
 
   if (s->info.args.exists("start-time") ||
       s->info.args.exists("end-time")) {
-    dout(5) << "start-time and end-time are no longer accepted" << dendl;
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
     op_ret = -EINVAL;
     return;
   }
 
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -63,7 +63,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
   if (!max_entries_str.empty()) {
     max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
     if (!err.empty()) {
-      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+      ldpp_dout(this, 5) << "Error parsing max-entries " << max_entries_str << dendl;
       op_ret = -EINVAL;
       return;
     }
@@ -73,10 +73,10 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
     period = store->svc()->zone->get_current_period_id();
     if (period.empty()) {
-      ldout(s->cct, 5) << "Missing period id" << dendl;
+      ldpp_dout(this, 5) << "Missing period id" << dendl;
       op_ret = -EINVAL;
       return;
     }
@@ -86,7 +86,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
 
   meta_log.init_list_entries(shard_id, {}, {}, marker, &handle);
 
-  op_ret = meta_log.list_entries(handle, max_entries, entries,
+  op_ret = meta_log.list_entries(this, handle, max_entries, entries,
                                    &last_marker, &truncated);
 
   meta_log.complete_list_entries(handle);
@@ -145,24 +145,24 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
 
   unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
     op_ret = -EINVAL;
     return;
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
     period = store->svc()->zone->get_current_period_id();
 
     if (period.empty()) {
-      ldout(s->cct, 5) << "Missing period id" << dendl;
+      ldpp_dout(this, 5) << "Missing period id" << dendl;
       op_ret = -EINVAL;
       return;
     }
   }
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
 
-  op_ret = meta_log.get_info(shard_id, &info);
+  op_ret = meta_log.get_info(this, shard_id, &info);
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
@@ -184,12 +184,12 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
 
   if (s->info.args.exists("start-time") ||
       s->info.args.exists("end-time")) {
-    dout(5) << "start-time and end-time are no longer accepted" << dendl;
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
     op_ret = -EINVAL;
   }
 
   if (s->info.args.exists("start-marker")) {
-    dout(5) << "start-marker is no longer accepted" << dendl;
+    ldpp_dout(this, 5) << "start-marker is no longer accepted" << dendl;
     op_ret = -EINVAL;
   }
 
@@ -197,7 +197,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
     if (!s->info.args.exists("marker")) {
       marker = s->info.args.get("end-marker");
     } else {
-      dout(5) << "end-marker and marker cannot both be provided" << dendl;
+      ldpp_dout(this, 5) << "end-marker and marker cannot both be provided" << dendl;
       op_ret = -EINVAL;
     }
   }
@@ -206,7 +206,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
 
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -217,18 +217,18 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
     period = store->svc()->zone->get_current_period_id();
 
     if (period.empty()) {
-      ldout(s->cct, 5) << "Missing period id" << dendl;
+      ldpp_dout(this, 5) << "Missing period id" << dendl;
       op_ret = -EINVAL;
       return;
     }
   }
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
 
-  op_ret = meta_log.trim(shard_id, {}, {}, {}, marker);
+  op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker);
 }
 
 void RGWOp_MDLog_Lock::execute(optional_yield y) {
@@ -569,7 +569,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
 
   if (s->info.args.exists("start-time") ||
       s->info.args.exists("end-time")) {
-    dout(5) << "start-time and end-time are no longer accepted" << dendl;
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
     op_ret = -EINVAL;
   }
 
@@ -577,7 +577,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
 
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -585,7 +585,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
   if (!max_entries_str.empty()) {
     max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
     if (!err.empty()) {
-      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+      ldpp_dout(this, 5) << "Error parsing max-entries " << max_entries_str << dendl;
       op_ret = -EINVAL;
       return;
     }
@@ -596,7 +596,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  op_ret = store->svc()->datalog_rados->list_entries(shard_id,
+  op_ret = store->svc()->datalog_rados->list_entries(this, shard_id,
 						     max_entries, entries,
 						     marker, &last_marker,
 						     &truncated);
@@ -652,12 +652,12 @@ void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
 
   unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
     op_ret = -EINVAL;
     return;
   }
 
-  op_ret = store->svc()->datalog_rados->get_info(shard_id, &info);
+  op_ret = store->svc()->datalog_rados->get_info(this, shard_id, &info);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -726,12 +726,12 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
 
   if (s->info.args.exists("start-time") ||
       s->info.args.exists("end-time")) {
-    dout(5) << "start-time and end-time are no longer accepted" << dendl;
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
     op_ret = -EINVAL;
   }
 
   if (s->info.args.exists("start-marker")) {
-    dout(5) << "start-marker is no longer accepted" << dendl;
+    ldpp_dout(this, 5) << "start-marker is no longer accepted" << dendl;
     op_ret = -EINVAL;
   }
 
@@ -739,14 +739,14 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
     if (!s->info.args.exists("marker")) {
       marker = s->info.args.get("end-marker");
     } else {
-      dout(5) << "end-marker and marker cannot both be provided" << dendl;
+      ldpp_dout(this, 5) << "end-marker and marker cannot both be provided" << dendl;
       op_ret = -EINVAL;
     }
   }
 
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -755,7 +755,7 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = store->svc()->datalog_rados->trim_entries(shard_id, marker);
+  op_ret = store->svc()->datalog_rados->trim_entries(this, shard_id, marker);
 }
 
 // not in header to avoid pulling in rgw_sync.h
