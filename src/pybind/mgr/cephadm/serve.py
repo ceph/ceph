@@ -404,6 +404,9 @@ class CephadmServe:
                         except (KeyError, TypeError):
                             self.log.debug(
                                 "Failed to find daemon id for rbd-mirror service %s" % (s.get('id')))
+                    elif s.get('type') == 'rgw-nfs':
+                        # https://tracker.ceph.com/issues/49573
+                        name = daemon_id.split('-rgw')[0]
 
                     if host not in self.mgr.inventory:
                         missing_names.append(name)
