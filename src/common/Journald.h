@@ -8,12 +8,15 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+struct LogEntry;
+
 namespace ceph {
 
 namespace logging {
 
 namespace detail {
 class EntryEncoder;
+class LogEntryEncoder;
 
 class JournaldClient {
  public:
@@ -39,6 +42,8 @@ class SubsystemMap;
  * Logger to send local logs to journald
  * 
  * local logs means @code dout(0) << ... @endcode and similars
+ * 
+ * @see JournaldClusterLogger
  */
 class JournaldLogger {
  public:
@@ -58,6 +63,26 @@ class JournaldLogger {
   const SubsystemMap * m_subs;
 };
 
+/**
+ * Logger to send cluster log recieved by MON to journald
+ * 
+ * @see JournaldLogger
+ */
+class JournaldClusterLogger {
+ public:
+  JournaldClusterLogger();
+  ~JournaldClusterLogger();
+
+  /**
+   * @returns 0 if log entry is successfully sent, -1 otherwise.
+   */
+  int log_log_entry(const LogEntry &le);
+
+ private:
+  detail::JournaldClient client;
+
+  std::unique_ptr<detail::LogEntryEncoder> m_log_entry_encoder;
+};
 
 }
 }

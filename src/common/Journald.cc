@@ -119,6 +119,39 @@ MESSAGE
   }
 };
 
+class LogEntryEncoder : public EntryEncoderBase {
+ public:
+  void encode(const LogEntry& le)
+  {
+    meta_buf.clear();
+    fmt::format_to(meta_buf,
+      R"(PRIORITY={:d}
+TIMESTAMP={}
+CEPH_NAME={}
+CEPH_RANK={}
+CEPH_SEQ={}
+CEPH_CHANNEL={}
+MESSAGE
+)",
+      clog_type_to_syslog_level(le.prio),
+      le.stamp.to_nsec(),
+      le.name.to_str(),
+      le.rank,
+      le.seq,
+      le.channel);
+
+    uint64_t msg_len = htole64(le.msg.size());
+    meta_buf.resize(meta_buf.size() + sizeof(msg_len));
+    *(reinterpret_cast<uint64_t*>(meta_buf.end()) - 1) = htole64(le.msg.size());
+
+    m_msg_vec[0].iov_base = meta_buf.data();
+    m_msg_vec[0].iov_len = meta_buf.size();
+
+    m_msg_vec[1].iov_base = (void *)le.msg.data();
+    m_msg_vec[1].iov_len = le.msg.size();
+  }
+};
+
 enum class JournaldClient::MemFileMode {
   MEMFD_CREATE,
   OPEN_TMPFILE,
@@ -249,6 +282,21 @@ JournaldLogger::~JournaldLogger() = default;
 int JournaldLogger::log_entry(const Entry& e)
 {
   m_entry_encoder->encode(e, m_subs);
+  return client.send();
+}
+
+JournaldClusterLogger::JournaldClusterLogger() :
+  m_log_entry_encoder(make_unique<detail::LogEntryEncoder>())
+{
+  client.m_msghdr.msg_iov = m_log_entry_encoder->iovec();
+  client.m_msghdr.msg_iovlen = m_log_entry_encoder->iovec_len();
+}
+
+JournaldClusterLogger::~JournaldClusterLogger() = default;
+
+int JournaldClusterLogger::log_log_entry(const LogEntry &le)
+{
+  m_log_entry_encoder->encode(le);
   return client.send();
 }
 

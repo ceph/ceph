@@ -32,6 +32,7 @@ static const std::string LOG_META_CHANNEL = "$channel";
 namespace ceph {
 namespace logging {
   class Graylog;
+  class JournaldClusterLogger;
 }
 }
 
@@ -52,23 +53,17 @@ private:
     std::map<std::string,std::string> log_to_graylog;
     std::map<std::string,std::string> log_to_graylog_host;
     std::map<std::string,std::string> log_to_graylog_port;
+    std::map<std::string,std::string> log_to_journald;
 
     std::map<std::string, std::shared_ptr<ceph::logging::Graylog>> graylogs;
+    std::unique_ptr<ceph::logging::JournaldClusterLogger> journald;
     uuid_d fsid;
     std::string host;
 
-    void clear() {
-      log_to_syslog.clear();
-      syslog_level.clear();
-      syslog_facility.clear();
-      log_file.clear();
-      expanded_log_file.clear();
-      log_file_level.clear();
-      log_to_graylog.clear();
-      log_to_graylog_host.clear();
-      log_to_graylog_port.clear();
-      graylogs.clear();
-    }
+    log_channel_info();
+    ~log_channel_info();
+
+    void clear();
 
     /** expands $channel meta variable on all maps *EXCEPT* log_file
      *
@@ -110,6 +105,13 @@ private:
     }
 
     std::shared_ptr<ceph::logging::Graylog> get_graylog(const std::string &channel);
+
+    bool do_log_to_journald(const std::string &channel) {
+      return (get_str_map_key(log_to_journald, channel,
+			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
+    }
+
+    ceph::logging::JournaldClusterLogger &get_journald();
   } channels;
 
   void update_log_channels();
@@ -179,6 +181,7 @@ private:
       "mon_cluster_log_to_graylog",
       "mon_cluster_log_to_graylog_host",
       "mon_cluster_log_to_graylog_port",
+      "mon_cluster_log_to_journald",
       NULL
     };
     return KEYS;
