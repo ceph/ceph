@@ -1201,8 +1201,6 @@ done
 %endif
 
 %if 0%{?suse_version}
-# the following setting fixed an OOM condition we once encountered in the OBS
-RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %limit_build -m 2600
 %endif
 
