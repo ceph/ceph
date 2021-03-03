@@ -6,6 +6,7 @@
 
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
+#include "rgw_zone_features.h"
 
 namespace rgw_zone_defaults {
 
@@ -596,13 +597,15 @@ struct RGWZone {
   bool sync_from_all;
   std::set<std::string> sync_from; /* list of zones to sync from */
 
+  rgw::zone_features::set supported_features;
+
   RGWZone()
     : log_meta(false), log_data(false), read_only(false),
       bucket_index_max_shards(default_bucket_index_max_shards),
       sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(name, bl);
     encode(endpoints, bl);
     encode(log_meta, bl);
@@ -614,11 +617,12 @@ struct RGWZone {
     encode(sync_from_all, bl);
     encode(sync_from, bl);
     encode(redirect_zone, bl);
+    encode(supported_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -645,6 +649,9 @@ struct RGWZone {
     if (struct_v >= 7) {
       decode(redirect_zone, bl);
     }
+    if (struct_v >= 8) {
+      decode(supported_features, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -655,6 +662,10 @@ struct RGWZone {
 
   bool syncs_from(const std::string& zone_name) const {
     return (sync_from_all || sync_from.find(zone_name) != sync_from.end());
+  }
+
+  bool supports(std::string_view feature) const {
+    return supported_features.contains(feature);
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)
@@ -902,6 +913,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string realm_id;
 
   rgw_sync_policy_info sync_policy;
+  rgw::zone_features::set enabled_features;
 
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
@@ -919,7 +931,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -933,11 +945,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     RGWSystemMetaObj::encode(bl);
     encode(realm_id, bl);
     encode(sync_policy, bl);
+    encode(enabled_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -960,6 +973,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     }
     if (struct_v >= 5) {
       decode(sync_policy, bl);
+    }
+    if (struct_v >= 6) {
+      decode(enabled_features, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -987,6 +1003,10 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<RGWZoneGroup*>& o);
+
+  bool supports(std::string_view feature) const {
+    return enabled_features.contains(feature);
+  }
 };
 WRITE_CLASS_ENCODER(RGWZoneGroup)
 
