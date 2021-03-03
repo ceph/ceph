@@ -4154,6 +4154,8 @@ int OSD::shutdown()
 {
   if (cct->_conf->osd_fast_shutdown) {
     derr << "*** Immediate shutdown (osd_fast_shutdown=true) ***" << dendl;
+    if (cct->_conf->osd_fast_shutdown_notify_mon)
+      service.prepare_to_stop();
     cct->_log->flush();
     _exit(0);
   }
