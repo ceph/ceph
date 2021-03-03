@@ -27,7 +27,7 @@ tasks:
         RBD_FEATURES: "61"
   - workunit:
       #The line below to change to 'pacific'
-      branch: master
+      branch: pacific
       clients:
         client.1:
           - rbd/notify_master.sh
