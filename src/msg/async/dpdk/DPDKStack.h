@@ -254,12 +254,11 @@ class DPDKStack : public NetworkStack {
   }
 
  public:
-  explicit DPDKStack(CephContext *cct): NetworkStack(cct) {
-    funcs.resize(cct->_conf->ms_async_max_op_threads);
-  }
+  explicit DPDKStack(CephContext *cct): NetworkStack(cct)
+  {}
   virtual bool support_local_listen_table() const override { return true; }
 
-  virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
+  virtual void spawn_worker(std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;
 };
 

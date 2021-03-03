@@ -83,14 +83,3 @@ Async messenger options
 :Type: 64-bit Unsigned Integer
 :Required: No
 :Default: ``3``
-
-
-``ms_async_max_op_threads``
-
-:Description: Maximum number of worker threads used by each Async Messenger instance. 
-              Set to lower values when your machine has limited CPU count, and increase 
-              when your CPUs are underutilized (i. e. one or more of CPUs are
-              constantly on 100% load during I/O operations).
-:Type: 64-bit Unsigned Integer
-:Required: No
-:Default: ``5``

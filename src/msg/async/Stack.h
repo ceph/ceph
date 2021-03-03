@@ -293,11 +293,10 @@ class Worker {
 };
 
 class NetworkStack {
-  unsigned num_workers = 0;
   ceph::spinlock pool_spin;
   bool started = false;
 
-  std::function<void ()> add_thread(unsigned i);
+  std::function<void ()> add_thread(Worker* w);
 
   virtual Worker* create_worker(CephContext *c, unsigned i) = 0;
 
@@ -334,11 +333,11 @@ class NetworkStack {
   }
   void drain();
   unsigned get_num_worker() const {
-    return num_workers;
+    return workers.size();
   }
 
   // direct is used in tests only
-  virtual void spawn_worker(unsigned i, std::function<void ()> &&) = 0;
+  virtual void spawn_worker(std::function<void ()> &&) = 0;
   virtual void join_worker(unsigned i) = 0;
 
   virtual bool is_ready() { return true; };
