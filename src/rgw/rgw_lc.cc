@@ -590,7 +590,7 @@ static int remove_expired_obj(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool
   ACLOwner bucket_owner;
   bucket_owner.set_id(bucket_info.owner);
 
-  return obj->delete_object(dpp, &oc.rctx, obj_owner, bucket_owner, meta.mtime, false, 0,
+  return obj->delete_object(dpp, &oc.rctx, obj_owner, bucket_owner, ceph::real_time(), false, 0,
 			    version_id, null_yield);
 } /* remove_expired_obj */
 
