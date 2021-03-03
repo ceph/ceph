@@ -2886,6 +2886,8 @@ public:
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
 
+    context->find_object(oid, &src_value, snap); 
+
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -2916,8 +2918,8 @@ public:
       // sucess
     } else if (r == -EBUSY) {
       // could fail if snap is not oldest
-    } else if (r == -ENOENT) {
-      // could fail if obj is removed
+    } else if (r == -ENOENT && src_value.deleted()) {
+      // could fail if object is removed
     } else {
       ceph_abort_msg("shouldn't happen");
     }
@@ -2947,6 +2949,7 @@ public:
   string oid;
   std::shared_ptr<int> in_use;
   int snap;
+  ObjectDesc src_value;
 
   TierEvictOp(int n,
 	       RadosTestContext *context,
@@ -2962,6 +2965,9 @@ public:
   {
     context->state_lock.lock();
 
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
     if (0 && !(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
       in_use = context->snaps_in_use.lookup_or_create(snap, snap);
@@ -2974,6 +2980,8 @@ public:
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
+
+    context->find_object(oid, &src_value, snap); 
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -3007,11 +3015,13 @@ public:
       // modifying manifeset object makes existing chunk_map clear
       // as a result, the modified object is no longer manifest object 
       // this casues to return -EINVAL
-    } else if (r == -ENOENT) {
-      // may have raced with a remove?
+    } else if (r == -ENOENT && src_value.deleted()) {
+      // could fail if object is removed
     } else {
       ceph_abort_msg("shouldn't happen");
     }
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
     context->kick();
     done = true;
   }
