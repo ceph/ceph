@@ -316,7 +316,8 @@ int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yi
 {
   int ret = 0;
   RGWUserInfo info;
-  if (ret = rgw_get_user_info_by_uid(dpp, store->ctl()->user, user_id, info, y); ret < 0) {
+  map<string, bufferlist> attrs;
+  if (ret = rgw_get_user_info_by_uid(dpp, store->ctl()->user, user_id, info, y, nullptr, nullptr, nullptr, &attrs); ret < 0) {
     return -ERR_NO_SUCH_ENTITY;
   }
 
@@ -324,7 +325,7 @@ int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yi
 
   RGWObjVersionTracker objv_tracker;
   if (ret = rgw_store_user_info(dpp, store->ctl()->user, info, &info, &objv_tracker, real_time(),
-				false, y); ret < 0) {
+				false, y, &attrs); ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
   return ret;

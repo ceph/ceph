@@ -168,7 +168,7 @@ int rgw_get_user_info_by_uid(const DoutPrefixProvider *dpp,
                              RGWUserCtl *user_ctl,
                              const rgw_user& uid,
                              RGWUserInfo& info,
-			     optional_yield y,
+                             optional_yield y,
                              RGWObjVersionTracker * const objv_tracker,
                              real_time * const pmtime,
                              rgw_cache_entry_info * const cache_info,
@@ -188,14 +188,15 @@ int rgw_get_user_info_by_uid(const DoutPrefixProvider *dpp,
  */
 int rgw_get_user_info_by_email(const DoutPrefixProvider *dpp, 
                                RGWUserCtl *user_ctl, string& email,
-			       RGWUserInfo& info, optional_yield y,
+                               RGWUserInfo& info, optional_yield y,
                                RGWObjVersionTracker *objv_tracker,
-			       real_time *pmtime)
+                               real_time *pmtime, map<string, bufferlist> *pattrs)
 {
   return user_ctl->get_info_by_email(dpp, email, &info, y,
                                      RGWUserCtl::GetParams()
                                      .set_objv_tracker(objv_tracker)
-                                     .set_mtime(pmtime));
+                                     .set_mtime(pmtime)
+                                     .set_attrs(pattrs));
 }
 
 /**
@@ -208,12 +209,13 @@ int rgw_get_user_info_by_swift(const DoutPrefixProvider *dpp,
 			       RGWUserInfo& info,        /* out */
 			       optional_yield y,
 			       RGWObjVersionTracker * const objv_tracker,
-			       real_time * const pmtime)
+			       real_time * const pmtime, map<string, bufferlist> *pattrs)
 {
   return user_ctl->get_info_by_swift(dpp, swift_name, &info, y,
                                      RGWUserCtl::GetParams()
                                      .set_objv_tracker(objv_tracker)
-                                     .set_mtime(pmtime));
+                                     .set_mtime(pmtime)
+                                     .set_attrs(pattrs));
 }
 
 /**
@@ -224,14 +226,15 @@ extern int rgw_get_user_info_by_access_key(const DoutPrefixProvider *dpp,
                                            RGWUserCtl *user_ctl,
                                            const std::string& access_key,
                                            RGWUserInfo& info,
-					   optional_yield y,
-					   RGWObjVersionTracker* objv_tracker,
-                                           real_time *pmtime)
+                                           optional_yield y,
+                                           RGWObjVersionTracker* objv_tracker,
+                                           real_time *pmtime, map<string, bufferlist> *pattrs)
 {
   return user_ctl->get_info_by_access_key(dpp, access_key, &info, y,
                                           RGWUserCtl::GetParams()
                                           .set_objv_tracker(objv_tracker)
-                                          .set_mtime(pmtime));
+                                          .set_mtime(pmtime)
+                                          .set_attrs(pattrs));
 }
 
 static bool char_is_unreserved_url(char c)
@@ -1488,21 +1491,21 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   }
 
   if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
-    found = (rgw_get_user_info_by_uid(dpp, user_ctl, user_id, user_info, y, &op_state.objv) >= 0);
+    found = (rgw_get_user_info_by_uid(dpp, user_ctl, user_id, user_info, y, &op_state.objv, nullptr, nullptr, &op_state.attrs) >= 0);
     op_state.found_by_uid = found;
   }
   if (store->ctx()->_conf.get_val<bool>("rgw_user_unique_email")) {
     if (!user_email.empty() && !found) {
-      found = (rgw_get_user_info_by_email(dpp, user_ctl, user_email, user_info, y, &op_state.objv) >= 0);
+      found = (rgw_get_user_info_by_email(dpp, user_ctl, user_email, user_info, y, &op_state.objv,  nullptr, &op_state.attrs) >= 0);
       op_state.found_by_email = found;
     }
   }
   if (!swift_user.empty() && !found) {
-    found = (rgw_get_user_info_by_swift(dpp, user_ctl, swift_user, user_info, y, &op_state.objv) >= 0);
+    found = (rgw_get_user_info_by_swift(dpp, user_ctl, swift_user, user_info, y, &op_state.objv,  nullptr, &op_state.attrs) >= 0);
     op_state.found_by_key = found;
   }
   if (!access_key.empty() && !found) {
-    found = (rgw_get_user_info_by_access_key(dpp, user_ctl, access_key, user_info, y, &op_state.objv) >= 0);
+    found = (rgw_get_user_info_by_access_key(dpp, user_ctl, access_key, user_info, y, &op_state.objv,  nullptr, &op_state.attrs) >= 0);
     op_state.found_by_key = found;
   }
   
@@ -1562,7 +1565,7 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
   RGWUserInfo *pold_info = (is_populated() ? &old_info : nullptr);
 
   ret = rgw_store_user_info(dpp, user_ctl, user_info, pold_info, &op_state.objv,
-			    real_time(), false, y);
+			    real_time(), false, y, &op_state.attrs);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to store user info");
     return ret;
@@ -2803,7 +2806,8 @@ int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp,
                                             params.objv_tracker,
                                             params.mtime,
                                             y,
-                                            dpp);
+                                            dpp,
+                                            params.attrs);
   });
 }
 
@@ -2819,7 +2823,8 @@ int RGWUserCtl::get_info_by_swift(const DoutPrefixProvider *dpp,
                                             params.objv_tracker,
                                             params.mtime,
                                             y,
-                                            dpp);
+                                            dpp,
+                                            params.attrs);
   });
 }
 
@@ -2835,7 +2840,8 @@ int RGWUserCtl::get_info_by_access_key(const DoutPrefixProvider *dpp,
                                                  params.objv_tracker,
                                                  params.mtime,
                                                  y,
-                                                 dpp);
+                                                 dpp,
+                                                 params.attrs);
   });
 }
 

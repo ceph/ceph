@@ -78,7 +78,7 @@ extern int rgw_store_user_info(const DoutPrefixProvider *dpp,
                                RGWObjVersionTracker *objv_tracker,
                                real_time mtime,
                                bool exclusive,
-			       optional_yield y,
+                               optional_yield y,
                                map<string, bufferlist> *pattrs = nullptr);
 
 /**
@@ -89,7 +89,7 @@ extern int rgw_get_user_info_by_uid(const DoutPrefixProvider *dpp,
                                     RGWUserCtl *user_ctl,
                                     const rgw_user& user_id,
                                     RGWUserInfo& info,
-				    optional_yield y,
+                                    optional_yield y,
                                     RGWObjVersionTracker *objv_tracker = nullptr,
                                     real_time *pmtime                  = nullptr,
                                     rgw_cache_entry_info *cache_info   = nullptr,
@@ -103,7 +103,8 @@ extern int rgw_get_user_info_by_email(const DoutPrefixProvider *dpp,
                                       string& email, RGWUserInfo& info,
 				      optional_yield y,
                                       RGWObjVersionTracker *objv_tracker = NULL,
-                                      real_time *pmtime = nullptr);
+                                      real_time *pmtime = nullptr,
+                                      map<string, bufferlist> *pattrs = nullptr);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
@@ -112,9 +113,10 @@ extern int rgw_get_user_info_by_swift(const DoutPrefixProvider *dpp,
                                       RGWUserCtl *user_ctl,
                                       const string& swift_name,
                                       RGWUserInfo& info,        /* out */
-				      optional_yield y,
+                                      optional_yield y,
                                       RGWObjVersionTracker *objv_tracker = nullptr,
-                                      real_time *pmtime = nullptr);
+                                      real_time *pmtime = nullptr,
+                                      map<string, bufferlist> *pattrs = nullptr);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
@@ -123,9 +125,10 @@ extern int rgw_get_user_info_by_access_key(const DoutPrefixProvider *dpp,
                                            RGWUserCtl *user_ctl,
                                            const std::string& access_key,
                                            RGWUserInfo& info,
-					   optional_yield y,
-					   RGWObjVersionTracker* objv_tracker = nullptr,
-                                           real_time* pmtime = nullptr);
+                                           optional_yield y,
+                                           RGWObjVersionTracker* objv_tracker = nullptr,
+                                           real_time* pmtime = nullptr,
+                                           map<string, bufferlist> *pattrs = nullptr);
 
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
@@ -237,6 +240,7 @@ struct RGWUserAdminOpState {
 
   list<string> placement_tags;  // user default placement_tags
   bool placement_tags_specified;
+  map<string, bufferlist> attrs;
 
   void set_access_key(const std::string& access_key) {
     if (access_key.empty())
