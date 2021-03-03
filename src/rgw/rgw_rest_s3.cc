@@ -1888,24 +1888,32 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
 
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+  }
+  if (op_ret){
+    set_req_state_err(s, op_ret);
+  }
   dump_errno(s);
   end_header(s, this);
   dump_start(s);
 
-  RGWZoneGroup zonegroup;
-  string api_name;
-
-  int ret = store->svc()->zone->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
-  if (ret >= 0) {
-    api_name = zonegroup.api_name;
-  } else  {
-    if (s->bucket->get_info().zonegroup != "default") {
-      api_name = s->bucket->get_info().zonegroup;
+  if (op_ret != -ERR_NO_SUCH_BUCKET){
+    RGWZoneGroup zonegroup;
+    string api_name;
+    
+    int ret = store->svc()->zone->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
+    if (ret >= 0) {
+      api_name = zonegroup.api_name;
+    } else  {
+      if (s->bucket->get_info().zonegroup != "default") {
+        api_name = s->bucket->get_info().zonegroup;
+      }
     }
-  }
 
-  s->formatter->dump_format_ns("LocationConstraint", XMLNS_AWS_S3,
-			       "%s", api_name.c_str());
+    s->formatter->dump_format_ns("LocationConstraint", XMLNS_AWS_S3,
+              "%s", api_name.c_str());
+  }
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
