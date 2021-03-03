@@ -1,7 +1,7 @@
 import ceph_module  # noqa
 
 from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
-    NamedTuple, Sequence, Union, TYPE_CHECKING
+    Mapping, NamedTuple, Sequence, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -378,7 +378,10 @@ class CLICommand(object):
             kwargs[k] = CephArgtype.cast_to(tp, v)
         return kwargs
 
-    def call(self, mgr: Any, cmd_dict: Dict[str, Any], inbuf: Optional[str] = None) -> HandleCommandResult:
+    def call(self,
+             mgr: Any,
+             cmd_dict: Dict[str, Any],
+             inbuf: Optional[str] = None) -> HandleCommandResult:
         kwargs = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
             kwargs['inbuf'] = inbuf
@@ -786,6 +789,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
+
+
+HealthChecksT = Mapping[str, Mapping[str, Union[int, str, Sequence[str]]]]
 
 
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
@@ -1281,7 +1287,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         self._ceph_send_command(result, svc_type, svc_id, command, tag, inbuf)
 
-    def set_health_checks(self, checks: Dict[str, Dict[str, Sequence[str]]]) -> None:
+    def set_health_checks(self, checks: HealthChecksT) -> None:
         """
         Set the module's current map of health checks.  Argument is a
         dict of check names to info, in this form:
@@ -1609,6 +1615,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_set_uri(uri)
 
+    def set_device_wear_level(self, devid: str, wear_level: float) -> None:
+        return self._ceph_set_device_wear_level(devid, wear_level)
+
     def have_mon_connection(self) -> bool:
         """
         Check whether this ceph-mgr daemon has an open connection
@@ -1619,7 +1628,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
-    def update_progress_event(self, evid: str, desc: str, progress: float, add_to_ceph_s: bool) -> None:
+    def update_progress_event(self,
+                              evid: str,
+                              desc: str,
+                              progress: float,
+                              add_to_ceph_s: bool) -> None:
         return self._ceph_update_progress_event(evid, desc, progress, add_to_ceph_s)
 
     def complete_progress_event(self, evid: str) -> None:
