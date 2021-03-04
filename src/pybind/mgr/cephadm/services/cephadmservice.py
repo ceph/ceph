@@ -225,7 +225,7 @@ class CephadmService(metaclass=ABCMeta):
     def ok_to_stop_osd(
             self,
             osds: List[str],
-            known: Optional[List[str]] = None,
+            known: Optional[List[str]] = None,  # output argument
             force: bool = False) -> HandleCommandResult:
         r = HandleCommandResult(*self.mgr.mon_command({
             'prefix': "osd ok-to-stop",
@@ -249,10 +249,12 @@ class CephadmService(metaclass=ABCMeta):
             ''
         )
 
-    def ok_to_stop(self,
-                   daemon_ids: List[str],
-                   force: bool = False,
-                   known: Optional[List[str]] = None) -> HandleCommandResult:
+    def ok_to_stop(
+            self,
+            daemon_ids: List[str],
+            force: bool = False,
+            known: Optional[List[str]] = None    # output argument
+    ) -> HandleCommandResult:
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {",".join(names)}'
         err = f'It is NOT safe to stop {",".join(names)} at this time'
@@ -577,10 +579,12 @@ class MgrService(CephService):
         num = len(mgr_map.get('standbys'))
         return bool(num)
 
-    def ok_to_stop(self,
-                   daemon_ids: List[str],
-                   force: bool = False,
-                   known: Optional[List[str]] = None) -> HandleCommandResult:
+    def ok_to_stop(
+            self,
+            daemon_ids: List[str],
+            force: bool = False,
+            known: Optional[List[str]] = None  # output argument
+    ) -> HandleCommandResult:
         # ok to stop if there is more than 1 mgr and not trying to stop the active mgr
 
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Mgr', 1, True)
@@ -866,10 +870,12 @@ class RgwService(CephService):
                 raise OrchestratorError(err)
             self.mgr.log.info('updated period')
 
-    def ok_to_stop(self,
-                   daemon_ids: List[str],
-                   force: bool = False,
-                   known: Optional[List[str]] = None) -> HandleCommandResult:
+    def ok_to_stop(
+            self,
+            daemon_ids: List[str],
+            force: bool = False,
+            known: Optional[List[str]] = None  # output argument
+    ) -> HandleCommandResult:
         # if load balancer (ha-rgw) is present block if only 1 daemon up otherwise ok
         # if no load balancer, warn if > 1 daemon, block if only 1 daemon
         def ha_rgw_present() -> bool:
@@ -920,10 +926,12 @@ class RbdMirrorService(CephService):
 
         return daemon_spec
 
-    def ok_to_stop(self,
-                   daemon_ids: List[str],
-                   force: bool = False,
-                   known: Optional[List[str]] = None) -> HandleCommandResult:
+    def ok_to_stop(
+            self,
+            daemon_ids: List[str],
+            force: bool = False,
+            known: Optional[List[str]] = None  # output argument
+    ) -> HandleCommandResult:
         # if only 1 rbd-mirror, alert user (this is not passable with --force)
         warn, warn_message = self._enough_daemons_to_stop(
             self.TYPE, daemon_ids, 'Rbdmirror', 1, True)
