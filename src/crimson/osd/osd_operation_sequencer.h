@@ -59,8 +59,8 @@ public:
         return last_unblocked == prev_op;
       });
     }
-    return have_green_light.then([this_op, do_op=std::move(do_op), this] {
-      auto result = seastar::futurize_invoke(do_op);
+    return have_green_light.then([this_op, do_op=std::move(do_op), this]() mutable {
+      auto result = seastar::futurize_invoke(std::move(do_op));
       // unblock the next one
       last_unblocked = this_op;
       unblocked.broadcast();
