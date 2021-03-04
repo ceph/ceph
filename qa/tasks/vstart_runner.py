@@ -53,6 +53,11 @@ from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
 import six
 import logging
+try:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+except:
+    pass
 
 def init_log():
     global log
@@ -210,13 +215,13 @@ class LocalRemoteProcess(object):
             return False
 
     def kill(self):
-        log.info("kill ")
+        log.debug("kill ")
         if self.subproc.pid and not self.finished:
-            log.info("kill: killing pid {0} ({1})".format(
+            log.debug("kill: killing pid {0} ({1})".format(
                 self.subproc.pid, self.args))
             safe_kill(self.subproc.pid)
         else:
-            log.info("kill: already terminated ({0})".format(self.args))
+            log.debug("kill: already terminated ({0})".format(self.args))
 
     @property
     def stdin(self):
@@ -360,7 +365,7 @@ class LocalRemote(object):
                     args[0]
                 ))
 
-        log.info("Running {0}".format(args))
+        log.debug("Running {0}".format(args))
 
         if shell:
             subproc = subprocess.Popen(quote(args),
@@ -454,13 +459,13 @@ class LocalDaemon(object):
 
         for line in lines:
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
-                log.info("Found ps line for daemon: {0}".format(line))
+                log.debug("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[0])
         if opt_log_ps_output:
-            log.info("No match for {0} {1}: {2}".format(
+            log.debug("No match for {0} {1}: {2}".format(
                 self.daemon_type, self.daemon_id, ps_txt))
         else:
-            log.info("No match for {0} {1}".format(self.daemon_type,
+            log.debug("No match for {0} {1}".format(self.daemon_type,
                      self.daemon_id))
             return None
 
@@ -478,14 +483,14 @@ class LocalDaemon(object):
             return
 
         pid = self._get_pid()
-        log.info("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
+        log.debug("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGTERM)
 
         waited = 0
         while pid is not None:
             new_pid = self._get_pid()
             if new_pid is not None and new_pid != pid:
-                log.info("Killing new PID {0}".format(new_pid))
+                log.debug("Killing new PID {0}".format(new_pid))
                 pid = new_pid
                 os.kill(pid, signal.SIGTERM)
 
@@ -515,7 +520,7 @@ class LocalDaemon(object):
 
         os.kill(self._get_pid(), sig)
         if not silent:
-            log.info("Sent signal {0} to {1}.{2}".format(sig, self.daemon_type, self.daemon_id))
+            log.debug("Sent signal {0} to {1}.{2}".format(sig, self.daemon_type, self.daemon_id))
 
 
 def safe_kill(pid):
@@ -617,9 +622,9 @@ class LocalKernelMount(KernelMount):
             # Previous mount existed, reuse the old name
             name = self.fs.name
         self.fs = LocalFilesystem(self.ctx, name=name)
-        log.info('Wait for MDS to reach steady state...')
+        log.debug('Wait for MDS to reach steady state...')
         self.fs.wait_for_daemons()
-        log.info('Ready to start {}...'.format(type(self).__name__))
+        log.debug('Ready to start {}...'.format(type(self).__name__))
 
     @property
     def _prefix(self):
@@ -778,9 +783,9 @@ class LocalFuseMount(FuseMount):
             # Previous mount existed, reuse the old name
             name = self.fs.name
         self.fs = LocalFilesystem(self.ctx, name=name)
-        log.info('Wait for MDS to reach steady state...')
+        log.debug('Wait for MDS to reach steady state...')
         self.fs.wait_for_daemons()
-        log.info('Ready to start {}...'.format(type(self).__name__))
+        log.debug('Ready to start {}...'.format(type(self).__name__))
 
     @property
     def _prefix(self):
@@ -836,7 +841,7 @@ class LocalFuseMount(FuseMount):
         # Before starting ceph-fuse process, note the contents of
         # /sys/fs/fuse/connections
         pre_mount_conns = list_connections()
-        log.info("Pre-mount connections: {0}".format(pre_mount_conns))
+        log.debug("Pre-mount connections: {0}".format(pre_mount_conns))
 
         prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
@@ -858,7 +863,7 @@ class LocalFuseMount(FuseMount):
                                                 self.mountpoint
                                             ], wait=False)
 
-        log.info("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
+        log.debug("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
         # Wait for the connection reference to appear in /sys
         waited = 0
@@ -876,7 +881,7 @@ class LocalFuseMount(FuseMount):
                 ))
             post_mount_conns = list_connections()
 
-        log.info("Post-mount connections: {0}".format(post_mount_conns))
+        log.debug("Post-mount connections: {0}".format(post_mount_conns))
 
         # Record our fuse connection number so that we can use it when
         # forcing an unmount
@@ -912,7 +917,7 @@ class LocalCephManager(CephManager):
         # certain teuthology tests want to run tasks in parallel
         self.lock = threading.RLock()
 
-        self.log = lambda x: log.info(x)
+        self.log = lambda x: log.debug(x)
 
         # Don't bother constructing a map of pools: it should be empty
         # at test cluster start, and in any case it would be out of date
@@ -1054,7 +1059,7 @@ class LocalCephCluster(CephCluster):
             existing_str += "\n[{0}]\n".format(subsys)
             for key, val in kvs.items():
                 # Comment out existing instance if it exists
-                log.info("Searching for existing instance {0}/{1}".format(
+                log.debug("Searching for existing instance {0}/{1}".format(
                     key, subsys
                 ))
                 existing_section = re.search("^\[{0}\]$([\n]|[^\[])+".format(
@@ -1066,7 +1071,7 @@ class LocalCephCluster(CephCluster):
                     existing_val = re.search("^\s*[^#]({0}) =".format(key), section_str, re.MULTILINE)
                     if existing_val:
                         start = existing_section.start() + existing_val.start(1)
-                        log.info("Found string to replace at {0}".format(
+                        log.debug("Found string to replace at {0}".format(
                             start
                         ))
                         existing_str = existing_str[0:start] + "#" + existing_str[start:]
@@ -1133,7 +1138,7 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
 
         self.mds_ids = list(self.mds_ids)
 
-        log.info("Discovered MDS IDs: {0}".format(self.mds_ids))
+        log.debug("Discovered MDS IDs: {0}".format(self.mds_ids))
 
         self.mon_manager = LocalCephManager()
 
@@ -1190,7 +1195,7 @@ class InteractiveFailureResult(unittest.TextTestResult):
 
 
 def enumerate_methods(s):
-    log.info("e: {0}".format(s))
+    log.debug("e: {0}".format(s))
     for t in s._tests:
         if isinstance(t, suite.BaseTestSuite):
             for sub in enumerate_methods(t):
@@ -1201,15 +1206,15 @@ def enumerate_methods(s):
 
 def load_tests(modules, loader):
     if modules:
-        log.info("Executing modules: {0}".format(modules))
+        log.debug("Executing modules: {0}".format(modules))
         module_suites = []
         for mod_name in modules:
             # Test names like cephfs.test_auto_repair
             module_suites.append(loader.loadTestsFromName(mod_name))
-        log.info("Loaded: {0}".format(list(module_suites)))
+        log.debug("Loaded: {0}".format(list(module_suites)))
         return suite.TestSuite(module_suites)
     else:
-        log.info("Executing all cephfs tests")
+        log.debug("Executing all cephfs tests")
         return loader.discover(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "cephfs")
         )
@@ -1292,7 +1297,7 @@ def clear_old_log():
         with open(logpath, 'w') as logfile:
             logfile.write('')
         init_log()
-        log.info('logging in a fresh file now...')
+        log.debug('logging in a fresh file now...')
 
 def exec_test():
     # Parse arguments
@@ -1509,7 +1514,7 @@ def exec_test():
             if not is_named:
                 victims.append((case, method))
 
-    log.info("Disabling {0} tests because of is_for_teuthology or needs_trimming".format(len(victims)))
+    log.debug("Disabling {0} tests because of is_for_teuthology or needs_trimming".format(len(victims)))
     for s, method in victims:
         s._tests.remove(method)
 
