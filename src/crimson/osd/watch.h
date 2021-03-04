@@ -107,6 +107,7 @@ struct notify_reply_t {
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 
 class Notify {
   std::set<WatchRef> watchers;
