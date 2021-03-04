@@ -32,5 +32,5 @@ EOF
 ./bin/ceph mon set_location a datacenter=site1
 ./bin/ceph mon set_location b datacenter=site2
 ./bin/ceph mon set_location c datacenter=site3
-./bin/ceph osd pool create test_stretch1 replicated
+./bin/ceph osd pool create test_stretch1 300 300 replicated
 ./bin/ceph mon enable_stretch_mode c stretch_rule datacenter
