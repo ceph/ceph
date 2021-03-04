@@ -134,12 +134,13 @@ WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& c
   return false;
 }
 
+template <typename T>
 void
-WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, std::unordered_multimap<string, string>& token) const
+WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, T& t) const
 {
   string s_val;
-  jwt::claim::type t = c.get_type();
-  switch(t) {
+  jwt::claim::type c_type = c.get_type();
+  switch(c_type) {
     case jwt::claim::type::null:
       break;
     case jwt::claim::type::boolean:
@@ -147,20 +148,20 @@ WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, std::
     case jwt::claim::type::int64:
     {
       s_val = c.to_json().serialize();
-      token.emplace(key, s_val);
+      t.emplace(std::make_pair(key, s_val));
       break;
     }
     case jwt::claim::type::string:
     {
       s_val = c.to_json().to_str();
-      token.emplace(key, s_val);
+      t.emplace(std::make_pair(key, s_val));
       break;
     }
     case jwt::claim::type::array:
     {
       const picojson::array& arr = c.as_array();
       for (auto& a : arr) {
-        recurse_and_insert(key, jwt::claim(a), token);
+        recurse_and_insert(key, jwt::claim(a), t);
       }
       break;
     }
@@ -168,7 +169,7 @@ WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, std::
     {
       const picojson::object& obj = c.as_object();
       for (auto& m : obj) {
-        recurse_and_insert(m.first, jwt::claim(m.second), token);
+        recurse_and_insert(m.first, jwt::claim(m.second), t);
       }
       break;
     }
@@ -177,24 +178,28 @@ WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, std::
 }
 
 //Extract all token claims so that they can be later used in the Condition element of Role's trust policy
-std::unordered_multimap<string,string>
+WebTokenEngine::token_t
 WebTokenEngine::get_token_claims(const jwt::decoded_jwt& decoded) const
 {
-  std::unordered_multimap<string, string> token;
+  WebTokenEngine::token_t token;
   const auto& claims = decoded.get_payload_claims();
 
   for (auto& c : claims) {
+    if (c.first == string(princTagsNamespace)) {
+      continue;
+    }
     recurse_and_insert(c.first, c.second, token);
   }
   return token;
 }
 
 //Offline validation of incoming Web Token which is a signed JWT (JSON Web Token)
-boost::optional<WebTokenEngine::token_t>
+std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
 WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s,
 			     optional_yield y) const
 {
   WebTokenEngine::token_t t;
+  WebTokenEngine::principal_tags_t principal_tags;
   try {
     const auto& decoded = jwt::decode(token);
 
@@ -224,11 +229,24 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (decoded.has_payload_claim("azp")) {
       azp = decoded.get_payload_claim("azp").as_string();
     }
+
     string role_arn = s->info.args.get("RoleArn");
     auto provider = get_provider(dpp, role_arn, iss);
     if (! provider) {
       ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw -EACCES;
+    }
+    if (decoded.has_payload_claim(string(princTagsNamespace))) {
+      auto& cl = decoded.get_payload_claim(string(princTagsNamespace));
+      if (cl.get_type() == jwt::claim::type::object || cl.get_type() == jwt::claim::type::array) {
+        recurse_and_insert("dummy", cl, principal_tags);
+        for (auto it : principal_tags) {
+          ldpp_dout(dpp, 5) << "Key: " << it.first << " Value: " << it.second << dendl;
+        }
+      } else {
+        ldpp_dout(dpp, 0) << "Malformed principal tags" << cl.as_string() << dendl;
+        throw -EINVAL;
+      }
     }
     vector<string> client_ids = provider->get_client_ids();
     vector<string> thumbprints = provider->get_thumbprints();
@@ -254,20 +272,20 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
         throw -EACCES;
       }
     } else {
-      return boost::none;
+      return {boost::none, boost::none};
     }
   } catch (int error) {
     if (error == -EACCES) {
       throw -EACCES;
     }
     ldpp_dout(dpp, 5) << "Invalid JWT token" << dendl;
-    return boost::none;
+    return {boost::none, boost::none};
   }
   catch (...) {
     ldpp_dout(dpp, 5) << "Invalid JWT token" << dendl;
-    return boost::none;
+    return {boost::none, boost::none};
   }
-  return t;
+  return {t, principal_tags};
 }
 
 std::string
@@ -440,31 +458,28 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
                               const req_state* const s,
 			      optional_yield y) const
 {
-  boost::optional<WebTokenEngine::token_t> t;
-
   if (! is_applicable(token)) {
     return result_t::deny();
   }
 
   try {
-    t = get_from_jwt(dpp, token, s, y);
+    auto [t, princ_tags] = get_from_jwt(dpp, token, s, y);
+    if (t) {
+      string role_session = s->info.args.get("RoleSessionName");
+      if (role_session.empty()) {
+        ldout(s->cct, 0) << "Role Session Name is empty " << dendl;
+        return result_t::deny(-EACCES);
+      }
+      string role_arn = s->info.args.get("RoleArn");
+      string role_tenant = get_role_tenant(role_arn);
+      auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t, princ_tags);
+      return result_t::grant(std::move(apl));
+    }
+    return result_t::deny(-EACCES);
   }
   catch (...) {
     return result_t::deny(-EACCES);
   }
-
-  if (t) {
-    string role_session = s->info.args.get("RoleSessionName");
-    if (role_session.empty()) {
-      ldpp_dout(dpp, 0) << "Role Session Name is empty " << dendl;
-      return result_t::deny(-EACCES);
-    }
-    string role_arn = s->info.args.get("RoleArn");
-    string role_tenant = get_role_tenant(role_arn);
-    auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t);
-    return result_t::grant(std::move(apl));
-  }
-  return result_t::deny(-EACCES);
 }
 
 } // namespace rgw::auth::sts
@@ -487,16 +502,23 @@ int RGWREST_STS::verify_permission(optional_yield y)
   //TODO - This step should be part of Role Creation
   try {
     const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
-    //Check if the input role arn is there as one of the Principals in the policy,
-    // If yes, then return 0, else -EPERM
-    auto p_res = p.eval_principal(s->env, *s->auth.identity);
-    if (p_res == rgw::IAM::Effect::Deny) {
-      ldpp_dout(this, 0) << "evaluating principal returned deny" << dendl;
-      return -EPERM;
+    if (!s->principal_tags.empty()) {
+      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, rgw::ARN());
+      if (res != rgw::IAM::Effect::Allow) {
+        ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
+        return -EPERM;
+      }
     }
-    auto c_res = p.eval_conditions(s->env);
-    if (c_res == rgw::IAM::Effect::Deny) {
-      ldpp_dout(this, 0) << "evaluating condition returned deny" << dendl;
+    uint64_t op;
+    if (get_type() == RGW_STS_ASSUME_ROLE_WEB_IDENTITY) {
+      op = rgw::IAM::stsAssumeRoleWithWebIdentity;
+    } else {
+      op = rgw::IAM::stsAssumeRole;
+    }
+
+    auto res = p.eval(s->env, *s->auth.identity, op, rgw::ARN());
+    if (res != rgw::IAM::Effect::Allow) {
+      ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;
     }
   } catch (rgw::IAM::PolicyParseException& e) {

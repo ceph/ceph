@@ -448,6 +448,37 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
     condition = idp_url + ":" + claim.first;
     s->env.emplace(condition, claim.second);
   }
+
+  if (principal_tags) {
+    constexpr size_t KEY_SIZE = 128, VAL_SIZE = 256;
+    std::set<std::pair<string, string>> p_tags = principal_tags.get();
+    for (auto& it : p_tags) {
+      string key = it.first;
+      string val = it.second;
+      if (key.find("aws:") == 0 || val.find("aws:") == 0) {
+        ldpp_dout(dpp, 0) << "ERROR: Tag/Value can't start with aws:, hence skipping it" << dendl;
+        continue;
+      }
+      if (key.size() > KEY_SIZE || val.size() > VAL_SIZE)  {
+        ldpp_dout(dpp, 0) << "ERROR: Invalid tag/value size, hence skipping it" << dendl;
+        continue;
+      }
+      std::string p_key = "aws:PrincipalTag/";
+      p_key.append(key);
+      s->principal_tags.emplace_back(std::make_pair(p_key, val));
+      ldpp_dout(dpp, 10) << "Principal Tag Key: " << p_key << " Value: " << val << dendl;
+
+      std::string e_key = "aws:RequestTag/";
+      e_key.append(key);
+      s->env.emplace(e_key, val);
+      ldpp_dout(dpp, 10) << "RGW Env Tag Key: " << e_key << " Value: " << val << dendl;
+
+      if (s->principal_tags.size() == 50) {
+        ldpp_dout(dpp, 0) << "ERROR: Number of tag/value pairs exceeding 50, hence skipping the rest" << dendl;
+        break;
+      }
+    }
+  }
 }
 
 bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
