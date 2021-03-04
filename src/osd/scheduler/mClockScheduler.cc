@@ -47,6 +47,7 @@ mClockScheduler::mClockScheduler(CephContext *cct,
   ceph_assert(num_shards > 0);
   set_max_osd_capacity();
   set_osd_mclock_cost_per_io();
+  set_osd_mclock_cost_per_byte();
   set_mclock_profile();
   enable_mclock_profile_settings();
   client_registry.update_from_config(cct->_conf);
@@ -460,9 +461,12 @@ const char** mClockScheduler::get_tracked_conf_keys() const
     "osd_mclock_scheduler_background_best_effort_res",
     "osd_mclock_scheduler_background_best_effort_wgt",
     "osd_mclock_scheduler_background_best_effort_lim",
-    "osd_mclock_cost_per_io_msec",
-    "osd_mclock_cost_per_io_msec_hdd",
-    "osd_mclock_cost_per_io_msec_ssd",
+    "osd_mclock_cost_per_io_usec",
+    "osd_mclock_cost_per_io_usec_hdd",
+    "osd_mclock_cost_per_io_usec_ssd",
+    "osd_mclock_cost_per_byte_usec",
+    "osd_mclock_cost_per_byte_usec_hdd",
+    "osd_mclock_cost_per_byte_usec_ssd",
     "osd_mclock_max_capacity_iops",
     "osd_mclock_max_capacity_iops_hdd",
     "osd_mclock_max_capacity_iops_ssd",
@@ -476,10 +480,15 @@ void mClockScheduler::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string> &changed)
 {
-  if (changed.count("osd_mclock_cost_per_io_msec") ||
-      changed.count("osd_mclock_cost_per_io_msec_hdd") ||
-      changed.count("osd_mclock_cost_per_io_msec_ssd")) {
+  if (changed.count("osd_mclock_cost_per_io_usec") ||
+      changed.count("osd_mclock_cost_per_io_usec_hdd") ||
+      changed.count("osd_mclock_cost_per_io_usec_ssd")) {
     set_osd_mclock_cost_per_io();
+  }
+  if (changed.count("osd_mclock_cost_per_byte_usec") ||
+      changed.count("osd_mclock_cost_per_byte_usec_hdd") ||
+      changed.count("osd_mclock_cost_per_byte_usec_ssd")) {
+    set_osd_mclock_cost_per_byte();
   }
   if (changed.count("osd_mclock_max_capacity_iops") ||
       changed.count("osd_mclock_max_capacity_iops_hdd") ||
