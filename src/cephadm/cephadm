@@ -2722,7 +2722,7 @@ def command_inspect_image():
     # type: () -> int
     out, err, ret = call_throws([
         container_path, 'inspect',
-        '--format', '{{.ID}},{{json .RepoDigests}}',
+        '--format', '{{.ID}},{{.RepoDigests}}',
         args.image])
     if ret:
         return errno.ENOENT
@@ -2744,7 +2744,7 @@ def get_image_info_from_inspect(out, image):
         'image_id': normalize_container_id(image_id)
     }
     if digests:
-        json_digests = json.loads(digests)
+        json_digests = digests[1:-1].split(' ')
         if json_digests:
             r['repo_digest'] = json_digests[0]
     return r
