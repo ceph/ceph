@@ -386,6 +386,21 @@ void mClockScheduler::set_global_recovery_options()
   cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
   cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
 
+  // Disable delete sleep
+  cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
+  cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
+  cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
+  cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
+
+  // Disable snap trim sleep
+  cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));
+  cct->_conf.set_val("osd_snap_trim_sleep_hdd", std::to_string(0));
+  cct->_conf.set_val("osd_snap_trim_sleep_ssd", std::to_string(0));
+  cct->_conf.set_val("osd_snap_trim_sleep_hybrid", std::to_string(0));
+
+  // Disable scrub sleep
+  cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
+
   // Apply the changes
   cct->_conf.apply_changes(nullptr);
 }
