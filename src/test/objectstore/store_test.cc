@@ -15,6 +15,7 @@
 #include <glob.h>
 #include <stdio.h>
 #include <string.h>
+#include <set>
 #include <iostream>
 #include <time.h>
 #include <sys/mount.h>
@@ -139,6 +140,7 @@ public:
   void doSyntheticTest(
     int num_ops,
     uint64_t max_obj, uint64_t max_wr, uint64_t align);
+  void doOnodeCacheTrimTest();
 };
 
 class StoreTestDeferredSetup : public StoreTest {
@@ -8088,6 +8090,142 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
       ASSERT_LE(logger->get(l_bluefs_slow_used_bytes), 300 * 1024 * 1024); // see SpilloverTest for 300MB choice rationale
     }
   );
+}
+
+void StoreTest::doOnodeCacheTrimTest() {
+  int r;
+  coll_t cid(spg_t(pg_t(0, 1), shard_id_t(1)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  vector<ghobject_t> all;
+  const size_t max_onodes = 2000;
+  const size_t max_pinned_onodes = 200;
+  const size_t max_cached_onodes = max_pinned_onodes / 2;
+  const PerfCounters* logger = store->get_perf_counters();
+  size_t onodes;
+  {
+    ObjectStore::Transaction t;
+    for (size_t i = 0; i < max_onodes; ++i) {
+      string name("object_");
+      name += stringify(i);
+      ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)),
+		      ghobject_t::NO_GEN, shard_id_t(1));
+      hoid.hobj.pool = 1;
+      all.emplace_back(hoid);
+      t.touch(cid, hoid);
+      if ((i % 100) == 0) {
+        cerr << "Creating object " << hoid << std::endl;
+      }
+    }
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  for (size_t i = 0; i < 5; ++i) {
+    onodes = logger->get(l_bluestore_onodes);
+    if (onodes == max_onodes)
+      break;
+    sleep(1);
+  }
+  ceph_assert(onodes == max_onodes);
+
+  SetVal(g_conf(), "bluestore_debug_max_cached_onodes",
+    stringify(max_cached_onodes).c_str());
+
+  for (size_t i = 0; i < 5; ++i) {
+    cerr << " remaining onodes = "
+	 << logger->get(l_bluestore_onodes)
+	 << std::endl;
+    sleep(1);
+  }
+  onodes = logger->get(l_bluestore_onodes);
+  ceph_assert(onodes == max_cached_onodes);
+
+
+  // revert cache size cap
+  SetVal(g_conf(), "bluestore_debug_max_cached_onodes", "0");
+
+  // pin some onodes
+  vector <ObjectMap::ObjectMapIterator> omap_iterators;
+  for (size_t i = 0; i < max_pinned_onodes; ++i) {
+    omap_iterators.emplace_back(store->get_omap_iterator(ch, all[i]));
+  }
+  // "warm" non-pinned onodes
+  {
+    ObjectStore::Transaction t;
+    for (size_t i = max_pinned_onodes; i < max_onodes; ++i) {
+      t.touch(cid, all[i]);
+    }
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  for (size_t i = 0; i < 5; ++i) {
+    onodes = logger->get(l_bluestore_onodes);
+    if (onodes == max_onodes)
+      break;
+    sleep(1);
+  }
+  ceph_assert(onodes == max_onodes);
+
+  SetVal(g_conf(), "bluestore_debug_max_cached_onodes",
+    stringify(max_cached_onodes).c_str());
+
+  for (size_t i = 0; i < 5; ++i) {
+    cerr << " remaining onodes = "
+	 << logger->get(l_bluestore_onodes)
+	 << std::endl;
+    sleep(1);
+  }
+  onodes = logger->get(l_bluestore_onodes);
+  ceph_assert(onodes == max_pinned_onodes);
+
+  // unpin onodes
+  omap_iterators.resize(0);
+
+  for (size_t i = 0; i < 5; ++i) {
+    cerr << " remaining onodes = "
+	 << logger->get(l_bluestore_onodes)
+	 << std::endl;
+    sleep(1);
+  }
+  onodes = logger->get(l_bluestore_onodes);
+  ceph_assert(onodes == max_cached_onodes);
+
+  {
+    ObjectStore::Transaction t;
+    for (size_t i = 0; i < max_onodes; ++i)
+      t.remove(cid, all[i]);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, OnodeCacheTrim2QTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_cache_type", "2q");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+  doOnodeCacheTrimTest();
+}
+
+TEST_P(StoreTestSpecificAUSize, OnodeCacheTrimLRUTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_cache_type", "lru");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+  doOnodeCacheTrimTest();
 }
 
 #endif  // WITH_BLUESTORE

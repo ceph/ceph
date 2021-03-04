@@ -1170,12 +1170,14 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   }
 
   // onodes
-  if (onode_max >= onode_lru.size()) {
+  if (onode_max >= onode_lru.size() ||
+      last_pinned == onode_lru.begin()) {
     return; // don't even try
   }
   uint64_t num = onode_lru.size() - onode_max;
 
-  auto p = onode_lru.end();
+  auto p = last_pinned;
+  last_pinned = onode_lru.end();
   ceph_assert(p != onode_lru.begin());
   --p;
   int skipped = 0;
@@ -1187,8 +1189,9 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       dout(20) << __func__ << "  " << o->oid << " has " << refs
 	       << " refs, skipping" << dendl;
       if (++skipped >= max_skipped) {
-        dout(20) << __func__ << " maximum skip pinned reached; stopping with "
+        dout(15) << __func__ << " maximum skip pinned reached; stopping with "
                  << num << " left to trim" << dendl;
+	last_pinned = p;
         break;
       }
 
@@ -1202,10 +1205,11 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
     dout(30) << __func__ << "  rm " << o->oid << dendl;
     if (p != onode_lru.begin()) {
-      onode_lru.erase(p--);
+      _onode_lru_erase(p--);
     } else {
-      onode_lru.erase(p);
-      ceph_assert(num == 1);
+      _onode_lru_erase(p);
+      num = 1; // fake num to end the loop
+               // in we might still have some pinned onodes
     }
     o->get();  // paranoia
     o->c->onode_map.remove(o->oid);
@@ -1243,7 +1247,7 @@ void BlueStore::LRUCache::_audit(const char *when)
 void BlueStore::TwoQCache::_touch_onode(OnodeRef& o)
 {
   auto p = onode_lru.iterator_to(*o);
-  onode_lru.erase(p);
+  _onode_lru_erase(p);
   onode_lru.push_front(*o);
 }
 
@@ -1467,12 +1471,14 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   }
 
   // onodes
-  if (onode_max >= onode_lru.size()) {
+  if (onode_max >= onode_lru.size() ||
+     last_pinned == onode_lru.begin()) {
     return; // don't even try
   }
   uint64_t num = onode_lru.size() - onode_max;
 
-  auto p = onode_lru.end();
+  auto p = last_pinned;
+  last_pinned = onode_lru.end();
   ceph_assert(p != onode_lru.begin());
   --p;
   int skipped = 0;
@@ -1485,8 +1491,9 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       dout(20) << __func__ << "  " << o->oid << " has " << refs
 	       << " refs; skipping" << dendl;
       if (++skipped >= max_skipped) {
-        dout(20) << __func__ << " maximum skip pinned reached; stopping with "
+        dout(15) << __func__ << " maximum skip pinned reached; stopping with "
                  << num << " left to trim" << dendl;
+        last_pinned = p;
         break;
       }
 
@@ -1500,10 +1507,11 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
     dout(30) << __func__ << " " << o->oid << " num=" << num <<" lru size="<<onode_lru.size()<< dendl;
     if (p != onode_lru.begin()) {
-      onode_lru.erase(p--);
+      _onode_lru_erase(p--);
     } else {
-      onode_lru.erase(p);
-      ceph_assert(num == 1);
+      _onode_lru_erase(p);
+      num = 1; // fake num to end the loop
+               // in we might still have some pinned onodes
     }
     o->get();  // paranoia
     o->c->onode_map.remove(o->oid);
@@ -3970,6 +3978,10 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
       (meta_alloc / (double) num_shards) / meta_cache->get_bytes_per_onode());
   uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / num_shards);
 
+  auto debug_max_onodes = g_conf()->bluestore_debug_max_cached_onodes;
+  if (debug_max_onodes) {
+    max_shard_onodes = debug_max_onodes;
+  }
   ldout(cct, 30) << __func__ << " max_shard_onodes: " << max_shard_onodes
                  << " max_shard_buffer: " << max_shard_buffer << dendl;
 
