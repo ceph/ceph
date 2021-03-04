@@ -15,7 +15,7 @@ ExternalProject_Add(zstd_ext
   BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/libzstd
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target libzstd_static
   BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a"
-  INSTALL_COMMAND "true")
+  INSTALL_COMMAND "")
 
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES
