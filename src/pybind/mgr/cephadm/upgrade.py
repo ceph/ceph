@@ -213,8 +213,10 @@ class CephadmUpgrade:
             return True
         return False
 
-    def _wait_for_ok_to_stop(self, s: DaemonDescription,
-                             known: Optional[List[str]] = None) -> bool:
+    def _wait_for_ok_to_stop(
+            self, s: DaemonDescription,
+            known: Optional[List[str]] = None,  # NOTE: output argument!
+    ) -> bool:
         # only wait a little bit; the service might go away for something
         assert s.daemon_type is not None
         assert s.daemon_id is not None
@@ -224,6 +226,7 @@ class CephadmUpgrade:
                 return False
 
             # setting force flag to retain old functionality.
+            # note that known is an output argument for ok_to_stop()
             r = self.mgr.cephadm_services[daemon_type_to_service(s.daemon_type)].ok_to_stop([
                 s.daemon_id], known=known, force=True)
 
@@ -472,6 +475,8 @@ class CephadmUpgrade:
                         to_upgrade.append(d)
                     continue
 
+                # NOTE: known_ok_to_stop is an output argument for
+                # _wait_for_ok_to_stop
                 if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return
 
