@@ -838,6 +838,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
     val_map[name] = val;
   }
 
+// when sub_resources exclusive by object are added, please remember to update obj_sub_resource in RGWHTTPArgs::exist_obj_excl_sub_resource().
   if ((name.compare("acl") == 0) ||
       (name.compare("cors") == 0) ||
       (name.compare("notification") == 0) ||

@@ -4870,10 +4870,12 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::RGWStore *store,
   } else {
     if (s->init_state.url_bucket.empty()) {
       handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts, enable_iam, enable_pubsub);
-    } else if (rgw::sal::RGWObject::empty(s->object.get())) {
-      handler = new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
-    } else {
+    } else if (!rgw::sal::RGWObject::empty(s->object.get())) {
       handler = new RGWHandler_REST_Obj_S3(auth_registry);
+    } else if (s->info.args.exist_obj_excl_sub_resource()) {
+      return NULL;
+    } else {
+      handler = new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
     }
   }
 
