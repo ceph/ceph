@@ -707,7 +707,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(21, 9, bl);
+     ENCODE_START(22, 9, bl);
      encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
@@ -750,10 +750,11 @@ struct RGWUserInfo
      encode(type, bl);
      encode(mfa_ids, bl);
      encode(assumed_role_arn, bl);
+     encode(user_id.ns, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(21, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(22, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -833,6 +834,11 @@ struct RGWUserInfo
     }
     if (struct_v >= 21) {
       decode(assumed_role_arn, bl);
+    }
+    if (struct_v >= 22) {
+      decode(user_id.ns, bl);
+    } else {
+      user_id.ns.clear();
     }
     DECODE_FINISH(bl);
   }
