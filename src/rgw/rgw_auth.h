@@ -375,6 +375,7 @@ protected:
   string role_session;
   string role_tenant;
   std::unordered_multimap<string, string> token_claims;
+  boost::optional<std::set<std::pair<string, string>>> principal_tags;
 
   string get_idp_url() const;
 
@@ -387,12 +388,14 @@ public:
                       rgw::sal::Store* store,
                       const string& role_session,
                       const string& role_tenant,
-                      const std::unordered_multimap<string, string>& token_claims)
+                      const std::unordered_multimap<string, string>& token_claims,
+                      boost::optional<std::set<std::pair<string, string>>> principal_tags)
       : cct(cct),
       store(store),
       role_session(role_session),
       role_tenant(role_tenant),
-      token_claims(token_claims) {
+      token_claims(token_claims),
+      principal_tags(principal_tags) {
       const auto& sub = token_claims.find("sub");
       if(sub != token_claims.end()) {
         this->sub = sub->second;
@@ -475,7 +478,8 @@ public:
                                               const req_state* s,
                                               const string& role_session,
                                               const string& role_tenant,
-                                              const std::unordered_multimap<string, string>& token) const = 0;
+                                              const std::unordered_multimap<string, string>& token,
+                                              boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const = 0;
   };
 };
 
