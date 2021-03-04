@@ -48,12 +48,12 @@ struct MDSPerfMetricQuery;
 
 struct offline_pg_report {
   set<int> osds;
-  set<pg_t> ok, not_ok;
+  set<pg_t> ok, not_ok, unknown;
   set<pg_t> ok_become_degraded, ok_become_more_degraded;             // ok
   set<pg_t> bad_no_pool, bad_already_inactive, bad_become_inactive;  // not ok
 
   bool ok_to_stop() const {
-    return not_ok.empty();
+    return not_ok.empty() && unknown.empty();
   }
 
   void dump(Formatter *f) const {
@@ -65,6 +65,15 @@ struct offline_pg_report {
     f->close_section();
     f->dump_unsigned("num_ok_pgs", ok.size());
     f->dump_unsigned("num_not_ok_pgs", not_ok.size());
+
+    // ambiguous
+    if (!unknown.empty()) {
+      f->open_array_section("unknown_pgs");
+      for (auto pg : unknown) {
+	f->dump_stream("pg") << pg;
+      }
+      f->close_section();
+    }
 
     // bad news
     if (!bad_no_pool.empty()) {
