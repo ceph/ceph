@@ -157,7 +157,8 @@ class PlacementSpec(object):
                  label=None,  # type: Optional[str]
                  hosts=None,  # type: Union[List[str],List[HostPlacementSpec], None]
                  count=None,  # type: Optional[int]
-                 host_pattern=None  # type: Optional[str]
+                 count_per_host=None,  # type: Optional[int]
+                 host_pattern=None,  # type: Optional[str]
                  ):
         # type: (...) -> None
         self.label = label
@@ -167,6 +168,7 @@ class PlacementSpec(object):
             self.set_hosts(hosts)
 
         self.count = count  # type: Optional[int]
+        self.count_per_host = count_per_host   # type: Optional[int]
 
         #: fnmatch patterns to select hosts. Can also be a single host.
         self.host_pattern = host_pattern  # type: Optional[str]
@@ -174,17 +176,21 @@ class PlacementSpec(object):
         self.validate()
 
     def is_empty(self) -> bool:
-        return self.label is None and \
-            not self.hosts and \
-            not self.host_pattern and \
-            self.count is None
+        return (
+            self.label is None
+            and not self.hosts
+            and not self.host_pattern
+            and self.count is None
+            and self.count_per_host is None
+        )
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, PlacementSpec):
             return self.label == other.label \
                    and self.hosts == other.hosts \
                    and self.count == other.count \
-                   and self.host_pattern == other.host_pattern
+                   and self.host_pattern == other.host_pattern \
+                   and self.count_per_host == other.count_per_host
         return NotImplemented
 
     def set_hosts(self, hosts: Union[List[str], List[HostPlacementSpec]]) -> None:
@@ -230,6 +236,8 @@ class PlacementSpec(object):
             kv.append(';'.join([str(h) for h in self.hosts]))
         if self.count:
             kv.append('count:%d' % self.count)
+        if self.count_per_host:
+            kv.append('count-per-host:%d' % self.count_per_host)
         if self.label:
             kv.append('label:%s' % self.label)
         if self.host_pattern:
@@ -240,6 +248,8 @@ class PlacementSpec(object):
         kv = []
         if self.count:
             kv.append('count=%d' % self.count)
+        if self.count_per_host:
+            kv.append('count_per_host=%d' % self.count_per_host)
         if self.label:
             kv.append('label=%s' % repr(self.label))
         if self.hosts:
@@ -269,6 +279,8 @@ class PlacementSpec(object):
             r['hosts'] = [host.to_json() for host in self.hosts]
         if self.count:
             r['count'] = self.count
+        if self.count_per_host:
+            r['count_per_host'] = self.count_per_host
         if self.host_pattern:
             r['host_pattern'] = self.host_pattern
         return r
@@ -279,6 +291,10 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
             raise ServiceSpecValidationError("num/count must be > 1")
+        if self.count_per_host is not None and self.count_per_host < 1:
+            raise ServiceSpecValidationError("count-per-host must be >= 1")
+        if self.count is not None and self.count_per_host is not None:
+            raise ServiceSpecValidationError("cannot combine count and count-per-host")
         if self.host_pattern and self.hosts:
             raise ServiceSpecValidationError('cannot combine host patterns and hosts')
         for h in self.hosts:
@@ -336,6 +352,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
             raise ServiceSpecValidationError('invalid placement %s' % arg)
 
         count = None
+        count_per_host = None
         if strings:
             try:
                 count = int(strings[0])
@@ -345,7 +362,15 @@ tPlacementSpec(hostname='host2', network='', name='')])
         for s in strings:
             if s.startswith('count:'):
                 try:
-                    count = int(s[6:])
+                    count = int(s[len('count:'):])
+                    strings.remove(s)
+                    break
+                except ValueError:
+                    pass
+        for s in strings:
+            if s.startswith('count-per-host:'):
+                try:
+                    count_per_host = int(s[len('count-per-host:'):])
                     strings.remove(s)
                     break
                 except ValueError:
@@ -370,6 +395,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
                 'more than one host pattern provided: {}'.format(host_patterns))
 
         ps = PlacementSpec(count=count,
+                           count_per_host=count_per_host,
                            hosts=advanced_hostspecs,
                            label=label,
                            host_pattern=host_patterns[0] if host_patterns else None)
