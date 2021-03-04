@@ -672,7 +672,7 @@ seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
     need_reload_obc);
   return (need_reload_obc ? reload_obc(*obc)
                           : load_obc_ertr::now()
-  ).safe_then([&e, &m, obc = std::move(obc), this] {
+  ).safe_then([e, &m, obc = std::move(obc), this] {
     auto reply = make_message<MOSDOpReply>(
       &m, -e.value(), get_osdmap_epoch(), 0, false);
     reply->set_enoent_reply_versions(
