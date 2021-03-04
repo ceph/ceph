@@ -18,6 +18,7 @@ function(build_pmem)
       GIT_REPOSITORY "https://github.com/ceph/pmdk.git"
       GIT_TAG "1.7"
       GIT_SHALLOW TRUE
+      GIT_CONFIG advice.detachedHead=false
       SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
       CONFIGURE_COMMAND ""
       # Explicitly built w/o NDCTL, otherwise if ndtcl is present on the
