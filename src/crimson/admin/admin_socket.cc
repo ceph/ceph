@@ -13,6 +13,7 @@
 #include <seastar/core/thread.hh>
 #include <seastar/util/std-compat.hh>
 
+#include "common/options.h"
 #include "common/version.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
@@ -501,6 +502,31 @@ public:
   }
 };
 
+/**
+ * listing the configuration values
+ */
+class ConfigHelpHook : public AdminSocketHook {
+public:
+  ConfigHelpHook() :
+    AdminSocketHook{"config help",
+                    "",
+                    "get config setting schema and descriptions"}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    // Output all
+    f->open_array_section("options");
+    for (const auto &option : ceph_options) {
+      f->dump_object("option", option);
+    }
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+};
+
 /// the hooks that are served directly by the admin_socket server
 seastar::future<> AdminSocket::register_admin_commands()
 {
@@ -512,6 +538,7 @@ seastar::future<> AdminSocket::register_admin_commands()
     register_command(std::make_unique<ConfigGetHook>()),
     register_command(std::make_unique<ConfigSetHook>()),
     register_command(std::make_unique<ConfigShowHook>()),
+    register_command(std::make_unique<ConfigHelpHook>()),
     register_command(std::make_unique<InjectArgsHook>())
   ).then_unpack([] {
     return seastar::now();
