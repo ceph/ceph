@@ -313,11 +313,11 @@ class RGWGCIOManager {
 
 public:
   RGWGCIOManager(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp),
-                                                  cct(_cct),
-                                                  gc(_gc),
-                                                  remove_tags(cct->_conf->rgw_gc_max_objs),
-                                                  tag_io_size(cct->_conf->rgw_gc_max_objs) {
+                                                                                  cct(_cct),
+                                                                                  gc(_gc) {
     max_aio = cct->_conf->rgw_gc_max_concurrent_io;
+    remove_tags.resize(min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max()));
+    tag_io_size.resize(min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max()));
   }
 
   ~RGWGCIOManager() {
