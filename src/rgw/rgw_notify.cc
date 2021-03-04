@@ -145,6 +145,9 @@ class Manager : public DoutPrefixProvider {
       timer(io_context) {}  
  
     void async_wait(spawn::yield_context yield) { 
+      if (pending_tokens == 0) {
+        return;
+      }
       timer.expires_from_now(infinite_duration);
       boost::system::error_code ec; 
       timer.async_wait(yield[ec]);
