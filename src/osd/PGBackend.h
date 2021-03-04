@@ -265,6 +265,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual pg_shard_t primary_shard() const = 0;
 
      virtual uint64_t min_peer_features() const = 0;
+     virtual uint64_t min_upacting_features() const = 0;
 
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;

@@ -2236,7 +2236,7 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max, bool legacy, vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
@@ -2445,6 +2445,19 @@ public:
 		      const ghobject_t& end,
 		      int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
+
+  int collection_list_legacy(const coll_t& cid,
+                             const ghobject_t& start,
+                             const ghobject_t& end,
+                             int max,
+                             vector<ghobject_t> *ls,
+                             ghobject_t *next) override;
+  int collection_list_legacy(CollectionHandle &c,
+                             const ghobject_t& start,
+                             const ghobject_t& end,
+                             int max,
+                             vector<ghobject_t> *ls,
+                             ghobject_t *next) override;
 
   int omap_get(
     const coll_t& cid,                ///< [in] Collection containing oid

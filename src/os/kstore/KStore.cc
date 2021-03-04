@@ -85,10 +85,10 @@ static void append_escaped(const string &in, string *out)
 {
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i <= '#') {
+    if ((unsigned char)*i <= '#') {
       snprintf(hexbyte, sizeof(hexbyte), "#%02x", (uint8_t)*i);
       out->append(hexbyte);
-    } else if (*i >= '~') {
+    } else if ((unsigned char)*i >= '~') {
       snprintf(hexbyte, sizeof(hexbyte), "~%02x", (uint8_t)*i);
       out->append(hexbyte);
     } else {
@@ -1505,14 +1505,16 @@ int KStore::_collection_list(
   if (end.hobj.is_max()) {
     pend = temp ? temp_end_key : end_key;
   } else {
-    get_object_key(cct, end, &end_key);
     if (end.hobj.is_temp()) {
       if (temp)
-	pend = end_key;
+        get_object_key(cct, end, &pend);
       else
 	goto out;
     } else {
-      pend = temp ? temp_end_key : end_key;
+      if (temp)
+        pend = temp_end_key;
+      else
+        get_object_key(cct, end, &pend);
     }
   }
   dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
@@ -1525,14 +1527,27 @@ int KStore::_collection_list(
 		 << " > " << end << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
+          if (it->valid() && it->key() < temp_end_key) {
+            int r = get_key_object(it->key(), pnext);
+            ceph_assert(r == 0);
+            set_next = true;
+          }
 	  break;
 	}
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
 	temp = false;
 	it->upper_bound(start_key);
-	pend = end_key;
+        if (end.hobj.is_max())
+          pend = end_key;
+        else
+          get_object_key(cct, end, &pend);
 	dout(30) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
 	continue;
+      }
+      if (it->valid() && it->key() < end_key) {
+        int r = get_key_object(it->key(), pnext);
+        ceph_assert(r == 0);
+        set_next = true;
       }
       break;
     }
