@@ -131,7 +131,8 @@ static constexpr std::uint64_t iamAll = s3All + 18;
 static constexpr std::uint64_t stsAssumeRole = iamAll + 1;
 static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = iamAll + 2;
 static constexpr std::uint64_t stsGetSessionToken = iamAll + 3;
-static constexpr std::uint64_t stsAll = iamAll + 4;
+static constexpr std::uint64_t stsTagSession = iamAll + 4;
+static constexpr std::uint64_t stsAll = iamAll + 5;
 
 static constexpr std::uint64_t s3Count = s3All;
 static constexpr std::uint64_t allCount = stsAll + 1;

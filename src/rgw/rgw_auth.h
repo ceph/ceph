@@ -379,6 +379,7 @@ protected:
   std::string role_session;
   std::string role_tenant;
   std::unordered_multimap<std::string, std::string> token_claims;
+  boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags;
 
   string get_idp_url() const;
 
@@ -391,12 +392,14 @@ public:
                       RGWCtl* const ctl,
                       const std::string& role_session,
                       const std::string& role_tenant,
-                      const std::unordered_multimap<std::string, std::string>& token_claims)
+                      const std::unordered_multimap<std::string, std::string>& token_claims,
+                      boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags)
       : cct(cct),
       ctl(ctl),
       role_session(role_session),
       role_tenant(role_tenant),
-      token_claims(token_claims) {
+      token_claims(token_claims),
+      principal_tags(principal_tags) {
       const auto& sub = token_claims.find("sub");
       if(sub != token_claims.end()) {
         this->sub = sub->second;
@@ -479,7 +482,8 @@ public:
                                               const req_state* s,
                                               const std::string& role_session,
                                               const std::string& role_tenant,
-                                              const std::unordered_multimap<std::string, std::string>& token) const = 0;
+                                              const std::unordered_multimap<std::string, std::string>& token,
+                                              boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const = 0;
   };
 };
 
