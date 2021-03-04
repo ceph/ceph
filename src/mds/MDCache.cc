@@ -12741,20 +12741,15 @@ public:
     tag(tag), formatter(f), on_finish(fin), header(nullptr) {}
 
   void finish(int r) override {
+    formatter->open_object_section("results");
+    formatter->dump_int("return_code", r);
     if (r == 0) {
-      // since recursive scrub is asynchronous, dump minimal output
-      // to not upset cli tools.
-      formatter->open_object_section("results");
-      formatter->dump_int("return_code", 0);
       formatter->dump_string("scrub_tag", tag);
       formatter->dump_string("mode", "asynchronous");
-      formatter->close_section(); // results
-    } else { // we failed the lookup or something; dump ourselves
-      formatter->open_object_section("results");
-      formatter->dump_int("return_code", r);
-      formatter->close_section(); // results
-      r = 0; // already dumped in formatter
     }
+    formatter->close_section();
+
+    r = 0;
     if (on_finish)
       on_finish->complete(r);
   }
