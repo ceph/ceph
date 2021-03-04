@@ -67,8 +67,8 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const uint32_t num_shards;
   bool is_rotational;
   double max_osd_capacity;
-  double max_osd_bandwidth;
-  uint64_t osd_mclock_cost_per_io_msec;
+  double osd_mclock_cost_per_io;
+  double osd_mclock_cost_per_byte;
   std::string mclock_profile = "high_client_ops";
   struct ClientAllocs {
     uint64_t res;
@@ -144,6 +144,9 @@ public:
 
   // Set the cost per io for the osd
   void set_osd_mclock_cost_per_io();
+
+  // Set the cost per byte for the osd
+  void set_osd_mclock_cost_per_byte();
 
   // Set the mclock profile type to enable
   void set_mclock_profile();
