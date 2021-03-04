@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    create_rbd_pool: true      
     log-ignorelist:
       - overall HEALTH_
       - \(CACHE_POOL_NEAR_FULL\)

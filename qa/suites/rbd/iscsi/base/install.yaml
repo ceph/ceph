@@ -4,7 +4,7 @@ tasks:
     extra_packages:
       - iscsi-initiator-utils
       - device-mapper-multipath
-- ceph:
+- cephadm:
 - install:
     packages:
       rpm:

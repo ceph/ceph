@@ -2,6 +2,7 @@
 os_type: centos
 
 overrides:
+  create_rbd_pool: true      
   install:
     ceph:
       debuginfo: true

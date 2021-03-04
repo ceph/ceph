@@ -5,10 +5,13 @@ roles:
 - [osd.9, osd.10, osd.11]
 tasks:
 - install:
-- ceph:
+- cephadm:
     log-ignorelist:
       - 'application not enabled'
 - workunit:
     timeout: 30m
     clients:
       all: [rbd/issue-20295.sh]
+overrides:
+  ceph:
+    create_rbd_pool: true
