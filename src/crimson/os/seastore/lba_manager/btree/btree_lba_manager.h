@@ -58,6 +58,11 @@ public:
     Transaction &t,
     laddr_list_t &&list) final;
 
+  find_hole_ret find_hole(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t) final;
+
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,

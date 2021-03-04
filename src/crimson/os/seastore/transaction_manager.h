@@ -267,6 +267,18 @@ public:
     });
   }
 
+  using find_hole_ertr = LBAManager::find_hole_ertr;
+  using find_hole_ret = LBAManager::find_hole_ret;
+  find_hole_ret find_hole(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len) {
+    return lba_manager->find_hole(
+      t,
+      hint,
+      len);
+  }
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.

@@ -60,6 +60,18 @@ public:
     laddr_list_t &&extent_lisk) = 0;
 
   /**
+   * Finds unmapped laddr extent of len len
+   */
+  using find_hole_ertr = base_ertr;
+  using find_hole_ret = find_hole_ertr::future<
+    std::pair<laddr_t, extent_len_t>
+    >;
+  virtual find_hole_ret find_hole(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t) = 0;
+
+  /**
    * Allocates a new mapping referenced by LBARef
    *
    * Offset will be relative to the block offset of the record
