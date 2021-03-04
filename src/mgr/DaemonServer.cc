@@ -1758,7 +1758,7 @@ bool DaemonServer::_handle_command(
     f->flush(cmdctx->odata);
     cmdctx->odata.append("\n");
     if (!out_report.ok_to_stop()) {
-      ss << "unsafe to stop osd(s)";
+      ss << "unsafe to stop osd(s) at this time (" << out_report.not_ok.size() << " PGs are or would become offline)";
       cmdctx->reply(-EBUSY, ss);
     } else {
       cmdctx->reply(0, ss);

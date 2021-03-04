@@ -1,7 +1,7 @@
 import errno
 import json
 import logging
-from typing import List, cast
+from typing import List, cast, Optional
 
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import IscsiServiceSpec
@@ -121,7 +121,10 @@ class IscsiService(CephService):
             get_set_cmd_dicts=get_set_cmd_dicts
         )
 
-    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+    def ok_to_stop(self,
+                   daemon_ids: List[str],
+                   force: bool = False,
+                   known: Optional[List[str]] = None) -> HandleCommandResult:
         # if only 1 iscsi, alert user (this is not passable with --force)
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Iscsi', 1, True)
         if warn:
