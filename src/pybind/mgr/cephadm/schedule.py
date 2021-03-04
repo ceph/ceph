@@ -122,13 +122,6 @@ class HostAssignment(object):
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
-            # if asked to place even number of mons, deploy 1 less
-            if self.spec.service_type == 'mon' and (len(candidates) % 2) == 0:
-                count = len(candidates) - 1
-                logger.info("Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
-                    count, len(candidates)))
-                return candidates[0:count]
-
             # do not deploy ha-rgw on hosts that don't support virtual ips
             if self.spec.service_type == 'ha-rgw' and self.filter_new_host:
                 old = candidates
@@ -138,23 +131,6 @@ class HostAssignment(object):
                         f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
                 logger.info('filtered %s down to %s' % (old, candidates))
             return candidates
-
-        # if asked to place even number of mons, deploy 1 less
-        if self.spec.service_type == 'mon':
-            # if count >= number of candidates then number of candidates
-            # is determining factor in how many mons will be placed
-            if count >= len(candidates):
-                if (len(candidates) % 2) == 0:
-                    logger.info("Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
-                        len(candidates) - 1, len(candidates)))
-                    count = len(candidates) - 1
-            # if count < number of candidates then count is determining
-            # factor in how many mons will get placed
-            else:
-                if (count % 2) == 0:
-                    logger.info(
-                        "Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (count - 1, count))
-                    count = count - 1
 
         # prefer hosts that already have services.
         # this avoids re-assigning to _new_ hosts
