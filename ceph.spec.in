@@ -22,6 +22,7 @@
 #################################################################################
 %bcond_with make_check
 %bcond_with cmake_verbose_logging
+%bcond_without ninja
 %bcond_without ceph_test_package
 %ifarch s390
 %bcond_with tcmalloc
@@ -408,6 +409,9 @@ BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 # distro-conditional dependencies
 #################################################################################
 %if 0%{?suse_version}
+%if 0%{with ninja}
+BuildRequires:  ninja
+%endif
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:	systemd-rpm-macros
 %{?systemd_requires}
@@ -436,6 +440,9 @@ BuildRequires:	jsonnet
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:	systemd
 BuildRequires:  boost-random
+%if 0%{with ninja}
+BuildRequires:	ninja-build
+%endif
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:  libatomic
@@ -1423,6 +1430,7 @@ env | sort
 mkdir -p %{_vpath_builddir}
 pushd %{_vpath_builddir}
 cmake .. \
+    -GNinja \
 %if 0%{?suse_version} == 1500
     -DCMAKE_C_COMPILER=gcc-11 \
     -DCMAKE_CXX_COMPILER=g++-11 \
@@ -1539,10 +1547,18 @@ cat ./CMakeFiles/CMakeOutput.log
 cat ./CMakeFiles/CMakeError.log
 %endif
 
+%if 0%{with ninja}
+%if 0%{?suse_version}
+ninja %{_smp_mflags}
+%else
+%ninja_build
+%endif
+%else
 %if 0%{?suse_version}
 make %{_smp_mflags}
 %else
 %make_build
+%endif
 %endif
 
 popd
@@ -1559,7 +1575,11 @@ popd
 %install
 
 pushd %{_vpath_builddir}
+%if 0%{with ninja}
+%ninja_install
+%else
 %make_install
+%endif
 # we have dropped sysvinit bits
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
 popd
