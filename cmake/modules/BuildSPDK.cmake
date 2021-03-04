@@ -52,7 +52,7 @@ macro(build_spdk)
     BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${make_cmd} EXTRA_CFLAGS="${spdk_CFLAGS}"
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${spdk_libs}
-    INSTALL_COMMAND "true")
+    INSTALL_COMMAND "")
   unset(make_cmd)
   foreach(spdk_lib ${SPDK_LIBRARIES})
     add_dependencies(${spdk_lib} spdk-ext)

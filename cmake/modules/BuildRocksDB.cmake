@@ -82,7 +82,7 @@ function(build_rocksdb)
     BINARY_DIR "${rocksdb_BINARY_DIR}"
     BUILD_COMMAND "${make_cmd}"
     BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
-    INSTALL_COMMAND "true"
+    INSTALL_COMMAND ""
     LIST_SEPARATOR !)
 
   add_library(RocksDB::RocksDB STATIC IMPORTED)

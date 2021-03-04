@@ -27,7 +27,7 @@ function(build_pmem)
       BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} NDCTL_ENABLE=n
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "${PMDK_LIB}/libpmem.a" "${PMDK_LIB}/libpmemobj.a"
-      INSTALL_COMMAND "true")
+      INSTALL_COMMAND "")
 
   # libpmem
   add_library(pmem::pmem STATIC IMPORTED)
