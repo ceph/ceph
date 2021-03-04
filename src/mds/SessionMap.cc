@@ -1011,14 +1011,14 @@ int Session::check_access(CInode *in, unsigned mask,
       inode->layout.pool_ns.length() &&
       !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
-    return -EIO;
+    return -CEPHFS_EIO;
   }
 
   if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
 			    info.inst.addr)) {
-    return -EACCES;
+    return -CEPHFS_EACCES;
   }
   return 0;
 }
@@ -1123,7 +1123,7 @@ int SessionFilter::parse(
       id = strict_strtoll(s.c_str(), 10, &err);
       if (!err.empty()) {
 	*ss << "Invalid filter '" << s << "'";
-	return -EINVAL;
+	return -CEPHFS_EINVAL;
       }
       return 0;
     }
@@ -1153,13 +1153,13 @@ int SessionFilter::parse(
       id = strict_strtoll(v.c_str(), 10, &err);
       if (!err.empty()) {
         *ss << err;
-        return -EINVAL;
+        return -CEPHFS_EINVAL;
       }
     } else if (k == "reconnecting") {
 
       /**
        * Strict boolean parser.  Allow true/false/0/1.
-       * Anything else is -EINVAL.
+       * Anything else is -CEPHFS_EINVAL.
        */
       auto is_true = [](std::string_view bstr, bool *out) -> bool
       {
@@ -1172,7 +1172,7 @@ int SessionFilter::parse(
           *out = false;
           return 0;
         } else {
-          return -EINVAL;
+          return -CEPHFS_EINVAL;
         }
       };
 
@@ -1182,11 +1182,11 @@ int SessionFilter::parse(
         set_reconnecting(bval);
       } else {
         *ss << "Invalid boolean value '" << v << "'";
-        return -EINVAL;
+        return -CEPHFS_EINVAL;
       }
     } else {
       *ss << "Invalid filter key '" << k << "'";
-      return -EINVAL;
+      return -CEPHFS_EINVAL;
     }
   }
 

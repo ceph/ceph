@@ -62,7 +62,7 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   if (CInode *in = dynamic_cast<CInode*>(obj)) {
     if (in->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *in << "}" << ", already in scrubbing" << dendl;
-      return -EBUSY;
+      return -CEPHFS_EBUSY;
     }
 
     dout(10) << __func__ << " with {" << *in << "}" << ", top=" << top << dendl;
@@ -70,7 +70,7 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   } else if (CDir *dir = dynamic_cast<CDir*>(obj)) {
     if (dir->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *dir << "}" << ", already in scrubbing" << dendl;
-      return -EBUSY;
+      return -CEPHFS_EBUSY;
     }
 
     dout(10) << __func__ << " with {" << *dir << "}" << ", top=" << top << dendl;
@@ -97,14 +97,14 @@ int ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header, bool top)
 {
   // abort in progress
   if (clear_stack)
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
 
   header->set_origin(in->ino());
   auto ret = scrubbing_map.emplace(header->get_tag(), header);
   if (!ret.second) {
     dout(10) << __func__ << " with {" << *in << "}"
 	     << ", conflicting tag " << header->get_tag() << dendl;
-    return -EEXIST;
+    return -CEPHFS_EEXIST;
   }
 
   int r = _enqueue(in, header, top);
@@ -742,7 +742,7 @@ void ScrubStack::scrub_pause(Context *on_finish) {
   // abort is in progress
   if (clear_stack) {
     if (on_finish)
-      on_finish->complete(-EINVAL);
+      on_finish->complete(-CEPHFS_EINVAL);
     return;
   }
 
@@ -769,10 +769,10 @@ bool ScrubStack::scrub_resume() {
   int r = 0;
 
   if (clear_stack) {
-    r = -EINVAL;
+    r = -CEPHFS_EINVAL;
   } else if (state == STATE_PAUSING) {
     set_state(STATE_RUNNING);
-    complete_control_contexts(-ECANCELED);
+    complete_control_contexts(-CEPHFS_ECANCELED);
   } else if (state == STATE_PAUSED) {
     set_state(STATE_RUNNING);
     kick_off_scrubs();

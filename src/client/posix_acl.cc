@@ -1,5 +1,6 @@
 #include "include/compat.h"
 #include "include/types.h"
+#include "include/fs_types.h"
 #include <sys/stat.h>
 #include "posix_acl.h"
 #include "UserPerm.h"
@@ -75,7 +76,7 @@ int posix_acl_check(const void *xattr, size_t size)
 int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
 {
   if (posix_acl_check(xattr, size) < 0)
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
 
   int not_equiv = 0;
   mode_t mode = 0;
@@ -104,7 +105,7 @@ int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
 	not_equiv = 1;
 	break;
       default:
-	return -EINVAL;
+	return -CEPHFS_EINVAL;
     }
     ++entry;
   }
@@ -116,7 +117,7 @@ int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
 int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
 {
   if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
-    return -EIO;
+    return -CEPHFS_EIO;
 
   acl_ea_entry *group_entry = NULL, *mask_entry = NULL;
   mode_t mode = *mode_p;
@@ -151,7 +152,7 @@ int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
 	not_equiv = 1;
 	break;
       default:
-	return -EIO;
+	return -CEPHFS_EIO;
 
     }
     ++entry;
@@ -164,7 +165,7 @@ int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
     mask_entry->e_perm = perm;
   } else {
     if (!group_entry)
-      return -EIO;
+      return -CEPHFS_EIO;
     __u16 perm = group_entry->e_perm;
     perm &= (mode >> 3) | ~S_IRWXO;
     mode &= (perm << 3) | ~S_IRWXG;
@@ -178,7 +179,7 @@ int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
 int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
 {
   if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
-    return -EIO;
+    return -CEPHFS_EIO;
 
   acl_ea_entry *group_entry = NULL, *mask_entry = NULL;
 
@@ -210,7 +211,7 @@ int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
     mask_entry->e_perm = (mode & S_IRWXG) >> 3;
   } else {
     if (!group_entry)
-      return -EIO;
+      return -CEPHFS_EIO;
     group_entry->e_perm = (mode & S_IRWXG) >> 3;
   }
   return 0;
@@ -220,7 +221,7 @@ int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
 			 const UserPerm& perms, unsigned want)
 {
   if (posix_acl_check(acl.c_str(), acl.length()) < 0)
-    return -EIO;
+    return -CEPHFS_EIO;
 
   const acl_ea_header *header = reinterpret_cast<const acl_ea_header*>(acl.c_str());
   const acl_ea_entry *entry = header->a_entries;
@@ -257,16 +258,16 @@ int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
 	break;
       case ACL_OTHER:
 	if (group_found)
-	  return -EACCES;
+	  return -CEPHFS_EACCES;
 	else
 	  goto check_perm;
 	break;
       default:
-	return -EIO;
+	return -CEPHFS_EIO;
     }
     ++entry;
   }
-  return -EIO;
+  return -CEPHFS_EIO;
 
 check_mask:
   next_entry = entry + 1;
@@ -276,12 +277,12 @@ check_mask:
       __u16 mask = next_entry->e_perm;
       if ((perm & mask & want) == want)
 	return 0;
-      return -EACCES;
+      return -CEPHFS_EACCES;
     }
     ++next_entry;
   }
 check_perm:
   if ((perm & want) == want)
     return 0;
-  return -EACCES;
+  return -CEPHFS_EACCES;
 }
