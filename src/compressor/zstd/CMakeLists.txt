@@ -11,7 +11,6 @@ ExternalProject_Add(zstd_ext
              -DCMAKE_C_FLAGS=${ZSTD_C_FLAGS}
              -DCMAKE_AR=${CMAKE_AR}
              -DCMAKE_POSITION_INDEPENDENT_CODE=${ENABLE_SHARED}
-             -G${CMAKE_GENERATOR}
   BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/libzstd
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target libzstd_static
   BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a"
