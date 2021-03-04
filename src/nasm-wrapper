@@ -18,6 +18,13 @@ while [ -n "$*" ]; do
         # ignore debug format
         shift
         ;;
+    -MD )
+        # before CMake v3.18, its ninja build rule always passes `-MD $DEP_FILE``
+        # to ASM_COMPILER. both nasm and GNU assembler accepts this option, but
+        # somehow the ninja generator fails to pass the <DEPFILE> argument. so
+        # just drop it.
+        shift
+        ;;
     -W* )
         # Warning/error option
         shift
