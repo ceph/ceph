@@ -157,6 +157,7 @@ class CephadmUpgrade:
                 self._save_upgrade_state()
                 return 'Resumed upgrade to %s' % self.target_image
             return 'Upgrade to %s in progress' % self.target_image
+        self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
             target_name=target_name,
             progress_id=str(uuid.uuid4())
@@ -173,6 +174,7 @@ class CephadmUpgrade:
         if self.upgrade_state.paused:
             return 'Upgrade to %s already paused' % self.target_image
         self.upgrade_state.paused = True
+        self.mgr.log.info('Upgrade: Paused upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         return 'Paused upgrade to %s' % self.target_image
 
@@ -182,6 +184,7 @@ class CephadmUpgrade:
         if not self.upgrade_state.paused:
             return 'Upgrade to %s not paused' % self.target_image
         self.upgrade_state.paused = False
+        self.mgr.log.info('Upgrade: Resumed upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         self.mgr.event.set()
         return 'Resumed upgrade to %s' % self.target_image
@@ -193,6 +196,7 @@ class CephadmUpgrade:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
         target_image = self.target_image
+        self.mgr.log.info('Upgrade: Stopped')
         self.upgrade_state = None
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
@@ -209,7 +213,10 @@ class CephadmUpgrade:
             return True
         return False
 
-    def _wait_for_ok_to_stop(self, s: DaemonDescription) -> bool:
+    def _wait_for_ok_to_stop(
+            self, s: DaemonDescription,
+            known: Optional[List[str]] = None,  # NOTE: output argument!
+    ) -> bool:
         # only wait a little bit; the service might go away for something
         assert s.daemon_type is not None
         assert s.daemon_id is not None
@@ -219,8 +226,9 @@ class CephadmUpgrade:
                 return False
 
             # setting force flag to retain old functionality.
+            # note that known is an output argument for ok_to_stop()
             r = self.mgr.cephadm_services[daemon_type_to_service(s.daemon_type)].ok_to_stop([
-                s.daemon_id], force=True)
+                s.daemon_id], known=known, force=True)
 
             if not r.retval:
                 logger.info(f'Upgrade: {r.stdout}')
@@ -448,10 +456,43 @@ class CephadmUpgrade:
             ):
                 return
 
+            to_upgrade = []
+            known_ok_to_stop: List[str] = []
             for d in need_upgrade:
                 assert d.daemon_type is not None
                 assert d.daemon_id is not None
                 assert d.hostname is not None
+
+                if not d.container_image_id:
+                    if d.container_image_name == target_image:
+                        logger.debug(
+                            'daemon %s has unknown container_image_id but has correct image name' % (d.name()))
+                        continue
+
+                if known_ok_to_stop:
+                    if d.name() in known_ok_to_stop:
+                        logger.info(f'Upgrade: {d.name()} is also safe to restart')
+                        to_upgrade.append(d)
+                    continue
+
+                # NOTE: known_ok_to_stop is an output argument for
+                # _wait_for_ok_to_stop
+                if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                    return
+
+                to_upgrade.append(d)
+
+                # if we don't have a list of others to consider, stop now
+                if not known_ok_to_stop:
+                    break
+
+            num = 1
+            for d in to_upgrade:
+                assert d.daemon_type is not None
+                assert d.daemon_id is not None
+                assert d.hostname is not None
+
+                self._update_upgrade_progress(done / len(daemons))
 
                 # make sure host has latest container image
                 out, errs, code = CephadmServe(self.mgr)._run_cephadm(
@@ -481,17 +522,12 @@ class CephadmUpgrade:
                         self._save_upgrade_state()
                         return
 
-                self._update_upgrade_progress(done / len(daemons))
-
-                if not d.container_image_id:
-                    if d.container_image_name == target_image:
-                        logger.debug(
-                            'daemon %s has unknown container_image_id but has correct image name' % (d.name()))
-                        continue
-                if not self._wait_for_ok_to_stop(d):
-                    return
-                logger.info('Upgrade: Updating %s.%s' %
-                            (d.daemon_type, d.daemon_id))
+                if len(to_upgrade) > 1:
+                    logger.info('Upgrade: Updating %s.%s (%d/%d)' %
+                                (d.daemon_type, d.daemon_id, num, len(to_upgrade)))
+                else:
+                    logger.info('Upgrade: Updating %s.%s' %
+                                (d.daemon_type, d.daemon_id))
                 try:
                     self.mgr._daemon_action(
                         d.daemon_type,
@@ -509,6 +545,9 @@ class CephadmUpgrade:
                             f'Upgrade daemon: {d.name()}: {e}'
                         ],
                     })
+                    return
+                num += 1
+            if to_upgrade:
                 return
 
             # complete mon upgrade?
