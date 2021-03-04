@@ -881,6 +881,10 @@ void DaemonServer::_check_offlines_pgs(
   for (const auto& q : pgmap.pg_stat) {
     set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
     bool found = false;
+    if (q.second.state == 0) {
+      report->unknown.insert(q.first);
+      continue;
+    }
     if (q.second.state & PG_STATE_DEGRADED) {
       for (auto& anm : q.second.avail_no_missing) {
 	if (osds.count(anm.osd)) {
@@ -931,7 +935,9 @@ void DaemonServer::_check_offlines_pgs(
     }
   }
   dout(20) << osds << " -> " << report->ok.size() << " ok, "
-	   << report->not_ok.size() << " not ok" << dendl;
+	   << report->not_ok.size() << " not ok, "
+	   << report->unknown.size() << " unknown"
+	   << dendl;
 }
 
 void DaemonServer::_maximize_ok_to_stop_set(
@@ -1737,26 +1743,21 @@ bool DaemonServer::_handle_command(
     }
     offline_pg_report out_report;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
-	if (pg_map.num_pg_unknown > 0) {
-	  ss << pg_map.num_pg_unknown << " pgs have unknown state; "
-	     << "cannot draw any conclusions";
-	  r = -EAGAIN;
-	  return;
-	}
 	_maximize_ok_to_stop_set(
 	  osds, max, osdmap, pg_map,
 	  &out_report);
       });
-    if (r < 0) {
-      cmdctx->reply(r, ss);
-      return true;
-    }
     if (!f) {
       f.reset(Formatter::create("json"));
     }
     f->dump_object("ok_to_stop", out_report);
     f->flush(cmdctx->odata);
     cmdctx->odata.append("\n");
+    if (!out_report.unknown.empty()) {
+      ss << out_report.unknown.size() << " pgs have unknown state; "
+	 << "cannot draw any conclusions";
+      cmdctx->reply(-EAGAIN, ss);
+    }
     if (!out_report.ok_to_stop()) {
       ss << "unsafe to stop osd(s)";
       cmdctx->reply(-EBUSY, ss);
