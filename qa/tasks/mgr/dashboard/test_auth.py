@@ -20,7 +20,7 @@ class AuthTest(DashboardTestCase):
         self.reset_session()
 
     def _validate_jwt_token(self, token, username, permissions):
-        payload = jwt.decode(token, verify=False)
+        payload = jwt.decode(token, options={'verify_signature': False})
         self.assertIn('username', payload)
         self.assertEqual(payload['username'], username)
 
