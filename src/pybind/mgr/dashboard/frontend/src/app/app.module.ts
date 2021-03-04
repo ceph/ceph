@@ -1,3 +1,4 @@
+import { APP_BASE_HREF } from '@angular/common';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import {
   ErrorHandler,
@@ -57,6 +58,10 @@ import { environment } from '../environments/environment';
       provide: HTTP_INTERCEPTORS,
       useClass: ApiInterceptorService,
       multi: true
+    },
+    {
+      provide: APP_BASE_HREF,
+      useValue: window['base-href']
     },
     {
       provide: TRANSLATIONS,
