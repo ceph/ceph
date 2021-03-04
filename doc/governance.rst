@@ -62,7 +62,7 @@ Current CLT members are:
  * João Eduardo Luis <joao@suse.de>
  * Ken Dreyer <kdreyer@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
- * Myoungwon Oh <omwmw@sk.com>
+ * Myoungwon Oh <myoungwon.oh@samsung.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@redhat.com>
  * Sage Weil <sage@redhat.com>
