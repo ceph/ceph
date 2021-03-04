@@ -199,6 +199,22 @@ class TestMisc(CephFSTestCase):
         info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
         assert info['path'] == "/foo"
 
+    def test_fs_lsflags(self):
+        """
+        Check that the lsflags displays the default state and the new state of flags
+        """
+        # Set some flags
+        self.fs.set_joinable(False)
+        self.fs.set_allow_new_snaps(False)
+        self.fs.set_allow_standby_replay(True)
+
+        lsflags = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'lsflags',
+                                                                 self.fs.name,
+                                                                 "--format=json-pretty"))
+        self.assertEqual(lsflags["joinable"], False)
+        self.assertEqual(lsflags["allow_snaps"], False)
+        self.assertEqual(lsflags["allow_multimds_snaps"], True)
+        self.assertEqual(lsflags["allow_standby_replay"], True)
 
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
