@@ -1345,7 +1345,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("fingerprint_algorithm", pool_opts_t::opt_desc_t(
 	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR))
            ("pg_num_min", pool_opts_t::opt_desc_t(
-	     pool_opts_t::PG_NUM_MIN, pool_opts_t::INT))
+	   pool_opts_t::PG_NUM_MIN, pool_opts_t::INT))
+	   ("pg_num_max", pool_opts_t::opt_desc_t(
+	   pool_opts_t::PG_NUM_MAX, pool_opts_t::INT))
            ("target_size_bytes", pool_opts_t::opt_desc_t(
 	     pool_opts_t::TARGET_SIZE_BYTES, pool_opts_t::INT))
            ("target_size_ratio", pool_opts_t::opt_desc_t(

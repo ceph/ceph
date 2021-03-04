@@ -2,6 +2,7 @@
 Automatically scale pg_num based on how much data is stored in each pool.
 """
 
+import math
 import json
 import mgr_util
 import threading
@@ -22,6 +23,8 @@ Some terminology is made up for the purposes of this module:
 INTERVAL = 5
 
 PG_NUM_MIN = 32  # unless specified on a per-pool basis
+
+PG_NUM_MAX = math.inf # unless specified on a per-pool basis
 
 def nearest_power_of_two(n):
     v = int(n)
@@ -332,8 +335,11 @@ class PgAutoscaler(MgrModule):
             final_ratio = 1 / (root_map[root_id].pool_count - root_map[root_id].pool_used)
             pool_pg_target = (final_ratio * root_map[root_id].pg_left) / p['size'] * bias
 
-        final_pg_target = max(p.get('options', {}).get('pg_num_min', PG_NUM_MIN),
+        semi_final_pg_target = max(p.get('options', {}).get('pg_num_min', PG_NUM_MIN),
                 nearest_power_of_two(pool_pg_target))
+
+        final_pg_target = min(p.get('options', {}).get('pg_num_max', PG_NUM_MAX),
+                semi_final_pg_target)
 
         self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
                       "pg target {4} quantized to {5} (current {6})".format(

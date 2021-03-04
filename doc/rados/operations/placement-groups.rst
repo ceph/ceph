@@ -171,6 +171,10 @@ You can set the minimum number of PGs for a pool with::
 
   ceph osd pool set <pool-name> pg_num_min <num>
 
+You can set the maximum number of PGs for a pool with::
+
+  ceph osd pool set <pool-name> pg_num_max <num>
+
 You can also specify the minimum PG count at pool creation time with
 the optional ``--pg-num-min <num>`` argument to the ``ceph osd pool
 create`` command.
