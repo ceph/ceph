@@ -55,6 +55,8 @@ class SlowOps final : public DaemonHealthMetricCollector {
       return;
     }
     static const char* fmt = "%1% slow ops, oldest one blocked for %2% sec, %3%";
+    // Note this message format is used in mgr/prometheus, so any change in format
+    // requires a corresponding change in the mgr/prometheus module.
     ostringstream ss;
     if (daemons.size() > 1) {
       if (daemons.size() > 10) {
