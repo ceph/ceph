@@ -18,6 +18,7 @@ from teuthology.exceptions import CommandFailedError
 from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
+from teuthology import contextutil
 from tasks.ceph_manager import write_conf
 from tasks import ceph_manager
 
@@ -1575,3 +1576,38 @@ class Filesystem(MDSCluster):
         assert(new_max_mds < oldmax)
         self.set_max_mds(new_max_mds)
         return self.wait_for_daemons()
+
+    def run_scrub(self, cmd, rank=0):
+        return self.rank_tell(["scrub"] + cmd, rank)
+
+    def get_scrub_status(self, rank=0):
+        return self.run_scrub(["status"], rank)
+
+    def wait_until_scrub_complete(self, result=None, tag=None, rank=0, sleep=30,
+                                  timeout=300, reverse=False):
+        # time out after "timeout" seconds and assume as done
+        if result is None:
+            result = "no active scrubs running"
+        with contextutil.safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
+            while proceed():
+                out_json = self.rank_tell(["scrub", "status"], rank=rank)
+                assert out_json is not None
+                if not reverse:
+                    if result in out_json['status']:
+                        log.info("all active scrubs completed")
+                        return True
+                else:
+                    if result not in out_json['status']:
+                        log.info("all active scrubs completed")
+                        return True
+
+                if tag is not None:
+                    status = out_json['scrubs'][tag]
+                    if status is not None:
+                        log.info(f"scrub status for tag:{tag} - {status}")
+                    else:
+                        log.info(f"scrub has completed for tag:{tag}")
+                        return True
+
+        # timed out waiting for scrub to complete
+        return False

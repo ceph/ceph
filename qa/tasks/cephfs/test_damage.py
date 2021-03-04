@@ -451,12 +451,12 @@ class TestDamage(CephFSTestCase):
         self.mount_a.umount_wait()
 
         # Now repair the stats
-        scrub_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair"])
+        scrub_json = self.fs.run_scrub(["start", "/subdir", "repair"])
         log.info(json.dumps(scrub_json, indent=2))
 
-        self.assertEqual(scrub_json["passed_validation"], False)
-        self.assertEqual(scrub_json["raw_stats"]["checked"], True)
-        self.assertEqual(scrub_json["raw_stats"]["passed"], False)
+        self.assertNotEqual(scrub_json, None)
+        self.assertEqual(scrub_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=scrub_json["scrub_tag"]), True)
 
         # Check that the file count is now correct
         self.mount_a.mount_wait()

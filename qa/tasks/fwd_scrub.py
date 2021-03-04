@@ -8,8 +8,6 @@ from gevent import sleep, GreenletExit
 from gevent.greenlet import Greenlet
 from gevent.event import Event
 from teuthology import misc as teuthology
-from teuthology import contextutil
-from teuthology.orchestra.run import CommandFailedError
 
 from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
@@ -64,7 +62,7 @@ class ForwardScrubber(Thrasher, Greenlet):
     def _scrub(self, path="/", recursive=True):
         self.logger.info(f"scrubbing fs: {self.fs.name}")
         recopt = ["recursive", "force"] if recursive else ["force"]
-        out_json = self.fs.rank_tell(["scrub", "start", path] + recopt)
+        out_json = self.fs.run_scrub(["start", path] + recopt)
         assert out_json is not None
 
         tag = out_json['scrub_tag']
@@ -73,29 +71,8 @@ class ForwardScrubber(Thrasher, Greenlet):
         assert out_json['return_code'] == 0
         assert out_json['mode'] == 'asynchronous'
 
-        return self._wait_until_scrub_complete(tag)
-
-    def _wait_until_scrub_complete(self, tag):
-        # time out after scrub_timeout seconds and assume as done
-        with contextutil.safe_while(sleep=30, tries=self.scrub_timeout//30) as proceed:
-            while proceed():
-                try:
-                    out_json = self.fs.rank_tell(["scrub", "status"])
-                    assert out_json is not None
-                    if out_json['status'] == "no active scrubs running":
-                        self.logger.info("all active scrubs completed")
-                        return
-
-                    status = out_json['scrubs'][tag]
-                    if status is not None:
-                        self.logger.info(f"scrub status for tag:{tag} - {status}")
-                    else:
-                        self.logger.info(f"scrub has completed for tag:{tag}")
-                        return
-                except CommandFailedError as e:
-                    self.logger.exception(f"exception while getting scrub status: {e}")
-                    self.logger.info("retrying scrub status command in a while")
-                    pass
+        return self.fs.wait_until_scrub_complete(tag=tag, sleep=30,
+                                                 timeout=self.scrub_timeout)
 
 def stop_all_fwd_scrubbers(thrashers):
     for thrasher in thrashers:
