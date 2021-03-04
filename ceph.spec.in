@@ -247,6 +247,7 @@ BuildRequires:  %{luarocks_package_name}
 %if 0%{with make_check}
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
+BuildRequires:	ninja-build
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
