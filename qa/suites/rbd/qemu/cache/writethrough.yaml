@@ -1,6 +1,6 @@
 tasks:
 - install:
-- ceph:
+- cephadm:
     conf:
       client:
         rbd cache: true

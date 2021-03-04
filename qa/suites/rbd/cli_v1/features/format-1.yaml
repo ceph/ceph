@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    create_rbd_pool: true      
     conf:
       client:
         rbd default format: 1
