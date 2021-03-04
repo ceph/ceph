@@ -85,16 +85,24 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
    * the access would be limited to accounts with empty tenant. */
   string bucket_tenant;
   if (!s->account_name.empty()) {
+    bool found = false;
     std::unique_ptr<rgw::sal::RGWUser> user;
 
     rgw_user uid(s->account_name);
     if (uid.tenant.empty()) {
-      uid.tenant = uid.id;
+      rgw_user tenanted_uid(uid.id, uid.id);
+      user = store->get_user(tenanted_uid);
+      if (user->load_by_id(dpp, s->yield) >= 0) {
+	/* Succeeded */
+	found = true;
+      }
     }
 
-    user = store->get_user(uid);
-    if (user->load_by_id(dpp, s->yield) < 0) {
-      throw -EPERM;
+    if (!found) {
+      user = store->get_user(uid);
+      if (user->load_by_id(dpp, s->yield) < 0) {
+	throw -EPERM;
+      }
     }
 
     bucket_tenant = user->get_tenant();
@@ -117,6 +125,8 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   if (user->load_by_id(dpp, s->yield) < 0) {
     throw -EPERM;
   }
+
+  owner_info = user->get_info();
 }
 
 std::string TempURLEngine::convert_from_iso8601(std::string expires) const
