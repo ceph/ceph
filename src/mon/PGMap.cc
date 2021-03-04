@@ -1621,6 +1621,16 @@ void PGMap::dump_osd_stats(ceph::Formatter *f, bool with_net) const
     f->close_section();
   }
   f->close_section();
+
+  f->open_array_section("pool_statfs");
+  for (auto& p : pool_statfs) {
+    f->open_object_section("item");
+    f->dump_int("poolid", p.first.first);
+    f->dump_int("osd", p.first.second);
+    p.second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void PGMap::dump_osd_ping_times(ceph::Formatter *f) const
