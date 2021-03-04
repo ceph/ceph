@@ -1208,7 +1208,7 @@ struct C_IO_Inode_Fetched : public CInodeIOContext {
   Context *fin;
   C_IO_Inode_Fetched(CInode *i, Context *f) : CInodeIOContext(i), fin(f) {}
   void finish(int r) override {
-    // Ignore 'r', because we fetch from two places, so r is usually ENOENT
+    // Ignore 'r', because we fetch from two places, so r is usually CEPHFS_ENOENT
     in->_fetched(bl, bl2, fin);
   }
   void print(ostream& out) const override {
@@ -1248,7 +1248,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     p = bl.cbegin();
   } else {
     derr << "No data while reading inode " << ino() << dendl;
-    fin->complete(-ENOENT);
+    fin->complete(-CEPHFS_ENOENT);
     return;
   }
 
@@ -1262,7 +1262,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     if (magic != CEPH_FS_ONDISK_MAGIC) {
       dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
               << "'" << dendl;
-      fin->complete(-EINVAL);
+      fin->complete(-CEPHFS_EINVAL);
     } else {
       decode_store(p);
       dout(10) << "_fetched " << *this << dendl;
@@ -1270,7 +1270,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     }
   } catch (buffer::error &err) {
     derr << "Corrupt inode " << ino() << ": " << err.what() << dendl;
-    fin->complete(-EINVAL);
+    fin->complete(-CEPHFS_EINVAL);
     return;
   }
 }
@@ -1395,18 +1395,18 @@ void CInode::store_backtrace(CInodeCommitOperations &op, int op_prio)
 
 void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 {
-  if (r == -ENOENT) {
+  if (r == -CEPHFS_ENOENT) {
     const int64_t pool = get_backtrace_pool();
     bool exists = mdcache->mds->objecter->with_osdmap(
         [pool](const OSDMap &osd_map) {
           return osd_map.have_pg_pool(pool);
         });
 
-    // This ENOENT is because the pool doesn't exist (the user deleted it
+    // This CEPHFS_ENOENT is because the pool doesn't exist (the user deleted it
     // out from under us), so the backtrace can never be written, so pretend
     // to succeed so that the user can proceed to e.g. delete the file.
     if (!exists) {
-      dout(4) << __func__ << " got ENOENT: a data pool was deleted "
+      dout(4) << __func__ << " got CEPHFS_ENOENT: a data pool was deleted "
                  "beneath us!" << dendl;
       r = 0;
     }
@@ -1478,7 +1478,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
     if (backtrace.ancestors.empty() ||
 	backtrace.ancestors[0].dname != pdn->get_name() ||
 	backtrace.ancestors[0].dirino != pdn->get_dir()->ino())
-      err = -EINVAL;
+      err = -CEPHFS_EINVAL;
   }
 
   if (err) {
@@ -3860,7 +3860,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       sizeof(struct ceph_timespec) + 8; // btime + change_attr
 
     if (bytes > max_bytes)
-      return -ENOSPC;
+      return -CEPHFS_ENOSPC;
   }
 
 
