@@ -10109,7 +10109,9 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
 {
   OpRequestRef op = ctx->op;
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
-  object_locator_t oloc = m->get_object_locator();
+
+  auto pool_id = osd->objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name), pool);
+  object_locator_t oloc(pool_id);
 
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
@@ -10125,7 +10127,6 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
     std::string oid = it->first;
     ObjectOperation obj_op;
     obj_op.call(cls, method, inbl);
-    int64_t ret = osd->objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name), pool);
     uint32_t flags = 0;
     ceph_tid_t tid = osd->objecter->read(
 					 object_t(oid), oloc, obj_op,
