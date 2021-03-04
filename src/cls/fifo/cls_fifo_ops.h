@@ -325,6 +325,49 @@ struct get_part_visible_offset_reply
 };
 WRITE_CLASS_ENCODER(get_part_visible_offset_reply)
 
+struct get_part_trim_offset
+{
+  std::optional<std::string> tag;
+  std::uint64_t start_ofs{0};
+  std::uint64_t end_ofs{0};
+  bool exclusive = false;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(tag, bl);
+    encode(start_ofs, bl);
+    encode(end_ofs, bl);
+    encode(exclusive, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(tag, bl);
+    decode(start_ofs, bl);
+    decode(end_ofs, bl);
+    decode(exclusive, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(get_part_trim_offset)
+
+struct get_part_trim_offset_reply
+{
+  std::uint64_t ofs{0};
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(ofs, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(ofs, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(get_part_trim_offset_reply)
+
 inline constexpr auto CLASS = "fifo";
 inline constexpr auto CREATE_META = "create_meta";
 inline constexpr auto GET_META = "get_meta";
@@ -335,4 +378,5 @@ inline constexpr auto TRIM_PART = "trim_part";
 inline constexpr auto LIST_PART = "part_list";
 inline constexpr auto GET_PART_INFO = "get_part_info";
 inline constexpr auto GET_PART_VISIBLE_OFFSET = "get_part_visible_offset";
+inline constexpr auto GET_PART_TRIM_OFFSET = "get_part_trim_offset";
 } // namespace rados::cls::fifo::op

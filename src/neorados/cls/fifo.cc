@@ -240,6 +240,42 @@ void get_part_visible_offset(WriteOp& op,
   op.returnvec();
 }
 
+void get_part_trim_offset(WriteOp& op,
+	       std::optional<string_view> tag,
+	       std::uint64_t start_ofs,
+	       std::uint64_t end_ofs,
+	       std::uint64_t& trim_ofs,
+	       bs::error_code* ec_out)
+{
+  fifo::op::get_part_trim_offset params;
+
+  params.tag = tag;
+  params.start_ofs = start_ofs;
+  params.end_ofs = end_ofs;
+
+  bufferlist in;
+  encode(params, in);
+  op.exec(fifo::op::CLASS, fifo::op::GET_PART_TRIM_OFFSET, in, 
+	  [&trim_ofs, ec_out](bs::error_code ec, const cb::list& bl) {
+	    if (ec) {
+	      if (ec_out) *ec_out = ec;
+	      return;
+	    }
+
+	    fifo::op::get_part_trim_offset_reply reply;
+	    auto iter = bl.cbegin();
+	    try {
+	      decode(reply, iter);
+	    } catch (const cb::error& err) {
+	      if (ec_out) *ec_out = ec;
+	      return;
+	    }
+
+	    trim_ofs = reply.ofs;
+	  });
+  op.returnvec();
+}
+
 void get_part_info(ReadOp& op,
 		   bs::error_code* out_ec,
 		   fifo::part_header* header)

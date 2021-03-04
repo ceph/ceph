@@ -133,6 +133,12 @@ void get_part_visible_offset(WriteOp& op,
 	       std::uint64_t& visible_ofs,
          bool& invisible_part,
 	       bs::error_code* ec_out);
+void get_part_trim_offset(WriteOp& op,
+	       std::optional<string_view> tag,
+	       std::uint64_t start_ofs,
+	       std::uint64_t end_ofs,
+	       std::uint64_t& trim_ofs,
+	       bs::error_code* ec_out);
 void get_part_info(ReadOp& op,
 		   bs::error_code* out_ec,
 		   fifo::part_header* header);
@@ -152,6 +158,14 @@ struct marker {
     return fmt::format("{:0>20}:{:0>20}", num, ofs);
   }
 };
+
+inline bool operator<(const marker& m1, const marker& m2) {
+  return m1.num < m2.num || (m1.num == m2.num && m1.ofs < m2.ofs);
+}
+
+inline bool operator>(const marker& m1, const marker& m2) {
+  return m1.num > m2.num || (m1.num == m2.num && m1.ofs > m2.ofs);
+}
 
 struct list_entry {
   cb::list data;
@@ -650,6 +664,53 @@ public:
       using handler_type = decltype(init.completion_handler);
       auto t = ceph::allocate_unique<Trimmer<handler_type>>(
 	a, this, m->num, m->ofs, exclusive, std::move(init.completion_handler));
+      t.release()->trim();
+    }
+    return init.result.get();
+  }
+
+  /// Trim entries from the tail to the given position
+  /// Signature: (bs::error_code)
+  template<typename CT>
+  auto trim2(std::string_view start_markstr, //< Position from which to trim
+      std::string_view end_markstr, //< Position to which to trim, inclusive
+	    bool exclusive, //< If true, trim markers up to but NOT INCLUDING
+	                    //< markstr, otherwise trim markstr as well.
+	    CT&& ct //< CompletionToken
+    ) {
+    ba::async_completion<CT, void(bs::error_code)> init(ct);
+    auto a = ba::get_associated_allocator(init.completion_handler);
+    auto e = ba::get_associated_executor(init.completion_handler);
+    const auto start_m = to_marker(start_markstr);
+    const auto end_m = to_marker(end_markstr);
+    if (!start_m) {
+      std::cout
+        << __func__ << "(): failed to parse start marker: marker="
+			 << start_markstr << std::endl;
+      e.post(ca::bind_handler(std::move(init.completion_handler),
+			      errc::invalid_marker), a);
+      return init.result.get();
+    } else if (!end_m) {
+      std::cout
+        << __func__ << "(): failed to parse end marker: marker="
+			 << end_markstr << std::endl;
+      e.post(ca::bind_handler(std::move(init.completion_handler),
+			      errc::invalid_marker), a);
+      return init.result.get();
+    }  else if(!(start_m.value() < end_m.value())) {
+      std::cout
+        << __func__ << "(): start marker: " << start_markstr << 
+			 " must be smaller than end marker: " << end_markstr << std::endl;
+      e.post(ca::bind_handler(std::move(init.completion_handler),
+			      errc::invalid_marker), a);
+    } else {
+      std::cout
+        << __func__ << "(): called with on: " <<  
+        start_markstr << " - " << end_markstr << std::endl;
+      using handler_type = decltype(init.completion_handler);
+      auto t = ceph::allocate_unique<Trimmer2<handler_type>>(a, this, 
+          start_m->num, start_m->ofs, end_m->num,end_m->ofs, 
+          std::move(init.completion_handler));
       t.release()->trim();
     }
     return init.result.get();
@@ -1630,6 +1691,162 @@ private:
 	    }
 	    update();
 	  }));
+    }
+  };
+
+  template<typename Handler>
+  class Trimmer2 {
+    FIFO* f;
+    std::int64_t max_part_size;
+    std::int64_t start_part_num;
+    std::uint64_t start_ofs;
+    std::int64_t end_part_num;
+    std::uint64_t end_ofs;
+    Handler handler;
+    std::int64_t pn;
+    int update_retries = 0;
+    bs::error_code ec_out;
+    bool contiguous_trim = true;
+
+    void handle(bs::error_code ec) {
+      auto h = std::move(handler);
+
+      FIFO::assoc_delete(h, this);
+      return std::move(h)(ec);
+    }
+
+    void update() {
+      std::cout << "INFO: " << __func__  << " called" << std::endl;
+      std::unique_lock l(f->m);
+      auto objv = f->info.version;
+      l.unlock();
+      auto a = ba::get_associated_allocator(handler);
+      auto e = ba::get_associated_executor(handler, f->get_executor());
+      f->_update_meta(fifo::update{}.tail_part_num(pn),
+          objv,
+	        ca::bind_ea(e, a, [this, t = std::unique_ptr<Trimmer2>(this)](bs::error_code ec, bool canceled) mutable {
+	          t.release();
+	          if (canceled) {
+	            if (update_retries >= MAX_RACE_RETRIES) {
+              std::cout 
+		              << "ERROR: " << __func__
+		              << "(): race check failed too many times, likely a bug"
+		              << std::endl;
+		            handle(errc::raced);
+		            return;
+	            }
+            }
+	          std::unique_lock l(f->m);
+	          const auto tail_part_num = f->info.tail_part_num;
+	          l.unlock();
+	          if (tail_part_num < pn) {
+	            ++update_retries;
+	            update();
+	            return;
+	          }
+	          handle({});
+	          return;
+	        }));
+    }
+
+    inline void stop_or_continue() {
+      if (pn == end_part_num) {
+	      handle({});
+        return;
+      }
+      ++pn;
+      trim();
+    }
+
+  public:
+    Trimmer2(FIFO* _f, std::int64_t _start_part_num, std::uint64_t _start_ofs,
+        std::int64_t _end_part_num, std::uint64_t _end_ofs, Handler&& _handler)
+      : f(_f), start_ofs(_start_ofs), end_ofs(_end_ofs), handler(std::move(_handler)) {
+      std::unique_lock l(f->m);
+      // we start to loop from the tail part
+      pn = f->info.tail_part_num;
+      // we cannot start trimming before the tail part
+      start_part_num = std::max(_start_part_num, pn);
+	    max_part_size = f->info.params.max_part_size;
+      // cannot end trimming after the head part
+      end_part_num = std::min(_end_part_num, f->info.head_part_num);
+      // TODO: add assert on start < end
+    }
+
+    void trim() {
+      if (pn < start_part_num) { 
+        contiguous_trim = false;
+        std::cout << __func__ << "(): INFO: skip part: " << pn << std::endl;
+        ++pn;
+	      trim();
+        return;
+      }
+
+	    WriteOp op;
+      std::uint64_t trim_ofs;
+	    get_part_trim_offset(op, {}, 
+          ((start_part_num == pn) ? start_ofs : 0),
+          ((end_part_num == pn) ? end_ofs : max_part_size), 
+          trim_ofs, 
+          &ec_out);
+
+      auto a = ba::get_associated_allocator(handler);
+      auto e = ba::get_associated_executor(handler, f->get_executor());
+	    std::unique_lock l(f->m);
+	    auto part_oid = f->info.part_oid(pn);
+	    l.unlock();
+	    f->r->execute(part_oid, f->ioc, std::move(op), 
+        ca::bind_ea(e, a, [&e, &a, t = std::unique_ptr<Trimmer2>(this), this, part_oid, &trim_ofs](bs::error_code ec) mutable {
+          t.release();
+          if (ec) {
+            cout
+		          << __func__ << "(): ERROR: trim_part_trim_offset() on part="
+		          << pn << " returned ec=" << ec.message() << std::endl;
+		        handle(ec);
+		        return;
+          }
+
+          cout << __func__ << "(): INFO: get_part_trim_offset returned offset: " << trim_ofs 
+            << " on part: " << pn << std::endl;
+          if (trim_ofs == 0) {
+            contiguous_trim = false;
+            cout << __func__ << "(): INFO: non contiguous trim on part: " << pn << std::endl;
+            stop_or_continue();
+            return;
+          }
+
+          if (contiguous_trim) {
+            cout << __func__ << "(): INFO: contiguous trim on part: " << pn << " with offset: " << trim_ofs << std::endl;
+            f->trim_part(pn, trim_ofs, std::nullopt, false, ca::bind_ea(e, a, [t = std::unique_ptr<Trimmer2>(this), this](bs::error_code ec) mutable {
+              t.release();
+	            if (ec && ec != bs::errc::no_such_file_or_directory) {
+                cout
+		              << __func__ << "(): ERROR: trim_part() on part="
+		              << pn << " returned ec=" << ec.message() << std::endl;
+		            handle(ec);
+		            return;
+	            }
+              if (pn < end_part_num) {
+	              ++pn;
+	              trim();
+                return;
+              }
+	            std::unique_lock l(f->m);
+	            const auto tail_part_num = f->info.tail_part_num;
+	            l.unlock();
+	            if (pn <= tail_part_num) {
+	              // don't need to modify meta info
+	              handle({});
+	              return;
+	            }
+	            update();
+	          }));
+            return;
+          }
+          std::cout
+            << __func__ << "(): INFO: non contiguous trim on part: " << pn  << std::endl;
+          stop_or_continue();
+        }));
     }
   };
 
