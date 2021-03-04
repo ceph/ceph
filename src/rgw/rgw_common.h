@@ -353,6 +353,15 @@ class RGWHTTPArgs {
   bool sub_resource_exists(const char *name) const {
     return (sub_resources.find(name) != std::end(sub_resources));
   }
+  bool exist_obj_excl_sub_resource() const {
+    const char* const obj_sub_resource[] = {"append", "torrent", "uploadId",
+                                            "partNumber", "versionId"};
+    for (int i = 0; i != std::size(obj_sub_resource); i++) {
+      if (sub_resource_exists(obj_sub_resource[i])) return true;
+    }
+    return false;
+  }
+
   std::map<std::string, std::string>& get_params() {
     return val_map;
   }
