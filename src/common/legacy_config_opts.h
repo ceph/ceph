@@ -1014,6 +1014,7 @@ OPTION(bluestore_bitmapallocator_span_size, OPT_INT) // must be power of 2 align
 OPTION(bluestore_max_deferred_txc, OPT_U64)
 OPTION(bluestore_max_defer_interval, OPT_U64)
 OPTION(bluestore_rocksdb_options, OPT_STR)
+OPTION(bluestore_rocksdb_options_annex, OPT_STR)
 OPTION(bluestore_fsck_on_mount, OPT_BOOL)
 OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL)
 OPTION(bluestore_fsck_quick_fix_on_mount, OPT_BOOL)
