@@ -327,6 +327,16 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     // TODO: we could limit this to getting the monmap and mgrmap...
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
   }
+  if (profile == "cephfs-mirror") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("mds", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                "cephfs/mirror/peer/");
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
+
+  }
   if (profile == "role-definer") {
     // grants ALL caps to the auth subsystem, read-only on the
     // monitor subsystem and nothing else.
