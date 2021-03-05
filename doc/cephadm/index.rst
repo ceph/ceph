@@ -27,7 +27,7 @@ versions of Ceph.
 .. toctree::
     :maxdepth: 1
 
-    stability
+    compatibility
     install
     adoption
     host-management
