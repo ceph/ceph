@@ -96,7 +96,14 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << " " << (version+1) << dendl;
   put_last_committed(t, version+1);
+  // NOTE: caller should have done encode_pending_to_kvmon() and
+  // kvmon->propose_pending() to commit the actual config changes.
+}
 
+void ConfigMonitor::encode_pending_to_kvmon()
+{
+  // we need to pass our data through KVMonitor so that it is properly
+  // versioned and shared with subscribers.
   for (auto& [key, value] : pending_cleanup) {
     if (pending.count(key) == 0) {
       derr << __func__ << " repair: adjusting config key '" << key << "'"
@@ -113,7 +120,7 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     bufferlist metabl;
     ::encode(ceph_clock_now(), metabl);
     ::encode(pending_description, metabl);
-    t->put(KV_PREFIX, history, metabl);
+    mon.kvmon()->enqueue_set(history, metabl);
   }
   for (auto& p : pending) {
     string key = KEY_PREFIX + p.first;
@@ -122,17 +129,17 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       if (p.second && *p.second == q->second) {
 	continue;
       }
-      t->put(KV_PREFIX, history + "-" + p.first, q->second);
+      mon.kvmon()->enqueue_set(history + "-" + p.first, q->second);
     } else if (!p.second) {
       continue;
     }
     if (p.second) {
       dout(20) << __func__ << " set " << key << dendl;
-      t->put(KV_PREFIX, key, *p.second);
-      t->put(KV_PREFIX, history + "+" + p.first, *p.second);
-    } else {
+      mon.kvmon()->enqueue_set(key, *p.second);
+      mon.kvmon()->enqueue_set(history + "+" + p.first, *p.second);
+   } else {
       dout(20) << __func__ << " rm " << key << dendl;
-      t->erase(KV_PREFIX, key);
+      mon.kvmon()->enqueue_rm(key);
     }
   }
 }
@@ -513,6 +520,13 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
   std::stringstream ss;
   int err = -EINVAL;
 
+  // make sure kv is writeable.
+  if (!mon.kvmon()->is_writeable()) {
+    dout(10) << __func__ << " waiting for kv mon to be writeable" << dendl;
+    mon.kvmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+    return false;
+  }
+
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
@@ -724,7 +738,12 @@ update:
     err = 0;
     goto reply;
   }
-  force_immediate_propose();  // faster response
+  // immediately propose *with* KV mon
+  encode_pending_to_kvmon();
+  paxos.plug();
+  mon.kvmon()->propose_pending();
+  paxos.unplug();
+  force_immediate_propose();
   wait_for_finished_proposal(
     op,
     new Monitor::C_Command(
@@ -743,7 +762,11 @@ void ConfigMonitor::tick()
   if (!pending_cleanup.empty()) {
     changed = true;
   }
-  if (changed) {
+  if (changed && mon.kvmon()->is_writeable()) {
+    paxos.plug();
+    encode_pending_to_kvmon();
+    mon.kvmon()->propose_pending();
+    paxos.unplug();
     propose_pending();
   }
 }
