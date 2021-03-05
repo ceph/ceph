@@ -114,6 +114,14 @@ bool notify_reply_t::operator<(const notify_reply_t& rhs) const
   return lhsp < rhsp;
 }
 
+std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs)
+{
+  out << "notify_reply_t{watcher_gid=" << rhs.watcher_gid
+      << ", watcher_cookie=" << rhs.watcher_cookie
+      << ", bl=" << rhs.bl << "}";
+  return out;
+}
+
 seastar::future<> Notify::remove_watcher(WatchRef watch)
 {
   if (discarded || complete) {
@@ -143,6 +151,7 @@ seastar::future<> Notify::maybe_send_completion()
 {
   logger().info("{} -- {} in progress watchers", __func__, watchers.size());
   if (watchers.empty()) {
+    logger().debug("{} sending notify replies: {}", __func__, notify_replies);
     // prepare reply
     ceph::bufferlist bl;
     encode(notify_replies, bl);
