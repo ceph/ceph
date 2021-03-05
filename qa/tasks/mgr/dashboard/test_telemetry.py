@@ -11,6 +11,15 @@ class TelemetryTest(DashboardTestCase):
         data = cls._get('/api/mgr/module/telemetry')
         cls.pre_enabled_status = data['enabled']
 
+        # identify ourselves so we can filter these reports out on the server side
+        cls._put(
+            '/api/settings',
+            {
+                'mgr/telemetry/channel_ident': True,
+                'mgr/telemetry/organization': 'ceph-qa',
+            }
+        )
+
     @classmethod
     def tearDownClass(cls):
         if cls.pre_enabled_status:
