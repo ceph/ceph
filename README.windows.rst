@@ -16,7 +16,7 @@ components for Windows. Support for msvc and clang will be added soon.
 It may be called from a Linux environment, including Windows Subsystem for
 Linux. MSYS2 and CygWin may also work but those weren't tested.
 
-This script currently supports Ubuntu 18.04 and openSUSE Tumbleweed, but it
+This script currently supports Ubuntu 20.04 and openSUSE Tumbleweed, but it
 may be easily adapted to run on other Linux distributions, taking into
 account different package managers, package names or paths (e.g. mingw paths).
 
@@ -136,8 +136,8 @@ In order to mount Ceph filesystems, you will have to install Dokany.
 You may fetch the installer as well as the source code from the Dokany
 Github repository: https://github.com/dokan-dev/dokany/releases
 
-Make sure to use 1.3.1, which at time of the writing is the latest
-stable release.
+The minimum supported Dokany version is 1.3.1. At the time of the writing,
+Dokany 2.0 is in Beta stage and is unsupported.
 
 In order to map RBD images, the ``WNBD`` driver must be installed. Please
 check out this page for more details about ``WNBD`` and the install process:
@@ -167,8 +167,12 @@ accordingly.
         keyring = C:/ProgramData/ceph/keyring
         ; log file = C:/ProgramData/ceph/out/$name.$pid.log
         admin socket = C:/ProgramData/ceph/out/$name.$pid.asok
+
+        ; client_permissions = true
+        ; client_mount_uid = 1000
+        ; client_mount_gid = 1000
     [global]
-        mon host =  [v2:xx.xx.xx.xx:40623,v1:xx.xx.xx.xx:40624] [v2:xx.xx.xx.xx:40625,v1:xx.xx.xx.xx:40626] [v2:xx.xx.xx.xx:40627,v1:xx.xx.xx.xx:40628]
+        mon host = <ceph_monitor_addresses>
 
 Assuming that you're going to use this config sample, don't forget to
 also copy your keyring file to the specified location and make sure
@@ -215,32 +219,7 @@ Usage
 Cephfs
 ======
 
-In order to mount a ceph filesystem, the following command can be used:
-
-.. code:: PowerShell
-
-    ceph-dokan.exe -c c:\ceph.conf -l x
-
-The above command will mount the default ceph filesystem using the drive
-letter ``x``. If ``ceph.conf`` is placed at the default location, which
-is ``%ProgramData%\ceph\ceph.conf``, then this argument becomes optional.
-
-The ``-l`` argument also allows using an empty folder as a mountpoint
-instead of a drive letter.
-
-The uid and gid used for mounting the filesystem defaults to 0 and may be
-changed using the ``-u`` and ``-g`` arguments. ``-n`` can be used in order
-to skip enforcing permissions on client side. Be aware that Windows ACLs
-are ignored. Posix ACLs are supported but cannot be modified using the
-current CLI. In the future, we may add some command actions to change
-file ownership or permissions.
-
-For debugging purposes, ``-d`` and ``s`` might be used. The first one will
-enable debug output and the latter will enable stderr logging. By default,
-debug messages are sent to a connected debugger.
-
-You may use ``--help`` to get the full list of available options. The
-current syntax is up for discussion and might change.
+Please check the `ceph-dokan documentation`_ for more details.
 
 RBD
 ===
@@ -411,3 +390,5 @@ At the same time, WNBD driver counters can be fetched using:
 
 Note that the ``wnbd-client`` mapping identifier will be the full RBD image spec
 (the ``device`` column of the ``rbd device list`` output).
+
+.. _ceph-dokan documentation: https://docs.ceph.com/en/latest/cephfs/ceph-dokan/
