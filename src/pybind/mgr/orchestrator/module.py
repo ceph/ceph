@@ -906,9 +906,7 @@ Usage:
 
     @_cli_write_command('orch daemon add rgw')
     def _rgw_add(self,
-                 realm_name: str,
-                 zone_name: str,
-                 subcluster: Optional[str] = None,
+                 svc_id: str,
                  port: Optional[int] = None,
                  ssl: bool = False,
                  placement: Optional[str] = None,
@@ -918,9 +916,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = RGWSpec(
-            rgw_realm=realm_name,
-            rgw_zone=zone_name,
-            subcluster=subcluster,
+            service_id=svc_id,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
@@ -1096,9 +1092,9 @@ Usage:
 
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
-                   realm_name: str,
-                   zone_name: str,
-                   subcluster: Optional[str] = None,
+                   svc_id: str,
+                   realm_name: Optional[str] = None,
+                   zone_name: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
                    placement: Optional[str] = None,
@@ -1111,9 +1107,9 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = RGWSpec(
+            service_id=svc_id,
             rgw_realm=realm_name,
             rgw_zone=zone_name,
-            subcluster=subcluster,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),

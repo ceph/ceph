@@ -161,7 +161,6 @@ placement:
 spec:
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
-  subcluster: '1'
 ---
 service_type: osd
 service_id: osd_spec_default
@@ -236,9 +235,10 @@ spec:
                              ),
                              (
                                      ServiceSpec(
-                                         service_type='rgw'
+                                         service_type='rgw',
+                                         service_id='foo',
                                      ),
-                                     RGWSpec(),
+                                     RGWSpec(service_id='foo'),
                                      True
                              ),
                          ])
