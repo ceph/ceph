@@ -5187,8 +5187,7 @@ void PG::replica_scrub(
 void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 {
   if (cct->_conf->osd_scrub_sleep > 0 &&
-      (scrubber.state == PG::Scrubber::NEW_CHUNK ||
-       scrubber.state == PG::Scrubber::INACTIVE) &&
+      scrubber.state == PG::Scrubber::NEW_CHUNK &&
        scrubber.needs_sleep) {
     ceph_assert(!scrubber.sleeping);
     dout(20) << __func__ << " state is INACTIVE|NEW_CHUNK, sleeping" << dendl;
