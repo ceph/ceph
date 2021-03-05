@@ -1061,6 +1061,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return False
         return conf.last_modified > dt
 
+    @orchestrator._cli_write_command(
+        'cephadm osd activate'
+    )
+    def _osd_activate(self, host: List[str]) -> HandleCommandResult:
+        """
+        Start OSD containers for existing OSDs
+        """
+
+        @forall_hosts
+        def run(h: str) -> str:
+            return self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd')
+
+        return HandleCommandResult(stdout='\n'.join(run(host)))
+
     def _get_connection(self, host: str) -> Tuple['remoto.backends.BaseConnection',
                                                   'remoto.backends.LegacyModuleExecute']:
         """
