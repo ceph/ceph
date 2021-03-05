@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
 
+RADOSGW_ADMIN_TIMEOUT = str(30)
+
 
 class CephadmDaemonDeploySpec:
     # typing.NamedTuple + Generic is broken in py36
@@ -743,22 +745,34 @@ class RgwService(CephService):
         return keyring
 
     def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str) -> None:
-        if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
-            raise OrchestratorError('Health not ok, will try again when health ok')
-
         # get keyring needed to run rados commands and strip out just the keyring
         keyring = self.get_keyring(rgw_id).split('key = ', 1)[1].rstrip()
 
-        # We can call radosgw-admin within the container, cause cephadm gives the MGR the required keyring permissions
+        # We can call radosgw-admin within the container, cause
+        # cephadm gives the MGR the required keyring permissions.
+
+        # Include a timeout so that we don't block indefinitely if there is a pool
+        # unavailable.
+
+        def radosgw_admin(args: List[str]) -> Tuple[bytes, bytes, int]:
+            cmd = [
+                'timeout', RADOSGW_ADMIN_TIMEOUT,
+                'radosgw-admin',
+            ] + args
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 124:
+                raise OrchestratorError('Timed out calling radosgw-admin; will try again later')
+            return result.stdout, result.stderr, result.returncode
 
         def get_realms() -> List[str]:
-            cmd = ['radosgw-admin',
-                   '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'realm', 'list',
-                   '--format=json']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out = result.stdout
+            out, _, _ = radosgw_admin(
+                [
+                    '--key=%s' % keyring,
+                    '--user', 'rgw.%s' % rgw_id,
+                    'realm', 'list',
+                    '--format=json',
+                ],
+            )
             if not out:
                 return []
             try:
@@ -768,26 +782,29 @@ class RgwService(CephService):
                 raise OrchestratorError('failed to parse realm info')
 
         def create_realm() -> None:
-            cmd = ['radosgw-admin',
-                   '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'realm', 'create',
-                   '--rgw-realm=%s' % spec.rgw_realm,
-                   '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode:
-                err = 'failed to create RGW realm "%s": %r' % (spec.rgw_realm, result.stderr)
-                raise OrchestratorError(err)
+            _, err, rc = radosgw_admin(
+                [
+                    '--key=%s' % keyring,
+                    '--user', 'rgw.%s' % rgw_id,
+                    'realm', 'create',
+                    '--rgw-realm=%s' % spec.rgw_realm,
+                    '--default',
+                ]
+            )
+            if rc:
+                raise OrchestratorError('failed to create realm %s: %r' % (
+                    spec.rgw_realm, err))
             self.mgr.log.info('created realm: %s' % spec.rgw_realm)
 
         def get_zonegroups() -> List[str]:
-            cmd = ['radosgw-admin',
-                   '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'zonegroup', 'list',
-                   '--format=json']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out = result.stdout
+            out, _, _ = radosgw_admin(
+                [
+                    '--key=%s' % keyring,
+                    '--user', 'rgw.%s' % rgw_id,
+                    'zonegroup', 'list',
+                    '--format=json',
+                ],
+            )
             if not out:
                 return []
             try:
@@ -797,16 +814,17 @@ class RgwService(CephService):
                 raise OrchestratorError('failed to parse zonegroup info')
 
         def create_zonegroup() -> None:
-            cmd = ['radosgw-admin',
-                   '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'zonegroup', 'create',
-                   '--rgw-zonegroup=default',
-                   '--master', '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode:
-                err = 'failed to create RGW zonegroup "%s": %r' % ('default', result.stderr)
-                raise OrchestratorError(err)
+            _, err, rc = radosgw_admin(
+                [
+                    '--key=%s' % keyring,
+                    '--user', 'rgw.%s' % rgw_id,
+                    'zonegroup', 'create',
+                    '--rgw-zonegroup=default',
+                    '--master', '--default',
+                ]
+            )
+            if rc:
+                raise OrchestratorError('failed to create zonegrop default: %r' % (err))
             self.mgr.log.info('created zonegroup: default')
 
         def create_zonegroup_if_required() -> None:
@@ -815,13 +833,14 @@ class RgwService(CephService):
                 create_zonegroup()
 
         def get_zones() -> List[str]:
-            cmd = ['radosgw-admin',
-                   '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'zone', 'list',
-                   '--format=json']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out = result.stdout
+            out, _, _ = radosgw_admin(
+                [
+                    '--key=%s' % keyring,
+                    '--user', 'rgw.%s' % rgw_id,
+                    'zone', 'list',
+                    '--format=json',
+                ],
+            )
             if not out:
                 return []
             try:
@@ -831,17 +850,19 @@ class RgwService(CephService):
                 raise OrchestratorError('failed to parse zone info')
 
         def create_zone() -> None:
-            cmd = ['radosgw-admin',
-                   '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'zone', 'create',
-                   '--rgw-zonegroup=default',
-                   '--rgw-zone=%s' % spec.rgw_zone,
-                   '--master', '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode:
-                err = 'failed to create RGW zone "%s": %r' % (spec.rgw_zone, result.stderr)
-                raise OrchestratorError(err)
+            _, err, rc = radosgw_admin(
+                [
+                    '--key=%s' % keyring,
+                    '--user', 'rgw.%s' % rgw_id,
+                    'zone', 'create',
+                    '--rgw-zonegroup=default',
+                    '--rgw-zone=%s' % spec.rgw_zone,
+                    '--master', '--default',
+                ]
+            )
+            if rc:
+                raise OrchestratorError('failed to create zone %s: %r' % (
+                    spec.rgw_zone, err))
             self.mgr.log.info('created zone: %s' % spec.rgw_zone)
 
         changes = False
@@ -858,16 +879,17 @@ class RgwService(CephService):
 
         # update period if changes were made
         if changes:
-            cmd = ['radosgw-admin',
-                   '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'period', 'update',
-                   '--rgw-realm=%s' % spec.rgw_realm,
-                   '--commit']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode:
-                err = 'failed to update RGW period: %r' % (result.stderr)
-                raise OrchestratorError(err)
+            _, err, rc = radosgw_admin(
+                [
+                    '--key=%s' % keyring,
+                    '--user', 'rgw.%s' % rgw_id,
+                    'period', 'update',
+                    '--rgw-realm=%s' % spec.rgw_realm,
+                    '--commit',
+                ]
+            )
+            if rc:
+                raise OrchestratorError('failed to update period: %s' % (err))
             self.mgr.log.info('updated period')
 
     def ok_to_stop(
