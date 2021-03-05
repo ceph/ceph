@@ -109,7 +109,7 @@ div.highlight {
   border-collapse: collapse;
 }
 
-.rst-content table dl:not(.docutils) dt {
+.rst-content li dl:not(.docutils) dt {
   display: inline-block;
 }
 
