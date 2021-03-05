@@ -20,7 +20,9 @@ SKIP_CMAKE=${SKIP_CMAKE:-}
 SKIP_DLL_COPY=${SKIP_DLL_COPY:-}
 SKIP_TESTS=${SKIP_TESTS:-}
 SKIP_BINDIR_CLEAN=${SKIP_BINDIR_CLEAN:-}
-NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
+# Use Ninja's default, it might be useful when having few cores.
+NUM_WORKERS_DEFAULT=$(( $num_vcpus + 2 ))
+NUM_WORKERS=${NUM_WORKERS:-$NUM_WORKERS_DEFAULT}
 DEV_BUILD=${DEV_BUILD:-}
 # Unless SKIP_ZIP is set, we're preparing an archive that contains the Ceph
 # binaries, debug symbols as well as the required DLLs.
@@ -77,7 +79,7 @@ dbgSymbolDir="$strippedBinDir/${dbgDirname}"
 depsSrcDir="$DEPS_DIR/src"
 depsToolsetDir="$DEPS_DIR/mingw"
 
-generatorUsed="Unix Makefiles"
+cmakeGenerator="Ninja"
 lz4Dir="${depsToolsetDir}/lz4"
 sslDir="${depsToolsetDir}/openssl"
 curlDir="${depsToolsetDir}/curl"
@@ -88,6 +90,8 @@ snappyDir="${depsToolsetDir}/snappy"
 winLibDir="${depsToolsetDir}/windows/lib"
 wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
+dokanSrcDir="${depsSrcDir}/dokany"
+dokanLibDir="${depsToolsetDir}/dokany/lib"
 
 depsDirs="$lz4Dir;$curlDir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
 depsDirs+=";$winLibDir"
@@ -147,11 +151,12 @@ fi
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D CMAKE_TOOLCHAIN_FILE="$MINGW_CMAKE_FILE" \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
-      -D WITH_GSSAPI=OFF -D WITH_FUSE=OFF -D WITH_XFS=OFF \
+      -D WITH_GSSAPI=OFF -D WITH_XFS=OFF \
+      -D WITH_FUSE=OFF -D WITH_DOKAN=ON \
       -D WITH_BLUESTORE=OFF -D WITH_LEVELDB=OFF \
       -D WITH_LTTNG=OFF -D WITH_BABELTRACE=OFF \
       -D WITH_SYSTEM_BOOST=ON -D WITH_MGR=OFF -D WITH_KVS=OFF \
-      -D WITH_LIBCEPHFS=OFF -D WITH_KRBD=OFF -D WITH_RADOSGW=OFF \
+      -D WITH_LIBCEPHFS=ON -D WITH_KRBD=OFF -D WITH_RADOSGW=OFF \
       -D ENABLE_SHARED=$ENABLE_SHARED -D WITH_RBD=ON -D BUILD_GMOCK=ON \
       -D WITH_CEPHFS=OFF -D WITH_MANPAGE=OFF \
       -D WITH_MGR_DASHBOARD_FRONTEND=OFF -D WITH_SYSTEMD=OFF -D WITH_TESTS=ON \
@@ -163,7 +168,9 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D WNBD_INCLUDE_DIRS="$wnbdSrcDir/include" \
       -D WNBD_LIBRARIES="$wnbdLibDir/libwnbd.a" \
       -D WITH_CEPH_DEBUG_MUTEX=$WITH_CEPH_DEBUG_MUTEX \
-      -G "$generatorUsed" \
+      -D DOKAN_INCLUDE_DIRS="$dokanSrcDir/dokan" \
+      -D DOKAN_LIBRARIES="$dokanLibDir/libdokan.a" \
+      -G "$cmakeGenerator" \
       $CEPH_DIR  2>&1 | tee "${BUILD_DIR}/cmake.log"
 fi # [[ -z $SKIP_CMAKE ]]
 
@@ -171,24 +178,17 @@ if [[ -z $SKIP_BUILD ]]; then
     echo "Building using $NUM_WORKERS workers. Log: ${BUILD_DIR}/build.log"
     echo "" > "${BUILD_DIR}/build.log"
 
-    # We're going to use an associative array having subdirectories as keys
-    # and targets as values.
-    declare -A make_targets
-    make_targets["src/tools"]="ceph-conf rados"
-    make_targets["src/tools/immutable_object_cache"]="all"
-    make_targets["src/tools/rbd"]="all"
-    make_targets["src/tools/rbd_wnbd"]="all"
-    make_targets["src/compressor"]="all"
-
+    cd $BUILD_DIR
+    ninja_targets="rados rbd rbd-wnbd "
+    ninja_targets+=" ceph-conf ceph-immutable-object-cache"
+    ninja_targets+=" cephfs ceph-dokan"
+    # TODO: do we actually need the ceph compression libs?
+    ninja_targets+=" compressor ceph_lz4 ceph_snappy ceph_zlib ceph_zstd"
     if [[ -z $SKIP_TESTS ]]; then
-      make_targets["src/tools"]+=" ceph_radosacl ceph_scratchtool"
-      make_targets["src/test"]="all"
+      ninja_targets+=" test ceph_radosacl ceph_scratchtool"
     fi
 
-    for target_subdir in "${!make_targets[@]}"; do
-      echo "Building $target_subdir: ${make_targets[$target_subdir]}" | tee -a "${BUILD_DIR}/build.log"
-      make -j $NUM_WORKERS -C $target_subdir ${make_targets[$target_subdir]} 2>&1 | tee -a "${BUILD_DIR}/build.log"
-    done
+    ninja -v $ninja_targets 2>&1 | tee "${BUILD_DIR}/build.log"
 fi
 
 if [[ -z $SKIP_DLL_COPY ]]; then

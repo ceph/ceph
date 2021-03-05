@@ -181,6 +181,8 @@ if(WITH_FUSE)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
 
+option(WITH_DOKAN "Dokan is here" OFF)
+
 option(WITH_XFS "XFS is here" ON)
 if(WITH_XFS)
   find_package(xfs)

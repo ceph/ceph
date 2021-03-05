@@ -209,7 +209,13 @@ void Client::_reset_faked_inos()
   free_faked_inos.insert(start, (uint32_t)-1 - start + 1);
   last_used_faked_ino = 0;
   last_used_faked_root = 0;
+  #ifdef _WIN32
+  // On Windows, sizeof(ino_t) is just 2. Despite that, most "native"
+  // Windows structures, including Dokan ones, are using 64B identifiers.
+  _use_faked_inos = false;
+  #else
   _use_faked_inos = sizeof(ino_t) < 8 || cct->_conf->client_use_faked_inos;
+  #endif
 }
 
 void Client::_assign_faked_ino(Inode *in)
@@ -5763,6 +5769,31 @@ int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms)
 out:
   ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
   return r;
+}
+
+int Client::may_delete(const char *relpath, const UserPerm& perms) {
+  ldout(cct, 20) << __func__ << " " << relpath << "; " << perms << dendl;
+
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  filepath path(relpath);
+  string name = path.last_dentry();
+  path.pop_dentry();
+  InodeRef dir;
+
+  std::scoped_lock lock(client_lock);
+  int r = path_walk(path, &dir, perms);
+  if (r < 0)
+    return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_delete(dir.get(), name.c_str(), perms);
+    if (r < 0)
+      return r;
+  }
+
+  return 0;
 }
 
 int Client::may_hardlink(Inode *in, const UserPerm& perms)
