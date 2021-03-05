@@ -115,8 +115,8 @@ void inode_backtrace_t::generate_test_instances(std::list<inode_backtrace_t*>& l
   ls.back()->ancestors.back().dname = "bar";
   ls.back()->ancestors.back().version = 456;
   ls.back()->pool = 0;
-  ls.back()->old_pools.insert(10);
-  ls.back()->old_pools.insert(7);
+  ls.back()->old_pools.push_back(10);
+  ls.back()->old_pools.push_back(7);
 }
 
 int inode_backtrace_t::compare(const inode_backtrace_t& other,

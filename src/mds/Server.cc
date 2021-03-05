@@ -297,7 +297,14 @@ void Server::dispatch(const cref_t<Message> &m)
 	queue_replay = true;
 	if (req->head.ino &&
 	    !session->have_completed_request(req->get_reqid().tid, nullptr)) {
-	  mdcache->add_replay_ino_alloc(inodeno_t(req->head.ino));
+	  inodeno_t ino(req->head.ino);
+	  mdcache->add_replay_ino_alloc(ino);
+	  if (replay_unsafe_with_closed_session &&
+	      session->free_prealloc_inos.contains(ino)) {
+	    // don't purge inodes that will be created by later replay
+	    session->free_prealloc_inos.erase(ino);
+	    session->delegated_inos.insert(ino);
+	  }
 	}
       } else if (req->get_retry_attempt()) {
 	// process completed request in clientreplay stage. The completed request
@@ -362,22 +369,22 @@ class C_MDS_session_finish : public ServerLogContext {
   uint64_t state_seq;
   bool open;
   version_t cmapv;
-  interval_set<inodeno_t> inos;
+  interval_set<inodeno_t> inos_to_free;
   version_t inotablev;
-  interval_set<inodeno_t> purge_inos;
+  interval_set<inodeno_t> inos_to_purge;
   LogSegment *ls = nullptr;
   Context *fin;
 public:
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = nullptr) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv,
-		       interval_set<inodeno_t> _purge_inos, LogSegment *_ls, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), purge_inos(std::move(_purge_inos)), ls(_ls), fin(fin_){}
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
+		       const interval_set<inodeno_t>& to_free, version_t iv,
+		       const interval_set<inodeno_t>& to_purge, LogSegment *_ls, Context *fin_ = nullptr) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv),
+    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge), ls(_ls), fin(fin_) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_session_logged(session, state_seq, open, cmapv, inos, inotablev, purge_inos, ls);
+    server->_session_logged(session, state_seq, open, cmapv, inos_to_free, inotablev, inos_to_purge, ls);
     if (fin) {
       fin->complete(r);
     }
@@ -799,30 +806,34 @@ void Server::finish_flush_session(Session *session, version_t seq)
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
-			     const interval_set<inodeno_t>& inos, version_t piv,
-			     const interval_set<inodeno_t>& purge_inos, LogSegment *ls)
+			     const interval_set<inodeno_t>& inos_to_free, version_t piv,
+			     const interval_set<inodeno_t>& inos_to_purge, LogSegment *ls)
 {
   dout(10) << "_session_logged " << session->info.inst
 	   << " state_seq " << state_seq
-	   << " " << (open ? "open":"close")
-	   << " " << pv
-	   << " purge_inos : " << purge_inos << dendl;
-  
-  if (NULL != ls) {
-    dout(10)  << "_session_logged seq : " << ls->seq << dendl;
-    if (purge_inos.size()){
-      ls->purge_inodes.insert(purge_inos);
-      mdcache->purge_inodes(purge_inos, ls);
+	   << " " << (open ? "open":"close") << " " << pv
+	   << " inos_to_free " << inos_to_free << " inotablev " << piv
+	   << " inos_to_purge " << inos_to_purge << dendl;
+
+  if (!open) {
+    if (inos_to_purge.size()){
+      ceph_assert(ls);
+      session->info.prealloc_inos.subtract(inos_to_purge);
+      ls->purging_inodes.insert(inos_to_purge);
+      if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping())
+	mdcache->purge_inodes(inos_to_purge, ls);
     }
-  }
-  
-  if (piv) {
-    ceph_assert(session->is_closing() || session->is_killing() ||
-	   session->is_opening()); // re-open closing session
-    session->info.prealloc_inos.subtract(inos);
+
+    if (inos_to_free.size()) {
+      ceph_assert(piv);
+      ceph_assert(session->is_closing() || session->is_killing() ||
+	  session->is_opening()); // re-open closing session
+      session->info.prealloc_inos.subtract(inos_to_free);
+      mds->inotable->apply_release_ids(inos_to_free);
+      ceph_assert(mds->inotable->get_version() == piv);
+    }
+    session->free_prealloc_inos = session->info.prealloc_inos;
     session->delegated_inos.clear();
-    mds->inotable->apply_release_ids(inos);
-    ceph_assert(mds->inotable->get_version() == piv);
   }
 
   mds->sessionmap.mark_dirty(session);
@@ -1248,7 +1259,7 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
  * XXX bump in the interface here, not using an MDSContext here
  * because all the callers right now happen to use a SaferCond
  */
-void Server::kill_session(Session *session, Context *on_safe, bool need_purge_inos)
+void Server::kill_session(Session *session, Context *on_safe)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
@@ -1257,7 +1268,7 @@ void Server::kill_session(Session *session, Context *on_safe, bool need_purge_in
        session->is_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
-    journal_close_session(session, Session::STATE_KILLING, on_safe, need_purge_inos);
+    journal_close_session(session, Session::STATE_KILLING, on_safe);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
     if (session->is_closing() ||
@@ -1315,12 +1326,13 @@ size_t Server::apply_blocklist(const std::set<entity_addr_t> &blocklist)
   return victims.size();
 }
 
-void Server::journal_close_session(Session *session, int state, Context *on_safe, bool need_purge_inos)
+void Server::journal_close_session(Session *session, int state, Context *on_safe)
 {
   dout(10) << __func__ << " : "
-	   << "("<< need_purge_inos << ")"
 	   << session->info.inst
-	   << "(" << session->info.prealloc_inos.size() << "|" << session->pending_prealloc_inos.size() << ")" << dendl;
+	   << " pending_prealloc_inos " << session->pending_prealloc_inos
+	   << " free_prealloc_inos " << session->free_prealloc_inos
+	   << " delegated_inos " << session->delegated_inos << dendl;
 
   uint64_t sseq = mds->sessionmap.set_state(session, state);
   version_t pv = mds->sessionmap.mark_projected(session);
@@ -1328,29 +1340,19 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
 
   // release alloc and pending-alloc inos for this session
   // and wipe out session state, in case the session close aborts for some reason
-  interval_set<inodeno_t> both;
-  both.insert(session->pending_prealloc_inos);
-  if (!need_purge_inos)
-    both.insert(session->info.prealloc_inos);
-  if (both.size()) {
-    mds->inotable->project_release_ids(both);
+  interval_set<inodeno_t> inos_to_free;
+  inos_to_free.insert(session->pending_prealloc_inos);
+  inos_to_free.insert(session->free_prealloc_inos);
+  if (inos_to_free.size()) {
+    mds->inotable->project_release_ids(inos_to_free);
     piv = mds->inotable->get_projected_version();
   } else
     piv = 0;
   
-  if(need_purge_inos && session->info.prealloc_inos.size()) {
-    dout(10) << "start purge indoes " << session->info.prealloc_inos << dendl;
-    LogSegment* ls = mdlog->get_current_segment();
-    LogEvent* e = new ESession(session->info.inst, false, pv, both, piv, session->info.prealloc_inos);
-    MDSLogContextBase* c = new C_MDS_session_finish(this, session, sseq, false, pv, both, piv,
-						    session->info.prealloc_inos, ls, on_safe);
-    mdlog->start_submit_entry(e, c);
-  } else {
-    interval_set<inodeno_t> empty;
-    LogEvent* e = new ESession(session->info.inst, false, pv, both, piv, empty);
-    MDSLogContextBase* c = new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe);
-    mdlog->start_submit_entry(e, c);
-  }
+  auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv, session->delegated_inos);
+  auto fin = new C_MDS_session_finish(this, session, sseq, false, pv, inos_to_free, piv,
+				      session->delegated_inos, mdlog->get_current_segment(), on_safe);
+  mdlog->start_submit_entry(le, fin);
   mdlog->flush();
 
   // clean up requests, too
@@ -1696,12 +1698,15 @@ void Server::reconnect_tick()
 		      << ", after waiting " << elapse1
 		      << " seconds during MDS startup";
 
+    // make _session_logged() purge orphan objects of lost async/unsafe requests
+    session->delegated_inos.swap(session->free_prealloc_inos);
+
     if (g_conf()->mds_session_blocklist_on_timeout) {
       CachedStackStringStream css;
       mds->evict_client(session->get_client().v, false, true, *css,
 			gather.new_sub());
     } else {
-      kill_session(session, NULL, true);
+      kill_session(session, NULL);
     }
 
     failed_reconnects++;
@@ -3248,8 +3253,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   if (allow_prealloc_inos && (mdr->used_prealloc_ino = _inode->ino = mdr->session->take_ino(useino))) {
     mds->sessionmap.mark_projected(mdr->session);
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
-	     << " (" << mdr->session->info.prealloc_inos
-	     << ", " << mdr->session->info.prealloc_inos.size() << " left)"
+	     << " (" << mdr->session->info.prealloc_inos.size() << " left)"
 	     << dendl;
   } else {
     mdr->alloc_ino = 
@@ -3360,13 +3364,14 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   if (mdr->prealloc_inos.size()) {
     ceph_assert(session);
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+    session->free_prealloc_inos.insert(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.mark_dirty(session, !mdr->used_prealloc_ino);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
     ceph_assert(session);
-    session->info.used_inos.erase(mdr->used_prealloc_ino);
+    session->info.prealloc_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap.mark_dirty(session);
   }
 }

@@ -1289,10 +1289,11 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
     in = diri;
     pdn = in->get_parent_dn();
   }
+  bt.old_pools.reserve(get_inode()->old_pools.size());
   for (auto &p : get_inode()->old_pools) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
     if (p != pool)
-      bt.old_pools.insert(p);
+      bt.old_pools.push_back(p);
   }
 }
 

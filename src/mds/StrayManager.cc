@@ -133,9 +133,11 @@ void StrayManager::purge(CDentry *dn)
 
     item.size = to;
     item.layout = pi->layout;
-    item.old_pools.clear();
-    for (const auto &p : pi->old_pools)
-      item.old_pools.insert(p);
+    item.old_pools.reserve(pi->old_pools.size());
+    for (const auto &p : pi->old_pools) {
+      if (p != pi->layout.pool_id)
+	item.old_pools.push_back(p);
+    }
     item.snapc = *snapc;
   }
 

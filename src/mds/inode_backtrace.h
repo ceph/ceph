@@ -81,8 +81,7 @@ struct inode_backtrace_t {
   inodeno_t ino;       // my ino
   std::vector<inode_backpointer_t> ancestors;
   int64_t pool = -1;
-  // we use a set for old_pools to avoid duplicate entries, e.g. setlayout 0, 1, 0
-  std::set<int64_t> old_pools;
+  std::vector<int64_t> old_pools;
 };
 WRITE_CLASS_ENCODER(inode_backtrace_t)
 
