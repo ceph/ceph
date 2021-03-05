@@ -169,8 +169,9 @@ export class UserListComponent implements OnInit {
     const expirationDays = row['pwdExpirationDate'];
     if (expirationDays === null) return false;
     const remainingDays = this.getRemainingDays(expirationDays);
-    const warning1 = 10;
+    const warning1 = 10; // TODO: change to real warning days
     if(remainingDays <= warning1) return true;
+    return false;
   }
 
   getWarningClass(row: any): any {
@@ -181,7 +182,6 @@ export class UserListComponent implements OnInit {
     const warning2 = 5;
     if(remainingDays <= warning2) classes += ' danger-icon';
     else classes += 'warning-icon';
-    console.log(classes);
     return classes;
   }
 
