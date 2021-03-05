@@ -780,6 +780,7 @@ class UpgradeStatusSpec(object):
         self.in_progress = False  # Is an upgrade underway?
         self.target_image: Optional[str] = None
         self.services_complete: List[str] = []  # Which daemon types are fully updated?
+        self.progress: Optional[str] = None  # How many of the daemons have we upgraded
         self.message = ""  # Freeform description
 
 
