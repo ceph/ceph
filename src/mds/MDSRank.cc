@@ -48,10 +48,11 @@
 using TOPNSPC::common::cmd_getval;
 class C_Flush_Journal : public MDSInternalContext {
 public:
-  C_Flush_Journal(MDCache *mdcache, MDLog *mdlog, MDSRank *mds,
+  C_Flush_Journal(MDSRank *mds, bool _force,
                   std::ostream *ss, Context *on_finish)
     : MDSInternalContext(mds),
-      mdcache(mdcache), mdlog(mdlog), ss(ss), on_finish(on_finish),
+      mdcache(mds->mdcache), mdlog(mds->mdlog),
+      force(_force), ss(ss), on_finish(on_finish),
       whoami(mds->whoami), incarnation(mds->incarnation) {
   }
 
@@ -66,9 +67,16 @@ public:
       return;
     }
 
-    if (!mds->is_active()) {
+    if (force) {
+      if (mds->get_state() < MDSMap::STATE_REJOIN ||
+          mds->get_state() > MDSMap::STATE_ACTIVE) {
+	dout(5) << __func__ << ": MDS not rejoin|clientreplay|active, no-op" << dendl;
+	complete(-EAGAIN);
+	return;
+      }
+    } else if (!mds->is_active()) {
       dout(5) << __func__ << ": MDS not active, no-op" << dendl;
-      complete(0);
+      complete(-EAGAIN);
       return;
     }
 
@@ -234,6 +242,7 @@ private:
 
   MDCache *mdcache;
   MDLog *mdlog;
+  bool force;
   std::ostream *ss;
   Context *on_finish;
 
@@ -390,7 +399,7 @@ private:
         handle_flush_journal(r);
       });
 
-    C_Flush_Journal *flush_journal = new C_Flush_Journal(mdcache, mdlog, mds, &ss, ctx);
+    C_Flush_Journal *flush_journal = new C_Flush_Journal(mds, false, &ss, ctx);
     flush_journal->send();
   }
 
@@ -2713,7 +2722,9 @@ void MDSRankDispatcher::handle_asok_command(
     cmd_getval(cmdmap, "path", path);
     command_flush_path(f, path);
   } else if (command == "flush journal") {
-    command_flush_journal(f);
+    string force;
+    cmd_getval(cmdmap, "force", force);
+    command_flush_journal(f, force == "--force");
   } else if (command == "get subtrees") {
     command_get_subtrees(f);
   } else if (command == "export dir") {
@@ -2947,14 +2958,14 @@ void MDSRank::command_flush_path(Formatter *f, std::string_view path)
 
 // synchronous wrapper around "journal flush" asynchronous context
 // execution.
-void MDSRank::command_flush_journal(Formatter *f) {
+void MDSRank::command_flush_journal(Formatter *f, bool force) {
   ceph_assert(f != NULL);
 
   C_SaferCond cond;
   CachedStackStringStream css;
   {
     std::lock_guard locker(mds_lock);
-    C_Flush_Journal *flush_journal = new C_Flush_Journal(mdcache, mdlog, this, css.get(), &cond);
+    C_Flush_Journal *flush_journal = new C_Flush_Journal(this, force, css.get(), &cond);
     flush_journal->send();
   }
   int r = cond.wait();

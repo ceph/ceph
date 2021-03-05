@@ -391,7 +391,8 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("flush journal",
+  r = admin_socket->register_command("flush journal "
+				     "name=force,type=CephChoices,strings=--force,req=false",
 				     asok_hook,
 				     "Flush the journal to the backing store");
   ceph_assert(r == 0);

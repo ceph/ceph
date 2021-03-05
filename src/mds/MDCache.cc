@@ -5038,7 +5038,8 @@ void MDCache::rejoin_reconnect_inode_finish(inodeno_t ino, int r)
     derr << "failed to reconnect subtree parent inos:" << r << dendl;
     for (auto &ino : failed)
       derr << "" << ino << dendl;
-    ceph_assert(0);
+    mds->clog->error() << "failed to reconnect subtrees";
+    return;
   }
 
   subtrees_connected = true;
