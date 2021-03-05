@@ -8,7 +8,8 @@
 #include "crimson/os/seastore/extentmap_manager/btree/btree_extentmap_manager.h"
 namespace crimson::os::seastore::extentmap_manager {
 
-ExtentMapManagerRef create_extentmap_manager(TransactionManager &trans_manager) {
+ExtentMapManagerRef create_extentmap_manager(
+  TransactionManager &trans_manager) {
   return ExtentMapManagerRef(new BtreeExtentMapManager(trans_manager));
 }
 
