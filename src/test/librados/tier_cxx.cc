@@ -23,6 +23,9 @@
 #include <sstream>
 #include <string>
 
+#include "cls/cas/cls_cas_client.h"
+#include "cls/cas/cls_cas_internal.h"
+
 using namespace librados;
 using std::map;
 using std::ostringstream;
@@ -153,6 +156,44 @@ string get_fp_oid(string oid, std::string fp_algo = NULL)
   } 
  
   return string();
+}
+
+void is_intended_refcount_state(librados::IoCtx& src_ioctx,
+				std::string src_oid,
+				librados::IoCtx& dst_ioctx,
+				std::string dst_oid,
+				int expected_refcount)
+{
+  int src_refcount = 0, dst_refcount = 0;
+  bufferlist t;
+  int r = dst_ioctx.getxattr(dst_oid, CHUNK_REFCOUNT_ATTR, t);
+  if (r == -ENOENT) {
+    dst_refcount = 0;
+  } else {
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ceph_assert(0);
+    }
+    dst_refcount = refs.count();
+  }
+  for (int tries = 0; tries < 10; ++tries) {
+    r = cls_cas_references_chunk(src_ioctx, src_oid, dst_oid);
+    if (r == -ENOENT || r == -ENOLINK) {
+      src_refcount = 0;
+    } else if (r == -EBUSY) {
+      sleep(15);
+      continue;
+    } else {
+      src_refcount = r;
+    }
+    break;
+  }
+  ASSERT_TRUE(src_refcount >= 0);
+  ASSERT_TRUE(src_refcount == expected_refcount);
+  ASSERT_TRUE(src_refcount <= dst_refcount);
 }
 
 class LibRadosTwoPoolsPP : public RadosTestPP
@@ -3613,15 +3654,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     sha1_gen.Update((const unsigned char *)"hi", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
   }
 
   // check chunk's refcount
@@ -3666,15 +3699,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     sha1_gen.Update((const unsigned char *)"hi", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
   }
 
   // remove snap
@@ -3697,15 +3722,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     sha1_gen.Update((const unsigned char *)"bb", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
   }
 
   // remove snap
@@ -3727,15 +3744,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     sha1_gen.Update((const unsigned char *)"bb", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
   }
 
   // check chunk's refcount
@@ -3748,15 +3757,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     sha1_gen.Update((const unsigned char *)"hi", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
   }
 }
 
@@ -3979,8 +3980,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     sha1_gen.Update((const unsigned char *)"BB", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    int r = cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    ASSERT_EQ(-ENOENT, r);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 0);
   }
 }
 
@@ -4310,8 +4310,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestCheckRefcountWhenModification) {
     sha1_gen.Update((const unsigned char *)"ai", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    int r = cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    ASSERT_EQ(-ENOENT, r);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 0);
   }
 
   // foo snap[0]: [er] [hi] [HI]
@@ -4364,8 +4363,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestCheckRefcountWhenModification) {
     sha1_gen.Update((const unsigned char *)"Er", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    int r = cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    ASSERT_EQ(-ENOENT, r);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 0);
   }
 }
 
@@ -4482,8 +4480,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapIncCount) {
   sleep(10);
 
   // check chunk's refcount
-  check_fp_oid_refcount(cache_ioctx, "chunk4", 1u, "");
-
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk4", 1);
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestEvict) {
@@ -5391,8 +5388,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
     sha1_gen.Update((const unsigned char *)chunk2.c_str(), size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    tgt_oid = string(p_str);
-    ASSERT_EQ(-ENOENT, ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t));
+    is_intended_refcount_state(cache_ioctx, "foo", ioctx, p_str, 0);
   }
 }
 
@@ -5468,6 +5464,184 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
     completion->release();
   }
 
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there HIHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  string er_fp_oid, hi_fp_oid, HI_fp_oid, ai_fp_oid, bi_fp_oid,
+	  Er_fp_oid, Hi_fp_oid, SI_fp_oid;
+
+  // get fp_oid
+  er_fp_oid = get_fp_oid("er", "sha1");
+  hi_fp_oid = get_fp_oid("hi", "sha1");
+  HI_fp_oid = get_fp_oid("HI", "sha1");
+  ai_fp_oid = get_fp_oid("ai", "sha1");
+  bi_fp_oid = get_fp_oid("bi", "sha1");
+  Er_fp_oid = get_fp_oid("Er", "sha1");
+  Hi_fp_oid = get_fp_oid("Hi", "sha1");
+  SI_fp_oid = get_fp_oid("SI", "sha1");
+
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("HI");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(HI_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ai");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ai_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("bi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(bi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("SI");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(SI_fp_oid, &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, HI_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, HI_fp_oid, "foo");
+
+  // foo head:     [hi] [HI]
+  
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("S");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 8));
+  }
+
+  // foo snap[0]:      [hi] [HI]
+  // foo head   : [er] [ai] [SI]
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, er_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, ai_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, SI_fp_oid, "foo");
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+
+  // foo snap[1]:      [HI] [HI]
+  // foo snap[0]: [er] [ai] [SI]
+  // foo head   : [er] [bi] [SI]
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, bi_fp_oid, "foo");
+
+  {
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", SI_fp_oid));
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", er_fp_oid));
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", ai_fp_oid));
+    ASSERT_EQ(2, cls_cas_references_chunk(ioctx, "foo", HI_fp_oid));
+    ASSERT_EQ(-ENOLINK, cls_cas_references_chunk(ioctx, "foo", Hi_fp_oid));
+  }
 }
 
 class LibRadosTwoPoolsECPP : public RadosTestECPP
