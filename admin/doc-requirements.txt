@@ -8,6 +8,7 @@ pcpp
 prettytable
 sphinx-autodoc-typehints
 sphinx-prompt
+sphinx_rtd_theme
 Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-openapi
