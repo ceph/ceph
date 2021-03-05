@@ -664,6 +664,7 @@ class RGWSpec(ServiceSpec):
                  ssl: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
+                 subcluster: Optional[str] = None,  # legacy, only for from_json on upgrade
                  ):
         assert service_type == 'rgw', service_type
         super(RGWSpec, self).__init__(
