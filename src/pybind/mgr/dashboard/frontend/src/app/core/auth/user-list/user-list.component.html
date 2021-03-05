@@ -20,3 +20,12 @@
     {{ role }}{{ !isLast ? ", " : "" }}
   </span>
 </ng-template>
+
+<ng-template #warningTpl
+             let-column="column"
+             let-value="value"
+             let-row="row">
+            <i *ngIf="shouldWarn(row)" 
+              [ngClass]="getWarningClass(row)"></i>
+            <span>{{ value }}</span>
+</ng-template>

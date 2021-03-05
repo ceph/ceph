@@ -30,6 +30,8 @@ const BASE_URL = 'user-management/users';
 export class UserListComponent implements OnInit {
   @ViewChild('userRolesTpl', { static: true })
   userRolesTpl: TemplateRef<any>;
+  @ViewChild('warningTpl', { static: true })
+  warningTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -77,7 +79,8 @@ export class UserListComponent implements OnInit {
       {
         name: $localize`Username`,
         prop: 'username',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTemplate: this.warningTpl
       },
       {
         name: $localize`Name`,
@@ -160,5 +163,29 @@ export class UserListComponent implements OnInit {
       itemNames: [username],
       submitAction: () => this.deleteUser(username)
     });
+  }
+
+  shouldWarn(row: any): any {
+    const expirationDays = row['pwdExpirationDate'];
+    if (expirationDays === null) return false;
+    const remainingDays = this.getRemainingDays(expirationDays);
+    const warning1 = 10;
+    if(remainingDays <= warning1) return true;
+  }
+
+  getWarningClass(row: any): any {
+    const expirationDays = row['pwdExpirationDate'];
+    let classes = "fa fa-exclamation-triangle";
+    if (expirationDays === null) return classes;
+    const remainingDays = this.getRemainingDays(expirationDays);
+    const warning2 = 5;
+    if(remainingDays <= warning2) classes += ' danger-icon';
+    else classes += 'warning-icon';
+    console.log(classes);
+    return classes;
+  }
+
+  private getRemainingDays(time: number): number {
+    return Math.floor((time - Date.now()) / (1000 * 60 * 60 * 24));
   }
 }
