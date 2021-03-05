@@ -2396,13 +2396,15 @@ void CDir::_omap_commit(int op_prio)
 
   // snap purge?
   const set<snapid_t> *snaps = NULL;
-  SnapRealm *realm = inode->find_snaprealm();
-  if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
-    snaps = &realm->get_snaps();
-    dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
-	     << " < " << realm->get_last_destroyed()
-	     << ", snap purge based on " << *snaps << dendl;
-    // fnode.snap_purged_thru = realm->get_last_destroyed();
+  if (!mdcache->mds->is_rejoin()) {
+    SnapRealm *realm = inode->find_snaprealm();
+    if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
+      snaps = &realm->get_snaps();
+      dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
+	       << " < " << realm->get_last_destroyed()
+	       << ", snap purge based on " << *snaps << dendl;
+      // fnode.snap_purged_thru = realm->get_last_destroyed();
+    }
   }
 
   size_t count = 0;
@@ -2680,8 +2682,8 @@ void CDir::_committed(int r, version_t v)
   } 
 
   // try drop dentries in this dirfrag if it's about to be purged
-  if (!inode->is_base() && get_parent_dir()->inode->is_stray() &&
-      inode->snaprealm)
+  if (CDir *dir = get_parent_dir();
+      dir && dir->inode->is_stray() && inode->snaprealm)
     mdcache->maybe_eval_stray(inode, true);
 
   // unpin if we kicked the last waiter.

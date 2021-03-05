@@ -120,6 +120,108 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 1);
 
+  if (mds->get_state() > MDSMap::STATE_REJOIN) {
+    // open files and snap inodes
+    if (!open_files.empty()) {
+      ceph_assert(!mds->mdlog->is_capped()); // hmm FIXME
+      EOpen *le = nullptr;
+      LogSegment *ls = mds->mdlog->get_current_segment();
+      ceph_assert(ls != this);
+      elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
+      while (!p.end()) {
+	CInode *in = *p;
+	++p;
+	if (in->last != CEPH_NOSNAP && in->is_auth() && !in->client_snap_caps.empty()) {
+	  // journal snap inodes that need flush. This simplify the mds failover hanlding
+	  dout(20) << "try_to_expire requeueing snap needflush inode " << *in << dendl;
+	  if (!le) {
+	    le = new EOpen(mds->mdlog);
+	    mds->mdlog->start_entry(le);
+	  }
+	  le->add_clean_inode(in);
+	  ls->open_files.push_back(&in->item_open_file);
+	} else if (in->is_auth() && in->is_dir() &&
+		   mds->locker->revoke_async_dirop_caps(in, gather_bld)) {
+	  dout(20) << "try_to_expire invalidating caps for dir ops " << *in << dendl;
+	} else {
+	  // open files are tracked by open file table, no need to journal them again
+	  in->item_open_file.remove_myself();
+	}
+      }
+      if (le) {
+	mds->mdlog->submit_entry(le);
+	mds->mdlog->wait_for_safe(gather_bld.new_sub());
+	dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
+      }
+    }
+    ceph_assert(g_conf()->mds_kill_journal_expire_at != 2);
+
+    // truncating
+    for (set<CInode*>::iterator p = truncating_inodes.begin();
+	p != truncating_inodes.end();
+	++p) {
+      dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
+      (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
+    }
+    // purge inodes
+    dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
+    if (purging_inodes.size())
+      set_purged_cb(gather_bld.new_sub());
+
+    // nudge scatterlocks
+    for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
+      CInode *in = *p;
+      dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
+      mds->locker->scatter_nudge(&in->filelock, gather_bld.new_sub());
+    }
+    for (elist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
+      CInode *in = *p;
+      dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
+      mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
+    }
+    for (elist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
+      CInode *in = *p;
+      dout(10) << "try_to_expire waiting for dirfragtreelock flush on " << *in << dendl;
+      mds->locker->scatter_nudge(&in->dirfragtreelock, gather_bld.new_sub());
+    }
+    ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
+  } else {
+    // forcibly flush journal
+    if (!open_files.empty()) {
+      derr << "try_to_expire forcibly clear open files" << dendl;
+      open_files.clear();
+    }
+    if (!truncating_inodes.empty()) {
+      derr << "try_to_expire forcibly clear truncating inodes" << dendl;
+      truncating_inodes.clear();
+    }
+    for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ) {
+      CInode *in = *p;
+      ++p;
+      derr << "try_to_expire forcibly clear dirty dirstat on " << *in << dendl;
+      in->filelock.remove_dirty();
+    }
+    for (elist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ) {
+      CInode *in = *p;
+      ++p;
+      derr << "try_to_expire forcibly clear dirty neststat on " << *in << dendl;
+      in->nestlock.remove_dirty();
+    }
+    for (elist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ) {
+      CInode *in = *p;
+      ++p;
+      fragset_t frags;
+      auto&& dfls = in->get_dirfrags();
+      for (auto& d : dfls) {
+	if (d->is_auth())
+	  frags.insert_raw(d->get_frag());
+      }
+      derr << "try_to_expire forcibly clear dirty dirfragtree on " << *in
+	   << " auth " << frags << dendl;
+      in->dirfragtreelock.remove_dirty();
+    }
+  }
+
   // commit dirs
   for (elist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
     dout(20) << " new_dirfrag " << **p << dendl;
@@ -161,64 +263,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  // uncommitted leader/peers/fragments
-  if (is_any_uncommitted())
-    uncommitted_waiters.push_back(gather_bld.new_sub());
-
-  // nudge scatterlocks
-  for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
-    mds->locker->scatter_nudge(&in->filelock, gather_bld.new_sub());
-  }
-  for (elist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for dirfragtreelock flush on " << *in << dendl;
-    mds->locker->scatter_nudge(&in->dirfragtreelock, gather_bld.new_sub());
-  }
-  for (elist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
-    mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
-  }
-
-  ceph_assert(g_conf()->mds_kill_journal_expire_at != 2);
-
-  // open files and snap inodes 
-  if (!open_files.empty()) {
-    ceph_assert(!mds->mdlog->is_capped()); // hmm FIXME
-    EOpen *le = 0;
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    ceph_assert(ls != this);
-    elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
-    while (!p.end()) {
-      CInode *in = *p;
-      ++p;
-      if (in->last != CEPH_NOSNAP && in->is_auth() && !in->client_snap_caps.empty()) {
-	// journal snap inodes that need flush. This simplify the mds failover hanlding
-	dout(20) << "try_to_expire requeueing snap needflush inode " << *in << dendl;
-	if (!le) {
-	  le = new EOpen(mds->mdlog);
-	  mds->mdlog->start_entry(le);
-	}
-	le->add_clean_inode(in);
-	ls->open_files.push_back(&in->item_open_file);
-      } else if (in->is_auth() && in->is_dir() &&
-		 mds->locker->revoke_async_dirop_caps(in, gather_bld)) {
-	dout(20) << "try_to_expire invalidating caps for dir ops " << *in << dendl;
-      } else {
-	// open files are tracked by open file table, no need to journal them again
-	in->item_open_file.remove_myself();
-      }
-    }
-    if (le) {
-      mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_safe(gather_bld.new_sub());
-      dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
-    }
-  }
-
-  ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
+  ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
 
   size_t count = 0;
   for (elist<CInode*>::iterator it = dirty_parent_inodes.begin(); !it.end(); ++it)
@@ -242,7 +287,11 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   if (!ops_vec.empty())
     mds->finisher->queue(new BatchCommitBacktrace(mds, gather_bld.new_sub(), std::move(ops_vec)));
 
-  ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
+  // uncommitted leader/peers/fragments
+  if (is_any_uncommitted())
+    uncommitted_waiters.push_back(gather_bld.new_sub());
+
+  ceph_assert(g_conf()->mds_kill_journal_expire_at != 5);
 
   // idalloc
   if (inotablev > mds->inotable->get_committed_version()) {
@@ -294,24 +343,12 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
       server->save(gather_bld.new_sub());
     }
   }
-
-  // truncating
-  for (set<CInode*>::iterator p = truncating_inodes.begin();
-       p != truncating_inodes.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
-    (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
-  }
-  // purge inodes
-  dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
-  if (purging_inodes.size())
-    set_purged_cb(gather_bld.new_sub());
   
   if (gather_bld.has_subs()) {
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
   } else {
-    ceph_assert(g_conf()->mds_kill_journal_expire_at != 5);
+    ceph_assert(g_conf()->mds_kill_journal_expire_at != 6);
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
   }
 }
