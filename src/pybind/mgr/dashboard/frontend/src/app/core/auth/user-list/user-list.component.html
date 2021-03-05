@@ -26,6 +26,7 @@
              let-value="value"
              let-row="row">
             <i *ngIf="shouldWarn(row)" 
+              class="fa fa-exclamation-triangle"
               [ngClass]="getWarningClass(row)"></i>
             <span>{{ value }}</span>
 </ng-template>

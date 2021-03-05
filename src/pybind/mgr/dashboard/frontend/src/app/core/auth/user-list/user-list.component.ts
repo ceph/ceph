@@ -18,6 +18,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { SettingsService } from '~/app/shared/api/settings.service';
 
 const BASE_URL = 'user-management/users';
 
@@ -37,6 +38,8 @@ export class UserListComponent implements OnInit {
   tableActions: CdTableAction[];
   columns: CdTableColumn[];
   users: Array<any>;
+  expiration_warning_1: number;
+  expiration_warning_2: number;
   selection = new CdTableSelection();
 
   modalRef: NgbModalRef;
@@ -49,6 +52,7 @@ export class UserListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private urlBuilder: URLBuilderService,
     private cdDatePipe: CdDatePipe,
+    private settingsService: SettingsService,
     public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().user;
@@ -113,6 +117,11 @@ export class UserListComponent implements OnInit {
         pipe: this.cdDatePipe
       }
     ];
+    const settings: string[] = ["USER_PWD_EXPIRATION_WARNING_1", "USER_PWD_EXPIRATION_WARNING_2"];
+    this.settingsService.getValues(settings).subscribe((data) => {
+      this.expiration_warning_1 = data["USER_PWD_EXPIRATION_WARNING_1"];
+      this.expiration_warning_2 = data["USER_PWD_EXPIRATION_WARNING_2"];
+    })
   }
 
   getUsers() {
@@ -169,20 +178,16 @@ export class UserListComponent implements OnInit {
     const expirationDays = row['pwdExpirationDate'];
     if (expirationDays === null) return false;
     const remainingDays = this.getRemainingDays(expirationDays);
-    const warning1 = 10; // TODO: change to real warning days
-    if(remainingDays <= warning1) return true;
+    if(remainingDays <= this.expiration_warning_1) return true;
     return false;
   }
 
   getWarningClass(row: any): any {
     const expirationDays = row['pwdExpirationDate'];
-    let classes = "fa fa-exclamation-triangle";
-    if (expirationDays === null) return classes;
+    if (expirationDays === null || this.expiration_warning_1 > 10) return "";
     const remainingDays = this.getRemainingDays(expirationDays);
-    const warning2 = 5;
-    if(remainingDays <= warning2) classes += ' danger-icon';
-    else classes += 'warning-icon';
-    return classes;
+    if(remainingDays <= this.expiration_warning_2) return 'danger-icon';
+    else return 'warning-icon';
   }
 
   private getRemainingDays(time: number): number {
