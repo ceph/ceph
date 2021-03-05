@@ -37,10 +37,11 @@ or decrypt data.
 
 This is implemented in S3 according to the `Amazon SSE-KMS`_ specification.
 
-In principle, any key management service could be used here, but currently
-only integration with `Barbican`_ and `Vault`_ are implemented.
+In principle, any key management service could be used here.  Currently
+integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 
-See `OpenStack Barbican Integration`_ and `HashiCorp Vault Integration`_.
+See `OpenStack Barbican Integration`_, `HashiCorp Vault Integration`_,
+and `KMIP Integration`_.
 
 Automatic Encryption (for testing only)
 =======================================
@@ -61,5 +62,7 @@ The configuration expects a base64-encoded 256 bit key. For example::
 .. _Amazon SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
 .. _Vault: https://www.vaultproject.io/docs/
+.. _KMIP: http://www.oasis-open.org/committees/kmip/
 .. _OpenStack Barbican Integration: ../barbican
 .. _HashiCorp Vault Integration: ../vault
+.. _KMIP Integration: ../kmip

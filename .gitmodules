@@ -77,3 +77,7 @@
 	path = src/jaegertracing/thrift
 	url = https://github.com/apache/thrift.git
 	branch = 0.13.0
+[submodule "src/libkmip"]
+	path = src/libkmip
+	url = https://github.com/ceph/libkmip
+	branch = ceph-master
