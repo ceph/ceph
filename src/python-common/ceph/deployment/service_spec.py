@@ -657,7 +657,6 @@ class RGWSpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  rgw_realm: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
-                 subcluster: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[List[str]] = None,
                  rgw_frontend_ssl_key: Optional[List[str]] = None,
@@ -667,18 +666,6 @@ class RGWSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  ):
         assert service_type == 'rgw', service_type
-        if service_id:
-            a = service_id.split('.', 2)
-            rgw_realm = a[0]
-            if len(a) > 1:
-                rgw_zone = a[1]
-            if len(a) > 2:
-                subcluster = a[2]
-        else:
-            if subcluster:
-                service_id = '%s.%s.%s' % (rgw_realm, rgw_zone, subcluster)
-            else:
-                service_id = '%s.%s' % (rgw_realm, rgw_zone)
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
@@ -686,7 +673,6 @@ class RGWSpec(ServiceSpec):
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
-        self.subcluster = subcluster
         self.rgw_frontend_port = rgw_frontend_port
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
         self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
@@ -709,16 +695,6 @@ class RGWSpec(ServiceSpec):
         else:
             ports.append(f"port={self.get_port()}")
         return f'beast {" ".join(ports)}'
-
-    def validate(self) -> None:
-        super(RGWSpec, self).validate()
-
-        if not self.rgw_realm:
-            raise ServiceSpecValidationError(
-                'Cannot add RGW: No realm specified')
-        if not self.rgw_zone:
-            raise ServiceSpecValidationError(
-                'Cannot add RGW: No zone specified')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)

@@ -661,19 +661,22 @@ class RgwService(CephService):
     def config(self, spec: RGWSpec, rgw_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
 
-        # ensure rgw_realm and rgw_zone is set for these daemons
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
-            'name': 'rgw_zone',
-            'value': spec.rgw_zone,
-        })
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.rgw_realm}",
-            'name': 'rgw_realm',
-            'value': spec.rgw_realm,
-        })
+        # set rgw_realm and rgw_zone, if present
+        if spec.rgw_realm:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
+                'name': 'rgw_realm',
+                'value': spec.rgw_realm,
+            })
+        if spec.rgw_zone:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
+                'name': 'rgw_zone',
+                'value': spec.rgw_zone,
+            })
+
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config set',
             'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",

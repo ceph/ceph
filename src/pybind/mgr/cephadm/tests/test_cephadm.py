@@ -143,10 +143,6 @@ class TestCephadm(object):
                                 'count': 1,
                                 'hosts': ["test"]
                             },
-                            'spec': {
-                                'rgw_realm': 'r',
-                                'rgw_zone': 'z',
-                            },
                             'service_id': 'r.z',
                             'service_name': 'rgw.r.z',
                             'service_type': 'rgw',
@@ -660,20 +656,20 @@ class TestCephadm(object):
     def test_rgw_update(self, cephadm_module):
         with with_host(cephadm_module, 'host1'):
             with with_host(cephadm_module, 'host2'):
-                with with_service(cephadm_module, RGWSpec(rgw_realm='realm', rgw_zone='zone1', unmanaged=True)):
+                with with_service(cephadm_module, RGWSpec(service_id="foo", unmanaged=True)):
                     ps = PlacementSpec(hosts=['host1'], count=1)
                     c = cephadm_module.add_rgw(
-                        RGWSpec(rgw_realm='realm', rgw_zone='zone1', placement=ps))
+                        RGWSpec(service_id="foo", placement=ps))
                     [out] = wait(cephadm_module, c)
-                    match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
+                    match_glob(out, "Deployed rgw.foo.* on host 'host1'")
 
                     ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
                     r = CephadmServe(cephadm_module)._apply_service(
-                        RGWSpec(rgw_realm='realm', rgw_zone='zone1', placement=ps))
+                        RGWSpec(service_id="foo", placement=ps))
                     assert r
 
-                    assert_rm_daemon(cephadm_module, 'rgw.realm.zone1', 'host1')
-                    assert_rm_daemon(cephadm_module, 'rgw.realm.zone1', 'host2')
+                    assert_rm_daemon(cephadm_module, 'rgw.foo', 'host1')
+                    assert_rm_daemon(cephadm_module, 'rgw.foo', 'host2')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([
@@ -706,7 +702,7 @@ class TestCephadm(object):
             (ServiceSpec('alertmanager'), CephadmOrchestrator.add_alertmanager),
             (ServiceSpec('rbd-mirror'), CephadmOrchestrator.add_rbd_mirror),
             (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.add_mds),
-            (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.add_rgw),
+            (RGWSpec(service_id="foo"), CephadmOrchestrator.add_rgw),
             (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.add_cephadm_exporter),
         ]
     )
@@ -847,13 +843,14 @@ class TestCephadm(object):
                     )]
                 )
             ), CephadmOrchestrator.apply_mds),
-            (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.apply_rgw),
+            (RGWSpec(service_id='foo'), CephadmOrchestrator.apply_rgw),
             (RGWSpec(
+                service_id='bar',
                 rgw_realm='realm', rgw_zone='zone',
                 placement=PlacementSpec(
                     hosts=[HostPlacementSpec(
                         hostname='test',
-                        name='realm.zone.a',
+                        name='bar',
                         network=''
                     )]
                 )
