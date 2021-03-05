@@ -1,6 +1,5 @@
 overrides:
-  ceph:
-    create_rbd_pool: true      
+  ceph:      
     conf:
       client:
         rbd default features: 125

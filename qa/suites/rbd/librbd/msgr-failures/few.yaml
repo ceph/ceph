@@ -1,6 +1,5 @@
 overrides:
-  ceph:
-    create_rbd_pool: true      
+  ceph: 
     conf:
       global:
         ms inject socket failures: 5000
