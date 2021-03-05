@@ -101,7 +101,6 @@ class TestCephadm(object):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
@@ -185,7 +184,6 @@ class TestCephadm(object):
             assert wait(cephadm_module, c)[0].name() == 'rgw.myrgw.foobar'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_daemon_action(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
@@ -211,7 +209,6 @@ class TestCephadm(object):
                 CephadmServe(cephadm_module)._check_daemons()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_daemon_action_fail(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
@@ -660,7 +657,6 @@ class TestCephadm(object):
             assert out == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_rgw_update(self, cephadm_module):
         with with_host(cephadm_module, 'host1'):
             with with_host(cephadm_module, 'host2'):
@@ -716,7 +712,6 @@ class TestCephadm(object):
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_daemon_add(self, spec: ServiceSpec, meth, cephadm_module):
         unmanaged_spec = ServiceSpec.from_json(spec.to_json())
         unmanaged_spec.unmanaged = True
@@ -901,7 +896,6 @@ class TestCephadm(object):
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec, meth, 'test'):
