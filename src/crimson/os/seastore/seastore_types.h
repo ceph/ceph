@@ -195,7 +195,6 @@ struct __attribute((packed)) paddr_le_t {
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 
 using objaddr_t = uint32_t;
-constexpr objaddr_t OBJ_ADDR_MIN = std::numeric_limits<objaddr_t>::min();
 
 /* Monotonically increasing identifier for the location of a
  * journal_record.
