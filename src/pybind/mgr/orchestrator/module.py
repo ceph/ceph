@@ -1332,6 +1332,7 @@ Usage:
             'target_image': status.target_image,
             'in_progress': status.in_progress,
             'services_complete': status.services_complete,
+            'progress': status.progress,
             'message': status.message,
         }
         out = json.dumps(r, indent=4)
