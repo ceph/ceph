@@ -100,13 +100,13 @@ struct notify_reply_t {
 
   bool operator<(const notify_reply_t& rhs) const;
   DENC(notify_reply_t, v, p) {
-    DENC_START(1, 1, p);
+    // there is no versioning / preamble
     denc(v.watcher_gid, p);
     denc(v.watcher_cookie, p);
     denc(v.bl, p);
-    DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 
 class Notify {
   std::set<WatchRef> watchers;
