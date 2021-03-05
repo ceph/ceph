@@ -97,7 +97,7 @@ class JwtManager(object):
 
     @classmethod
     def blacklist_token(cls, token):
-        token = jwt.decode(token, verify=False)
+        token = cls.decode_token(token)
         blacklist_json = mgr.get_store(cls.JWT_TOKEN_BLACKLIST_KEY)
         if not blacklist_json:
             blacklist_json = "{}"
