@@ -1,6 +1,5 @@
 overrides:
-  ceph:
-    create_rbd_pool: true      
+  ceph:     
     conf:
       client:
         rbd read from replica policy: balance

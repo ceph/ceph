@@ -5,3 +5,6 @@ tasks:
       client:
         rbd cache: true
         rbd cache max dirty: 0
+overrides:
+  ceph:
+    create_rbd_pool: true  
