@@ -10,7 +10,6 @@ from tests import mock
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
-@mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
 def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1', refresh_hosts=False):
         with with_host(cephadm_module, 'host2', refresh_hosts=False):
