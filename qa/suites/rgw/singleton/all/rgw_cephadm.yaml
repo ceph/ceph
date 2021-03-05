@@ -1,0 +1,6 @@
+roles: [mon.a, osd.0, osd.1, osd.2, rgw.z.r.a, rgw.z.r.b]
+tasks:
+- cephadm:
+- exec:
+    mon.a:
+    - sleep 30
