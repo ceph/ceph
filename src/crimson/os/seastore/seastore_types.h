@@ -282,12 +282,10 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  EXTMAP_INNER = 4,
-  EXTMAP_LEAF = 5,
-  OMAP_INNER = 6,
-  OMAP_LEAF = 7,
-  ONODE_BLOCK_STAGED = 8,
-  COLL_BLOCK = 9,
+  OMAP_INNER = 4,
+  OMAP_LEAF = 5,
+  ONODE_BLOCK_STAGED = 6,
+  COLL_BLOCK = 7,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
