@@ -29,7 +29,10 @@ class Auth(RESTController):
             url_prefix = 'https' if mgr.get_localized_module_option('ssl') else 'http'
             logger.debug('Login successful')
             token = JwtManager.gen_token(username)
-            token = token.decode('utf-8')
+
+            # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
+            token = token.decode('utf-8') if isinstance(token, bytes) else token
+
             set_cookies(url_prefix, token)
             return {
                 'token': token,
