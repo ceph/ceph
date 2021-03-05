@@ -1,4 +1,6 @@
 PATH=/home/teuthology/src/teuthology_master/virtualenv/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+TEUTH_CEPH_REPO='https://github.com/ceph/ceph.git'
+TEUTH_SUITE_REPO='https://github.com/ceph/ceph.git'
 MAILTO="ceph-infra@redhat.com;yweinste@redhat.com"
 CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
