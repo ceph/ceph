@@ -64,7 +64,12 @@ To add each new host to the cluster, perform two steps:
 Removing Hosts
 ==============
 
-If the node that want you to remove is running OSDs, make sure you remove the OSDs from the node.
+If the node that want you to remove is running OSDs, make sure you remove the
+OSDs from the node.
+By default cephadm will not allow to remove a host with ceph daemons running in
+it.
+The ``host rm`` command has a ``force`` parameter in order to allow the removal
+operation, although is not recommended to use it.
 
 To remove a host from a cluster, do the following:
 

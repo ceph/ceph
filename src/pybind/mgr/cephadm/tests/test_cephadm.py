@@ -100,6 +100,16 @@ class TestCephadm(object):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_blocked_host_removal(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            c = cephadm_module.list_daemons(refresh=True)
+            assert wait(cephadm_module, c) == []
+            with with_service(cephadm_module, ServiceSpec('mds', 'name', unmanaged=True)) as _, \
+                    with_daemon(cephadm_module, ServiceSpec('mds', 'name'), 'test') as _:
+                out = wait(cephadm_module, cephadm_module.remove_host('test'))
+                assert out.find("Not allowed to remove test from cluster") != -1
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)

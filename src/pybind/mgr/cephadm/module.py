@@ -1456,13 +1456,30 @@ Then run the following:
         return self._add_host(spec)
 
     @handle_orch_error
-    def remove_host(self, host):
-        # type: (str) -> str
+    def remove_host(self, host: str, force: bool = False) -> str:
         """
         Remove a host from orchestrator management.
 
         :param host: host name
+        :param force: if true then allows to delete host with daemons running
         """
+        if not force:
+            # Verify if it is possible to remove the host safely
+            daemons = [(d.daemon_type, str(d.container_id))
+                       for d in self.cache.get_daemons() if d.hostname == host]
+            if daemons:
+                self.log.warning(f"Blocked {host} removal. Daemons running: {daemons}")
+                daemons_table = ""
+                daemons.insert(0, ("-" * 20, "-" * 15))
+                daemons.insert(0, ("type", "container id"))
+                for d in daemons:
+                    daemons_table += "{:<20} {:<15}\n".format(d[0], d[1])
+
+                return "Not allowed to remove %s from cluster. " \
+                    "The following daemons are running in the host:" \
+                    "\n%s" % (host, daemons_table)
+
+        # Proceed to removal
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
         self._reset_con(host)
