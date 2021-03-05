@@ -115,8 +115,8 @@ class Notify {
   crimson::net::ConnectionRef conn;
   uint64_t client_gid;
   uint64_t user_version;
-  bool complete = false;
-  bool discarded = false;
+  bool complete{false};
+  bool discarded{false};
   seastar::timer<seastar::lowres_clock> timeout_timer{
     [this] { do_timeout(); }
   };
