@@ -12,6 +12,7 @@
 #include "rgw/rgw_keystone.h"
 #include "rgw/rgw_b64.h"
 #include "rgw/rgw_kms.h"
+#include "rgw/rgw_kmip_client.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -250,6 +251,114 @@ public:
 
 };
 
+class KmipSecretEngine;
+class KmipGetTheKey {
+private:
+	CephContext *cct;
+	std::string work;
+	bool failed = false;
+	int ret;
+protected:
+	KmipGetTheKey(CephContext *cct) : cct(cct) {}
+	KmipGetTheKey& keyid_to_keyname(std::string_view key_id);
+	KmipGetTheKey& get_uniqueid_for_keyname();
+	int get_key_for_uniqueid(std::string &);
+	friend KmipSecretEngine;
+};
+
+KmipGetTheKey&
+KmipGetTheKey::keyid_to_keyname(std::string_view key_id)
+{
+	work = cct->_conf->rgw_crypt_kmip_kms_key_template;
+	std::string keyword = "$keyid";
+	std::string replacement = std::string(key_id);
+	size_t pos = 0;
+	if (work.length() == 0) {
+		work = std::move(replacement);
+	} else {
+		while (pos < work.length()) {
+			pos = work.find(keyword, pos);
+			if (pos == std::string::npos) break;
+			work.replace(pos, keyword.length(), replacement);
+			pos += key_id.length();
+		}
+	}
+	return *this;
+}
+
+KmipGetTheKey&
+KmipGetTheKey::get_uniqueid_for_keyname()
+{
+	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::LOCATE);
+
+	secret_req.name = work.data();
+	ret = secret_req.process(null_yield);
+	if (ret < 0) {
+		failed = true;
+	} else if (!secret_req.outlist->string_count) {
+		ret = -ENOENT;
+		lderr(cct) << "error: locate returned no results for "
+			<< secret_req.name << dendl;
+		failed = true;
+	} else if (secret_req.outlist->string_count != 1) {
+		ret = -EINVAL;
+		lderr(cct) << "error: locate found "
+			<< secret_req.outlist->string_count
+			<< " results for " << secret_req.name << dendl;
+		failed = true;
+	} else {
+		work = std::string(secret_req.outlist->strings[0]);
+	}
+	return *this;
+}
+
+int
+KmipGetTheKey::get_key_for_uniqueid(std::string& actual_key)
+{
+	if (failed) return ret;
+	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::GET);
+	secret_req.unique_id = work.data();
+	ret = secret_req.process(null_yield);
+	if (ret < 0) {
+		failed = true;
+	} else {
+		actual_key = std::string((char*)(secret_req.outkey->data),
+			secret_req.outkey->keylen);
+	}
+	return ret;
+}
+
+class KmipSecretEngine: public SecretEngine {
+
+protected:
+  CephContext *cct;
+
+  int send_request(std::string_view key_id, JSONParser* parser) override
+  {
+    return -EINVAL;
+  }
+
+  int decode_secret(JSONObj* json_obj, std::string& actual_key){
+    return -EINVAL;
+  }
+
+public:
+
+  KmipSecretEngine(CephContext *cct) {
+    this->cct = cct;
+  }
+
+  int get_key(std::string_view key_id, std::string& actual_key)
+  {
+	int r;
+	r = KmipGetTheKey{cct}
+		.keyid_to_keyname(key_id)
+		.get_uniqueid_for_keyname()
+		.get_key_for_uniqueid(actual_key);
+	return r;
+  }
+};
+
 
 static map<string,string> get_str_map(const string &str) {
   map<string,string> m;
@@ -383,6 +492,23 @@ static int get_actual_key_from_vault(CephContext *cct,
 }
 
 
+static int get_actual_key_from_kmip(CephContext *cct,
+                                     std::string_view key_id,
+                                     std::string& actual_key)
+{
+  std::string secret_engine = RGW_SSE_KMS_KMIP_SE_KV;
+
+  if (RGW_SSE_KMS_KMIP_SE_KV == secret_engine){
+    KmipSecretEngine engine(cct);
+    return engine.get_key(key_id, actual_key);
+  }
+  else{
+    ldout(cct, 0) << "Missing or invalid secret engine" << dendl;
+    return -EINVAL;
+  }
+}
+
+
 int get_actual_key_from_kms(CephContext *cct,
                             std::string_view key_id,
                             std::string_view key_selector,
@@ -399,6 +525,9 @@ int get_actual_key_from_kms(CephContext *cct,
 
   if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend)
     return get_actual_key_from_vault(cct, key_id, actual_key);
+
+  if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend)
+    return get_actual_key_from_kmip(cct, key_id, actual_key);
 
   if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend)
     return get_actual_key_from_conf(cct, key_id, key_selector, actual_key);

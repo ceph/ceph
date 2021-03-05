@@ -845,6 +845,8 @@ if(WITH_KVS)
 endif(WITH_KVS)
 
 if(WITH_RADOSGW)
+  add_subdirectory(libkmip)
+
   set(civetweb_common_files civetweb/src/civetweb.c)
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
   target_include_directories(civetweb_common_objs SYSTEM PRIVATE
