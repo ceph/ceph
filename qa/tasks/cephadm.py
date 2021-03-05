@@ -732,30 +732,15 @@ def ceph_rgw(ctx, config):
                     if teuthology.is_type('rgw', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
-            realmzone = '.'.join(id_.split('.')[0:2])
-            if realmzone not in nodes:
-                nodes[realmzone] = []
-            nodes[realmzone].append(remote.shortname + '=' + id_)
+            svc = '.'.join(id_.split('.')[0:2])
+            if svc not in nodes:
+                nodes[svc] = []
+            nodes[svc].append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
 
-    for realmzone in nodes.keys():
-        (realm, zone) = realmzone.split('.', 1)
-
-        # TODO: those should be moved to mgr/cephadm
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'realm', 'create', '--rgw-realm', realm, '--default']
-        )
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'zonegroup', 'create', '--rgw-zonegroup=default', '--master', '--default']
-        )
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'zone', 'create', '--rgw-zonegroup=default', '--rgw-zone', zone,  '--master', '--default']
-        )
-
-    for realmzone, nodes in nodes.items():
-        (realm, zone) = realmzone.split('.', 1)
+    for svc, nodes in nodes.items():
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'orch', 'apply', 'rgw', realm, zone,
+            'ceph', 'orch', 'apply', 'rgw', svc,
              '--placement',
              str(len(nodes)) + ';' + ';'.join(nodes)]
         )
