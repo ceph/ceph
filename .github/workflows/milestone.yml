@@ -1,0 +1,12 @@
+---
+name: "Pull Request Set Milestone"
+on:
+  pull_request_target:
+jobs:
+  milestone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: iyu/actions-milestone@v1
+        with:
+          configuration-path: .github/milestone.yml
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
