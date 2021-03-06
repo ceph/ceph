@@ -1,9 +1,11 @@
 ---
-name: "Pull Request Add Milestone"
+name: "Pull Request Set Milestone"
 on:
   pull_request:
     types:
       - opened
+      - edited
+      - synchronize
 jobs:
   milestone:
     runs-on: ubuntu-latest
