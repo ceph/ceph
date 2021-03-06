@@ -1,0 +1,6 @@
+base-branch:
+  - "luminous"
+  - "nautilus"
+  - "octopus"
+  - "pacific"
+  - "quincy"
