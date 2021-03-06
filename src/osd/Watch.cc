@@ -193,10 +193,11 @@ void Notify::maybe_complete_notify()
     // prepare reply
     bufferlist bl;
     encode(notify_replies, bl);
-    list<pair<uint64_t,uint64_t> > missed;
-    for (auto p = watchers.begin(); p != watchers.end(); ++p) {
-      missed.push_back(make_pair((*p)->get_watcher_gid(),
-				 (*p)->get_cookie()));
+    vector<pair<uint64_t,uint64_t>> missed;
+    missed.reserve(watchers.size());
+    for (auto& watcher : watchers) {
+      missed.emplace_back(watcher->get_watcher_gid(),
+                          watcher->get_cookie());
     }
     encode(missed, bl);
 
