@@ -114,26 +114,31 @@ failure, ask one of the team members for help.
 Debugging an issue using interactive-on-error
 ---------------------------------------------
 
-It is important to be able to reproduce an issue when investigating its cause.
-Run a job similar to the failed job, using the `interactive-on-error`_ mode in
-teuthology::
+When you encounter a job failure during testing, you should attempt to
+reproduce it. This is where ``--interactive-on-error`` comes in. This
+section explains how to use ``interactive-on-error`` and what it does. 
+
+When you have verified that a job has failed, run the same job again in
+teuthology but add the `interactive-on-error`_ flag::
 
     ideepika@teuthology:~/teuthology$ ./virtualenv/bin/teuthology -v --lock --block $<your-config-yaml> --interactive-on-error
 
-For this job, use either `custom config.yaml`_ or the yaml file from
-the failed job. If you intend to use the yaml file from the failed job, copy 
-``orig.config.yaml`` to your local dir and change the `testing priority`_
-accordingly, like so::
+Use either `custom config.yaml`_ or the yaml file from the failed job. If
+you use the yaml file from the failed job, copy ``orig.config.yaml`` to
+your local directory::
 
     ideepika@teuthology:~/teuthology$ cp /a/teuthology-2021-01-06_07:01:02-rados-master-distro-basic-smithi/5759282/orig.config.yaml test.yaml
     ideepika@teuthology:~/teuthology$ ./virtualenv/bin/teuthology -v --lock --block test.yaml --interactive-on-error
 
+If a job fails when the ``interactive-on-error`` flag is used, teuthology
+will lock the machines required by ``config.yaml``. Teuthology will halt
+the testing machines and hold them in the state that they were in at the
+time of the job failure. You will be put into an interactive python
+session. From there, you can ssh into the system to investigate the cause
+of the job failure.  
 
-In the event of job failure, teuthology will lock the machines required by
-``config.yaml``. Teuthology will halt at an interactive python session. 
-By sshing into the targets, we can investigate their ctx values.  After we have
-investigated the system, we can manually terminate the session and let
-teuthology clean the session up.
+After you have investigated the failure, just terminate the session.
+Teuthology will then clean up the session and unlock the machines.
 
 Suggested Resources
 --------------------
