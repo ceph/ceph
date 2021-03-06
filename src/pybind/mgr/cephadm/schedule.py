@@ -116,21 +116,28 @@ class HostAssignment(object):
 
         count = self.spec.placement.count
 
-        # get candidates based on [hosts, label, host_pattern]
-        candidates = self.get_candidates()
+        # get candidate hosts based on [hosts, label, host_pattern]
+        candidates = self.get_candidates()  # type: List[HostPlacementSpec]
 
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
+
+            if self.spec.placement.count_per_host:
+                per_host = self.spec.placement.count_per_host
+            else:
+                per_host = 1
+
             # do not deploy ha-rgw on hosts that don't support virtual ips
             if self.spec.service_type == 'ha-rgw' and self.filter_new_host:
                 old = candidates
                 candidates = [h for h in candidates if self.filter_new_host(h.hostname)]
                 for h in list(set(old) - set(candidates)):
                     logger.info(
-                        f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
-                logger.info('filtered %s down to %s' % (old, candidates))
-            return candidates
+                        f"Filtered out host {h.hostname} for ha-rgw: could not verify host allowed virtual ips")
+                logger.debug('Filtered %s down to %s' % (old, candidates))
+
+            return candidates * per_host
 
         # prefer hosts that already have services.
         # this avoids re-assigning to _new_ hosts
@@ -141,7 +148,7 @@ class HostAssignment(object):
         # The amount of hosts that need to be selected in order to fulfill count.
         need = count - len(hosts_with_daemons)
 
-        # hostspecs that are do not have daemons on them but are still candidates.
+        # hostspecs that do not have daemons on them but are still candidates.
         others = difference_hostspecs(candidates, hosts_with_daemons)
 
         # we don't need any additional hosts
@@ -215,12 +222,12 @@ class HostAssignment(object):
     def get_candidates(self) -> List[HostPlacementSpec]:
         if self.spec.placement.hosts:
             return self.spec.placement.hosts
-        elif self.spec.placement.label:
+        if self.spec.placement.label:
             return [
                 HostPlacementSpec(x.hostname, '', '')
                 for x in self.hosts_by_label(self.spec.placement.label)
             ]
-        elif self.spec.placement.host_pattern:
+        if self.spec.placement.host_pattern:
             return [
                 HostPlacementSpec(x, '', '')
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
