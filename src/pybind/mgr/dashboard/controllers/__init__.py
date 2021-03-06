@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import collections
+import html
 import importlib
 import inspect
 import json
@@ -383,8 +384,8 @@ def generate_routes(url_prefix):
 
 def json_error_page(status, message, traceback, version):
     cherrypy.response.headers['Content-Type'] = 'application/json'
-    return json.dumps(dict(status=status, detail=message, traceback=traceback,
-                           version=version))
+    return json.dumps(dict(status=status, detail=html.unescape(message),
+                           traceback=html.unescape(traceback), version=version))
 
 
 def _get_function_params(func):

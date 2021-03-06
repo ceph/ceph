@@ -9,3 +9,5 @@ Routes
 prettytable
 pytest
 pyyaml
+typing-extensions; python_version < '3.8'
+typeguard

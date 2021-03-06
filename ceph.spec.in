@@ -586,6 +586,8 @@ Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-jwt
 Requires:       python%{python3_pkgversion}-routes
+Requires:       python%{python3_pkgversion}-typeguard
+Requires:       python%{python3_pkgversion}-typing-extensions
 Requires:       python%{python3_pkgversion}-werkzeug
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
@@ -595,6 +597,8 @@ Recommends:     python%{python3_pkgversion}-saml
 Requires:       python%{python3_pkgversion}-CherryPy
 Requires:       python%{python3_pkgversion}-PyJWT
 Requires:       python%{python3_pkgversion}-Routes
+Requires:       python%{python3_pkgversion}-typing_extensions
+Requires:       python%{python3_pkgversion}-typeguard
 Requires:       python%{python3_pkgversion}-Werkzeug
 Recommends:     python%{python3_pkgversion}-python3-saml
 %endif
