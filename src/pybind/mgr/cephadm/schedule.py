@@ -119,8 +119,8 @@ class HostAssignment(object):
 
         count = self.spec.placement.count
 
-        # get candidates based on [hosts, label, host_pattern]
-        candidates = self.get_candidates()
+        # get candidate hosts based on [hosts, label, host_pattern]
+        candidates = self.get_candidates()  # type: List[HostPlacementSpec]
 
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
@@ -131,8 +131,8 @@ class HostAssignment(object):
                 candidates = [h for h in candidates if self.filter_new_host(h.hostname)]
                 for h in list(set(old) - set(candidates)):
                     logger.info(
-                        f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
-                logger.info('filtered %s down to %s' % (old, candidates))
+                        f"Filtered out host {h.hostname} for ha-rgw: could not verify host allowed virtual ips")
+                logger.debug('Filtered %s down to %s' % (old, candidates))
             return candidates
 
         # prefer hosts that already have services.
@@ -144,7 +144,7 @@ class HostAssignment(object):
         # The amount of hosts that need to be selected in order to fulfill count.
         need = count - len(hosts_with_daemons)
 
-        # hostspecs that are do not have daemons on them but are still candidates.
+        # hostspecs that do not have daemons on them but are still candidates.
         others = difference_hostspecs(candidates, hosts_with_daemons)
 
         # we don't need any additional hosts
@@ -216,18 +216,20 @@ class HostAssignment(object):
         return _remove_daemon_hosts
 
     def get_candidates(self) -> List[HostPlacementSpec]:
+        per_host = self.spec.placement.get_num_per_host()
+
         if self.spec.placement.hosts:
-            return self.spec.placement.hosts
-        elif self.spec.placement.label:
+            return self.spec.placement.hosts * per_host
+        if self.spec.placement.label:
             return [
                 HostPlacementSpec(x.hostname, '', '')
                 for x in self.hosts_by_label(self.spec.placement.label)
-            ]
-        elif self.spec.placement.host_pattern:
+            ] * per_host
+        if self.spec.placement.host_pattern:
             return [
                 HostPlacementSpec(x, '', '')
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
-            ]
+            ] * per_host
         # If none of the above and also no <count>
         if self.spec.placement.count is None:
             raise OrchestratorValidationError(
@@ -236,7 +238,7 @@ class HostAssignment(object):
         return [
             HostPlacementSpec(x.hostname, '', '')
             for x in self.hosts
-        ]
+        ] * per_host
 
     def hosts_with_daemons(self, candidates: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
         """

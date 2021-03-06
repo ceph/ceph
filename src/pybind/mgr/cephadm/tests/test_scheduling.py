@@ -349,6 +349,17 @@ class NodeAssignmentTest(NamedTuple):
             ],
             ['host1', 'host2', 'host3']
         ),
+        # all_hosts + max_per_host
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='*', max_per_host=2),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host2'),
+            ],
+            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3']
+        ),
         # count that is bigger than the amount of hosts. Truncate to len(hosts)
         # RGWs should not be co-located to each other.
         NodeAssignmentTest(
@@ -418,6 +429,15 @@ class NodeAssignmentTest(NamedTuple):
             [],
             ['host1', 'host2', 'host3']
         ),
+        # label only + max_per_hst
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(label='foo', max_per_host=3),
+            'host1 host2 host3'.split(),
+            [],
+            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3',
+             'host1', 'host2', 'host3']
+        ),
         # host_pattern
         NodeAssignmentTest(
             'mgr',
@@ -425,6 +445,14 @@ class NodeAssignmentTest(NamedTuple):
             'mgrhost1 mgrhost2 datahost'.split(),
             [],
             ['mgrhost1', 'mgrhost2']
+        ),
+        # host_pattern + max_per_host
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='mgr*', max_per_host=3),
+            'mgrhost1 mgrhost2 datahost'.split(),
+            [],
+            ['mgrhost1', 'mgrhost2', 'mgrhost1', 'mgrhost2', 'mgrhost1', 'mgrhost2']
         ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
