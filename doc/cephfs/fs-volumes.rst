@@ -173,6 +173,24 @@ The command resizes the subvolume quota using the size specified by 'new_size'.
 
 The subvolume can be resized to an infinite size by passing 'inf' or 'infinite' as the new_size.
 
+Authorize cephx auth IDs, the read/read-write access to fs subvolumes::
+
+    $ ceph fs subvolume authorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>] [--access_level=<access_level>]
+
+The 'access_level' takes 'r' or 'rw' as value.
+
+Deauthorize cephx auth IDs, the read/read-write access to fs subvolumes::
+
+    $ ceph fs subvolume deauthorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
+
+List cephx auth IDs authorized to access fs subvolume::
+
+    $ ceph fs subvolume authorized_list <vol_name> <sub_name> [--group_name=<group_name>]
+
+Evict fs clients based on auth ID and subvolume mounted::
+
+    $ ceph fs subvolume evict <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
+
 Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
