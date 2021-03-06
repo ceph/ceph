@@ -135,67 +135,52 @@ class HostAssignment(object):
                 logger.debug('Filtered %s down to %s' % (old, candidates))
             return candidates
 
-        # prefer hosts that already have services.
-        # this avoids re-assigning to _new_ hosts
-        # and constant re-distribution of hosts when new nodes are
-        # added to the cluster
-        hosts_with_daemons = self.hosts_with_daemons(candidates)
+        # sort candidates into existing/used slots that already have a
+        # daemon, and others (the rest)
+        existing_active: List[HostPlacementSpec] = []
+        existing_standby: List[HostPlacementSpec] = []
+        others = candidates
+        for d in self.daemons:
+            hs = d.get_host_placement()
+            for i in others:
+                if i == hs:
+                    others.remove(i)
+                    if d.is_active:
+                        existing_active.append(hs)
+                    else:
+                        existing_standby.append(hs)
+                    break
+        logger.debug('Hosts with existing active daemons: {}'.format(existing_active))
+        logger.debug('Hosts with existing standby daemons: {}'.format(existing_standby))
 
-        # The amount of hosts that need to be selected in order to fulfill count.
-        need = count - len(hosts_with_daemons)
+        # Put active daemons at the front of the list
+        existing = existing_active + existing_standby
 
-        # hostspecs that do not have daemons on them but are still candidates.
-        others = difference_hostspecs(candidates, hosts_with_daemons)
+        # The number of new slots that need to be selected in order to fulfill count
+        need = count - len(existing)
 
-        # we don't need any additional hosts
-        if need < 0:
-            final_candidates = self.prefer_hosts_with_active_daemons(hosts_with_daemons, count)
-        else:
-            # exclusive to daemons from 'mon' and 'ha-rgw' services.
-            # Filter out hosts that don't have a public network assigned
-            # or don't allow virtual ips respectively
-            if self.filter_new_host:
-                old = others
-                others = [h for h in others if self.filter_new_host(h.hostname)]
-                for h in list(set(old) - set(others)):
-                    if self.spec.service_type == 'ha-rgw':
-                        logger.info(
-                            f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
-                logger.debug('filtered %s down to %s' % (old, others))
+        # we don't need any additional placements
+        if need <= 0:
+            del existing[count:]
+            return existing
 
-            # ask the scheduler to return a set of hosts with a up to the value of <count>
-            others = self.scheduler.place(others, need)
-            logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
-                hosts_with_daemons, others))
-            # if a host already has the anticipated daemon, merge it with the candidates
-            # to get a list of HostPlacementSpec that can be deployed on.
-            final_candidates = list(merge_hostspecs(hosts_with_daemons, others))
+        # exclusive to daemons from 'mon' and 'ha-rgw' services.
+        # Filter out hosts that don't have a public network assigned
+        # or don't allow virtual ips respectively
+        if self.filter_new_host:
+            old = others
+            others = [h for h in others if self.filter_new_host(h.hostname)]
+            for h in list(set(old) - set(others)):
+                if self.spec.service_type == 'ha-rgw':
+                    logger.info(
+                        f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
+            logger.debug('filtered %s down to %s' % (old, others))
 
-        return final_candidates
-
-    def get_hosts_with_active_daemon(self, hosts: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
-        active_hosts: List['HostPlacementSpec'] = []
-        for daemon in self.daemons:
-            if daemon.is_active:
-                for h in hosts:
-                    if h.hostname == daemon.hostname:
-                        active_hosts.append(h)
-        # remove duplicates before returning
-        return list(dict.fromkeys(active_hosts))
-
-    def prefer_hosts_with_active_daemons(self, hosts: List[HostPlacementSpec], count: int) -> List[HostPlacementSpec]:
-        # try to prefer host with active daemon if possible
-        active_hosts = self.get_hosts_with_active_daemon(hosts)
-        if len(active_hosts) != 0 and count > 0:
-            for host in active_hosts:
-                hosts.remove(host)
-            if len(active_hosts) >= count:
-                return self.scheduler.place(active_hosts, count)
-            else:
-                return list(merge_hostspecs(self.scheduler.place(active_hosts, count),
-                                            self.scheduler.place(hosts, count - len(active_hosts))))
-        # ask the scheduler to return a set of hosts with a up to the value of <count>
-        return self.scheduler.place(hosts, count)
+        # ask the scheduler to select additional slots
+        chosen = self.scheduler.place(others, need)
+        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
+            existing, chosen))
+        return existing + chosen
 
     def add_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
         hosts_with_daemons = {d.hostname for d in self.daemons}
@@ -239,20 +224,6 @@ class HostAssignment(object):
             HostPlacementSpec(x.hostname, '', '')
             for x in self.hosts
         ] * per_host
-
-    def hosts_with_daemons(self, candidates: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
-        """
-        Prefer hosts with daemons. Otherwise we'll constantly schedule daemons
-        on different hosts all the time. This is about keeping daemons where
-        they are. This isn't about co-locating.
-        """
-        hosts_with_daemons = {d.hostname for d in self.daemons}
-
-        # calc existing daemons (that aren't already in chosen)
-        existing = [hs for hs in candidates if hs.hostname in hosts_with_daemons]
-
-        logger.debug('Hosts with existing daemons: {}'.format(existing))
-        return existing
 
 
 def merge_hostspecs(

@@ -351,12 +351,12 @@ class NodeAssignmentTest(NamedTuple):
         ),
         # all_hosts + max_per_host
         NodeAssignmentTest(
-            'mgr',
+            'mds',
             PlacementSpec(host_pattern='*', max_per_host=2),
             'host1 host2 host3'.split(),
             [
-                DaemonDescription('mgr', 'a', 'host1'),
-                DaemonDescription('mgr', 'b', 'host2'),
+                DaemonDescription('mds', 'a', 'host1'),
+                DaemonDescription('mds', 'b', 'host2'),
             ],
             ['host1', 'host2', 'host3', 'host1', 'host2', 'host3']
         ),
@@ -431,7 +431,7 @@ class NodeAssignmentTest(NamedTuple):
         ),
         # label only + max_per_hst
         NodeAssignmentTest(
-            'mgr',
+            'mds',
             PlacementSpec(label='foo', max_per_host=3),
             'host1 host2 host3'.split(),
             [],
@@ -448,17 +448,19 @@ class NodeAssignmentTest(NamedTuple):
         ),
         # host_pattern + max_per_host
         NodeAssignmentTest(
-            'mgr',
-            PlacementSpec(host_pattern='mgr*', max_per_host=3),
-            'mgrhost1 mgrhost2 datahost'.split(),
+            'mds',
+            PlacementSpec(host_pattern='mds*', max_per_host=3),
+            'mdshost1 mdshost2 datahost'.split(),
             [],
-            ['mgrhost1', 'mgrhost2', 'mgrhost1', 'mgrhost2', 'mgrhost1', 'mgrhost2']
+            ['mdshost1', 'mdshost2', 'mdshost1', 'mdshost2', 'mdshost1', 'mdshost2']
         ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
     service_id = None
     if service_type == 'rgw':
         service_id = 'realm.zone'
+    elif service_type == 'mds':
+        service_id = 'myfs'
 
     spec = ServiceSpec(service_type=service_type,
                        service_id=service_id,
@@ -786,8 +788,8 @@ def test_active_assignment(service_type, placement, hosts, daemons, expected):
                        service_id=None,
                        placement=placement)
 
-    hosts = HostAssignment(
+    result = HostAssignment(
         spec=spec,
         hosts=[HostSpec(h) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
-    assert sorted([h.hostname for h in hosts]) in expected
+    assert sorted([h.hostname for h in result]) in expected
