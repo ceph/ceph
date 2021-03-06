@@ -560,11 +560,11 @@ class CephadmServe:
         # add any?
         did_config = False
 
-        add_daemon_hosts: Set[HostPlacementSpec] = ha.add_daemon_hosts(hosts)
+        add_daemon_hosts: List[HostPlacementSpec] = ha.add_daemon_hosts(hosts)
         self.log.debug('Hosts that will receive new daemons: %s' % add_daemon_hosts)
 
-        remove_daemon_hosts: Set[orchestrator.DaemonDescription] = ha.remove_daemon_hosts(hosts)
-        self.log.debug('Hosts that will loose daemons: %s' % remove_daemon_hosts)
+        remove_daemons: Set[orchestrator.DaemonDescription] = ha.remove_daemon_hosts(hosts)
+        self.log.debug('Daemons that will be removed: %s' % remove_daemons)
 
         if service_type == 'ha-rgw':
             spec = self.update_ha_rgw_definitive_hosts(spec, hosts, add_daemon_hosts)
@@ -608,18 +608,18 @@ class CephadmServe:
                 daemons.append(sd)
 
         # remove any?
-        def _ok_to_stop(remove_daemon_hosts: Set[orchestrator.DaemonDescription]) -> bool:
-            daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
+        def _ok_to_stop(remove_daemons: Set[orchestrator.DaemonDescription]) -> bool:
+            daemon_ids = [d.daemon_id for d in remove_daemons]
             assert None not in daemon_ids
-            # setting force flag retains previous behavior, should revisit later.
+            # setting force flag retains previous behavior
             r = self.mgr.cephadm_services[service_type].ok_to_stop(
                 cast(List[str], daemon_ids), force=True)
             return not r.retval
 
-        while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
+        while remove_daemons and not _ok_to_stop(remove_daemons):
             # let's find a subset that is ok-to-stop
-            remove_daemon_hosts.pop()
-        for d in remove_daemon_hosts:
+            remove_daemons.pop()
+        for d in remove_daemons:
             r = True
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
@@ -754,8 +754,12 @@ class CephadmServe:
     # if definitive host list has changed, all ha-rgw daemons must get new
     # config, including those that are already on the correct host and not
     # going to be deployed
-    def update_ha_rgw_definitive_hosts(self, spec: ServiceSpec, hosts: List[HostPlacementSpec],
-                                       add_hosts: Set[HostPlacementSpec]) -> HA_RGWSpec:
+    def update_ha_rgw_definitive_hosts(
+            self,
+            spec: ServiceSpec,
+            hosts: List[HostPlacementSpec],
+            add_hosts: List[HostPlacementSpec]
+    ) -> HA_RGWSpec:
         spec = cast(HA_RGWSpec, spec)
         if not (set(hosts) == set(spec.definitive_host_list)):
             spec.definitive_host_list = hosts

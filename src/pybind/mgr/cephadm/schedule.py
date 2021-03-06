@@ -80,6 +80,9 @@ class HostAssignment(object):
         if self.spec.placement.count == 0:
             raise OrchestratorValidationError(
                 f'<count> can not be 0 for {self.spec.one_line_str()}')
+        if self.spec.placement.max_per_host is not None and self.spec.placement.max_per_host < 1:
+            raise OrchestratorValidationError(
+                f'<max-per-host> can not be less than 1 for {self.spec.one_line_str()}')
 
         if self.spec.placement.hosts:
             explicit_hostnames = {h.hostname for h in self.spec.placement.hosts}
@@ -194,12 +197,12 @@ class HostAssignment(object):
         # ask the scheduler to return a set of hosts with a up to the value of <count>
         return self.scheduler.place(hosts, count)
 
-    def add_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> Set[HostPlacementSpec]:
+    def add_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
         hosts_with_daemons = {d.hostname for d in self.daemons}
-        _add_daemon_hosts = set()
+        _add_daemon_hosts = []  # type: List[HostPlacementSpec]
         for host in host_pool:
             if host.hostname not in hosts_with_daemons:
-                _add_daemon_hosts.add(host)
+                _add_daemon_hosts.append(host)
         return _add_daemon_hosts
 
     def remove_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> Set[DaemonDescription]:
@@ -208,6 +211,8 @@ class HostAssignment(object):
         for d in self.daemons:
             if d.hostname not in target_hosts:
                 _remove_daemon_hosts.add(d)
+            else:
+                target_hosts.remove(d.hostname)
         return _remove_daemon_hosts
 
     def get_candidates(self) -> List[HostPlacementSpec]:
@@ -248,7 +253,10 @@ class HostAssignment(object):
         return existing
 
 
-def merge_hostspecs(lh: List[HostPlacementSpec], rh: List[HostPlacementSpec]) -> Iterable[HostPlacementSpec]:
+def merge_hostspecs(
+        lh: List[HostPlacementSpec],
+        rh: List[HostPlacementSpec]
+) -> Iterable[HostPlacementSpec]:
     """
     Merge two lists of HostPlacementSpec by hostname. always returns `lh` first.
 
@@ -262,7 +270,10 @@ def merge_hostspecs(lh: List[HostPlacementSpec], rh: List[HostPlacementSpec]) ->
     yield from (h for h in rh if h.hostname not in lh_names)
 
 
-def difference_hostspecs(lh: List[HostPlacementSpec], rh: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
+def difference_hostspecs(
+        lh: List[HostPlacementSpec],
+        rh: List[HostPlacementSpec]
+) -> List[HostPlacementSpec]:
     """
     returns lh "minus" rh by hostname.
 
