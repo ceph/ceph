@@ -589,6 +589,42 @@ public:
     pool_obj_cont.rbegin()->second.insert_or_assign(oid, contents);
   }
 
+  void update_object_tier_flushed(const string &oid, int snap)
+  {
+    for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
+	   pool_obj_cont.rbegin();
+	 i != pool_obj_cont.rend();
+	 ++i) {
+      if (snap != -1 && snap < i->first)
+	continue;
+      map<string,ObjectDesc>::iterator j = i->second.find(oid);
+      if (j != i->second.end()) {
+	j->second.flushed = true;
+	break;
+      }
+    }
+  }
+
+  bool check_oldest_snap_flushed(const string &oid, int snap) 
+  {
+    for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
+	   pool_obj_cont.rbegin();
+	 i != pool_obj_cont.rend();
+	 ++i) {
+      if (snap != -1 && snap < i->first)
+	continue;
+      map<string,ObjectDesc>::iterator j = i->second.find(oid);
+      if (j != i->second.end() && !j->second.flushed) {
+	cout << __func__ << " oid " << oid
+	     << " v " << j->second.version << " " << j->second.most_recent()
+	     << " " << (j->second.flushed ? "flushed" : "unflushed")
+	     << " " << i->first << std::endl;
+	return false;
+      }
+    }
+    return true;
+  }
+
   bool check_chunks_refcount(librados::IoCtx &chunk_pool_ctx, librados::IoCtx &manifest_pool_ctx)
   {
     librados::ObjectCursor shard_start;
@@ -2882,6 +2918,8 @@ public:
       snap = -1;
     }
 
+    cout << num << ": tier_flush oid " << oid << " snap " << snap << std::endl;
+
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
@@ -2918,11 +2956,13 @@ public:
       // sucess
     } else if (r == -EBUSY) {
       // could fail if snap is not oldest
+      ceph_assert(!context->check_oldest_snap_flushed(oid, snap)); 
     } else if (r == -ENOENT && src_value.deleted()) {
       // could fail if object is removed
     } else {
       ceph_abort_msg("shouldn't happen");
     }
+    context->update_object_tier_flushed(oid, snap);
     context->update_object_version(oid, completion->get_version64(), snap);
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
