@@ -529,7 +529,9 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
       uint32_t fadvise_flags = i.get_fadvise_flags();
       ceph::bufferlist bl;
       i.decode_bl(bl);
-      return _write(ctx, get_onode(op->oid), off, len, bl, fadvise_flags);
+      return _write(
+	ctx, get_onode(op->oid), off, len, std::move(bl),
+	fadvise_flags);
     }
     break;
     case Transaction::OP_TRUNCATE:
@@ -545,7 +547,7 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
       i.decode_bl(bl);
       std::map<std::string, bufferptr> to_set;
       to_set[name] = bufferptr(bl.c_str(), bl.length());
-      return _setattrs(ctx, get_onode(op->oid), to_set);
+      return _setattrs(ctx, get_onode(op->oid), std::move(to_set));
     }
     break;
     case Transaction::OP_MKCOLL:
@@ -571,14 +573,14 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
     {
       ceph::bufferlist bl;
       i.decode_bl(bl);
-      return _omap_set_header(ctx, get_onode(op->oid), bl);
+      return _omap_set_header(ctx, get_onode(op->oid), std::move(bl));
     }
     break;
     case Transaction::OP_OMAP_RMKEYS:
     {
       omap_keys_t keys;
       i.decode_keyset(keys);
-      return _omap_rmkeys(ctx, get_onode(op->oid), keys);
+      return _omap_rmkeys(ctx, get_onode(op->oid), std::move(keys));
     }
     break;
     case Transaction::OP_OMAP_RMKEYRANGE:
@@ -586,7 +588,9 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
       string first, last;
       first = i.decode_string();
       last = i.decode_string();
-      return _omap_rmkeyrange(ctx, get_onode(op->oid), first, last);
+      return _omap_rmkeyrange(
+	ctx, get_onode(op->oid),
+	std::move(first), std::move(last));
     }
     break;
     case Transaction::OP_COLL_HINT:
@@ -626,12 +630,12 @@ SeaStore::tm_ret SeaStore::_touch(
 SeaStore::tm_ret SeaStore::_write(
   internal_context_t &ctx,
   OnodeRef &onode,
-  uint64_t offset, size_t len, const ceph::bufferlist& bl,
+  uint64_t offset, size_t len,
+  ceph::bufferlist &&bl,
   uint32_t fadvise_flags)
 {
   logger().debug("{}: {} {} ~ {}",
                 __func__, *onode, offset, len);
-  assert(len == bl.length());
   return tm_ertr::now();
 }
 
@@ -685,7 +689,7 @@ SeaStore::tm_ret SeaStore::_omap_set_values(
 SeaStore::tm_ret SeaStore::_omap_set_header(
   internal_context_t &ctx,
   OnodeRef &onode,
-  const ceph::bufferlist &header)
+  ceph::bufferlist &&header)
 {
   logger().debug(
     "{}: {} {} bytes",
@@ -697,7 +701,7 @@ SeaStore::tm_ret SeaStore::_omap_set_header(
 SeaStore::tm_ret SeaStore::_omap_rmkeys(
   internal_context_t &ctx,
   OnodeRef &onode,
-  const omap_keys_t& keys)
+  omap_keys_t &&keys)
 {
   logger().debug(
     "{} {} {} keys",
@@ -709,9 +713,11 @@ SeaStore::tm_ret SeaStore::_omap_rmkeys(
     return seastar::do_with(
       BtreeOMapManager(*transaction_manager),
       onode->get_layout().omap_root.get(),
-      [&ctx, &onode, &keys, this](
+      std::move(keys),
+      [&ctx, &onode, this](
 	auto &omap_manager,
-	auto &omap_root) {
+	auto &omap_root,
+	auto &keys) {
 	return crimson::do_for_each(
 	  keys.begin(),
 	  keys.end(),
@@ -733,8 +739,8 @@ SeaStore::tm_ret SeaStore::_omap_rmkeys(
 SeaStore::tm_ret SeaStore::_omap_rmkeyrange(
   internal_context_t &ctx,
   OnodeRef &onode,
-  const std::string &first,
-  const std::string &last)
+  std::string first,
+  std::string last)
 {
   logger().debug(
     "{} {} first={} last={}",
@@ -756,7 +762,7 @@ SeaStore::tm_ret SeaStore::_truncate(
 SeaStore::tm_ret SeaStore::_setattrs(
   internal_context_t &ctx,
   OnodeRef &onode,
-  std::map<std::string,bufferptr>& aset)
+  std::map<std::string,bufferptr> &&aset)
 {
   logger().debug("{} onode={}",
                 __func__, *onode);
