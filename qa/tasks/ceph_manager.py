@@ -1419,15 +1419,18 @@ class CephManager:
         """
         Start ceph on a raw cluster.  Return count
         """
-        stdout = kwargs.pop('stdout', StringIO())
-        p = self.run_cluster_cmd(args=args, stdout=stdout, **kwargs)
-        return p.stdout.getvalue()
+        if kwargs.get('args') is None and args:
+            kwargs['args'] = args
+        kwargs['stdout'] = kwargs.pop('stdout', StringIO())
+        return self.run_cluster_cmd(**kwargs).stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         Start ceph on a cluster.  Return success or failure information.
         """
-        kwargs['args'], kwargs['check_status'] = args, False
+        if kwargs.get('args') is None and args:
+           kwargs['args'] = args
+        kwargs['check_status'] = False
         return self.run_cluster_cmd(**kwargs).exitstatus
 
     def run_ceph_w(self, watch_channel=None):
