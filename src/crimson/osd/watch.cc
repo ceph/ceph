@@ -18,13 +18,6 @@ namespace {
 
 namespace crimson::osd {
 
-bool Watch::NotifyCmp::operator()(NotifyRef lhs, NotifyRef rhs) const
-{
-  ceph_assert(lhs);
-  ceph_assert(rhs);
-  return lhs->get_id() < rhs->get_id();
-}
-
 seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
 {
   if (this->conn == conn) {
@@ -110,11 +103,7 @@ seastar::future<> Watch::remove(const bool send_disconnect)
 void Watch::cancel_notify(const uint64_t notify_id)
 {
   logger().info("{} notify_id={}", __func__, notify_id);
-  const auto it = std::find_if(
-    std::begin(in_progress_notifies), std::end(in_progress_notifies),
-    [notify_id] (const auto& notify) {
-      return notify->ninfo.notify_id == notify_id;
-    });
+  const auto it = in_progress_notifies.find(notify_id);
   assert(it != std::end(in_progress_notifies));
   in_progress_notifies.erase(it);
 }
@@ -209,12 +198,11 @@ void Notify::do_timeout()
   if (complete) {
     return;
   }
-  decltype(watchers) timedout_watchers;
-  std::swap(watchers, timedout_watchers);
-  for (auto& watcher : timedout_watchers) {
+  for (auto& watcher : watchers) {
     watcher->cancel_notify(ninfo.notify_id);
   }
-  std::ignore = maybe_send_completion(std::move(timedout_watchers));
+  std::ignore = maybe_send_completion(std::move(watchers));
+  watchers.clear();
 }
 
 } // namespace crimson::osd
