@@ -155,6 +155,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
 
   decayrate.set_halflife(g_conf()->mds_decay_halflife);
 
+  bal_offload_rank0 = g_conf().get_val<bool>("mds_bal_offload_rank0");
+
   upkeeper = std::thread([this]() {
     std::unique_lock lock(upkeep_mutex);
     while (!upkeep_trim_shutdown.load()) {
@@ -218,9 +220,10 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
     lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
-  if (changed.count("mds_cache_trim_decay_rate")) {
+  if (changed.count("mds_cache_trim_decay_rate"))
     trim_counter = DecayCounter(g_conf().get_val<double>("mds_cache_trim_decay_rate"));
-  }
+  if (changed.count("mds_bal_offload_rank0"))
+    bal_offload_rank0 = g_conf().get_val<bool>("mds_bal_offload_rank0");
 
   migrator->handle_conf_change(changed, mdsmap);
   mds->balancer->handle_conf_change(changed, mdsmap);
@@ -947,22 +950,24 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 */
 mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
 {
-  const mds_rank_t max_mds = std::min<int>(mds->mdsmap->get_max_mds(),
-					   mds->mdsmap->get_num_in_mds());
+  const int max_mds = std::min<int>(mds->mdsmap->get_max_mds(),
+				    mds->mdsmap->get_num_in_mds());
   uint64_t hash = rjhash64(ino);
   if (fg)
     hash = rjhash64(hash + rjhash64(fg.value()));
 
+  int n = max_mds;
+  if (n >= 3 && bal_offload_rank0)
+    --n;
   int64_t b = -1, j = 0;
-  while (j < max_mds) {
+  while (j < n) {
     b = j;
     hash = hash*2862933555777941757ULL + 1;
     j = (b + 1) * (double(1LL << 31) / double((hash >> 33) + 1));
   }
   // verify bounds before returning
-  auto result = mds_rank_t(b);
-  ceph_assert(result >= 0 && result < max_mds);
-  return result;
+  ceph_assert(b >= 0 && b < n);
+  return mds_rank_t(b + (max_mds - n));
 }
 
 bool MDCache::export_dir_distributed(CDir *dir, MDSContext *fin)
