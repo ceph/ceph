@@ -4065,7 +4065,7 @@ std::vector<Option> get_global_options() {
     .set_description("Default value of bluestore_compression_min_blob_size for rotational media"),
 
     Option("bluestore_compression_min_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(8_K)
+    .set_default(32_K)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_min_blob_size for non-rotational (solid state) media"),
 
