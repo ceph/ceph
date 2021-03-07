@@ -146,6 +146,9 @@ seastar::future<> Notify::remove_watcher(WatchRef watch)
   [[maybe_unused]] const auto num_removed = watchers.erase(watch);
   assert(num_removed > 0);
   if (watchers.empty()) {
+    complete = true;
+    [[maybe_unused]] bool was_armed = timeout_timer.cancel();
+    assert(was_armed);
     return send_completion();
   } else {
     return seastar::now();
@@ -173,8 +176,6 @@ seastar::future<> Notify::send_completion(
   logger().info("{} -- {} in progress watchers, {} timedout watchers {}",
                 __func__, watchers.size(), timedout_watchers.size());
   logger().debug("{} sending notify replies: {}", __func__, notify_replies);
-  complete = true;
-  timeout_timer.cancel();
 
   ceph::bufferlist empty;
   auto reply = make_message<MWatchNotify>(
