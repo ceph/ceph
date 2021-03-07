@@ -1,11 +1,15 @@
 ---
-name: "Pull Request Labeler"
+name: "Pull Request Triage"
 on: pull_request_target
 jobs:
-  labeler:
+  pr-triage:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/labeler@main
         with:
           sync-labels: ''
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+      - uses: iyu/actions-milestone@v1
+        with:
+          configuration-path: .github/milestone.yml
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
