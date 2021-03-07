@@ -786,6 +786,15 @@ options:
   default: true
   services:
   - mds
+- name: mds_bal_hash_frag_bits
+  type: uint
+  level: advanced
+  desc: how many bits of frag_t are used to calculate distribution of dirfrag
+  default: 3
+  services:
+  - mds
+  min: 0
+  max: 24
 - name: mds_oft_prefetch_dirfrags
   type: bool
   level: advanced
