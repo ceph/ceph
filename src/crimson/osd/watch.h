@@ -89,6 +89,7 @@ public:
   uint64_t get_cookie() const {
     return winfo.cookie;
   }
+  void cancel_notify(const uint64_t notify_id);
 };
 
 using WatchRef = seastar::shared_ptr<Watch>;
@@ -114,14 +115,23 @@ class Notify {
   crimson::net::ConnectionRef conn;
   uint64_t client_gid;
   uint64_t user_version;
-  bool complete = false;
-  bool discarded = false;
+  bool complete{false};
+  bool discarded{false};
+  seastar::timer<seastar::lowres_clock> timeout_timer{
+    [this] { do_timeout(); }
+  };
 
   /// (gid,cookie) -> reply_bl for everyone who acked the notify
   std::multiset<notify_reply_t> notify_replies;
 
   uint64_t get_id() const { return ninfo.notify_id; }
-  seastar::future<> maybe_send_completion();
+
+  /// Sends notify completion if watchers.empty() or timeout
+  seastar::future<> maybe_send_completion(
+    std::set<WatchRef> timedout_watchers = {});
+
+  /// Called on Notify timeout
+  void do_timeout();
 
   template <class WatchIteratorT>
   Notify(WatchIteratorT begin,
@@ -166,6 +176,9 @@ Notify::Notify(WatchIteratorT begin,
     conn(std::move(conn)),
     client_gid(client_gid),
     user_version(user_version) {
+  if (ninfo.timeout) {
+    timeout_timer.arm(std::chrono::seconds{ninfo.timeout});
+  }
 }
 
 template <class WatchIteratorT, class... Args>

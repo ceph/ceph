@@ -3463,7 +3463,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_default_notify_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("default number of seconds after which notify propagation times out. used if a client has not specified other value"),
 
     Option("osd_kill_backfill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
