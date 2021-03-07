@@ -3692,6 +3692,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_bal_fragment_dirs",
     "mds_bal_fragment_interval",
     "mds_bal_offload_rank0",
+    "mds_bal_hash_frag_bits",
     "mds_cache_memory_limit",
     "mds_cache_mid",
     "mds_cache_reservation",

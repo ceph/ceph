@@ -1292,6 +1292,7 @@ class MDCache {
   std::atomic<bool> upkeep_trim_shutdown{false};
 
   bool bal_offload_rank0 = true;
+  int bal_hash_frag_bits = 0;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

@@ -8465,6 +8465,11 @@ std::vector<Option> get_mds_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("mds_bal_hash_frag_bits", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min_max(0, 24)
+    .set_description(""),
+
     Option("mds_oft_prefetch_dirfrags", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("prefetch dirfrags recorded in open file table on startup")
