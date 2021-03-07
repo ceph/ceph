@@ -95,7 +95,13 @@ that case, you can install cephadm directly. For example:
 
   .. prompt:: bash #
 
-     dnf install -y cephadm   
+     apt install -y cephadm
+
+  In Fedora:
+
+  .. prompt:: bash #
+
+     dnf -y install cephadm
 
   In SUSE:
 
