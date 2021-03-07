@@ -134,7 +134,7 @@ class CephFSTestCase(CephTestCase):
         # In case anything is in the OSD blocklist list, clear it out.  This is to avoid
         # the OSD map changing in the background (due to blocklist expiry) while tests run.
         try:
-            self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "clear")
+            self.mds_cluster.mon_manager.run_cluster_cmd(args="osd blocklist clear")
         except CommandFailedError:
             # Fallback for older Ceph cluster
             blocklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
