@@ -198,12 +198,11 @@ void Notify::do_timeout()
   if (complete) {
     return;
   }
-  decltype(watchers) timedout_watchers;
-  std::swap(watchers, timedout_watchers);
-  for (auto& watcher : timedout_watchers) {
+  for (auto& watcher : watchers) {
     watcher->cancel_notify(ninfo.notify_id);
   }
-  std::ignore = maybe_send_completion(std::move(timedout_watchers));
+  std::ignore = maybe_send_completion(std::move(watchers));
+  watchers.clear();
 }
 
 } // namespace crimson::osd
