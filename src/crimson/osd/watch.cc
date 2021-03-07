@@ -128,6 +128,16 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs)
   return out;
 }
 
+Notify::Notify(crimson::net::ConnectionRef conn,
+               const notify_info_t& ninfo,
+               const uint64_t client_gid,
+               const uint64_t user_version)
+  : ninfo(ninfo),
+    conn(std::move(conn)),
+    client_gid(client_gid),
+    user_version(user_version)
+{}
+
 seastar::future<> Notify::remove_watcher(WatchRef watch)
 {
   if (discarded || complete) {
