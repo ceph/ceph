@@ -124,7 +124,7 @@ class Notify {
   uint64_t get_id() const { return ninfo.notify_id; }
 
   /// Sends notify completion if watchers.empty() or timeout
-  seastar::future<> maybe_send_completion(
+  seastar::future<> send_completion(
     std::set<WatchRef> timedout_watchers = {});
 
   /// Called on Notify timeout
@@ -207,11 +207,13 @@ seastar::future<> Notify::create_n_propagate(
     begin,
     end,
     std::forward<Args>(args)...);
-  return seastar::do_for_each(begin, end, [=] (auto& watchref) {
-    return watchref->start_notify(notify);
-  }).then([notify = std::move(notify)] {
-    return notify->maybe_send_completion();
-  });
+  if (begin == end) {
+    return notify->send_completion();
+  } else {
+    return seastar::do_for_each(begin, end, [=] (auto& watchref) {
+      return watchref->start_notify(notify);
+    });
+  }
 }
 
 } // namespace crimson::osd
