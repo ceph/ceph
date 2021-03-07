@@ -117,9 +117,7 @@ public:
     do_log(CLOG_SEC, s);
   }
 
-  void set_log_to_monitors(bool v) {
-    log_to_monitors = v;
-  }
+  void set_log_to_monitors(bool v);
   void set_log_to_syslog(bool v) {
     log_to_syslog = v;
   }
@@ -234,6 +232,7 @@ public:
   const EntityName& get_myname();
   entity_name_t get_myrank();
   version_t queue(LogEntry &entry);
+  void reset();
 
 private:
   ceph::ref_t<Message> _get_mon_log_message();
