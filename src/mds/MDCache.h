@@ -1291,6 +1291,8 @@ class MDCache {
   time upkeep_last_trim = time::min();
   time upkeep_last_release = time::min();
   std::atomic<bool> upkeep_trim_shutdown{false};
+
+  bool bal_offload_rank0 = true;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

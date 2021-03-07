@@ -779,6 +779,13 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_bal_offload_rank0
+  type: bool
+  level: advanced
+  desc: offload mds rank 0 when distributing dirfrags
+  default: true
+  services:
+  - mds
 - name: mds_oft_prefetch_dirfrags
   type: bool
   level: advanced
