@@ -32,10 +32,7 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   // used by create().
   struct private_ctag_t{};
 
-  struct NotifyCmp {
-    inline bool operator()(NotifyRef lhs, NotifyRef rhs) const;
-  };
-  std::set<NotifyRef, NotifyCmp> in_progress_notifies;
+  std::set<NotifyRef, std::less<>> in_progress_notifies;
   crimson::net::ConnectionRef conn;
   crimson::osd::ObjectContextRef obc;
 
@@ -144,6 +141,21 @@ class Notify {
   // de facto private one. The motivation behind the hack is make_shared
   // used by create_n_propagate factory.
   struct private_ctag_t{};
+
+  using ptr_t = seastar::shared_ptr<Notify>;
+  friend bool operator<(const ptr_t& lhs, const ptr_t& rhs) {
+    assert(lhs);
+    assert(rhs);
+    return lhs->get_id() < rhs->get_id();
+  }
+  friend bool operator<(const ptr_t& ptr, const uint64_t id) {
+    assert(ptr);
+    return ptr->get_id() < id;
+  }
+  friend bool operator<(const uint64_t id, const ptr_t& ptr) {
+    assert(ptr);
+    return id < ptr->get_id();
+  }
 
   friend Watch;
 
