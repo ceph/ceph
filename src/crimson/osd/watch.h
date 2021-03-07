@@ -130,6 +130,10 @@ class Notify {
   /// Called on Notify timeout
   void do_timeout();
 
+  Notify(crimson::net::ConnectionRef conn,
+         const notify_info_t& ninfo,
+         const uint64_t client_gid,
+         const uint64_t user_version);
   template <class WatchIteratorT>
   Notify(WatchIteratorT begin,
          WatchIteratorT end,
@@ -188,6 +192,7 @@ Notify::Notify(WatchIteratorT begin,
     conn(std::move(conn)),
     client_gid(client_gid),
     user_version(user_version) {
+  assert(!std::empty(watchers));
   if (ninfo.timeout) {
     timeout_timer.arm(std::chrono::seconds{ninfo.timeout});
   }
@@ -202,14 +207,16 @@ seastar::future<> Notify::create_n_propagate(
   static_assert(
     std::is_same_v<typename std::iterator_traits<WatchIteratorT>::value_type,
                    crimson::osd::WatchRef>);
-  auto notify = seastar::make_shared<Notify>(
-    private_ctag_t{},
-    begin,
-    end,
-    std::forward<Args>(args)...);
   if (begin == end) {
+    auto notify = seastar::make_shared<Notify>(
+      private_ctag_t{},
+      std::forward<Args>(args)...);
     return notify->send_completion();
   } else {
+    auto notify = seastar::make_shared<Notify>(
+      private_ctag_t{},
+      begin, end,
+      std::forward<Args>(args)...);
     return seastar::do_for_each(begin, end, [=] (auto& watchref) {
       return watchref->start_notify(notify);
     });
