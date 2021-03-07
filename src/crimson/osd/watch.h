@@ -108,10 +108,10 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 
 class Notify {
   std::set<WatchRef> watchers;
-  notify_info_t ninfo;
+  const notify_info_t ninfo;
   crimson::net::ConnectionRef conn;
-  uint64_t client_gid;
-  uint64_t user_version;
+  const uint64_t client_gid;
+  const uint64_t user_version;
   bool complete{false};
   bool discarded{false};
   seastar::timer<seastar::lowres_clock> timeout_timer{
