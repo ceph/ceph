@@ -990,16 +990,18 @@ class LocalCephManager(CephManager):
         args like ["osd", "dump"}
         return stdout string
         """
-        kwargs['args'] = args
-        if kwargs.get('stdout') is None:
-            kwargs['stdout'] = StringIO()
+        if kwargs.get('args') is None and args:
+            kwargs['args'] = args
+        kwargs['stdout'] = kwargs.pop('stdout', StringIO())
         return self.run_cluster_cmd(**kwargs).stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         like raw_cluster_cmd but don't check status, just return rc
         """
-        kwargs['args'], kwargs['check_status'] = args, False
+        if kwargs.get('args') is None and args:
+            kwargs['args'] = args
+        kwargs['check_status'] = False
         return self.run_cluster_cmd(**kwargs).exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
