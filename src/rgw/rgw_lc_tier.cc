@@ -190,7 +190,7 @@ class RGWLCStreamReadCRF : public RGWStreamReadCRF
   const DoutPrefixProvider *dpp;
   map<string, bufferlist> attrs;
   uint64_t obj_size;
-  rgw_obj& obj;
+  std::unique_ptr<rgw::sal::RGWObject>* obj;
   const real_time &mtime;
 
   bool multipart;
@@ -200,9 +200,9 @@ class RGWLCStreamReadCRF : public RGWStreamReadCRF
 
   public:
   RGWLCStreamReadCRF(CephContext *_cct, const DoutPrefixProvider *_dpp,
-                     RGWRados* rados, RGWBucketInfo& bucket_info,
-                     RGWObjectCtx& obj_ctx, rgw_obj& _obj, const real_time &_mtime) :
-                     RGWStreamReadCRF(rados, bucket_info, obj_ctx, _obj), cct(_cct),
+                     RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::RGWObject>* _obj,
+                     const real_time &_mtime) :
+                     RGWStreamReadCRF(_obj, obj_ctx), cct(_cct),
                      dpp(_dpp), obj(_obj), mtime(_mtime) {}
 
   ~RGWLCStreamReadCRF() {};
@@ -218,11 +218,9 @@ class RGWLCStreamReadCRF : public RGWStreamReadCRF
     optional_yield y = null_yield;
     real_time read_mtime;
 
-    read_op.params.attrs = &attrs;
-    read_op.params.lastmod = &read_mtime;
-    read_op.params.obj_size = &obj_size;
+    read_op->params.lastmod = &read_mtime;
 
-    int ret = read_op.prepare(y, dpp);
+    int ret = read_op->prepare(y, dpp);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: fail to prepare read_op, ret = " << ret << dendl;
       return ret;
@@ -232,6 +230,9 @@ class RGWLCStreamReadCRF : public RGWStreamReadCRF
       /* raced */
       return -ECANCELED;
     }
+
+    attrs = (*obj)->get_attrs();
+    obj_size = (*obj)->get_obj_size();
 
     ret = init_rest_obj();
     if (ret < 0) {
@@ -251,7 +252,7 @@ class RGWLCStreamReadCRF : public RGWStreamReadCRF
     /* Initialize rgw_rest_obj. 
      * Reference: do_decode_rest_obj
      * Check how to copy headers content */ 
-    rest_obj.init(obj.key);
+    rest_obj.init((*obj)->get_key());
 
     if (!multipart) {
       rest_obj.content_len = obj_size;
@@ -290,7 +291,7 @@ class RGWLCStreamReadCRF : public RGWStreamReadCRF
   int read(off_t ofs, off_t end, bufferlist &bl) {
     optional_yield y = null_yield;
 
-    return read_op.read(ofs, end, bl, y, dpp);
+    return read_op->read(ofs, end, bl, y, dpp);
   }
 };
 
@@ -516,8 +517,8 @@ class RGWLCStreamObjToCloudPlainCR : public RGWCoroutine {
   std::shared_ptr<RGWStreamReadCRF> in_crf;
   std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
 
-  std::shared_ptr<rgw::sal::RGWRadosBucket> dest_bucket;
-  std::shared_ptr<rgw::sal::RGWRadosObject> dest_obj;
+  std::unique_ptr<rgw::sal::RGWBucket> dest_bucket;
+  std::unique_ptr<rgw::sal::RGWObject> dest_obj;
 
   public:
   RGWLCStreamObjToCloudPlainCR(RGWLCCloudTierCtx& _tier_ctx)
@@ -535,12 +536,11 @@ class RGWLCStreamObjToCloudPlainCR : public RGWCoroutine {
 
     target_bucket.name = tier_ctx.target_bucket_name;
     target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                      tier_ctx.obj.key.name + get_key_instance(tier_ctx.obj.key);
+                      (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
 
-    dest_bucket.reset(new rgw::sal::RGWRadosBucket(tier_ctx.store, target_bucket));
+    tier_ctx.store->get_bucket(tier_ctx.dpp, nullptr, target_bucket, &dest_bucket, null_yield);
 
-    dest_obj.reset(new rgw::sal::RGWRadosObject(tier_ctx.store, rgw_obj_key(target_obj_name),
-                   (rgw::sal::RGWRadosBucket *)(dest_bucket.get())));
+    dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
     rgw::sal::RGWObject *o = static_cast<rgw::sal::RGWObject *>(dest_obj.get());
 
 
@@ -549,7 +549,6 @@ class RGWLCStreamObjToCloudPlainCR : public RGWCoroutine {
 
       /* Prepare Read from source */
       in_crf.reset(new RGWLCStreamReadCRF(tier_ctx.cct, tier_ctx.dpp,
-                   tier_ctx.store->getRados(), tier_ctx.bucket_info,
                    tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
 
       out_crf.reset(new RGWLCStreamPutCRF((CephContext *)(tier_ctx.cct), get_env(), this,
@@ -579,8 +578,8 @@ class RGWLCStreamObjToCloudMultipartPartCR : public RGWCoroutine {
   std::shared_ptr<RGWStreamReadCRF> in_crf;
   std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
 
-  std::shared_ptr<rgw::sal::RGWRadosBucket> dest_bucket;
-  std::shared_ptr<rgw::sal::RGWRadosObject> dest_obj;
+  std::unique_ptr<rgw::sal::RGWBucket> dest_bucket;
+  std::unique_ptr<rgw::sal::RGWObject> dest_obj;
 
   public:
   RGWLCStreamObjToCloudMultipartPartCR(RGWLCCloudTierCtx& _tier_ctx, const string& _upload_id,
@@ -598,19 +597,17 @@ class RGWLCStreamObjToCloudMultipartPartCR : public RGWCoroutine {
 
     target_bucket.name = tier_ctx.target_bucket_name;
     target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                      tier_ctx.obj.key.name + get_key_instance(tier_ctx.obj.key);
+                      (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
 
-    dest_bucket.reset(new rgw::sal::RGWRadosBucket(tier_ctx.store, target_bucket));
-
-    dest_obj.reset(new rgw::sal::RGWRadosObject(tier_ctx.store, rgw_obj_key(target_obj_name),
-                   (rgw::sal::RGWRadosBucket *)(dest_bucket.get())));
+    tier_ctx.store->get_bucket(tier_ctx.dpp, nullptr, target_bucket, &dest_bucket, null_yield);
+    dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
 
     reenter(this) {
     //  tier_ctx.obj.set_atomic(&tier_ctx.rctx); -- might need when updated to zipper SAL
 
       /* Prepare Read from source */
-      in_crf.reset(new RGWLCStreamReadCRF(tier_ctx.cct, tier_ctx.dpp, tier_ctx.store->getRados(),
-                   tier_ctx.bucket_info, tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
+      in_crf.reset(new RGWLCStreamReadCRF(tier_ctx.cct, tier_ctx.dpp, 
+                   tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
 
       end = part_info.ofs + part_info.size - 1;
       std::static_pointer_cast<RGWLCStreamReadCRF>(in_crf)->set_multipart(part_info.size, part_info.ofs, end);
@@ -877,6 +874,7 @@ class RGWLCStreamAbortMultipartUploadCR : public RGWCoroutine {
   const rgw_raw_obj status_obj;
 
   string upload_id;
+  int ret = -1;
 
   public:
 
@@ -893,9 +891,10 @@ class RGWLCStreamAbortMultipartUploadCR : public RGWCoroutine {
         ldout(tier_ctx.cct, 0) << "ERROR: failed to abort multipart upload dest obj=" << dest_obj << " upload_id=" << upload_id << " retcode=" << retcode << dendl;
         /* ignore error, best effort */
       }
-      yield call(new RGWRadosRemoveCR(tier_ctx.store, status_obj));
-      if (retcode < 0) {
-        ldout(tier_ctx.cct, 0) << "ERROR: failed to remove sync status obj obj=" << status_obj << " retcode=" << retcode << dendl;
+      ret = tier_ctx.store->delete_system_obj(status_obj.pool, status_obj.oid, nullptr, null_yield);
+
+      if (ret < 0) {
+        ldout(tier_ctx.cct, 0) << "ERROR: failed to remove sync status obj obj=" << status_obj << " retcode=" << ret << dendl;
         /* ignore error, best effort */
       }
       return set_cr_done();
@@ -924,6 +923,7 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
   int ret_err{0};
 
   rgw_raw_obj status_obj;
+  bufferlist bl;
 
   public:
   RGWLCStreamObjToCloudMultipartCR(RGWLCCloudTierCtx& _tier_ctx) : RGWCoroutine(_tier_ctx.cct),  tier_ctx(_tier_ctx) {}
@@ -935,7 +935,7 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
         tier_ctx.acl_mappings,
         tier_ctx.target_storage_class);
 
-    rgw_obj& obj = tier_ctx.obj;
+    //rgw_obj& obj = (*tier_ctx.obj)->get_obj();
     obj_size = tier_ctx.o.meta.size;
 
     rgw_bucket target_bucket;
@@ -943,24 +943,34 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
 
     string target_obj_name;
     target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                      tier_ctx.obj.key.name + get_key_instance(tier_ctx.obj.key);
+                      (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
     rgw_obj dest_obj(target_bucket, target_obj_name);
     std::shared_ptr<RGWStreamReadCRF> in_crf;
     rgw_rest_obj rest_obj;
 
-    status_obj = rgw_raw_obj(tier_ctx.store->svc()->zone->get_zone_params().log_pool,
-        "lc_multipart_" + obj.get_oid());
+    status_obj = rgw_raw_obj(tier_ctx.store->get_zone()->get_params().log_pool,
+        "lc_multipart_" + (*tier_ctx.obj)->get_oid());
 
-    reenter(this) {
-      yield call(new RGWSimpleRadosReadCR<rgw_lc_multipart_upload_info>(tier_ctx.store->svc()->rados->get_async_processor(), tier_ctx.store->svc()->sysobj,
-            status_obj, &status, false));
+      ret_err = tier_ctx.store->get_system_obj(tier_ctx.dpp, status_obj.pool,
+                  status_obj.oid, bl, NULL, NULL, null_yield);
 
-      if (retcode < 0 && retcode != -ENOENT) {
-        ldout(tier_ctx.cct, 0) << "ERROR: failed to read sync status of object " << src_obj << " retcode=" << retcode << dendl;
+      if (ret_err < 0 && ret_err != -ENOENT) {
+        ldout(tier_ctx.cct, 0) << "ERROR: failed to read sync status of object " << src_obj << " retcode=" << ret_err << dendl;
         return retcode;
       }
 
-      if (retcode >= 0) {
+      if (ret_err >= 0) {
+        auto iter = bl.cbegin();
+        try {
+          decode(status, iter);
+        } catch (buffer::error& err) {
+          return -EIO;
+        }
+      }
+
+    reenter(this) {
+
+      if (ret_err >= 0) {
         /* check here that mtime and size did not change */
         if (status.mtime != obj_properties.mtime || status.obj_size != obj_size ||
             status.etag != obj_properties.etag) {
@@ -969,8 +979,8 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
         }
       }
 
-      if (retcode == -ENOENT) {
-        in_crf.reset(new RGWLCStreamReadCRF(tier_ctx.cct, tier_ctx.dpp, tier_ctx.store->getRados(), tier_ctx.bucket_info, tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
+      if (ret_err == -ENOENT) {
+        in_crf.reset(new RGWLCStreamReadCRF(tier_ctx.cct, tier_ctx.dpp, tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
 
         in_crf->init();
 
@@ -1024,9 +1034,11 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
           return set_cr_error(ret_err);
         }
 
-        yield call(new RGWSimpleRadosWriteCR<rgw_lc_multipart_upload_info>(tier_ctx.store->svc()->rados->get_async_processor(), tier_ctx.store->svc()->sysobj, status_obj, status));
-        if (retcode < 0) {
-          ldout(tier_ctx.cct, 0) << "ERROR: failed to store multipart upload state, retcode=" << retcode << dendl;
+        encode(status, bl);
+        ret_err = tier_ctx.store->put_system_obj(status_obj.pool, status_obj.oid,
+                      bl, false, NULL, real_time(), null_yield, NULL);
+        if (ret_err < 0) {
+          ldout(tier_ctx.cct, 0) << "ERROR: failed to store multipart upload state, retcode=" << ret_err << dendl;
           /* continue with upload anyway */
         }
         ldout(tier_ctx.cct, 0) << "sync of object=" << tier_ctx.obj << " via multipart upload, finished sending part #" << status.cur_part << " etag=" << pcur_part_info->etag << dendl;
@@ -1041,9 +1053,10 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
       }
 
       /* remove status obj */
-      yield call(new RGWRadosRemoveCR(tier_ctx.store, status_obj));
-      if (retcode < 0) {
-        ldout(tier_ctx.cct, 0) << "ERROR: failed to abort multipart upload obj=" << tier_ctx.obj << " upload_id=" << status.upload_id << " part number " << status.cur_part << " (" << cpp_strerror(-retcode) << ")" << dendl;
+      ret_err = tier_ctx.store->delete_system_obj(status_obj.pool, status_obj.oid, nullptr, null_yield);
+
+      if (ret_err < 0) {
+        ldout(tier_ctx.cct, 0) << "ERROR: failed to abort multipart upload obj=" << tier_ctx.obj << " upload_id=" << status.upload_id << " part number " << status.cur_part << " (" << cpp_strerror(-ret_err) << ")" << dendl;
         /* ignore error, best effort */
       }
       return set_cr_done();
@@ -1063,13 +1076,14 @@ int RGWLCCloudCheckCR::operate() {
 
   target_bucket.name = tier_ctx.target_bucket_name;
   target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                    tier_ctx.obj.key.name + get_key_instance(tier_ctx.obj.key);
+                    (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
 
-  std::shared_ptr<rgw::sal::RGWRadosBucket> dest_bucket;
-  dest_bucket.reset(new rgw::sal::RGWRadosBucket(tier_ctx.store, target_bucket));
+  std::unique_ptr<rgw::sal::RGWBucket> dest_bucket;
+  std::unique_ptr<rgw::sal::RGWObject> dest_obj;
 
-  std::shared_ptr<rgw::sal::RGWRadosObject> dest_obj;
-  dest_obj.reset(new rgw::sal::RGWRadosObject(tier_ctx.store, rgw_obj_key(target_obj_name), (rgw::sal::RGWRadosBucket *)(dest_bucket.get())));
+    tier_ctx.store->get_bucket(tier_ctx.dpp, nullptr, target_bucket, &dest_bucket, null_yield);
+
+    dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
 
 
   std::shared_ptr<RGWLCStreamGetCRF> get_crf;
