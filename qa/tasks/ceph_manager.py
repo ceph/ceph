@@ -1402,6 +1402,9 @@ class CephManager:
 
         Accepts arguments same as that of teuthology.orchestra.run.run()
         """
+        if isinstance(kwargs['args'], str):
+            kwargs['args'] = shlex.split(kwargs['args'])
+
         if self.cephadm:
             return shell(self.ctx, self.cluster, self.controller,
                          args=['ceph'] + list(kwargs['args']),
