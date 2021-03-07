@@ -1276,27 +1276,25 @@ public:
   int delete_tier_obj(lc_op_ctx& oc, RGWLCCloudTierCtx& tier_ctx) {
     int ret = 0;
 
-    /* XXX: do we need to check for retention attributes * as done in RGWDeleteObj?
+    /* If bucket is versioned, create delete_marker for current version
      */
-    ret = oc.store->getRados()->delete_obj(oc.dpp, oc.rctx, oc.bucket->get_info(), oc.obj->get_obj(), tier_ctx.bucket_info.versioning_status());
-
+    ret = remove_expired_obj(oc.dpp, oc,
+                 !(oc.o.is_current() && oc.bucket->versioned()));
     return ret;
   }
 
   int update_tier_obj(lc_op_ctx& oc, RGWLCCloudTierCtx& tier_ctx) {
 
     map<string, bufferlist> attrs;
-    RGWRados::Object op_target(tier_ctx.store->getRados(),
-                               tier_ctx.bucket_info,
-                               tier_ctx.rctx, tier_ctx.obj);
+    int r = 0;
+
     real_time read_mtime;
 
-    RGWRados::Object::Read read_op(&op_target);
+    std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op(oc.obj->get_read_op(&oc.rctx));
 
-    read_op.params.attrs = &attrs;
-    read_op.params.lastmod = &read_mtime;
+    read_op->params.lastmod = &read_mtime;
 
-    int r = read_op.prepare(null_yield, oc.dpp);
+    r = read_op->prepare(null_yield, oc.dpp);
     if (r < 0) {
       return r;
     }
@@ -1306,24 +1304,25 @@ public:
       return -ECANCELED;
     }
 
-    tier_ctx.rctx.set_atomic(tier_ctx.obj);
+    attrs = oc.obj->get_attrs();
+    (*tier_ctx.obj)->set_atomic(&tier_ctx.rctx);
     
-    RGWRados::Object::Write obj_op(&op_target);
-    RGWObjState *s = tier_ctx.rctx.get_state(tier_ctx.obj);
+    RGWObjState *s = tier_ctx.rctx.get_state((*tier_ctx.obj)->get_obj());
+    std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op(oc.obj->get_write_op(&oc.rctx));
 
-    obj_op.meta.modify_tail = true;
-    obj_op.meta.flags = PUT_OBJ_CREATE;
-    obj_op.meta.category = RGWObjCategory::CloudTiered;
-    obj_op.meta.delete_at = real_time();
+    obj_op->params.modify_tail = true;
+    obj_op->params.flags = PUT_OBJ_CREATE;
+    obj_op->params.category = RGWObjCategory::CloudTiered;
+    obj_op->params.delete_at = real_time();
     bufferlist blo;
     blo.append("");
-    obj_op.meta.data = &blo;
-    obj_op.meta.if_match = NULL;
-    obj_op.meta.if_nomatch = NULL;
-    obj_op.meta.user_data = NULL;
-    obj_op.meta.zones_trace = NULL;
-    obj_op.meta.delete_at = real_time();
-    obj_op.meta.olh_epoch = tier_ctx.o.versioned_epoch;
+    obj_op->params.data = &blo;
+    obj_op->params.if_match = NULL;
+    obj_op->params.if_nomatch = NULL;
+    obj_op->params.user_data = NULL;
+    obj_op->params.zones_trace = NULL;
+    obj_op->params.delete_at = real_time();
+    obj_op->params.olh_epoch = tier_ctx.o.versioned_epoch;
     
     RGWObjManifest *pmanifest; 
 
@@ -1340,9 +1339,9 @@ public:
     rgw_placement_rule target_placement;
     target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
     target_placement.storage_class = oc.tier.storage_class;
-    pmanifest->set_head(target_placement, tier_ctx.obj, 0);
+    pmanifest->set_head(target_placement, (*tier_ctx.obj)->get_obj(), 0);
 
-    pmanifest->set_tail_placement(target_placement, tier_ctx.obj.bucket);
+    pmanifest->set_tail_placement(target_placement, (*tier_ctx.obj)->get_obj().bucket);
 
     /* should the obj_size also be set to '0' or is it needed
      * to keep track of original size before transition. 
@@ -1353,7 +1352,7 @@ public:
      */
     //pmanifest->set_obj_size(0);
 
-    obj_op.meta.manifest = pmanifest;
+    obj_op->params.manifest = pmanifest;
 
     /* update storage class */
     bufferlist bl;
@@ -1363,7 +1362,9 @@ public:
     attrs.erase(RGW_ATTR_ID_TAG);
     attrs.erase(RGW_ATTR_TAIL_TAG);
 
-    obj_op.write_meta(oc.dpp, tier_ctx.o.meta.size, 0, attrs, null_yield);
+    obj_op->params.attrs = &attrs;
+
+    r = obj_op->write_meta(oc.dpp, tier_ctx.o.meta.size, 0, null_yield);
     if (r < 0) {
       return r;
     }
@@ -1380,19 +1381,23 @@ public:
     RGWAccessKey key = oc.tier.t.s3.key;
     HostStyle host_style = oc.tier.t.s3.host_style;
     string bucket_name = oc.tier.t.s3.target_path;
-    const RGWZoneGroup& zonegroup = oc.store->svc()->zone->get_zonegroup();
+    const RGWZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
+    bool delete_object;
    
+    /* Option 'retain_object' is not applicable for CurrentVersionTransition */
+    delete_object = (!oc.tier.retain_object ||
+                     (oc.o.is_current() && oc.bucket->versioned()));
+
     if (bucket_name.empty()) {
       bucket_name = "rgwx-" + zonegroup.get_name() + "-" + oc.tier.storage_class +
                     "-cloud-bucket";
       boost::algorithm::to_lower(bucket_name);
     }
 
-    conn.reset(new S3RESTConn(oc.cct, oc.store->svc()->zone,
-                                id, { endpoint }, key, host_style));
+    conn.reset(new S3RESTConn(oc.cct, oc.store, id, { endpoint }, key, host_style));
 
     /* http_mngr */
-    RGWCoroutinesManager crs(oc.store->ctx(), oc.store->getRados()->get_cr_registry());
+    RGWCoroutinesManager crs(oc.store->ctx(), oc.store->get_cr_registry());
     RGWHTTPManager http_manager(oc.store->ctx(), crs.get_completion_mgr());
 
     int ret = http_manager.start();
@@ -1402,7 +1407,7 @@ public:
     }
 
     RGWLCCloudTierCtx tier_ctx(oc.cct, oc.dpp, oc.o, oc.store, oc.bucket->get_info(),
-                        oc.obj->get_obj(), oc.rctx, conn, bucket_name,
+                        &oc.obj, oc.rctx, conn, bucket_name,
                         oc.tier.t.s3.target_storage_class, &http_manager);
     tier_ctx.acl_mappings = oc.tier.t.s3.acl_mappings;
     tier_ctx.multipart_min_part_size = oc.tier.t.s3.multipart_min_part_size;
@@ -1434,16 +1439,16 @@ public:
       return ret;
     }
 
-    if (oc.tier.retain_object) {
-      ret = update_tier_obj(oc, tier_ctx);
-      if (ret < 0) {
-        ldpp_dout(oc.dpp, 0) << "ERROR: Updating tier object failed ret=" << ret << dendl;
-        return ret;
-      }
-    } else {
+    if (delete_object) {
       ret = delete_tier_obj(oc, tier_ctx);
       if (ret < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: Deleting tier object failed ret=" << ret << dendl;
+        return ret;
+      }
+    } else {
+      ret = update_tier_obj(oc, tier_ctx);
+      if (ret < 0) {
+        ldpp_dout(oc.dpp, 0) << "ERROR: Updating tier object failed ret=" << ret << dendl;
         return ret;
       }
     }
@@ -1455,7 +1460,7 @@ public:
     auto& o = oc.o;
     int r;
     std::string tier_type = ""; 
-    const RGWZoneGroup& zonegroup = oc.store->svc()->zone->get_zonegroup();
+    const RGWZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
 
     rgw_placement_rule target_placement;
     target_placement.inherit_from(oc.bucket->get_placement_rule());
@@ -1465,6 +1470,13 @@ public:
 
     if (!r && oc.tier.tier_type == "cloud-s3") {
       ldpp_dout(oc.dpp, 20) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
+
+      if (!oc.o.is_current() &&
+          !pass_object_lock_check(oc.store, oc.obj.get(), oc.rctx, oc.dpp)) {
+        /* Skip objects which has object lock enabled. */
+        ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
+      }
+
       r = transition_obj_to_cloud(oc);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj to cloud (r=" << r << ")"

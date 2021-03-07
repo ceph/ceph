@@ -592,14 +592,13 @@ public:
 
 class RGWStreamReadCRF {
 public:
-  RGWRados::Object op_target;
-  RGWRados::Object::Read read_op;
+  std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op;
   off_t ofs;
   off_t end;
   rgw_rest_obj rest_obj;
+  std::unique_ptr<rgw::sal::RGWObject>* obj;
 
-  RGWStreamReadCRF(RGWRados* rados, RGWBucketInfo& bucket_info,
-                  RGWObjectCtx& obj_ctx, rgw_obj& obj);
+  RGWStreamReadCRF(std::unique_ptr<rgw::sal::RGWObject>* obj, RGWObjectCtx& obj_ctx);
   virtual ~RGWStreamReadCRF();
 
   virtual int init() {return 0; }

@@ -21,11 +21,11 @@ struct RGWLCCloudTierCtx {
 
   /* Source */
   rgw_bucket_dir_entry& o;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   RGWBucketInfo& bucket_info;
   string storage_class;
 
-  rgw_obj obj;
+  std::unique_ptr<rgw::sal::RGWObject>* obj;
   RGWObjectCtx& rctx;
 
   /* Remote */
@@ -41,9 +41,9 @@ struct RGWLCCloudTierCtx {
   bool is_multipart_upload{false};
 
   RGWLCCloudTierCtx(CephContext* _cct, const DoutPrefixProvider *_dpp,
-            rgw_bucket_dir_entry& _o, rgw::sal::RGWRadosStore* _store,
-            RGWBucketInfo &_binfo, rgw_obj _obj, RGWObjectCtx& _rctx,
-            std::shared_ptr<RGWRESTConn> _conn, string _bucket,
+            rgw_bucket_dir_entry& _o, rgw::sal::RGWStore* _store,
+            RGWBucketInfo &_binfo, std::unique_ptr<rgw::sal::RGWObject>* _obj,
+            RGWObjectCtx& _rctx, std::shared_ptr<RGWRESTConn> _conn, string _bucket,
             string _storage_class, RGWHTTPManager *_http)
             : cct(_cct), dpp(_dpp), o(_o), store(_store), bucket_info(_binfo),
               obj(_obj), rctx(_rctx), conn(_conn), target_bucket_name(_bucket),
