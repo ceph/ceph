@@ -37,6 +37,8 @@ public:
   {}
   virtual ~AuthClientHandler() {}
 
+  virtual AuthClientHandler* clone() const = 0;
+
   void init(const EntityName& n) { name = n; }
   
   void set_want_keys(__u32 keys) {
