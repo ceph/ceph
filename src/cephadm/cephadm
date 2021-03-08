@@ -2619,6 +2619,8 @@ class CephContainer:
                 # let OSD etc read block devs that haven't been chowned
                 '--group-add=disk',
             ])
+        if self.init:
+            cmd_args.append('--init')
         if self.envs:
             for env in self.envs:
                 envs.extend(['-e', env])
