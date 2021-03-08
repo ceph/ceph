@@ -684,14 +684,13 @@ options:
   - mds
   with_legacy: true
 - name: mds_bal_max
-  type: int
+  type: uint
   level: dev
-  default: -1
+  default: 0
   services:
   - mds
   fmt_desc: The number of iterations to run balancer before Ceph stops.
     (used for testing purposes only)
-  with_legacy: true
 - name: mds_bal_max_until
   type: int
   level: dev
