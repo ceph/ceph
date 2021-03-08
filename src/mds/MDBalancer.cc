@@ -105,17 +105,16 @@ void MDBalancer::tick()
   // We can use duration_cast below, although the result is an int,
   // because the values from g_conf are also integers.
   // balance?
-  if (mds->get_nodeid() == 0
-      && mds->is_active()
-      && bal_interval > 0
-      && chrono::duration_cast<chrono::seconds>(now - last_heartbeat).count() >= bal_interval
-      && (num_bal_times || (bal_max_until >= 0 && mds->get_uptime().count() > bal_max_until))) {
+  if (mds->get_nodeid() == 0 &&
+      mds->is_active() &&
+      bal_interval > 0 &&
+      chrono::duration_cast<chrono::seconds>(now - last_heartbeat).count() >= bal_interval &&
+      (num_bal_times || (bal_max_until >= 0 && mds->get_uptime().count() > bal_max_until))) {
     last_heartbeat = now;
     send_heartbeat();
     num_bal_times--;
+    mds->mdcache->show_subtrees(10, true);
   }
-
-  mds->mdcache->show_subtrees(10, true);
 }
 
 
