@@ -5841,6 +5841,137 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRollback) {
 
 }
 
+TEST_F(LibRadosTwoPoolsPP, ManifestRollbackRefcount) {
+  // skip test if not yet pacific
+  if (_get_required_osd_release(cluster) < "pacific") {
+    cout << "cluster is not yet pacific, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EFere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("DDDDD hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk4", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EEEEE hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk5", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("thABe hiEF");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk3", "foo");
+  // foo snap[1]: 
+  // foo snap[0]:  
+  // foo head   :          [chunk1]                    [chunk3]
+
+  ioctx.snap_set_read(my_snaps[1]);
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk4", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "chunk5", "foo");
+  // foo snap[1]:           [chunk4]          [chunk5]       
+  // foo snap[0]:  
+  // foo head   :           [chunk1]                   [chunk3]
+  
+  ioctx.snap_set_read(my_snaps[0]);
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "chunk2", "foo");
+  // foo snap[1]:           [chunk4]          [chunk5]       
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          [chunk1]                    [chunk3]
+  
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback("foo", my_snaps[1]));
+  // foo snap[1]:          [chunk4]          [chunk5]       
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          [chunk4]          [chunk5] <-- will contain these contents
+
+  sleep(10);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk1", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk3", 0);
+
+  ioctx.selfmanaged_snap_remove(my_snaps[1]);
+  sleep(10);
+  // foo snap[1]:          
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          [chunk4]          [chunk5] 
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk4", 1);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk5", 1);
+
+  {
+    bufferlist bl;
+    bl.append("thABe hiEF");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // foo snap[1]:          
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk1", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk3", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk4", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk5", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk2", 1);
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
