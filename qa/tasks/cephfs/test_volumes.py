@@ -1331,7 +1331,7 @@ class TestVolumes(CephFSTestCase):
         # for different subvolumes, versioning details, etc.
         expected_auth_metadata = {
             "version": 5,
-            "compat_version": 1,
+            "compat_version": 6,
             "dirty": False,
             "tenant_id": "tenant1",
             "subvolumes": {
@@ -1728,7 +1728,7 @@ class TestVolumes(CephFSTestCase):
 
         expected_auth_metadata = {
             "version": 5,
-            "compat_version": 1,
+            "compat_version": 6,
             "dirty": False,
             "tenant_id": "tenant1",
             "subvolumes": {
@@ -1805,7 +1805,7 @@ class TestVolumes(CephFSTestCase):
 
         expected_auth_metadata = {
             "version": 5,
-            "compat_version": 1,
+            "compat_version": 6,
             "dirty": False,
             "tenant_id": "tenant1",
             "subvolumes": {
