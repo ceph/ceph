@@ -214,3 +214,13 @@ Files: src/common/async/bind_allocator.h
 Copyright: 2020 Red Hat <contact@redhat.com>
            2003-2019 Christopher M. Kohlhoff <chris@kohlhoff.com>
 License: Boost Software License, Version 1.0
+
+Files: src/script/backport-create-issue
+Copyright: 2015 Red Hat <contact@redhat.com>
+           2018 SUSE LLC
+License: GNU Affero General Public License, Version 3
+
+Files: src/script/backport-resolve-issue
+Copyright: 2015 Red Hat <contact@redhat.com>
+           2018 SUSE LLC
+License: GNU Affero General Public License, Version 3
