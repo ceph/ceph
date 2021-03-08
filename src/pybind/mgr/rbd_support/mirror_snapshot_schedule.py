@@ -262,7 +262,8 @@ class CreateSnapshotRequests:
                 "CreateSnapshotRequests.handle_get_mirror_mode: {}/{}/{}: {}".format(
                     pool_id, namespace, image_id,
                     "snapshot mirroring is not enabled"))
-            self.close_image(image_spec)
+            self.close_image(image_spec, image)
+            return
 
         self.get_mirror_info(image_spec, image)
 
