@@ -21,7 +21,9 @@
 
 void print_usage() {
   const char* usage_str = R"(
-Usage: ceph-dokan.exe -l <drive_letter>
+Usage: ceph-dokan.exe -l <mountpoint>
+                      map -l <mountpoint>    Map a CephFS filesystem
+                      unmap -l <mountpoint>  Unmap a CephFS filesystem
 
 Map options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x)
@@ -37,6 +39,11 @@ Map options:
   -o [ --win-mount-mgr]       use the Windows mount manager
   --current-session-only      expose the mount only to the current user session
   -m [ --removable ]          use a removable drive
+
+Unmap options:
+  -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x).
+                              It has to be the exact same mountpoint that was
+                              used when the mapping was created.
 
 Common Options:
 )";
@@ -138,6 +145,8 @@ int parse_args(
       cmd = Command::Version;
     } else if (strcmp(*args.begin(), "map") == 0) {
       cmd = Command::Map;
+    } else if (strcmp(*args.begin(), "unmap") == 0) {
+      cmd = Command::Unmap;
     } else {
       *err_msg << "ceph-dokan: unknown command: " <<  *args.begin();
       return -EINVAL;
@@ -151,6 +160,7 @@ int parse_args(
 
   switch (cmd) {
     case Command::Map:
+    case Command::Unmap:
       if (cfg->mountpoint.empty()) {
         *err_msg << "ceph-dokan: missing mountpoint.";
         return -EINVAL;
