@@ -108,10 +108,10 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 
 class Notify {
   std::set<WatchRef> watchers;
-  notify_info_t ninfo;
+  const notify_info_t ninfo;
   crimson::net::ConnectionRef conn;
-  uint64_t client_gid;
-  uint64_t user_version;
+  const uint64_t client_gid;
+  const uint64_t user_version;
   bool complete{false};
   bool discarded{false};
   seastar::timer<seastar::lowres_clock> timeout_timer{
@@ -124,12 +124,16 @@ class Notify {
   uint64_t get_id() const { return ninfo.notify_id; }
 
   /// Sends notify completion if watchers.empty() or timeout
-  seastar::future<> maybe_send_completion(
+  seastar::future<> send_completion(
     std::set<WatchRef> timedout_watchers = {});
 
   /// Called on Notify timeout
   void do_timeout();
 
+  Notify(crimson::net::ConnectionRef conn,
+         const notify_info_t& ninfo,
+         const uint64_t client_gid,
+         const uint64_t user_version);
   template <class WatchIteratorT>
   Notify(WatchIteratorT begin,
          WatchIteratorT end,
@@ -188,6 +192,7 @@ Notify::Notify(WatchIteratorT begin,
     conn(std::move(conn)),
     client_gid(client_gid),
     user_version(user_version) {
+  assert(!std::empty(watchers));
   if (ninfo.timeout) {
     timeout_timer.arm(std::chrono::seconds{ninfo.timeout});
   }
@@ -202,16 +207,20 @@ seastar::future<> Notify::create_n_propagate(
   static_assert(
     std::is_same_v<typename std::iterator_traits<WatchIteratorT>::value_type,
                    crimson::osd::WatchRef>);
-  auto notify = seastar::make_shared<Notify>(
-    private_ctag_t{},
-    begin,
-    end,
-    std::forward<Args>(args)...);
-  return seastar::do_for_each(begin, end, [=] (auto& watchref) {
-    return watchref->start_notify(notify);
-  }).then([notify = std::move(notify)] {
-    return notify->maybe_send_completion();
-  });
+  if (begin == end) {
+    auto notify = seastar::make_shared<Notify>(
+      private_ctag_t{},
+      std::forward<Args>(args)...);
+    return notify->send_completion();
+  } else {
+    auto notify = seastar::make_shared<Notify>(
+      private_ctag_t{},
+      begin, end,
+      std::forward<Args>(args)...);
+    return seastar::do_for_each(begin, end, [=] (auto& watchref) {
+      return watchref->start_notify(notify);
+    });
+  }
 }
 
 } // namespace crimson::osd
