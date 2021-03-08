@@ -57,3 +57,64 @@ The specification can then be applied using:
 .. prompt:: bash #
 
    ceph orch apply -i nfs.yaml
+
+NFSv3
+=====
+
+.. note:: NFSv3 is a very old protocol. Please consider upgrading to NFSv4 instead.
+
+to enable NFSv3, replace the Jinja2 template of cephadm::
+
+    # {{ cephadm_managed }}
+    NFS_CORE_PARAM {
+            Enable_NLM = false;
+            Enable_RQUOTA = false;
+            Protocols = 3, 4;
+    }
+
+    MDCACHE {
+            Dir_Chunk = 0;
+    }
+
+    EXPORT_DEFAULTS {
+            Attr_Expiration_Time = 0;
+    }
+
+    NFSv4 {
+            Delegations = false;
+            RecoveryBackend = 'rados_cluster';
+            Minor_Versions = 1, 2;
+    }
+
+    RADOS_KV {
+            UserId = "{{ user }}";
+            nodeid = "{{ nodeid}}";
+            pool = "{{ pool }}";
+            namespace = "{{ namespace }}";
+    }
+
+    RADOS_URLS {
+            UserId = "{{ user }}";
+            watch_url = "{{ url }}";
+    }
+
+    RGW {
+            cluster = "ceph";
+            name = "client.{{ rgw_user }}";
+    }
+
+    %url    {{ url }}
+
+and repalce the existing template using:
+
+.. prompt:: bash #
+
+  ceph config-key set mgr/cephadm/services/nfs/ganesha.conf -i filename.conf
+
+Then apply the new config:
+
+.. prompt:: bash #
+
+  ceph reconfig nfs.<svc_id>
+
+
