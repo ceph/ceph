@@ -667,6 +667,11 @@ class RGWSpec(ServiceSpec):
                  subcluster: Optional[str] = None,  # legacy, only for from_json on upgrade
                  ):
         assert service_type == 'rgw', service_type
+
+        # for backward compatibility with octopus spec files,
+        if not service_id and (rgw_realm and rgw_zone):
+            service_id = rgw_realm + '.' + rgw_zone
+
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged,

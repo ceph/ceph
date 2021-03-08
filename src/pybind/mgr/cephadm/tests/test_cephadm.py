@@ -702,6 +702,7 @@ class TestCephadm(object):
             (ServiceSpec('alertmanager'), CephadmOrchestrator.add_alertmanager),
             (ServiceSpec('rbd-mirror'), CephadmOrchestrator.add_rbd_mirror),
             (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.add_mds),
+            (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.add_rgw),
             (RGWSpec(service_id="foo"), CephadmOrchestrator.add_rgw),
             (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.add_cephadm_exporter),
         ]
