@@ -225,7 +225,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         {
             'name': 'container_init',
             'type': 'bool',
-            'default': True,
+            'default': False,
             'desc': 'Run podman/docker with `--init`',
         },
         {
@@ -310,7 +310,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
             self.allow_ptrace = False
-            self.container_init = True
+            self.container_init = False
             self.prometheus_alerts_path = ''
             self.migration_current: Optional[int] = None
             self.config_dashboard = True
