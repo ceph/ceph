@@ -5,11 +5,11 @@ jobs:
   pr-triage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/labeler@main
+      - uses: actions/labeler@9794b1493b6f1fa7b006c5f8635a19c76c98be95
         with:
           sync-labels: ''
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
-      - uses: iyu/actions-milestone@v1
+      - uses: iyu/actions-milestone@9aa2197e1bda6cf71541d1bf6fa4f73edc543991
         with:
           configuration-path: .github/milestone.yml
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
