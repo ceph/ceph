@@ -89,13 +89,12 @@ class Migrations:
                 yield s
 
         def convert_to_explicit(spec: ServiceSpec) -> None:
+            existing_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
             placements = HostAssignment(
                 spec=spec,
                 hosts=self.mgr.inventory.all_specs(),
-                get_daemons_func=self.mgr.cache.get_daemons_by_service
+                daemons=existing_daemons,
             ).place()
-
-            existing_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
 
             # We have to migrate, only if the new scheduler would remove daemons
             if len(placements) >= len(existing_daemons):
