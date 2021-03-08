@@ -15,37 +15,40 @@ Limitations
 Preparation
 -----------
 
-#. Get the ``cephadm`` command line tool on each host in the existing
-   cluster.  See :ref:`get-cephadm`.
+#. Make sure that the ``cephadm`` command line tool is available on each host
+   in the existing cluster.  See :ref:`get-cephadm` to learn how.
 
-#. Prepare each host for use by ``cephadm``:
+#. Prepare each host for use by ``cephadm`` by running this command:
 
    .. prompt:: bash #
 
       cephadm prepare-host
 
-#. Determine which Ceph version you will use.  You can use any Octopus (15.2.z)
-   release or later.  For example, ``docker.io/ceph/ceph:v15.2.0``.  The default
-   will be the latest stable release, but if you are upgrading from an earlier
-   release at the same time be sure to refer to the upgrade notes for any
-   special steps to take while upgrading.
+#. Choose a version of Ceph to use for the conversion. This procedure will work
+   with any release of Ceph that is Octopus (15.2.z) or later, inclusive.  The
+   latest stable release of Ceph is the default. You might be upgrading from an
+   earlier Ceph release at the same time that you're performing this
+   conversion; if you are upgrading from an earlier release, make sure to
+   follow any upgrade-releated instructions for that release.
 
-   The image is passed to cephadm with:
+   Pass the image to cephadm with the following command:
 
    .. prompt:: bash #
 
       cephadm --image $IMAGE <rest of command goes here>
 
-#. Cephadm can provide a list of all Ceph daemons on the current host:
+   The conversion begins.
+
+#. Confirm that the conversion is underway by running ``cephadm ls`` and
+   making sure that the style of the daemons is changed:
 
    .. prompt:: bash #
 
       cephadm ls
 
-   Before starting, you should see that all existing daemons have a
-   style of ``legacy`` in the resulting output.  As the adoption
-   process progresses, adopted daemons will appear as style
-   ``cephadm:v1``.
+   Before starting the converstion process, ``cephadm ls`` shows all existing
+   daemons to have a style of ``legacy``. As the adoption process progresses,
+   adopted daemons will appear with a style of ``cephadm:v1``.
 
 
 Adoption process
