@@ -1,8 +1,9 @@
 @use './src/styles/vendor/variables' as vv;
+
 .danger-icon {
-    color: vv.$danger;
+  color: vv.$danger;
 }
 
 .warning-icon {
-    color: vv.$warning;
+  color: vv.$warning;
 }

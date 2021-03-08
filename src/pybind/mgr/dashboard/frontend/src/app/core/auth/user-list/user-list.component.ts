@@ -2,6 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
+import { SettingsService } from '~/app/shared/api/settings.service';
 import { UserService } from '~/app/shared/api/user.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -12,14 +13,11 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
-import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
-import { DurationPipe } from '~/app/shared/pipes/duration.pipe';
 import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { SettingsService } from '~/app/shared/api/settings.service';
 
 const BASE_URL = 'user-management/users';
 
@@ -54,8 +52,6 @@ export class UserListComponent implements OnInit {
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
     private urlBuilder: URLBuilderService,
-    private cdDatePipe: CdDatePipe,
-    private durationPipe: DurationPipe,
     private settingsService: SettingsService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -121,11 +117,11 @@ export class UserListComponent implements OnInit {
         cellTemplate: this.durationTpl
       }
     ];
-    const settings: string[] = ["USER_PWD_EXPIRATION_WARNING_1", "USER_PWD_EXPIRATION_WARNING_2"];
+    const settings: string[] = ['USER_PWD_EXPIRATION_WARNING_1', 'USER_PWD_EXPIRATION_WARNING_2'];
     this.settingsService.getValues(settings).subscribe((data) => {
-      this.expiration_warning_1 = data["USER_PWD_EXPIRATION_WARNING_1"];
-      this.expiration_warning_2 = data["USER_PWD_EXPIRATION_WARNING_2"];
-    })
+      this.expiration_warning_1 = data['USER_PWD_EXPIRATION_WARNING_1'];
+      this.expiration_warning_2 = data['USER_PWD_EXPIRATION_WARNING_2'];
+    });
   }
 
   getUsers() {
@@ -181,27 +177,40 @@ export class UserListComponent implements OnInit {
 
   shouldWarn(row: any): any {
     const expirationDays = row['pwdExpirationDate'];
-    if (expirationDays === null) return false;
+    if (expirationDays === null) {
+      return false;
+    }
     const remainingDays = this.getRemainingDays(expirationDays);
-    if(remainingDays <= this.expiration_warning_1) return true;
+    if (remainingDays <= this.expiration_warning_1) {
+      return true;
+    }
     return false;
   }
 
   getWarningClass(row: any): any {
     const expirationDays = row['pwdExpirationDate'];
-    if (expirationDays === null || this.expiration_warning_1 > 10) return "";
+    if (expirationDays === null || this.expiration_warning_1 > 10) {
+      return '';
+    }
     const remainingDays = this.getRemainingDays(expirationDays);
-    if(remainingDays <= this.expiration_warning_2) return 'danger-icon';
-    else return 'warning-icon';
+    if (remainingDays <= this.expiration_warning_2) {
+      return 'danger-icon';
+    } else {
+      return 'warning-icon';
+    }
   }
 
   getRemainingDays(time: number): number {
-    if(time === undefined || time == null) return undefined;
-    if(time < 0) return 0;
+    if (time === undefined || time == null) {
+      return undefined;
+    }
+    if (time < 0) {
+      return 0;
+    }
     const toDays = 1000 * 60 * 60 * 24;
-    return Math.max(0, Math.floor((this.getRemainingTime(time)) / toDays));
+    return Math.max(0, Math.floor(this.getRemainingTime(time) / toDays));
   }
   getRemainingTime(time: number): number {
-    return time - Date.now(); 
+    return time - Date.now();
   }
 }

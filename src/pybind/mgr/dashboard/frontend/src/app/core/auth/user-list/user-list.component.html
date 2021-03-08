@@ -25,14 +25,16 @@
              let-column="column"
              let-value="value"
              let-row="row">
-              <i *ngIf="shouldWarn(row)" title="User's password is about to expire" class="fa fa-exclamation-triangle"
-                [ngClass]="getWarningClass(row)"></i>
-            <span>{{ value }}</span>
+  <i *ngIf="shouldWarn(row)"
+     title="User's password is about to expire"
+     class="fa fa-exclamation-triangle"
+     [ngClass]="getWarningClass(row)"></i>
+  <span>{{ value }}</span>
 </ng-template>
 
 <ng-template #durationTpl
              let-column="column"
              let-value="value"
              let-row="row">
-            <span title="{{ value | cdDate }}">{{ (getRemainingTime(value)) / 1000 | duration }}</span>
+  <span title="{{ value | cdDate }}">{{ (getRemainingTime(value)) / 1000 | duration }}</span>
 </ng-template>
