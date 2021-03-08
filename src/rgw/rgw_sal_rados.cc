@@ -1719,6 +1719,7 @@ RadosObject::RadosWriteOp::RadosWriteOp(RadosObject* _source, RGWObjectCtx* _rct
 int RadosObject::RadosWriteOp::prepare(optional_yield y)
 {
   op_target.set_versioning_disabled(params.versioning_disabled);
+  op_target.set_meta_placement_rule(params.pmeta_placement_rule);
   parent_op.meta.mtime = params.mtime;
   parent_op.meta.rmattrs = params.rmattrs;
   parent_op.meta.data = params.data;
