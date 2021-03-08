@@ -37,12 +37,14 @@ static lockdep_stopper_t lockdep_stopper;
 static ceph::unordered_map<std::string, int> lock_ids;
 static std::map<int, std::string> lock_names;
 static std::map<int, int> lock_refs;
-static constexpr size_t MAX_LOCKS = 4096;   // increase me as needed
+static constexpr size_t MAX_LOCKS = 128 * 1024;   // increase me as needed
 static std::bitset<MAX_LOCKS> free_ids; // bit set = free
 static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
+static constexpr size_t NR_LOCKS = 4096; // the initial number of locks
 static constexpr size_t MAX_FOLLOWERS = 4096;
-static std::vector<std::bitset<MAX_FOLLOWERS>> follows(MAX_LOCKS); // follows[a][b] means b taken after a
-static std::vector<std::array<ceph::BackTrace *, MAX_FOLLOWERS>> follows_bt(MAX_LOCKS);
+static std::vector<std::bitset<MAX_FOLLOWERS>> follows(NR_LOCKS); // follows[a][b] means b taken after a
+static std::vector<std::array<ceph::BackTrace *, MAX_FOLLOWERS>> follows_bt(NR_LOCKS);
+// upper bound of lock id
 unsigned current_maxid;
 int last_freed_id = -1;
 static bool free_ids_inited;
@@ -169,7 +171,11 @@ static int _lockdep_register(const char *name)
       ceph_abort();
     }
     if (current_maxid <= (unsigned)id) {
-        current_maxid = (unsigned)id + 1;
+      current_maxid = (unsigned)id + 1;
+      if (current_maxid == follows.size()) {
+        follows.resize(current_maxid);
+        follows_bt.resize(current_maxid);
+      }
     }
     lock_ids[name] = id;
     lock_names[id] = name;
