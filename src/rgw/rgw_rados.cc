@@ -2351,12 +2351,15 @@ int RGWRados::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketI
   return 0;
 }
 
-int RGWRados::get_obj_head_ref(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref)
+int RGWRados::get_obj_head_ref(const DoutPrefixProvider *dpp,
+                               const rgw_placement_rule& target_placement_rule,
+                               const rgw_obj& obj,
+                               rgw_rados_ref *ref)
 {
   get_obj_bucket_and_oid_loc(obj, ref->obj.oid, ref->obj.loc);
 
   rgw_pool pool;
-  if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
+  if (!get_obj_data_pool(target_placement_rule, obj, &pool)) {
     ldpp_dout(dpp, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
     return -EIO;
   }
@@ -2373,6 +2376,14 @@ int RGWRados::get_obj_head_ref(const DoutPrefixProvider *dpp, const RGWBucketInf
   ref->pool.ioctx().locator_set_key(ref->obj.loc);
 
   return 0;
+}
+
+int RGWRados::get_obj_head_ref(const DoutPrefixProvider *dpp,
+                               const RGWBucketInfo& bucket_info,
+                               const rgw_obj& obj,
+                               rgw_rados_ref *ref)
+{
+  return get_obj_head_ref(dpp, bucket_info.placement_rule, obj, ref);
 }
 
 int RGWRados::get_raw_obj_ref(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, rgw_rados_ref *ref)
@@ -3025,7 +3036,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   }
 
   rgw_rados_ref ref;
-  r = store->get_obj_head_ref(dpp, target->get_bucket_info(), obj, &ref);
+  r = store->get_obj_head_ref(dpp, target->get_meta_placement_rule(), obj, &ref);
   if (r < 0)
     return r;
 
