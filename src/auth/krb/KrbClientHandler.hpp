@@ -39,7 +39,11 @@ class KrbClientHandler : public AuthClientHandler {
       reset();
     }
     ~KrbClientHandler() override;
-    
+
+    KrbClientHandler* clone() const override {
+      return new KrbClientHandler(*this);
+    }
+
     int get_protocol() const override { return CEPH_AUTH_GSS; }
     void reset() override {
       m_gss_client_name = GSS_C_NO_NAME; 
