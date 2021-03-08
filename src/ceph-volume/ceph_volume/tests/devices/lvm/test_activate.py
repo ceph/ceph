@@ -51,7 +51,7 @@ class TestActivate(object):
         volumes = []
         volumes.append(FooVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: [])
-        monkeypatch.setattr(api, 'get_first_lv', lambda **kwargs: [])
+        monkeypatch.setattr(api, 'get_single_lv', lambda **kwargs: [])
         monkeypatch.setattr(activate, 'activate_filestore', capture)
 
         args = Args(osd_id=None, osd_fsid='2222')
