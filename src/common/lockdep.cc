@@ -19,7 +19,6 @@
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
-#define MAX_LOCKS  4096   // increase me as needed
 #define BACKTRACE_SKIP 2
 
 /******* Globals **********/
@@ -38,10 +37,12 @@ static lockdep_stopper_t lockdep_stopper;
 static ceph::unordered_map<std::string, int> lock_ids;
 static std::map<int, std::string> lock_names;
 static std::map<int, int> lock_refs;
+static constexpr size_t MAX_LOCKS = 4096;   // increase me as needed
 static std::bitset<MAX_LOCKS> free_ids; // bit set = free
 static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
-static std::vector<std::bitset<MAX_LOCKS>> follows(MAX_LOCKS); // follows[a][b] means b taken after a
-static std::vector<std::array<ceph::BackTrace *, MAX_LOCKS>> follows_bt(MAX_LOCKS);
+static constexpr size_t MAX_FOLLOWERS = 4096;
+static std::vector<std::bitset<MAX_FOLLOWERS>> follows(MAX_LOCKS); // follows[a][b] means b taken after a
+static std::vector<std::array<ceph::BackTrace *, MAX_FOLLOWERS>> follows_bt(MAX_LOCKS);
 unsigned current_maxid;
 int last_freed_id = -1;
 static bool free_ids_inited;
