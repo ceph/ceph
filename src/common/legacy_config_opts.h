@@ -433,7 +433,6 @@ OPTION(mds_bal_merge_size, OPT_INT)
 OPTION(mds_bal_fragment_size_max, OPT_INT) // order of magnitude higher than split size
 OPTION(mds_bal_fragment_fast_factor, OPT_FLOAT) // multiple of size_max that triggers immediate split
 OPTION(mds_bal_idle_threshold, OPT_FLOAT)
-OPTION(mds_bal_max, OPT_INT)
 OPTION(mds_bal_max_until, OPT_INT)
 OPTION(mds_bal_mode, OPT_INT)
 OPTION(mds_bal_min_rebalance, OPT_FLOAT)  // must be this much above average before we export anything

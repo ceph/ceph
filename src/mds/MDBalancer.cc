@@ -91,7 +91,7 @@ void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const 
 
 void MDBalancer::tick()
 {
-  static int num_bal_times = g_conf()->mds_bal_max;
+  static uint64_t num_bal_times = g_conf().get_val<uint64_t>("mds_bal_max");
   auto bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
   auto bal_max_until = g_conf().get_val<int64_t>("mds_bal_max_until");
   time now = clock::now();

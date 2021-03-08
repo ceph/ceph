@@ -8421,8 +8421,8 @@ std::vector<Option> get_mds_options() {
     .set_default(0)
     .set_description("idle metadata popularity threshold before rebalancing"),
 
-    Option("mds_bal_max", Option::TYPE_INT, Option::LEVEL_DEV)
-    .set_default(-1)
+    Option("mds_bal_max", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(0)
     .set_description(""),
 
     Option("mds_bal_max_until", Option::TYPE_INT, Option::LEVEL_DEV)
