@@ -38,7 +38,7 @@ static lockdep_stopper_t lockdep_stopper;
 static ceph::unordered_map<std::string, int> lock_ids;
 static std::map<int, std::string> lock_names;
 static std::map<int, int> lock_refs;
-static char free_ids[MAX_LOCKS/8]; // bit set = free
+static std::bitset<MAX_LOCKS> free_ids; // bit set = free
 static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
 static std::vector<std::bitset<MAX_LOCKS>> follows(MAX_LOCKS); // follows[a][b] means b taken after a
 static ceph::BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
@@ -69,7 +69,7 @@ void lockdep_register_ceph_context(CephContext *cct)
     if (!free_ids_inited) {
       free_ids_inited = true;
       // FIPS zeroization audit 20191115: this memset is not security related.
-      memset((void*) &free_ids[0], 255, sizeof(free_ids));
+      free_ids.set();
     }
   }
   pthread_mutex_unlock(&lockdep_mutex);
@@ -127,26 +127,21 @@ out:
 int lockdep_get_free_id(void)
 {
   // if there's id known to be freed lately, reuse it
-  if ((last_freed_id >= 0) && 
-     (free_ids[last_freed_id/8] & (1 << (last_freed_id % 8)))) {
+  if (last_freed_id >= 0 &&
+      free_ids.test(last_freed_id)) {
     int tmp = last_freed_id;
     last_freed_id = -1;
-    free_ids[tmp/8] &= 255 - (1 << (tmp % 8));
+    free_ids.reset(tmp);
     lockdep_dout(1) << "lockdep reusing last freed id " << tmp << dendl;
     return tmp;
   }
   
   // walk through entire array and locate nonzero char, then find
   // actual bit.
-  for (int i = 0; i < MAX_LOCKS / 8; ++i) {
-    if (free_ids[i] != 0) {
-      for (int j = 0; j < 8; ++j) {
-        if (free_ids[i] & (1 << j)) {
-          free_ids[i] &= 255 - (1 << j);
-          lockdep_dout(1) << "lockdep using id " << i * 8 + j << dendl;
-          return i * 8 + j;
-        }
-      }
+  for (size_t i = 0; i < free_ids.size(); ++i) {
+    if (free_ids.test(i)) {
+      free_ids.reset(i);
+      return i;
     }
   }
   
@@ -232,7 +227,7 @@ void lockdep_unregister(int id)
       lock_names.erase(id);
     }
     lock_refs.erase(id);
-    free_ids[id/8] |= (1 << (id % 8));
+    free_ids.set(id);
     last_freed_id = id;
   } else if (g_lockdep) {
     lockdep_dout(20) << "have " << refs << " of '" << name << "' " <<
