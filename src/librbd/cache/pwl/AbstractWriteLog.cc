@@ -818,15 +818,44 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
+  /* Split images because PMDK doesn't support allocating too big extent
+   * TODO: If the bluestore allocator is implemented as a library,
+   * the split operation is not necessary
+   */
+  Extents split_image_extents;
+  uint64_t max_extent_size = get_max_extent();
+  if (max_extent_size != 0) {
+    for (auto extent : image_extents) {
+      if (extent.second > max_extent_size) {
+        uint64_t off = extent.first;
+        uint64_t extent_bytes = extent.second;
+        for (int i = 0; extent_bytes != 0; ++i) {
+          Extent _ext;
+          _ext.first = off + i * max_extent_size;
+          _ext.second = std::min(max_extent_size, extent_bytes);
+          extent_bytes = extent_bytes - _ext.second ;
+          split_image_extents.emplace_back(_ext);
+        }
+      } else {
+        split_image_extents.emplace_back(extent);
+      }
+    }
+  } else {
+    split_image_extents = image_extents;
+  }
+
   C_WriteRequestT *write_req =
-    m_builder->create_write_request(*this, now, std::move(image_extents), std::move(bl),
-                                    fadvise_flags, m_lock, m_perfcounter, on_finish);
-  m_perfcounter->inc(l_librbd_pwl_wr_bytes, write_req->image_extents_summary.total_bytes);
+    m_builder->create_write_request(*this, now, std::move(split_image_extents),
+                                    std::move(bl), fadvise_flags, m_lock,
+                                    m_perfcounter, on_finish);
+  m_perfcounter->inc(l_librbd_pwl_wr_bytes,
+                      write_req->image_extents_summary.total_bytes);
 
   /* The lambda below will be called when the block guard for all
    * blocks affected by this write is obtained */
   GuardedRequestFunctionContext *guarded_ctx =
-    new GuardedRequestFunctionContext([this, write_req](GuardedRequestFunctionContext &guard_ctx) {
+    new GuardedRequestFunctionContext([this,
+      write_req](GuardedRequestFunctionContext &guard_ctx) {
       write_req->blockguard_acquired(guard_ctx);
       alloc_and_dispatch_io_req(write_req);
     });

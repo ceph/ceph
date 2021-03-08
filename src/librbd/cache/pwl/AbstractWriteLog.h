@@ -393,6 +393,10 @@ protected:
       const std::shared_ptr<pwl::GenericLogEntry> log_entry) {
     return nullptr;
   }
+  virtual uint64_t get_max_extent() {
+    return 0;
+  }
+
 };
 
 } // namespace pwl
