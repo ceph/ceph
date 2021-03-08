@@ -12,6 +12,7 @@
  *
  */
 #include "lockdep.h"
+#include <bitset>
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
@@ -39,7 +40,7 @@ static std::map<int, std::string> lock_names;
 static std::map<int, int> lock_refs;
 static char free_ids[MAX_LOCKS/8]; // bit set = free
 static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
-static char follows[MAX_LOCKS][MAX_LOCKS/8]; // follows[a][b] means b taken after a
+static std::vector<std::bitset<MAX_LOCKS>> follows(MAX_LOCKS); // follows[a][b] means b taken after a
 static ceph::BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
 unsigned current_maxid;
 int last_freed_id = -1;
@@ -94,7 +95,8 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     lock_names.clear();
     lock_ids.clear();
     // FIPS zeroization audit 20191115: these memsets are not security related.
-    memset((void*)&follows[0][0], 0, current_maxid * MAX_LOCKS/8);
+    std::for_each(follows.begin(), std::next(follows.begin(), current_maxid),
+                  [](auto& follow) { follow.reset(); });
     memset((void*)&follows_bt[0][0], 0, sizeof(ceph::BackTrace*) * current_maxid * MAX_LOCKS);
   }
   pthread_mutex_unlock(&lockdep_mutex);
@@ -215,15 +217,14 @@ void lockdep_unregister(int id)
   if (--refs == 0) {
     if (p != lock_names.end()) {
       // reset dependency ordering
-      // FIPS zeroization audit 20191115: this memset is not security related.
-      memset((void*)&follows[id][0], 0, MAX_LOCKS/8);
+      follows[id].reset();
       for (unsigned i=0; i<current_maxid; ++i) {
         delete follows_bt[id][i];
         follows_bt[id][i] = NULL;
 
         delete follows_bt[i][id];
         follows_bt[i][id] = NULL;
-        follows[i][id / 8] &= 255 - (1 << (id % 8));
+        follows[i].reset(id);
       }
 
       lockdep_dout(10) << "unregistered '" << name << "' from " << id << dendl;
@@ -244,7 +245,7 @@ void lockdep_unregister(int id)
 // does b follow a?
 static bool does_follow(int a, int b)
 {
-  if (follows[a][b/8] & (1 << (b % 8))) {
+  if (follows[a].test(b)) {
     lockdep_dout(0) << "\n";
     *_dout << "------------------------------------" << "\n";
     *_dout << "existing dependency " << lock_names[a] << " (" << a << ") -> "
@@ -257,7 +258,7 @@ static bool does_follow(int a, int b)
   }
 
   for (unsigned i=0; i<current_maxid; i++) {
-    if ((follows[a][i/8] & (1 << (i % 8))) &&
+    if (follows[a].test(i) &&
 	does_follow(i, b)) {
       lockdep_dout(0) << "existing intermediate dependency " << lock_names[a]
           << " (" << a << ") -> " << lock_names[i] << " (" << i << ") at:\n";
@@ -305,8 +306,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
 	*_dout << dendl;
 	ceph_abort();
       }
-    }
-    else if (!(follows[p->first][id/8] & (1 << (id % 8)))) {
+    } else if (!follows[p->first].test(id)) {
       // new dependency
 
       // did we just create a cycle?
@@ -339,7 +339,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
         if (force_backtrace || lockdep_force_backtrace()) {
           bt = new ceph::BackTrace(BACKTRACE_SKIP);
         }
-        follows[p->first][id/8] |= 1 << (id % 8);
+        follows[p->first].set(id);
         follows_bt[p->first][id] = bt;
 	lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
 	//bt->print(*_dout);
