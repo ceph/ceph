@@ -190,6 +190,7 @@ Arguments:
 * [--config-json CONFIG_JSON]  Additional configuration information in JSON format
 * [--skip-firewalld]           Do not configure firewalld
 * [--skip-pull]                do not pull the latest image before adopting
+* [--container-init]           Run podman/docker with `--init`
 
 
 bootstrap
