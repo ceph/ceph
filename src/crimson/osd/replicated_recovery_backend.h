@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "crimson/common/interruptible_future.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/recovery_backend.h"
 
 #include "messages/MOSDPGPull.h"
@@ -18,33 +20,34 @@ public:
 			    crimson::osd::ShardServices& shard_services,
 			    crimson::os::CollectionRef coll,
 			    PGBackend* backend)
-    : RecoveryBackend(pg, shard_services, coll, backend) {}
-  seastar::future<> handle_recovery_op(
+    : RecoveryBackend(pg, shard_services, coll, backend)
+  {}
+  interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m) final;
 
-  seastar::future<> recover_object(
+  interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) final;
-  seastar::future<> recover_delete(
+  interruptible_future<> recover_delete(
     const hobject_t& soid,
     eversion_t need) final;
-  seastar::future<> push_delete(
+  interruptible_future<> push_delete(
     const hobject_t& soid,
     eversion_t need) final;
 protected:
-  seastar::future<> handle_pull(
+  interruptible_future<> handle_pull(
     Ref<MOSDPGPull> m);
-  seastar::future<> handle_pull_response(
+  interruptible_future<> handle_pull_response(
     Ref<MOSDPGPush> m);
-  seastar::future<> handle_push(
+  interruptible_future<> handle_push(
     Ref<MOSDPGPush> m);
-  seastar::future<> handle_push_reply(
+  interruptible_future<> handle_push_reply(
     Ref<MOSDPGPushReply> m);
-  seastar::future<> handle_recovery_delete(
+  interruptible_future<> handle_recovery_delete(
     Ref<MOSDPGRecoveryDelete> m);
-  seastar::future<> handle_recovery_delete_reply(
+  interruptible_future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<PushOp> prep_push(
+  interruptible_future<PushOp> prep_push(
     const hobject_t& soid,
     eversion_t need,
     pg_shard_t pg_shard);
@@ -55,13 +58,13 @@ protected:
     eversion_t need);
   std::vector<pg_shard_t> get_shards_to_push(
     const hobject_t& soid) const;
-  seastar::future<PushOp> build_push_op(
+  interruptible_future<PushOp> build_push_op(
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
     object_stat_sum_t* stat);
   /// @returns true if this push op is the last push op for
   ///          recovery @c pop.soid
-  seastar::future<bool> _handle_pull_response(
+  interruptible_future<bool> _handle_pull_response(
     pg_shard_t from,
     PushOp& pop,
     PullOp* response,
@@ -70,7 +73,7 @@ protected:
     const interval_set<uint64_t> &copy_subset,
     const interval_set<uint64_t> &intervals_received,
     ceph::bufferlist data_received);
-  seastar::future<> submit_push_data(
+  interruptible_future<> submit_push_data(
     const ObjectRecoveryInfo &recovery_info,
     bool first,
     bool complete,
@@ -85,20 +88,20 @@ protected:
   void submit_push_complete(
     const ObjectRecoveryInfo &recovery_info,
     ObjectStore::Transaction *t);
-  seastar::future<> _handle_push(
+  interruptible_future<> _handle_push(
     pg_shard_t from,
     PushOp& pop,
     PushReplyOp *response,
     ceph::os::Transaction *t);
-  seastar::future<std::optional<PushOp>> _handle_push_reply(
+  interruptible_future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
     const PushReplyOp &op);
-  seastar::future<> on_local_recover_persist(
+  interruptible_future<> on_local_recover_persist(
     const hobject_t& soid,
     const ObjectRecoveryInfo& _recovery_info,
     bool is_delete,
     epoch_t epoch_to_freeze);
-  seastar::future<> local_recover_delete(
+  interruptible_future<> local_recover_delete(
     const hobject_t& soid,
     eversion_t need,
     epoch_t epoch_frozen);
@@ -107,15 +110,19 @@ protected:
   }
 private:
   /// pull missing object from peer
-  seastar::future<> maybe_pull_missing_obj(
+  interruptible_future<> maybe_pull_missing_obj(
     const hobject_t& soid,
     eversion_t need);
 
   /// load object context for recovery if it is not ready yet
   using load_obc_ertr = crimson::errorator<
     crimson::ct_error::object_corrupted>;
+  using load_obc_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      load_obc_ertr>;
 
-  seastar::future<> maybe_push_shards(
+  interruptible_future<> maybe_push_shards(
     const hobject_t& soid,
     eversion_t need);
 
@@ -123,7 +130,7 @@ private:
   /// be relatively small.
   ///
   /// @return @c oi.version
-  seastar::future<eversion_t> read_metadata_for_push_op(
+  interruptible_future<eversion_t> read_metadata_for_push_op(
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
     ObjectRecoveryProgress& new_progress,
@@ -136,19 +143,19 @@ private:
   /// @param copy_subset extents we want
   /// @param offset the offset in object from where we should read
   /// @return the new offset
-  seastar::future<uint64_t> read_object_for_push_op(
+  interruptible_future<uint64_t> read_object_for_push_op(
     const hobject_t& oid,
     const interval_set<uint64_t>& copy_subset,
     uint64_t offset,
     uint64_t max_len,
     PushOp* push_op);
-  seastar::future<> read_omap_for_push_op(
+  interruptible_future<> read_omap_for_push_op(
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
     ObjectRecoveryProgress& new_progress,
     uint64_t* max_len,
     PushOp* push_op);
-  seastar::future<hobject_t> prep_push_target(
+  interruptible_future<hobject_t> prep_push_target(
     const ObjectRecoveryInfo &recovery_info,
     bool first,
     bool complete,
@@ -156,4 +163,6 @@ private:
     ObjectStore::Transaction* t,
     const map<string, bufferlist> &attrs,
     bufferlist&& omap_header);
+  using interruptor = crimson::interruptible::interruptor<
+    crimson::osd::IOInterruptCondition>;
 };

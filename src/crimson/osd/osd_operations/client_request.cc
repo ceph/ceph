@@ -65,102 +65,118 @@ seastar::future<> ClientRequest::start()
 {
   logger().debug("{}: start", *this);
 
-  return crimson::common::handle_system_shutdown(
-    [this, opref=IRef{this}]() mutable {
-    return seastar::repeat([this, opref=std::move(opref)]() mutable {
+  return seastar::repeat([this, opref=IRef{this}]() mutable {
       logger().debug("{}: in repeat", *this);
       return with_blocking_future(handle.enter(cp().await_map))
-      .then([this] {
-	return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_min_epoch()));
+      .then([this]() {
+	return with_blocking_future(
+	    osd.osdmap_gate.wait_for_map(
+	      m->get_min_epoch()));
       }).then([this](epoch_t epoch) {
 	return with_blocking_future(handle.enter(cp().get_pg));
       }).then([this] {
 	return with_blocking_future(osd.wait_for_pg(m->get_spg()));
       }).then([this](Ref<PG> pgref) mutable {
-	epoch_t same_interval_since = pgref->get_interval_start_epoch();
-	logger().debug("{} same_interval_since: {}", *this, same_interval_since);
-	return sequencer.start_op(
-	  handle, prev_op_id, get_id(),
-	  [this, pgref] {
-	  PG &pg = *pgref;
-	  if (pg.can_discard_op(*m)) {
-	    logger().debug("{} op discarded, {}, same_primary_since: {}",
-		*this, pg, pg.get_info().history.same_primary_since);
-	    return osd.send_incremental_map(conn, m->get_map_epoch());
-	  }
-	  return with_blocking_future(
-	    handle.enter(pp(pg).await_map)
-	  ).then([this, &pg]() mutable {
-	    return with_blocking_future(
-	      pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
-	  }).then([this, &pg](auto map) mutable {
-	    return with_blocking_future(
-	      handle.enter(pp(pg).wait_for_active));
-	  }).then([this, &pg]() mutable {
-	    return with_blocking_future(pg.wait_for_active_blocker.wait());
-	  }).then([this, pgref=std::move(pgref)]() mutable {
-	    if (m->finish_decode()) {
-	      m->clear_payload();
-	    }
-	    if (is_pg_op()) {
-	      return process_pg_op(pgref);
-	    } else {
-	      return process_op(pgref);
-	    }
-	  });
-        }).then([this] {
-          sequencer.finish_op(get_id());
-          return seastar::stop_iteration::yes;
-        }).handle_exception_type(
-          [this](crimson::common::actingset_changed& e) mutable {
-          if (e.is_primary()) {
-            logger().debug("operation restart, acting set changed");
-            sequencer.maybe_reset(get_id());
-            return seastar::stop_iteration::no;
-          } else {
-            sequencer.abort();
-            logger().debug("operation abort, up primary changed");
+	return interruptor::with_interruption([this, pgref]() mutable {
+          epoch_t same_interval_since = pgref->get_interval_start_epoch();
+          logger().debug("{} same_interval_since: {}", *this, same_interval_since);
+          return sequencer.start_op(
+            handle, prev_op_id, get_id(),
+            interruptor::wrap_function(
+              [this, pgref]() mutable -> interruptible_future<> {
+              PG &pg = *pgref;
+              if (pg.can_discard_op(*m)) {
+                return osd.send_incremental_map(conn, m->get_map_epoch());
+              }
+              return with_blocking_future_interruptible<IOInterruptCondition>(
+                handle.enter(pp(pg).await_map)
+              ).then_interruptible([this, &pg]() mutable {
+                return with_blocking_future_interruptible<IOInterruptCondition>(
+                    pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
+              }).then_interruptible([this, &pg](auto map) mutable {
+                return with_blocking_future_interruptible<IOInterruptCondition>(
+                    handle.enter(pp(pg).wait_for_active));
+              }).then_interruptible([this, &pg]() mutable {
+                return with_blocking_future_interruptible<IOInterruptCondition>(
+                    pg.wait_for_active_blocker.wait());
+              }).then_interruptible([this, pgref=std::move(pgref)]() mutable {
+                if (m->finish_decode()) {
+                  m->clear_payload();
+                }
+                if (is_pg_op()) {
+                  return process_pg_op(pgref);
+                } else {
+                  return process_op(pgref);
+                }
+              });
+            })
+          ).then_interruptible([this, pgref]() mutable {
+            sequencer.finish_op(get_id());
             return seastar::stop_iteration::yes;
-          }
-        }).handle_exception_type(
-          [](seastar::broken_condition_variable&) {
-          return seastar::stop_iteration::yes;
-        });
+          });
+	}, [this, pgref](std::exception_ptr eptr) mutable {
+	  if (*eptr.__cxa_exception_type() ==
+	      typeid(::crimson::common::actingset_changed)) {
+	    try {
+	      std::rethrow_exception(eptr);
+	    } catch(::crimson::common::actingset_changed& e) {
+	      if (e.is_primary()) {
+		logger().debug("{} operation restart, acting set changed", *this);
+                sequencer.maybe_reset(get_id());
+		return seastar::stop_iteration::no;
+	      } else {
+		logger().debug("{} operation abort, up primary changed", *this);
+                sequencer.abort();
+		return seastar::stop_iteration::yes;
+	      }
+	    }
+	  }
+	  assert(*eptr.__cxa_exception_type() ==
+	  typeid(crimson::common::system_shutdown_exception));
+	  crimson::get_logger(ceph_subsys_osd).debug(
+	      "{} operation skipped, system shutdown", *this);
+	  return seastar::stop_iteration::yes;
+	}, pgref);
       });
     });
-  });
 }
 
-seastar::future<> ClientRequest::process_pg_op(
+ClientRequest::interruptible_future<>
+ClientRequest::process_pg_op(
   Ref<PG> &pg)
 {
   return pg->do_pg_ops(m)
-    .then([this, pg=std::move(pg)](Ref<MOSDOpReply> reply) {
+    .then_interruptible([this, pg=std::move(pg)](Ref<MOSDOpReply> reply) {
       return conn->send(reply);
     });
 }
 
-seastar::future<> ClientRequest::process_op(Ref<PG> &pg)
+ClientRequest::interruptible_future<>
+ClientRequest::process_op(Ref<PG> &pg)
 {
-  return with_blocking_future(handle.enter(pp(*pg).recover_missing)).then(
+  return with_blocking_future_interruptible<IOInterruptCondition>(
+      handle.enter(pp(*pg).recover_missing))
+  .then_interruptible(
     [this, pg]() mutable {
     return do_recover_missing(pg);
-  }).then([this, pg]() mutable {
-    return pg->already_complete(m->get_reqid()).then_unpack(
+  }).then_interruptible([this, pg]() mutable {
+    return pg->already_complete(m->get_reqid()).then_unpack_interruptible(
       [this, pg](bool completed, int ret) mutable
-      -> PG::load_obc_ertr::future<> {
+      -> PG::load_obc_iertr::future<> {
       if (completed) {
         auto reply = make_message<MOSDOpReply>(
           m.get(), ret, pg->get_osdmap_epoch(),
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
         return conn->send(std::move(reply));
       } else {
-        return with_blocking_future(handle.enter(pp(*pg).get_obc)).then(
-          [this, pg]() mutable -> PG::load_obc_ertr::future<> {
+        return with_blocking_future_interruptible<IOInterruptCondition>(
+            handle.enter(pp(*pg).get_obc)).then_interruptible(
+          [this, pg]() mutable -> PG::load_obc_iertr::future<> {
           logger().debug("{}: got obc lock", *this);
           op_info.set_from_op(&*m, *pg->get_osdmap());
           return pg->with_locked_obc(m, op_info, this, [this, pg](auto obc) mutable {
-            return with_blocking_future(handle.enter(pp(*pg).process)).then(
+            return with_blocking_future_interruptible<IOInterruptCondition>(
+                handle.enter(pp(*pg).process)).then_interruptible(
               [this, pg, obc]() mutable {
               return do_process(pg, obc);
             });
@@ -168,7 +184,7 @@ seastar::future<> ClientRequest::process_op(Ref<PG> &pg)
         });
       }
     });
-  }).safe_then([pg=std::move(pg)] {
+  }).safe_then_interruptible([pg=std::move(pg)] {
     return seastar::now();
   }, PG::load_obc_ertr::all_same_way([](auto &code) {
     logger().error("ClientRequest saw error code {}", code);
@@ -176,7 +192,8 @@ seastar::future<> ClientRequest::process_op(Ref<PG> &pg)
   }));
 }
 
-seastar::future<> ClientRequest::do_recover_missing(Ref<PG>& pg)
+ClientRequest::interruptible_future<>
+ClientRequest::do_recover_missing(Ref<PG>& pg)
 {
   eversion_t ver;
   const hobject_t& soid = m->get_hobj();
@@ -196,7 +213,7 @@ seastar::future<> ClientRequest::do_recover_missing(Ref<PG>& pg)
   }
 }
 
-seastar::future<>
+ClientRequest::interruptible_future<>
 ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
 {
   if (!pg->is_primary()) {
@@ -213,7 +230,8 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
       return conn->send(std::move(reply));
     }
   }
-  return pg->do_osd_ops(m, obc, op_info).safe_then([this](Ref<MOSDOpReply> reply) {
+  return pg->do_osd_ops(m, obc, op_info).safe_then_interruptible(
+      [this](Ref<MOSDOpReply> reply) -> interruptible_future<> {
     return conn->send(std::move(reply));
   }, crimson::ct_error::eagain::handle([this, pg]() mutable {
     return process_op(pg);

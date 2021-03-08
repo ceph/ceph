@@ -72,6 +72,14 @@ add_executable(unittest-fixed-kv-node-layout
   test_fixed_kv_node_layout.cc)
 add_ceph_unittest(unittest-fixed-kv-node-layout)
 
+add_executable(unittest_interruptible_future
+  test_interruptible_future.cc
+  gtest_seastar.cc)
+add_ceph_unittest(unittest_interruptible_future)
+target_link_libraries(
+  unittest_interruptible_future
+  crimson-common)
+
 add_subdirectory(seastore)
 
 add_library(crimson-gtest STATIC

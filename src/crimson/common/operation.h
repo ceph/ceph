@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #pragma once
 
@@ -17,6 +17,7 @@
 #include <seastar/core/future-util.hh>
 
 #include "include/ceph_assert.h"
+#include "crimson/common/interruptible_future.h"
 
 namespace ceph {
   class Formatter;
@@ -54,6 +55,11 @@ class blocking_future_detail {
   template <typename U>
   friend blocking_future_detail<seastar::future<>> join_blocking_futures(U &&u);
 
+  template <typename InterruptCond, typename T>
+  friend blocking_future_detail<
+    ::crimson::interruptible::interruptible_future<InterruptCond>>
+  join_blocking_interruptible_futures(T&& t);
+
   template <typename U>
   friend class blocking_future_detail;
 
@@ -65,10 +71,39 @@ public:
       blocker,
       std::move(fut).then(std::forward<F>(f)));
   }
+  template <typename InterruptCond, typename F>
+  auto then_interruptible(F &&f) && {
+    using result = decltype(std::declval<Fut>().then_interruptible(f));
+    return blocking_future_detail<
+      typename ::crimson::interruptible::interruptor<
+	InterruptCond>::template futurize<result>::type>(
+      blocker,
+      std::move(fut).then_interruptible(std::forward<F>(f)));
+  }
 };
 
 template <typename T=void>
 using blocking_future = blocking_future_detail<seastar::future<T>>;
+
+template <typename InterruptCond, typename T = void>
+using blocking_interruptible_future = blocking_future_detail<
+  ::crimson::interruptible::interruptible_future<InterruptCond, T>>;
+
+template <typename InterruptCond, typename V, typename U>
+blocking_interruptible_future<InterruptCond, V>
+make_ready_blocking_interruptible_future(U&& args) {
+  return blocking_interruptible_future<InterruptCond, V>(
+    nullptr,
+    seastar::make_ready_future<V>(std::forward<U>(args)));
+}
+
+template <typename InterruptCond, typename V, typename Exception>
+blocking_interruptible_future<InterruptCond, V>
+make_exception_blocking_interruptible_future(Exception&& e) {
+  return blocking_interruptible_future<InterruptCond, V>(
+    nullptr,
+    seastar::make_exception_future<InterruptCond, V>(e));
+}
 
 template <typename V=void, typename... U>
 blocking_future_detail<seastar::future<V>> make_ready_blocking_future(U&&... args) {
@@ -95,6 +130,23 @@ public:
   blocking_future<T> make_blocking_future(seastar::future<T> &&f) {
     return blocking_future<T>(this, std::move(f));
   }
+
+  template <typename InterruptCond, typename T>
+  blocking_interruptible_future<InterruptCond, T>
+  make_blocking_future(
+      crimson::interruptible::interruptible_future<InterruptCond, T> &&f) {
+    return blocking_interruptible_future<InterruptCond, T>(
+      this, std::move(f));
+  }
+  template <typename InterruptCond, typename T = void>
+  blocking_interruptible_future<InterruptCond, T>
+  make_blocking_interruptible_future(seastar::future<T> &&f) {
+    return blocking_interruptible_future<InterruptCond, T>(
+	this,
+	::crimson::interruptible::interruptor<InterruptCond>::make_interruptible(
+	  std::move(f)));
+  }
+
   void dump(ceph::Formatter *f) const;
   virtual ~Blocker() = default;
 
@@ -142,6 +194,26 @@ blocking_future<> join_blocking_futures(T &&t) {
       }));
 }
 
+template <typename InterruptCond, typename T>
+blocking_interruptible_future<InterruptCond>
+join_blocking_interruptible_futures(T&& t) {
+  std::vector<Blocker*> blockers;
+  blockers.reserve(t.size());
+  for (auto &&bf: t) {
+    blockers.push_back(bf.blocker);
+    bf.blocker = nullptr;
+  }
+  auto agg = std::make_unique<AggregateBlocker>(std::move(blockers));
+  return agg->make_blocking_future(
+    ::crimson::interruptible::interruptor<InterruptCond>::parallel_for_each(
+      std::forward<T>(t),
+      [](auto &&bf) {
+	return std::move(bf.fut);
+      }).then_interruptible([agg=std::move(agg)] {
+	return seastar::make_ready_future<>();
+      }));
+}
+
 
 /**
  * Common base for all crimson-osd operations.  Mainly provides
@@ -167,6 +239,38 @@ class Operation : public boost::intrusive_ref_counter<
     assert(f.blocker);
     add_blocker(f.blocker);
     return std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
+      clear_blocker(blocker);
+      return std::move(arg);
+    });
+  }
+
+  template <typename InterruptCond, typename T>
+  ::crimson::interruptible::interruptible_future<InterruptCond, T>
+  with_blocking_future_interruptible(blocking_future<T> &&f) {
+    if (f.fut.available()) {
+      return std::move(f.fut);
+    }
+    assert(f.blocker);
+    add_blocker(f.blocker);
+    auto fut = std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
+      clear_blocker(blocker);
+      return std::move(arg);
+    });
+    return ::crimson::interruptible::interruptible_future<
+      InterruptCond, T>(std::move(fut));
+  }
+
+  template <typename InterruptCond, typename T>
+  ::crimson::interruptible::interruptible_future<InterruptCond, T>
+  with_blocking_future_interruptible(
+    blocking_interruptible_future<InterruptCond, T> &&f) {
+    if (f.fut.available()) {
+      return std::move(f.fut);
+    }
+    assert(f.blocker);
+    add_blocker(f.blocker);
+    return std::move(f.fut).template then_wrapped_interruptible(
+      [this, blocker=f.blocker](auto &&arg) {
       clear_blocker(blocker);
       return std::move(arg);
     });
