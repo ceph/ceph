@@ -360,6 +360,85 @@ class NodeAssignmentTest(NamedTuple):
             ],
             ['host1', 'host2', 'host3', 'host1', 'host2', 'host3']
         ),
+        # max_per_host + reduce count per host. This needs to remove MGRs d,e and f
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='*', max_per_host=1),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host2'),
+                DaemonDescription('mgr', 'c', 'host3'),
+                DaemonDescription('mgr', 'd', 'host1'),
+                DaemonDescription('mgr', 'e', 'host2'),
+                DaemonDescription('mgr', 'f', 'host3'),
+            ],
+            ['host1', 'host2', 'host3']
+        ),
+        # max_per_host + count
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='*', count=4, max_per_host=2),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host2'),
+                DaemonDescription('mgr', 'c', 'host3'),
+            ],
+            ['host1', 'host2', 'host3', '*']
+        ),
+        # max_per_host + count + existing daemons
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='*', count=4, max_per_host=2),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host2'),
+                DaemonDescription('mgr', 'c', 'host3'),
+                DaemonDescription('mgr', 'd', 'host2'),
+            ],
+            ['host1', 'host2', 'host3', 'host2'],
+        ),
+        # max_per_host + count + uneven existing daemons
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='*', count=4, max_per_host=2),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host1'),
+                DaemonDescription('mgr', 'c', 'host3'),
+                DaemonDescription('mgr', 'd', 'host3'),
+            ],
+            ['host1', 'host1', 'host3', 'host3'],  # avoid relocation if possible
+        ),
+        # max_per_host + count + uneven existing daemons on wrong hosts
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='*', count=4, max_per_host=2),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host1'),
+                DaemonDescription('mgr', 'c', 'host4'),
+                DaemonDescription('mgr', 'd', 'host4'),
+            ],
+            ['host1', 'host1', 'host2', 'host3'],
+        ),
+        # max_per_host + count + spread out
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(host_pattern='*', count=4, max_per_host=2),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host1'),
+                DaemonDescription('mgr', 'c', 'host1'),
+                DaemonDescription('mgr', 'd', 'host1'),
+            ],
+            ['host1', 'host1', 'host2', 'host3'],
+        ),
         # count that is bigger than the amount of hosts. Truncate to len(hosts)
         # RGWs should not be co-located to each other.
         NodeAssignmentTest(
@@ -470,7 +549,15 @@ def test_node_assignment(service_type, placement, hosts, daemons, expected):
         spec=spec,
         hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
-    assert sorted([h.hostname for h in hosts]) == sorted(expected)
+
+    got = [hs.hostname for hs in hosts]
+    num_wildcard = 0
+    for i in expected:
+        if i == '*':
+            num_wildcard += 1
+        else:
+            got.remove(i)
+    assert num_wildcard == len(got)
 
 
 class NodeAssignmentTest2(NamedTuple):
