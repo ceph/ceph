@@ -1980,16 +1980,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
         )
         ha.validate()
-        hosts = ha.place()
-
-        add_daemon_hosts = ha.add_daemon_hosts(hosts)
-        remove_daemon_hosts = ha.remove_daemon_hosts(hosts)
+        hosts, to_add, to_remove = ha.place()
 
         return {
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
-            'add': [hs.hostname for hs in add_daemon_hosts],
-            'remove': [d.hostname for d in remove_daemon_hosts]
+            'add': [hs.hostname for hs in to_add],
+            'remove': [d.hostname for d in to_remove]
         }
 
     @handle_orch_error

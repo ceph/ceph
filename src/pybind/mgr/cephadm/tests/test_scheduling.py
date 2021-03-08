@@ -127,7 +127,7 @@ def run_scheduler_test(results, mk_spec, hosts, daemons, key_elems):
     except IndexError:
         try:
             spec = mk_spec()
-            host_res = HostAssignment(
+            host_res, to_add, to_remove = HostAssignment(
                 spec=spec,
                 hosts=hosts,
                 daemons=daemons,
@@ -142,7 +142,7 @@ def run_scheduler_test(results, mk_spec, hosts, daemons, key_elems):
     for _ in range(10):  # scheduler has a random component
         try:
             spec = mk_spec()
-            host_res = HostAssignment(
+            host_res, to_add, to_remove = HostAssignment(
                 spec=spec,
                 hosts=hosts,
                 daemons=daemons
@@ -547,7 +547,7 @@ def test_node_assignment(service_type, placement, hosts, daemons, expected):
                        service_id=service_id,
                        placement=placement)
 
-    hosts = HostAssignment(
+    hosts, to_add, to_remove = HostAssignment(
         spec=spec,
         hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         daemons=daemons,
@@ -635,7 +635,7 @@ class NodeAssignmentTest2(NamedTuple):
     ])
 def test_node_assignment2(service_type, placement, hosts,
                           daemons, expected_len, in_set):
-    hosts = HostAssignment(
+    hosts, to_add, to_remove = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
         hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         daemons=daemons,
@@ -668,7 +668,7 @@ def test_node_assignment2(service_type, placement, hosts,
     ])
 def test_node_assignment3(service_type, placement, hosts,
                           daemons, expected_len, must_have):
-    hosts = HostAssignment(
+    hosts, to_add, to_remove = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
         hosts=[HostSpec(h) for h in hosts],
         daemons=daemons,
@@ -730,7 +730,7 @@ class NodeAssignmentTestBadSpec(NamedTuple):
     ])
 def test_bad_specs(service_type, placement, hosts, daemons, expected):
     with pytest.raises(OrchestratorValidationError) as e:
-        hosts = HostAssignment(
+        hosts, to_add, to_remove = HostAssignment(
             spec=ServiceSpec(service_type, placement=placement),
             hosts=[HostSpec(h) for h in hosts],
             daemons=daemons,
@@ -881,7 +881,7 @@ def test_active_assignment(service_type, placement, hosts, daemons, expected):
                        service_id=None,
                        placement=placement)
 
-    result = HostAssignment(
+    result, to_add, to_remove = HostAssignment(
         spec=spec,
         hosts=[HostSpec(h) for h in hosts],
         daemons=daemons,
