@@ -10,6 +10,7 @@ LOGROTATE_DIR = '/etc/logrotate.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
+CONTAINER_INIT=True
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
@@ -2067,7 +2068,6 @@ def get_container(fsid: str, daemon_type: str, daemon_id: Union[int, str],
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
-        init=args.container_init,
         host_network=host_network,
     )
 
@@ -2535,7 +2535,7 @@ class CephContainer:
                  privileged: bool = False,
                  ptrace: bool = False,
                  bind_mounts: Optional[List[List[str]]] = None,
-                 init: bool = False,
+                 init: Optional[bool] = None,
                  host_network: bool = True,
                  ) -> None:
         self.image = image
@@ -2548,7 +2548,7 @@ class CephContainer:
         self.privileged = privileged
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
-        self.init = init
+        self.init = init if init else container_init
         self.host_network = host_network
 
     def run_cmd(self) -> List[str]:
@@ -3224,8 +3224,7 @@ def command_bootstrap():
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', args.registry_username, '--force'])
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password, '--force'])
 
-    if args.container_init:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(args.container_init), '--force'])
+    cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(container_init), '--force'])
 
     if not args.skip_dashboard:
         # Configure SSL port (cephadm only allows to configure dashboard SSL port)
@@ -5609,6 +5608,11 @@ def _get_parser():
         action='append',
         default=[],
         help='set environment variable')
+    parser.add_argument(
+        '--no-container-init',
+        action='store_true',
+        default=not CONTAINER_INIT,
+        help='Do not run podman/docker with `--init`')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
@@ -5677,7 +5681,8 @@ def _get_parser():
     parser_adopt.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -5966,7 +5971,8 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
@@ -6013,7 +6019,8 @@ def _get_parser():
     parser_deploy.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
@@ -6093,9 +6100,22 @@ def _get_parser():
 
 def _parse_args(av):
     parser = _get_parser()
+
     args = parser.parse_args(av)
     if 'command' in args and args.command and args.command[0] == "--":
         args.command.pop(0)
+
+    # workaround argparse to deprecate the subparser `--container-init` flag
+    # container_init and no_container_init must always be mutually exclusive
+    container_init_args = ('--container-init', '--no-container-init')
+    if set(container_init_args).issubset(av):
+        parser.error('argument %s: not allowed with argument %s' % (container_init_args))
+    elif '--container-init' in av:
+        args.no_container_init = not args.container_init
+    else:
+        args.container_init = not args.no_container_init
+    assert args.container_init is not args.no_container_init
+
     return args
 
 
@@ -6145,6 +6165,10 @@ if __name__ == "__main__":
                     and args.func != command_add_repo:
                 sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
                 sys.exit(1)
+
+    # container-init?
+    container_init = args.container_init
+    logger.debug('container_init=%s' % (container_init))
 
     try:
         r = args.func()
