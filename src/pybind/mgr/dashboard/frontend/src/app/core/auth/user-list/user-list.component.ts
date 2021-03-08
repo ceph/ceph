@@ -190,7 +190,11 @@ export class UserListComponent implements OnInit {
     else return 'warning-icon';
   }
 
-  private getRemainingDays(time: number): number {
-    return Math.floor((time - Date.now()) / (1000 * 60 * 60 * 24));
+  getRemainingDays(time: number): number {
+    if(time === undefined || time == null) return undefined;
+    if(time < 0) return 0;
+    const today = Date.now();
+    const toDays = 1000 * 60 * 60 * 24;
+    return Math.max(0, Math.floor((time - today) / toDays));
   }
 }
