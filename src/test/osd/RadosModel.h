@@ -2957,9 +2957,18 @@ public:
     } else if (r == -EBUSY) {
       // could fail if snap is not oldest
       ceph_assert(!context->check_oldest_snap_flushed(oid, snap)); 
-    } else if (r == -ENOENT && src_value.deleted()) {
+    } else if (r == -ENOENT) {
       // could fail if object is removed
+      if (src_value.deleted()) {
+	cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+      } else {
+	cerr << num << ": got unexpected ENOENT" << std::endl;
+	ceph_abort();
+      }
     } else {
+      if (r != -ENOENT && src_value.deleted()) {
+	cerr << num << ": src dne, but r is not ENOENT" << std::endl;
+      }	
       ceph_abort_msg("shouldn't happen");
     }
     context->update_object_tier_flushed(oid, snap);
@@ -3052,12 +3061,21 @@ public:
     if (r == 0) {
       // ok
     } else if (r == -EINVAL) {
-      // modifying manifeset object makes existing chunk_map clear
+      // modifying manifest object makes existing chunk_map clear
       // as a result, the modified object is no longer manifest object 
       // this casues to return -EINVAL
-    } else if (r == -ENOENT && src_value.deleted()) {
+    } else if (r == -ENOENT) {
       // could fail if object is removed
+      if (src_value.deleted()) {
+	cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+      } else {
+	cerr << num << ": got unexpected ENOENT" << std::endl;
+	ceph_abort();
+      }
     } else {
+      if (r != -ENOENT && src_value.deleted()) {
+	cerr << num << ": src dne, but r is not ENOENT" << std::endl;
+      }	
       ceph_abort_msg("shouldn't happen");
     }
     context->oid_in_use.erase(oid);
