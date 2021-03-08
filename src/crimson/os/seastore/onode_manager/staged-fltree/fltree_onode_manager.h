@@ -116,5 +116,6 @@ public:
 
   ~FLTreeOnodeManager();
 };
+using FLTreeOnodeManagerRef = std::unique_ptr<FLTreeOnodeManager>;
 
 }
