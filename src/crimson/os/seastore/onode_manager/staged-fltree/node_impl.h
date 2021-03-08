@@ -70,6 +70,8 @@ class NodeImpl {
   virtual node_type_t node_type() const = 0;
   virtual field_type_t field_type() const = 0;
   virtual laddr_t laddr() const = 0;
+  virtual const char* read() const = 0;
+  virtual bool is_duplicate() const = 0;
   virtual void prepare_mutate(context_t) = 0;
   virtual bool is_level_tail() const = 0;
   virtual bool is_empty() const = 0;

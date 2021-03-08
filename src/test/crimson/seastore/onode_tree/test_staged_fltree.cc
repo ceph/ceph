@@ -712,6 +712,10 @@ class DummyChildPool {
    protected:
     node_type_t node_type() const override { return node_type_t::LEAF; }
     field_type_t field_type() const override { return field_type_t::N0; }
+    const char* read() const override {
+      ceph_abort("impossible path"); }
+    bool is_duplicate() const override {
+      ceph_abort("impossible path"); }
     level_t level() const override { return 0u; }
     void prepare_mutate(context_t) override {
       ceph_abort("impossible path"); }

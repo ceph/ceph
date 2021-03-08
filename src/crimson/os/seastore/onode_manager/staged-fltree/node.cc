@@ -33,7 +33,7 @@ using node_future = Node::node_future<ValueT>;
  */
 
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
-      : ref_leaf_node{node}, position{pos}
+      : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
   assert(!is_end());
   ref_leaf_node->do_track_cursor<true>(*this);
@@ -42,15 +42,15 @@ tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
 tree_cursor_t::tree_cursor_t(
     Ref<LeafNode> node, const search_position_t& pos,
     const key_view_t& key_view, const value_header_t* p_value_header)
-      : ref_leaf_node{node}, position{pos}
+      : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
   assert(!is_end());
-  update_cache(*node, key_view, p_value_header);
+  update_cache_same_node(key_view, p_value_header);
   ref_leaf_node->do_track_cursor<true>(*this);
 }
 
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
-      : ref_leaf_node{node}, position{search_position_t::end()}
+      : ref_leaf_node{node}, position{search_position_t::end()}, cache{ref_leaf_node}
 {
   assert(is_end());
   assert(ref_leaf_node->is_level_tail());
@@ -133,81 +133,112 @@ void tree_cursor_t::update_track(
   assert(!is_end());
   ref_leaf_node = node;
   position = pos;
+  // we lazy update the key/value information until user asked
   cache.invalidate();
   ref_leaf_node->do_track_cursor<VALIDATE>(*this);
 }
 template void tree_cursor_t::update_track<true>(Ref<LeafNode>, const search_position_t&);
 template void tree_cursor_t::update_track<false>(Ref<LeafNode>, const search_position_t&);
 
-void tree_cursor_t::update_cache(LeafNode& node,
-                                 const key_view_t& key_view,
-                                 const value_header_t* p_value_header) const
+void tree_cursor_t::update_cache_same_node(const key_view_t& key_view,
+                                           const value_header_t* p_value_header) const
 {
   assert(!is_end());
-  assert(ref_leaf_node.get() == &node);
-  cache.update(node, key_view, p_value_header);
-  cache.validate_is_latest(node, position);
+  cache.update_all(ref_leaf_node->get_version(), key_view, p_value_header);
+  cache.validate_is_latest(position);
 }
 
-void tree_cursor_t::maybe_update_cache(value_magic_t magic) const
-{
-  assert(!is_end());
-  if (!cache.is_latest()) {
-    auto [key_view, p_value_header] = ref_leaf_node->get_kv(position);
-    if (p_value_header->magic != magic) {
-      logger().error("OTree::Value::Load: magic mismatch, expect {} but got {}",
-                     magic, p_value_header->magic);
-      ceph_abort();
-    }
-    cache.update(*ref_leaf_node, key_view, p_value_header);
-  }
-  cache.validate_is_latest(*ref_leaf_node, position);
-}
+/*
+ * tree_cursor_t::Cache
+ */
 
-tree_cursor_t::Cache::Cache() = default;
+tree_cursor_t::Cache::Cache(Ref<LeafNode>& ref_leaf_node)
+  : ref_leaf_node{ref_leaf_node} {}
 
-bool tree_cursor_t::Cache::is_latest() const
-{
-  return (valid && (version == p_leaf_node->get_layout_version()));
-}
-
-void tree_cursor_t::Cache::update(LeafNode& node,
-                                  const key_view_t& _key_view,
-                                  const value_header_t* _p_value_header)
+void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
+                                      const key_view_t& _key_view,
+                                      const value_header_t* _p_value_header)
 {
   assert(_p_value_header);
-  p_leaf_node = &node;
-  version = node.get_layout_version();
+
+  needs_update_all = false;
+  version = current_version;
+
   key_view = _key_view;
   p_value_header = _p_value_header;
+
+  auto p_node_base = ref_leaf_node->read();
+  assert((const char*)_p_value_header > p_node_base);
+  offset_value_header = (const char*)_p_value_header - p_node_base;
+  assert(offset_value_header < NODE_BLOCK_SIZE);
+
   value_payload_mut.reset();
   p_value_recorder = nullptr;
-  valid = true;
-  assert(is_latest());
 }
 
-void tree_cursor_t::Cache::validate_is_latest(const LeafNode& node,
-                                              const search_position_t& pos) const
+void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version)
 {
-  assert(p_leaf_node == &node);
-  assert(is_latest());
+  assert(version.layout == current_version.layout);
+  if (!version.is_duplicate && current_version.is_duplicate) {
+    assert(p_value_header);
+    auto _p_value_header = reinterpret_cast<const value_header_t*>(
+        ref_leaf_node->read() + offset_value_header);
+    assert(_p_value_header != p_value_header);
+    assert(*_p_value_header == *p_value_header);
+
+    assert(!value_payload_mut);
+    assert(!p_value_recorder);
+
+    version.is_duplicate = true;
+    p_value_header = _p_value_header;
+  } else {
+    // cache must be latest.
+    // node cannot change is_duplicate from true to false.
+    assert(!(version.is_duplicate && !current_version.is_duplicate));
+  }
+}
+
+void tree_cursor_t::Cache::make_latest(
+    value_magic_t magic, const search_position_t& pos)
+{
+  auto current_version = ref_leaf_node->get_version();
+  if (needs_update_all || version.layout != current_version.layout) {
+    auto [_key_view, _p_value_header] = ref_leaf_node->get_kv(pos);
+    update_all(current_version, _key_view, _p_value_header);
+  } else {
+    maybe_duplicate(current_version);
+  }
+  assert(p_value_header->magic == magic);
+  validate_is_latest(pos);
+}
+
+void tree_cursor_t::Cache::validate_is_latest(const search_position_t& pos) const
+{
 #ifndef NDEBUG
-  auto [_key_view, _p_value_header] = node.get_kv(pos);
+  assert(!needs_update_all);
+  assert(version == ref_leaf_node->get_version());
+
+  auto [_key_view, _p_value_header] = ref_leaf_node->get_kv(pos);
   assert(key_view->compare_to(_key_view) == MatchKindCMP::EQ);
   assert(p_value_header == _p_value_header);
+  auto p_node_base = ref_leaf_node->read();
+  assert((const char*)_p_value_header - p_node_base == offset_value_header);
 #endif
 }
 
 std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
-tree_cursor_t::Cache::prepare_mutate_value_payload(context_t c)
+tree_cursor_t::Cache::prepare_mutate_value_payload(
+    context_t c, const search_position_t& pos)
 {
-  assert(is_latest());
-  assert(p_leaf_node && p_value_header);
-  assert(p_value_header->magic == c.vb.get_header_magic());
+  make_latest(c.vb.get_header_magic(), pos);
   if (!value_payload_mut.has_value()) {
-    auto value_mutable = p_leaf_node->prepare_mutate_value_payload(c);
+    assert(!p_value_recorder);
+    auto value_mutable = ref_leaf_node->prepare_mutate_value_payload(c);
+    auto current_version = ref_leaf_node->get_version();
+    maybe_duplicate(current_version);
     value_payload_mut = p_value_header->get_payload_mutable(value_mutable.first);
     p_value_recorder = value_mutable.second;
+    validate_is_latest(pos);
   }
   return {*value_payload_mut, p_value_recorder};
 }
@@ -770,6 +801,16 @@ bool LeafNode::is_level_tail() const
   return impl->is_level_tail();
 }
 
+node_version_t LeafNode::get_version() const
+{
+  return {layout_version, impl->is_duplicate()};
+}
+
+const char* LeafNode::read() const
+{
+  return impl->read();
+}
+
 std::tuple<key_view_t, const value_header_t*>
 LeafNode::get_kv(const search_position_t& pos) const
 {
@@ -994,7 +1035,7 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
     assert(p_cursor->get_position() == position);
-    p_cursor->update_cache(*this, key, p_value_header);
+    p_cursor->update_cache_same_node(key, p_value_header);
   }
   return p_cursor;
 }
