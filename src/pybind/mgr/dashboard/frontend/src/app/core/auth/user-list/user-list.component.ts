@@ -13,6 +13,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { DurationPipe } from '~/app/shared/pipes/duration.pipe';
 import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -33,6 +34,8 @@ export class UserListComponent implements OnInit {
   userRolesTpl: TemplateRef<any>;
   @ViewChild('warningTpl', { static: true })
   warningTpl: TemplateRef<any>;
+  @ViewChild('durationTpl', { static: true })
+  durationTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -52,6 +55,7 @@ export class UserListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private urlBuilder: URLBuilderService,
     private cdDatePipe: CdDatePipe,
+    private durationPipe: DurationPipe,
     private settingsService: SettingsService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -111,10 +115,10 @@ export class UserListComponent implements OnInit {
         cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: $localize`Password expiration date`,
+        name: $localize`Remaining days before password expires`,
         prop: 'pwdExpirationDate',
         flexGrow: 1,
-        pipe: this.cdDatePipe
+        cellTemplate: this.durationTpl
       }
     ];
     const settings: string[] = ["USER_PWD_EXPIRATION_WARNING_1", "USER_PWD_EXPIRATION_WARNING_2"];
@@ -129,6 +133,7 @@ export class UserListComponent implements OnInit {
       users.forEach((user) => {
         if (user['pwdExpirationDate'] && user['pwdExpirationDate'] > 0) {
           user['pwdExpirationDate'] = user['pwdExpirationDate'] * 1000;
+          user['pwdExpirationDateInSeconds'] = (user['pwdExpirationDate'] - Date.now()) / 1000;
         }
       });
       this.users = users;
@@ -193,8 +198,10 @@ export class UserListComponent implements OnInit {
   getRemainingDays(time: number): number {
     if(time === undefined || time == null) return undefined;
     if(time < 0) return 0;
-    const today = Date.now();
     const toDays = 1000 * 60 * 60 * 24;
-    return Math.max(0, Math.floor((time - today) / toDays));
+    return Math.max(0, Math.floor((this.getRemainingTime(time)) / toDays));
+  }
+  getRemainingTime(time: number): number {
+    return time - Date.now(); 
   }
 }
