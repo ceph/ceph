@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import List, Optional, Callable, Iterable, TypeVar, Set
+from typing import List, Optional, Callable, TypeVar, Set
 
 import orchestrator
 from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec
@@ -226,37 +226,3 @@ class HostAssignment(object):
         random.Random(seed).shuffle(hosts)
 
         return hosts * self.spec.placement.get_num_per_host()
-
-
-def merge_hostspecs(
-        lh: List[HostPlacementSpec],
-        rh: List[HostPlacementSpec]
-) -> Iterable[HostPlacementSpec]:
-    """
-    Merge two lists of HostPlacementSpec by hostname. always returns `lh` first.
-
-    >>> list(merge_hostspecs([HostPlacementSpec(hostname='h', name='x', network='')],
-    ...                      [HostPlacementSpec(hostname='h', name='y', network='')]))
-    [HostPlacementSpec(hostname='h', network='', name='x')]
-
-    """
-    lh_names = {h.hostname for h in lh}
-    yield from lh
-    yield from (h for h in rh if h.hostname not in lh_names)
-
-
-def difference_hostspecs(
-        lh: List[HostPlacementSpec],
-        rh: List[HostPlacementSpec]
-) -> List[HostPlacementSpec]:
-    """
-    returns lh "minus" rh by hostname.
-
-    >>> list(difference_hostspecs([HostPlacementSpec(hostname='h1', name='x', network=''),
-    ...                           HostPlacementSpec(hostname='h2', name='y', network='')],
-    ...                           [HostPlacementSpec(hostname='h2', name='', network='')]))
-    [HostPlacementSpec(hostname='h1', network='', name='x')]
-
-    """
-    rh_names = {h.hostname for h in rh}
-    return [h for h in lh if h.hostname not in rh_names]
