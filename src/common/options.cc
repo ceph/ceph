@@ -7047,7 +7047,6 @@ std::vector<Option> get_rgw_options() {
 
 
     Option("rgw_crypt_vault_secret_engine", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_enum_allowed({"kv", "transit"})
     .set_default("transit")
     .set_description(
         "Vault Secret Engine to be used to retrieve encryption keys.")
