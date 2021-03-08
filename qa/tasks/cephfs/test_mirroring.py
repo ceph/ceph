@@ -8,6 +8,7 @@ from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
+from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 
@@ -690,3 +691,82 @@ class TestMirroring(CephFSTestCase):
         self.assertEquals(peer_stats['recovery_count'], 1)
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_mirroring_init_failure(self):
+        """Test mirror daemon init failure"""
+
+        # enable mirroring through mon interface -- this should result in the mirror daemon
+        # failing to enable mirroring due to absence of `cephfs_mirorr` index object.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", self.primary_fs_name)
+
+        with safe_while(sleep=5, tries=10, action='wait for failed state') as proceed:
+            while proceed():
+                try:
+                    # verify via asok
+                    res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                                     'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+                    if not 'state' in res:
+                        return
+                    self.assertTrue(res['state'] == "failed")
+                    return True
+                except:
+                    pass
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", self.primary_fs_name)
+        time.sleep(10)
+        # verify via asok
+        try:
+            self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                       'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+        except CommandFailedError:
+            pass
+        else:
+            raise RuntimeError('expected admin socket to be unavailable')
+
+    def test_mirroring_init_failure_with_recovery(self):
+        """Test if the mirror daemon can recover from a init failure"""
+
+        # enable mirroring through mon interface -- this should result in the mirror daemon
+        # failing to enable mirroring due to absence of `cephfs_mirorr` index object.
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", self.primary_fs_name)
+        # need safe_while since non-failed status pops up as mirroring is restarted
+        # internally in mirror daemon.
+        with safe_while(sleep=5, tries=10, action='wait for failed state') as proceed:
+            while proceed():
+                try:
+                    # verify via asok
+                    res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                                     'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+                    if not 'state' in res:
+                        return
+                    self.assertTrue(res['state'] == "failed")
+                    return True
+                except:
+                    pass
+
+        # create the index object and check daemon recovery
+        try:
+            p = self.mount_a.client_remote.run(args=['rados', '-p', self.fs.metadata_pool_name, 'create', 'cephfs_mirror'],
+                                               stdout=StringIO(), stderr=StringIO(), timeout=30,
+                                               check_status=True, label="create index object")
+            p.wait()
+        except CommandFailedError as ce:
+            log.warn(f'mirror daemon command to create mirror index object failed: {ce}')
+            raise
+        time.sleep(30)
+        res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                         'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+        self.assertTrue(res['peers'] == {})
+        self.assertTrue(res['snap_dirs']['dir_count'] == 0)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", self.primary_fs_name)
+        time.sleep(10)
+        # verify via asok
+        try:
+            self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                       'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+        except CommandFailedError:
+            pass
+        else:
+            raise RuntimeError('expected admin socket to be unavailable')
