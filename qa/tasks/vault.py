@@ -185,14 +185,17 @@ def create_secrets(ctx, config):
     engine = cconfig.get('engine')
     prefix = cconfig.get('prefix')
     secrets = cconfig.get('secrets')
+    flavor = cconfig.get('flavor')
     if secrets is None:
         raise ConfigError("No secrets specified, please specify some.")
 
+    ctx.vault.keys[cclient] = []
     for secret in secrets:
         try:
             path = secret['path']
         except KeyError:
             raise ConfigError('Missing "path" field in secret')
+        exportable = secret.get("exportable", flavor == "old")
 
         if engine == 'kv':
             try:
@@ -204,11 +207,13 @@ def create_secrets(ctx, config):
             except KeyError:
                 raise ConfigError('Missing "secret" field in secret')
         elif engine == 'transit':
-            data = {"exportable": "true"}
+            data = {"exportable": "true" if exportable else "false"}
         else:
             raise Exception("Unknown or missing secrets engine")
 
         send_req(ctx, cconfig, cclient, urljoin(prefix, path), json.dumps(data))
+
+        ctx.vault.keys[cclient].append({ 'Path': path });
 
     log.info("secrets created")
     yield
@@ -224,15 +229,28 @@ def task(ctx, config):
     tasks:
     - vault:
         client.0:
-          version: 1.2.2
+          install_url: http://my.special.place/vault.zip
+          install_sha256: zipfiles-sha256-sum-much-larger-than-this
           root_token: test_root_token
-          engine: kv
-          prefix: /v1/kv/data/
+          engine: transit
+          flavor: old
+          prefix: /v1/transit/keys
           secrets:
             - path: kv/teuthology/key_a
-              secret: YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
+              secret: base64_only_if_using_kv_aWxkCmNlcGguY29uZgo=
+              exportable: true
             - path: kv/teuthology/key_b
-              secret: aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+              secret: base64_only_if_using_kv_dApzcmMKVGVzdGluZwo=
+
+    engine can be 'kv' or 'transit'
+    prefix should be /v1/kv/data/ for kv, /v1/transit/keys/ for transit
+    flavor should be 'old' only if testing the original transit logic
+        otherwise omit.
+    for kv only: 256-bit key value should be specified via secret,
+        otherwise should omit.
+    for transit: exportable may be used to make individual keys exportable.
+    flavor may be set to 'old' to make all keys exportable by default,
+        which is required by the original transit logic.
     """
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
@@ -255,6 +273,10 @@ def task(ctx, config):
     ctx.vault.root_token = None
     ctx.vault.prefix = config[client].get('prefix')
     ctx.vault.engine = config[client].get('engine')
+    ctx.vault.keys = {}
+    q=config[client].get('flavor')
+    if q:
+        ctx.vault.flavor = q
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
