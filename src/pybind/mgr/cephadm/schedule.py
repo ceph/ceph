@@ -121,14 +121,6 @@ class HostAssignment(object):
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
-            # do not deploy ha-rgw on hosts that don't support virtual ips
-            if self.spec.service_type == 'ha-rgw' and self.filter_new_host:
-                old = candidates
-                candidates = [h for h in candidates if self.filter_new_host(h.hostname)]
-                for h in list(set(old) - set(candidates)):
-                    logger.info(
-                        f"Filtered out host {h.hostname} for ha-rgw: could not verify host allowed virtual ips")
-                logger.debug('Filtered %s down to %s' % (old, candidates))
             return candidates
 
         # sort candidates into existing/used slots that already have a
@@ -159,18 +151,6 @@ class HostAssignment(object):
         if need <= 0:
             del existing[count:]
             return existing
-
-        # exclusive to daemons from 'mon' and 'ha-rgw' services.
-        # Filter out hosts that don't have a public network assigned
-        # or don't allow virtual ips respectively
-        if self.filter_new_host:
-            old = others
-            others = [h for h in others if self.filter_new_host(h.hostname)]
-            for h in list(set(old) - set(others)):
-                if self.spec.service_type == 'ha-rgw':
-                    logger.info(
-                        f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
-            logger.debug('filtered %s down to %s' % (old, others))
 
         # ask the scheduler to select additional slots
         chosen = self.scheduler.place(others, need)
@@ -224,5 +204,14 @@ class HostAssignment(object):
         # gen seed off of self.spec to make shuffling deterministic
         seed = hash(self.spec.service_name())
         random.Random(seed).shuffle(hosts)
+
+        # apply filter (e.g., for ha-rgw
+        if self.filter_new_host:
+            old = hosts.copy()
+            hosts = [h for h in old if self.filter_new_host(h.hostname)]
+            for h in list(set(old) - set(hosts)):
+                logger.info(
+                    f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
+            logger.debug('Filtered %s down to %s' % (old, hosts))
 
         return hosts * self.spec.placement.get_num_per_host()
