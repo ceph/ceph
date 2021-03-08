@@ -77,6 +77,8 @@ def test_parse_placement_specs(test_input, expected):
         ("host? host*"),
         ('host=a max-per-host:0'),
         ('host=a max-per-host:-10'),
+        ('host1=a host2=b max-per-host:2'),
+        ('host1:10/8 max-per-host:2'),
     ]
 )
 def test_parse_placement_specs_raises(test_input):

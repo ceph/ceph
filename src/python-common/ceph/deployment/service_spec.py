@@ -298,6 +298,14 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError("num/count must be > 1")
         if self.max_per_host is not None and self.max_per_host < 1:
             raise ServiceSpecValidationError("max-per-host must be >= 1")
+        if (
+                self.max_per_host is not None
+                and self.hosts
+                and any([hs.network or hs.name for hs in self.hosts])
+        ):
+            raise ServiceSpecValidationError(
+                "max-per-host cannot be combined explicit placement with names or networks"
+            )
         if self.host_pattern and self.hosts:
             raise ServiceSpecValidationError('cannot combine host patterns and hosts')
         for h in self.hosts:
