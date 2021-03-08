@@ -3334,7 +3334,8 @@ paths:
         \ name of the host to be processed.\n        :param labels: List of labels.\n\
         \        "
       parameters:
-      - in: path
+      - description: Hostname
+        in: path
         name: hostname
         required: true
         schema:
@@ -3345,7 +3346,10 @@ paths:
             schema:
               properties:
                 labels:
-                  type: string
+                  description: Host Labels
+                  items:
+                    type: string
+                  type: array
               required:
               - labels
               type: object
@@ -3353,7 +3357,9 @@ paths:
         '200':
           content:
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                properties: {}
+                type: object
           description: Resource updated.
         '202':
           content:

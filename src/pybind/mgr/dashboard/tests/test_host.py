@@ -136,6 +136,10 @@ class HostControllerTest(ControllerTestCase):
             fake_client.hosts.remove_label.assert_called_once_with('node0', 'aaa')
             fake_client.hosts.add_label.assert_called_once_with('node0', 'ccc')
 
+            # return 400 if type other than List[str]
+            self._put('{}/node0'.format(self.URL_HOST), {'labels': 'ddd'})
+            self.assertStatus(400)
+
     @mock.patch('dashboard.controllers.host.time')
     def test_identify_device(self, mock_time):
         url = '{}/host-0/identify_device'.format(self.URL_HOST)
