@@ -128,6 +128,16 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs)
   return out;
 }
 
+Notify::Notify(crimson::net::ConnectionRef conn,
+               const notify_info_t& ninfo,
+               const uint64_t client_gid,
+               const uint64_t user_version)
+  : ninfo(ninfo),
+    conn(std::move(conn)),
+    client_gid(client_gid),
+    user_version(user_version)
+{}
+
 seastar::future<> Notify::remove_watcher(WatchRef watch)
 {
   if (discarded || complete) {
@@ -135,7 +145,14 @@ seastar::future<> Notify::remove_watcher(WatchRef watch)
   }
   [[maybe_unused]] const auto num_removed = watchers.erase(watch);
   assert(num_removed > 0);
-  return maybe_send_completion();
+  if (watchers.empty()) {
+    complete = true;
+    [[maybe_unused]] bool was_armed = timeout_timer.cancel();
+    assert(was_armed);
+    return send_completion();
+  } else {
+    return seastar::now();
+  }
 }
 
 
@@ -153,43 +170,38 @@ seastar::future<> Notify::complete_watcher(
   return remove_watcher(std::move(watch));
 }
 
-seastar::future<> Notify::maybe_send_completion(
+seastar::future<> Notify::send_completion(
   std::set<WatchRef> timedout_watchers)
 {
   logger().info("{} -- {} in progress watchers, {} timedout watchers {}",
                 __func__, watchers.size(), timedout_watchers.size());
-  if (watchers.empty() || !timedout_watchers.empty()) {
-    logger().debug("{} sending notify replies: {}", __func__, notify_replies);
-    complete = true;
-    timeout_timer.cancel();
+  logger().debug("{} sending notify replies: {}", __func__, notify_replies);
 
-    ceph::bufferlist empty;
-    auto reply = make_message<MWatchNotify>(
-      ninfo.cookie,
-      user_version,
-      ninfo.notify_id,
-      CEPH_WATCH_EVENT_NOTIFY_COMPLETE,
-      empty,
-      client_gid);
-    ceph::bufferlist reply_bl;
-    {
-      std::vector<std::pair<uint64_t,uint64_t>> missed;
-      missed.reserve(std::size(timedout_watchers));
-      boost::insert(
-	missed, std::begin(missed),
-	timedout_watchers | boost::adaptors::transformed([] (auto w) {
-          return std::make_pair(w->get_watcher_gid(), w->get_cookie());
-        }));
-      ceph::encode(notify_replies, reply_bl);
-      ceph::encode(missed, reply_bl);
-    }
-    reply->set_data(std::move(reply_bl));
-    if (!timedout_watchers.empty()) {
-      reply->return_code = -ETIMEDOUT;
-    }
-    return conn->send(std::move(reply));
+  ceph::bufferlist empty;
+  auto reply = make_message<MWatchNotify>(
+    ninfo.cookie,
+    user_version,
+    ninfo.notify_id,
+    CEPH_WATCH_EVENT_NOTIFY_COMPLETE,
+    empty,
+    client_gid);
+  ceph::bufferlist reply_bl;
+  {
+    std::vector<std::pair<uint64_t,uint64_t>> missed;
+    missed.reserve(std::size(timedout_watchers));
+    boost::insert(
+      missed, std::begin(missed),
+      timedout_watchers | boost::adaptors::transformed([] (auto w) {
+        return std::make_pair(w->get_watcher_gid(), w->get_cookie());
+      }));
+    ceph::encode(notify_replies, reply_bl);
+    ceph::encode(missed, reply_bl);
   }
-  return seastar::now();
+  reply->set_data(std::move(reply_bl));
+  if (!timedout_watchers.empty()) {
+    reply->return_code = -ETIMEDOUT;
+  }
+  return conn->send(std::move(reply));
 }
 
 void Notify::do_timeout()
@@ -201,7 +213,7 @@ void Notify::do_timeout()
   for (auto& watcher : watchers) {
     watcher->cancel_notify(ninfo.notify_id);
   }
-  std::ignore = maybe_send_completion(std::move(watchers));
+  std::ignore = send_completion(std::move(watchers));
   watchers.clear();
 }
 
