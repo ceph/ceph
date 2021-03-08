@@ -10,9 +10,9 @@ import time
 from gevent import sleep
 from gevent.greenlet import Greenlet
 from gevent.event import Event
-from teuthology import misc as teuthology
 
-from tasks import ceph_manager
+from teuthology.misc import deep_merge
+
 from tasks.cephfs.filesystem import MDSCluster, Filesystem, FSMissing
 from tasks.thrasher import Thrasher
 
@@ -372,15 +372,16 @@ def task(ctx, config):
     available options.
     """
 
-    mds_cluster = MDSCluster(ctx)
-
     if config is None:
         config = {}
     assert isinstance(config, dict), \
         'mds_thrash task only accepts a dict for configuration'
-    mdslist = list(teuthology.all_roles_of_type(ctx.cluster, 'mds'))
-    assert len(mdslist) > 1, \
-        'mds_thrash task requires at least 2 metadata servers'
+    overrides = self.ctx.config.get('overrides', {})
+    deep_merge(config, overrides.get('mds_thrash', {}))
+
+    cluster = config.get('cluster', 'ceph')
+    manager = ctx.managers[cluster]
+    mds_cluster = MDSCluster(ctx)
 
     # choose random seed
     if 'seed' in config:
@@ -389,11 +390,6 @@ def task(ctx, config):
         seed = int(time.time())
     log.info('mds thrasher using random seed: {seed}'.format(seed=seed))
     random.seed(seed)
-
-    (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.keys()
-    manager = ceph_manager.CephManager(
-        first, ctx=ctx, logger=log.getChild('ceph_manager'),
-    )
 
     # make sure everyone is in active, standby, or standby-replay
     log.info('Wait for all MDSs to reach steady state...')
