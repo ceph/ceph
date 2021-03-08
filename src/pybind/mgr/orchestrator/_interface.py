@@ -791,6 +791,8 @@ class DaemonDescription(object):
                  memory_request: Optional[int] = None,
                  memory_limit: Optional[int] = None,
                  service_name: Optional[str] = None,
+                 ports: Optional[List[int]] = None,
+                 ip: Optional[str] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -843,7 +845,17 @@ class DaemonDescription(object):
         self.memory_request: Optional[int] = memory_request
         self.memory_limit: Optional[int] = memory_limit
 
+        self.ports: Optional[List[int]] = ports
+        self.ip: Optional[str] = ip
+
         self.is_active = is_active
+
+    def get_port_summary(self) -> str:
+        if not self.ports:
+            return ''
+        return ' '.join([
+            f"{self.ip or '*'}:{p}" for p in self.ports
+        ])
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -951,6 +963,8 @@ class DaemonDescription(object):
         if self.daemon_type == 'osd':
             out['osdspec_affinity'] = self.osdspec_affinity
         out['is_active'] = self.is_active
+        out['ports'] = self.ports
+        out['ip'] = self.ip
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
