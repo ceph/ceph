@@ -281,6 +281,8 @@ class CephadmServe:
             sd.memory_limit = d.get('memory_limit')
             sd._service_name = d.get('service_name')
             sd.version = d.get('version')
+            sd.ports = d.get('ports')
+            sd.ip = d.get('ip')
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
