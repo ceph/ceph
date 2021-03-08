@@ -44,10 +44,6 @@ class SimpleScheduler(BaseScheduler):
         if not host_pool:
             return []
         host_pool = [x for x in host_pool]
-        # gen seed off of self.spec to make shuffling deterministic
-        seed = hash(self.spec.service_name())
-        # shuffle for pseudo random selection
-        random.Random(seed).shuffle(host_pool)
         return host_pool[:count]
 
 
@@ -201,29 +197,35 @@ class HostAssignment(object):
         return _remove_daemon_hosts
 
     def get_candidates(self) -> List[HostPlacementSpec]:
-        per_host = self.spec.placement.get_num_per_host()
-
         if self.spec.placement.hosts:
-            return self.spec.placement.hosts * per_host
-        if self.spec.placement.label:
-            return [
+            hosts = self.spec.placement.hosts
+        elif self.spec.placement.label:
+            hosts = [
                 HostPlacementSpec(x.hostname, '', '')
                 for x in self.hosts_by_label(self.spec.placement.label)
-            ] * per_host
-        if self.spec.placement.host_pattern:
-            return [
+            ]
+        elif self.spec.placement.host_pattern:
+            hosts = [
                 HostPlacementSpec(x, '', '')
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
-            ] * per_host
-        # If none of the above and also no <count>
-        if self.spec.placement.count is None:
+            ]
+        elif self.spec.placement.count is not None:
+            # backward compatibility: consider an empty placements to be the same pattern = *
+            hosts = [
+                HostPlacementSpec(x.hostname, '', '')
+                for x in self.hosts
+            ]
+        else:
+            # If none of the above and also no <count>
             raise OrchestratorValidationError(
                 "placement spec is empty: no hosts, no label, no pattern, no count")
-        # backward compatibility: consider an empty placements to be the same pattern = *
-        return [
-            HostPlacementSpec(x.hostname, '', '')
-            for x in self.hosts
-        ] * per_host
+
+        # shuffle for pseudo random selection
+        # gen seed off of self.spec to make shuffling deterministic
+        seed = hash(self.spec.service_name())
+        random.Random(seed).shuffle(hosts)
+
+        return hosts * self.spec.placement.get_num_per_host()
 
 
 def merge_hostspecs(
