@@ -63,6 +63,14 @@ changed using the following ``ceph.conf`` options::
 
 Please use ``ceph-dokan --help`` for a full list of arguments.
 
+The mount can be removed by either issuing ctrl-c or using the unmap command,
+like so::
+
+    ceph-dokan.exe unmap -l x
+
+Note that when unmapping Ceph filesystems, the exact same mountpoint argument
+must be used as when the mapping was created.
+
 Credentials
 -----------
 
