@@ -34,6 +34,7 @@ enum {
   MAY_CHGRP	= (1 << 5),
   MAY_SET_VXATTR = (1 << 6),
   MAY_SNAPSHOT	= (1 << 7),
+  MAY_FULL	= (1 << 8),
 };
 
 // what we can do
@@ -45,16 +46,22 @@ struct MDSCapSpec {
   static const unsigned SET_VXATTR	= (1 << 3);
   // if the capability permits mksnap/rmsnap
   static const unsigned SNAPSHOT	= (1 << 4);
+  // if the capability permits to bypass osd full check
+  static const unsigned FULL	        = (1 << 5);
 
   static const unsigned RW		= (READ|WRITE);
+  static const unsigned RWF		= (READ|WRITE|FULL);
   static const unsigned RWP		= (READ|WRITE|SET_VXATTR);
   static const unsigned RWS		= (READ|WRITE|SNAPSHOT);
+  static const unsigned RWFP		= (READ|WRITE|FULL|SET_VXATTR);
+  static const unsigned RWFS		= (READ|WRITE|FULL|SNAPSHOT);
   static const unsigned RWPS		= (READ|WRITE|SET_VXATTR|SNAPSHOT);
+  static const unsigned RWFPS		= (READ|WRITE|FULL|SET_VXATTR|SNAPSHOT);
 
   MDSCapSpec() = default;
   MDSCapSpec(unsigned _caps) : caps(_caps) {
     if (caps & ALL)
-      caps |= RWPS;
+      caps |= RWFPS;
   }
 
   bool allow_all() const {
@@ -82,6 +89,9 @@ struct MDSCapSpec {
   }
   bool allow_set_vxattr() const {
     return (caps & SET_VXATTR);
+  }
+  bool allow_full() const {
+    return (caps & FULL);
   }
 private:
   unsigned caps = 0;
