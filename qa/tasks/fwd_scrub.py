@@ -7,7 +7,8 @@ import contextlib
 from gevent import sleep, GreenletExit
 from gevent.greenlet import Greenlet
 from gevent.event import Event
-from teuthology import misc as teuthology
+
+from teuthology.misc import deep_merge
 
 from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
@@ -92,24 +93,21 @@ def task(ctx, config):
     Example config:
 
     - fwd_scrub:
+      cluster: ceph
       scrub_timeout: 300
       sleep_between_iterations: 1
     """
-
-    mds_cluster = MDSCluster(ctx)
 
     if config is None:
         config = {}
     assert isinstance(config, dict), \
         'fwd_scrub task only accepts a dict for configuration'
-    mdslist = list(teuthology.all_roles_of_type(ctx.cluster, 'mds'))
-    assert len(mdslist) > 0, \
-        'fwd_scrub task requires at least 1 metadata server'
+    overrides = self.ctx.config.get('overrides', {})
+    deep_merge(config, overrides.get('fwd_scrub', {}))
 
-    (first,) = ctx.cluster.only(f'mds.{mdslist[0]}').remotes.keys()
-    manager = ceph_manager.CephManager(
-        first, ctx=ctx, logger=log.getChild('ceph_manager'),
-    )
+    cluster = config.get('cluster', 'ceph')
+    manager = ctx.managers[cluster]
+    mds_cluster = MDSCluster(ctx)
 
     # make sure everyone is in active, standby, or standby-replay
     log.info('Wait for all MDSs to reach steady state...')
@@ -131,20 +129,17 @@ def task(ctx, config):
     manager.wait_for_clean()
     assert manager.is_clean()
 
-    if 'cluster' not in config:
-        config['cluster'] = 'ceph'
-
     for fs in status.get_filesystems():
         fwd_scrubber = ForwardScrubber(Filesystem(ctx, fscid=fs['id']),
                                        config['scrub_timeout'],
                                        config['sleep_between_iterations'])
         fwd_scrubber.start()
-        ctx.ceph[config['cluster']].thrashers.append(fwd_scrubber)
+        ctx.ceph[cluster].thrashers.append(fwd_scrubber)
 
     try:
         log.debug('Yielding')
         yield
     finally:
         log.info('joining ForwardScrubbers')
-        stop_all_fwd_scrubbers(ctx.ceph[config['cluster']].thrashers)
+        stop_all_fwd_scrubbers(ctx.ceph[cluster].thrashers)
         log.info('done joining')
