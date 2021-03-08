@@ -819,7 +819,16 @@ static NTSTATUS WinCephGetDiskFreeSpace(
   return 0;
 }
 
-int do_unmount() {
+int do_unmap(wstring& mountpoint) {
+  if (!DokanRemoveMountPoint(mountpoint.c_str())) {
+    wcerr << "Couldn't remove the specified CephFS mount: "
+          << mountpoint << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int cleanup_mount() {
   int ret = ceph_unmount(cmount);
   if (ret)
     derr << "Couldn't perform clean unmount. Error: " << ret << dendl;
@@ -831,7 +840,7 @@ int do_unmount() {
 static NTSTATUS WinCephUnmount(
   PDOKAN_FILE_INFO  DokanFileInfo)
 {
-  do_unmount();
+  cleanup_mount();
   // TODO: consider propagating unmount errors to Dokan.
   return 0;
 }
@@ -853,7 +862,7 @@ BOOL WINAPI ConsoleHandler(DWORD dwType)
 
 static void unmount_atexit(void)
 {
-  do_unmount();
+  cleanup_mount();
 }
 
 int do_map() {
@@ -1008,6 +1017,8 @@ int main(int argc, const char** argv)
   switch (cmd) {
     case Command::Map:
       return do_map();
+    case Command::Unmap:
+      return do_unmap(g_cfg->mountpoint);
     default:
       print_usage();
       break;

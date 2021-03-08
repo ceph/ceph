@@ -36,12 +36,13 @@ struct Config {
 
 extern Config *g_cfg;
 
-// TODO: list and unmap commands.
+// TODO: list and service commands.
 enum class Command {
   None,
   Version,
   Help,
   Map,
+  Unmap,
 };
 
 void print_usage();
