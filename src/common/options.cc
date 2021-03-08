@@ -9028,6 +9028,12 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_min(1)
     .set_description("failed directory retry interval for synchronization")
     .set_long_description("interval in seconds to retry synchronization for failed directories."),
+
+    Option("cephfs_mirror_restart_mirror_on_failure_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(20)
+    .set_min(0)
+    .set_description("interval to restart failed mirror instances")
+    .set_long_description("Interval in seconds to restart failed mirror instances. Setting to zero (0) disables restarting failed mirror instances."),
     });
 }
 
