@@ -33,7 +33,8 @@ class CephadmDaemonDeploySpec:
                  ceph_conf: str = '',
                  extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
-                 ports: Optional[List[int]] = None,):
+                 ip: Optional[str] = None,
+                 ports: Optional[List[int]] = None):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -58,6 +59,7 @@ class CephadmDaemonDeploySpec:
 
         # TCP ports used by the daemon
         self.ports: List[int] = ports or []
+        self.ip: Optional[str] = ip
 
         # values to be populated during generate_config calls
         # and then used in _run_cephadm
@@ -80,7 +82,9 @@ class CephadmDaemonDeploySpec:
             daemon_id=self.daemon_id,
             hostname=self.host,
             status=status,
-            status_desc=status_desc
+            status_desc=status_desc,
+            ip=self.ip,
+            ports=self.ports,
         )
 
 
@@ -100,17 +104,21 @@ class CephadmService(metaclass=ABCMeta):
     def allow_colo(self) -> bool:
         return False
 
-    def make_daemon_spec(self, host: str,
-                         daemon_id: str,
-                         network: str,
-                         spec: ServiceSpecs,
-                         daemon_type: Optional[str] = None,) -> CephadmDaemonDeploySpec:
+    def make_daemon_spec(
+            self, host: str,
+            daemon_id: str,
+            network: str,
+            spec: ServiceSpecs,
+            daemon_type: Optional[str] = None,
+            ports: Optional[List[int]] = None
+    ) -> CephadmDaemonDeploySpec:
         return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
             service_name=spec.service_name(),
             network=network,
-            daemon_type=daemon_type
+            daemon_type=daemon_type,
+            ports=ports,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:

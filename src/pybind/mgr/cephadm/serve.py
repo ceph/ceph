@@ -859,6 +859,8 @@ class CephadmServe:
                         '--name', daemon_spec.name(),
                         '--meta-json', json.dumps({
                             'service_name': daemon_spec.service_name,
+                            'ports': daemon_spec.ports,
+                            'ip': daemon_spec.ip,
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
