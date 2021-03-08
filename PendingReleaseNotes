@@ -268,3 +268,12 @@
 * ``ceph pg #.# list_unfound`` output has been enhanced to provide
   might_have_unfound information which indicates which OSDs may
   contain the unfound objects.
+
+* The ``ceph orch apply rgw`` syntax and behavior have changed.  RGW
+  services can now be arbitrarily named (it is no longer forced to be
+  `realm.zone`).  The ``--rgw-realm=...`` and ``--rgw-zone=...``
+  arguments are now optional, which means that if they are omitted, a
+  vanilla single-cluster RGW will be deployed.  When the realm and
+  zone are provided, the user is now responsible for setting up the
+  multisite configuration beforehand--cephadm no longer attempts to
+  create missing realms or zones.
