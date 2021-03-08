@@ -41,7 +41,7 @@ static std::map<int, int> lock_refs;
 static std::bitset<MAX_LOCKS> free_ids; // bit set = free
 static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
 static std::vector<std::bitset<MAX_LOCKS>> follows(MAX_LOCKS); // follows[a][b] means b taken after a
-static ceph::BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
+static std::vector<std::array<ceph::BackTrace *, MAX_LOCKS>> follows_bt(MAX_LOCKS);
 unsigned current_maxid;
 int last_freed_id = -1;
 static bool free_ids_inited;
@@ -94,10 +94,10 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     held.clear();
     lock_names.clear();
     lock_ids.clear();
-    // FIPS zeroization audit 20191115: these memsets are not security related.
     std::for_each(follows.begin(), std::next(follows.begin(), current_maxid),
                   [](auto& follow) { follow.reset(); });
-    memset((void*)&follows_bt[0][0], 0, sizeof(ceph::BackTrace*) * current_maxid * MAX_LOCKS);
+    std::for_each(follows_bt.begin(), std::next(follows_bt.begin(), current_maxid),
+                  [](auto& follow_bt) { follow_bt = {}; });
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
