@@ -30,11 +30,8 @@ public:
   ~CephxServiceHandler() override {}
   
   int start_session(const EntityName& name,
-		    size_t connection_secret_required_length,
 		    ceph::buffer::list *result_bl,
-		    AuthCapsInfo *caps,
-		    CryptoKey *session_key,
-		    std::string *connection_secret) override;
+		    AuthCapsInfo *caps) override;
   int handle_request(
     ceph::buffer::list::const_iterator& indata,
     size_t connection_secret_required_length,

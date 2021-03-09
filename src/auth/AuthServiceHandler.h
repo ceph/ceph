@@ -37,11 +37,8 @@ public:
   virtual ~AuthServiceHandler() { }
 
   virtual int start_session(const EntityName& name,
-			    size_t connection_secret_required_length,
 			    ceph::buffer::list *result,
-			    AuthCapsInfo *caps,
-			    CryptoKey *session_key,
-			    std::string *connection_secret) = 0;
+			    AuthCapsInfo *caps) = 0;
   virtual int handle_request(ceph::buffer::list::const_iterator& indata,
 			     size_t connection_secret_required_length,
 			     ceph::buffer::list *result,
