@@ -593,11 +593,15 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
+    PROTOCOLS = ['3', '4', 'NFS3', 'NFS4', 'V3', 'V4', 'NFSv3', 'NFSv4', '9P']
+    PROTOCOLS_DEFAULT = ['NFSv4']
+
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
                  pool: Optional[str] = None,
                  namespace: Optional[str] = None,
+                 protocols: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -615,12 +619,20 @@ class NFSServiceSpec(ServiceSpec):
         #: RADOS namespace where NFS client recovery data is stored in the pool.
         self.namespace = namespace
 
+        # Supported NFS Protocols
+        self.protocols: List[str] = protocols if protocols else self.PROTOCOLS_DEFAULT
+
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
 
         if not self.pool:
             raise ServiceSpecValidationError(
                 'Cannot add NFS: No Pool specified')
+
+        if self.protocols:
+            ukn_protos = set(self.protocols).difference(self.PROTOCOLS)
+            if ukn_protos:
+                raise ServiceSpecValidationError(f'Unknown protocols: {ukn_protos}')
 
     def rados_config_name(self):
         # type: () -> str

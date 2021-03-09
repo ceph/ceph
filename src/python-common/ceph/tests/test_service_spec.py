@@ -263,3 +263,38 @@ def test_service_name(s_type, s_id, s_name):
     spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
     spec.validate()
     assert spec.service_name() == s_name
+
+@pytest.mark.parametrize(
+    "protocols_in,protocols_out",
+    [
+        ([], ['NFSv4']),
+        (['NFSv3'], ['NFSv3']),
+        (['NFSv3', '4'], ['NFSv3', '4']),
+        (['3', '4', '9P'], ['3', '4', '9P']),
+    ])
+def test_nfs_protocols(protocols_in, protocols_out):
+    dict_spec = _get_dict_spec('nfs', 'foo')
+    dict_spec['protocols'] = protocols_in
+
+    spec = ServiceSpec.from_json(dict_spec)
+    spec.validate()
+
+    assert set(spec.protocols) == set(protocols_out)
+
+@pytest.mark.parametrize(
+    "protocols_in,protocols_out",
+    [
+        (['3', '4', 'iscsi'], ['3', '4']),
+        (['rbd', '3', '4', 'iscsi'], ['3', '4']),
+    ])
+def test_nfs_protocols_raises(protocols_in, protocols_out):
+    dict_spec = _get_dict_spec('nfs', 'foo')
+    dict_spec['protocols'] = protocols_in
+
+    with pytest.raises(ServiceSpecValidationError) as e:
+        spec = ServiceSpec.from_json(dict_spec)
+        spec.validate()
+
+    proto_diff = set(protocols_in).symmetric_difference(protocols_out)
+    for proto in proto_diff:
+        assert proto in str(e.value)

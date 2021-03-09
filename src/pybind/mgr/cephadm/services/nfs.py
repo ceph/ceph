@@ -55,6 +55,7 @@ class NFSService(CephService):
                            pool=spec.pool,
                            namespace=spec.namespace if spec.namespace else '',
                            rgw_user=rgw_user,
+                           protocols=', '.join(spec.protocols),
                            url=spec.rados_config_location())
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
