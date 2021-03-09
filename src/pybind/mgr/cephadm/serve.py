@@ -852,15 +852,21 @@ class CephadmServe:
                     ] + daemon_spec.extra_args,
                     stdin=json.dumps(daemon_spec.final_config),
                     image=image)
-                if not code and daemon_spec.host in self.mgr.cache.daemons:
-                    # prime cached service state with what we (should have)
-                    # just created
-                    sd = daemon_spec.to_daemon_description(
-                        DaemonDescriptionStatus.running, 'starting')
-                    self.mgr.cache.add_daemon(daemon_spec.host, sd)
-                    if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
-                        self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
-                self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
+
+                # refresh daemon state?  (ceph daemon reconfig does not need it)
+                if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
+                    if not code and daemon_spec.host in self.mgr.cache.daemons:
+                        # prime cached service state with what we (should have)
+                        # just created
+                        sd = daemon_spec.to_daemon_description(
+                            DaemonDescriptionStatus.running, 'starting')
+                        self.mgr.cache.add_daemon(daemon_spec.host, sd)
+                        if daemon_spec.daemon_type in [
+                            'grafana', 'iscsi', 'prometheus', 'alertmanager'
+                        ]:
+                            self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
+                    self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
+
                 self.mgr.cache.update_daemon_config_deps(
                     daemon_spec.host, daemon_spec.name(), daemon_spec.deps, start_time)
                 self.mgr.cache.save_host(daemon_spec.host)
