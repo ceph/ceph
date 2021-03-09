@@ -12,7 +12,7 @@
  */
 
 #include <Python.h>
-
+#include <fmt/format.h>
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/errno.h"
@@ -530,18 +530,15 @@ void Mgr::handle_mon_map()
     }
   });
   for (const auto& name : names_exist) {
-     const auto k = DaemonKey{"osd", name};
-     if (daemon_state.is_updating(k)) {
-       continue;
-     }
-     auto c = new MetadataUpdate(daemon_state, k);
-     std::ostringstream cmd;
-     cmd << "{\"prefix\": \"mon metadata\", \"id\": \""
-    << name << "\"}";
-     monc->start_mon_command(
-    {cmd.str()},
-    {}, &c->outbl, &c->outs, c);
-   }
+    const auto k = DaemonKey{"mon", name};
+    if (daemon_state.is_updating(k)) {
+      continue;
+    }
+    auto c = new MetadataUpdate(daemon_state, k);
+    const char* cmd = R"({{"prefix": "mon metadata", "id": "{}"}})";
+    monc->start_mon_command({fmt::format(cmd, name)}, {},
+	        &c->outbl, &c->outs, c);
+  }
   daemon_state.cull("mon", names_exist);
 }
 
