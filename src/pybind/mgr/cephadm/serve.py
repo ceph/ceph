@@ -519,6 +519,7 @@ class CephadmServe:
             # return a solid indication
             return False
 
+        svc = self.mgr.cephadm_services[service_type]
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
 
         public_network = None
@@ -590,17 +591,16 @@ class CephadmServe:
                                                      forcename=name)
 
                 if not did_config:
-                    self.mgr.cephadm_services[service_type].config(spec, daemon_id)
+                    svc.config(spec, daemon_id)
                     did_config = True
 
-                daemon_spec = self.mgr.cephadm_services[service_type].make_daemon_spec(
+                daemon_spec = svc.make_daemon_spec(
                     host, daemon_id, network, spec, daemon_type=daemon_type)
                 self.log.debug('Placing %s.%s on host %s' % (
                     daemon_type, daemon_id, host))
 
                 try:
-                    daemon_spec = self.mgr.cephadm_services[service_type].prepare_create(
-                        daemon_spec)
+                    daemon_spec = svc.prepare_create(daemon_spec)
                     self._create_daemon(daemon_spec)
                     r = True
                 except (RuntimeError, OrchestratorError) as e:
@@ -626,8 +626,7 @@ class CephadmServe:
             daemon_ids = [d.daemon_id for d in remove_daemons]
             assert None not in daemon_ids
             # setting force flag retains previous behavior
-            r = self.mgr.cephadm_services[service_type].ok_to_stop(
-                cast(List[str], daemon_ids), force=True)
+            r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
             return not r.retval
 
         while remove_daemons and not _ok_to_stop(remove_daemons):
