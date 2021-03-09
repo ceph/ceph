@@ -353,12 +353,12 @@ class NodeAssignmentTest(NamedTuple):
         ),
         # all_hosts + count_per_host
         NodeAssignmentTest(
-            'mgr',
+            'mds',
             PlacementSpec(host_pattern='*', count_per_host=2),
             'host1 host2 host3'.split(),
             [
-                DaemonDescription('mgr', 'a', 'host1'),
-                DaemonDescription('mgr', 'b', 'host2'),
+                DaemonDescription('mds', 'a', 'host1'),
+                DaemonDescription('mds', 'b', 'host2'),
             ],
             ['host1', 'host2', 'host3', 'host1', 'host2', 'host3']
         ),
@@ -433,7 +433,7 @@ class NodeAssignmentTest(NamedTuple):
         ),
         # label only + count_per_hst
         NodeAssignmentTest(
-            'mgr',
+            'mds',
             PlacementSpec(label='foo', count_per_host=3),
             'host1 host2 host3'.split(),
             [],
@@ -450,17 +450,21 @@ class NodeAssignmentTest(NamedTuple):
         ),
         # host_pattern + count_per_host
         NodeAssignmentTest(
-            'mgr',
-            PlacementSpec(host_pattern='mgr*', count_per_host=3),
-            'mgrhost1 mgrhost2 datahost'.split(),
+            'mds',
+            PlacementSpec(host_pattern='mds*', count_per_host=3),
+            'mdshost1 mdshost2 datahost'.split(),
             [],
-            ['mgrhost1', 'mgrhost2', 'mgrhost1', 'mgrhost2', 'mgrhost1', 'mgrhost2']
+            ['mdshost1', 'mdshost2', 'mdshost1', 'mdshost2', 'mdshost1', 'mdshost2']
         ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
     service_id = None
+    allow_colo = False
     if service_type == 'rgw':
         service_id = 'realm.zone'
+    elif service_type == 'mds':
+        service_id = 'myfs'
+        allow_colo = True
 
     spec = ServiceSpec(service_type=service_type,
                        service_id=service_id,
@@ -469,7 +473,8 @@ def test_node_assignment(service_type, placement, hosts, daemons, expected):
     hosts = HostAssignment(
         spec=spec,
         hosts=[HostSpec(h, labels=['foo']) for h in hosts],
-        daemons=daemons
+        daemons=daemons,
+        allow_colo=allow_colo
     ).place()
     assert sorted([h.hostname for h in hosts]) == sorted(expected)
 

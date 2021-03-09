@@ -97,6 +97,9 @@ class CephadmService(metaclass=ABCMeta):
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
+    def allow_colo(self) -> bool:
+        return False
+
     def make_daemon_spec(self, host: str,
                          daemon_id: str,
                          network: str,
@@ -601,6 +604,9 @@ class MgrService(CephService):
 class MdsService(CephService):
     TYPE = 'mds'
 
+    def allow_colo(self) -> bool:
+        return True
+
     def config(self, spec: ServiceSpec, daemon_id: str) -> None:
         assert self.TYPE == spec.service_type
         assert spec.service_id
@@ -778,6 +784,9 @@ class RgwService(CephService):
 
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
+
+    def allow_colo(self) -> bool:
+        return True
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
