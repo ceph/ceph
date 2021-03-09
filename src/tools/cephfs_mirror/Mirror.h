@@ -13,6 +13,7 @@
 #include "mds/FSMap.h"
 #include "ClusterWatcher.h"
 #include "FSMirror.h"
+#include "ServiceDaemon.h"
 #include "Types.h"
 
 class Messenger;
@@ -100,6 +101,8 @@ private:
   std::map<Filesystem, MirrorAction> m_mirror_actions;
 
   utime_t m_last_blocklist_check;
+  RadosRef m_local;
+  std::unique_ptr<ServiceDaemon> m_service_daemon;
 
   int init_mon_client();
 

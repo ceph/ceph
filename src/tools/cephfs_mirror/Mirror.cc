@@ -10,12 +10,10 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "include/types.h"
-#include "json_spirit/json_spirit.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
 #include "aio_utils.h"
 #include "Mirror.h"
-
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
@@ -26,6 +24,8 @@ namespace cephfs {
 namespace mirror {
 
 namespace {
+
+const std::string SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY("mirroring_failed");
 
 class SafeTimerSingleton : public SafeTimer {
 public:
@@ -195,7 +195,8 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args,
     m_monc(monc),
     m_msgr(msgr),
     m_listener(this),
-    m_last_blocklist_check(ceph_clock_now()) {
+    m_last_blocklist_check(ceph_clock_now()),
+    m_local(new librados::Rados()) {
   auto thread_pool = &(cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
                          "cephfs::mirror::thread_pool", false, cct));
   auto safe_timer = &(cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
@@ -252,7 +253,27 @@ int Mirror::init(std::string &reason) {
   dout(20) << dendl;
 
   std::scoped_lock locker(m_lock);
-  int r = init_mon_client();
+
+  int r = m_local->init_with_context(m_cct);
+  if (r < 0) {
+    derr << ": could not initialize rados handler" << dendl;
+    return r;
+  }
+
+  r = m_local->connect();
+  if (r < 0) {
+    derr << ": error connecting to local cluster" << dendl;
+    return r;
+  }
+
+  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local);
+  r = m_service_daemon->init();
+  if (r < 0) {
+    derr << ": error registering service daemon: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = init_mon_client();
   if (r < 0) {
     return r;
   }
@@ -288,6 +309,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
   if (r < 0) {
     derr << ": failed to initialize FSMirror for filesystem=" << filesystem
          << ": " << cpp_strerror(r) << dendl;
+    m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
+                                                 SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
+                                                 true);
     return;
   }
 
@@ -310,6 +334,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
   if (r < 0) {
     derr << ": failed to initialize FSMirror for filesystem=" << filesystem
          << ": " << cpp_strerror(r) << dendl;
+    m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
+                                                 SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
+                                                 true);
     return;
   }
 
@@ -334,7 +361,7 @@ void Mirror::enable_mirroring(const Filesystem &filesystem, uint64_t local_pool_
 
   mirror_action.action_in_progress = true;
   mirror_action.fs_mirror = std::make_unique<FSMirror>(m_cct, filesystem, local_pool_id,
-                                                       m_args, m_work_queue);
+                                                       m_service_daemon.get(), m_args, m_work_queue);
   mirror_action.fs_mirror->init(new C_AsyncCallback<ContextWQ>(m_work_queue, on_finish));
 }
 
@@ -502,7 +529,7 @@ void Mirror::run() {
   dout(20) << dendl;
 
   std::unique_lock locker(m_lock);
-  m_cluster_watcher.reset(new ClusterWatcher(m_cct, m_monc, m_listener));
+  m_cluster_watcher.reset(new ClusterWatcher(m_cct, m_monc, m_service_daemon.get(), m_listener));
   m_msgr->add_dispatcher_tail(m_cluster_watcher.get());
 
   m_cluster_watcher->init();
