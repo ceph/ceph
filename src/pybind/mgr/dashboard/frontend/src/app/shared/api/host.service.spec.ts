@@ -44,10 +44,15 @@ describe('HostService', () => {
   });
 
   it('should update host', fakeAsync(() => {
-    service.update('mon0', ['foo', 'bar']).subscribe();
+    service.update('mon0', true, ['foo', 'bar']).subscribe();
     const req = httpTesting.expectOne('api/host/mon0');
     expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual({ labels: ['foo', 'bar'] });
+    expect(req.request.body).toEqual({
+      force: false,
+      labels: ['foo', 'bar'],
+      maintenance: false,
+      update_labels: true
+    });
   }));
 
   it('should call getInventory', () => {
