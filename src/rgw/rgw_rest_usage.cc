@@ -18,12 +18,12 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_READ);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_usage"; }
 };
 
-void RGWOp_Usage_Get::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWOp_Usage_Get::execute(optional_yield y) {
   map<std::string, bool> categories;
 
   string uid_str;
@@ -69,12 +69,12 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_WRITE);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "trim_usage"; }
 };
 
-void RGWOp_Usage_Delete::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWOp_Usage_Delete::execute(optional_yield y) {
   string uid_str;
   string bucket_name;
   uint64_t start, end;

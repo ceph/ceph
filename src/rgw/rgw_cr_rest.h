@@ -194,7 +194,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
 
     int ret = op->aio_send(dpp, input_bl);
     if (ret < 0) {
-      lsubdout(cct, rgw, 0) << "ERROR: failed to send request" << dendl;
+      ldpp_subdout(dpp, rgw, 0) << "ERROR: failed to send request" << dendl;
       op->put();
       return ret;
     }
@@ -351,7 +351,7 @@ public:
 
     int ret = op->aio_send(dpp, bl);
     if (ret < 0) {
-      lsubdout(cct, rgw, 0) << "ERROR: failed to send DELETE request" << dendl;
+      ldpp_subdout(dpp, rgw, 0) << "ERROR: failed to send DELETE request" << dendl;
       op->put();
       return ret;
     }

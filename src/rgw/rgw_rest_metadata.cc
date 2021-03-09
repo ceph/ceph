@@ -49,7 +49,7 @@ static inline void frame_metadata_key(req_state *s, string& out) {
   }
 }
 
-void RGWOp_Metadata_Get::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWOp_Metadata_Get::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
@@ -66,16 +66,16 @@ void RGWOp_Metadata_Get::execute(const DoutPrefixProvider *dpp, optional_yield y
   op_ret = 0;
 }
 
-void RGWOp_Metadata_Get_Myself::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWOp_Metadata_Get_Myself::execute(optional_yield y) {
   string owner_id;
 
   owner_id = s->owner.get_id().to_str();
   s->info.args.append("key", owner_id);
 
-  return RGWOp_Metadata_Get::execute(dpp, y);
+  return RGWOp_Metadata_Get::execute(y);
 }
 
-void RGWOp_Metadata_List::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWOp_Metadata_List::execute(optional_yield y) {
   string marker;
   ldpp_dout(s, 16) << __func__
 		    << " raw marker " << s->info.args.get("marker")
@@ -232,7 +232,7 @@ static bool string_to_sync_type(const string& sync_string,
   return true;
 }
 
-void RGWOp_Metadata_Put::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWOp_Metadata_Put::execute(optional_yield y) {
   bufferlist bl;
   string metadata_key;
 
@@ -288,7 +288,7 @@ void RGWOp_Metadata_Put::send_response() {
   end_header(s);
 }
 
-void RGWOp_Metadata_Delete::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWOp_Metadata_Delete::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);

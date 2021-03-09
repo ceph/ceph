@@ -915,7 +915,8 @@ class RGWRadosBILogTrimCR : public RGWSimpleCoroutine {
   std::string end_marker;
   boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
  public:
-  RGWRadosBILogTrimCR(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
+  RGWRadosBILogTrimCR(const DoutPrefixProvider *dpp,
+                      rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
                       int shard_id, const std::string& start_marker,
                       const std::string& end_marker);
 

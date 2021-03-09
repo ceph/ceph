@@ -26,12 +26,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "list_user"; }
 };
 
-void RGWOp_User_List::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_User_List::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state(store);
 
@@ -54,12 +54,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_user_info"; }
 };
 
-void RGWOp_User_Info::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_User_Info::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state(store);
 
@@ -101,12 +101,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "create_user"; }
 };
 
-void RGWOp_User_Create::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_User_Create::execute(optional_yield y)
 {
   std::string uid_str;
   std::string display_name;
@@ -242,12 +242,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "modify_user"; }
 };
 
-void RGWOp_User_Modify::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_User_Modify::execute(optional_yield y)
 {
   std::string uid_str;
   std::string display_name;
@@ -384,12 +384,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_user"; }
 };
 
-void RGWOp_User_Remove::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_User_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   bool purge_data;
@@ -425,12 +425,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "create_subuser"; }
 };
 
-void RGWOp_Subuser_Create::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Subuser_Create::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -501,12 +501,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "modify_subuser"; }
 };
 
-void RGWOp_Subuser_Modify::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Subuser_Modify::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -568,12 +568,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_subuser"; }
 };
 
-void RGWOp_Subuser_Remove::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Subuser_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -611,12 +611,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "create_access_key"; }
 };
 
-void RGWOp_Key_Create::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Key_Create::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -667,12 +667,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_access_key"; }
 };
 
-void RGWOp_Key_Remove::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Key_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -714,12 +714,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "add_user_caps"; }
 };
 
-void RGWOp_Caps_Add::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Caps_Add::execute(optional_yield y)
 {
   std::string uid_str;
   std::string caps;
@@ -752,12 +752,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_user_caps"; }
 };
 
-void RGWOp_Caps_Remove::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Caps_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   std::string caps;
@@ -809,13 +809,13 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_quota_info"; }
 };
 
 
-void RGWOp_Quota_Info::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Quota_Info::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state(store);
 
@@ -881,7 +881,7 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "set_quota_info"; }
 };
@@ -934,7 +934,7 @@ public:
  *
  */
 
-void RGWOp_Quota_Set::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Quota_Set::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state(store);
 
@@ -956,7 +956,7 @@ void RGWOp_Quota_Set::execute(const DoutPrefixProvider *dpp, optional_yield y)
   bool set_user = set_all || (quota_type == "user");
 
   if (!(set_all || set_bucket || set_user)) {
-    ldout(store->ctx(), 20) << "invalid quota type" << dendl;
+    ldpp_dout(this, 20) << "invalid quota type" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -971,7 +971,7 @@ void RGWOp_Quota_Set::execute(const DoutPrefixProvider *dpp, optional_yield y)
   }
 
   if (use_http_params && set_all) {
-    ldpp_dout(dpp, 20) << "quota type was not specified, can't set all quotas via http headers" << dendl;
+    ldpp_dout(this, 20) << "quota type was not specified, can't set all quotas via http headers" << dendl;
     op_ret = -EINVAL;
     return;
   }

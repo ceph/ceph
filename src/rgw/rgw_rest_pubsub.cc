@@ -483,10 +483,10 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
 
 public:
   const char* name() const override { return "pubsub_notification_create_s3"; }
-  void execute(const DoutPrefixProvider *dpp, optional_yield) override;
+  void execute(optional_yield) override;
 };
 
-void RGWPSCreateNotif_ObjStore_S3::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
   op_ret = get_params_from_body();
   if (op_ret < 0) {
     return;
@@ -625,11 +625,11 @@ private:
   }
 
 public:
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
   const char* name() const override { return "pubsub_notification_delete_s3"; }
 };
 
-void RGWPSDeleteNotif_ObjStore_S3::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -716,7 +716,7 @@ private:
   }
 
 public:
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
   void send_response() override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
@@ -733,7 +733,7 @@ public:
   const char* name() const override { return "pubsub_notifications_get_s3"; }
 };
 
-void RGWPSListNotifs_ObjStore_S3::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
   ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   ceph_assert(b);
@@ -742,7 +742,7 @@ void RGWPSListNotifs_ObjStore_S3::execute(const DoutPrefixProvider *dpp, optiona
   rgw_pubsub_bucket_topics bucket_topics;
   op_ret = b->get_topics(&bucket_topics);
   if (op_ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
     return;
   }
   if (!notif_name.empty()) {
@@ -753,7 +753,7 @@ void RGWPSListNotifs_ObjStore_S3::execute(const DoutPrefixProvider *dpp, optiona
       return;
     }
     op_ret = -ENOENT;
-    ldpp_dout(dpp, 1) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
     return;
   }
   // loop through all topics of the bucket

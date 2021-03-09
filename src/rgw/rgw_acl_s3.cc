@@ -493,7 +493,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
 
   std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(owner->get_id());
   if (user->load_by_id(dpp, null_yield) < 0) {
-    ldout(cct, 10) << "owner info does not exist" << dendl;
+    ldpp_dout(dpp, 10) << "owner info does not exist" << dendl;
     err_msg = "Invalid id";
     return -EINVAL;
   }
@@ -525,9 +525,9 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
           return -EINVAL;
         }
         email = u.id;
-        ldout(cct, 10) << "grant user email=" << email << dendl;
+        ldpp_dout(dpp, 10) << "grant user email=" << email << dendl;
 	if (store->get_user_by_email(dpp, email, null_yield, &user) < 0) {
-          ldout(cct, 10) << "grant user email not found or other error" << dendl;
+          ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
           err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
         }
@@ -547,7 +547,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
         if (grant_user.user_id.empty()) {
 	  user = store->get_user(uid);
 	  if (user->load_by_id(dpp, null_yield) < 0) {
-	    ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
+	    ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
 	    err_msg = "Invalid id";
 	    return -EINVAL;
 	  } else {
@@ -559,7 +559,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
 	grant_ok = true;
 	rgw_user new_id;
 	new_grant.get_id(new_id);
-	ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+	ldpp_dout(dpp, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
       }
       break;
     case ACL_TYPE_GROUP:

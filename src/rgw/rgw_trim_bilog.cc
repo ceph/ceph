@@ -381,15 +381,17 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
 /// concurrent requests
 class BucketTrimShardCollectCR : public RGWShardCollectCR {
   static constexpr int MAX_CONCURRENT_SHARDS = 16;
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *const store;
   const RGWBucketInfo& bucket_info;
   const std::vector<std::string>& markers; //< shard markers to trim
   size_t i{0}; //< index of current shard marker
  public:
-  BucketTrimShardCollectCR(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
+  BucketTrimShardCollectCR(const DoutPrefixProvider *dpp,
+                           rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
                            const std::vector<std::string>& markers)
     : RGWShardCollectCR(store->ctx(), MAX_CONCURRENT_SHARDS),
-      store(store), bucket_info(bucket_info), markers(markers)
+      dpp(dpp), store(store), bucket_info(bucket_info), markers(markers)
   {}
   bool spawn_next() override;
 };
@@ -402,9 +404,9 @@ bool BucketTrimShardCollectCR::spawn_next()
 
     // skip empty markers
     if (!marker.empty()) {
-      ldout(cct, 10) << "trimming bilog shard " << shard_id
+      ldpp_dout(dpp, 10) << "trimming bilog shard " << shard_id
           << " of " << bucket_info.bucket << " at marker " << marker << dendl;
-      spawn(new RGWRadosBILogTrimCR(store, bucket_info, shard_id,
+      spawn(new RGWRadosBILogTrimCR(dpp, store, bucket_info, shard_id,
                                     std::string{}, marker),
             false);
       return true;
@@ -512,7 +514,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
         auto ziter = zone_conn_map.find(zid);
         if (ziter == zone_conn_map.end()) {
-          ldout(cct, 0) << "WARNING: no connection to zone " << zid << ", can't trim bucket: " << bucket << dendl;
+          ldpp_dout(dpp, 0) << "WARNING: no connection to zone " << zid << ", can't trim bucket: " << bucket << dendl;
           return set_cr_error(-ECANCELED);
         }
         using StatusCR = RGWReadRESTResourceCR<StatusShards>;
@@ -540,21 +542,21 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
     retcode = take_min_status(cct, peer_status.begin(), peer_status.end(),
                               &min_markers);
     if (retcode < 0) {
-      ldout(cct, 4) << "failed to correlate bucket sync status from peers" << dendl;
+      ldpp_dout(dpp, 4) << "failed to correlate bucket sync status from peers" << dendl;
       return set_cr_error(retcode);
     }
 
     // trim shards with a ShardCollectCR
-    ldout(cct, 10) << "trimming bilogs for bucket=" << pbucket_info->bucket
+    ldpp_dout(dpp, 10) << "trimming bilogs for bucket=" << pbucket_info->bucket
        << " markers=" << min_markers << ", shards=" << min_markers.size() << dendl;
     set_status("trimming bilog shards");
-    yield call(new BucketTrimShardCollectCR(store, *pbucket_info, min_markers));
+    yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, min_markers));
     // ENODATA just means there were no keys to trim
     if (retcode == -ENODATA) {
       retcode = 0;
     }
     if (retcode < 0) {
-      ldout(cct, 4) << "failed to trim bilog shards: "
+      ldpp_dout(dpp, 4) << "failed to trim bilog shards: "
           << cpp_strerror(retcode) << dendl;
       return set_cr_error(retcode);
     }

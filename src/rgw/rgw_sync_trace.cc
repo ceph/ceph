@@ -15,7 +15,6 @@
 
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw_sync
 
 RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, uint64_t _handle,
                                    const RGWSyncTraceNodeRef& _parent,

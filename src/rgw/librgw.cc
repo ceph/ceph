@@ -317,7 +317,7 @@ namespace rgw {
 
       ldpp_dout(s, 2) << "executing" << dendl;
       op->pre_exec();
-      op->execute(s, null_yield);
+      op->execute(null_yield);
       op->complete();
 
     } catch (const ceph::crypto::DigestException& e) {

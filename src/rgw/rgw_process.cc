@@ -164,7 +164,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   op->pre_exec();
 
   ldpp_dout(op, 2) << "executing" << dendl;
-  op->execute(op, y);
+  op->execute(y);
 
   ldpp_dout(op, 2) << "completing" << dendl;
   op->complete();

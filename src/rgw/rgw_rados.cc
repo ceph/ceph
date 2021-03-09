@@ -2693,7 +2693,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
   return 0;
 }
 
-int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info,
+int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
                                 const rgw_obj& obj)
 {
   bucket = bucket_info.bucket;
@@ -2703,25 +2703,25 @@ int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info,
 							 &bucket_obj,
 							 &shard_id);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
   }
-  ldout(store->ctx(), 20) << " bucket index object: " << bucket_obj << dendl;
+  ldpp_dout(dpp, 20) << " bucket index object: " << bucket_obj << dendl;
 
   return 0;
 }
 
-int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int sid)
+int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int sid)
 {
   bucket = bucket_info.bucket;
   shard_id = sid;
 
   int ret = store->svc.bi_rados->open_bucket_index_shard(bucket_info, shard_id, idx_layout, &bucket_obj);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
   }
-  ldout(store->ctx(), 20) << " bucket index object: " << bucket_obj << dendl;
+  ldpp_dout(dpp, 20) << " bucket index object: " << bucket_obj << dendl;
 
   return 0;
 }
@@ -5046,7 +5046,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     } else {
       rgw_bucket_dir_entry dirent;
 
-      int r = store->bi_get_instance(target->get_bucket_info(), obj, &dirent);
+      int r = store->bi_get_instance(dpp, target->get_bucket_info(), obj, &dirent);
       if (r < 0) {
         return r;
       }
@@ -6949,7 +6949,7 @@ int RGWRados::repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, cons
 {
   // fetch the current olh entry from the bucket index
   rgw_bucket_olh_entry olh;
-  int r = bi_get_olh(bucket_info, obj, &olh);
+  int r = bi_get_olh(dpp, bucket_info, obj, &olh);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "repair_olh failed to read olh entry for " << obj << dendl;
     return r;
@@ -8004,13 +8004,13 @@ string RGWRados::list_raw_objs_get_cursor(RGWListRawObjsCtx& ctx)
   return pool_iterate_get_cursor(ctx.iter_ctx);
 }
 
-int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+int RGWRados::bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                               rgw_bucket_dir_entry *dirent)
 {
   rgw_cls_bi_entry bi_entry;
-  int r = bi_get(bucket_info, obj, BIIndexType::Instance, &bi_entry);
+  int r = bi_get(dpp, bucket_info, obj, BIIndexType::Instance, &bi_entry);
   if (r < 0 && r != -ENOENT) {
-    ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: bi_get() returned r=" << r << dendl;
   }
   if (r < 0) {
     return r;
@@ -8019,20 +8019,20 @@ int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& o
   try {
     decode(*dirent, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode bi_entry()" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode bi_entry()" << dendl;
     return -EIO;
   }
 
   return 0;
 }
 
-int RGWRados::bi_get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+int RGWRados::bi_get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          rgw_bucket_olh_entry *olh)
 {
   rgw_cls_bi_entry bi_entry;
-  int r = bi_get(bucket_info, obj, BIIndexType::OLH, &bi_entry);
+  int r = bi_get(dpp, bucket_info, obj, BIIndexType::OLH, &bi_entry);
   if (r < 0 && r != -ENOENT) {
-    ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: bi_get() returned r=" << r << dendl;
   }
   if (r < 0) {
     return r;
@@ -8041,20 +8041,20 @@ int RGWRados::bi_get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
   try {
     decode(*olh, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode bi_entry()" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode bi_entry()" << dendl;
     return -EIO;
   }
 
   return 0;
 }
 
-int RGWRados::bi_get(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                      BIIndexType index_type, rgw_cls_bi_entry *entry)
 {
   BucketShard bs(this);
-  int ret = bs.init(bucket_info, obj);
+  int ret = bs.init(dpp, bucket_info, obj);
   if (ret < 0) {
-    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 

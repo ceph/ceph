@@ -47,7 +47,7 @@ bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
     return false;
 }
 
-void RGWPSCreateTopicOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSCreateTopicOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -56,30 +56,30 @@ void RGWPSCreateTopicOp::execute(const DoutPrefixProvider *dpp, optional_yield y
   ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   op_ret = ps->create_topic(this, topic_name, dest, topic_arn, opaque_data, y);
   if (op_ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(dpp, 20) << "successfully created topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully created topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSListTopicsOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSListTopicsOp::execute(optional_yield y) {
   ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   op_ret = ps->get_topics(&result);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get topics, ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get topics, ret=" << op_ret << dendl;
     return;
   }
   if (topics_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
-    ldout(s->cct, 1) << "topics contain secret and cannot be sent over insecure transport" << dendl;
+    ldpp_dout(this, 1) << "topics contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
     return;
   }
-  ldpp_dout(s, 20) << "successfully got topics" << dendl;
+  ldpp_dout(this, 20) << "successfully got topics" << dendl;
 }
 
-void RGWPSGetTopicOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSGetTopicOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -87,47 +87,47 @@ void RGWPSGetTopicOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
   ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   op_ret = ps->get_topic(topic_name, &result);
   if (topic_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
-    ldout(s->cct, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
+    ldpp_dout(this, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
     return;
   }
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(s, 1) << "successfully got topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 1) << "successfully got topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSDeleteTopicOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSDeleteTopicOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
   ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
-  op_ret = ps->remove_topic(dpp, topic_name, y);
+  op_ret = ps->remove_topic(this, topic_name, y);
   if (op_ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(dpp, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSCreateSubOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSCreateSubOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
   ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
-  op_ret = sub->subscribe(dpp, topic_name, dest, y);
+  op_ret = sub->subscribe(this, topic_name, dest, y);
   if (op_ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(dpp, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSGetSubOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSGetSubOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -136,33 +136,33 @@ void RGWPSGetSubOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
   auto sub = ps->get_sub(sub_name);
   op_ret = sub->get_conf(&result);
   if (subscription_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
-    ldpp_dout(dpp, 1) << "subscription '" << sub_name << "' contain secret and cannot be sent over insecure transport" << dendl;
+    ldpp_dout(this, 1) << "subscription '" << sub_name << "' contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
     return;
   }
   if (op_ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to get subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(dpp, 20) << "successfully got subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully got subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSDeleteSubOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSDeleteSubOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
   ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
-  op_ret = sub->unsubscribe(dpp, topic_name, y);
+  op_ret = sub->unsubscribe(this, topic_name, y);
   if (op_ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(dpp, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSAckSubEventOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSAckSubEventOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -171,13 +171,13 @@ void RGWPSAckSubEventOp::execute(const DoutPrefixProvider *dpp, optional_yield y
   auto sub = ps->get_sub_with_events(sub_name);
   op_ret = sub->remove_event(s, event_id);
   if (op_ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(dpp, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSPullSubEventsOp::execute(const DoutPrefixProvider *dpp, optional_yield y) {
+void RGWPSPullSubEventsOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -186,7 +186,7 @@ void RGWPSPullSubEventsOp::execute(const DoutPrefixProvider *dpp, optional_yield
   sub = ps->get_sub_with_events(sub_name);
   if (!sub) {
     op_ret = -ENOENT;
-    ldout(s->cct, 1) << "failed to get subscription '" << sub_name << "' for events, ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get subscription '" << sub_name << "' for events, ret=" << op_ret << dendl;
     return;
   }
   op_ret = sub->list_events(s, marker, max_entries);
@@ -208,13 +208,13 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
   std::unique_ptr<rgw::sal::RGWBucket> bucket;
   ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
   if (ret < 0) {
-    ldout(s->cct, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
+    ldpp_dout(this, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
     return ret;
   }
   bucket_info = bucket->get_info();
 
   if (bucket_info.owner != s->owner.get_id()) {
-    ldout(s->cct, 1) << "user doesn't own bucket, not allowed to create notification" << dendl;
+    ldpp_dout(this, 1) << "user doesn't own bucket, not allowed to create notification" << dendl;
     return -EPERM;
   }
   return 0;
@@ -235,7 +235,7 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
   bucket_info = bucket->get_info();
 
   if (bucket_info.owner != s->owner.get_id()) {
-    ldout(s->cct, 1) << "user doesn't own bucket, cannot remove notification" << dendl;
+    ldpp_dout(this, 1) << "user doesn't own bucket, cannot remove notification" << dendl;
     return -EPERM;
   }
   return 0;
@@ -256,7 +256,7 @@ int RGWPSListNotifsOp::verify_permission(optional_yield y) {
   bucket_info = bucket->get_info();
 
   if (bucket_info.owner != s->owner.get_id()) {
-    ldout(s->cct, 1) << "user doesn't own bucket, cannot get notification list" << dendl;
+    ldpp_dout(this, 1) << "user doesn't own bucket, cannot get notification list" << dendl;
     return -EPERM;
   }
 

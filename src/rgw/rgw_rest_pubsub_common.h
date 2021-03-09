@@ -29,7 +29,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield) override;
+  void execute(optional_yield) override;
 
   const char* name() const override { return "pubsub_topic_create"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_CREATE; }
@@ -49,7 +49,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield) override;
+  void execute(optional_yield) override;
 
   const char* name() const override { return "pubsub_topics_list"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPICS_LIST; }
@@ -72,7 +72,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_topic_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_GET; }
@@ -94,7 +94,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_topic_delete"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_DELETE; }
@@ -118,7 +118,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_create"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_CREATE; }
@@ -141,7 +141,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_GET; }
@@ -164,7 +164,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_delete"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_DELETE; }
@@ -189,7 +189,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_ack"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_ACK; }
@@ -218,7 +218,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_pull"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_PULL; }

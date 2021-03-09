@@ -6512,7 +6512,7 @@ next:
 
     rgw_cls_bi_entry entry;
 
-    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->bi_get(bucket->get_info(), obj, bi_index_type, &entry);
+    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->bi_get(dpp(), bucket->get_info(), obj, bi_index_type, &entry);
     if (ret < 0) {
       cerr << "ERROR: bi_get(): " << cpp_strerror(-ret) << std::endl;
       return -ret;

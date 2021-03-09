@@ -51,7 +51,7 @@ void RGWOp_Period_Base::send_response()
 // GET /admin/realm/period
 class RGWOp_Period_Get : public RGWOp_Period_Base {
  public:
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
@@ -61,7 +61,7 @@ class RGWOp_Period_Get : public RGWOp_Period_Base {
   const char* name() const override { return "get_period"; }
 };
 
-void RGWOp_Period_Get::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Period_Get::execute(optional_yield y)
 {
   string realm_id, realm_name, period_id;
   epoch_t epoch = 0;
@@ -81,7 +81,7 @@ void RGWOp_Period_Get::execute(const DoutPrefixProvider *dpp, optional_yield y)
 // POST /admin/realm/period
 class RGWOp_Period_Post : public RGWOp_Period_Base {
  public:
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_WRITE);
   }
@@ -91,7 +91,7 @@ class RGWOp_Period_Post : public RGWOp_Period_Base {
   const char* name() const override { return "post_period"; }
 };
 
-void RGWOp_Period_Post::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Period_Post::execute(optional_yield y)
 {
   auto cct = store->ctx();
 
@@ -266,12 +266,12 @@ public:
   int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "get_realm"; }
 };
 
-void RGWOp_Realm_Get::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Realm_Get::execute(optional_yield y)
 {
   string id;
   RESTArgs::get_string(s, "id", id, &id);
@@ -312,12 +312,12 @@ public:
   int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "list_realms"; }
 };
 
-void RGWOp_Realm_List::execute(const DoutPrefixProvider *dpp, optional_yield y)
+void RGWOp_Realm_List::execute(optional_yield y)
 {
   {
     // read default realm
