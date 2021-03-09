@@ -30,6 +30,9 @@ void MDSPerformanceCounterDescriptor::pack_counter(
   case MDSPerformanceCounterType::WRITE_LATENCY_METRIC:
   case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
   case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
+  case MDSPerformanceCounterType::OPENED_FILES_METRIC:
+  case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
+  case MDSPerformanceCounterType::OPENED_INODES_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -47,6 +50,9 @@ void MDSPerformanceCounterDescriptor::unpack_counter(
   case MDSPerformanceCounterType::WRITE_LATENCY_METRIC:
   case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
   case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
+  case MDSPerformanceCounterType::OPENED_FILES_METRIC:
+  case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
+  case MDSPerformanceCounterType::OPENED_INODES_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -69,6 +75,15 @@ std::ostream& operator<<(std::ostream &os, const MDSPerformanceCounterDescriptor
      break;
    case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
      os << "dentry_lease_metric";
+     break;
+   case MDSPerformanceCounterType::OPENED_FILES_METRIC:
+     os << "opened_files_metric";
+     break;
+   case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
+     os << "pinned_icaps_metric";
+     break;
+   case MDSPerformanceCounterType::OPENED_INODES_METRIC:
+     os << "opened_inodes_metric";
      break;
    }
 

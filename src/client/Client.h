@@ -804,6 +804,36 @@ public:
     return std::make_pair(cap_hits, cap_misses);
   }
 
+  void inc_opened_files() {
+    ++opened_files;
+  }
+  void dec_opened_files() {
+    --opened_files;
+  }
+  std::pair<uint64_t, uint64_t> get_opened_files_rates() {
+    return std::make_pair(opened_files, inode_map.size());
+  }
+
+  void inc_pinned_icaps() {
+    ++pinned_icaps;
+  }
+  void dec_pinned_icaps(uint64_t nr=1) {
+    pinned_icaps -= nr;
+  }
+  std::pair<uint64_t, uint64_t> get_pinned_icaps_rates() {
+    return std::make_pair(pinned_icaps, inode_map.size());
+  }
+
+  void inc_opened_inodes() {
+    ++opened_inodes;
+  }
+  void dec_opened_inodes() {
+    --opened_inodes;
+  }
+  std::pair<uint64_t, uint64_t> get_opened_inodes_rates() {
+    return std::make_pair(opened_inodes, inode_map.size());
+  }
+
   xlist<Inode*> &get_dirty_list() { return dirty_list; }
 
   /* timer_lock for 'timer' */
@@ -1484,6 +1514,10 @@ private:
 
   uint64_t cap_hits = 0;
   uint64_t cap_misses = 0;
+
+  uint64_t opened_files = 0;
+  uint64_t pinned_icaps = 0;
+  uint64_t opened_inodes = 0;
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;

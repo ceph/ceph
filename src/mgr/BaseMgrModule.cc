@@ -1084,6 +1084,9 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
     {"write_latency", MDSPerformanceCounterType::WRITE_LATENCY_METRIC},
     {"metadata_latency", MDSPerformanceCounterType::METADATA_LATENCY_METRIC},
     {"dentry_lease", MDSPerformanceCounterType::DENTRY_LEASE_METRIC},
+    {"opened_files", MDSPerformanceCounterType::OPENED_FILES_METRIC},
+    {"pinned_icaps", MDSPerformanceCounterType::PINNED_ICAPS_METRIC},
+    {"opened_inodes", MDSPerformanceCounterType::OPENED_INODES_METRIC},
   };
 
   PyObject *py_query = nullptr;

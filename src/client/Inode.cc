@@ -137,6 +137,9 @@ void Inode::make_nosnap_relative_path(filepath& p)
 
 void Inode::get_open_ref(int mode)
 {
+  client->inc_opened_files();
+  if (open_by_mode.count(mode) == 0)
+    client->inc_opened_inodes();
   open_by_mode[mode]++;
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
@@ -146,8 +149,11 @@ bool Inode::put_open_ref(int mode)
   //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
   auto& ref = open_by_mode.at(mode);
   ceph_assert(ref > 0);
-  if (--ref == 0)
+  client->dec_opened_files();
+  if (--ref == 0) {
+    client->dec_opened_inodes();
     return true;
+  }
   return false;
 }
 
