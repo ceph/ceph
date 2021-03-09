@@ -192,7 +192,8 @@ class TestSessionMap(CephFSTestCase):
         Check that mds evicts blocklisted client
         """
         if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("Requires FUSE client to use is_blocklisted()")
+            self.skipTest("Requires FUSE client to use "
+                          "mds_cluster.is_addr_blocklisted()")
 
         self.fs.set_max_mds(2)
         status = self.fs.wait_for_daemons()
@@ -213,7 +214,8 @@ class TestSessionMap(CephFSTestCase):
         mount_a_client_id = self.mount_a.get_global_id()
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id],
                          mds_id=self.fs.get_rank(rank=0, status=status)['name'])
-        self.wait_until_true(lambda: self.mount_a.is_blocklisted(), timeout=30)
+        self.wait_until_true(lambda: self.mds_cluster.is_addr_blocklisted(
+            self.mount_a.get_global_addr()), timeout=30)
 
         # 10 seconds should be enough for evicting client
         time.sleep(10)
