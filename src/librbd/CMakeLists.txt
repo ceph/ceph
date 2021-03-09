@@ -18,7 +18,7 @@ add_library(rbd_types STATIC
 
 if (WITH_RBD_RWL)
   target_link_libraries(rbd_types
-    PRIVATE pmem::pmemobj)
+    PUBLIC pmem::pmemobj)
 endif()
 
 set(librbd_internal_srcs

@@ -40,9 +40,8 @@ if(WITH_ZBD)
   target_link_libraries(blk PRIVATE ${ZBD_LIBRARIES})
 endif()
 
-if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
+if(WITH_BLUESTORE_PMEM)
   target_link_libraries(blk
-    PUBLIC pmem::pmemobj
     PRIVATE pmem::pmem)
 endif()
 
