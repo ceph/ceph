@@ -29,11 +29,8 @@
 
 int CephxServiceHandler::start_session(
   const EntityName& name,
-  size_t connection_secret_required_length,
   bufferlist *result_bl,
-  AuthCapsInfo *caps,
-  CryptoKey *session_key,
-  std::string *connection_secret)
+  AuthCapsInfo *caps)
 {
   entity_name = name;
 

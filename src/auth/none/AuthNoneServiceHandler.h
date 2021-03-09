@@ -27,11 +27,8 @@ public:
   ~AuthNoneServiceHandler() override {}
   
   int start_session(const EntityName& name,
-		    size_t connection_secret_required_length,
 		    bufferlist *result_bl,
-		    AuthCapsInfo *caps,
-		    CryptoKey *session_key,
-		    std::string *connection_secret) override {
+		    AuthCapsInfo *caps) override {
     entity_name = name;
     caps->allow_all = true;
     return 1;
