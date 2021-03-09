@@ -51,16 +51,19 @@ Preparation
 Adoption process
 ----------------
 
-#. Ensure the ceph configuration is migrated to use the cluster config database.
-   If the ``/etc/ceph/ceph.conf`` is identical on each host, then on one host:
+#. Make sure that the ceph configuration has been migrated to use the cluster
+   config database.  If the ``/etc/ceph/ceph.conf`` is identical on each host,
+   then the following command can be run on one single host and will affect all
+   hosts:
 
    .. prompt:: bash #
 
       ceph config assimilate-conf -i /etc/ceph/ceph.conf
 
-   If there are config variations on each host, you may need to repeat
-   this command on each host.  You can view the cluster's
-   configuration to confirm that it is complete with:
+   If there are configuration variations between hosts, you will need to repeat
+   this command on each host. During this adoption process, view the cluster's
+   configuration to confirm that it is complete by running the following
+   command:
 
    .. prompt:: bash #
 
@@ -104,7 +107,7 @@ Adoption process
    .. note::
      It is also possible to import an existing ssh key. See
      :ref:`ssh errors <cephadm-ssh-errors>` in the troubleshooting
-     document for instructions describing how to import existing
+     document for instructions that describe how to import existing
      ssh keys.
 
 #. Tell cephadm which hosts to manage:
@@ -113,10 +116,10 @@ Adoption process
 
       ceph orch host add <hostname> [ip-address]
 
-   This will perform a ``cephadm check-host`` on each host before
-   adding it to ensure it is working.  The IP address argument is only
-   required if DNS does not allow you to connect to each host by its
-   short name.
+   This will perform a ``cephadm check-host`` on each host before adding it;
+   this check ensures that the host is functioning properly. The IP address
+   argument is required only if DNS does not allow you to connect to each host
+   by its short name.
 
 #. Verify that the adopted monitor and manager daemons are visible:
 
@@ -138,8 +141,9 @@ Adoption process
       cephadm adopt --style legacy --name osd.2
 
 #. Redeploy MDS daemons by telling cephadm how many daemons to run for
-   each file system.  You can list file systems by name with ``ceph fs
-   ls``.  Run the following command on the master nodes:
+   each file system. List file systems by name with the command ``ceph fs
+   ls``. Run the following command on the master nodes to redeploy the MDS
+   daemons:
 
    .. prompt:: bash #
 
@@ -159,7 +163,7 @@ Adoption process
 
       ceph orch apply mds foo 2
 
-   Wait for the new MDS daemons to start with:
+   Confirm that the new MDS daemons have started:
 
    .. prompt:: bash #
 
@@ -172,7 +176,7 @@ Adoption process
       systemctl stop ceph-mds.target
       rm -rf /var/lib/ceph/mds/ceph-*
 
-#. Redeploy RGW daemons.  Cephadm manages RGW daemons by zone.  For each
+#. Redeploy RGW daemons. Cephadm manages RGW daemons by zone. For each
    zone, deploy new RGW daemons with cephadm:
 
    .. prompt:: bash #
@@ -182,16 +186,16 @@ Adoption process
    where *<placement>* can be a simple daemon count, or a list of
    specific hosts (see :ref:`orchestrator-cli-placement-spec`).
 
-   Once the daemons have started and you have confirmed they are functioning,
-   stop and remove the old legacy daemons:
+   After the daemons have started and you have confirmed that they are
+   functioning, stop and remove the old, legacy daemons:
 
    .. prompt:: bash #
 
       systemctl stop ceph-rgw.target
       rm -rf /var/lib/ceph/radosgw/ceph-*
 
-   For adopting single-site systems without a realm, see also
+   To learn more about adopting single-site systems without a realm, see
    :ref:`rgw-multisite-migrate-from-single-site`.
 
-#. Check the ``ceph health detail`` output for cephadm warnings about
-   stray cluster daemons or hosts that are not yet managed.
+#. Check the output of the command ``ceph health detail`` for cephadm warnings
+   about stray cluster daemons or hosts that are not yet managed by cephadm.
