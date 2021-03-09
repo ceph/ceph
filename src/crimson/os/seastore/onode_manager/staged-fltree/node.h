@@ -205,9 +205,9 @@ class tree_cursor_t final
     node_version_t version;
 
     // cached key value info
-    std::optional<key_view_t> key_view; // maybe still point to the read_only extent
+    const char* p_node_base = nullptr;
+    std::optional<key_view_t> key_view;
     const value_header_t* p_value_header = nullptr;
-    node_offset_t offset_value_header;
 
     // cached data-structures to update value payload
     std::optional<NodeExtentMutable> value_payload_mut;
