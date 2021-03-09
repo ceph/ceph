@@ -615,6 +615,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   bool start = false;
   bool finished = false;
   EntityName entity_name;
+  bool is_new_global_id = false;
 
   // set up handler?
   if (m->protocol == 0 && !s->auth_handler) {
@@ -734,12 +735,15 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       ceph_assert(!paxos_writable);
       return false;
     }
+    is_new_global_id = true;
   }
 
   try {
     if (start) {
       // new session
       ret = s->auth_handler->start_session(entity_name,
+					   s->con->peer_global_id,
+					   is_new_global_id,
 					   &response_bl,
 					   &s->con->peer_caps_info);
     } else {
