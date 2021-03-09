@@ -1154,7 +1154,6 @@ class CephManager:
             'ceph',
             '--cluster',
             self.cluster,
-            '--log-early',
         ]
         ceph_args.extend(args)
         proc = self.controller.run(
