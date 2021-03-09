@@ -1067,8 +1067,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   snapid_t          first, last;
   mempool::mds_co::compact_set<snapid_t> dirty_old_rstats;
 
-  uint64_t last_journaled = 0;       // log offset for the last time i was journaled
-  //loff_t last_open_journaled;  // log offset for the last journaled EOpen
+  uint64_t last_journal = 0;	// log event seq for the last time i was added to log event
   utime_t last_dirstat_prop;
 
   // list item node for when we have unpropagated rstat data

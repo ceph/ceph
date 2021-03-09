@@ -122,9 +122,9 @@ class MDSCacheObject {
     return authority().second != CDIR_AUTH_UNKNOWN;
   }
 
-  int get_num_ref(int by = -1) const {
+  int get_num_ref(int by = 0) const {
 #ifdef MDS_REF_SET
-    if (by >= 0) {
+    if (by) {
       if (ref_map.find(by) == ref_map.end()) {
 	return 0;
       } else {
