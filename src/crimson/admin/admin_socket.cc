@@ -119,7 +119,8 @@ seastar::future<> AdminSocket::finalize_response(
   uint32_t response_length = htonl(outbuf_cont.length());
   logger().info("asok response length: {}", outbuf_cont.length());
 
-  return out.write((char*)&response_length, sizeof(uint32_t))
+  return out.write(reinterpret_cast<char*>(&response_length),
+                   sizeof(response_length))
     .then([&out, outbuf_cont] { return out.write(outbuf_cont.c_str()); });
 }
 
