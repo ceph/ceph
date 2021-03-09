@@ -1,51 +1,45 @@
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, Option
 import json
 import threading
 
 class Module(MgrModule):
 
     MODULE_OPTIONS = [
-        {
-            'name': 'subtree',
-            'type': 'str',
-            'default': 'rack',
-            'desc': 'CRUSH level for which to create a local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'failure_domain',
-            'type': 'str',
-            'default': 'host',
-            'desc': 'failure domain for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'min_size',
-            'type': 'int',
-            'desc': 'default min_size for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'num_rep',
-            'type': 'int',
-            'default': 3,
-            'desc': 'default replica count for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'pg_num',
-            'type': 'int',
-            'default': 128,
-            'desc': 'default pg_num for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'prefix',
-            'type': 'str',
-            'default': '',
-            'desc': 'name prefix for any created local pool',
-            'runtime': True,
-        },
+        Option(
+            name='subtree',
+            type='str',
+            default='rack',
+            desc='CRUSH level for which to create a local pool',
+            runtime=True),
+        Option(
+            name='failure_domain',
+            type='str',
+            default='host',
+            desc='failure domain for any created local pool',
+            runtime=True),
+        Option(
+            name='min_size',
+            type='int',
+            desc='default min_size for any created local pool',
+            runtime=True),
+        Option(
+            name='num_rep',
+            type='int',
+            default=3,
+            desc='default replica count for any created local pool',
+            runtime=True),
+        Option(
+            name='pg_num',
+            type='int',
+            default=128,
+            desc='default pg_num for any created local pool',
+            runtime=True),
+        Option(
+            name='prefix',
+            type='str',
+            default='',
+            desc='name prefix for any created local pool',
+            runtime=True),
     ]
 
     def __init__(self, *args, **kwargs):
