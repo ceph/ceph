@@ -59,6 +59,7 @@ class HostAssignment(object):
                  daemons: List[orchestrator.DaemonDescription],
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  scheduler=None,  # type: Optional[BaseScheduler]
+                 allow_colo: bool = False,
                  ):
         assert spec
         self.spec = spec  # type: ServiceSpec
@@ -67,6 +68,7 @@ class HostAssignment(object):
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
+        self.allow_colo = allow_colo
 
     def hosts_by_label(self, label: str) -> List[orchestrator.HostSpec]:
         return [h for h in self.hosts if label in h.labels]
@@ -80,6 +82,15 @@ class HostAssignment(object):
         if self.spec.placement.count == 0:
             raise OrchestratorValidationError(
                 f'<count> can not be 0 for {self.spec.one_line_str()}')
+
+        if (
+                self.spec.placement.count_per_host is not None
+                and self.spec.placement.count_per_host > 1
+                and not self.allow_colo
+        ):
+            raise OrchestratorValidationError(
+                f'Cannot place more than one {self.spec.service_type} per host'
+            )
 
         if self.spec.placement.hosts:
             explicit_hostnames = {h.hostname for h in self.spec.placement.hosts}
