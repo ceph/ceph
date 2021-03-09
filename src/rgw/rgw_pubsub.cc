@@ -594,6 +594,17 @@ int RGWPubSub::Bucket::remove_notification(const string& topic_name)
 
   bucket_topics.topics.erase(topic_name);
 
+  if (bucket_topics.topics.empty()) {
+    // no more topics - delete the notification object of the bucket
+    ret = ps->remove(bucket_meta_obj, &objv_tracker);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(ps->store->ctx(), 1) << "ERROR: failed to remove bucket topics: ret=" << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
+
+  // write back the notifications without the deleted one
   ret = write_topics(bucket_topics, &objv_tracker);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
