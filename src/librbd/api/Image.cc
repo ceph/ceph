@@ -938,6 +938,11 @@ template <typename I>
 int Image<I>::encryption_format(I* ictx, encryption_format_t format,
                                 encryption_options_t opts, size_t opts_size,
                                 bool c_api) {
+  if (ictx->parent != nullptr) {
+    lderr(ictx->cct) << "cannot format a cloned image" << dendl;
+    return -ENOTSUP;
+  }
+
   crypto::EncryptionFormat<I>* result_format;
   auto r = util::create_encryption_format(
           ictx->cct, format, opts, opts_size, c_api, &result_format);

@@ -171,7 +171,7 @@ void S3Stream<I>::process_request(HttpRequest& http_request) {
 
   // create HMAC-SHA1 signature from secret key + string-to-sign
   sha1_digest_t digest;
-  crypto::HMACSHA1 hmac(
+  ceph::crypto::HMACSHA1 hmac(
     reinterpret_cast<const unsigned char*>(m_secret_key.data()),
     m_secret_key.size());
   hmac.Update(reinterpret_cast<const unsigned char*>(string_to_sign.data()),

@@ -58,6 +58,7 @@ set(unittest_librbd_srcs
   crypto/test_mock_CryptoObjectDispatch.cc
   crypto/test_mock_FormatRequest.cc
   crypto/test_mock_LoadRequest.cc
+  crypto/test_mock_ShutDownCryptoRequest.cc
   crypto/openssl/test_DataCryptor.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
