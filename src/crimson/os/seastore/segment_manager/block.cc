@@ -256,7 +256,7 @@ BlockSegmentManager::~BlockSegmentManager()
 {
 }
 
-BlockSegmentManager::mount_ret BlockSegmentManager::mount(mount_config_t config)
+BlockSegmentManager::mount_ret BlockSegmentManager::mount(const mount_config_t& config)
 {
   return open_device(
     config.path, seastar::open_flags::rw | seastar::open_flags::dsync

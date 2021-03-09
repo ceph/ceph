@@ -683,7 +683,7 @@ ceph::bufferlist Client::handle_auth_reply_more(crimson::net::ConnectionRef conn
 int Client::handle_auth_done(crimson::net::ConnectionRef conn,
                              AuthConnectionMetaRef auth_meta,
                              uint64_t global_id,
-                             uint32_t con_mode,
+                             uint32_t /*con_mode*/,
                              const bufferlist& bl)
 {
   if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {

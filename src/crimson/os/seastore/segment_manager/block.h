@@ -143,7 +143,7 @@ public:
   };
   using mount_ertr = access_ertr;
   using mount_ret = access_ertr::future<>;
-  mount_ret mount(mount_config_t);
+  mount_ret mount(const mount_config_t&);
 
   struct mkfs_config_t {
     std::string path;

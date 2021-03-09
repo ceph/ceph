@@ -16,7 +16,6 @@
 
 using std::string;
 using std::vector;
-using std::set;
 using std::list;
 using ceph::for_each_substr;
 

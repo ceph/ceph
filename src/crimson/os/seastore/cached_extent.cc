@@ -86,7 +86,7 @@ std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)
 {
   bool first = true;
   out << '[';
-  for (auto &i: rhs) {
+  for (const auto &i: rhs) {
     out << (first ? "" : ",") << *i;
     first = false;
   }
