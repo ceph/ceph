@@ -554,6 +554,7 @@ class CephadmServe:
             daemons=daemons,
             filter_new_host=matches_network if service_type == 'mon'
             else virtual_ip_allowed if service_type == 'ha-rgw' else None,
+            allow_colo=svc.allow_colo(),
         )
 
         try:
