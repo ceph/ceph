@@ -94,6 +94,21 @@ Expected output:
 }
 ```
 
+- Get configuration of all notification of a bucket:
+```
+aws --endpoint-url http://localhost:8000 s3api get-bucket-notification-configuration --bucket=mybucket --notification=""
+```
+
+- Delete a specific notification from a bucket:
+```
+aws --endpoint-url http://localhost:8000 s3api delete-bucket-notification-configuration --bucket=mybucket --notification=notif1
+```
+
+- Delete all notifications from a bucket:
+```
+aws --endpoint-url http://localhost:8000 s3api delete-bucket-notification-configuration --bucket=mybucket --notification=""
+```
+
 # Developers
 Anyone developing an extension to the S3 API supported by AWS, please modify ``service-2.sdk-extras.json`` (all extensions should go into the same file), so that boto3 could be used to test the new API. 
 In addition, python files with code samples should be added to this directory demonstrating use of the new API.

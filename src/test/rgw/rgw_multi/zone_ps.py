@@ -330,30 +330,17 @@ class PSNotificationS3:
         self.conn = conn
         assert bucket_name.strip()
         self.bucket_name = bucket_name
-        self.resource = '/'+bucket_name
         self.topic_conf_list = topic_conf_list
         self.client = boto3.client('s3',
                                    endpoint_url='http://'+conn.host+':'+str(conn.port),
                                    aws_access_key_id=conn.aws_access_key_id,
-                                   aws_secret_access_key=conn.aws_secret_access_key,
-                                   config=Config(signature_version='s3'))
+                                   aws_secret_access_key=conn.aws_secret_access_key)
 
-    def send_request(self, method, parameters=None):
-        """send request to radosgw"""
-        return make_request(self.conn, method, self.resource,
-                            parameters=parameters, sign_parameters=True)
-
-    def get_config(self, notification=None):
+    def get_config(self, notification=''):
         """get notification info"""
-        parameters = None
-        if notification is None:
-            response = self.client.get_bucket_notification_configuration(Bucket=self.bucket_name)
-            status = response['ResponseMetadata']['HTTPStatusCode']
-            return response, status
-        parameters = {'notification': notification}
-        response, status = self.send_request('GET', parameters=parameters)
-        dict_response = xmltodict.parse(response)
-        return dict_response, status
+        response = self.client.get_bucket_notification_configuration(Bucket=self.bucket_name, Notification=notification)
+        status = response['ResponseMetadata']['HTTPStatusCode']
+        return response, status
 
     def set_config(self):
         """set notification"""
@@ -364,11 +351,11 @@ class PSNotificationS3:
         status = response['ResponseMetadata']['HTTPStatusCode']
         return response, status
 
-    def del_config(self, notification=None):
+    def del_config(self, notification=''):
         """delete notification"""
-        parameters = {'notification': notification}
-
-        return self.send_request('DELETE', parameters)
+        response = self.client.delete_bucket_notification_configuration(Bucket=self.bucket_name, Notification=notification)
+        status = response['ResponseMetadata']['HTTPStatusCode']
+        return response, status
 
 
 class PSSubscription:

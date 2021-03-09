@@ -830,12 +830,12 @@ def test_ps_s3_notification():
     # get specific notification on a bucket
     response, status = s3_notification_conf1.get_config(notification=notification_name1)
     assert_equal(status/100, 2)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Id'], notification_name1)
+    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
+    assert_equal(response['TopicConfigurations'][0]['Id'], notification_name1)
     response, status = s3_notification_conf2.get_config(notification=notification_name2)
     assert_equal(status/100, 2)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Id'], notification_name2)
+    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
+    assert_equal(response['TopicConfigurations'][0]['Id'], notification_name2)
 
     # delete specific notifications
     _, status = s3_notification_conf1.del_config(notification=notification_name1)
@@ -1011,7 +1011,7 @@ def test_ps_s3_notification_on_master():
     # get notifications on a bucket
     response, status = s3_notification_conf.get_config(notification=notification_name+'_1')
     assert_equal(status/100, 2)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn1)
+    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn1)
 
     # delete specific notifications
     _, status = s3_notification_conf.del_config(notification=notification_name+'_1')
@@ -1033,7 +1033,7 @@ def test_ps_s3_notification_on_master():
     try:
         dummy = response['TopicConfigurations']
     except:
-        print('"TopicConfigurations" is not in response')
+        print('"TopicConfigurations" is not in response - is expected')
     else:
         assert False, '"TopicConfigurations" should not be in response'
 
@@ -1175,7 +1175,7 @@ def ps_s3_notification_filter(on_master):
     if not skip_notif4:
         result, status = s3_notification_conf4.get_config(notification=notification_name+'_4')
         assert_equal(status/100, 2)
-        filter_name = result['NotificationConfiguration']['TopicConfiguration']['Filter']['S3Metadata']['FilterRule'][0]['Name']
+        filter_name = result['TopicConfigurations'][0]['Filter']['Metadata']['FilterRules'][0]['Name']
         assert filter_name == 'x-amz-meta-foo' or filter_name == 'x-amz-meta-hello'
 
     expected_in1 = ['hello.kaboom', 'hello.txt', 'hello123.txt', 'hello']
@@ -4564,8 +4564,12 @@ def test_ps_delete_bucket():
     verify_s3_records_by_elements(records, keys, exact_match=False)
 
     # s3 notification is deleted with bucket
-    _, status = s3_notification_conf.get_config(notification=notification_name)
-    assert_equal(status, 404)
+    try:
+        s3_notification_conf.get_config(notification=notification_name)
+    except:
+        pass
+    else:
+        assert False, "notifications should be deleted at this point"
     # non-s3 notification is deleted with bucket
     _, status = notification_conf.get_config()
     assert_equal(status, 404)
