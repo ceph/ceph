@@ -727,7 +727,8 @@ PG::do_osd_ops(
       "do_osd_ops: {} - object {} all operations successful",
       *m,
       ox->get_target());
-    return std::move(*ox).flush_changes(
+    return std::move(*ox).flush_changes_n_do_ops_effects(
+      Ref<PG>{this},
       [this, m, &op_info] (auto&& txn,
 			   auto&& obc,
 			   auto&& osd_op_p,

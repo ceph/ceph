@@ -180,7 +180,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
         const auto& [cookie, entity] = ctx.key;
@@ -234,7 +234,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       if (auto nh = obc->watchers.extract(ctx.key); !nh.empty()) {
         return seastar::do_with(std::move(nh.mapped()),
                          [ctx](auto&& watcher) {
@@ -347,7 +347,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
       ceph::encode(ctx.ninfo.notify_id, osd_op.outdata);
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       auto alive_watchers = obc->watchers | boost::adaptors::map_values
                                           | boost::adaptors::filtered(
         [] (const auto& w) {
@@ -396,7 +396,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
       }
       return watch_errorator::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       logger().info("notify_ack watch_cookie={}, notify_id={}",
                     ctx.watch_cookie, ctx.notify_id);
       return seastar::do_for_each(obc->watchers,
