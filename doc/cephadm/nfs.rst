@@ -47,6 +47,8 @@ an optional namespace:
     spec:
       pool: mypool
       namespace: mynamespace
+      protocols:
+      - NFSv4
 
 where ``pool`` is a RADOS pool where NFS client recovery data is stored
 and ``namespace`` is a RADOS namespace where NFS client recovery
@@ -57,3 +59,8 @@ The specification can then be applied using:
 .. prompt:: bash #
 
    ceph orch apply -i nfs.yaml
+
+.. note::
+   While NFSv3 can be specified as a protocol, it is deprecated and not
+   recommended for use in a multi-head cluster. Please consider using
+   NFSv4 instead.
