@@ -5,9 +5,28 @@ CephFS sub-tasks.
 import logging
 import re
 
-from tasks.cephfs.filesystem import Filesystem
+from tasks.cephfs.filesystem import Filesystem, MDSCluster
 
 log = logging.getLogger(__name__)
+
+def ready(ctx, config):
+    """
+    That the file system is ready for clients.
+    """
+
+    if config is None:
+        config = {}
+    assert isinstance(config, dict), \
+        'task only accepts a dict for configuration'
+
+    timeout = config.get('timeout', 300)
+
+    mdsc = MDSCluster(ctx)
+    status = mdsc.status()
+
+    for filesystem in status.get_filesystems():
+        fs = Filesystem(ctx, fscid=filesystem['id'])
+        fs.wait_for_daemons(timeout=timeout, status=status)
 
 def clients_evicted(ctx, config):
     """
