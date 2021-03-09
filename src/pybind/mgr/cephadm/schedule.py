@@ -56,17 +56,17 @@ class HostAssignment(object):
     def __init__(self,
                  spec,  # type: ServiceSpec
                  hosts: List[orchestrator.HostSpec],
-                 get_daemons_func,  # type: Callable[[str],List[orchestrator.DaemonDescription]]
+                 daemons: List[orchestrator.DaemonDescription],
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  scheduler=None,  # type: Optional[BaseScheduler]
                  ):
-        assert spec and get_daemons_func
+        assert spec
         self.spec = spec  # type: ServiceSpec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec)
         self.hosts: List[orchestrator.HostSpec] = hosts
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
-        self.daemons = get_daemons_func(self.service_name)
+        self.daemons = daemons
 
     def hosts_by_label(self, label: str) -> List[orchestrator.HostSpec]:
         return [h for h in self.hosts if label in h.labels]

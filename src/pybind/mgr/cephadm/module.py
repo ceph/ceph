@@ -2086,7 +2086,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ha = HostAssignment(
             spec=spec,
             hosts=self._hosts_with_daemon_inventory(),
-            get_daemons_func=self.cache.get_daemons_by_service,
+            daemons=self.cache.get_daemons_by_service(spec.service_name()),
         )
         ha.validate()
         hosts = ha.place()
@@ -2144,7 +2144,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         HostAssignment(
             spec=spec,
             hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh
-            get_daemons_func=self.cache.get_daemons_by_service,
+            daemons=self.cache.get_daemons_by_service(spec.service_name()),
         ).validate()
 
         self.log.info('Saving service %s spec with placement %s' % (
