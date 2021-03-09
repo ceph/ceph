@@ -53,7 +53,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   op_ret = ps->create_topic(topic_name, dest, topic_arn, opaque_data, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -63,7 +63,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
 }
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   op_ret = ps->get_topics(&result);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
@@ -84,7 +84,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   op_ret = ps->get_topic(topic_name, &result);
   if (topic_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
     ldout(s->cct, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
@@ -103,7 +103,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   op_ret = ps->remove_topic(topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
@@ -117,7 +117,7 @@ void RGWPSCreateSubOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
   op_ret = sub->subscribe(topic_name, dest, y);
   if (op_ret < 0) {
@@ -132,7 +132,7 @@ void RGWPSGetSubOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
   op_ret = sub->get_conf(&result);
   if (subscription_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
@@ -152,7 +152,7 @@ void RGWPSDeleteSubOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
   op_ret = sub->unsubscribe(topic_name, y);
   if (op_ret < 0) {
@@ -167,7 +167,7 @@ void RGWPSAckSubEventOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto sub = ps->get_sub_with_events(sub_name);
   op_ret = sub->remove_event(s, event_id);
   if (op_ret < 0) {
@@ -182,7 +182,7 @@ void RGWPSPullSubEventsOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   sub = ps->get_sub_with_events(sub_name);
   if (!sub) {
     op_ret = -ENOENT;
@@ -204,8 +204,8 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(s->owner.get_id());
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
   if (ret < 0) {
     ldout(s->cct, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
@@ -226,8 +226,8 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(s->owner.get_id());
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
   if (ret < 0) {
     return ret;
@@ -247,8 +247,8 @@ int RGWPSListNotifsOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(s->owner.get_id());
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
   if (ret < 0) {
     return ret;

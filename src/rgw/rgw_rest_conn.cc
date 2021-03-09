@@ -27,7 +27,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
   }
 }
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::RGWStore* store,
+RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          std::optional<string> _api_name,
@@ -62,7 +62,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
   }
 }
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::RGWStore* store,
+RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          RGWAccessKey _cred,
@@ -145,7 +145,7 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
   return req.forward_request(key, info, max_response, inbl, outbl, y);
 }
 
-int RGWRESTConn::put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
+int RGWRESTConn::put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
 {
   string url;
   int ret = get_url(url);
@@ -166,7 +166,7 @@ int RGWRESTConn::put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_para
   return 0;
 }
 
-int RGWRESTConn::put_obj_async_init(const rgw_user& uid, rgw::sal::RGWObject* obj,
+int RGWRESTConn::put_obj_async_init(const rgw_user& uid, rgw::sal::Object* obj,
                                     map<string, bufferlist>& attrs,
                                     RGWRESTStreamS3PutObj **req)
 {
@@ -216,7 +216,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 }
 
 
-int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw::sal::RGWObject* obj,
+int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw::sal::Object* obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
@@ -237,7 +237,7 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, con
   return get_obj(obj, params, send, req);
 }
 
-int RGWRESTConn::get_obj(const rgw::sal::RGWObject* obj, const get_obj_params& in_params, bool send, RGWRESTStreamRWRequest **req)
+int RGWRESTConn::get_obj(const rgw::sal::Object* obj, const get_obj_params& in_params, bool send, RGWRESTStreamRWRequest **req)
 {
   string url;
   int ret = get_url(url);

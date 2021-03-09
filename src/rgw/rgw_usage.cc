@@ -30,8 +30,8 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // categories
 }
 
-int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
-		  rgw::sal::RGWUser* user , rgw::sal::RGWBucket* bucket,
+int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
 		   uint64_t start_epoch, uint64_t end_epoch, bool show_log_entries,
 		   bool show_log_sum,
 		   map<string, bool> *categories, RGWFormatterFlusher& flusher)
@@ -152,8 +152,8 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
   return 0;
 }
 
-int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
-		   rgw::sal::RGWUser* user , rgw::sal::RGWBucket* bucket,
+int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		   rgw::sal::User* user , rgw::sal::Bucket* bucket,
 		   uint64_t start_epoch, uint64_t end_epoch)
 {
   if (bucket) {
@@ -165,7 +165,7 @@ int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
   }
 }
 
-int RGWUsage::clear(rgw::sal::RGWStore* store)
+int RGWUsage::clear(rgw::sal::Store* store)
 {
   return store->clear_usage();
 }

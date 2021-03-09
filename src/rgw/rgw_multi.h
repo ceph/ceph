@@ -10,7 +10,7 @@
 #include "rgw_compression_types.h"
 
 namespace rgw { namespace sal {
-  class RGWStore;
+  class Store;
 } }
 
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
@@ -108,7 +108,7 @@ public:
 
 extern bool is_v2_upload_id(const string& upload_id);
 
-extern int list_multipart_parts(rgw::sal::RGWBucket* bucket,
+extern int list_multipart_parts(rgw::sal::Bucket* bucket,
 				CephContext *cct,
                                 const string& upload_id,
                                 const string& meta_oid, int num_parts,
@@ -123,12 +123,12 @@ extern int list_multipart_parts(struct req_state *s,
                                 int *next_marker, bool *truncated,
                                 bool assume_unsorted = false);
 
-extern int abort_multipart_upload(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *store,
+extern int abort_multipart_upload(const DoutPrefixProvider *dpp, rgw::sal::Store *store,
 				  CephContext *cct, RGWObjectCtx *obj_ctx,
-				  rgw::sal::RGWBucket* bucket, RGWMPObj& mp_obj);
+				  rgw::sal::Bucket* bucket, RGWMPObj& mp_obj);
 
 extern int list_bucket_multiparts(const DoutPrefixProvider *dpp,
-				  rgw::sal::RGWBucket* bucket,
+				  rgw::sal::Bucket* bucket,
 				  const string& prefix,
 				  const string& marker,
 				  const string& delim,
@@ -137,7 +137,7 @@ extern int list_bucket_multiparts(const DoutPrefixProvider *dpp,
 				  map<string, bool> *common_prefixes, bool *is_truncated);
 
 extern int abort_bucket_multiparts(const DoutPrefixProvider *dpp,
-				   rgw::sal::RGWStore *store, CephContext *cct,
-				   rgw::sal::RGWBucket* bucket,
+				   rgw::sal::Store *store, CephContext *cct,
+				   rgw::sal::Bucket* bucket,
 				   string& prefix, string& delim);
 #endif

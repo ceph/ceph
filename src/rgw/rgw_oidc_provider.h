@@ -24,7 +24,7 @@ class RGWOIDCProvider
   static constexpr int MAX_OIDC_URL_LEN = 255;
 
   CephContext *cct;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   string id;
   string provider_url;
   string arn;
@@ -40,7 +40,7 @@ class RGWOIDCProvider
 
 public:
   RGWOIDCProvider(CephContext *cct,
-                    rgw::sal::RGWStore* store,
+                    rgw::sal::Store* store,
                     string provider_url,
                     string tenant,
                     vector<string> client_ids,
@@ -54,7 +54,7 @@ public:
   }
 
   RGWOIDCProvider(CephContext *cct,
-                    rgw::sal::RGWStore* store,
+                    rgw::sal::Store* store,
                     string arn,
                     string tenant)
   : cct(cct),
@@ -64,14 +64,14 @@ public:
   }
 
   RGWOIDCProvider(CephContext *cct,
-                    rgw::sal::RGWStore* store,
+                    rgw::sal::Store* store,
                     string tenant)
   : cct(cct),
     store(store),
     tenant(std::move(tenant)) {}
 
   RGWOIDCProvider(CephContext *cct,
-          rgw::sal::RGWStore* store)
+          rgw::sal::Store* store)
   : cct(cct),
     store(store) {}
 
@@ -118,7 +118,7 @@ public:
 
   static const string& get_url_oid_prefix();
   static int get_providers(const DoutPrefixProvider *dpp,
-			   rgw::sal::RGWStore* store,
+			   rgw::sal::Store* store,
 			   const string& tenant,
 			   vector<RGWOIDCProvider>& providers);
 };

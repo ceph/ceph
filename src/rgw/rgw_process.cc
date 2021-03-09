@@ -172,7 +172,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   return 0;
 }
 
-int process_request(rgw::sal::RGWStore* const store,
+int process_request(rgw::sal::Store* const store,
                     RGWREST* const rest,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
@@ -196,7 +196,7 @@ int process_request(rgw::sal::RGWStore* const store,
   struct req_state rstate(g_ceph_context, &rgw_env, req->id);
   struct req_state *s = &rstate;
 
-  std::unique_ptr<rgw::sal::RGWUser> u = store->get_user(rgw_user());
+  std::unique_ptr<rgw::sal::User> u = store->get_user(rgw_user());
   s->set_user(u);
 
   RGWObjectCtx rados_ctx(store, s);
@@ -338,7 +338,7 @@ done:
   }
   int op_ret = 0;
 
-  if (user && !rgw::sal::RGWUser::empty(s->user.get())) {
+  if (user && !rgw::sal::User::empty(s->user.get())) {
     *user = s->user->get_id().to_str();
   }
 

@@ -45,7 +45,7 @@ struct RGWQuotaCacheStats {
 template<class T>
 class RGWQuotaCache {
 protected:
-  rgw::sal::RGWStore *store;
+  rgw::sal::Store *store;
   lru_map<T, RGWQuotaCacheStats> stats_map;
   RefCountedWaitObject *async_refcount;
 
@@ -74,7 +74,7 @@ protected:
 
   virtual void data_modified(const rgw_user& user, rgw_bucket& bucket) {}
 public:
-  RGWQuotaCache(rgw::sal::RGWStore *_store, int size) : store(_store), stats_map(size) {
+  RGWQuotaCache(rgw::sal::Store *_store, int size) : store(_store), stats_map(size) {
     async_refcount = new RefCountedWaitObject;
   }
   virtual ~RGWQuotaCache() {
@@ -93,10 +93,10 @@ public:
 
   class AsyncRefreshHandler {
   protected:
-    rgw::sal::RGWStore *store;
+    rgw::sal::Store *store;
     RGWQuotaCache<T> *cache;
   public:
-    AsyncRefreshHandler(rgw::sal::RGWStore *_store, RGWQuotaCache<T> *_cache) : store(_store), cache(_cache) {}
+    AsyncRefreshHandler(rgw::sal::Store *_store, RGWQuotaCache<T> *_cache) : store(_store), cache(_cache) {}
     virtual ~AsyncRefreshHandler() {}
 
     virtual int init_fetch() = 0;
@@ -281,7 +281,7 @@ class BucketAsyncRefreshHandler : public RGWQuotaCache<rgw_bucket>::AsyncRefresh
                                   public RGWGetBucketStats_CB {
   rgw_user user;
 public:
-  BucketAsyncRefreshHandler(rgw::sal::RGWStore *_store, RGWQuotaCache<rgw_bucket> *_cache,
+  BucketAsyncRefreshHandler(rgw::sal::Store *_store, RGWQuotaCache<rgw_bucket> *_cache,
                             const rgw_user& _user, const rgw_bucket& _bucket) :
                                       RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_store, _cache),
                                       RGWGetBucketStats_CB(_bucket), user(_user) {}
@@ -293,7 +293,7 @@ public:
 
 int BucketAsyncRefreshHandler::init_fetch()
 {
-  std::unique_ptr<rgw::sal::RGWBucket> rbucket;
+  std::unique_ptr<rgw::sal::Bucket> rbucket;
 
   const DoutPrefix dp(store->ctx(), dout_subsys, "rgw bucket async refresh handler: ");
   int r = store->get_bucket(&dp, nullptr, bucket, &rbucket, null_yield);
@@ -353,7 +353,7 @@ protected:
   int fetch_stats_from_storage(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp) override;
 
 public:
-  explicit RGWBucketStatsCache(rgw::sal::RGWStore *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
+  explicit RGWBucketStatsCache(rgw::sal::Store *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
   }
 
   AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) override {
@@ -363,8 +363,8 @@ public:
 
 int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_bucket& _b, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp)
 {
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(_u);
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(_u);
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 
   int r = store->get_bucket(dpp, user.get(), _b, &bucket, y);
   if (r < 0) {
@@ -400,7 +400,7 @@ class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_user>::AsyncRefreshHand
                                 public RGWGetUserStats_CB {
   rgw_bucket bucket;
 public:
-  UserAsyncRefreshHandler(rgw::sal::RGWStore *_store, RGWQuotaCache<rgw_user> *_cache,
+  UserAsyncRefreshHandler(rgw::sal::Store *_store, RGWQuotaCache<rgw_user> *_cache,
                           const rgw_user& _user, const rgw_bucket& _bucket) :
                           RGWQuotaCache<rgw_user>::AsyncRefreshHandler(_store, _cache),
                           RGWGetUserStats_CB(_user),
@@ -413,7 +413,7 @@ public:
 
 int UserAsyncRefreshHandler::init_fetch()
 {
-  std::unique_ptr<rgw::sal::RGWUser> ruser = store->get_user(user);
+  std::unique_ptr<rgw::sal::User> ruser = store->get_user(user);
 
   ldout(store->ctx(), 20) << "initiating async quota refresh for user=" << user << dendl;
   int r = ruser->read_stats_async(this);
@@ -574,7 +574,7 @@ protected:
   }
 
 public:
-  RGWUserStatsCache(rgw::sal::RGWStore *_store, bool quota_threads)
+  RGWUserStatsCache(rgw::sal::Store *_store, bool quota_threads)
     : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size)
   {
     if (quota_threads) {
@@ -622,7 +622,7 @@ int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& _u,
 						optional_yield y,
                                                 const DoutPrefixProvider *dpp)
 {
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(_u);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(_u);
   int r = user->read_stats(y, &stats);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get user stats for user=" << user << dendl;
@@ -634,8 +634,8 @@ int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& _u,
 
 int RGWUserStatsCache::sync_bucket(const rgw_user& _u, rgw_bucket& _b, optional_yield y, const DoutPrefixProvider *dpp)
 {
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(_u);
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(_u);
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 
   int r = store->get_bucket(dpp, user.get(), _b, &bucket, y);
   if (r < 0) {
@@ -657,7 +657,7 @@ int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& 
   RGWStorageStats stats;
   ceph::real_time last_stats_sync;
   ceph::real_time last_stats_update;
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(_u.to_str()));
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(_u.to_str()));
 
   int ret = user->read_stats(y, &stats, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
@@ -891,7 +891,7 @@ const RGWQuotaInfoApplier& RGWQuotaInfoApplier::get_instance(
 
 
 class RGWQuotaHandlerImpl : public RGWQuotaHandler {
-  rgw::sal::RGWStore *store;
+  rgw::sal::Store *store;
   RGWBucketStatsCache bucket_stats_cache;
   RGWUserStatsCache user_stats_cache;
 
@@ -925,7 +925,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
     return 0;
   }
 public:
-  RGWQuotaHandlerImpl(rgw::sal::RGWStore *_store, bool quota_threads) : store(_store),
+  RGWQuotaHandlerImpl(rgw::sal::Store *_store, bool quota_threads) : store(_store),
                                     bucket_stats_cache(_store),
                                     user_stats_cache(_store, quota_threads) {}
 
@@ -998,7 +998,7 @@ public:
 };
 
 
-RGWQuotaHandler *RGWQuotaHandler::generate_handler(rgw::sal::RGWStore *store, bool quota_threads)
+RGWQuotaHandler *RGWQuotaHandler::generate_handler(rgw::sal::Store *store, bool quota_threads)
 {
   return new RGWQuotaHandlerImpl(store, quota_threads);
 }

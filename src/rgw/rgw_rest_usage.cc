@@ -34,8 +34,8 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(uid_str));
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(uid_str));
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (!bucket_name.empty()) {
     store->get_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
@@ -81,8 +81,8 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(uid_str));
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(uid_str));
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (!bucket_name.empty()) {
     store->get_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
@@ -91,7 +91,7 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
 
-  if (rgw::sal::RGWUser::empty(user.get()) &&
+  if (rgw::sal::User::empty(user.get()) &&
       !bucket_name.empty() &&
       !start &&
       end == (uint64_t)-1) {

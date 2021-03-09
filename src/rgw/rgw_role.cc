@@ -425,7 +425,7 @@ void RGWRole::update_trust_policy(string& trust_policy)
 }
 
 int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
-				      rgw::sal::RGWStore *store,
+				      rgw::sal::Store *store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,

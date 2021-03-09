@@ -17,7 +17,7 @@ class RGWUserCtl;
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
-  int add_grants(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
+  int add_grants(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
                  const std::vector<std::string>& uids,
                  uint32_t perm);
 
@@ -28,7 +28,7 @@ public:
   ~RGWAccessControlPolicy_SWIFT() override = default;
 
   int create(const DoutPrefixProvider *dpp,
-	     rgw::sal::RGWStore* store,
+	     rgw::sal::Store* store,
              const rgw_user& id,
              const std::string& name,
              const char* read_list,
@@ -47,11 +47,11 @@ public:
   ~RGWAccessControlPolicy_SWIFTAcct() override {}
 
   void add_grants(const DoutPrefixProvider *dpp,
-		  rgw::sal::RGWStore* store,
+		  rgw::sal::Store* store,
                   const std::vector<std::string>& uids,
                   uint32_t perm);
   bool create(const DoutPrefixProvider *dpp,
-	      rgw::sal::RGWStore* store,
+	      rgw::sal::Store* store,
               const rgw_user& id,
               const std::string& name,
               const std::string& acl_str);

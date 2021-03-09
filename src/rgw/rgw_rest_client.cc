@@ -671,7 +671,7 @@ int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key, const bufferlist *opt_co
   return 0;
 }
 
-void RGWRESTStreamS3PutObj::send_init(rgw::sal::RGWObject* obj)
+void RGWRESTStreamS3PutObj::send_init(rgw::sal::Object* obj)
 {
   string resource_str;
   string resource;
@@ -728,7 +728,7 @@ void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key)
   out_cb = new RGWRESTStreamOutCB(this);
 }
 
-void RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, map<string, bufferlist>& attrs)
+void RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::Object* obj, map<string, bufferlist>& attrs)
 {
   send_init(obj);
   send_ready(key, attrs);

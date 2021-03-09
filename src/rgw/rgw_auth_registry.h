@@ -38,7 +38,7 @@ class StrategyRegistry {
 
     s3_main_strategy_t(CephContext* const cct,
 		       ImplicitTenants& implicit_tenant_context,
-		       rgw::sal::RGWStore* store)
+		       rgw::sal::Store* store)
       : s3_main_strategy_plain(cct, implicit_tenant_context, store),
         s3_main_strategy_boto2(cct, implicit_tenant_context, store) {
       add_engine(Strategy::Control::SUFFICIENT, s3_main_strategy_plain);
@@ -61,7 +61,7 @@ class StrategyRegistry {
 public:
   StrategyRegistry(CephContext* const cct,
                    ImplicitTenants& implicit_tenant_context,
-                   rgw::sal::RGWStore* store)
+                   rgw::sal::Store* store)
     : s3_main_strategy(cct, implicit_tenant_context, store),
       s3_post_strategy(cct, implicit_tenant_context, store),
       swift_strategy(cct, implicit_tenant_context, store),
@@ -87,7 +87,7 @@ public:
   static std::shared_ptr<StrategyRegistry>
   create(CephContext* const cct,
          ImplicitTenants& implicit_tenant_context,
-         rgw::sal::RGWStore* store) {
+         rgw::sal::Store* store) {
     return std::make_shared<StrategyRegistry>(cct, implicit_tenant_context, store);
   }
 };
