@@ -41,7 +41,9 @@ public:
     CryptoKey *session_key,
     std::string *connection_secret) override;
 
-  void build_cephx_response_header(int request_type, int status, bufferlist& bl);
+private:
+  void build_cephx_response_header(int request_type, int status,
+				   bufferlist& bl);
 };
 
 #endif
