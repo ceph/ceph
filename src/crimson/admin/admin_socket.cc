@@ -141,7 +141,7 @@ seastar::future<> AdminSocket::handle_command(crimson::net::ConnectionRef conn,
 seastar::future<> AdminSocket::execute_line(std::string cmdline,
                                             seastar::output_stream<char>& out)
 {
-  return execute_command({cmdline}, {}).then([&out, this](auto result) {
+  return execute_command({std::move(cmdline)}, {}).then([&out, this](auto result) {
      auto [ret, stderr, stdout] = std::move(result);
      if (ret < 0) {
        stdout.append(fmt::format("ERROR: {}\n", cpp_strerror(ret)));
