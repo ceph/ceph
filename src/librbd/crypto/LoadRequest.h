@@ -34,7 +34,6 @@ private:
     I* m_image_ctx;
     std::unique_ptr<EncryptionFormat<I>> m_format;
     Context* m_on_finish;
-    ceph::ref_t<crypto::CryptoInterface> m_crypto;
 };
 
 } // namespace crypto

@@ -19,9 +19,9 @@ struct EncryptionFormat {
   }
 
   virtual void format(ImageCtxT* ictx, Context* on_finish) = 0;
-  virtual void load(ImageCtxT* ictx,
-                    ceph::ref_t<CryptoInterface>* result_crypto,
-                    Context* on_finish) = 0;
+  virtual void load(ImageCtxT* ictx, Context* on_finish) = 0;
+
+  virtual ceph::ref_t<CryptoInterface> get_crypto() = 0;
 };
 
 } // namespace crypto

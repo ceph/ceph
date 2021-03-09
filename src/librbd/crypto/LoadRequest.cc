@@ -7,10 +7,7 @@
 #include "common/errno.h"
 #include "librbd/Utils.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/crypto/CryptoImageDispatch.h"
-#include "librbd/crypto/CryptoObjectDispatch.h"
-#include "librbd/io/ImageDispatcherInterface.h"
-#include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/crypto/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -32,8 +29,7 @@ LoadRequest<I>::LoadRequest(
 
 template <typename I>
 void LoadRequest<I>::send() {
-  if (m_image_ctx->io_object_dispatcher->exists(
-          io::OBJECT_DISPATCH_LAYER_CRYPTO)) {
+  if (m_image_ctx->crypto != nullptr) {
     lderr(m_image_ctx->cct) << "encryption already loaded" << dendl;
     finish(-EEXIST);
     return;
@@ -52,22 +48,18 @@ void LoadRequest<I>::send() {
 
   auto ctx = create_context_callback<
           LoadRequest<I>, &LoadRequest<I>::finish>(this);
-  m_format->load(m_image_ctx, &m_crypto, ctx);
+  m_format->load(m_image_ctx, ctx);
 }
 
 template <typename I>
 void LoadRequest<I>::finish(int r) {
+
   if (r == 0) {
     // load crypto layers to image and its ancestors
+    auto crypto = m_format->get_crypto();
     auto ictx = m_image_ctx;
     while (ictx != nullptr) {
-      auto object_dispatch = CryptoObjectDispatch<I>::create(
-              ictx, m_crypto);
-      auto image_dispatch = CryptoImageDispatch::create(
-            m_crypto->get_data_offset());
-      ictx->io_object_dispatcher->register_dispatch(object_dispatch);
-      ictx->io_image_dispatcher->register_dispatch(image_dispatch);
-
+      util::set_crypto(ictx, crypto);
       ictx = ictx->parent;
     }
   }

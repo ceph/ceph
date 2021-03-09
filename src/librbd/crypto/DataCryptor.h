@@ -19,6 +19,9 @@ public:
 
   virtual uint32_t get_block_size() const = 0;
   virtual uint32_t get_iv_size() const = 0;
+  virtual const unsigned char* get_key() const = 0;
+  virtual int get_key_length() const = 0;
+
   virtual T* get_context(CipherMode mode) = 0;
   virtual void return_context(T* ctx, CipherMode mode) = 0;
 
