@@ -41,6 +41,12 @@ class Module(MgrModule):
         return self.fs_snapshot_mirror.peer_add(fs_name, remote_cluster_spec,
                                                 remote_fs_name, remote_conf=conf)
 
+    @CLIReadCommand('fs snapshot mirror peer_list')
+    def snapshot_mirror_peer_list(self,
+                                  fs_name: str):
+        """List configured peers for a file system"""
+        return self.fs_snapshot_mirror.peer_list(fs_name)
+
     @CLIWriteCommand('fs snapshot mirror peer_remove')
     def snapshot_mirror_peer_remove(self,
                                     fs_name: str,

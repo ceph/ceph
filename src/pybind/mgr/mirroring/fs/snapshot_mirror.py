@@ -536,6 +536,29 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to disable mirroring'
 
+    def peer_list(self, filesystem):
+        try:
+            with self.lock:
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                peers = self.get_filesystem_peers(filesystem)
+                peer_res = {}
+                for peer_uuid, rem in peers.items():
+                    conf = self.config_get(FSSnapshotMirror.peer_config_key(filesystem, peer_uuid))
+                    remote = rem['remote']
+                    peer_res[peer_uuid] = {'client_name': remote['client_name'],
+                                           'site_name': remote['cluster_name'],
+                                           'fs_name': remote['fs_name']
+                                           }
+                    if 'mon_host' in conf:
+                        peer_res[peer_uuid]['mon_host'] = conf['mon_host']
+                return 0, json.dumps(peer_res), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            return e.args[0], '', 'failed to list peers'
+
     def peer_add(self, filesystem, remote_cluster_spec, remote_fs_name, remote_conf):
         try:
             if remote_fs_name == None:
