@@ -35,13 +35,11 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 
-int CephxServiceHandler::start_session(
-  const EntityName& name,
+int CephxServiceHandler::do_start_session(
+  bool is_new_global_id,
   bufferlist *result_bl,
   AuthCapsInfo *caps)
 {
-  entity_name = name;
-
   uint64_t min = 1; // always non-zero
   uint64_t max = std::numeric_limits<uint64_t>::max();
   server_challenge = ceph::util::generate_random_number<uint64_t>(min, max);

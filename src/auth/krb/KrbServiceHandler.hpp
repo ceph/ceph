@@ -45,11 +45,11 @@ class KrbServiceHandler : public AuthServiceHandler {
 		       CryptoKey *session_key,
 		       std::string *connection_secret) override;
 
-    int start_session(const EntityName& name,
-		      bufferlist *buff_list,
-                      AuthCapsInfo *caps) override;
-
   private:
+    int do_start_session(bool is_new_global_id,
+			 ceph::buffer::list *buff_list,
+			 AuthCapsInfo *caps) override;
+
     gss_buffer_desc m_gss_buffer_out;
     gss_cred_id_t m_gss_credentials; 
     gss_ctx_id_t m_gss_sec_ctx; 
