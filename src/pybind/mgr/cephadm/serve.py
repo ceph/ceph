@@ -554,7 +554,7 @@ class CephadmServe:
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr._hosts_with_daemon_inventory(),
-            get_daemons_func=self.mgr.cache.get_daemons_by_service,
+            daemons=daemons,
             filter_new_host=matches_network if service_type == 'mon'
             else virtual_ip_allowed if service_type == 'ha-rgw' else None,
         )
