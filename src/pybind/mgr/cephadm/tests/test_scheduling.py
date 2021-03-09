@@ -363,13 +363,21 @@ class NodeAssignmentTest(NamedTuple):
             ['host1', 'host2', 'host3', 'host1', 'host2', 'host3']
         ),
         # count that is bigger than the amount of hosts. Truncate to len(hosts)
-        # RGWs should not be co-located to each other.
+        # mgr should not be co-located to each other.
         NodeAssignmentTest(
-            'rgw',
+            'mgr',
             PlacementSpec(count=4),
             'host1 host2 host3'.split(),
             [],
             ['host1', 'host2', 'host3']
+        ),
+        # count that is bigger than the amount of hosts; wrap around.
+        NodeAssignmentTest(
+            'mds',
+            PlacementSpec(count=6),
+            'host1 host2 host3'.split(),
+            [],
+            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3']
         ),
         # count + partial host list
         NodeAssignmentTest(
@@ -381,6 +389,17 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('mgr', 'b', 'host2'),
             ],
             ['host3']
+        ),
+        # count + partial host list (with colo)
+        NodeAssignmentTest(
+            'mds',
+            PlacementSpec(count=3, hosts=['host3']),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mgr', 'b', 'host2'),
+            ],
+            ['host3', 'host3', 'host3']
         ),
         # count 1 + partial host list
         NodeAssignmentTest(
@@ -430,6 +449,22 @@ class NodeAssignmentTest(NamedTuple):
             'host1 host2 host3'.split(),
             [],
             ['host1', 'host2', 'host3']
+        ),
+        # label + count (truncate to host list)
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(count=4, label='foo'),
+            'host1 host2 host3'.split(),
+            [],
+            ['host1', 'host2', 'host3']
+        ),
+        # label + count (with colo)
+        NodeAssignmentTest(
+            'mds',
+            PlacementSpec(count=6, label='foo'),
+            'host1 host2 host3'.split(),
+            [],
+            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3']
         ),
         # label only + count_per_hst
         NodeAssignmentTest(
