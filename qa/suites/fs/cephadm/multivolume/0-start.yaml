@@ -35,5 +35,5 @@ tasks:
     host.a:
       - ceph fs volume create foo
       - ceph fs volume create bar
-- sleep:
-    interval: 60
+- fs.ready:
+    timeout: 300
