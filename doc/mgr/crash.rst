@@ -3,19 +3,39 @@ Crash Module
 The crash module collects information about daemon crashdumps and stores
 it in the Ceph cluster for later analysis.
 
-Daemon crashdumps are dumped in /var/lib/ceph/crash by default; this can
-be configured with the option 'crash dir'.  Crash directories are named by
-time and date and a randomly-generated UUID, and contain a metadata file
-'meta' and a recent log file, with a "crash_id" that is the same.
-This module allows the metadata about those dumps to be persisted in
-the monitors' storage.
-
 Enabling
 --------
 
 The *crash* module is enabled with::
 
   ceph mgr module enable crash
+
+The *crash* upload key is generated with::
+
+  ceph auth get-or-create client.crash mon 'profile crash' mgr 'profile crash'
+
+On each node, you should store this key in
+``/etc/ceph/ceph.client.crash.keyring``.
+
+
+Automated collection
+--------------------
+
+Daemon crashdumps are dumped in ``/var/lib/ceph/crash`` by default; this can
+be configured with the option 'crash dir'.  Crash directories are named by
+time and date and a randomly-generated UUID, and contain a metadata file
+'meta' and a recent log file, with a "crash_id" that is the same.
+
+These crashes can be automatically submitted and persisted in the monitors'
+storage by using ``ceph-crash.service``.
+It watches the crashdump directory and uploads them with ``ceph crash post``.
+
+``ceph-crash`` tries some authentication names: ``client.crash.$hostname``,
+``client.crash`` and ``client.admin``.
+In order to successfully upload with ``ceph crash post``, these need
+the suitable permissions: ``mon profile crash`` and ``mgr profile crash``
+and a keyring needs to be in ``/etc/ceph``.
+
 
 Commands
 --------

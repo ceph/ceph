@@ -308,11 +308,11 @@ The following entries describe valid capability profiles:
               you're doing as the security ramifications are substantial and
               pervasive.
 
-``profile crash`` (Monitor only)
+``profile crash`` (Monitor and MGR)
 
 :Description: Gives a user read-only access to monitors, used in conjunction
-              with the manager ``crash`` module when collecting daemon crash
-              dumps for later analysis.
+              with the manager ``crash`` module to upload daemon crash
+              dumps into monitor storage for later analysis.
 
 Pool
 ----
