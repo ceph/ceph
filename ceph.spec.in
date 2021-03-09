@@ -1313,7 +1313,11 @@ cat ./CMakeFiles/CMakeOutput.log
 cat ./CMakeFiles/CMakeError.log
 %endif
 
+%if 0%{?suse_version}
+make %{_smp_mflags}
+%else
 %make_build
+%endif
 
 %if 0%{with make_check}
 %check
