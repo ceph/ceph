@@ -35,7 +35,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::RoleApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   rgw::auth::ImplicitTenants& implicit_tenant_context;
 
   STSEngine  sts_engine;
@@ -77,7 +77,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
 
 public:
   STSAuthStrategy(CephContext* const cct,
-                       rgw::sal::RGWStore* store,
+                       rgw::sal::Store* store,
                        rgw::auth::ImplicitTenants& implicit_tenant_context,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
     : store(store),
@@ -99,7 +99,7 @@ public:
 class ExternalAuthStrategy : public rgw::auth::Strategy,
                              public rgw::auth::RemoteApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   rgw::auth::ImplicitTenants& implicit_tenant_context;
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
@@ -125,7 +125,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 
 public:
   ExternalAuthStrategy(CephContext* const cct,
-                       rgw::sal::RGWStore* store,
+                       rgw::sal::Store* store,
                        rgw::auth::ImplicitTenants& implicit_tenant_context,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
     : store(store),
@@ -166,7 +166,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                                 AbstractorT>::value,
                 "AbstractorT must be a subclass of rgw::auth::s3::VersionAbstractor");
 
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   AbstractorT ver_abstractor;
 
   S3AnonymousEngine anonymous_engine;
@@ -224,7 +224,7 @@ public:
 
   AWSAuthStrategy(CephContext* const cct,
                   rgw::auth::ImplicitTenants& implicit_tenant_context,
-                  rgw::sal::RGWStore* store)
+                  rgw::sal::Store* store)
     : store(store),
       ver_abstractor(cct),
       anonymous_engine(cct,

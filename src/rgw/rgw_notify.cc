@@ -474,7 +474,7 @@ public:
   Manager(CephContext* _cct, uint32_t _max_queue_size, uint32_t _queues_update_period_ms, 
           uint32_t _queues_update_retry_ms, uint32_t _queue_idle_sleep_us, u_int32_t failover_time_ms, 
           uint32_t _stale_reservations_period_s, uint32_t _reservations_cleanup_period_s,
-          uint32_t _worker_count, rgw::sal::RGWRadosStore* store) : 
+          uint32_t _worker_count, rgw::sal::RadosStore* store) :
     max_queue_size(_max_queue_size),
     queues_update_period_ms(_queues_update_period_ms),
     queues_update_retry_ms(_queues_update_retry_ms),
@@ -583,7 +583,7 @@ constexpr uint32_t WORKER_COUNT = 1;                 // 1 worker thread
 constexpr uint32_t STALE_RESERVATIONS_PERIOD_S = 120;   // cleanup reservations that are more than 2 minutes old
 constexpr uint32_t RESERVATIONS_CLEANUP_PERIOD_S = 30; // reservation cleanup every 30 seconds
 
-bool init(CephContext* cct, rgw::sal::RGWRadosStore* store, const DoutPrefixProvider *dpp) {
+bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvider *dpp) {
   if (s_manager) {
     return false;
   }
@@ -616,7 +616,7 @@ int remove_persistent_topic(const std::string& topic_name, optional_yield y) {
   return s_manager->remove_persistent_topic(topic_name, y);
 }
 
-rgw::sal::RGWObject* get_object_with_atttributes(const req_state* s, rgw::sal::RGWObject* obj) {
+rgw::sal::Object* get_object_with_atttributes(const req_state* s, rgw::sal::Object* obj) {
   // in case of copy obj, the tags and metadata are taken from source
   const auto src_obj = s->src_object ? s->src_object.get() : obj;
   if (src_obj->get_attrs().empty()) {
@@ -630,7 +630,7 @@ rgw::sal::RGWObject* get_object_with_atttributes(const req_state* s, rgw::sal::R
   return src_obj;
 }
 
-void metadata_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& metadata) {
+void metadata_from_attributes(const req_state* s, rgw::sal::Object* obj, KeyValueMap& metadata) {
   const auto src_obj = get_object_with_atttributes(s, obj);
   if (!src_obj) {
     return;
@@ -646,7 +646,7 @@ void metadata_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyV
   }
 }
 
-void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& tags) {
+void tags_from_attributes(const req_state* s, rgw::sal::Object* obj, KeyValueMap& tags) {
   const auto src_obj = get_object_with_atttributes(s, obj);
   if (!src_obj) {
     return;
@@ -668,7 +668,7 @@ void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValue
 
 // populate event from request
 void populate_event_from_request(const req_state *s, 
-        rgw::sal::RGWObject* obj,
+        rgw::sal::Object* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
@@ -710,7 +710,7 @@ void populate_event_from_request(const req_state *s,
   // opaque data will be filled from topic configuration
 }
 
-bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::RGWObject* obj, 
+bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::Object* obj,
     EventType event, const RGWObjTags* req_tags) {
   if (!match(filter.events, event)) { 
     return false;
@@ -815,7 +815,7 @@ int publish_reserve(EventType event_type,
   return 0;
 }
 
-int publish_commit(rgw::sal::RGWObject* obj,
+int publish_commit(rgw::sal::Object* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 

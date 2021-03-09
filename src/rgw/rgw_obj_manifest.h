@@ -45,7 +45,7 @@ public:
   }
 
   rgw_raw_obj get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const;
-  rgw_raw_obj get_raw_obj(rgw::sal::RGWStore* store) const;
+  rgw_raw_obj get_raw_obj(rgw::sal::Store* store) const;
 
   rgw_obj_select& operator=(const rgw_obj& rhs) {
     obj = rhs;
@@ -549,7 +549,7 @@ public:
     int create_next(uint64_t ofs);
 
     rgw_raw_obj get_cur_obj(RGWZoneGroup& zonegroup, RGWZoneParams& zone_params) { return cur_obj.get_raw_obj(zonegroup, zone_params); }
-    rgw_raw_obj get_cur_obj(rgw::sal::RGWStore* store) const { return cur_obj.get_raw_obj(store); }
+    rgw_raw_obj get_cur_obj(rgw::sal::Store* store) const { return cur_obj.get_raw_obj(store); }
 
     /* total max size of current stripe (including head obj) */
     uint64_t cur_stripe_max_size() const {

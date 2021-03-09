@@ -424,7 +424,7 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("s3_id", s3_id, f);
 }
 
-RGWPubSub::RGWPubSub(rgw::sal::RGWRadosStore* _store, const std::string& _tenant) : 
+RGWPubSub::RGWPubSub(rgw::sal::RadosStore* _store, const std::string& _tenant) :
                             store(_store),
                             tenant(_tenant),
                             obj_ctx(store->svc()->sysobj->init_obj_ctx()) {
@@ -541,7 +541,7 @@ int RGWPubSub::Bucket::create_notification(const string& topic_name, const rgw::
 
 int RGWPubSub::Bucket::create_notification(const string& topic_name,const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) {
   rgw_pubsub_topic_subs topic_info;
-  rgw::sal::RGWRadosStore *store = ps->store;
+  rgw::sal::RadosStore *store = ps->store;
 
   int ret = ps->get_topic(topic_name, &topic_info);
   if (ret < 0) {
@@ -584,7 +584,7 @@ int RGWPubSub::Bucket::create_notification(const string& topic_name,const rgw::n
 int RGWPubSub::Bucket::remove_notification(const string& topic_name, optional_yield y)
 {
   rgw_pubsub_topic_subs topic_info;
-  rgw::sal::RGWRadosStore *store = ps->store;
+  rgw::sal::RadosStore *store = ps->store;
 
   int ret = ps->get_topic(topic_name, &topic_info);
   if (ret < 0) {
@@ -753,7 +753,7 @@ int RGWPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest& de
 {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
-  rgw::sal::RGWRadosStore *store = ps->store;
+  rgw::sal::RadosStore *store = ps->store;
 
   int ret = ps->read_topics(&topics, &objv_tracker);
   if (ret < 0) {
@@ -797,7 +797,7 @@ int RGWPubSub::Sub::unsubscribe(const string& _topic, optional_yield y)
 {
   string topic = _topic;
   RGWObjVersionTracker sobjv_tracker;
-  rgw::sal::RGWRadosStore *store = ps->store;
+  rgw::sal::RadosStore *store = ps->store;
 
   if (topic.empty()) {
     rgw_pubsub_sub_config sub_conf;
@@ -919,7 +919,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *d
 template<typename EventType>
 int RGWPubSub::SubWithEvents<EventType>::remove_event(const DoutPrefixProvider *dpp, const string& event_id)
 {
-  rgw::sal::RGWRadosStore *store = ps->store;
+  rgw::sal::RadosStore *store = ps->store;
   rgw_pubsub_sub_config sub_conf;
   int ret = get_conf(&sub_conf);
   if (ret < 0) {

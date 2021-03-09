@@ -9,7 +9,7 @@
 
 namespace rgw {
 namespace sal {
-class RGWStore;
+class Store;
 }
 }
 
@@ -33,10 +33,10 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
     /// pause all frontends while realm reconfiguration is in progress
     virtual void pause() = 0;
     /// resume all frontends with the given RGWRados instance
-    virtual void resume(rgw::sal::RGWStore* store) = 0;
+    virtual void resume(rgw::sal::Store* store) = 0;
   };
 
-  RGWRealmReloader(rgw::sal::RGWStore*& store, std::map<std::string, std::string>& service_map_meta,
+  RGWRealmReloader(rgw::sal::Store*& store, std::map<std::string, std::string>& service_map_meta,
                    Pauser* frontends);
   ~RGWRealmReloader() override;
 
@@ -49,8 +49,8 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
 
   class C_Reload; //< Context that calls reload()
 
-  /// main()'s RGWStore pointer as a reference, modified by reload()
-  rgw::sal::RGWStore*& store;
+  /// main()'s Store pointer as a reference, modified by reload()
+  rgw::sal::Store*& store;
   std::map<std::string, std::string>& service_map_meta;
   Pauser *const frontends;
 

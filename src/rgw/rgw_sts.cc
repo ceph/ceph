@@ -152,7 +152,7 @@ void AssumedRoleUser::dump(Formatter *f) const
 }
 
 int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
-                                              rgw::sal::RGWStore *store,
+                                              rgw::sal::Store *store,
                                               const string& roleId,
                                               const rgw::ARN& roleArn,
                                               const string& roleSessionName)
@@ -315,7 +315,7 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
 int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y)
 {
   int ret = 0;
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(user_id);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(user_id);
   if ((ret = user->load_by_id(dpp, y)) < 0) {
     return -ERR_NO_SUCH_ENTITY;
   }

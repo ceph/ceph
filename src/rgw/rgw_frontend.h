@@ -85,7 +85,7 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(rgw::sal::RGWStore* store,
+  virtual void unpause_with_new_config(rgw::sal::Store* store,
                                        rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
@@ -148,7 +148,7 @@ public:
     env.mutex.get_write();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWStore* const store,
+  void unpause_with_new_config(rgw::sal::Store* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = std::move(auth_registry);
@@ -191,7 +191,7 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWStore* const store,
+  void unpause_with_new_config(rgw::sal::Store* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = auth_registry;
@@ -247,7 +247,7 @@ public:
     }
 
     rgw_user uid(uid_str);
-    std::unique_ptr<rgw::sal::RGWUser> user = env.store->get_user(uid);
+    std::unique_ptr<rgw::sal::User> user = env.store->get_user(uid);
 
     int ret = user->load_by_id(this, null_yield);
     if (ret < 0) {
@@ -289,7 +289,7 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(rgw::sal::RGWStore *store) override {
+  void resume(rgw::sal::Store *store) override {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \

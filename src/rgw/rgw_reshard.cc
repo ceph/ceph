@@ -59,7 +59,7 @@ const std::initializer_list<uint16_t> RGWBucketReshard::reshard_primes = {
 };
 
 class BucketReshardShard {
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
   const RGWBucketInfo& bucket_info;
   int num_shard;
   const rgw::bucket_index_layout_generation& idx_layout;
@@ -103,7 +103,7 @@ class BucketReshardShard {
 
 public:
   BucketReshardShard(const DoutPrefixProvider *dpp, 
-                     rgw::sal::RGWRadosStore *_store, const RGWBucketInfo& _bucket_info,
+                     rgw::sal::RadosStore *_store, const RGWBucketInfo& _bucket_info,
                      int _num_shard, const rgw::bucket_index_layout_generation& _idx_layout,
                      deque<librados::AioCompletion *>& _completions) :
     store(_store), bucket_info(_bucket_info), idx_layout(_idx_layout), bs(store->getRados()),
@@ -183,7 +183,7 @@ public:
 
 
 class BucketReshardManager {
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
   const RGWBucketInfo& target_bucket_info;
   deque<librados::AioCompletion *> completions;
   int num_target_shards;
@@ -191,7 +191,7 @@ class BucketReshardManager {
 
 public:
   BucketReshardManager(const DoutPrefixProvider *dpp,
-                       rgw::sal::RGWRadosStore *_store,
+                       rgw::sal::RadosStore *_store,
 		       const RGWBucketInfo& _target_bucket_info,
 		       int _num_target_shards) :
     store(_store), target_bucket_info(_target_bucket_info),
@@ -250,7 +250,7 @@ public:
   }
 }; // class BucketReshardManager
 
-RGWBucketReshard::RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
+RGWBucketReshard::RGWBucketReshard(rgw::sal::RadosStore *_store,
 				   const RGWBucketInfo& _bucket_info,
 				   const map<string, bufferlist>& _bucket_attrs,
 				   RGWBucketReshardLock* _outer_reshard_lock) :
@@ -259,7 +259,7 @@ RGWBucketReshard::RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
   outer_reshard_lock(_outer_reshard_lock)
 { }
 
-int RGWBucketReshard::set_resharding_status(rgw::sal::RGWRadosStore* store,
+int RGWBucketReshard::set_resharding_status(rgw::sal::RadosStore* store,
 					    const RGWBucketInfo& bucket_info,
 					    const string& new_instance_id,
 					    int32_t num_shards,
@@ -283,7 +283,7 @@ int RGWBucketReshard::set_resharding_status(rgw::sal::RGWRadosStore* store,
 }
 
 // reshard lock assumes lock is held
-int RGWBucketReshard::clear_resharding(rgw::sal::RGWRadosStore* store,
+int RGWBucketReshard::clear_resharding(rgw::sal::RadosStore* store,
 				       const RGWBucketInfo& bucket_info)
 {
   int ret = clear_index_shard_reshard_status(store, bucket_info);
@@ -306,7 +306,7 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RGWRadosStore* store,
   return 0;
 }
 
-int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
+int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RadosStore* store,
 						       const RGWBucketInfo& bucket_info)
 {
   uint32_t num_shards = bucket_info.layout.current_index.layout.normal.num_shards;
@@ -327,7 +327,7 @@ int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* 
   return 0;
 }
 
-static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
+static int create_new_bucket_instance(rgw::sal::RadosStore *store,
 				      int new_num_shards,
 				      const RGWBucketInfo& bucket_info,
 				      map<string, bufferlist>& attrs,
@@ -383,7 +383,7 @@ int RGWBucketReshard::cancel()
 class BucketInfoReshardUpdate
 {
   const DoutPrefixProvider *dpp;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
   RGWBucketInfo& bucket_info;
   std::map<string, bufferlist> bucket_attrs;
 
@@ -401,7 +401,7 @@ class BucketInfoReshardUpdate
 
 public:
   BucketInfoReshardUpdate(const DoutPrefixProvider *_dpp,
-                          rgw::sal::RGWRadosStore *_store,
+                          rgw::sal::RadosStore *_store,
 			  RGWBucketInfo& _bucket_info,
                           map<string, bufferlist>& _bucket_attrs,
 			  const string& new_bucket_id) :
@@ -449,7 +449,7 @@ public:
 };
 
 
-RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RGWRadosStore* _store,
+RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RadosStore* _store,
 					   const std::string& reshard_lock_oid,
 					   bool _ephemeral) :
   store(_store),
@@ -803,7 +803,7 @@ error_out:
 } // execute
 
 
-RGWReshard::RGWReshard(rgw::sal::RGWRadosStore* _store, bool _verbose, ostream *_out,
+RGWReshard::RGWReshard(rgw::sal::RadosStore* _store, bool _verbose, ostream *_out,
                        Formatter *_formatter) :
   store(_store), instance_lock(bucket_instance_lock_name),
   verbose(_verbose), out(_out), formatter(_formatter)

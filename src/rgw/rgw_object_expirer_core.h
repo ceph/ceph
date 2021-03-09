@@ -70,7 +70,7 @@ public:
 
 class RGWObjectExpirer {
 protected:
-  rgw::sal::RGWStore *store;
+  rgw::sal::Store *store;
   RGWObjExpStore exp_store;
 
   class OEWorker : public Thread, public DoutPrefixProvider {
@@ -98,9 +98,9 @@ protected:
   std::atomic<bool> down_flag = { false };
 
 public:
-  explicit RGWObjectExpirer(rgw::sal::RGWStore *_store)
+  explicit RGWObjectExpirer(rgw::sal::Store *_store)
     : store(_store),
-      exp_store(_store->ctx(), static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->rados, store->get_zone()),
+      exp_store(_store->ctx(), static_cast<rgw::sal::RadosStore*>(store)->svc()->rados, store->get_zone()),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {

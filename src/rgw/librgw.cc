@@ -542,7 +542,7 @@ namespace rgw {
       g_conf()->rgw_nfs_run_sync_thread;
 
     const DoutPrefix dp(cct.get(), dout_subsys, "librgw: ");
-    store = RGWStoreManager::get_storage(&dp, g_ceph_context,
+    store = StoreManager::get_storage(&dp, g_ceph_context,
 					 "rados",
 					 run_gc,
 					 run_lc,
@@ -656,7 +656,7 @@ namespace rgw {
 
     delete olog;
 
-    RGWStoreManager::close_storage(store);
+    StoreManager::close_storage(store);
 
     rgw_tools_cleanup();
     rgw_shutdown_resolver();
@@ -677,10 +677,10 @@ namespace rgw {
     return 0;
   } /* RGWLib::stop() */
 
-  int RGWLibIO::set_uid(rgw::sal::RGWStore *store, const rgw_user& uid)
+  int RGWLibIO::set_uid(rgw::sal::Store *store, const rgw_user& uid)
   {
     const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
-    std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(uid);
+    std::unique_ptr<rgw::sal::User> user = store->get_user(uid);
     /* object exists, but policy is broken */
     int ret = user->load_by_id(&dp, null_yield);
     if (ret < 0) {
