@@ -39,7 +39,10 @@ LBAInternalNode::lookup_ret LBAInternalNode::lookup(
   }
   assert(meta.begin <= addr);
   assert(meta.end > addr);
-  auto iter = lower_bound(addr);
+
+  [[maybe_unused]] auto [iter, biter] = bound(addr, addr + 1);
+  assert(iter != biter);
+  assert(iter + 1 == biter);
   return get_lba_btree_extent(
     c,
     this,
