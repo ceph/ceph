@@ -36,7 +36,7 @@ class BtreeOMapManager : public OMapManager {
    */
   using get_root_ertr = base_ertr;
   using get_root_ret = get_root_ertr::future<OMapNodeRef>;
-  get_root_ret get_omap_root(
+  static get_root_ret get_omap_root(
     omap_context_t c,
     const omap_root_t &omap_root);
 
@@ -49,7 +49,7 @@ class BtreeOMapManager : public OMapManager {
   handle_root_split_ret handle_root_split(
     omap_context_t c,
     omap_root_t &omap_root,
-    OMapNode::mutation_result_t mresult);
+    const OMapNode::mutation_result_t& mresult);
 
   /* handle_root_merge
    *

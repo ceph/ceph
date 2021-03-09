@@ -48,7 +48,7 @@ BtreeOMapManager::handle_root_split_ret
 BtreeOMapManager::handle_root_split(
   omap_context_t oc,
   omap_root_t &omap_root,
-  OMapNode::mutation_result_t mresult)
+  const OMapNode::mutation_result_t& mresult)
 {
   return oc.tm.alloc_extent<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE)
     .safe_then([&omap_root, mresult](auto&& nroot) -> handle_root_split_ret {
