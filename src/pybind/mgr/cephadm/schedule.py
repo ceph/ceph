@@ -44,10 +44,6 @@ class SimpleScheduler(BaseScheduler):
         if not host_pool:
             return []
         host_pool = [x for x in host_pool]
-        # gen seed off of self.spec to make shuffling deterministic
-        seed = hash(self.spec.service_name())
-        # shuffle for pseudo random selection
-        random.Random(seed).shuffle(host_pool)
         return host_pool[:count]
 
 
@@ -239,6 +235,10 @@ class HostAssignment(object):
                     f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
                 logger.debug('Filtered %s down to %s' % (old, hosts))
 
+        # shuffle for pseudo random selection
+        # gen seed off of self.spec to make shuffling deterministic
+        seed = hash(self.spec.service_name())
+        random.Random(seed).shuffle(hosts)
         return hosts
 
     def hosts_with_daemons(self, candidates: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
