@@ -164,13 +164,11 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
   needs_update_all = false;
   version = current_version;
 
+  p_node_base = ref_leaf_node->read();
   key_view = _key_view;
   p_value_header = _p_value_header;
-
-  auto p_node_base = ref_leaf_node->read();
-  assert((const char*)_p_value_header > p_node_base);
-  offset_value_header = (const char*)_p_value_header - p_node_base;
-  assert(offset_value_header < NODE_BLOCK_SIZE);
+  assert((const char*)p_value_header > p_node_base);
+  assert((const char*)p_value_header - p_node_base < NODE_BLOCK_SIZE);
 
   value_payload_mut.reset();
   p_value_recorder = nullptr;
@@ -180,17 +178,20 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
 {
   assert(version.layout == current_version.layout);
   if (!version.is_duplicate && current_version.is_duplicate) {
-    assert(p_value_header);
-    auto _p_value_header = reinterpret_cast<const value_header_t*>(
-        ref_leaf_node->read() + offset_value_header);
-    assert(_p_value_header != p_value_header);
-    assert(*_p_value_header == *p_value_header);
-
+    assert(p_node_base != nullptr);
+    assert(key_view.has_value());
+    assert(p_value_header != nullptr);
     assert(!value_payload_mut);
-    assert(!p_value_recorder);
+    assert(p_value_recorder == nullptr);
+
+    auto current_p_node_base = ref_leaf_node->read();
+    assert(current_p_node_base != p_node_base);
 
     version.is_duplicate = true;
-    p_value_header = _p_value_header;
+    reset_ptr(p_value_header, p_node_base, current_p_node_base);
+    key_view->reset_to(p_node_base, current_p_node_base);
+
+    p_node_base = current_p_node_base;
   } else {
     // cache must be latest.
     // node cannot change is_duplicate from true to false.
@@ -219,10 +220,9 @@ void tree_cursor_t::Cache::validate_is_latest(const search_position_t& pos) cons
   assert(version == ref_leaf_node->get_version());
 
   auto [_key_view, _p_value_header] = ref_leaf_node->get_kv(pos);
+  assert(p_node_base == ref_leaf_node->read());
   assert(key_view->compare_to(_key_view) == MatchKindCMP::EQ);
   assert(p_value_header == _p_value_header);
-  auto p_node_base = ref_leaf_node->read();
-  assert((const char*)_p_value_header - p_node_base == offset_value_header);
 #endif
 }
 
