@@ -62,6 +62,14 @@ uint32_t DataCryptor::get_iv_size() const {
   return m_iv_size;
 }
 
+const unsigned char* DataCryptor::get_key() const {
+  return m_key;
+}
+
+int DataCryptor::get_key_length() const {
+  return EVP_CIPHER_key_length(m_cipher);
+}
+
 EVP_CIPHER_CTX* DataCryptor::get_context(CipherMode mode) {
   int enc;
   switch(mode) {
@@ -130,7 +138,8 @@ void DataCryptor::log_errors() const {
     if (error == 0) {
       break;
     }
-    lderr(m_cct) << "OpenSSL error: " << error << dendl;
+    lderr(m_cct) << "OpenSSL error: " << ERR_error_string(error, nullptr)
+                 << dendl;
   }
 }
 

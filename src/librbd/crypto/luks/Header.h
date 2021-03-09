@@ -21,8 +21,8 @@ public:
     int write(const ceph::bufferlist& bl);
     ssize_t read(ceph::bufferlist* bl);
 
-    int format(const char* type, const char* alg, size_t key_size,
-               const char* cipher_mode, uint32_t sector_size,
+    int format(const char* type, const char* alg, const char* key,
+               size_t key_size, const char* cipher_mode, uint32_t sector_size,
                uint32_t data_alignment, bool insecure_fast_mode);
     int add_keyslot(const char* passphrase, size_t passphrase_size);
     int load(const char* type);

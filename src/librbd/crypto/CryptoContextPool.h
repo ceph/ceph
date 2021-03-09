@@ -28,6 +28,12 @@ public:
     inline uint32_t get_iv_size() const override {
       return m_data_cryptor->get_iv_size();
     }
+    inline int get_key_length() const override {
+      return m_data_cryptor->get_key_length();
+    }
+    inline const unsigned char* get_key() const override {
+      return m_data_cryptor->get_key();
+    }
     inline int init_context(T* ctx, const unsigned char* iv,
                             uint32_t iv_length) const override {
       return m_data_cryptor->init_context(ctx, iv, iv_length);

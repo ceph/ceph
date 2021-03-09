@@ -33,6 +33,8 @@ public:
   MOCK_CONST_METHOD4(update_context, int(MockCryptoContext*,
                                          const unsigned char*, unsigned char*,
                                          uint32_t));
+  MOCK_CONST_METHOD0(get_key, const unsigned char*());
+  MOCK_CONST_METHOD0(get_key_length, int());
 };
 
 } // namespace crypto
