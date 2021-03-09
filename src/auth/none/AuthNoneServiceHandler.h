@@ -41,9 +41,6 @@ public:
 		     std::string *connection_secret) override {
     return 0;
   }
-  void build_cephx_response_header(int request_type, int status,
-				   ceph::buffer::list& bl) {
-  }
 };
 
 #endif
