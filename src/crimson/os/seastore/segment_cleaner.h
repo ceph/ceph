@@ -35,6 +35,10 @@ struct segment_info_t {
     return state == Segment::segment_state_t::CLOSED;
   }
 
+  bool is_releasing() const {
+    return state == Segment::segment_state_t::RELEASING;
+  }
+
   bool is_open() const {
     return state == Segment::segment_state_t::OPEN;
   }
@@ -665,9 +669,16 @@ private:
     segments[segment].state = Segment::segment_state_t::CLOSED;
   }
 
-  void mark_empty(segment_id_t segment) {
+  void mark_releasing(segment_id_t segment) {
     assert(segments.size() > segment);
     assert(segments[segment].is_closed());
+    segments[segment].state = Segment::segment_state_t::RELEASING;
+  }
+
+
+  void mark_empty(segment_id_t segment) {
+    assert(segments.size() > segment);
+    assert(segments[segment].is_releasing());
     assert(segments.size() > empty_segments);
     ++empty_segments;
     if (space_tracker->get_usage(segment) != 0) {

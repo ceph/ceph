@@ -331,6 +331,7 @@ SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
 	  }).safe_then([&t, this] {
 	    if (scan_cursor->is_complete()) {
 	      t.mark_segment_to_release(scan_cursor->get_offset().segment);
+	      mark_releasing(scan_cursor->get_offset().segment);
 	      scan_cursor.reset();
 	    }
 	    return ExtentCallbackInterface::release_segment_ertr::now();

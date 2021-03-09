@@ -214,8 +214,11 @@ TransactionManager::submit_transaction(
       lba_manager->complete_transaction(tref);
       auto to_release = tref.get_segment_to_release();
       if (to_release != NULL_SEG_ID) {
-	segment_cleaner->mark_segment_released(to_release);
-	return segment_manager.release(to_release);
+	return segment_manager.release(to_release
+	).safe_then([this, to_release] {
+	  segment_cleaner->mark_segment_released(to_release);
+	  return SegmentManager::release_ertr::now();
+	});
       } else {
 	return SegmentManager::release_ertr::now();
       }
