@@ -78,6 +78,8 @@ def test_parse_placement_specs(test_input, expected):
         ('host=a count-per-host:0'),
         ('host=a count-per-host:-10'),
         ('count:2 count-per-host:1'),
+        ('host1=a host2=b count-per-host:2'),
+        ('host1:10/8 count-per-host:2'),
     ]
 )
 def test_parse_placement_specs_raises(test_input):
