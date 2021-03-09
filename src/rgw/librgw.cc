@@ -475,7 +475,7 @@ namespace rgw {
     return ret;
   }
 
-  int RGWLibFrontend::init()
+  int RGWLibFrontend::init(const DoutPrefixProvider *dpp)
   {
     pprocess = new RGWLibProcess(g_ceph_context, &env,
 				 g_conf()->rgw_thread_pool_size, conf);
@@ -603,7 +603,7 @@ namespace rgw {
     service_map_meta["frontend_type#" + fe_count] = "rgw-nfs";
     service_map_meta["frontend_config#" + fe_count] = fec->get_config();
 
-    fe->init();
+    fe->init(&dp);
     if (r < 0) {
       derr << "ERROR: failed initializing frontend" << dendl;
       return r;

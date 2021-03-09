@@ -33,7 +33,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
     /// pause all frontends while realm reconfiguration is in progress
     virtual void pause() = 0;
     /// resume all frontends with the given RGWRados instance
-    virtual void resume(rgw::sal::RGWStore* store) = 0;
+    virtual void resume(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store) = 0;
   };
 
   RGWRealmReloader(rgw::sal::RGWStore*& store, std::map<std::string, std::string>& service_map_meta,

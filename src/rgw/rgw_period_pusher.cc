@@ -296,12 +296,12 @@ void RGWPeriodPusher::pause()
   store = nullptr;
 }
 
-void RGWPeriodPusher::resume(rgw::sal::RGWStore* store)
+void RGWPeriodPusher::resume(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store)
 {
   std::lock_guard<std::mutex> lock(mutex);
   this->store = store;
 
-  ldout(cct, 4) << "resume with " << pending_periods.size()
+  ldpp_dout(dpp, 4) << "resume with " << pending_periods.size()
       << " periods pending" << dendl;
 
   // process notification queue

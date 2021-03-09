@@ -170,5 +170,5 @@ void RGWRealmReloader::reload()
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 
-  frontends->resume(store);
+  frontends->resume(&dp, store);
 }

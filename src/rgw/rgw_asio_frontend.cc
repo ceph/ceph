@@ -165,7 +165,8 @@ std::ostream& operator<<(std::ostream& out, const log_apache_time& a) {
 using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_type>;
 
 template <typename Stream>
-void handle_connection(boost::asio::io_context& context,
+void handle_connection(const DoutPrefixProvider *dpp,
+                       boost::asio::io_context& context,
                        RGWProcessEnv& env, Stream& stream,
                        parse_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
@@ -200,12 +201,12 @@ void handle_connection(boost::asio::io_context& context,
         ec == ssl::error::stream_truncated ||
 #endif
         ec == http::error::end_of_stream) {
-      ldout(cct, 20) << "failed to read header: " << ec.message() << dendl;
+      ldpp_dout(dpp, 20) << "failed to read header: " << ec.message() << dendl;
       return;
     }
     auto& message = parser.get();
     if (ec) {
-      ldout(cct, 1) << "failed to read header: " << ec.message() << dendl;
+      ldpp_dout(dpp, 1) << "failed to read header: " << ec.message() << dendl;
       http::response<http::empty_body> response;
       response.result(http::status::bad_request);
       response.version(message.version() == 10 ? 10 : 11);
@@ -215,9 +216,9 @@ void handle_connection(boost::asio::io_context& context,
       }
       http::async_write(stream, response, yield[ec]);
       if (ec) {
-        ldout(cct, 5) << "failed to write response: " << ec.message() << dendl;
+        ldpp_dout(dpp, 5) << "failed to write response: " << ec.message() << dendl;
       }
-      ldout(cct, 1) << "====== req done http_status=400 ======" << dendl;
+      ldpp_dout(dpp, 1) << "====== req done http_status=400 ======" << dendl;
       return;
     }
 
@@ -226,7 +227,7 @@ void handle_connection(boost::asio::io_context& context,
       if (ec == boost::asio::error::operation_aborted) {
         return;
       } else if (ec) {
-        ldout(cct, 1) << "failed to lock: " << ec.message() << dendl;
+        ldpp_dout(dpp, 1) << "failed to lock: " << ec.message() << dendl;
         return;
       }
 
@@ -236,7 +237,7 @@ void handle_connection(boost::asio::io_context& context,
       auto& socket = get_lowest_layer(stream).socket();
       const auto& remote_endpoint = socket.remote_endpoint(ec);
       if (ec) {
-        ldout(cct, 1) << "failed to connect client: " << ec.message() << dendl;
+        ldpp_dout(dpp, 1) << "failed to connect client: " << ec.message() << dendl;
         return;
       }
 
@@ -261,7 +262,7 @@ void handle_connection(boost::asio::io_context& context,
 
       if (cct->_conf->subsys.should_gather(dout_subsys, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
-        ldout(cct, 1) << "beast: " << std::hex << &req << std::dec << ": "
+        ldpp_dout(dpp, 1) << "beast: " << std::hex << &req << std::dec << ": "
             << remote_endpoint.address() << " - " << user << " [" << log_apache_time{started} << "] \""
             << message.method_string() << ' ' << message.target() << ' '
             << http_version{message.version()} << "\" " << http_ret << ' '
@@ -384,7 +385,7 @@ class AsioFrontend {
   CephContext* ctx() const { return env.store->ctx(); }
   std::optional<dmc::ClientCounters> client_counters;
   std::unique_ptr<dmc::ClientConfig> client_config;
-  void accept(Listener& listener, boost::system::error_code ec);
+  void accept(const DoutPrefixProvider *dpp, Listener& listener, boost::system::error_code ec);
 
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
@@ -410,12 +411,12 @@ class AsioFrontend {
     }
   }
 
-  int init();
+  int init(const DoutPrefixProvider *dpp);
   int run();
   void stop();
   void join();
   void pause();
-  void unpause(rgw::sal::RGWStore* store, rgw_auth_registry_ptr_t);
+  void unpause(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, rgw_auth_registry_ptr_t);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -502,7 +503,7 @@ static int drop_privileges(CephContext *ctx)
   return 0;
 }
 
-int AsioFrontend::init()
+int AsioFrontend::init(const DoutPrefixProvider *dpp)
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
@@ -514,7 +515,7 @@ int AsioFrontend::init()
     if (timeout_number) {
       request_timeout =  std::chrono::milliseconds(*timeout_number);
     } else {
-      lderr(ctx()) << "WARNING: invalid value for request_timeout_ms: "
+      ldpp_dout(dpp, -1) << "WARNING: invalid value for request_timeout_ms: "
       << timeout->second.data() << " setting it to the default value: "
       << REQUEST_TIMEOUT << dendl;
     }
@@ -531,7 +532,7 @@ int AsioFrontend::init()
   for (auto i = ports.first; i != ports.second; ++i) {
     auto port = parse_port(i->second.c_str(), ec);
     if (ec) {
-      lderr(ctx()) << "failed to parse port=" << i->second << dendl;
+      ldpp_dout(dpp, -1) << "failed to parse port=" << i->second << dendl;
       return -ec.value();
     }
     listeners.emplace_back(context);
@@ -545,7 +546,7 @@ int AsioFrontend::init()
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
     auto endpoint = parse_endpoint(i->second, 80, ec);
     if (ec) {
-      lderr(ctx()) << "failed to parse endpoint=" << i->second << dendl;
+      ldpp_dout(dpp, -1) << "failed to parse endpoint=" << i->second << dendl;
       return -ec.value();
     }
     listeners.emplace_back(context);
@@ -566,19 +567,19 @@ int AsioFrontend::init()
     l.acceptor.open(l.endpoint.protocol(), ec);
     if (ec) {
       if (ec == boost::asio::error::address_family_not_supported) {
-	ldout(ctx(), 0) << "WARNING: cannot open socket for endpoint=" << l.endpoint
+	ldpp_dout(dpp, 0) << "WARNING: cannot open socket for endpoint=" << l.endpoint
 			<< ", " << ec.message() << dendl;
 	continue;
       }
 
-      lderr(ctx()) << "failed to open socket: " << ec.message() << dendl;
+      ldpp_dout(dpp, -1) << "failed to open socket: " << ec.message() << dendl;
       return -ec.value();
     }
 
     if (l.endpoint.protocol() == tcp::v6()) {
       l.acceptor.set_option(boost::asio::ip::v6_only(true), ec);
       if (ec) {
-        lderr(ctx()) << "failed to set v6_only socket option: "
+        ldpp_dout(dpp, -1) << "failed to set v6_only socket option: "
 		     << ec.message() << dendl;
 	return -ec.value();
       }
@@ -587,7 +588,7 @@ int AsioFrontend::init()
     l.acceptor.set_option(tcp::acceptor::reuse_address(true));
     l.acceptor.bind(l.endpoint, ec);
     if (ec) {
-      lderr(ctx()) << "failed to bind address " << l.endpoint
+      ldpp_dout(dpp, -1) << "failed to bind address " << l.endpoint
           << ": " << ec.message() << dendl;
       return -ec.value();
     }
@@ -598,21 +599,21 @@ int AsioFrontend::init()
       string err;
       max_connection_backlog = strict_strtol(it->second.c_str(), 10, &err);
       if (!err.empty()) {
-        ldout(ctx(), 0) << "WARNING: invalid value for max_connection_backlog=" << it->second << dendl;
+        ldpp_dout(dpp, 0) << "WARNING: invalid value for max_connection_backlog=" << it->second << dendl;
         max_connection_backlog = boost::asio::socket_base::max_listen_connections;
       }
     }
     l.acceptor.listen(max_connection_backlog);
     l.acceptor.async_accept(l.socket,
-                            [this, &l] (boost::system::error_code ec) {
-                              accept(l, ec);
+                            [dpp, this, &l] (boost::system::error_code ec) {
+                              accept(dpp, l, ec);
                             });
 
-    ldout(ctx(), 4) << "frontend listening on " << l.endpoint << dendl;
+    ldpp_dout(dpp, 4) << "frontend listening on " << l.endpoint << dendl;
     socket_bound = true;
   }
   if (!socket_bound) {
-    lderr(ctx()) << "Unable to listen at any endpoints" << dendl;
+    ldpp_dout(dpp, -1) << "Unable to listen at any endpoints" << dendl;
     return -EINVAL;
   }
 
@@ -873,22 +874,22 @@ int AsioFrontend::init_ssl()
 }
 #endif // WITH_RADOSGW_BEAST_OPENSSL
 
-void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
+void AsioFrontend::accept(const DoutPrefixProvider *dpp, Listener& l, boost::system::error_code ec)
 {
   if (!l.acceptor.is_open()) {
     return;
   } else if (ec == boost::asio::error::operation_aborted) {
     return;
   } else if (ec) {
-    ldout(ctx(), 1) << "accept failed: " << ec.message() << dendl;
+    ldpp_dout(dpp, 1) << "accept failed: " << ec.message() << dendl;
     return;
   }
   auto socket = std::move(l.socket);
   tcp::no_delay options(l.use_nodelay);
   socket.set_option(options,ec);
   l.acceptor.async_accept(l.socket,
-                          [this, &l] (boost::system::error_code ec) {
-                            accept(l, ec);
+                          [dpp, this, &l] (boost::system::error_code ec) {
+                            accept(dpp, l, ec);
                           });
   
   boost::beast::tcp_stream stream(std::move(socket));
@@ -896,7 +897,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
     spawn::spawn(context,
-      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
+      [dpp, this, s=std::move(stream)] (spawn::yield_context yield) mutable {
         Connection conn{s.socket()};
         auto c = connections.add(conn);
         // wrap the tcp_stream in an ssl stream
@@ -910,11 +911,11 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto bytes = stream.async_handshake(ssl::stream_base::server,
                                             buffer->data(), yield[ec]);
         if (ec) {
-          ldout(ctx(), 1) << "ssl handshake failed: " << ec.message() << dendl;
+          ldpp_dout(dpp, 1) << "ssl handshake failed: " << ec.message() << dendl;
           return;
         }
         buffer->consume(bytes);
-        handle_connection(context, env, stream, *buffer, true, pause_mutex,
+        handle_connection(dpp, context, env, stream, *buffer, true, pause_mutex,
                           scheduler.get(), ec, yield, request_timeout);
         if (!ec) {
           // ssl shutdown (ignoring errors)
@@ -927,12 +928,12 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   {
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     spawn::spawn(context,
-      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
+      [dpp, this, s=std::move(stream)] (spawn::yield_context yield) mutable {
         Connection conn{s.socket()};
         auto c = connections.add(conn);
         auto buffer = std::make_unique<parse_buffer>();
         boost::system::error_code ec;
-        handle_connection(context, env, s, *buffer, false, pause_mutex,
+        handle_connection(dpp, context, env, s, *buffer, false, pause_mutex,
                           scheduler.get(), ec, yield, request_timeout);
         s.socket().shutdown(tcp::socket::shutdown_both, ec);
       }, make_stack_allocator());
@@ -1013,7 +1014,7 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause(rgw::sal::RGWStore* const store,
+void AsioFrontend::unpause(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* const store,
                            rgw_auth_registry_ptr_t auth_registry)
 {
   env.store = store;
@@ -1025,12 +1026,12 @@ void AsioFrontend::unpause(rgw::sal::RGWStore* const store,
   // start accepting connections again
   for (auto& l : listeners) {
     l.acceptor.async_accept(l.socket,
-                            [this, &l] (boost::system::error_code ec) {
-                              accept(l, ec);
+                            [dpp, this, &l] (boost::system::error_code ec) {
+                              accept(dpp, l, ec);
                             });
   }
 
-  ldout(ctx(), 4) << "frontend unpaused" << dendl;
+  ldpp_dout(dpp, 4) << "frontend unpaused" << dendl;
 }
 
 } // anonymous namespace
@@ -1051,9 +1052,9 @@ RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
 
 RGWAsioFrontend::~RGWAsioFrontend() = default;
 
-int RGWAsioFrontend::init()
+int RGWAsioFrontend::init(const DoutPrefixProvider *dpp)
 {
-  return impl->init();
+  return impl->init(dpp);
 }
 
 int RGWAsioFrontend::run()
@@ -1077,8 +1078,9 @@ void RGWAsioFrontend::pause_for_new_config()
 }
 
 void RGWAsioFrontend::unpause_with_new_config(
+  const DoutPrefixProvider *dpp,
   rgw::sal::RGWStore* const store,
   rgw_auth_registry_ptr_t auth_registry
 ) {
-  impl->unpause(store, std::move(auth_registry));
+  impl->unpause(dpp, store, std::move(auth_registry));
 }

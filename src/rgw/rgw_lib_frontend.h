@@ -81,7 +81,7 @@ namespace rgw {
     RGWLibFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
       : RGWProcessFrontend(pe, _conf) {}
 		
-    int init() override;
+    int init(const DoutPrefixProvider *dpp) override;
 
     void stop() override {
       RGWProcessFrontend::stop();

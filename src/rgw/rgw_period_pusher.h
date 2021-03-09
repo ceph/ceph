@@ -40,7 +40,7 @@ class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
   void pause() override;
 
   /// continue processing notifications with a new RGWRados instance
-  void resume(rgw::sal::RGWStore* store) override;
+  void resume(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store) override;
 
  private:
   void handle_notify(RGWZonesNeedPeriod&& period);

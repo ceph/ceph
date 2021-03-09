@@ -16,13 +16,13 @@ public:
 		  rgw::dmclock::SchedulerCtx& sched_ctx);
   ~RGWAsioFrontend() override;
 
-  int init() override;
+  int init(const DoutPrefixProvider *dpp) override;
   int run() override;
   void stop() override;
   void join() override;
 
   void pause_for_new_config() override;
-  void unpause_with_new_config(rgw::sal::RGWStore *store,
+  void unpause_with_new_config(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *store,
                                rgw_auth_registry_ptr_t auth_registry) override;
 };
 

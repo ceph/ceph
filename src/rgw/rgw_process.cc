@@ -352,7 +352,7 @@ done:
     handler->put_op(op);
   rest->put_handler(handler);
 
-  dout(1) << "====== req done req=" << hex << req << dec
+  ldpp_dout(s, 1) << "====== req done req=" << hex << req << dec
 	  << " op status=" << op_ret
 	  << " http_status=" << s->err.http_ret
 	  << " latency=" << s->time_elapsed()

@@ -76,14 +76,14 @@ class RGWFrontend {
 public:
   virtual ~RGWFrontend() {}
 
-  virtual int init() = 0;
+  virtual int init(const DoutPrefixProvider *dpp) = 0;
 
   virtual int run() = 0;
   virtual void stop() = 0;
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(rgw::sal::RGWStore* store,
+  virtual void unpause_with_new_config(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
                                        rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
@@ -123,7 +123,7 @@ public:
                       RGWFrontendConfig *conf,
 		      rgw::dmclock::SchedulerCtx& sched_ctx);
 
-  int init() override {
+  int init(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -146,7 +146,7 @@ public:
     env.mutex.get_write();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWStore* const store,
+  void unpause_with_new_config(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = std::move(auth_registry);
@@ -189,7 +189,7 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWStore* const store,
+  void unpause_with_new_config(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = auth_registry;
@@ -202,7 +202,7 @@ public:
   RGWFCGXFrontend(RGWProcessEnv& pe, RGWFrontendConfig* _conf)
     : RGWProcessFrontend(pe, _conf) {}
 
-  int init() override {
+  int init(const DoutPrefixProvider *dpp) override {
     pprocess = new RGWFCGXProcess(g_ceph_context, &env,
 				  g_conf()->rgw_thread_pool_size, conf);
     return 0;
@@ -228,7 +228,7 @@ public:
     return out << "rgw loadgen frontend: ";
   }
 
-  int init() override {
+  int init(const DoutPrefixProvider *dpp) override {
     int num_threads;
     conf->get_val("num_threads", g_conf()->rgw_thread_pool_size, &num_threads);
     RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env,
@@ -287,16 +287,16 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(rgw::sal::RGWStore *store) override {
+  void resume(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *store) override {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
       rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store);
 
     for (auto frontend : frontends)
-      frontend->unpause_with_new_config(store, auth_registry);
+      frontend->unpause_with_new_config(dpp, store, auth_registry);
     if (pauser)
-      pauser->resume(store);
+      pauser->resume(dpp, store);
   }
 };
 

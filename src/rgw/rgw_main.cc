@@ -605,7 +605,7 @@ int radosgw_Main(int argc, const char **argv)
     }
 
     dout(0) << "starting handler: " << fiter->first << dendl;
-    int r = fe->init();
+    int r = fe->init(&dp);
     if (r < 0) {
       derr << "ERROR: failed initializing frontend" << dendl;
       return -r;
