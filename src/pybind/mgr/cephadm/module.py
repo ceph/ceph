@@ -29,7 +29,7 @@ from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
-from mgr_module import MgrModule, HandleCommandResult, Option
+from mgr_module import MgrModule, HandleCommandResult, Option, MonCommandFailed
 from mgr_util import create_self_signed_cert
 import secrets
 import orchestrator
@@ -1436,6 +1436,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if extra:
             config += '\n\n' + extra.strip() + '\n'
         return config
+
+    def _get_or_create_key(self, entity: str, caps: List[str]) -> str:
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': entity,
+            'caps': caps,
+        })
+        if ret and not keyring:
+            ret, keyring, err = self.mon_command({
+                'prefix': 'auth get',
+                'entity': entity
+            })
+        if ret:
+            raise MonCommandFailed(f'Failed to get or create key for {entity}')
+        return keyring
 
     def _invalidate_daemons_and_kick_serve(self, filter_host: Optional[str] = None) -> None:
         if filter_host:

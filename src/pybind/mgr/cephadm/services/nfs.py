@@ -118,28 +118,22 @@ class NFSService(CephService):
             osd_caps = '%s namespace=%s' % (osd_caps, spec.namespace)
 
         logger.info('Create keyring: %s' % entity)
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': entity,
-            'caps': ['mon', 'allow r',
-                     'osd', osd_caps],
-        })
-
-        return keyring
+        return self.mgr._get_or_create_key(
+            entity,
+            ['mon', 'allow r',
+             'osd', osd_caps],
+        )
 
     def create_rgw_keyring(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         daemon_id = daemon_spec.daemon_id
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
         logger.info('Create keyring: %s' % entity)
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': entity,
-            'caps': ['mon', 'allow r',
-                     'osd', 'allow rwx tag rgw *=*'],
-        })
-
-        return keyring
+        return self.mgr._get_or_create_key(
+            entity,
+            ['mon', 'allow r',
+             'osd', 'allow rwx tag rgw *=*'],
+        )
 
     def remove_rgw_keyring(self, daemon: DaemonDescription) -> None:
         assert daemon.daemon_id is not None

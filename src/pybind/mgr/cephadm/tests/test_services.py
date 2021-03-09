@@ -18,6 +18,7 @@ class FakeMgr:
     def __init__(self):
         self.config = ''
         self.check_mon_command = MagicMock(side_effect=self._check_mon_command)
+        self._get_or_create_key = MagicMock()
         self.template = MagicMock()
 
     def _check_mon_command(self, cmd_dict, inbuf=None):
@@ -105,11 +106,9 @@ class TestCephadmService:
                          'mgr', 'allow command "service status"',
                          'osd', 'allow rwx']
 
-        expected_call = call({'prefix': 'auth get-or-create',
-                              'entity': 'client.iscsi.a',
-                              'caps': expected_caps})
+        expected_call = call('client.iscsi.a', expected_caps)
 
-        assert expected_call in mgr.check_mon_command.mock_calls
+        assert expected_call in mgr._get_or_create_key.mock_calls
 
     def test_get_auth_entity(self):
         mgr = FakeMgr()

@@ -27,15 +27,14 @@ class IscsiService(CephService):
         spec = cast(IscsiServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id
 
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(igw_id),
-            'caps': ['mon', 'profile rbd, '
-                            'allow command "osd blocklist", '
-                            'allow command "config-key get" with "key" prefix "iscsi/"',
-                     'mgr', 'allow command "service status"',
-                     'osd', 'allow rwx'],
-        })
+        keyring = self.mgr._get_or_create_key(
+            self.get_auth_entity(igw_id),
+            ['mon', 'profile rbd, '
+             'allow command "osd blocklist", '
+             'allow command "config-key get" with "key" prefix "iscsi/"',
+             'mgr', 'allow command "service status"',
+             'osd', 'allow rwx'],
+        )
 
         if spec.ssl_cert:
             if isinstance(spec.ssl_cert, list):

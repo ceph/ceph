@@ -512,13 +512,12 @@ class MgrService(CephService):
         mgr_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(mgr_id),
-            'caps': ['mon', 'profile mgr',
-                     'osd', 'allow *',
-                     'mds', 'allow *'],
-        })
+        keyring = self.mgr._get_or_create_key(
+            self.get_auth_entity(mgr_id),
+            ['mon', 'profile mgr',
+             'osd', 'allow *',
+             'mds', 'allow *'],
+        )
 
         # Retrieve ports used by manager modules
         # In the case of the dashboard port and with several manager daemons
@@ -620,14 +619,12 @@ class MdsService(CephService):
         mds_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(mds_id),
-            'caps': ['mon', 'profile mds',
-                     'osd', 'allow rw tag cephfs *=*',
-                     'mds', 'allow'],
-        })
-        daemon_spec.keyring = keyring
+        daemon_spec.keyring = self.mgr._get_or_create_key(
+            self.get_auth_entity(mds_id),
+            ['mon', 'profile mds',
+             'osd', 'allow rw tag cephfs *=*',
+             'mds', 'allow'],
+        )
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
@@ -733,14 +730,12 @@ class RgwService(CephService):
         return daemon_spec
 
     def get_keyring(self, rgw_id: str) -> str:
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(rgw_id),
-            'caps': ['mon', 'allow *',
-                     'mgr', 'allow rw',
-                     'osd', 'allow rwx tag rgw *=*'],
-        })
-        return keyring
+        return self.mgr._get_or_create_key(
+            self.get_auth_entity(rgw_id),
+            ['mon', 'allow *',
+             'mgr', 'allow rw',
+             'osd', 'allow rwx tag rgw *=*'],
+        )
 
     def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str) -> None:
         if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
@@ -913,14 +908,11 @@ class RbdMirrorService(CephService):
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(daemon_id),
-            'caps': ['mon', 'profile rbd-mirror',
-                     'osd', 'profile rbd'],
-        })
-
-        daemon_spec.keyring = keyring
+        daemon_spec.keyring = self.mgr._get_or_create_key(
+            self.get_auth_entity(daemon_id),
+            ['mon', 'profile rbd-mirror',
+             'osd', 'profile rbd'],
+        )
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
@@ -947,14 +939,11 @@ class CrashService(CephService):
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(daemon_id, host=host),
-            'caps': ['mon', 'profile crash',
-                     'mgr', 'profile crash'],
-        })
-
-        daemon_spec.keyring = keyring
+        daemon_spec.keyring = self.mgr._get_or_create_key(
+            self.get_auth_entity(daemon_id, host=host),
+            ['mon', 'profile crash',
+             'mgr', 'profile crash'],
+        )
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
