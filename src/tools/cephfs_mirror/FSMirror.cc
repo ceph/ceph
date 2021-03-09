@@ -13,6 +13,7 @@
 #include "FSMirror.h"
 #include "PeerReplayer.h"
 #include "aio_utils.h"
+#include "ServiceDaemon.h"
 #include "Utils.h"
 
 #include "common/Cond.h"
@@ -26,6 +27,10 @@ namespace cephfs {
 namespace mirror {
 
 namespace {
+
+const std::string SERVICE_DAEMON_DIR_COUNT_KEY("directory_count");
+const std::string SERVICE_DAEMON_PEER_INIT_FAILED_KEY("peer_init_failed");
+
 class MirrorAdminSocketCommand {
 public:
   virtual ~MirrorAdminSocketCommand() {
@@ -87,14 +92,18 @@ private:
 };
 
 FSMirror::FSMirror(CephContext *cct, const Filesystem &filesystem, uint64_t pool_id,
-                   std::vector<const char*> args, ContextWQ *work_queue)
+                   ServiceDaemon *service_daemon, std::vector<const char*> args,
+                   ContextWQ *work_queue)
   : m_cct(cct),
     m_filesystem(filesystem),
     m_pool_id(pool_id),
+    m_service_daemon(service_daemon),
     m_args(args),
     m_work_queue(work_queue),
     m_snap_listener(this),
     m_asok_hook(new MirrorAdminSocketHook(cct, filesystem, this)) {
+  m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
+                                               (uint64_t)0);
 }
 
 FSMirror::~FSMirror() {
@@ -321,24 +330,33 @@ void FSMirror::handle_shutdown_instance_watcher(int r) {
 void FSMirror::handle_acquire_directory(string_view dir_path) {
   dout(5) << ": dir_path=" << dir_path << dendl;
 
-  std::scoped_lock locker(m_lock);
-  m_directories.emplace(dir_path);
-  for (auto &[peer, peer_replayer] : m_peer_replayers) {
-    dout(10) << ": peer=" << peer << dendl;
-    peer_replayer->add_directory(dir_path);
+  {
+    std::scoped_lock locker(m_lock);
+    m_directories.emplace(dir_path);
+    m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
+                                                 m_directories.size());
+
+    for (auto &[peer, peer_replayer] : m_peer_replayers) {
+      dout(10) << ": peer=" << peer << dendl;
+      peer_replayer->add_directory(dir_path);
+    }
   }
 }
 
 void FSMirror::handle_release_directory(string_view dir_path) {
   dout(5) << ": dir_path=" << dir_path << dendl;
 
-  std::scoped_lock locker(m_lock);
-  auto it = m_directories.find(dir_path);
-  if (it != m_directories.end()) {
-    m_directories.erase(it);
-    for (auto &[peer, peer_replayer] : m_peer_replayers) {
-      dout(10) << ": peer=" << peer << dendl;
-      peer_replayer->remove_directory(dir_path);
+  {
+    std::scoped_lock locker(m_lock);
+    auto it = m_directories.find(dir_path);
+    if (it != m_directories.end()) {
+      m_directories.erase(it);
+      m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
+                                                   m_directories.size());
+      for (auto &[peer, peer_replayer] : m_peer_replayers) {
+        dout(10) << ": peer=" << peer << dendl;
+        peer_replayer->remove_directory(dir_path);
+      }
     }
   }
 }
@@ -353,9 +371,12 @@ void FSMirror::add_peer(const Peer &peer) {
   }
 
   auto replayer = std::make_unique<PeerReplayer>(
-    m_cct, this, m_filesystem, peer, m_directories, m_mount);
+    m_cct, this, m_filesystem, peer, m_directories, m_mount, m_service_daemon);
   int r = init_replayer(replayer.get());
   if (r < 0) {
+    m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, peer,
+                                                   SERVICE_DAEMON_PEER_INIT_FAILED_KEY,
+                                                   true);
     return;
   }
   m_peer_replayers.emplace(peer, std::move(replayer));
