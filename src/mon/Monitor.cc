@@ -6341,14 +6341,14 @@ int Monitor::handle_auth_request(
     // are supported by the client if we require it.  for msgr2 that
     // is not necessary.
 
+    bool is_new_global_id = false;
     if (!con->peer_global_id) {
       con->peer_global_id = authmon()->_assign_global_id();
       if (!con->peer_global_id) {
 	dout(1) << __func__ << " failed to assign global_id" << dendl;
 	return -EBUSY;
       }
-      dout(10) << __func__ << "  assigned global_id " << con->peer_global_id
-	       << dendl;
+      is_new_global_id = true;
     }
 
     // set up partial session
@@ -6358,6 +6358,8 @@ int Monitor::handle_auth_request(
 
     r = s->auth_handler->start_session(
       entity_name,
+      con->peer_global_id,
+      is_new_global_id,
       reply,
       &con->peer_caps_info);
   } else {
