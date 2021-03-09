@@ -573,18 +573,6 @@ class CephFSMount(object):
         finally:
             self.umount_wait()
 
-    def is_blocklisted(self):
-        addr = self.get_global_addr()
-        if addr is None:
-            log.warn("Couldn't get the client address, so the blocklisted status undetermined")
-            return False
-
-        blocklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "blocklist", "ls", "--format=json"))
-        for b in blocklist:
-            if addr == b["addr"]:
-                return True
-        return False
-
     def create_file(self, filename='testfile', dirname=None, user=None,
                     check_status=True):
         assert(self.is_mounted())

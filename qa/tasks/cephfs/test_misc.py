@@ -165,7 +165,8 @@ class TestMisc(CephFSTestCase):
                                 cap_waited, session_timeout
                             ))
 
-            self.assertTrue(self.mount_a.is_blocklisted())
+            self.assertTrue(self.mds_cluster.is_addr_blocklisted(
+                self.mount_a.get_global_addr()))
             self.mount_a._kill_background(cap_holder)
         finally:
             self.mount_a.resume_netns()
