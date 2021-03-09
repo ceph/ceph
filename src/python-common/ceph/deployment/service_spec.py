@@ -295,6 +295,14 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError("count-per-host must be >= 1")
         if self.count is not None and self.count_per_host is not None:
             raise ServiceSpecValidationError("cannot combine count and count-per-host")
+        if (
+                self.count_per_host is not None
+                and self.hosts
+                and any([hs.network or hs.name for hs in self.hosts])
+        ):
+            raise ServiceSpecValidationError(
+                "count-per-host cannot be combined explicit placement with names or networks"
+            )
         if self.host_pattern and self.hosts:
             raise ServiceSpecValidationError('cannot combine host patterns and hosts')
         for h in self.hosts:
