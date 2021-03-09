@@ -9,7 +9,7 @@ jobs:
         with:
           sync-labels: ''
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
-      - uses: iyu/actions-milestone@9aa2197e1bda6cf71541d1bf6fa4f73edc543991
+      - uses: iyu/actions-milestone@dbf7e5348844c9ddc6b803a5721b85fa70fe3bb9
         with:
           configuration-path: .github/milestone.yml
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
