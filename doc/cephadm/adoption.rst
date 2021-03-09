@@ -181,10 +181,11 @@ Adoption process
 
    .. prompt:: bash #
 
-      ceph orch apply rgw <realm> <zone> [--subcluster=<subcluster>] [--port=<port>] [--ssl] [--placement=<placement>]
+      ceph orch apply rgw <svc_id> [--rgw-realm=<realm>] [--rgw-zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>]
 
    where *<placement>* can be a simple daemon count, or a list of
-   specific hosts (see :ref:`orchestrator-cli-placement-spec`).
+   specific hosts (see :ref:`orchestrator-cli-placement-spec`), and the
+   zone and realm arguments are needed only for a multisite setup.
 
    After the daemons have started and you have confirmed that they are
    functioning, stop and remove the old, legacy daemons:
@@ -193,9 +194,6 @@ Adoption process
 
       systemctl stop ceph-rgw.target
       rm -rf /var/lib/ceph/radosgw/ceph-*
-
-   To learn more about adopting single-site systems without a realm, see
-   :ref:`rgw-multisite-migrate-from-single-site`.
 
 #. Check the output of the command ``ceph health detail`` for cephadm warnings
    about stray cluster daemons or hosts that are not yet managed by cephadm.
