@@ -838,9 +838,16 @@ void CInode::close_dirfrag(frag_t fg)
   for (const auto &p : dir->items)
     dout(14) << __func__ << " LEFTOVER dn " << *p.second << dendl;
 
-  ceph_assert(dir->get_num_ref() == 0);
-  delete dir;
   dirfrags.erase(fg);
+  if (dir->get_num_ref() == 0) {
+    delete dir;
+  } else {
+#ifdef MDS_REF_SET
+    ceph_assert(dir->get_num_ref() == dir->get_num_ref(CDir::PIN_PTRWAITER));
+#endif
+    put(CInode::PIN_DIRFRAG);
+    dir->inode = nullptr;
+  }
 }
 
 void CInode::close_dirfrags()

@@ -1193,7 +1193,7 @@ bool OpenFileTable::should_log_open(CInode *in)
 {
   if (in->state_test(CInode::STATE_TRACKEDBYOFT)) {
     // inode just journaled
-    if (in->last_journaled >= committing_log_seq)
+    if (in->last_journal >= committing_log_seq)
       return false;
     // item not dirty. it means the item has already been saved
     auto p = dirty_items.find(in->ino());

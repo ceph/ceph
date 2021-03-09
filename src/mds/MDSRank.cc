@@ -153,7 +153,7 @@ private:
     // Attach contexts to wait for all expiring segments to expire
     MDSGatherBuilder expiry_gather(g_ceph_context);
 
-    const auto &expiring_segments = mdlog->get_expiring_segments();
+    auto&& expiring_segments = mdlog->get_expiring_segments();
     for (auto p : expiring_segments) {
       p->wait_for_expiry(expiry_gather.new_sub());
     }

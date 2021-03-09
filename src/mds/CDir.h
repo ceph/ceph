@@ -669,6 +669,9 @@ public:
   frag_t frag;   // my frag
 
   snapid_t first = 2;
+
+  uint64_t last_journaled = 0;	// log event seq for the last time i was journaled
+
   mempool::mds_co::compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data

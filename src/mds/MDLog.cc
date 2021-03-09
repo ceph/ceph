@@ -272,6 +272,7 @@ void MDLog::cancel_entry(LogEvent *le)
 {
   ceph_assert(le == cur_event);
   cur_event = NULL;
+  --event_seq;
   delete le;
 }
 
@@ -294,7 +295,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   le->set_stamp(ceph_clock_now());
 
   mdsmap_up_features = mds->mdsmap->get_up_features();
-  pending_events[ls->seq].push_back(PendingEvent(le, c));
+  pending_events[ls->seq].emplace_back(le, event_seq, c);
   num_events++;
 
   if (logger) {
@@ -345,8 +346,8 @@ protected:
 public:
   C_MDL_Flushed(MDLog *m, MDSContext *w)
     : mdlog(m), wrapped(w) {}
-  C_MDL_Flushed(MDLog *m, uint64_t wp) : mdlog(m), wrapped(NULL) {
-    set_write_pos(wp);
+  C_MDL_Flushed(MDLog *m, uint64_t wp, uint64_t seq) : mdlog(m), wrapped(nullptr) {
+    set_write_pos(wp, seq);
   }
 };
 
@@ -403,10 +404,12 @@ void MDLog::_submit_thread()
       if (data.fin) {
 	fin = dynamic_cast<MDSLogContextBase*>(data.fin);
 	ceph_assert(fin);
-	fin->set_write_pos(new_write_pos);
+	fin->set_write_pos(new_write_pos, data.seq);
       } else {
-	fin = new C_MDL_Flushed(this, new_write_pos);
+	fin = new C_MDL_Flushed(this, new_write_pos, data.seq);
       }
+      if (EMetaBlob *blob = le->get_metablob())
+	fin->set_subtrees(std::move(blob->subtrees));
 
       journaler->wait_for_flush(fin);
 
@@ -419,11 +422,9 @@ void MDLog::_submit_thread()
       delete le;
     } else {
       if (data.fin) {
-	MDSContext* fin =
-		dynamic_cast<MDSContext*>(data.fin);
+	MDSContext* fin = dynamic_cast<MDSContext*>(data.fin);
 	ceph_assert(fin);
 	C_MDL_Flushed *fin2 = new C_MDL_Flushed(this, fin);
-	fin2->set_write_pos(journaler->get_write_pos());
 	journaler->wait_for_flush(fin2);
       }
       if (data.flush)
@@ -444,7 +445,7 @@ void MDLog::wait_for_safe(MDSContext *c)
 
   bool no_pending = true;
   if (!pending_events.empty()) {
-    pending_events.rbegin()->second.push_back(PendingEvent(NULL, c));
+    pending_events.rbegin()->second.emplace_back(nullptr, 0, c);
     no_pending = false;
     submit_cond.notify_all();
   }
@@ -462,7 +463,7 @@ void MDLog::flush()
   bool do_flush = unflushed > 0;
   unflushed = 0;
   if (!pending_events.empty()) {
-    pending_events.rbegin()->second.push_back(PendingEvent(NULL, NULL, true));
+    pending_events.rbegin()->second.emplace_back(nullptr, 0, nullptr, true);
     do_flush = false;
     submit_cond.notify_all();
   }
@@ -548,6 +549,8 @@ void MDLog::_prepare_new_segment()
   uint64_t seq = event_seq + 1;
   dout(7) << __func__ << " seq " << seq << dendl;
 
+  if (segments.empty())
+    unexpired_segment_seq = seq;
   segments[seq] = new LogSegment(seq);
 
   logger->inc(l_mdl_segadd);
@@ -670,15 +673,16 @@ void MDLog::trim(int m)
     } else {
       ceph_assert(expiring_segments.count(ls) == 0);
       new_expiring_segments++;
-      expiring_segments.insert(ls);
+      expiring_segments.emplace(ls, event_seq);
       expiring_events += ls->num_events;
+      uint64_t next_seq = (p != segments.end() ? p->first : event_seq + 1);
+      unexpired_segment_seq = next_seq;
       submit_mutex.unlock();
 
-      uint64_t last_seq = ls->seq;
       try_expire(ls, op_prio);
 
       submit_mutex.lock();
-      p = segments.lower_bound(last_seq + 1);
+      p = segments.lower_bound(next_seq);
     }
   }
 
@@ -760,11 +764,12 @@ int MDLog::trim_all()
 	      << ", " << ls->num_events << " events" << dendl;
     } else {
       ceph_assert(expiring_segments.count(ls) == 0);
-      expiring_segments.insert(ls);
+      expiring_segments.emplace(ls, event_seq);
       expiring_events += ls->num_events;
+      uint64_t next_seq = (p != segments.end() ? p->first : event_seq + 1);
+      unexpired_segment_seq = next_seq;
       submit_mutex.unlock();
 
-      uint64_t next_seq = ls->seq + 1;
       try_expire(ls, CEPH_MSG_PRIO_DEFAULT);
 
       submit_mutex.lock();
@@ -790,9 +795,6 @@ void MDLog::try_expire(LogSegment *ls, int op_prio)
   } else {
     dout(10) << "try_expire expired segment " << ls->seq << "/" << ls->offset << dendl;
     submit_mutex.lock();
-    ceph_assert(expiring_segments.count(ls));
-    expiring_segments.erase(ls);
-    expiring_events -= ls->num_events;
     _expired(ls);
     submit_mutex.unlock();
   }
@@ -823,9 +825,15 @@ void MDLog::_trim_expired_segments()
   bool trimmed = false;
   while (!segments.empty()) {
     LogSegment *ls = segments.begin()->second;
-    if (!expired_segments.count(ls)) {
+    auto it = expired_segments.find(ls);
+    if (it == expired_segments.end()) {
       dout(10) << "_trim_expired_segments waiting for " << ls->seq << "/" << ls->offset
 	       << " to expire" << dendl;
+      break;
+    }
+    if (std::min<uint64_t>(event_seq, it->second) > safe_event_seq) {
+      dout(10) << "_trim_expired_segments waiting for event " << it->second
+	       << " to be safe" << dendl;
       break;
     }
 
@@ -838,7 +846,7 @@ void MDLog::_trim_expired_segments()
     dout(10) << "_trim_expired_segments trimming expired "
 	     << ls->seq << "/0x" << std::hex << ls->offset << std::dec << dendl;
     expired_events -= ls->num_events;
-    expired_segments.erase(ls);
+    expired_segments.erase(it);
     if (pre_segments_size > 0)
       pre_segments_size--;
     num_events -= ls->num_events;
@@ -847,6 +855,7 @@ void MDLog::_trim_expired_segments()
     if (journaler->get_expire_pos() < ls->end) {
       journaler->set_expire_pos(ls->end);
       logger->set(l_mdl_expos, ls->end);
+      trimmed = true;
     } else {
       logger->set(l_mdl_expos, ls->offset);
     }
@@ -856,7 +865,6 @@ void MDLog::_trim_expired_segments()
     
     segments.erase(ls->seq);
     delete ls;
-    trimmed = true;
   }
 
   submit_mutex.unlock();
@@ -878,12 +886,18 @@ void MDLog::_expired(LogSegment *ls)
   dout(5) << "_expired segment " << ls->seq << "/" << ls->offset
 	  << ", " << ls->num_events << " events" << dendl;
 
+  auto it = expiring_segments.find(ls);
+  ceph_assert(it != expiring_segments.end());
+  uint64_t seq = it->second;
+  expiring_segments.erase(it);
+  expiring_events -= ls->num_events;
+
   if (!capped && ls == peek_current_segment()) {
     dout(5) << "_expired not expiring " << ls->seq << "/" << ls->offset
 	    << ", last one and !capped" << dendl;
   } else {
     // expired.
-    expired_segments.insert(ls);
+    expired_segments.emplace(ls, seq);
     expired_events += ls->num_events;
 
     // Trigger all waiters
@@ -1462,6 +1476,10 @@ void MDLog::_replay_thread()
   }
 
   safe_pos = journaler->get_write_safe_pos();
+  if (event_seq) {
+    safe_event_seq = event_seq;
+    unexpired_segment_seq = segments.begin()->first;
+  }
 
   dout(10) << "_replay_thread kicking waiters" << dendl;
   {

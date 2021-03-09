@@ -984,8 +984,10 @@ void CDir::finish_old_fragment(MDSContext::vec& waiters, bool replay)
 
   if (auth_pins > 0)
     put(PIN_AUTHPIN);
-
-  ceph_assert(get_num_ref() == (state_test(STATE_STICKY) ? 1:0));
+#ifdef MDS_REF_SET
+  ceph_assert(get_num_ref() ==
+	      get_num_ref(PIN_PTRWAITER) + (state_test(STATE_STICKY) ? 1 : 0));
+#endif
 }
 
 void CDir::init_fragment_pins()
@@ -1511,7 +1513,10 @@ void CDir::first_get()
 
 void CDir::last_put()
 {
-  inode->put(CInode::PIN_DIRFRAG);
+  if (inode)
+    inode->put(CInode::PIN_DIRFRAG);
+  else
+    delete this;
 }
 
 
@@ -2739,6 +2744,7 @@ void CDir::finish_export()
   pop_auth_subtree.zero();
   put(PIN_TEMPEXPORTING);
   dirty_old_rstat.clear();
+  last_journaled = 0;
 }
 
 void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)

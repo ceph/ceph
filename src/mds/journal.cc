@@ -361,7 +361,7 @@ void EMetaBlob::add_dir_context(CDir *dir)
     }
 
     // was the inode journaled in this blob?
-    if (event_seq && diri->last_journaled == event_seq) {
+    if (event_seq && diri->last_journal == event_seq) {
       dout(20) << "EMetaBlob::add_dir_context already have diri this blob " << *diri << dendl;
       break;
     }

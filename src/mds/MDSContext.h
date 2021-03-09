@@ -25,6 +25,7 @@
 #include "common/ceph_time.h"
 
 class MDSRank;
+class CDir;
 
 /**
  * Completion which has access to a reference to the global MDS instance.
@@ -108,6 +109,8 @@ public:
   static bool check_ios_in_flight(ceph::coarse_mono_time cutoff,
 				  std::string& slow_count,
 				  ceph::coarse_mono_time& oldest);
+protected:
+  void complete_locked(int r);
 private:
   ceph::coarse_mono_time created_at;
   elist<MDSIOContextBase*>::item list_item;
@@ -124,13 +127,21 @@ class MDSLogContextBase : public MDSIOContextBase
 {
 protected:
   uint64_t write_pos = 0;
+  uint64_t event_seq = 0;
+  std::vector<CDir*> subtrees;
 public:
   MDSLogContextBase() = default;
   void complete(int r) final;
-  void set_write_pos(uint64_t wp) { write_pos = wp; }
+  void set_write_pos(uint64_t wp, uint64_t seq) {
+    write_pos = wp;
+    event_seq = seq;
+  }
+  void set_subtrees(std::vector<CDir*>&& dfv) {
+    subtrees = std::move(dfv);
+  }
   virtual void pre_finish(int r) {}
   void print(std::ostream& out) const override {
-    out << "log_event(" << write_pos << ")";
+    out << "log_event(" << write_pos << ", " << event_seq << ")";
   }
 };
 

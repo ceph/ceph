@@ -312,9 +312,10 @@ public:
   vector<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
   list<fullbit> roots;
-public:
-  vector<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
+  std::vector<CDir*> subtrees;
+
+  vector<pair<__u8,version_t> > table_tids;  // tableclient transactions
   inodeno_t opened_ino;
 public:
   inodeno_t renamed_dirino;
@@ -475,7 +476,7 @@ private:
 		   in->oldest_snap, snapbl, state, in->get_old_inodes());
 
     // make note of where this inode was last journaled
-    in->last_journaled = event_seq;
+    in->last_journal = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
   }
 
@@ -508,7 +509,7 @@ private:
   }
 
   void add_root(bool dirty, CInode *in) {
-    in->last_journaled = event_seq;
+    in->last_journal = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     const auto& pi = in->get_projected_inode();
@@ -551,8 +552,21 @@ private:
     auto df = dir->dirfrag();
     auto& pf = dir->get_projected_fnode();
 
-    if (lump_map.count(df) == 0)
+    if (lump_map.count(df) == 0) {
       lump_order.push_back(df);
+      // match EMetaBlob::add_dir_context
+      CInode *diri = dir->get_inode();
+      if (dir->is_subtree_root() && !diri->is_mdsdir()) {
+	dir->get(CDir::PIN_PTRWAITER);
+	subtrees.push_back(dir);
+      } else {
+	CDentry *pdn = diri->get_projected_parent_dn();
+	if (pdn && !pdn->is_auth()) {
+	  dir->get(CDir::PIN_PTRWAITER);
+	  subtrees.push_back(dir);
+	}
+      }
+    }
 
     dirlump& l = lump_map[df];
     l.fnode = pf;
