@@ -119,7 +119,8 @@ seastar::future<> AdminSocket::finalize_response(
   uint32_t response_length = htonl(outbuf_cont.length());
   logger().info("asok response length: {}", outbuf_cont.length());
 
-  return out.write((char*)&response_length, sizeof(uint32_t))
+  return out.write(reinterpret_cast<char*>(&response_length),
+                   sizeof(response_length))
     .then([&out, outbuf_cont] { return out.write(outbuf_cont.c_str()); });
 }
 
@@ -140,7 +141,7 @@ seastar::future<> AdminSocket::handle_command(crimson::net::ConnectionRef conn,
 seastar::future<> AdminSocket::execute_line(std::string cmdline,
                                             seastar::output_stream<char>& out)
 {
-  return execute_command({cmdline}, {}).then([&out, this](auto result) {
+  return execute_command({std::move(cmdline)}, {}).then([&out, this](auto result) {
      auto [ret, stderr, stdout] = std::move(result);
      if (ret < 0) {
        stdout.append(fmt::format("ERROR: {}\n", cpp_strerror(ret)));
@@ -157,7 +158,7 @@ auto AdminSocket::execute_command(const std::vector<std::string>& cmd,
   return seastar::with_shared(servers_tbl_rwlock,
 			      [cmd, buf=std::move(buf), this]() mutable {
     auto maybe_parsed = parse_cmd(cmd);
-    if (auto parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
+    if (auto* parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
       stringstream os;
       string desc{parsed->hook.desc};
       if (!validate_cmd(nullptr, desc, parsed->params, os)) {

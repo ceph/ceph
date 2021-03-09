@@ -108,7 +108,7 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
     return crimson::ct_error::invarg::make();
   }
 
-  auto addr = ::mmap(
+  void* addr = ::mmap(
     nullptr,
     config.size,
     PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,

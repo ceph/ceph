@@ -4,7 +4,7 @@ namespace crimson::common {
 
 int64_t Throttle::take(int64_t c)
 {
-  if (!max) {
+  if (max == 0u) {
     return 0;
   }
   count += c;
@@ -13,7 +13,7 @@ int64_t Throttle::take(int64_t c)
 
 int64_t Throttle::put(int64_t c)
 {
-  if (!max) {
+  if (max == 0u) {
     return 0;
   }
   if (!c) {
@@ -26,7 +26,7 @@ int64_t Throttle::put(int64_t c)
 
 seastar::future<> Throttle::get(size_t c)
 {
-  if (!max) {
+  if (max == 0u) {
     return seastar::make_ready_future<>();
   }
   return on_free_slots.wait([this, c] {
