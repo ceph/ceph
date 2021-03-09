@@ -3,8 +3,7 @@
 /qa/suites/rados/dashboard                      @ceph/dashboard
 /qa/tasks/mgr/test_dashboard.py                 @ceph/dashboard
 /qa/tasks/mgr/dashboard                         @ceph/dashboard
-/monitoring/grafana                             @ceph/dashboard
-/monitoring/prometheus                          @ceph/dashboard
+/monitoring                                     @ceph/dashboard
 /doc/mgr/dashboard.rst                          @ceph/dashboard
 
 # Dashboard API team
