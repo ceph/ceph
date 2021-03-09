@@ -99,14 +99,14 @@ class CephadmService(metaclass=ABCMeta):
 
     def make_daemon_spec(self, host: str,
                          daemon_id: str,
-                         netowrk: str,
+                         network: str,
                          spec: ServiceSpecs,
                          daemon_type: Optional[str] = None,) -> CephadmDaemonDeploySpec:
         return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
             service_name=spec.service_name(),
-            network=netowrk,
+            network=network,
             daemon_type=daemon_type
         )
 
