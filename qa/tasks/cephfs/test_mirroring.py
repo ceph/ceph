@@ -796,6 +796,12 @@ class TestMirroring(CephFSTestCase):
         self.verify_peer_added(self.primary_fs_name, self.primary_fs_id, "client.mirror_peer_bootstrap@site-remote",
                                self.secondary_fs_name)
 
+        # verify via peer_list interface
+        peer_uuid = self.get_peer_uuid("client.mirror_peer_bootstrap@site-remote")
+        res = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_list", self.primary_fs_name))
+        self.assertTrue(peer_uuid in res)
+        self.assertTrue('mon_host' in res[peer_uuid] and res[peer_uuid]['mon_host'] != '')
+
         # remove peer
         self.peer_remove(self.primary_fs_name, self.primary_fs_id, "client.mirror_peer_bootstrap@site-remote")
         # disable mirroring
