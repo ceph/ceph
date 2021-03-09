@@ -124,6 +124,8 @@ def mode_notation(mode):
     notation = '-'
     if mode[2] == '4':
         notation = 'd'
+    elif mode[2:4] == '12':
+        notation = 'l'
     for i in mode[-3:]:
         notation += permission_bits[i]
     return notation
@@ -225,21 +227,30 @@ def humansize(nbytes):
     return '%s%s' % (f, suffixes[i])
 
 
-def print_long(path, is_dir, human_readable):
-    info = cephfs.stat(path)
-    pretty = os.path.basename(path.decode('utf-8'))
-    if is_dir:
-        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + '/'
-        pretty += colorama.Style.RESET_ALL
+def style_listing(path, is_dir, is_symlink, ls_long=False):
+    if not (is_dir or is_symlink):
+        return path
+    pretty = colorama.Style.BRIGHT
+    if is_symlink:
+        pretty += colorama.Fore.CYAN + path
+        if ls_long:
+            # Add target path
+            pretty += ' -> ' + cephfs.readlink(path, size=255).decode('utf-8')
+    elif is_dir:
+        pretty += colorama.Fore.BLUE + path + '/'
+    pretty += colorama.Style.RESET_ALL
+    return pretty
+
+
+def print_long(path, is_dir, is_symlink, human_readable):
+    info = cephfs.stat(path, follow_symlink=(not is_symlink))
+    pretty = style_listing(os.path.basename(path.decode('utf-8')), is_dir, is_symlink, True)
     if human_readable:
-        poutput('{}\t{:10s} {} {} {} {}'.format(
-            mode_notation(info.st_mode),
-            humansize(info.st_size), info.st_uid,
-            info.st_gid, info.st_mtime, pretty))
+        sizefmt = '\t {:10s}'.format(humansize(info.st_size))
     else:
-        poutput('{} {:12d} {} {} {} {}'.format(
-            mode_notation(info.st_mode), info.st_size, info.st_uid,
-            info.st_gid, info.st_mtime, pretty))
+        sizefmt = '{:12d}'.format(info.st_size)
+    poutput(f'{mode_notation(info.st_mode)} {sizefmt} {info.st_uid} {info.st_gid} {info.st_mtime}'
+            f' {pretty}')
 
 
 def word_len(word):
@@ -790,63 +801,64 @@ class CephFSShell(Cmd):
         for path in paths:
             values = []
             items = []
-            if path.count(b'*') > 0:
-                all_items = get_all_possible_paths(path)
-                if len(all_items) == 0:
-                    continue
-                path = all_items[0].rsplit(b'/', 1)[0]
-                if path == b'':
-                    path = b'/'
-                dirs = []
-                for i in all_items:
-                    for item in ls(path):
-                        d_name = item.d_name
-                        if os.path.basename(i) == d_name:
-                            if item.is_dir():
-                                dirs.append(os.path.join(path, d_name))
-                            else:
-                                items.append(item)
-                if dirs:
-                    paths.extend(dirs)
+            try:
+                if path.count(b'*') > 0:
+                    all_items = get_all_possible_paths(path)
+                    if len(all_items) == 0:
+                        continue
+                    path = all_items[0].rsplit(b'/', 1)[0]
+                    if path == b'':
+                        path = b'/'
+                    dirs = []
+                    for i in all_items:
+                        for item in ls(path):
+                            d_name = item.d_name
+                            if os.path.basename(i) == d_name:
+                                if item.is_dir():
+                                    dirs.append(os.path.join(path, d_name))
+                                else:
+                                    items.append(item)
+                    if dirs:
+                        paths.extend(dirs)
+                    else:
+                        poutput(path.decode('utf-8'), end=':\n')
+                    items = sorted(items, key=lambda item: item.d_name)
                 else:
-                    poutput(path.decode('utf-8'), end=':\n')
-                items = sorted(items, key=lambda item: item.d_name)
-            else:
-                if path != b'' and path != cephfs.getcwd() and len(paths) > 1:
-                    poutput(path.decode('utf-8'), end=':\n')
-                items = sorted(ls(path),
-                               key=lambda item: item.d_name)
-            if not args.all:
-                items = [i for i in items if not i.d_name.startswith(b'.')]
-
-            if args.S:
-                items = sorted(items, key=lambda item: cephfs.stat(
-                    path + b'/' + item.d_name).st_size)
-
-            if args.reverse:
-                items = reversed(items)
-            for item in items:
-                filepath = item.d_name
-                is_dir = item.is_dir()
-
-                if args.long and args.H:
-                    print_long(os.path.join(cephfs.getcwd(), path, filepath),
-                               is_dir, True)
-                elif args.long:
-                    print_long(os.path.join(cephfs.getcwd(), path, filepath),
-                               is_dir, False)
-                elif is_dir:
-                    values.append(colorama.Style.BRIGHT
-                                  + colorama.Fore.CYAN
-                                  + filepath.decode('utf-8')
-                                  + '/'
-                                  + colorama.Style.RESET_ALL)
-                else:
-                    values.append(filepath)
-            if not args.long:
-                print_list(values, shutil.get_terminal_size().columns)
-                if path != paths[-1]:
-                    poutput('')
+                    if path != b'' and path != cephfs.getcwd() and len(paths) > 1:
+                        poutput(path.decode('utf-8'), end=':\n')
+                    items = sorted(ls(path), key=lambda item: item.d_name)
+                if not args.all:
+                    items = [i for i in items if not i.d_name.startswith(b'.')]
+                if args.S:
+                    items = sorted(items, key=lambda item: cephfs.stat(
+                        path + b'/' + item.d_name, follow_symlink=(
+                            not item.is_symbol_file())).st_size)
+                if args.reverse:
+                    items = reversed(items)
+                for item in items:
+                    filepath = item.d_name
+                    is_dir = item.is_dir()
+                    is_sym_lnk = item.is_symbol_file()
+                    try:
+                        if args.long and args.H:
+                            print_long(os.path.join(cephfs.getcwd(), path, filepath), is_dir,
+                                       is_sym_lnk, True)
+                        elif args.long:
+                            print_long(os.path.join(cephfs.getcwd(), path, filepath), is_dir,
+                                       is_sym_lnk, False)
+                        elif is_sym_lnk or is_dir:
+                            values.append(style_listing(filepath.decode('utf-8'), is_dir,
+                                          is_sym_lnk))
+                        else:
+                            values.append(filepath)
+                    except libcephfs.Error as e:
+                        set_exit_code_msg(msg=e)
+                if not args.long:
+                    print_list(values, shutil.get_terminal_size().columns)
+                    if path != paths[-1]:
+                        poutput('')
+            except libcephfs.Error as e:
+                set_exit_code_msg(msg=e)
 
     def complete_rmdir(self, text, line, begidx, endidx):
         """
