@@ -425,6 +425,7 @@ class CephAnsible(Task):
             run.Raw('setuptools>=11.3'),
             run.Raw('notario>=0.0.13'), # FIXME: use requirements.txt
             run.Raw('netaddr'),
+            run.Raw('six'),
             run.Raw(ansible_ver),
             run.Raw(';'),
             run.Raw(str_args)
