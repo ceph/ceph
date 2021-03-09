@@ -122,21 +122,10 @@ class HostAssignment(object):
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
-
             if self.spec.placement.count_per_host:
                 per_host = self.spec.placement.count_per_host
             else:
                 per_host = 1
-
-            # do not deploy ha-rgw on hosts that don't support virtual ips
-            if self.spec.service_type == 'ha-rgw' and self.filter_new_host:
-                old = candidates
-                candidates = [h for h in candidates if self.filter_new_host(h.hostname)]
-                for h in list(set(old) - set(candidates)):
-                    logger.info(
-                        f"Filtered out host {h.hostname} for ha-rgw: could not verify host allowed virtual ips")
-                logger.debug('Filtered %s down to %s' % (old, candidates))
-
             return candidates * per_host
 
         # prefer hosts that already have services.
@@ -155,18 +144,6 @@ class HostAssignment(object):
         if need < 0:
             final_candidates = self.prefer_hosts_with_active_daemons(hosts_with_daemons, count)
         else:
-            # exclusive to daemons from 'mon' and 'ha-rgw' services.
-            # Filter out hosts that don't have a public network assigned
-            # or don't allow virtual ips respectively
-            if self.filter_new_host:
-                old = others
-                others = [h for h in others if self.filter_new_host(h.hostname)]
-                for h in list(set(old) - set(others)):
-                    if self.spec.service_type == 'ha-rgw':
-                        logger.info(
-                            f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
-                logger.debug('filtered %s down to %s' % (old, others))
-
             # ask the scheduler to return a set of hosts with a up to the value of <count>
             others = self.scheduler.place(others, need)
             logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
@@ -221,26 +198,37 @@ class HostAssignment(object):
 
     def get_candidates(self) -> List[HostPlacementSpec]:
         if self.spec.placement.hosts:
-            return self.spec.placement.hosts
-        if self.spec.placement.label:
-            return [
+            hosts = self.spec.placement.hosts
+        elif self.spec.placement.label:
+            hosts = [
                 HostPlacementSpec(x.hostname, '', '')
                 for x in self.hosts_by_label(self.spec.placement.label)
             ]
-        if self.spec.placement.host_pattern:
-            return [
+        elif self.spec.placement.host_pattern:
+            hosts = [
                 HostPlacementSpec(x, '', '')
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
             ]
         # If none of the above and also no <count>
-        if self.spec.placement.count is None:
+        elif self.spec.placement.count is not None:
+            # backward compatibility: consider an empty placements to be the same pattern = *
+            hosts = [
+                HostPlacementSpec(x.hostname, '', '')
+                for x in self.hosts
+            ]
+        else:
             raise OrchestratorValidationError(
                 "placement spec is empty: no hosts, no label, no pattern, no count")
-        # backward compatibility: consider an empty placements to be the same pattern = *
-        return [
-            HostPlacementSpec(x.hostname, '', '')
-            for x in self.hosts
-        ]
+
+        if self.filter_new_host:
+            old = hosts.copy()
+            hosts = [h for h in hosts if self.filter_new_host(h.hostname)]
+            for h in list(set(old) - set(hosts)):
+                logger.info(
+                    f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
+                logger.debug('Filtered %s down to %s' % (old, hosts))
+
+        return hosts
 
     def hosts_with_daemons(self, candidates: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
         """
