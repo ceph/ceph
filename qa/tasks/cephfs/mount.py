@@ -175,7 +175,7 @@ class CephFSMount(object):
         self.fs.wait_for_daemons()
         log.info('Ready to start {}...'.format(type(self).__name__))
 
-    def _create_mntpt(self, cwd=None):
+    def _create_mntpt(self):
         stderr = StringIO()
         # Use 0000 mode to prevent undesired modifications to the mountpoint on
         # the local file system.
