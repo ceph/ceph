@@ -115,15 +115,15 @@ struct seastore_test_t :
 
 	if (!iter->valid() || refiter->first < iter->key()) {
 	  logger().debug(
-	    "check_omap: misisng omap key {}",
+	    "check_omap: missing omap key {}",
 	    refiter->first);
-	  EXPECT_FALSE("missing omap key");
+	  GTEST_FAIL() << "missing omap key " << refiter->first;
 	  ++refiter;
 	} else if (refiter == omap.end() || refiter->first > iter->key()) {
 	  logger().debug(
 	    "check_omap: extra omap key {}",
 	    iter->key());
-	  EXPECT_FALSE("extra omap key");
+	  GTEST_FAIL() << "extra omap key" << iter->key();
 	  iter->next().get0();
 	} else {
 	  EXPECT_EQ(iter->value(), refiter->second);
