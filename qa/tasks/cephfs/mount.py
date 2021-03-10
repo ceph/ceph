@@ -176,16 +176,12 @@ class CephFSMount(object):
         log.info('Ready to start {}...'.format(type(self).__name__))
 
     def _create_mntpt(self):
-        stderr = StringIO()
+        self.client_remote.run(args=f'mkdir -p -v {self.hostfs_mntpt}',
+                               timeout=60)
         # Use 0000 mode to prevent undesired modifications to the mountpoint on
         # the local file system.
-        script = f'mkdir -m 0000 -p -v {self.hostfs_mntpt}'.split()
-        try:
-            self.client_remote.run(args=script, timeout=(15*60),
-                                   stderr=stderr)
-        except CommandFailedError:
-            if 'file exists' not in stderr.getvalue().lower():
-                raise
+        self.client_remote.run(args=f'chmod 0000 {self.hostfs_mntpt}',
+                               timeout=60)
 
     @property
     def _nsenter_args(self):
