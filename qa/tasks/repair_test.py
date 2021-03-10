@@ -4,8 +4,6 @@ Test pool repairing after objects are damaged.
 import logging
 import time
 
-from teuthology import misc as teuthology
-
 log = logging.getLogger(__name__)
 
 
@@ -123,20 +121,16 @@ def repair_test_2(ctx, manager, config, chooser):
     with manager.pool(pool, 1):
         log.info("starting repair test type 2")
         victim_osd = chooser(manager, pool, 0)
-        first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
         # create object
         log.info("doing put and setomapval")
         manager.do_put(pool, 'file1', '/etc/hosts')
-        manager.do_rados(mon, ['-p', pool, 'setomapval', 'file1',
-                                   'key', 'val'])
+        manager.do_rados(['setomapval', 'file1', 'key', 'val'], pool=pool)
         manager.do_put(pool, 'file2', '/etc/hosts')
         manager.do_put(pool, 'file3', '/etc/hosts')
         manager.do_put(pool, 'file4', '/etc/hosts')
         manager.do_put(pool, 'file5', '/etc/hosts')
-        manager.do_rados(mon, ['-p', pool, 'setomapval', 'file5',
-                                   'key', 'val'])
+        manager.do_rados(['setomapval', 'file5', 'key', 'val'], pool=pool)
         manager.do_put(pool, 'file6', '/etc/hosts')
 
         # corrupt object
