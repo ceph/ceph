@@ -2,7 +2,7 @@ import json
 import logging
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, List, cast, Set, Dict, Any, Union, Tuple, Iterator
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
 
 from cephadm import remotes
 
@@ -561,8 +561,8 @@ class CephadmServe:
         )
 
         try:
-            hosts: List[HostPlacementSpec] = ha.place()
-            self.log.debug('Usable hosts: %s' % hosts)
+            all_slots, slots_to_add, daemons_to_remove = ha.place()
+            self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
         except OrchestratorError as e:
             self.log.error('Failed to apply %s spec %s: %s' % (
                 spec.service_name(), spec, e))
@@ -572,23 +572,21 @@ class CephadmServe:
         r = None
 
         # sanity check
-        if service_type in ['mon', 'mgr'] and len(hosts) < 1:
-            self.log.debug('cannot scale mon|mgr below 1 (hosts=%s)' % hosts)
+        final_count = len(daemons) + len(slots_to_add) - len(daemons_to_remove)
+        if service_type in ['mon', 'mgr'] and final_count < 1:
+            self.log.debug('cannot scale mon|mgr below 1)')
             return False
 
         # add any?
         did_config = False
 
-        add_daemon_hosts: List[HostPlacementSpec] = ha.add_daemon_hosts(hosts)
-        self.log.debug('Hosts that will receive new daemons: %s' % add_daemon_hosts)
-
-        remove_daemons: Set[orchestrator.DaemonDescription] = ha.remove_daemon_hosts(hosts)
-        self.log.debug('Daemons that will be removed: %s' % remove_daemons)
+        self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
+        self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
 
         if service_type == 'ha-rgw':
-            spec = self.update_ha_rgw_definitive_hosts(spec, hosts, add_daemon_hosts)
+            spec = self.update_ha_rgw_definitive_hosts(spec, all_slots, slots_to_add)
 
-        for host, network, name in add_daemon_hosts:
+        for host, network, name in slots_to_add:
             for daemon_type in service_to_daemon_types(service_type):
                 daemon_id = self.mgr.get_unique_name(daemon_type, host, daemons,
                                                      prefix=spec.service_id,
@@ -626,17 +624,17 @@ class CephadmServe:
                 daemons.append(sd)
 
         # remove any?
-        def _ok_to_stop(remove_daemons: Set[orchestrator.DaemonDescription]) -> bool:
+        def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
             daemon_ids = [d.daemon_id for d in remove_daemons]
             assert None not in daemon_ids
             # setting force flag retains previous behavior
             r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
             return not r.retval
 
-        while remove_daemons and not _ok_to_stop(remove_daemons):
+        while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
             # let's find a subset that is ok-to-stop
-            remove_daemons.pop()
-        for d in remove_daemons:
+            daemons_to_remove.pop()
+        for d in daemons_to_remove:
             r = True
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
