@@ -9,6 +9,7 @@ from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
 
 from cephadm.module import HostAssignment
+from cephadm.schedule import DaemonPlacement
 from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError
 
 
@@ -184,6 +185,29 @@ test_explicit_scheduler_results = [
     (k("123 123 2 *"), two_of('1', '2', '3')),
     (k("123 123 * *"), exactly('1', '2', '3')),
 ]
+
+
+@pytest.mark.parametrize(
+    'dp,dd,result',
+    [
+        (
+            DaemonPlacement(hostname='host1'),
+            DaemonDescription('mgr', 'a', 'host1'),
+            True
+        ),
+        (
+            DaemonPlacement(hostname='host1', name='a'),
+            DaemonDescription('mgr', 'a', 'host1'),
+            True
+        ),
+        (
+            DaemonPlacement(hostname='host1', name='a'),
+            DaemonDescription('mgr', 'b', 'host1'),
+            False
+        ),
+    ])
+def test_daemon_placement_match(dp, dd, result):
+    assert dp.matches_daemon(dd) == result
 
 
 @pytest.mark.parametrize("spec_section_key,spec_section",
