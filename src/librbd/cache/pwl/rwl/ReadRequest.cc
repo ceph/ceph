@@ -27,23 +27,23 @@ void C_ReadRequest::finish(int r) {
      * hits.
      */
     uint64_t miss_bl_offset = 0;
-    for (auto &extent : read_extents) {
-      if (extent.m_bl.length()) {
+    for (auto extent : read_extents) {
+      if (extent->m_bl.length()) {
         /* This was a hit */
-        ceph_assert(extent.second == extent.m_bl.length());
+        ceph_assert(extent->second == extent->m_bl.length());
         ++hits;
-        hit_bytes += extent.second;
-        m_out_bl->claim_append(extent.m_bl);
+        hit_bytes += extent->second;
+        m_out_bl->claim_append(extent->m_bl);
       } else {
         /* This was a miss. */
         ++misses;
-        miss_bytes += extent.second;
+        miss_bytes += extent->second;
         bufferlist miss_extent_bl;
-        miss_extent_bl.substr_of(miss_bl, miss_bl_offset, extent.second);
+        miss_extent_bl.substr_of(miss_bl, miss_bl_offset, extent->second);
         /* Add this read miss bufferlist to the output bufferlist */
         m_out_bl->claim_append(miss_extent_bl);
         /* Consume these bytes in the read miss bufferlist */
-        miss_bl_offset += extent.second;
+        miss_bl_offset += extent->second;
       }
     }
   }
