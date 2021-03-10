@@ -34,7 +34,6 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/PriorityCache.h"
-#include "common/RWLock.h"
 #include "Allocator.h"
 #include "FreelistManager.h"
 #include "BlueFS.h"
@@ -11719,7 +11718,7 @@ out:
 
 void BlueStore::_osr_attach(Collection *c)
 {
-  // note: caller has RWLock on coll_map
+  // note: caller has coll_lock
   auto q = coll_map.find(c->cid);
   if (q != coll_map.end()) {
     c->osr = q->second->osr;

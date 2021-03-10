@@ -20,7 +20,6 @@
 
 #include "osd/osd_types.h"
 #include "include/object.h"
-#include "common/RWLock.h"
 
 /**
   CollectionIndex provides an interface for manipulating indexed collections
