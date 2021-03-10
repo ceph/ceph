@@ -112,7 +112,7 @@ TEST_F(LibRadosIo, Checksum) {
 
   uint32_t expected_crc = ceph_crc32c(-1, reinterpret_cast<const uint8_t*>(buf),
                                       sizeof(buf));
-  ceph_le32 init_value = init_le32(-1);
+  ceph_le32 init_value(-1);
   ceph_le32 crc[2];
   ASSERT_EQ(0, rados_checksum(ioctx, "foo", LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			      reinterpret_cast<char*>(&init_value),
