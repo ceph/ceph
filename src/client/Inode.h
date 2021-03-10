@@ -5,6 +5,7 @@
 #define CEPH_CLIENT_INODE_H
 
 #include <numeric>
+#include <boost/intrusive_ptr.hpp>
 
 #include "include/compat.h"
 #include "include/ceph_assert.h"
@@ -30,29 +31,20 @@ class MetaRequest;
 class filepath;
 class Fh;
 
-class Cap {
+class Cap : public RefCountedObject {
 public:
   Cap() = delete;
-  Cap(Inode &i, MetaSession *s) : inode(i),
-                                  session(s),
-                                  gen(s->cap_gen),
-                                  cap_item(this)
-  {
-    s->caps.push_back(&cap_item);
-  }
-  ~Cap() {
-    cap_item.remove_myself();
-  }
+  Cap(Inode &i, MetaSession *s, Client *c) : inode(i),
+    session(s), client(c), gen(s->cap_gen), cap_item(this)
+  {}
+  ~Cap() {}
 
-  void touch(void) {
-    // move to back of LRU
-    session->caps.push_back(&cap_item);
-  }
-
+  void touch(void);
   void dump(Formatter *f) const;
 
   Inode &inode;
   MetaSession *session;
+  Client *client;
   uint64_t cap_id = 0;
   unsigned issued = 0;
   unsigned implemented = 0;
@@ -63,7 +55,6 @@ public:
   __u32 gen;
   UserPerm latest_perms;
 
-private:
   /* Note that this Cap will not move (see Inode::caps):
    *
    * Section 23.1.2#8
@@ -73,6 +64,9 @@ private:
    */
   xlist<Cap *>::item cap_item;
 };
+void intrusive_ptr_add_ref(Cap *cap);
+void intrusive_ptr_release(Cap *cap);
+typedef boost::intrusive_ptr<Cap> CapRef;
 
 struct CapSnap {
   //snapid_t follows;  // map key
@@ -200,8 +194,8 @@ struct Inode : RefCountedObject {
   bool dir_replicated = false;
 
   // per-mds caps
-  std::map<mds_rank_t, Cap> caps;            // mds -> Cap
-  Cap *auth_cap = 0;
+  std::map<mds_rank_t, Cap*> caps;            // mds -> Cap
+  CapRef auth_cap = 0;
   int64_t cap_dirtier_uid = -1;
   int64_t cap_dirtier_gid = -1;
   unsigned dirty_caps = 0;
@@ -309,7 +303,7 @@ struct Inode : RefCountedObject {
   void get_cap_ref(int cap);
   int put_cap_ref(int cap);
   bool is_any_caps();
-  bool cap_is_valid(const Cap &cap) const;
+  bool cap_is_valid(const Cap *cap) const;
   int caps_issued(int *implemented = 0) const;
   void try_touch_cap(mds_rank_t mds);
   bool caps_issued_mask(unsigned mask, bool allow_impl=false);
