@@ -735,16 +735,6 @@ class RGWSpec(ServiceSpec):
         else:
             return 80
 
-    def rgw_frontends_config_value(self) -> str:
-        ports = []
-        if self.ssl:
-            ports.append(f"ssl_port={self.get_port()}")
-            ports.append(f"ssl_certificate=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.crt")
-            ports.append(f"ssl_key=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.key")
-        else:
-            ports.append(f"port={self.get_port()}")
-        return f'beast {" ".join(ports)}'
-
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
