@@ -361,7 +361,7 @@ class NodeAssignmentTest(NamedTuple):
         # just hosts
         NodeAssignmentTest(
             'mgr',
-            PlacementSpec(hosts=['smithi060:[v2:172.21.15.60:3301,v1:172.21.15.60:6790]=c']),
+            PlacementSpec(hosts=['smithi060']),
             ['smithi060'],
             [],
             ['smithi060'], ['smithi060'], []
@@ -528,6 +528,34 @@ class NodeAssignmentTest(NamedTuple):
             ['mdshost1', 'mdshost2', 'mdshost1', 'mdshost2', 'mdshost1', 'mdshost2'],
             []
         ),
+        # label + count_per_host + ports
+        NodeAssignmentTest(
+            'rgw',
+            PlacementSpec(count=6, label='foo'),
+            'host1 host2 host3'.split(),
+            [],
+            ['host1(port=80)', 'host2(port=80)', 'host3(port=80)',
+             'host1(port=81)', 'host2(port=81)', 'host3(port=81)'],
+            ['host1(port=80)', 'host2(port=80)', 'host3(port=80)',
+             'host1(port=81)', 'host2(port=81)', 'host3(port=81)'],
+            []
+        ),
+        # label + count_per_host + ports (+ xisting)
+        NodeAssignmentTest(
+            'rgw',
+            PlacementSpec(count=6, label='foo'),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('rgw', 'a', 'host1', ports=[81]),
+                DaemonDescription('rgw', 'b', 'host2', ports=[80]),
+                DaemonDescription('rgw', 'c', 'host1', ports=[82]),
+            ],
+            ['host1(port=80)', 'host2(port=80)', 'host3(port=80)',
+             'host1(port=81)', 'host2(port=81)', 'host3(port=81)'],
+            ['host1(port=80)', 'host3(port=80)',
+             'host2(port=81)', 'host3(port=81)'],
+            ['rgw.c']
+        ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons,
                          expected, expected_add, expected_remove):
@@ -535,6 +563,7 @@ def test_node_assignment(service_type, placement, hosts, daemons,
     allow_colo = False
     if service_type == 'rgw':
         service_id = 'realm.zone'
+        allow_colo = True
     elif service_type == 'mds':
         service_id = 'myfs'
         allow_colo = True
@@ -547,24 +576,26 @@ def test_node_assignment(service_type, placement, hosts, daemons,
         spec=spec,
         hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         daemons=daemons,
-        allow_colo=allow_colo
+        allow_colo=allow_colo,
     ).place()
 
-    got = [hs.hostname for hs in all_slots]
+    got = [str(p) for p in all_slots]
     num_wildcard = 0
     for i in expected:
         if i == '*':
             num_wildcard += 1
         else:
+            assert i in got
             got.remove(i)
     assert num_wildcard == len(got)
 
-    got = [hs.hostname for hs in to_add]
+    got = [str(p) for p in to_add]
     num_wildcard = 0
     for i in expected_add:
         if i == '*':
             num_wildcard += 1
         else:
+            assert i in got
             got.remove(i)
     assert num_wildcard == len(got)
 
