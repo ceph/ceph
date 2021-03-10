@@ -4,7 +4,7 @@ import re
 import logging
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
-    Optional, Dict, Any, Tuple, NewType
+    Optional, Dict, Any, Tuple, NewType, cast
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
@@ -700,13 +700,6 @@ class RgwService(CephService):
                 'value': spec.rgw_zone,
             })
 
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
-            'name': 'rgw_frontends',
-            'value': spec.rgw_frontends_config_value(),
-        })
-
         if spec.rgw_frontend_ssl_certificate:
             if isinstance(spec.rgw_frontend_ssl_certificate, list):
                 cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
@@ -745,11 +738,28 @@ class RgwService(CephService):
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
+        spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
         keyring = self.get_keyring(rgw_id)
 
-        daemon_spec.keyring = keyring
+        # configure frontend
+        args = []
+        if spec.ssl:
+            args.append(f"ssl_port={spec.get_port()}")
+            args.append(f"ssl_certificate=config://rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt")
+            args.append(f"ssl_key=config://rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key")
+        else:
+            args.append(f"port={spec.get_port()}")
+        frontend = f'beast {" ".join(args)}'
 
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config set',
+            'who': utils.name_to_config_section(daemon_spec.name()),
+            'name': 'rgw_frontends',
+            'value': frontend
+        })
+
+        daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
