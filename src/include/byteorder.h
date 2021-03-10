@@ -16,6 +16,10 @@ struct ceph_le {
 private:
   T v;
 public:
+  ceph_le() = default;
+  explicit ceph_le(T nv)
+    : v{boost::endian::native_to_little(nv)}
+  {}
   ceph_le<T>& operator=(T nv) {
     v = boost::endian::native_to_little(nv);
     return *this;
