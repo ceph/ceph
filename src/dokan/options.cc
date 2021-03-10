@@ -38,7 +38,7 @@ Map options:
   --read-only                 read-only mount
   -o [ --win-mount-mgr]       use the Windows mount manager
   --current-session-only      expose the mount only to the current user session
-  -m [ --removable ]          use a removable drive
+  --removable                 use a removable drive
   --win-vol-name arg          The Windows volume name. Default: Ceph - <fs_name>.
 
 Unmap options:
@@ -102,7 +102,7 @@ int parse_args(
       cfg->dokan_stderr = true;
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       cfg->readonly = true;
-    } else if (ceph_argparse_flag(args, i, "--removable", "-m", (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--removable", (char *)NULL)) {
       cfg->removable = true;
     } else if (ceph_argparse_flag(args, i, "--win-mount-mgr", "-o", (char *)NULL)) {
       cfg->use_win_mount_mgr = true;
