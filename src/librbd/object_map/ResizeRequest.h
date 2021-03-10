@@ -9,7 +9,6 @@
 #include "common/bit_vector.hpp"
 
 class Context;
-class RWLock;
 
 namespace librbd {
 
