@@ -38,22 +38,6 @@ using ceph_les64 = ceph_le<__s64>;
 using ceph_les32 = ceph_le<__s32>;
 using ceph_les16 = ceph_le<__s16>;
 
-inline ceph_le64 init_le64(__u64 x) {
-  ceph_le64 v;
-  v = x;
-  return v;
-}
-inline ceph_le32 init_le32(__u32 x) {
-  ceph_le32 v;
-  v = x;
-  return v;
-}
-inline ceph_le16 init_le16(__u16 x) {
-  ceph_le16 v;
-  v = x;
-  return v;
-}
-
 inline ceph_les64 init_les64(__s64 x) {
   ceph_les64 v;
   v = x;
