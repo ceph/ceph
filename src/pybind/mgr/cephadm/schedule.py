@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import List, Optional, Callable, Iterable, TypeVar, Set
+from typing import List, Optional, Callable, TypeVar, Set, Tuple
 
 import orchestrator
 from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec
@@ -109,7 +109,7 @@ class HostAssignment(object):
                     f'hosts for label {self.spec.placement.label}')
 
     def place(self):
-        # type: () -> List[HostPlacementSpec]
+        # type: () -> Tuple[List[HostPlacementSpec], List[HostPlacementSpec], List[orchestrator.DaemonDescription]]
         """
         Generate a list of HostPlacementSpec taking into account:
 
@@ -125,20 +125,15 @@ class HostAssignment(object):
 
         # get candidate hosts based on [hosts, label, host_pattern]
         candidates = self.get_candidates()  # type: List[HostPlacementSpec]
-        if not candidates:
-            return []  # sigh
 
-        # If we don't have <count> the list of candidates is definitive.
+        # consider enough slots to fulfill target count-per-host or count
         if count is None:
-            logger.debug('Provided hosts: %s' % candidates)
             if self.spec.placement.count_per_host:
                 per_host = self.spec.placement.count_per_host
             else:
                 per_host = 1
-            return candidates * per_host
-
-        if self.allow_colo:
-            # consider enough slots to fit target count
+            candidates = candidates * per_host
+        elif self.allow_colo and candidates:
             per_host = 1 + ((count - 1) // len(candidates))
             candidates = candidates * per_host
 
@@ -151,37 +146,48 @@ class HostAssignment(object):
 
         # sort candidates into existing/used slots that already have a
         # daemon, and others (the rest)
-        existing_active: List[HostPlacementSpec] = []
-        existing_standby: List[HostPlacementSpec] = []
-        existing: List[HostPlacementSpec] = []
-        others = candidates
+        existing_active: List[orchestrator.DaemonDescription] = []
+        existing_standby: List[orchestrator.DaemonDescription] = []
+        existing_slots: List[HostPlacementSpec] = []
+        to_remove: List[orchestrator.DaemonDescription] = []
+        others = candidates.copy()
         for d in daemons:
             hs = d.get_host_placement()
+            found = False
             for i in others:
                 if i == hs:
                     others.remove(i)
                     if d.is_active:
-                        existing_active.append(hs)
+                        existing_active.append(d)
                     else:
-                        existing_standby.append(hs)
-                    existing.append(hs)
+                        existing_standby.append(d)
+                    existing_slots.append(hs)
+                    found = True
                     break
-        logger.debug('Hosts with existing active daemons: {}'.format(existing_active))
-        logger.debug('Hosts with existing standby daemons: {}'.format(existing_standby))
+            if not found:
+                to_remove.append(d)
+
+        existing = existing_active + existing_standby
+
+        # If we don't have <count> the list of candidates is definitive.
+        if count is None:
+            logger.debug('Provided hosts: %s' % candidates)
+            return candidates, others, to_remove
 
         # The number of new slots that need to be selected in order to fulfill count
         need = count - len(existing)
 
         # we don't need any additional placements
         if need <= 0:
-            del existing[count:]
-            return existing
+            to_remove.extend(existing[count:])
+            del existing_slots[count:]
+            return existing_slots, [], to_remove
 
         # ask the scheduler to select additional slots
-        chosen = self.scheduler.place(others, need)
+        to_add = self.scheduler.place(others, need)
         logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
-            existing, chosen))
-        return existing + chosen
+            existing, to_add))
+        return existing_slots + to_add, to_add, to_remove
 
     def add_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
         hosts_with_daemons = {d.hostname for d in self.daemons}
@@ -239,37 +245,3 @@ class HostAssignment(object):
         random.Random(seed).shuffle(hosts)
 
         return hosts
-
-
-def merge_hostspecs(
-        lh: List[HostPlacementSpec],
-        rh: List[HostPlacementSpec]
-) -> Iterable[HostPlacementSpec]:
-    """
-    Merge two lists of HostPlacementSpec by hostname. always returns `lh` first.
-
-    >>> list(merge_hostspecs([HostPlacementSpec(hostname='h', name='x', network='')],
-    ...                      [HostPlacementSpec(hostname='h', name='y', network='')]))
-    [HostPlacementSpec(hostname='h', network='', name='x')]
-
-    """
-    lh_names = {h.hostname for h in lh}
-    yield from lh
-    yield from (h for h in rh if h.hostname not in lh_names)
-
-
-def difference_hostspecs(
-        lh: List[HostPlacementSpec],
-        rh: List[HostPlacementSpec]
-) -> List[HostPlacementSpec]:
-    """
-    returns lh "minus" rh by hostname.
-
-    >>> list(difference_hostspecs([HostPlacementSpec(hostname='h1', name='x', network=''),
-    ...                           HostPlacementSpec(hostname='h2', name='y', network='')],
-    ...                           [HostPlacementSpec(hostname='h2', name='', network='')]))
-    [HostPlacementSpec(hostname='h1', network='', name='x')]
-
-    """
-    rh_names = {h.hostname for h in rh}
-    return [h for h in lh if h.hostname not in rh_names]

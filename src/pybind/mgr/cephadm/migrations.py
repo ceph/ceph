@@ -90,7 +90,7 @@ class Migrations:
 
         def convert_to_explicit(spec: ServiceSpec) -> None:
             existing_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
-            placements = HostAssignment(
+            placements, to_add, to_remove = HostAssignment(
                 spec=spec,
                 hosts=self.mgr.inventory.all_specs(),
                 daemons=existing_daemons,
