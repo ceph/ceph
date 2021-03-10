@@ -785,11 +785,11 @@ void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWU
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
-  out << "rgw::auth::LocalApplier(role name =" << role.name;
+  out << "rgw::auth::RoleApplier(role name =" << role.name;
   for (auto& policy: role.role_policies) {
     out << ", role policy =" << policy;
   }
-  out << ", token policy =" << token_policy;
+  out << ", token policy =" << token_attrs.token_policy;
   out << ")";
 }
 
@@ -805,7 +805,7 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
       }
     } else if (p.is_assumed_role()) {
       string tenant = p.get_tenant();
-      string role_session = role.name + "/" + role_session_name; //role/role-session
+      string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
       if (role.tenant == tenant && role_session == p.get_role_session()) {
         return true;
       }
@@ -813,12 +813,12 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
       string id = p.get_id();
       string tenant = p.get_tenant();
       string oidc_id;
-      if (user_id.ns.empty()) {
-        oidc_id = user_id.id;
+      if (token_attrs.user_id.ns.empty()) {
+        oidc_id = token_attrs.user_id.id;
       } else {
-        oidc_id = user_id.ns + "$" + user_id.id;
+        oidc_id = token_attrs.user_id.ns + "$" + token_attrs.user_id.id;
       }
-      if (oidc_id == id && user_id.tenant == tenant) {
+      if (oidc_id == id && token_attrs.user_id.tenant == tenant) {
         return true;
       }
     }
@@ -829,7 +829,7 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
 void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
 {
   /* Load the user id */
-  user_info.user_id = this->user_id;
+  user_info.user_id = this->token_attrs.user_id;
 }
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
@@ -846,9 +846,9 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
     }
   }
 
-  if (!this->token_policy.empty()) {
+  if (!this->token_attrs.token_policy.empty()) {
     try {
-      string policy = this->token_policy;
+      string policy = this->token_attrs.token_policy;
       bufferlist bl = bufferlist::static_from_string(policy);
       const rgw::IAM::Policy p(s->cct, role.tenant, bl);
       s->session_policies.push_back(std::move(p));
@@ -860,15 +860,19 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   }
 
   string condition = "aws:userid";
-  string value = role.id + ":" + role_session_name;
+  string value = role.id + ":" + token_attrs.role_session_name;
   s->env.emplace(condition, value);
 
-  s->env.emplace("aws:TokenIssueTime", token_issued_at);
+  s->env.emplace("aws:TokenIssueTime", token_attrs.token_issued_at);
+
+  for (auto& m : token_attrs.principal_tags) {
+    s->env.emplace(m.first, m.second);
+  }
 
   s->token_claims.emplace_back("sts");
   s->token_claims.emplace_back("role_name:" + role.tenant + "$" + role.name);
-  s->token_claims.emplace_back("role_session:" + role_session_name);
-  for (auto& it : token_claims) {
+  s->token_claims.emplace_back("role_session:" + token_attrs.role_session_name);
+  for (auto& it : token_attrs.token_claims) {
     s->token_claims.emplace_back(it);
   }
 }
