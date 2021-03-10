@@ -217,10 +217,10 @@ class PlacementSpec(object):
             return fnmatch.filter(all_hosts, self.host_pattern)
         return all_hosts
 
-    def get_host_selection_size(self, hostspecs: Iterable[HostSpec]) -> int:
+    def get_target_count(self, hostspecs: Iterable[HostSpec]) -> int:
         if self.count:
             return self.count
-        return len(self.filter_matching_hostspecs(hostspecs))
+        return len(self.filter_matching_hostspecs(hostspecs)) * (self.count_per_host or 1)
 
     def pretty_str(self) -> str:
         """

@@ -98,6 +98,41 @@ def test_parse_host_placement_specs_raises_wrong_format(test_input):
         HostPlacementSpec.parse(test_input)
 
 
+@pytest.mark.parametrize(
+    "p,hosts,size",
+    [
+        (
+            PlacementSpec(count=3),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            3
+        ),
+        (
+            PlacementSpec(host_pattern='*'),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            5
+        ),
+        (
+            PlacementSpec(count_per_host=2, host_pattern='*'),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            10
+        ),
+        (
+            PlacementSpec(host_pattern='foo*'),
+            ['foo1', 'foo2', 'bar1', 'bar2'],
+            2
+        ),
+        (
+            PlacementSpec(count_per_host=2, host_pattern='foo*'),
+            ['foo1', 'foo2', 'bar1', 'bar2'],
+            4
+        ),
+    ])
+def test_placement_target_size(p, hosts, size):
+    assert p.get_target_count(
+        [HostPlacementSpec(n, '', '') for n in hosts]
+    ) == size
+
+
 def _get_dict_spec(s_type, s_id):
     dict_spec = {
         "service_id": s_id,
