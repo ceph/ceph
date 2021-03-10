@@ -32,8 +32,8 @@ class TestForwardScrub(CephFSTestCase):
         """
         Read a ceph-encoded string from a rados xattr
         """
-        output = self.fs.rados(["getxattr", obj, attr], pool=pool,
-                               stdout_data=BytesIO())
+        output = self.fs.mon_manager.do_rados(["getxattr", obj, attr], pool=pool,
+                               stdout=BytesIO()).stdout.getvalue()
         strlen = struct.unpack('i', output[0:4])[0]
         return output[4:(4 + strlen)].decode(encoding='ascii')
 
@@ -150,7 +150,7 @@ class TestForwardScrub(CephFSTestCase):
         self.fs.set_ceph_conf('mds', 'mds verify scatter', False)
         self.fs.set_ceph_conf('mds', 'mds debug scatterstat', False)
         frag_obj_id = "{0:x}.00000000".format(inos["./parent/flushed"])
-        self.fs.rados(["rmomapkey", frag_obj_id, "bravo_head"])
+        self.fs.radosm(["rmomapkey", frag_obj_id, "bravo_head"])
 
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
@@ -205,7 +205,7 @@ class TestForwardScrub(CephFSTestCase):
             print("Trying to fetch inotable object: " + inotable_oid)
 
             #self.fs.get_metadata_object("InoTable", "mds0_inotable")
-            inotable_raw = self.fs.get_metadata_object_raw(inotable_oid)
+            inotable_raw = self.fs.radosmo(['get', inotable_oid, '-'])
             inotable_dict[inotable_oid] = inotable_raw
         return inotable_dict
 
@@ -250,7 +250,7 @@ class TestForwardScrub(CephFSTestCase):
 
         # Revert to old inotable.
         for key, value in inotable_copy.items():
-           self.fs.put_metadata_object_raw(key, value)
+            self.fs.radosm(["put", key, "-"], stdin=BytesIO(value))
 
         self.fs.set_joinable()
         self.fs.wait_for_daemons()

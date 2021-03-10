@@ -1,3 +1,4 @@
+from io import StringIO
 
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -83,9 +84,8 @@ class TestMisc(CephFSTestCase):
                                             self.fs.metadata_pool_name,
                                             self.fs.pgs_per_fs_pool.__str__())
 
-        dummyfile = '/etc/fstab'
-
-        self.fs.put_metadata_object_raw("key", dummyfile)
+        # insert a garbage object
+        self.fs.radosm(["put", "foo", "-"], stdin=StringIO("bar"))
 
         def get_pool_df(fs, name):
             try:

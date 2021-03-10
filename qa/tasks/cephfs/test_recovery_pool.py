@@ -56,10 +56,9 @@ class OverlayWorkload(object):
         Damage the filesystem pools in ways that will be interesting to recover from.  By
         default just wipe everything in the metadata pool
         """
-        # Delete every object in the metadata pool
-        objects = self._orig_fs.rados(["ls"]).split("\n")
-        for o in objects:
-            self._orig_fs.rados(["rm", o])
+
+        pool = self._orig_fs.get_metadata_pool_name()
+        self._orig_fs.rados(["purge", pool, '--yes-i-really-really-mean-it'])
 
     def flush(self):
         """
