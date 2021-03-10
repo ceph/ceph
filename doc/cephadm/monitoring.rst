@@ -126,14 +126,14 @@ to these keys.
 
   ceph orch restart mgr
 
-If you already deployed Grafana, you need to redeploy the service for the
+If you already deployed Grafana, you need to ``reconfig`` the service for the
 configuration to be updated.
 
 .. code-block:: bash
 
-  ceph orch redeploy grafana
+  ceph orch reconfig grafana
 
-The ``redeploy`` command also takes care of setting the right URL for Ceph
+The ``reconfig`` command also takes care of setting the right URL for Ceph
 Dashboard.
 
 Using custom images
@@ -246,7 +246,7 @@ To set contents of files as template use the ``-i`` argument:
 
 It is required to restart the cephadm mgr module after a configuration option
 has been set. Then the configuration file for the service needs to be recreated.
-This is done using `redeploy`. For more details see the following example.
+This is done using `reconfig`. For more details see the following example.
 
 Example
 """""""
@@ -260,8 +260,8 @@ Example
   # restart cephadm mgr module
   ceph orch restart mgr
 
-  # redeploy the prometheus service
-  ceph orch redeploy prometheus
+  # reconfig the prometheus service
+  ceph orch reconfig prometheus
 
 Disabling monitoring
 --------------------
