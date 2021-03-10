@@ -707,6 +707,7 @@ class RGWSpec(ServiceSpec):
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[List[str]] = None,
+                 rgw_frontend_type: Optional[str] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
                  preview_only: bool = False,
@@ -728,6 +729,7 @@ class RGWSpec(ServiceSpec):
         self.rgw_zone = rgw_zone
         self.rgw_frontend_port = rgw_frontend_port
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
+        self.rgw_frontend_type = rgw_frontend_type
         self.ssl = ssl
 
     def get_port_start(self) -> Optional[int]:
