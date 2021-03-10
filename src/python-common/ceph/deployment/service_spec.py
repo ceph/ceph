@@ -857,7 +857,7 @@ class HA_RGWSpec(ServiceSpec):
                  ha_proxy_ssl_options: Optional[List[str]] = None,
                  haproxy_container_image: Optional[str] = None,
                  keepalived_container_image: Optional[str] = None,
-                 definitive_host_list: Optional[List[HostPlacementSpec]] = None
+                 definitive_host_list: Optional[List[str]] = None
                  ):
         assert service_type == 'ha-rgw'
         super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id,
@@ -883,7 +883,7 @@ class HA_RGWSpec(ServiceSpec):
         # placeholder variable. Need definitive list of hosts this service will
         # be placed on in order to generate keepalived config. Will be populated
         # when applying spec
-        self.definitive_host_list = []  # type: List[HostPlacementSpec]
+        self.definitive_host_list = []  # type: List[str]
 
     def validate(self) -> None:
         super(HA_RGWSpec, self).validate()

@@ -14,15 +14,14 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, \
-    HA_RGWSpec, CustomContainerSpec
+from ceph.deployment.service_spec import ServiceSpec, HA_RGWSpec, CustomContainerSpec
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.schedule import HostAssignment
+from cephadm.schedule import HostAssignment, DaemonPlacement
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
 from mgr_module import MonCommandFailed
@@ -586,20 +585,25 @@ class CephadmServe:
         if service_type == 'ha-rgw':
             spec = self.update_ha_rgw_definitive_hosts(spec, all_slots, slots_to_add)
 
-        for host, network, name in slots_to_add:
+        for slot in slots_to_add:
             for daemon_type in service_to_daemon_types(service_type):
-                daemon_id = self.mgr.get_unique_name(daemon_type, host, daemons,
-                                                     prefix=spec.service_id,
-                                                     forcename=name)
+                daemon_id = self.mgr.get_unique_name(
+                    daemon_type,
+                    slot.hostname,
+                    daemons,
+                    prefix=spec.service_id,
+                    forcename=slot.name)
 
                 if not did_config:
                     svc.config(spec, daemon_id)
                     did_config = True
 
                 daemon_spec = svc.make_daemon_spec(
-                    host, daemon_id, network, spec, daemon_type=daemon_type)
+                    slot.hostname, daemon_id, slot.network, spec, daemon_type=daemon_type,
+                    ports=slot.ports
+                )
                 self.log.debug('Placing %s.%s on host %s' % (
-                    daemon_type, daemon_id, host))
+                    daemon_type, daemon_id, slot.hostname))
 
                 try:
                     daemon_spec = svc.prepare_create(daemon_spec)
@@ -608,7 +612,7 @@ class CephadmServe:
                 except (RuntimeError, OrchestratorError) as e:
                     self.mgr.events.for_service(spec, 'ERROR',
                                                 f"Failed while placing {daemon_type}.{daemon_id}"
-                                                f"on {host}: {e}")
+                                                f"on {slot.hostname}: {e}")
                     # only return "no change" if no one else has already succeeded.
                     # later successes will also change to True
                     if r is None:
@@ -617,7 +621,7 @@ class CephadmServe:
 
                 # add to daemon list so next name(s) will also be unique
                 sd = orchestrator.DaemonDescription(
-                    hostname=host,
+                    hostname=slot.hostname,
                     daemon_type=daemon_type,
                     daemon_id=daemon_id,
                 )
@@ -772,15 +776,17 @@ class CephadmServe:
     def update_ha_rgw_definitive_hosts(
             self,
             spec: ServiceSpec,
-            hosts: List[HostPlacementSpec],
-            add_hosts: List[HostPlacementSpec]
+            hosts: List[DaemonPlacement],
+            add_hosts: List[DaemonPlacement]
     ) -> HA_RGWSpec:
         spec = cast(HA_RGWSpec, spec)
-        if not (set(hosts) == set(spec.definitive_host_list)):
-            spec.definitive_host_list = hosts
+        hostnames = [p.hostname for p in hosts]
+        add_hostnames = [p.hostname for p in add_hosts]
+        if not (set(hostnames) == set(spec.definitive_host_list)):
+            spec.definitive_host_list = hostnames
             ha_rgw_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
             for daemon in ha_rgw_daemons:
-                if daemon.hostname in [h.hostname for h in hosts] and daemon.hostname not in add_hosts:
+                if daemon.hostname in hostnames and daemon.hostname not in add_hostnames:
                     assert daemon.hostname is not None
                     self.mgr.cache.schedule_daemon_action(
                         daemon.hostname, daemon.name(), 'reconfig')
