@@ -707,12 +707,11 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
         self._mount_cmd_cwd, self._mount_cmd_logger, \
             self._mount_cmd_stdin = None, None, None
 
-    def _create_mntpt(self, cwd=None):
+    def _create_mntpt(self):
         stderr = StringIO()
         script = f'mkdir -p -v {self.hostfs_mntpt}'.split()
         try:
-            self.client_remote.run(args=script, cwd=self.test_dir,
-                                   stderr=stderr)
+            self.client_remote.run(args=script, stderr=stderr)
         except CommandFailedError:
             if 'file exists' not in stderr.getvalue().lower():
                 raise
