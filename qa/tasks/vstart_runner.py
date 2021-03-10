@@ -809,7 +809,7 @@ class LocalCephManager(CephManager):
         kwargs['args'] = [CEPH_CMD] + list(kwargs['args'])
         return self.controller.run(**kwargs)
 
-    def raw_cluster_cmd(self, *args, **kwargs):
+    def raw_cluster_cmd(self, *args, **kwargs) -> str:
         """
         args like ["osd", "dump"}
         return stdout string
