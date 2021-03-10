@@ -182,9 +182,10 @@ class HostAssignment(object):
                 HostPlacementSpec(x, '', '')
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
             ]
-        # If none of the above and also no <count>
-        elif self.spec.placement.count is not None:
-            # backward compatibility: consider an empty placements to be the same pattern = *
+        elif (
+                self.spec.placement.count is not None
+                or self.spec.placement.count_per_host is not None
+        ):
             hosts = [
                 HostPlacementSpec(x.hostname, '', '')
                 for x in self.hosts
