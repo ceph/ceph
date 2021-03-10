@@ -13,7 +13,8 @@ if [ -e $BUILD_DIR ]; then
     exit 1
 fi
 
-PYBUILD="2"
+PYBUILD="3"
+ARGS="-GNinja"
 if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
@@ -46,9 +47,7 @@ else
   exit 1
 fi
 
-if [[ "$PYBUILD" =~ ^3(\..*)?$ ]] ; then
-    ARGS+=" -DWITH_PYTHON3=${PYBUILD}"
-fi
+ARGS+=" -DWITH_PYTHON3=${PYBUILD}"
 
 if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"

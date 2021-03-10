@@ -1230,8 +1230,11 @@ export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 
 env | sort
 
-mkdir build
-cd build
+%{?!_vpath_builddir:%global _vpath_builddir %{_target_platform}}
+
+# TODO: drop this step once we can use `cmake -B`
+mkdir -p %{_vpath_builddir}
+pushd %{_vpath_builddir}
 cmake .. \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
@@ -1319,16 +1322,19 @@ make %{_smp_mflags}
 %make_build
 %endif
 
+popd
+
 %if 0%{with make_check}
 %check
 # run in-tree unittests
-cd build
+pushd %{_vpath_builddir}
 ctest %{_smp_mflags}
+popd
 %endif
 
 
 %install
-pushd build
+pushd %{_vpath_builddir}
 %make_install
 # we have dropped sysvinit bits
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph

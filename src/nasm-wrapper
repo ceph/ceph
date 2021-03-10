@@ -7,7 +7,7 @@ while [ -n "$*" ]; do
     case "$1" in
     -f )
         shift
-        refine_nasm_options="$refine_nasm_options -f $1"
+        refine_nasm_options+=" -f $1"
         shift
         ;;
     -c | --param* | -m* | -pipe | -thread )
@@ -16,6 +16,13 @@ while [ -n "$*" ]; do
         ;;
     -g* )
         # ignore debug format
+        shift
+        ;;
+    -MD )
+        # before CMake v3.18, its ninja build rule always passes `-MD $DEP_FILE``
+        # to ASM_COMPILER. both nasm and GNU assembler accepts this option, but
+        # somehow the ninja generator fails to pass the <DEPFILE> argument. so
+        # just drop it.
         shift
         ;;
     -W* )
@@ -27,12 +34,12 @@ while [ -n "$*" ]; do
         ;;
     -I | -isystem )
         shift
-        refine_nasm_options="$refine_nasm_options -i $1"
+        refine_nasm_options+=" -i $1"
         shift
         ;;
     * )
         # Keep other options
-        refine_nasm_options="$refine_nasm_options $1"
+        refine_nasm_options+=" $1"
         shift
         ;;
     esac
