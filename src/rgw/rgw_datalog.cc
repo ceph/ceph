@@ -990,6 +990,10 @@ void RGWDataChangesLog::renew_stop()
 
 void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
 {
+  if (!cct->_conf->rgw_data_notify_interval_msec) {
+    return;
+  }
+
   auto key = bs.get_key();
   {
     std::shared_lock rl{modified_lock}; // read lock to check for existence
