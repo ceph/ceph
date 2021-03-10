@@ -707,14 +707,11 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
         self._mount_cmd_cwd, self._mount_cmd_logger, \
             self._mount_cmd_stdin = None, None, None
 
+    # XXX: CephFSMount._create_mntpt() sets mountpoint's permission mode to
+    # 0000 which doesn't work for vstart_runner since superuser privileges are
+    # not used for mounting Ceph FS with FUSE.
     def _create_mntpt(self):
-        stderr = StringIO()
-        script = f'mkdir -p -v {self.hostfs_mntpt}'.split()
-        try:
-            self.client_remote.run(args=script, stderr=stderr)
-        except CommandFailedError:
-            if 'file exists' not in stderr.getvalue().lower():
-                raise
+        self.client_remote.run(args=f'mkdir -p -v {self.hostfs_mntpt}')
 
     def _run_mount_cmd(self, mntopts, check_status):
         super(type(self), self)._run_mount_cmd(mntopts, check_status)
