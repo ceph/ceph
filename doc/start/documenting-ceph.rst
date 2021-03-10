@@ -10,10 +10,9 @@ instructions will help the Ceph project immensely.
 
 The Ceph documentation source resides in the ``ceph/doc`` directory of the Ceph
 repository, and Python Sphinx renders the source into HTML and manpages. The
-http://ceph.com/docs link currently displays the  ``master`` branch by default,
-but you may view documentation for older branches (e.g., ``argonaut``) or future
-branches (e.g., ``next``) as well as work-in-progress branches by substituting
-``master`` with the branch name you prefer.
+https://docs.ceph.com link currently displays the ``master`` branch by default,
+but you may view documentation for older branches (e.g., ``mimic``) by substituting
+``latest`` in the URL with the branch name you prefer.
 
 
 Making Contributions

@@ -128,6 +128,19 @@ html.writer-html5 .rst-content table.docutils th,
   white-space: normal;
 }
 
+.rst-content table.docutils ul {
+  margin-bottom: inherit;
+}
+
+/* lists */
+.rst-content .section dl:not(.docutils) dt {
+  display: table-cell;
+}
+
+.rst-content table.docutils ul + ul {
+  margin-top: 1em;
+}
+
 /* versions */
 .injected .rst-versions.rst-badge {
   left: 0;
