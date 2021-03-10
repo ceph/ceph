@@ -46,7 +46,6 @@ function(build_rocksdb)
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
   list(APPEND rocksdb_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
   list(APPEND rocksdb_CMAKE_ARGS -DUSE_RTTI=1)
-  list(APPEND rocksdb_CMAKE_ARGS -G${CMAKE_GENERATOR})
   CHECK_C_COMPILER_FLAG("-Wno-stringop-truncation" HAS_WARNING_STRINGOP_TRUNCATION)
   if(HAS_WARNING_STRINGOP_TRUNCATION)
     list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_C_FLAGS=-Wno-stringop-truncation)
@@ -82,7 +81,7 @@ function(build_rocksdb)
     BINARY_DIR "${rocksdb_BINARY_DIR}"
     BUILD_COMMAND "${make_cmd}"
     BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
-    INSTALL_COMMAND "true"
+    INSTALL_COMMAND ""
     LIST_SEPARATOR !)
 
   add_library(RocksDB::RocksDB STATIC IMPORTED)
