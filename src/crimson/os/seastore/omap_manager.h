@@ -18,7 +18,6 @@
 
 namespace crimson::os::seastore {
 
-constexpr size_t MAX_SIZE = std::numeric_limits<size_t>::max();
 std::ostream &operator<<(std::ostream &out, const std::list<std::string> &rhs);
 std::ostream &operator<<(std::ostream &out, const std::map<std::string, std::string> &rhs);
 
@@ -87,26 +86,65 @@ public:
     const std::string &key) = 0;
 
   /**
-   * Ordered scan of key-> value mapping in omap tree
+   * omap_list
+   *
+   * Scans key/value pairs in order.
    *
    * @param omap_root: omap btree root information
    * @param t: current transaction
-   * @param start: the list keys range begin > start if present,
-   *        at beginning if std::nullopt
-   * @param max_result_size: the number of list keys,
-   *        it it is not set, list all keys after string start.
-   * @retval listed key->value mapping and next key
+   * @param start: nullopt sorts before any string, behavior
+   *        based on config.inclusive
+   * @param config: see below for params
+   * @retval listed key->value and bool indicating complete
    */
+  struct omap_list_config_t {
+    /// max results to return
+    size_t max_result_size = 128;
+
+    /// true denotes behavior like lower_bound, upper_bound otherwise
+    bool inclusive = false;
+
+    omap_list_config_t(
+      size_t max_result_size,
+      bool inclusive)
+      : max_result_size(max_result_size),
+	inclusive(inclusive) {}
+    omap_list_config_t() {}
+    omap_list_config_t(const omap_list_config_t &) = default;
+    omap_list_config_t(omap_list_config_t &&) = default;
+    omap_list_config_t &operator=(const omap_list_config_t &) = default;
+    omap_list_config_t &operator=(omap_list_config_t &&) = default;
+
+    static omap_list_config_t with_max(size_t max) {
+      omap_list_config_t ret{};
+      ret.max_result_size = max;
+      return ret;
+    }
+
+    static omap_list_config_t with_inclusive(bool inclusive) {
+      omap_list_config_t ret{};
+      ret.inclusive = inclusive;
+      return ret;
+    }
+
+    auto with_reduced_max(size_t reduced_by) const {
+      assert(reduced_by <= max_result_size);
+      return omap_list_config_t(
+	max_result_size - reduced_by,
+	inclusive
+      );
+    }
+  };
   using omap_list_ertr = base_ertr;
   using omap_list_bare_ret = std::pair<
     bool,
-    std::map<std::string, bufferlist>>;
+    std::map<std::string, bufferlist, std::less<>>>;
   using omap_list_ret = omap_list_ertr::future<omap_list_bare_ret>;
   virtual omap_list_ret omap_list(
     const omap_root_t &omap_root,
     Transaction &t,
     const std::optional<std::string> &start,
-    size_t max_result_size = MAX_SIZE) = 0;
+    omap_list_config_t config = omap_list_config_t()) = 0;
 
   /**
    * clear all omap tree key->value mapping

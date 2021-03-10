@@ -15,9 +15,11 @@
 #include "include/uuid.h"
 
 #include "os/Transaction.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
+#include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
 
 namespace crimson::os::seastore {
@@ -78,7 +80,10 @@ public:
     const omap_keys_t& keys) final;
 
   /// Retrieves paged set of values > start (if present)
-  read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
+  using omap_get_values_ret_bare_t = std::tuple<bool, omap_values_t>;
+  using omap_get_values_ret_t = read_errorator::future<
+    omap_get_values_ret_bare_t>;
+  omap_get_values_ret_t omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
     const std::optional<std::string> &start ///< [in] start, empty for begin
@@ -166,6 +171,42 @@ private:
       });
   }
 
+  template <typename Ret, typename F>
+  auto repeat_with_onode(
+    CollectionRef ch,
+    const ghobject_t &oid,
+    F &&f) {
+    return seastar::do_with(
+      oid,
+      Ret{},
+      TransactionRef(),
+      OnodeRef(),
+      std::forward<F>(f),
+      [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
+	return repeat_eagain([&, this] {
+	  t = make_transaction();
+	  return onode_manager->get_onode(
+	    *t, oid
+	  ).safe_then([&, this](auto onode_ret) {
+	    onode = std::move(onode_ret);
+	    return f(*t, *onode);
+	  }).safe_then([&ret](auto _ret) {
+	    ret = _ret;
+	  });
+	}).safe_then([&ret] {
+	  return seastar::make_ready_future<Ret>(ret);
+	});
+      });
+  }
+
+
+  friend class SeaStoreOmapIterator;
+  omap_get_values_ret_t omap_list(
+    CollectionRef ch,
+    const ghobject_t &oid,
+    const std::optional<string> &_start,
+    OMapManager::omap_list_config_t config);
+
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
@@ -216,6 +257,9 @@ private:
   tm_ret _create_collection(
     internal_context_t &ctx,
     const coll_t& cid, int bits);
+  tm_ret _remove_collection(
+    internal_context_t &ctx,
+    const coll_t& cid);
 
   boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 };

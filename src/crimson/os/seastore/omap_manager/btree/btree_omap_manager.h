@@ -86,7 +86,7 @@ public:
     const omap_root_t &omap_root,
     Transaction &t,
     const std::optional<std::string> &start,
-    size_t max_result_size) final;
+    omap_list_config_t config = omap_list_config_t()) final;
 
   omap_clear_ret omap_clear(
     omap_root_t &omap_root,

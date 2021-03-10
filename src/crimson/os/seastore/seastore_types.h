@@ -282,7 +282,6 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  ONODE_BLOCK = 3,
   EXTMAP_INNER = 4,
   EXTMAP_LEAF = 5,
   OMAP_INNER = 6,
@@ -373,6 +372,7 @@ struct omap_root_t {
   depth_t depth = 0;
   bool mutated = false;
 
+  omap_root_t() = default;
   omap_root_t(laddr_t addr, depth_t depth)
     : addr(addr),
       depth(depth) {}
