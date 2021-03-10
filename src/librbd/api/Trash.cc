@@ -24,6 +24,7 @@
 #include <json_spirit/json_spirit.h>
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/image/ListWatchersRequest.h"
+#include <experimental/map>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -288,15 +289,37 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       return -EOPNOTSUPP;
     }
 
-    // image doesn't exist -- perhaps already in the trash since removing
-    // from the directory is the last step
-    return -ENOENT;
+    // search for an interrupted trash move request
+    std::map<std::string, cls::rbd::TrashImageSpec> trash_image_specs;
+    int r = list_trash_image_specs(io_ctx, &trash_image_specs, true);
+    if (r < 0) {
+      return r;
+    }
+
+    std::experimental::erase_if(
+      trash_image_specs, [image_name](const auto& pair) {
+        const auto& spec = pair.second;
+        return (spec.source != cls::rbd::TRASH_IMAGE_SOURCE_USER ||
+                spec.state != cls::rbd::TRASH_IMAGE_STATE_MOVING ||
+                spec.name != image_name);
+      });
+    if (trash_image_specs.empty()) {
+      return -ENOENT;
+    }
+
+    image_id = trash_image_specs.begin()->first;
+    ldout(cct, 15) << "derived image id " << image_id << " from existing "
+                   << "trash entry" << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve image id: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  ceph_assert(!image_name.empty() && !image_id.empty());
+  if (image_name.empty() || image_id.empty()) {
+    lderr(cct) << "invalid image name/id" << dendl;
+    return -EINVAL;
+  }
+
   return Trash<I>::move(io_ctx, source, image_name, image_id, delay);
 }
 
