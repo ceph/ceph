@@ -62,7 +62,7 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         ('3 data[1-3]', "PlacementSpec(count=3, host_pattern='data[1-3]')"),
         ('3 data?', "PlacementSpec(count=3, host_pattern='data?')"),
         ('3 data*', "PlacementSpec(count=3, host_pattern='data*')"),
-        ("count-per-host:4", "PlacementSpec(count_per_host=4)"),
+        ("count-per-host:4 label:foo", "PlacementSpec(count_per_host=4, label='foo')"),
     ])
 def test_parse_placement_specs(test_input, expected):
     ret = PlacementSpec.from_string(test_input)
@@ -80,6 +80,7 @@ def test_parse_placement_specs(test_input, expected):
         ('count:2 count-per-host:1'),
         ('host1=a host2=b count-per-host:2'),
         ('host1:10/8 count-per-host:2'),
+        ('count-per-host:2'),
     ]
 )
 def test_parse_placement_specs_raises(test_input):

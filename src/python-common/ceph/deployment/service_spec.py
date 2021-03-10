@@ -210,15 +210,12 @@ class PlacementSpec(object):
         if self.hosts:
             all_hosts = [hs.hostname for hs in hostspecs]
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
-        elif self.label:
+        if self.label:
             return [hs.hostname for hs in hostspecs if self.label in hs.labels]
-        elif self.host_pattern:
-            all_hosts = [hs.hostname for hs in hostspecs]
+        all_hosts = [hs.hostname for hs in hostspecs]
+        if self.host_pattern:
             return fnmatch.filter(all_hosts, self.host_pattern)
-        else:
-            # This should be caught by the validation but needs to be here for
-            # get_host_selection_size
-            return []
+        return all_hosts
 
     def get_host_selection_size(self, hostspecs: Iterable[HostSpec]) -> int:
         if self.count:
@@ -293,6 +290,14 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError("num/count must be > 1")
         if self.count_per_host is not None and self.count_per_host < 1:
             raise ServiceSpecValidationError("count-per-host must be >= 1")
+        if self.count_per_host is not None and not (
+                self.label
+                or self.hosts
+                or self.host_pattern
+        ):
+            raise ServiceSpecValidationError(
+                "count-per-host must be combined with label or hosts or host_pattern"
+            )
         if self.count is not None and self.count_per_host is not None:
             raise ServiceSpecValidationError("cannot combine count and count-per-host")
         if (
