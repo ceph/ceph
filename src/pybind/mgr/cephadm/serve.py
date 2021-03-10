@@ -309,14 +309,24 @@ class CephadmServe:
         return None
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
+
+        with_lsm = self.mgr.get_module_option('device_enhanced_scan')
+        inventory_args = ['--', 'inventory',
+                          '--format=json',
+                          '--filter-for-batch']
+        if with_lsm:
+            inventory_args.insert(-1, "--with-lsm")
+
         try:
             try:
                 devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
-                                                 ['--', 'inventory', '--format=json', '--filter-for-batch'])
+                                                 inventory_args)
             except OrchestratorError as e:
                 if 'unrecognized arguments: --filter-for-batch' in str(e):
+                    rerun_args = inventory_args.copy()
+                    rerun_args.remove('--filter-for-batch')
                     devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
-                                                     ['--', 'inventory', '--format=json'])
+                                                     rerun_args)
                 else:
                     raise
 
