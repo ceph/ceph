@@ -172,10 +172,12 @@ class TestMirroring(CephFSTestCase):
         snap_list = self.mount_b.ls(path=f'{dir_name}/.snap')
         self.assertTrue(snap_name in snap_list)
 
-        source_res = self.mount_a.dir_checksum(path=f'{dir_name}/.snap/{snap_name}')
+        source_res = self.mount_a.dir_checksum(path=f'{dir_name}/.snap/{snap_name}',
+                                               follow_symlinks=True)
         log.debug(f'source snapshot checksum {snap_name} {source_res}')
 
-        dest_res = self.mount_b.dir_checksum(path=f'{dir_name}/.snap/{snap_name}')
+        dest_res = self.mount_b.dir_checksum(path=f'{dir_name}/.snap/{snap_name}',
+                                             follow_symlinks=True)
         log.debug(f'destination snapshot checksum {snap_name} {dest_res}')
         self.assertTrue(source_res == dest_res)
 
@@ -805,4 +807,39 @@ class TestMirroring(CephFSTestCase):
         # remove peer
         self.peer_remove(self.primary_fs_name, self.primary_fs_id, "client.mirror_peer_bootstrap@site-remote")
         # disable mirroring
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_symlink_sync(self):
+        log.debug('reconfigure client auth caps')
+        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+            'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
+                'mds', 'allow rw',
+                'mon', 'allow r',
+                'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
+                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+
+        log.debug(f'mounting filesystem {self.secondary_fs_name}')
+        self.mount_b.umount_wait()
+        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+
+        # create a bunch of files w/ symbolic links in a directory to snap
+        self.mount_a.run_shell(["mkdir", "d0"])
+        self.mount_a.create_n_files('d0/file', 10, sync=True)
+        self.mount_a.run_shell(["ln", "-s", "./file_0", "d0/sym_0"])
+        self.mount_a.run_shell(["ln", "-s", "./file_1", "d0/sym_1"])
+        self.mount_a.run_shell(["ln", "-s", "./file_2", "d0/sym_2"])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # take a snapshot
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
+
+        time.sleep(30)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap0', 1)
+        self.verify_snapshot('d0', 'snap0')
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
