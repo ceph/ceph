@@ -51,7 +51,7 @@ static constexpr uint32_t bns = 123456789;
 static constexpr uint32_t bus = 123456;
 static constexpr time_t btt = bs;
 static constexpr struct timespec bts = { bs, bns };
-static struct ceph_timespec bcts = { init_le32(bs), init_le32(bns) };
+static struct ceph_timespec bcts = { ceph_le32(bs), ceph_le32(bns) };
 static constexpr struct timeval btv = { bs, bus };
 static constexpr double bd = bs + ((double)bns / 1000000000.);
 
