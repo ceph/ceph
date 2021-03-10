@@ -681,6 +681,9 @@ class MdsService(CephService):
 class RgwService(CephService):
     TYPE = 'rgw'
 
+    def allow_colo(self) -> bool:
+        return True
+
     def config(self, spec: RGWSpec, rgw_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
 
@@ -745,11 +748,11 @@ class RgwService(CephService):
         # configure frontend
         args = []
         if spec.ssl:
-            args.append(f"ssl_port={spec.get_port()}")
+            args.append(f"ssl_port={daemon_spec.ports[0]}")
             args.append(f"ssl_certificate=config://rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt")
             args.append(f"ssl_key=config://rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key")
         else:
-            args.append(f"port={spec.get_port()}")
+            args.append(f"port={daemon_spec.ports[0]}")
         frontend = f'beast {" ".join(args)}'
 
         ret, out, err = self.mgr.check_mon_command({
