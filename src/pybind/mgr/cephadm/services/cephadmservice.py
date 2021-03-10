@@ -750,7 +750,7 @@ class RgwService(CephService):
         if spec.ssl:
             args.append(f"ssl_port={daemon_spec.ports[0]}")
             args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
-            args.append(f"ssl_key=config://rgw/cert/{spec.service_name()}.key")
+            args.append(f"ssl_private_key=config://rgw/cert/{spec.service_name()}.key")
         else:
             args.append(f"port={daemon_spec.ports[0]}")
         frontend = f'beast {" ".join(args)}'
