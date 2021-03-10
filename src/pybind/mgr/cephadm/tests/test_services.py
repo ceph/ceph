@@ -3,12 +3,13 @@ import pytest
 from unittest.mock import MagicMock, call
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmExporter, CephadmDaemonDeploySpec
+    RbdMirrorService, CrashService, CephadmDaemonDeploySpec
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
 from cephadm.services.osd import OSDService
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
+from cephadm.services.exporter import CephadmExporter
 from ceph.deployment.service_spec import IscsiServiceSpec
 
 from orchestrator import OrchestratorError

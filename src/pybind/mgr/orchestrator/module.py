@@ -43,6 +43,7 @@ class ServiceType(enum.Enum):
     mon = 'mon'
     mgr = 'mgr'
     rbd_mirror = 'rbd-mirror'
+    cephfs_mirror = 'cephfs-mirror'
     crash = 'crash'
     alertmanager = 'alertmanager'
     grafana = 'grafana'
@@ -853,38 +854,7 @@ Usage:
         return self._daemon_add_misc(spec)
 
     def _daemon_add_misc(self, spec: ServiceSpec) -> HandleCommandResult:
-        daemon_type = ServiceType(spec.service_type)
-
-        if daemon_type == ServiceType.mon:
-            completion = self.add_mon(spec)
-        elif daemon_type == ServiceType.mgr:
-            completion = self.add_mgr(spec)
-        elif daemon_type == ServiceType.rbd_mirror:
-            completion = self.add_rbd_mirror(spec)
-        elif daemon_type == ServiceType.crash:
-            completion = self.add_crash(spec)
-        elif daemon_type == ServiceType.alertmanager:
-            completion = self.add_alertmanager(spec)
-        elif daemon_type == ServiceType.grafana:
-            completion = self.add_grafana(spec)
-        elif daemon_type == ServiceType.node_exporter:
-            completion = self.add_node_exporter(spec)
-        elif daemon_type == ServiceType.prometheus:
-            completion = self.add_prometheus(spec)
-        elif daemon_type == ServiceType.mds:
-            completion = self.add_mds(spec)
-        elif daemon_type == ServiceType.rgw:
-            completion = self.add_rgw(cast(RGWSpec, spec))
-        elif daemon_type == ServiceType.nfs:
-            completion = self.add_nfs(cast(NFSServiceSpec, spec))
-        elif daemon_type == ServiceType.iscsi:
-            completion = self.add_iscsi(cast(IscsiServiceSpec, spec))
-        elif daemon_type == ServiceType.cephadm_exporter:
-            completion = self.add_cephadm_exporter(spec)
-        else:
-            tp = type(daemon_type)
-            raise OrchestratorValidationError(f'unknown daemon type `{tp}`')
-
+        completion = self.add_daemon(spec)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
