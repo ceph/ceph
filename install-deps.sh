@@ -338,6 +338,7 @@ else
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
+                $SUDO dnf install -y ninja-build
                 $SUDO dnf install -y dnf-utils
                 $SUDO dnf install -y docker-ce docker-ce-cli containerd.io
                 $SUDO systemctl start docker
