@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "common/RWLock.h"
+
 #include "rgw_metadata.h"
 #include "rgw_mdlog_types.h"
 

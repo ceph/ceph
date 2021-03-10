@@ -7,6 +7,8 @@
 #include <map>
 #include <string>
 
+#include "common/RWLock.h"
+
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_realm_reloader.h"
