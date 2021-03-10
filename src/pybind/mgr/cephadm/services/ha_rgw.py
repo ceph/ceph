@@ -100,9 +100,7 @@ class HA_RGWService(CephService):
 
         spec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
-        all_hosts = []
-        for h, network, name in spec.definitive_host_list:
-            all_hosts.append(h)
+        all_hosts = spec.definitive_host_list
 
         # set state. first host in placement is master all others backups
         state = 'BACKUP'
