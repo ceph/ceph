@@ -3,16 +3,13 @@
 
 #pragma once
 
-#include <iostream>
-#include <limits>
+#include <iosfwd>
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
-#include "include/buffer.h"
-#include "include/denc.h"
-
-#include "crimson/os/seastore/transaction.h"
+#include "include/byteorder.h"
+#include "seastore_types.h"
 
 namespace crimson::os::seastore {
 
@@ -20,6 +17,8 @@ struct onode_layout_t {
   ceph_le32 size{0};
   omap_root_le_t omap_root;
 } __attribute__((packed));
+
+class Transaction;
 
 /**
  * Onode

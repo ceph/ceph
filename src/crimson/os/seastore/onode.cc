@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "onode.h"
-#include "include/encoding.h"
+#include <iostream>
 
 namespace crimson::os::seastore {
 
