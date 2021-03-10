@@ -151,24 +151,6 @@ class HostAssignment(object):
             existing, to_add))
         return existing_slots + to_add, to_add, to_remove
 
-    def add_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
-        hosts_with_daemons = {d.hostname for d in self.daemons}
-        _add_daemon_hosts = []  # type: List[HostPlacementSpec]
-        for host in host_pool:
-            if host.hostname not in hosts_with_daemons:
-                _add_daemon_hosts.append(host)
-        return _add_daemon_hosts
-
-    def remove_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> Set[DaemonDescription]:
-        target_hosts = [h.hostname for h in host_pool]
-        _remove_daemon_hosts = set()
-        for d in self.daemons:
-            if d.hostname not in target_hosts:
-                _remove_daemon_hosts.add(d)
-            else:
-                target_hosts.remove(d.hostname)
-        return _remove_daemon_hosts
-
     def get_candidates(self) -> List[HostPlacementSpec]:
         if self.spec.placement.hosts:
             hosts = self.spec.placement.hosts
