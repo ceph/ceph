@@ -1,3 +1,5 @@
+from io import StringIO
+
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 import json
 import logging
@@ -21,7 +23,7 @@ class TestMantle(CephFSTestCase):
 
     def push_balancer(self, obj, lua_code, expect):
         self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', obj)
-        self.fs.rados(["put", obj, "-"], stdin_data=lua_code)
+        self.fs.radosm(["put", obj, "-"], stdin=StringIO(lua_code))
         with self.assert_cluster_log(failure + obj + " " + expect):
             log.info("run a " + obj + " balancer that expects=" + expect)
 
@@ -58,7 +60,7 @@ class TestMantle(CephFSTestCase):
         self.start_mantle()
         lua_code = "BAL_LOG(0, \"test\")\nreturn {3, 4}"
         self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', "valid.lua")
-        self.fs.rados(["put", "valid.lua", "-"], stdin_data=lua_code)
+        self.fs.radosm(["put", "valid.lua", "-"], stdin=StringIO(lua_code))
         with self.assert_cluster_log(success + "valid.lua"):
             log.info("run a valid.lua balancer")
 

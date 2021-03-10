@@ -1,4 +1,4 @@
-
+from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra import run
@@ -223,9 +223,9 @@ class TestFragmentation(CephFSTestCase):
         )
         # Check that the metadata pool objects for all the myriad
         # child fragments are gone
-        metadata_objs = self.fs.rados(["ls"])
+        metadata_objs = self.fs.radosmo(["ls"], stdout=StringIO()).strip()
         frag_objs = []
-        for o in metadata_objs:
+        for o in metadata_objs.split("\n"):
             if o.startswith("{0:x}.".format(dir_inode_no)):
                 frag_objs.append(o)
         self.assertListEqual(frag_objs, [])
