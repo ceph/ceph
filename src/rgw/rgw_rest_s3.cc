@@ -6084,6 +6084,7 @@ rgw::auth::s3::STSEngine::authenticate(
   rgw_user user_id;
   string role_id;
   rgw::auth::RoleApplier::Role r;
+  rgw::auth::RoleApplier::TokenAttrs t_attrs;
   if (! token.roleId.empty()) {
     std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(token.roleId);
     if (role->get_by_id(dpp, y) < 0) {
@@ -6100,8 +6101,6 @@ rgw::auth::s3::STSEngine::authenticate(
         r.role_policies.push_back(std::move(perm_policy));
       }
     }
-    // This is mostly needed to assign the owner of a bucket during its creation
-    user_id = token.user;
   }
 
   user = store->get_user(token.user);
@@ -6119,7 +6118,13 @@ rgw::auth::s3::STSEngine::authenticate(
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else if (token.acct_type == TYPE_ROLE) {
-    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session, token.token_claims, token.issued_at);
+    t_attrs.user_id = std::move(token.user); // This is mostly needed to assign the owner of a bucket during its creation
+    t_attrs.token_policy = std::move(token.policy);
+    t_attrs.role_session_name = std::move(token.role_session);
+    t_attrs.token_claims = std::move(token.token_claims);
+    t_attrs.token_issued_at = std::move(token.issued_at);
+    t_attrs.principal_tags = std::move(token.principal_tags);
+    auto apl = role_apl_factory->create_apl_role(cct, s, r, t_attrs);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;
