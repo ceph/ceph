@@ -105,13 +105,13 @@
 
 /// default object layout
 static const struct ceph_file_layout default_file_layout = {
-  init_le32(1<<22),	// fl_stripe_unit
-  init_le32(1),		// fl_stripe_count
-  init_le32(1<<22),	// fl_object_size
-  init_le32(0),		// fl_cas_hash
-  init_le32(0),		// fl_object_stripe_unit
-  init_le32(-1),	// fl_unused
-  init_le32(-1),	// fl_pg_pool
+  ceph_le32(1<<22),	// fl_stripe_unit
+  ceph_le32(1),		// fl_stripe_count
+  ceph_le32(1<<22),	// fl_object_size
+  ceph_le32(0),		// fl_cas_hash
+  ceph_le32(0),		// fl_object_stripe_unit
+  ceph_le32(-1),	// fl_unused
+  ceph_le32(-1),	// fl_pg_pool
 };
 
 using libradosstriper::MultiAioCompletionImplPtr;
