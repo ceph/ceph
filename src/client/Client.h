@@ -892,6 +892,10 @@ public:
 
   bool fuse_default_permissions;
 
+  // global client lock
+  //  - protects Client and buffer cache both!
+  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
+
 protected:
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
@@ -1096,10 +1100,6 @@ protected:
    * being set up.
    */
   void _finish_init();
-
-  // global client lock
-  //  - protects Client and buffer cache both!
-  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
 
   std::map<snapid_t, int> ll_snap_ref;
 
