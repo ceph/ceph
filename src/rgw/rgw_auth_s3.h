@@ -65,13 +65,9 @@ class STSAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_role(CephContext* const cct,
                             const req_state* const s,
                             const rgw::auth::RoleApplier::Role& role,
-                            const rgw_user& user_id,
-                            const std::string& token_policy,
-                            const std::string& role_session_name,
-                            const std::vector<string>& token_claims,
-                            const std::string& token_issued_at) const override {
+                            const rgw::auth::RoleApplier::TokenAttrs& token_attrs) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::RoleApplier(cct, role, user_id, token_policy, role_session_name, token_claims, token_issued_at));
+      rgw::auth::RoleApplier(cct, role, token_attrs));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
