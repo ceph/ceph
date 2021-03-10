@@ -210,6 +210,10 @@ struct dir_result_t {
   }
 
   InodeRef inode;
+  UserPerm perms;
+
+  // the above members no need to be placed under the Clinet::client_lock
+
   int64_t offset;        // hash order:
 			 //   (0xff << 52) | ((24 bits hash) << 28) |
 			 //   (the nth entry has hash collision);
@@ -223,7 +227,6 @@ struct dir_result_t {
   uint64_t ordered_count;
   unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
-  UserPerm perms;
 
   frag_t buffer_frag;
 
@@ -762,6 +765,7 @@ public:
   void update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,
 			      utime_t ctime, utime_t mtime, utime_t atime);
 
+  void get_inode_lock_name(std::string &name, vinodeno_t vino);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
 			  const UserPerm& request_perms);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease,
@@ -784,9 +788,11 @@ public:
   void start_tick_thread();
 
   void inc_dentry_nr() {
+    std::scoped_lock cl(client_lock);
     ++dentry_nr;
   }
   void dec_dentry_nr() {
+    std::scoped_lock cl{client_lock};
     --dentry_nr;
   }
   void dlease_hit() {
@@ -854,6 +860,10 @@ public:
   std::unique_ptr<MDSMap> mdsmap;
 
   bool fuse_default_permissions;
+
+  // global client lock
+  //  - protects Client and buffer cache both!
+  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
 
 protected:
   /* Flags for check_caps() */
@@ -1060,10 +1070,6 @@ protected:
    * being set up.
    */
   void _finish_init();
-
-  // global client lock
-  //  - protects Client and buffer cache both!
-  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
 
   std::map<snapid_t, int> ll_snap_ref;
 

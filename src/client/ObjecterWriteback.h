@@ -8,10 +8,9 @@
 
 class ObjecterWriteback : public WritebackHandler {
  public:
-  ObjecterWriteback(Objecter *o, Finisher *fin, ceph::mutex *lock)
+  ObjecterWriteback(Objecter *o, Finisher *fin)
     : m_objecter(o),
-      m_finisher(fin),
-      m_lock(lock) { }
+      m_finisher(fin) { }
   ~ObjecterWriteback() override {}
 
   void read(const object_t& oid, uint64_t object_no,
@@ -22,8 +21,7 @@ class ObjecterWriteback : public WritebackHandler {
                     Context *onfinish) override {
     m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
 			   trunc_size, trunc_seq,
-			   new C_OnFinisher(new C_Lock(m_lock, onfinish),
-					    m_finisher));
+			   new C_OnFinisher(onfinish, m_finisher));
   }
 
   bool may_copy_on_write(const object_t& oid, uint64_t read_off,
@@ -40,9 +38,7 @@ class ObjecterWriteback : public WritebackHandler {
 			   Context *oncommit) override {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
 				   trunc_size, trunc_seq,
-				   new C_OnFinisher(new C_Lock(m_lock,
-							       oncommit),
-						    m_finisher));
+				   new C_OnFinisher(oncommit, m_finisher));
   }
 
   bool can_scattered_write() override { return true; }
@@ -59,14 +55,12 @@ class ObjecterWriteback : public WritebackHandler {
       op.write(p->first, p->second, trunc_size, trunc_seq);
 
     return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0,
-			      new C_OnFinisher(new C_Lock(m_lock, oncommit),
-					       m_finisher));
+			      new C_OnFinisher(oncommit, m_finisher));
   }
 
  private:
   Objecter *m_objecter;
   Finisher *m_finisher;
-  ceph::mutex *m_lock;
 };
 
 #endif
