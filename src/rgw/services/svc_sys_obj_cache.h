@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/RWLock.h"
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_cache.h"
 

@@ -4,7 +4,6 @@
 #include <boost/optional.hpp>
 
 #include "common/ceph_json.h"
-#include "common/RWLock.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"

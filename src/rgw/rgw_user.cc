@@ -10,7 +10,6 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
-#include "common/RWLock.h"
 #include "rgw_sal_rados.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"

@@ -661,7 +661,7 @@ static int clear_signal(int fd)
   // since we're in non-blocking mode, we can try to read a lot more than
   // one signal from signal_thread() to avoid later wakeups. non-blocking reads
   // are also required to support the curl_multi_wait bug workaround
-  std::array<char, 256> buf;
+  std::array<char, 256> buf{};
   int ret = ::read(fd, (void *)buf.data(), buf.size());
   if (ret < 0) {
     ret = -errno;
