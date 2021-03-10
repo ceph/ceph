@@ -101,7 +101,10 @@ template <typename I>
 void MoveRequest<I>::handle_directory_remove(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
-  if (r < 0 && r != -ENOENT) {
+  if (r == -ENOENT) {
+    r = 0;
+  }
+  if (r < 0) {
     lderr(m_cct) << "failed to remove image from directory: " << cpp_strerror(r)
                  << dendl;
   }
