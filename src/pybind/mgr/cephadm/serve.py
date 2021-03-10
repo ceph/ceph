@@ -600,7 +600,7 @@ class CephadmServe:
 
                 daemon_spec = svc.make_daemon_spec(
                     slot.hostname, daemon_id, slot.network, spec, daemon_type=daemon_type,
-                    ports=slot.ports
+                    ports=[slot.port] if slot.port else None
                 )
                 self.log.debug('Placing %s.%s on host %s' % (
                     daemon_type, daemon_id, slot.hostname))
