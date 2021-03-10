@@ -16,7 +16,7 @@ class DaemonPlacement(NamedTuple):
     network: str = ''   # for mons only
     name: str = ''
     ip: Optional[str] = None
-    ports: Optional[List[int]] = None
+    port: Optional[int] = None
 
     def __str__(self) -> str:
         res = self.hostname
@@ -27,8 +27,8 @@ class DaemonPlacement(NamedTuple):
             other.append(f'name={self.name}')
         if self.ip:
             other.append(f'ip={self.ip}')
-        if self.ports:
-            other.append(f'ports={",".join(map(str, self.ports))}')
+        if self.port:
+            other.append(f'port={self.port}')
         if other:
             res += '(' + ' '.join(other) + ')'
         return res
@@ -41,7 +41,7 @@ class DaemonPlacement(NamedTuple):
             return False
         if self.ip and self.ip != dd.ip:
             return False
-        if self.ports and self.ports != dd.ports:
+        if self.port and [self.port] != dd.ports:
             return False
         return True
 
