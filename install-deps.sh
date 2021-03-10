@@ -339,7 +339,10 @@ else
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
-                $SUDO dnf install -y docker-ce docker-ce-cli containerd.io
+                dnf list installed | egrep "docker-ce|docker-ce-cli|containerd\.io|podman"
+                if test $? -ne 0; then
+                    $SUDO dnf install -y docker
+                fi
                 $SUDO systemctl start docker
                 $SUDO systemctl enable docker
                 ;;
