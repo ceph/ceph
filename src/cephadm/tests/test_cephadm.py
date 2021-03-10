@@ -619,13 +619,10 @@ iMN28C2bKGao5UHvdER1rGy7
         assert exporter.unit_run
         lines = exporter.unit_run.split('\n')
         assert len(lines) == 2
-        assert "/var/lib/ceph/foobar/cephadm exporter --fsid foobar --id test --port 9443 &" in lines[1]
+        assert "cephadm exporter --fsid foobar --id test --port 9443 &" in lines[1]
 
     def test_binary_path(self, exporter):
-        # fsid = foobar
-        args = cd._parse_args([])
-        cd.args = args
-        assert exporter.binary_path == "/var/lib/ceph/foobar/cephadm"
+        assert os.path.isfile(exporter.binary_path)
 
     def test_systemd_unit(self, exporter):
         assert exporter.unit_file
