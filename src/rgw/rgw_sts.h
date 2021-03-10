@@ -50,6 +50,7 @@ class AssumeRoleWithWebIdentityRequest : public AssumeRoleRequestBase {
   string iss;
   string sub;
   string aud;
+  std::vector<std::pair<string,string>> session_princ_tags;
 public:
   AssumeRoleWithWebIdentityRequest( CephContext* cct,
                       const string& duration,
@@ -59,13 +60,15 @@ public:
                       const string& roleSessionName,
                       const string& iss,
                       const string& sub,
-                      const string& aud)
+                      const string& aud,
+                      std::vector<std::pair<string,string>> session_princ_tags)
     : AssumeRoleRequestBase(cct, duration, iamPolicy, roleArn, roleSessionName),
-      providerId(providerId), iss(iss), sub(sub), aud(aud) {}
+      providerId(providerId), iss(iss), sub(sub), aud(aud), session_princ_tags(session_princ_tags) {}
   const string& getProviderId() const { return providerId; }
   const string& getIss() const { return iss; }
   const string& getAud() const { return aud; }
   const string& getSub() const { return sub; }
+  const std::vector<std::pair<string,string>>& getPrincipalTags() const { return session_princ_tags; }
   int validate_input() const;
 };
 
@@ -135,11 +138,12 @@ struct SessionToken {
   string role_session;
   std::vector<string> token_claims;
   string issued_at;
+  std::vector<std::pair<string,string>> principal_tags;
 
   SessionToken() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(access_key_id, bl);
     encode(secret_access_key, bl);
     encode(expiration, bl);
@@ -153,11 +157,12 @@ struct SessionToken {
     encode(role_session, bl);
     encode(token_claims, bl);
     encode(issued_at, bl);
+    encode(principal_tags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     decode(access_key_id, bl);
     decode(secret_access_key, bl);
     decode(expiration, bl);
@@ -177,6 +182,9 @@ struct SessionToken {
     if (struct_v >= 4) {
       decode(issued_at, bl);
     }
+    if (struct_v >= 5) {
+      decode(principal_tags, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -195,7 +203,8 @@ public:
                           const boost::optional<string>& policy,
                           const boost::optional<string>& roleId,
                           const boost::optional<string>& role_session,
-                          const boost::optional<std::vector<string> > token_claims,
+                          const boost::optional<std::vector<string>>& token_claims,
+                          const boost::optional<std::vector<std::pair<string,string>>>& session_princ_tags,
                           boost::optional<rgw_user> user,
                           rgw::auth::Identity* identity);
   const string& getAccessKeyId() const { return accessKeyId; }
