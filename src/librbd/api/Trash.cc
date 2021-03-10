@@ -108,6 +108,48 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
   return 0;
 }
 
+int list_trash_image_specs(
+    librados::IoCtx &io_ctx,
+    std::map<std::string, cls::rbd::TrashImageSpec>* trash_image_specs,
+    bool exclude_user_remove_source) {
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << "list_trash_image_specs " << &io_ctx << dendl;
+
+  bool more_entries;
+  uint32_t max_read = 1024;
+  std::string last_read;
+  do {
+    std::map<string, cls::rbd::TrashImageSpec> trash_entries;
+    int r = cls_client::trash_list(&io_ctx, last_read, max_read,
+                                   &trash_entries);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error listing rbd trash entries: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    } else if (r == -ENOENT) {
+      break;
+    }
+
+    if (trash_entries.empty()) {
+      break;
+    }
+
+    for (const auto &entry : trash_entries) {
+      if (exclude_user_remove_source &&
+          entry.second.source == cls::rbd::TRASH_IMAGE_SOURCE_REMOVING) {
+        continue;
+      }
+
+      trash_image_specs->insert({entry.first, entry.second});
+    }
+
+    last_read = trash_entries.rbegin()->first;
+    more_entries = (trash_entries.size() >= max_read);
+  } while (more_entries);
+
+  return 0;
+}
+
 } // anonymous namespace
 
 template <typename I>
@@ -285,41 +327,23 @@ template <typename I>
 int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries,
                    bool exclude_user_remove_source) {
   CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << "trash_list " << &io_ctx << dendl;
+  ldout(cct, 20) << __func__ << " " << &io_ctx << dendl;
 
-  bool more_entries;
-  uint32_t max_read = 1024;
-  std::string last_read = "";
-  do {
-    map<string, cls::rbd::TrashImageSpec> trash_entries;
-    int r = cls_client::trash_list(&io_ctx, last_read, max_read,
-                                   &trash_entries);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error listing rbd trash entries: " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    } else if (r == -ENOENT) {
-      break;
-    }
+  std::map<std::string, cls::rbd::TrashImageSpec> trash_image_specs;
+  int r = list_trash_image_specs(io_ctx, &trash_image_specs,
+                                 exclude_user_remove_source);
+  if (r < 0) {
+    return r;
+  }
 
-    if (trash_entries.empty()) {
-      break;
-    }
-
-    for (const auto &entry : trash_entries) {
-      rbd_trash_image_source_t source =
-          static_cast<rbd_trash_image_source_t>(entry.second.source);
-      if (exclude_user_remove_source &&
-          source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
-        continue;
-      }
-      entries.push_back({entry.first, entry.second.name, source,
-                         entry.second.deletion_time.sec(),
-                         entry.second.deferment_end_time.sec()});
-    }
-    last_read = trash_entries.rbegin()->first;
-    more_entries = (trash_entries.size() >= max_read);
-  } while (more_entries);
+  entries.reserve(trash_image_specs.size());
+  for (const auto &entry : trash_image_specs) {
+    rbd_trash_image_source_t source =
+        static_cast<rbd_trash_image_source_t>(entry.second.source);
+    entries.push_back({entry.first, entry.second.name, source,
+                       entry.second.deletion_time.sec(),
+                       entry.second.deferment_end_time.sec()});
+  }
 
   return 0;
 }
