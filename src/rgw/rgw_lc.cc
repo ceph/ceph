@@ -1600,9 +1600,10 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 
     ret = sal_lc->set_entry(obj_names[index],  entry);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
+      ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to set entry on "
           << obj_names[index] << dendl;
     }
+
 clean:
     lock->unlock();
     delete lock;
@@ -1697,6 +1698,30 @@ time_t RGWLC::thread_stop_at()
   return time(nullptr) + interval;
 }
 
+int RGWLC::bucket_lc_reset(rgw::sal::Lifecycle::LCHead& head, int index, LCWorker* worker)
+{
+  utime_t now = ceph_clock_now();
+  head.start_date = now;
+  head.marker.clear();
+  auto ret = bucket_lc_prepare(index, worker);
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "RGWLC::process() failed to update lc object "
+                       << obj_names[index]
+                       << ", ret=" << ret
+                       << dendl;
+    return ret;
+  }
+  ret = sal_lc->put_head(obj_names[index],  head);
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
+                       << obj_names[index]
+                       << dendl;
+    return ret;
+  }
+  return ret;
+}
+
+
 int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
   bool once = false)
 {
@@ -1708,7 +1733,6 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 							obj_names[index],
 							std::string());
   do {
-    utime_t now = ceph_clock_now();
     //string = bucket_name:bucket_id, start_time, int = LC_BUCKET_STATUS
     rgw::sal::Lifecycle::LCEntry entry;
     if (max_lock_secs <= 0)
@@ -1735,6 +1759,12 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       goto exit;
     }
 
+    if (head.start_date == 0) {
+      // Since it is the first execution, reset date and marker
+      bucket_lc_reset(head, index, worker);
+      goto exit;
+    }
+
     if (! (cct->_conf->rgw_lc_lock_max_time == 9969)) {
       ret = sal_lc->get_entry(obj_names[index], head.marker, entry);
       if (ret >= 0) {
@@ -1742,7 +1772,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  if (expired_session(entry.start_time)) {
 	    dout(5) << "RGWLC::process(): STALE lc session found for: " << entry
 		    << " index: " << index << " worker ix: " << worker->ix
-		    << " (clearing)"
+		    << " (go ahead to the next)"
 		    << dendl;
 	  } else {
 	    dout(5) << "RGWLC::process(): ACTIVE entry: " << entry
@@ -1754,20 +1784,6 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       }
     }
 
-    if(!if_already_run_today(head.start_date) ||
-       once) {
-      head.start_date = now;
-      head.marker.clear();
-      ret = bucket_lc_prepare(index, worker);
-      if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to update lc object "
-			 << obj_names[index]
-			 << ", ret=" << ret
-			 << dendl;
-      goto exit;
-      }
-    }
-
     ret = sal_lc->get_next_entry(obj_names[index], head.marker, entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj entry "
@@ -1776,8 +1792,15 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     }
 
     /* termination condition (eof) */
-    if (entry.bucket.empty())
+    if (entry.bucket.empty()) {
+      // Reach the end of lc.N and check whether to restart today
+      if(!if_already_run_today(head.start_date)) {
+        // Since last round is not started today,
+        // reset the head and prepare to start a new round
+        bucket_lc_reset(head, index, worker);
+      }
       goto exit;
+    }
 
     ldpp_dout(this, 5) << "RGWLC::process(): START entry 1: " << entry
 	    << " index: " << index << " worker ix: " << worker->ix

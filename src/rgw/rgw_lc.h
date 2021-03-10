@@ -523,6 +523,7 @@ public:
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
 		     rgw::sal::Lifecycle::LCEntry& entry, int& result, LCWorker* worker);
+  int bucket_lc_reset(rgw::sal::Lifecycle::LCHead& head, int index, LCWorker* worker);
   bool going_down();
   void start_processor();
   void stop_processor();
