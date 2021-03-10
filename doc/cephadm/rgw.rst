@@ -8,32 +8,41 @@ Deploy RGWs
 ===========
 
 Cephadm deploys radosgw as a collection of daemons that manage a
-particular *realm* and *zone*.  (For more information about realms and
-zones, see :ref:`multisite`.)
+single-cluster deployment or a particular *realm* and *zone* in a
+multisite deployment.  (For more information about realms and zones,
+see :ref:`multisite`.)
 
 Note that with cephadm, radosgw daemons are configured via the monitor
 configuration database instead of via a `ceph.conf` or the command line.  If
 that configuration isn't already in place (usually in the
-``client.rgw.<realmname>.<zonename>`` section), then the radosgw
+``client.rgw.<something>`` section), then the radosgw
 daemons will start up with default settings (e.g., binding to port
 80).
 
-To deploy a set of radosgw daemons for a particular realm and zone, run the
-following command:
+To deploy a set of radosgw daemons, with an arbitrary service name
+*name*, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch apply rgw *<realm-name>* *<zone-name>* --placement="*<num-daemons>* [*<host1>* ...]"
+  ceph orch apply rgw *<name>* [--rgw-realm=*<realm-name>*] [--rgw-zone=*<zone-name>*] --placement="*<num-daemons>* [*<host1>* ...]"
 
-For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-1* zone on *myhost1* and *myhost2*:
+For example, to deploy 2 RGW daemons (the default) for a single-cluster RGW deployment
+under the arbitrary service id *foo*:
 
 .. prompt:: bash #
 
-   ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
+   ceph orch apply rgw foo
 
-Cephadm will wait for a healthy cluster and automatically create the supplied realm and zone if they do not exist before deploying the rgw daemon(s)
+To deploy RGWs serving the multisite *myorg* realm and the *us-east-1* zone on
+*myhost1* and *myhost2*:
 
-Alternatively, the realm, zonegroup, and zone can be manually created using ``radosgw-admin`` commands:
+.. prompt:: bash #
+
+   ceph orch apply rgw east --rgw-realm=myorg --rgw-zone=us-east-1 --placement="2 myhost1 myhost2"
+
+Note that in a multisite situation, cephadm only deploys the daemons.  It does not create
+or update the realm or zone configurations.  To create a new realm and zone, you need to do
+something like:
 
 .. prompt:: bash #
 
@@ -52,7 +61,7 @@ Alternatively, the realm, zonegroup, and zone can be manually created using ``ra
   radosgw-admin period update --rgw-realm=<realm-name> --commit
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement
-specification.
+specification.  See :ref:`multisite` for more information of setting up multisite RGW.
 
 
 .. _orchestrator-haproxy-service-spec:
