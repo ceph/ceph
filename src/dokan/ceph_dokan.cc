@@ -950,7 +950,7 @@ int do_map() {
   }
 
   atexit(unmount_atexit);
-  dout(0) << "Mounted cephfs directory: " << ceph_getcwd(cmount)
+  dout(0) << "Mounted cephfs directory: " << g_cfg->root_path.c_str()
           <<". Mountpoint: " << to_string(g_cfg->mountpoint) << dendl;
 
   DWORD status = DokanMain(dokan_options, dokan_operations);
