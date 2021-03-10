@@ -1608,7 +1608,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         osd_count += 1
                         sm[n].size = osd_count
                     else:
-                        sm[n].size = spec.placement.get_host_selection_size(
+                        sm[n].size = spec.placement.get_target_count(
                             self.inventory.all_specs())
 
                     sm[n].created = self.spec_store.spec_created[n]
@@ -1639,7 +1639,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 continue
             sm[n] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=spec.placement.get_host_selection_size(self.inventory.all_specs()),
+                size=spec.placement.get_target_count(self.inventory.all_specs()),
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
             )
