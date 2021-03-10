@@ -78,7 +78,7 @@ private:
   PGPipeline &pp(PG &pg);
 
   OpSequencer& sequencer;
-  const uint64_t prev_op_id;
+  uint64_t prev_op_id = 0;
 
   template <typename Errorator>
   using interruptible_errorator =
@@ -87,6 +87,7 @@ private:
       Errorator>;
 private:
   bool is_misdirected(const PG& pg) const;
+  void may_set_prev_op();
 };
 
 }
