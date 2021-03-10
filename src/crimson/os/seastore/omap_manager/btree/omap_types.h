@@ -68,24 +68,24 @@ struct omap_inner_key_t {
 };
 
 struct omap_inner_key_le_t {
-  ceph_le16 key_off = init_le16(0);
-  ceph_le16 key_len = init_le16(0);
-  laddr_le_t laddr = laddr_le_t(0);
+  ceph_le16 key_off{0};
+  ceph_le16 key_len{0};
+  laddr_le_t laddr{0};
 
   omap_inner_key_le_t() = default;
   omap_inner_key_le_t(const omap_inner_key_le_t &) = default;
   explicit omap_inner_key_le_t(const omap_inner_key_t &key)
-    : key_off(init_le16(key.key_off)),
-      key_len(init_le16(key.key_len)),
-      laddr(laddr_le_t(key.laddr)) {}
+    : key_off(key.key_off),
+      key_len(key.key_len),
+      laddr(key.laddr) {}
 
   operator omap_inner_key_t() const {
     return omap_inner_key_t{uint16_t(key_off), uint16_t(key_len), laddr_t(laddr)};
   }
 
   omap_inner_key_le_t& operator=(omap_inner_key_t key) {
-    key_off = init_le16(key.key_off);
-    key_len = init_le16(key.key_len);
+    key_off = key.key_off;
+    key_len = key.key_len;
     laddr = laddr_le_t(key.laddr);
     return *this;
   }
@@ -123,16 +123,16 @@ struct omap_leaf_key_t {
 };
 
 struct omap_leaf_key_le_t {
-  ceph_le16 key_off = init_le16(0);
-  ceph_le16 key_len = init_le16(0);
-  ceph_le16 val_len = init_le16(0);
+  ceph_le16 key_off{0};
+  ceph_le16 key_len{0};
+  ceph_le16 val_len{0};
 
   omap_leaf_key_le_t() = default;
   omap_leaf_key_le_t(const omap_leaf_key_le_t &) = default;
   explicit omap_leaf_key_le_t(const omap_leaf_key_t &key)
-    : key_off(init_le16(key.key_off)),
-      key_len(init_le16(key.key_len)),
-      val_len(init_le16(key.val_len)) {}
+    : key_off(key.key_off),
+      key_len(key.key_len),
+      val_len(key.val_len) {}
 
   operator omap_leaf_key_t() const {
     return omap_leaf_key_t{uint16_t(key_off), uint16_t(key_len),
@@ -140,9 +140,9 @@ struct omap_leaf_key_le_t {
   }
 
   omap_leaf_key_le_t& operator=(omap_leaf_key_t key) {
-    key_off = init_le16(key.key_off);
-    key_len = init_le16(key.key_len);
-    val_len = init_le16(key.val_len);
+    key_off = key.key_off;
+    key_len = key.key_len;
+    val_len = key.val_len;
     return *this;
   }
 
