@@ -4,14 +4,14 @@ import re
 import logging
 import subprocess
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, TypeVar, Generic, \
+from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
 from mgr_util import ServerConfigException, verify_tls
@@ -25,10 +25,10 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
 
 
-class CephadmDaemonSpec(Generic[ServiceSpecs]):
+class CephadmDaemonDeploySpec:
     # typing.NamedTuple + Generic is broken in py36
     def __init__(self, host: str, daemon_id: str,
-                 spec: Optional[ServiceSpecs] = None,
+                 service_name: str,
                  network: Optional[str] = None,
                  keyring: Optional[str] = None,
                  extra_args: Optional[List[str]] = None,
@@ -37,20 +37,14 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
                  daemon_type: Optional[str] = None,
                  ports: Optional[List[int]] = None,):
         """
-        Used for
-        * deploying new daemons. then everything is set
-        * redeploying existing daemons, then only the first three attrs are set.
-
-        Would be great to have a consistent usage where all properties are set.
+        A data struction to encapsulate `cephadm deploy ...
         """
         self.host: str = host
         self.daemon_id = daemon_id
-        daemon_type = daemon_type or (spec.service_type if spec else None)
+        self.service_name = service_name
+        daemon_type = daemon_type or (service_name.split('.')[0])
         assert daemon_type is not None
         self.daemon_type: str = daemon_type
-
-        # would be great to have the spec always available:
-        self.spec: Optional[ServiceSpecs] = spec
 
         # mons
         self.network = network
@@ -82,7 +76,7 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
 
         return files
 
-    def to_daemon_description(self, status: int, status_desc: str) -> DaemonDescription:
+    def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
         return DaemonDescription(
             daemon_type=self.daemon_type,
             daemon_id=self.daemon_id,
@@ -109,19 +103,19 @@ class CephadmService(metaclass=ABCMeta):
                          daemon_id: str,
                          netowrk: str,
                          spec: ServiceSpecs,
-                         daemon_type: Optional[str] = None,) -> CephadmDaemonSpec:
-        return CephadmDaemonSpec(
+                         daemon_type: Optional[str] = None,) -> CephadmDaemonDeploySpec:
+        return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
-            spec=spec,
+            service_name=spec.service_name(),
             network=netowrk,
             daemon_type=daemon_type
         )
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         raise NotImplementedError()
 
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
 
     def config(self, spec: ServiceSpec, daemon_id: str) -> None:
@@ -255,7 +249,9 @@ class CephadmService(metaclass=ABCMeta):
         # Provides a warning about if it possible or not to stop <n> daemons in a service
         names = [f'{daemon_type}.{d_id}' for d_id in daemon_ids]
         number_of_running_daemons = len(
-            [daemon for daemon in self.mgr.cache.get_daemons_by_type(daemon_type) if daemon.status == 1])
+            [daemon
+             for daemon in self.mgr.cache.get_daemons_by_type(daemon_type)
+             if daemon.status == DaemonDescriptionStatus.running])
         if (number_of_running_daemons - len(daemon_ids)) >= low_limit:
             return False, f'It is presumed safe to stop {names}'
 
@@ -298,7 +294,7 @@ class CephadmService(metaclass=ABCMeta):
 
 
 class CephService(CephadmService):
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # Ceph.daemons (mon, mgr, mds, osd, etc)
         cephadm_config = self.get_config_and_keyring(
             daemon_spec.daemon_type,
@@ -382,7 +378,7 @@ class CephService(CephadmService):
 class MonService(CephService):
     TYPE = 'mon'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
         Create a new monitor on the given host.
         """
@@ -473,7 +469,7 @@ class MonService(CephService):
 class MgrService(CephService):
     TYPE = 'mgr'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
         Create a new manager instance on a host.
         """
@@ -579,7 +575,7 @@ class MdsService(CephService):
             'value': spec.service_id,
         })
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         mds_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -684,7 +680,7 @@ class RgwService(CephService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -834,11 +830,41 @@ class RgwService(CephService):
                 raise OrchestratorError(err)
             self.mgr.log.info('updated period')
 
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # if load balancer (ha-rgw) is present block if only 1 daemon up otherwise ok
+        # if no load balancer, warn if > 1 daemon, block if only 1 daemon
+        def ha_rgw_present() -> bool:
+            running_ha_rgw_daemons = [
+                daemon for daemon in self.mgr.cache.get_daemons_by_type('ha-rgw') if daemon.status == 1]
+            running_haproxy_daemons = [
+                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'haproxy']
+            running_keepalived_daemons = [
+                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'keepalived']
+            # check that there is at least one haproxy and keepalived daemon running
+            if running_haproxy_daemons and running_keepalived_daemons:
+                return True
+            return False
+
+        # if only 1 rgw, alert user (this is not passable with --force)
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'RGW', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+        # if reached here, there is > 1 rgw daemon.
+        # Say okay if load balancer present or force flag set
+        if ha_rgw_present() or force:
+            return HandleCommandResult(0, warn_message, '')
+
+        # if reached here, > 1 RGW daemon, no load balancer and no force flag.
+        # Provide warning
+        warn_message = "WARNING: Removing RGW daemons can cause clients to lose connectivity. "
+        return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
 
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -855,11 +881,19 @@ class RbdMirrorService(CephService):
 
         return daemon_spec
 
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # if only 1 rbd-mirror, alert user (this is not passable with --force)
+        warn, warn_message = self._enough_daemons_to_stop(
+            self.TYPE, daemon_ids, 'Rbdmirror', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+        return HandleCommandResult(0, warn_message, '')
+
 
 class CrashService(CephService):
     TYPE = 'crash'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -960,7 +994,7 @@ class CephadmExporterConfig:
 class CephadmExporter(CephadmService):
     TYPE = 'cephadm-exporter'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
         cfg = CephadmExporterConfig(self.mgr)
@@ -981,9 +1015,8 @@ class CephadmExporter(CephadmService):
 
         return daemon_spec
 
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        assert daemon_spec.spec
         deps: List[str] = []
 
         cfg = CephadmExporterConfig(self.mgr)

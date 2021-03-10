@@ -389,7 +389,7 @@ class RookCluster(object):
             else:
                 raise
 
-    def apply_filesystem(self, spec: ServiceSpec) -> None:
+    def apply_filesystem(self, spec: ServiceSpec) -> str:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
@@ -456,7 +456,7 @@ class RookCluster(object):
             cos.CephObjectStore, 'cephobjectstores', name,
             _update_zone, _create_zone)
 
-    def apply_nfsgw(self, spec: NFSServiceSpec) -> None:
+    def apply_nfsgw(self, spec: NFSServiceSpec) -> str:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.

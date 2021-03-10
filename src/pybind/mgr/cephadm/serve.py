@@ -19,12 +19,15 @@ from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, \
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
-from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent
-from cephadm.services.cephadmservice import CephadmDaemonSpec
+from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
+    DaemonDescriptionStatus, daemon_type_to_service, service_to_daemon_types
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo
-from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
+from mgr_module import MonCommandFailed
+
+from . import utils
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -206,7 +209,7 @@ class CephadmServe:
             health_changed = True
         failed_daemons = []
         for dd in self.mgr.cache.get_daemons():
-            if dd.status is not None and dd.status < 0:
+            if dd.status is not None and dd.status == DaemonDescriptionStatus.error:
                 failed_daemons.append('daemon %s on %s is in %s state' % (
                     dd.name(), dd.hostname, dd.status_desc
                 ))
@@ -271,16 +274,20 @@ class CephadmServe:
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
             sd.container_image_digests = d.get('container_image_digests')
+            sd.memory_usage = d.get('memory_usage')
+            sd.memory_request = d.get('memory_request')
+            sd.memory_limit = d.get('memory_limit')
+            sd._service_name = d.get('service_name')
             sd.version = d.get('version')
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
-                    'running': 1,
-                    'stopped': 0,
-                    'error': -1,
-                    'unknown': -1,
+                    'running': DaemonDescriptionStatus.running,
+                    'stopped': DaemonDescriptionStatus.stopped,
+                    'error': DaemonDescriptionStatus.error,
+                    'unknown': DaemonDescriptionStatus.error,
                 }[d['state']]
             else:
                 sd.status_desc = 'unknown'
@@ -443,6 +450,34 @@ class CephadmServe:
 
         return r
 
+    def _apply_service_config(self, spec: ServiceSpec) -> None:
+        if spec.config:
+            section = utils.name_to_config_section(spec.service_name())
+            for k, v in spec.config.items():
+                try:
+                    current = self.mgr.get_foreign_ceph_option(section, k)
+                except KeyError:
+                    self.log.warning(
+                        f'Ignoring invalid {spec.service_name()} config option {k}'
+                    )
+                    self.mgr.events.for_service(
+                        spec, OrchestratorEvent.ERROR, f'Invalid config option {k}'
+                    )
+                    continue
+                if current != v:
+                    self.log.debug(f'setting [{section}] {k} = {v}')
+                    try:
+                        self.mgr.check_mon_command({
+                            'prefix': 'config set',
+                            'name': k,
+                            'value': str(v),
+                            'who': section,
+                        })
+                    except MonCommandFailed as e:
+                        self.log.warning(
+                            f'Failed to set {spec.service_name()} option {k}: {e}'
+                        )
+
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
@@ -460,6 +495,8 @@ class CephadmServe:
             return False
         self.log.debug('Applying service %s spec' % service_name)
 
+        self._apply_service_config(spec)
+
         if service_type == 'osd':
             self.mgr.osd_service.create_from_spec(cast(DriveGroupSpec, spec))
             # TODO: return True would result in a busy loop
@@ -471,11 +508,7 @@ class CephadmServe:
 
         public_network = None
         if service_type == 'mon':
-            ret, out, err = self.mgr.check_mon_command({
-                'prefix': 'config get',
-                'who': 'mon',
-                'key': 'public_network',
-            })
+            out = str(self.mgr.get_foreign_ceph_option('mon', 'public_network'))
             if '/' in out:
                 public_network = out.strip()
                 self.log.debug('mon public_network is %s' % public_network)
@@ -734,7 +767,7 @@ class CephadmServe:
         return spec
 
     def _create_daemon(self,
-                       daemon_spec: CephadmDaemonSpec,
+                       daemon_spec: CephadmDaemonDeploySpec,
                        reconfig: bool = False,
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
                        ) -> str:
@@ -751,18 +784,8 @@ class CephadmServe:
                 ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
 
                 if daemon_spec.daemon_type == 'container':
-                    spec: Optional[CustomContainerSpec] = daemon_spec.spec
-                    if spec is None:
-                        # Exit here immediately because the required service
-                        # spec to create a daemon is not provided. This is only
-                        # provided when a service is applied via 'orch apply'
-                        # command.
-                        msg = "Failed to {} daemon {} on {}: Required " \
-                              "service specification not provided".format(
-                                  'reconfigure' if reconfig else 'deploy',
-                                  daemon_spec.name(), daemon_spec.host)
-                        self.log.info(msg)
-                        return msg
+                    spec = cast(CustomContainerSpec,
+                                self.mgr.spec_store[daemon_spec.service_name].spec)
                     image = spec.image
                     if spec.ports:
                         ports.extend(spec.ports)
@@ -777,12 +800,12 @@ class CephadmServe:
                             return msg
 
                 if daemon_spec.daemon_type == 'haproxy':
-                    haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                    haspec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
                     if haspec.haproxy_container_image:
                         image = haspec.haproxy_container_image
 
                 if daemon_spec.daemon_type == 'keepalived':
-                    haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                    haspec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
                     if haspec.keepalived_container_image:
                         image = haspec.keepalived_container_image
 
@@ -810,8 +833,6 @@ class CephadmServe:
                     self._registry_login(daemon_spec.host, self.mgr.registry_url,
                                          self.mgr.registry_username, self.mgr.registry_password)
 
-                daemon_spec.extra_args.extend(['--config-json', '-'])
-
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
@@ -820,13 +841,18 @@ class CephadmServe:
                     daemon_spec.host, daemon_spec.name(), 'deploy',
                     [
                         '--name', daemon_spec.name(),
+                        '--meta-json', json.dumps({
+                            'service_name': daemon_spec.service_name,
+                        }),
+                        '--config-json', '-',
                     ] + daemon_spec.extra_args,
                     stdin=json.dumps(daemon_spec.final_config),
                     image=image)
                 if not code and daemon_spec.host in self.mgr.cache.daemons:
                     # prime cached service state with what we (should have)
                     # just created
-                    sd = daemon_spec.to_daemon_description(1, 'starting')
+                    sd = daemon_spec.to_daemon_description(
+                        DaemonDescriptionStatus.running, 'starting')
                     self.mgr.cache.add_daemon(daemon_spec.host, sd)
                     if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
                         self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
@@ -847,7 +873,7 @@ class CephadmServe:
                 if not reconfig:
                     # we have to clean up the daemon. E.g. keyrings.
                     servict_type = daemon_type_to_service(daemon_spec.daemon_type)
-                    dd = daemon_spec.to_daemon_description(-1, 'failed')
+                    dd = daemon_spec.to_daemon_description(DaemonDescriptionStatus.error, 'failed')
                     self.mgr.cephadm_services[servict_type].post_remove(dd)
                 raise
 
@@ -934,22 +960,27 @@ class CephadmServe:
 
             final_args = []
 
+            # global args
             if env_vars:
                 for env_var_pair in env_vars:
                     final_args.extend(['--env', env_var_pair])
 
             if image:
                 final_args.extend(['--image', image])
+
+            if not self.mgr.container_init:
+                final_args += ['--no-container-init']
+
+            # subcommand
             final_args.append(command)
 
+            # subcommand args
             if not no_fsid:
                 final_args += ['--fsid', self.mgr._cluster_fsid]
 
-            if self.mgr.container_init:
-                final_args += ['--container-init']
-
             final_args += args
 
+            # exec
             self.log.debug('args: %s' % (' '.join(final_args)))
             if self.mgr.mode == 'root':
                 if stdin:

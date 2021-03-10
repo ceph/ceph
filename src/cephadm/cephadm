@@ -17,6 +17,7 @@ LOGROTATE_DIR = '/etc/logrotate.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
+CONTAINER_INIT=True
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 MIN_PODMAN_VERSION = (2, 0, 2)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
@@ -54,12 +55,11 @@ import ipaddress
 import json
 import logging
 from logging.config import dictConfig
-from operator import truediv
 import os
 import platform
 import pwd
 import random
-import select
+import shlex
 import shutil
 import socket
 import string
@@ -113,7 +113,10 @@ class BaseConfig:
         self.timeout: Optional[int] = DEFAULT_TIMEOUT
         self.retry: int = DEFAULT_RETRY
         self.env: List[str] = []
+        self.memory_request: Optional[int] = None
+        self.memory_limit: Optional[int] = None
 
+        self.container_init: bool = CONTAINER_INIT
         self.container_path: str = ""
 
     def set_from_args(self, args: argparse.Namespace):
@@ -280,6 +283,35 @@ class Monitoring(object):
             ],
         },
     }  # type: ignore
+
+    @staticmethod
+    def get_version(ctx, container_id, daemon_type):
+        # type: (CephadmContext, str, str) -> str
+        """
+        :param: daemon_type Either "prometheus", "alertmanager" or "node-exporter"
+        """
+        assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter')
+        cmd = daemon_type.replace('-', '_')
+        code = -1
+        err = ''
+        version = ''
+        if daemon_type == 'alertmanager':
+            for cmd in ['alertmanager', 'prometheus-alertmanager']:
+                _, err, code = call(ctx, [
+                        ctx.container_path, 'exec', container_id, cmd,
+                        '--version'
+                    ], verbosity=CallVerbosity.SILENT)
+                if code == 0:
+                    break
+            cmd = 'alertmanager'  # reset cmd for version extraction
+        else:
+            _, err, code = call(ctx, [
+                ctx.container_path, 'exec', container_id, cmd, '--version'
+            ])
+        if code == 0 and \
+            err.startswith('%s, version ' % cmd):
+            version = err.split(' ')[2]
+        return version
 
 ##################################
 def populate_files(config_dir, config_files, uid, gid):
@@ -930,6 +962,9 @@ def get_supported_daemons():
 
 ##################################
 
+class PortOccupiedError(Error):
+    pass
+
 
 def attempt_bind(ctx, s, address, port):
     # type: (CephadmContext, socket.socket, str, int) -> None
@@ -937,12 +972,12 @@ def attempt_bind(ctx, s, address, port):
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((address, port))
     except (socket.error, OSError) as e:  # py2 and py3
-        msg = 'Cannot bind to IP %s port %d: %s' % (address, port, e)
-        logger.warning(msg)
         if e.errno == errno.EADDRINUSE:
-            raise OSError(msg)
-        elif e.errno == errno.EADDRNOTAVAIL:
-            pass
+            msg = 'Cannot bind to IP %s port %d: %s' % (address, port, e)
+            logger.warning(msg)
+            raise PortOccupiedError(msg)
+        else:
+            raise e
     finally:
         s.close()
 
@@ -951,16 +986,25 @@ def port_in_use(ctx, port_num):
     # type: (CephadmContext, int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
     logger.info('Verifying port %d ...' % port_num)
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        attempt_bind(ctx, s, '0.0.0.0', port_num)
-
-        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        attempt_bind(ctx, s, '::', port_num)
-    except OSError:
-        return True
-    else:
+    def _port_in_use(af: socket.AddressFamily, address: str) -> bool:
+        try:
+            s = socket.socket(af, socket.SOCK_STREAM)
+            attempt_bind(ctx, s, address, port_num)
+        except PortOccupiedError:
+            return True
+        except OSError as e:
+            if e.errno in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL):
+                # Ignore EAFNOSUPPORT and EADDRNOTAVAIL as two interfaces are
+                # being tested here and one might be intentionally be disabled.
+                # In that case no error should be raised.
+                return False
+            else:
+                raise e
         return False
+    return any(_port_in_use(af, address) for af, address in (
+        (socket.AF_INET, '0.0.0.0'),
+        (socket.AF_INET6, '::')
+    ))
 
 
 def check_ip_port(ctx, ip, port):
@@ -972,10 +1016,7 @@ def check_ip_port(ctx, ip, port):
             ip = unwrap_ipv6(ip)
         else:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            attempt_bind(ctx, s, ip, port)
-        except OSError as e:
-            raise Error(e)
+        attempt_bind(ctx, s, ip, port)
 
 ##################################
 
@@ -2028,7 +2069,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
             '--setgroup', 'ceph',
             '--default-log-to-file=false',
             '--default-log-to-stderr=true',
-            '--default-log-stderr-prefix="debug "',
+            '--default-log-stderr-prefix=debug ',
         ]
         if daemon_type == 'mon':
             r += [
@@ -2408,7 +2449,6 @@ def get_container(ctx: CephadmContext,
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
-        init=ctx.container_init,
         host_network=host_network,
     )
 
@@ -2553,19 +2593,33 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
     file_obj.write('! '+ ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
     # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
     if 'podman' in ctx.container_path:
-        file_obj.write('! '+ ' '.join(container.rm_cmd(storage=True)) + ' 2> /dev/null\n')
+        file_obj.write(
+            '! '
+            + ' '.join([shlex.quote(a) for a in container.rm_cmd(storage=True)])
+            + ' 2> /dev/null\n')
 
     # container run command
-    file_obj.write(' '.join(container.run_cmd()) + (' &' if background else '') + '\n')
+    file_obj.write(
+        ' '.join([shlex.quote(a) for a in container.run_cmd()])
+        + (' &' if background else '') + '\n')
 
 
-def deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id, c,
-                        enable=True, start=True,
-                        osd_fsid=None):
-    # type: (CephadmContext, str, int, int, str, Union[int, str], CephContainer, bool, bool, Optional[str]) -> None
+def deploy_daemon_units(
+    ctx: CephadmContext,
+    fsid: str,
+    uid: int,
+    gid: int,
+    daemon_type: str,
+    daemon_id: Union[int, str],
+    c: 'CephContainer',
+    enable: bool = True,
+    start: bool = True,
+    osd_fsid: Optional[str] = None,
+) -> None:
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
-    with open(data_dir + '/unit.run.new', 'w') as f:
+    with open(data_dir + '/unit.run.new', 'w') as f, \
+         open(data_dir + '/unit.meta.new', 'w') as metaf:
         f.write('set -e\n')
 
         if daemon_type in Ceph.daemons:
@@ -2597,6 +2651,8 @@ def deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id, c,
                     volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
                     bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
                     cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
+                    memory_request=ctx.memory_request,
+                    memory_limit=ctx.memory_limit,
                 )
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
         elif daemon_type == NFSGanesha.daemon_type:
@@ -2611,9 +2667,23 @@ def deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id, c,
             _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
+
+        # some metadata about the deploy
+        meta: Dict[str, Any] = {}
+        if 'meta_json' in ctx and ctx.meta_json:
+            meta = json.loads(ctx.meta_json) or {}
+        meta.update({
+            'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
+            'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
+        })
+        metaf.write(json.dumps(meta, indent=4) + "\n")
+
         os.fchmod(f.fileno(), 0o600)
+        os.fchmod(metaf.fileno(), 0o600)
         os.rename(data_dir + '/unit.run.new',
                   data_dir + '/unit.run')
+        os.rename(data_dir + '/unit.meta.new',
+                  data_dir + '/unit.meta')
 
     # post-stop command(s)
     with open(data_dir + '/unit.poststop.new', 'w') as f:
@@ -2876,6 +2946,7 @@ def get_unit_file(ctx, fsid):
             'Type=forking\n'
             'PIDFile=/%t/%n-pid\n')
 
+    docker = 'docker' in ctx.container_path
     u = """# generated by cephadm
 [Unit]
 Description=Ceph %i for {fsid}
@@ -2884,8 +2955,9 @@ Description=Ceph %i for {fsid}
 #   http://www.freedesktop.org/wiki/Software/systemd/NetworkTarget
 # these can be removed once ceph-mon will dynamically change network
 # configuration.
-After=network-online.target local-fs.target time-sync.target
+After=network-online.target local-fs.target time-sync.target{docker_after}
 Wants=network-online.target local-fs.target time-sync.target
+{docker_requires}
 
 PartOf=ceph-{fsid}.target
 Before=ceph-{fsid}.target
@@ -2911,7 +2983,11 @@ WantedBy=ceph-{fsid}.target
     container_path=ctx.container_path,
     fsid=fsid,
     data_dir=ctx.data_dir,
-    extra_args=extra_args)
+    extra_args=extra_args,
+    # if docker, we depend on docker.service
+    docker_after=' docker.service' if docker else '',
+    docker_requires='Requires=docker.service\n' if docker else '',
+)
 
     return u
 
@@ -2931,8 +3007,10 @@ class CephContainer:
                  privileged: bool = False,
                  ptrace: bool = False,
                  bind_mounts: Optional[List[List[str]]] = None,
-                 init: bool = False,
+                 init: Optional[bool] = None,
                  host_network: bool = True,
+                 memory_request: Optional[str] = None,
+                 memory_limit: Optional[str] = None,
                  ) -> None:
         self.ctx = ctx
         self.image = image
@@ -2945,8 +3023,10 @@ class CephContainer:
         self.privileged = privileged
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
-        self.init = init
+        self.init = init if init else ctx.container_init
         self.host_network = host_network
+        self.memory_request = memory_request
+        self.memory_limit = memory_limit
 
     def run_cmd(self) -> List[str]:
         cmd_args: List[str] = [
@@ -2967,6 +3047,12 @@ class CephContainer:
         vols: List[str] = []
         binds: List[str] = []
 
+        if self.memory_request:
+            cmd_args.extend(['-e', 'POD_MEMORY_REQUEST', str(self.memory_request)])
+        if self.memory_limit:
+            cmd_args.extend(['-e', 'POD_MEMORY_LIMIT', str(self.memory_limit)])
+            cmd_args.extend(['--memory', str(self.memory_limit)])
+
         if self.host_network:
             cmd_args.append('--net=host')
         if self.entrypoint:
@@ -2983,6 +3069,7 @@ class CephContainer:
             cmd_args.append('--cap-add=SYS_PTRACE')
         if self.init:
             cmd_args.append('--init')
+            envs += ['-e', 'CEPH_USE_RANDOM_NONCE=1']
         if self.cname:
             cmd_args.extend(['--name', self.cname])
         if self.envs:
@@ -3021,6 +3108,9 @@ class CephContainer:
                 # let OSD etc read block devs that haven't been chowned
                 '--group-add=disk',
             ])
+        if self.init:
+            cmd_args.append('--init')
+            envs += ['-e', 'CEPH_USE_RANDOM_NONCE=1']
         if self.envs:
             for env in self.envs:
                 envs.extend(['-e', env])
@@ -3077,9 +3167,11 @@ class CephContainer:
 @infer_image
 def command_version(ctx):
     # type: (CephadmContext) -> int
-    out = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run()
-    print(out.strip())
-    return 0
+    c = CephContainer(ctx, ctx.image, 'ceph', ['--version'])
+    out, err, ret = call(ctx, c.run_cmd(), desc=c.entrypoint)
+    if not ret:
+        print(out.strip())
+    return ret
 
 ##################################
 
@@ -3421,6 +3513,7 @@ def create_mon(
     fsid: str, mon_id: str
 ) -> None:
     mon_c = get_container(ctx, fsid, 'mon', mon_id)
+    ctx.meta_json = json.dumps({"service_name": "mon"})
     deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
 
@@ -3466,6 +3559,7 @@ def create_mgr(
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
     # Note:the default port used by the Prometheus node exporter is opened in fw
+    ctx.meta_json = json.dumps({"service_name": "mgr"})
     deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
                   config=config, keyring=mgr_keyring, ports=[9283])
 
@@ -3559,10 +3653,10 @@ def prepare_ssh(
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
 
-    for t in ['mon', 'mgr', 'crash']:
-        if ctx.orphan_initial_daemons:
+    for t in ['mon', 'mgr']:
+        if not ctx.orphan_initial_daemons:
             logger.info('Deploying %s service with default placement...' % t)
-            cli(['orch', 'apply', t, '--unmanaged'])
+            cli(['orch', 'apply', t])
         else:
             logger.info('Deploying unmanaged %s service...' % t)
             cli(['orch', 'apply', t, '--unmanaged'])
@@ -3859,8 +3953,7 @@ def command_bootstrap(ctx):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', ctx.registry_username, '--force'])
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', ctx.registry_password, '--force'])
 
-    if ctx.container_init:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
+    cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
     if ctx.with_exporter:
         cli(['config-key', 'set', 'mgr/cephadm/exporter_enabled', 'true'])
@@ -3882,7 +3975,6 @@ def command_bootstrap(ctx):
         # deploy the service (commented out until the cephadm changes are in the ceph container build)
         logger.info('Deploying cephadm exporter service with default placement...')
         cli(['orch', 'apply', 'cephadm-exporter'])
-
 
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
@@ -4420,6 +4512,27 @@ def command_ls(ctx):
     print(json.dumps(ls, indent=4))
 
 
+def with_units_to_int(v: str) -> int:
+    if v.endswith('iB'):
+        v = v[:-2]
+    elif v.endswith('B'):
+        v = v[:-1]
+    mult = 1
+    if v[-1].upper() == 'K':
+        mult = 1024
+        v = v[:-1]
+    elif v[-1].upper() == 'M':
+        mult = 1024 * 1024
+        v = v[:-1]
+    elif v[-1].upper() == 'G':
+        mult = 1024 * 1024 * 1024
+        v = v[:-1]
+    elif v[-1].upper() == 'T':
+        mult = 1024 * 1024 * 1024 * 1024
+        v = v[:-1]
+    return int(float(v) * mult)
+
+
 def list_daemons(ctx, detail=True, legacy_dir=None):
     # type: (CephadmContext, bool, Optional[str]) -> List[Dict[str, str]]
     host_version: Optional[str] = None
@@ -4435,6 +4548,22 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
 
     # keep track of image digests
     seen_digests = {}   # type: Dict[str, List[str]]
+
+    # keep track of memory usage we've seen
+    seen_memusage = {}  # type: Dict[str, int]
+    out, err, code = call(
+        ctx,
+        [container_path, 'stats', '--format', '{{.ID}},{{.MemUsage}}', '--no-stream'],
+        verbosity=CallVerbosity.DEBUG
+    )
+    seen_memusage_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, usage) = line.split(',')
+            (used, limit) = usage.split(' / ')
+            seen_memusage[cid] = with_units_to_int(used)
+            if not seen_memusage_cid_len:
+                seen_memusage_cid_len = len(cid)
 
     # /var/lib/ceph
     if os.path.exists(data_dir):
@@ -4551,14 +4680,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 elif daemon_type in ['prometheus',
                                                      'alertmanager',
                                                      'node-exporter']:
-                                    cmd = daemon_type.replace('-', '_')
-                                    out, err, code = call(ctx,
-                                        [container_path, 'exec', container_id,
-                                         cmd, '--version'])
-                                    if not code and \
-                                       err.startswith('%s, version ' % cmd):
-                                        version = err.split(' ')[2]
-                                        seen_versions[image_id] = version
+                                    version = Monitoring.get_version(ctx, container_id, daemon_type)
+                                    seen_versions[image_id] = version
                                 elif daemon_type == 'haproxy':
                                     out, err, code = call(ctx,
                                         [container_path, 'exec', container_id,
@@ -4589,10 +4712,22 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     image_name = f.read().strip() or None
                             except IOError:
                                 pass
+
+                        # unit.meta?
+                        mfile = os.path.join(data_dir, fsid, j, 'unit.meta') # type: ignore
+                        try:
+                            with open(mfile, 'r') as f:
+                                meta = json.loads(f.read())
+                                val.update(meta)
+                        except IOError:
+                            pass
+
                         val['container_id'] = container_id
                         val['container_image_name'] = image_name
                         val['container_image_id'] = image_id
                         val['container_image_digests'] = image_digests
+                        if container_id:
+                            val['memory_usage'] = seen_memusage.get(container_id[0:seen_memusage_cid_len])
                         val['version'] = version
                         val['started'] = start_stamp
                         val['created'] = get_file_timestamp(
@@ -5151,21 +5286,21 @@ def command_check_host(ctx: CephadmContext) -> None:
             find_program(command)
             logger.info('%s is present' % command)
         except ValueError:
-            errors.append('ERROR: %s binary does not appear to be installed' % command)
+            errors.append('%s binary does not appear to be installed' % command)
 
     # check for configured+running chronyd or ntp
     if not check_time_sync(ctx):
-        errors.append('ERROR: No time synchronization is active')
+        errors.append('No time synchronization is active')
 
     if "expect_hostname" in ctx and ctx.expect_hostname:
         if get_hostname().lower() != ctx.expect_hostname.lower():
-            errors.append('ERROR: hostname "%s" does not match expected hostname "%s"' % (
+            errors.append('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), ctx.expect_hostname))
         logger.info('Hostname "%s" matches what is expected.',
                     ctx.expect_hostname)
 
     if errors:
-        raise Error('\n'.join(errors))
+        raise Error('\nERROR: '.join(errors))
 
     logger.info('Host looks OK')
 
@@ -6852,11 +6987,13 @@ class CephadmDaemon():
 
     @property
     def unit_file(self):
+        docker = 'docker' in self.ctx.container_path
         return """#generated by cephadm
 [Unit]
 Description=cephadm exporter service for cluster {fsid}
-After=network-online.target
+After=network-online.target{docker_after}
 Wants=network-online.target
+{docker_requires}
 
 PartOf=ceph-{fsid}.target
 Before=ceph-{fsid}.target
@@ -6872,8 +7009,11 @@ RestartSec=10s
 WantedBy=ceph-{fsid}.target
 """.format(
         fsid=self.fsid,
-        daemon_path=self.daemon_path
-)
+        daemon_path=self.daemon_path,
+        # if docker, we depend on docker.service
+        docker_after=' docker.service' if docker else '',
+        docker_requires='Requires=docker.service\n' if docker else '',
+        )
 
     def deploy_daemon_unit(self, config=None):
         """deploy a specific unit file for cephadm
@@ -7084,6 +7224,11 @@ def _get_parser():
         action='append',
         default=[],
         help='set environment variable')
+    parser.add_argument(
+        '--no-container-init',
+        action='store_true',
+        default=not CONTAINER_INIT,
+        help='Do not run podman/docker with `--init`')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
@@ -7152,7 +7297,8 @@ def _get_parser():
     parser_adopt.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -7446,7 +7592,8 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
     parser_bootstrap.add_argument(
         '--with-exporter',
         action='store_true',
@@ -7504,7 +7651,20 @@ def _get_parser():
     parser_deploy.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
+    parser_deploy.add_argument(
+        '--memory-request',
+        help='Container memory request/target'
+    )
+    parser_deploy.add_argument(
+        '--memory-limit',
+        help='Container memory hard limit'
+    )
+    parser_deploy.add_argument(
+        '--meta-json',
+        help='JSON dict of additional metadata'
+    )
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
@@ -7624,9 +7784,22 @@ def _get_parser():
 
 def _parse_args(av):
     parser = _get_parser()
+
     args = parser.parse_args(av)
     if 'command' in args and args.command and args.command[0] == "--":
         args.command.pop(0)
+
+    # workaround argparse to deprecate the subparser `--container-init` flag
+    # container_init and no_container_init must always be mutually exclusive
+    container_init_args = ('--container-init', '--no-container-init')
+    if set(container_init_args).issubset(av):
+        parser.error('argument %s: not allowed with argument %s' % (container_init_args))
+    elif '--container-init' in av:
+        args.no_container_init = not args.container_init
+    else:
+        args.container_init = not args.no_container_init
+    assert args.container_init is not args.no_container_init
+
     return args
 
 

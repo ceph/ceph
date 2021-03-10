@@ -1,8 +1,226 @@
+***********
+OSD Service
+***********
+
+List Devices
+============
+
+Print a list of discovered devices, grouped by host and optionally
+filtered to a particular host:
+
+.. prompt:: bash #
+
+    ceph orch device ls [--host=...] [--refresh]
+
+Example::
+
+    HOST    PATH      TYPE   SIZE  DEVICE  AVAIL  REJECT REASONS
+    master  /dev/vda  hdd   42.0G          False  locked
+    node1   /dev/vda  hdd   42.0G          False  locked
+    node1   /dev/vdb  hdd   8192M  387836  False  locked, LVM detected, Insufficient space (<5GB) on vgs
+    node1   /dev/vdc  hdd   8192M  450575  False  locked, LVM detected, Insufficient space (<5GB) on vgs
+    node3   /dev/vda  hdd   42.0G          False  locked
+    node3   /dev/vdb  hdd   8192M  395145  False  LVM detected, locked, Insufficient space (<5GB) on vgs
+    node3   /dev/vdc  hdd   8192M  165562  False  LVM detected, locked, Insufficient space (<5GB) on vgs
+    node2   /dev/vda  hdd   42.0G          False  locked
+    node2   /dev/vdb  hdd   8192M  672147  False  LVM detected, Insufficient space (<5GB) on vgs, locked
+    node2   /dev/vdc  hdd   8192M  228094  False  LVM detected, Insufficient space (<5GB) on vgs, locked
+
+
+.. _cephadm-deploy-osds:
+             
+Deploy OSDs
+===========
+
+An inventory of storage devices on all cluster hosts can be displayed with:
+
+.. prompt:: bash #
+
+  ceph orch device ls
+
+A storage device is considered *available* if all of the following
+conditions are met:
+
+* The device must have no partitions.
+* The device must not have any LVM state.
+* The device must not be mounted.
+* The device must not contain a file system.
+* The device must not contain a Ceph BlueStore OSD.
+* The device must be larger than 5 GB.
+
+Ceph refuses to provision an OSD on a device that is not available.
+
+There are a few ways to create new OSDs:
+
+* Tell Ceph to consume any available and unused storage device:
+
+  .. prompt:: bash #
+
+    ceph orch apply osd --all-available-devices
+
+* Create an OSD from a specific device on a specific host:
+  
+  .. prompt:: bash #
+
+    ceph orch daemon add osd *<host>*:*<device-path>*
+
+  For example:
+  
+  .. prompt:: bash #
+
+    ceph orch daemon add osd host1:/dev/sdb
+
+* Use :ref:`drivegroups` to describe device(s) to consume
+  based on their properties, such device type (SSD or HDD), device
+  model names, size, or the hosts on which the devices exist:
+  
+  .. prompt:: bash #
+
+    ceph orch apply -i spec.yml
+    
+Dry Run
+-------
+
+``--dry-run`` will cause the orchestrator to present a preview of what will happen
+without actually creating the OSDs.
+
+Example::
+
+    # ceph orch apply osd --all-available-devices --dry-run
+    NAME                  HOST  DATA     DB WAL
+    all-available-devices node1 /dev/vdb -  -
+    all-available-devices node2 /dev/vdc -  -
+    all-available-devices node3 /dev/vdd -  -
+
+.. _cephadm-osd-declarative:
+    
+Declarative State
+-----------------
+
+Note that the effect of ``ceph orch apply`` is persistent; that is, drives which are added to the system
+or become available (say, by zapping) after the command is complete will be automatically found and added to the cluster.
+
+That is, after using::
+
+    ceph orch apply osd --all-available-devices
+
+* If you add new disks to the cluster they will automatically be used to create new OSDs.
+* A new OSD will be created automatically if you remove an OSD and clean the LVM physical volume.
+
+If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter::
+
+    ceph orch apply osd --all-available-devices --unmanaged=true
+
+* For cephadm, see also :ref:`cephadm-spec-unmanaged`.
+    
+
+Remove an OSD
+=============
+::
+
+    ceph orch osd rm <osd_id(s)> [--replace] [--force]
+
+Evacuates PGs from an OSD and removes it from the cluster.
+
+Example::
+
+    # ceph orch osd rm 0
+    Scheduled OSD(s) for removal
+
+
+OSDs that are not safe-to-destroy will be rejected.
+
+You can query the state of the operation with::
+
+    # ceph orch osd rm status
+    OSD_ID  HOST         STATE                    PG_COUNT  REPLACE  FORCE  STARTED_AT
+    2       cephadm-dev  done, waiting for purge  0         True     False  2020-07-17 13:01:43.147684
+    3       cephadm-dev  draining                 17        False    True   2020-07-17 13:01:45.162158
+    4       cephadm-dev  started                  42        False    True   2020-07-17 13:01:45.162158
+
+
+When no PGs are left on the OSD, it will be decommissioned and removed from the cluster.
+
+.. note::
+    After removing an OSD, if you wipe the LVM physical volume in the device used by the removed OSD, a new OSD will be created.
+    Read information about the ``unmanaged`` parameter in :ref:`cephadm-osd-declarative`.
+
+Stopping OSD Removal
+--------------------
+
+You can stop the queued OSD removal operation with
+
+::
+
+    ceph orch osd rm stop <svc_id(s)>
+
+Example::
+
+    # ceph orch osd rm stop 4
+    Stopped OSD(s) removal
+
+This will reset the initial state of the OSD and take it off the removal queue.
+
+
+Replace an OSD
+-------------------
+::
+
+    orch osd rm <svc_id(s)> --replace [--force]
+
+Example::
+
+    # ceph orch osd rm 4 --replace
+    Scheduled OSD(s) for replacement
+
+
+This follows the same procedure as the "Remove OSD" part with the exception that the OSD is not permanently removed
+from the CRUSH hierarchy, but is assigned a 'destroyed' flag.
+
+**Preserving the OSD ID**
+
+The previously-set 'destroyed' flag is used to determine OSD ids that will be reused in the next OSD deployment.
+
+If you use OSDSpecs for OSD deployment, your newly added disks will be assigned the OSD ids of their replaced
+counterparts, assuming the new disks still match the OSDSpecs.
+
+For assistance in this process you can use the '--dry-run' feature.
+
+Tip: The name of your OSDSpec can be retrieved from **ceph orch ls**
+
+Alternatively, you can use your OSDSpec file::
+
+    ceph orch apply osd -i <osd_spec_file> --dry-run
+    NAME                  HOST  DATA     DB WAL
+    <name_of_osd_spec>    node1 /dev/vdb -  -
+
+
+If this matches your anticipated behavior, just omit the --dry-run flag to execute the deployment.
+
+
+Erase Devices (Zap Devices)
+---------------------------
+
+Erase (zap) a device so that it can be reused. ``zap`` calls ``ceph-volume zap`` on the remote host.
+
+::
+
+     orch device zap <hostname> <path>
+
+Example command::
+
+     ceph orch device zap my_hostname /dev/sdx
+
+.. note::
+    Cephadm orchestrator will automatically deploy drives that match the DriveGroup in your OSDSpec if the unmanaged flag is unset.
+    For example, if you use the ``all-available-devices`` option when creating OSDs, when you ``zap`` a device the cephadm orchestrator will automatically create a new OSD in the device .
+    To disable this behavior, see :ref:`cephadm-osd-declarative`.
+
+
 .. _drivegroups:
 
-=========================
-OSD Service Specification
-=========================
+Advanced OSD Service Specifications
+===================================
 
 :ref:`orchestrator-cli-service-spec` of type ``osd`` are a way to describe a cluster layout using the properties of disks.
 It gives the user an abstract way tell ceph which disks should turn into an OSD
@@ -56,7 +274,7 @@ Example
 
 
 Filters
-=======
+-------
 
 .. note::
    Filters are applied using a `AND` gate by default. This essentially means that a drive needs to fulfill all filter
@@ -77,7 +295,7 @@ with
   ceph-volume inventory </path/to/disk>
 
 Vendor or Model:
--------------------
+^^^^^^^^^^^^^^^^
 
 You can target specific disks by their Vendor or by their Model
 
@@ -93,7 +311,7 @@ or
 
 
 Size:
---------------
+^^^^^
 
 You can also match by disk `Size`.
 
@@ -144,7 +362,7 @@ Supported units are Megabyte(M), Gigabyte(G) and Terrabyte(T). Also appending th
 
 
 Rotational:
------------
+^^^^^^^^^^^
 
 This operates on the 'rotational' attribute of the disk.
 
@@ -158,7 +376,7 @@ This operates on the 'rotational' attribute of the disk.
 
 
 All:
-------------
+^^^^
 
 This will take all disks that are 'available'
 
@@ -170,7 +388,7 @@ Note: This is exclusive for the data_devices section.
 
 
 Limiter:
---------
+^^^^^^^^
 
 When you specified valid filters but want to limit the amount of matching disks you can use the 'limit' directive.
 
@@ -191,7 +409,7 @@ Note: Be aware that `limit` is really just a last resort and shouldn't be used i
 
 
 Additional Options
-===================
+------------------
 
 There are multiple optional settings you can use to change the way OSDs are deployed.
 You can add these options to the base level of a DriveGroup for it to take effect.
@@ -217,10 +435,10 @@ See a full list in the DriveGroupSpecs
    :exclude-members: from_json
 
 Examples
-========
+--------
 
 The simple case
----------------
+^^^^^^^^^^^^^^^
 
 All nodes with the same setup
 
@@ -281,7 +499,7 @@ Note: All of the above DriveGroups are equally valid. Which of those you want to
 
 
 The advanced case
------------------
+^^^^^^^^^^^^^^^^^
 
 Here we have two distinct setups
 
@@ -319,7 +537,7 @@ This can be described with two layouts.
     db_devices:
       model: MC-55-44-XZ
       limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
-    ---  
+    ---
     service_type: osd
     service_id: osd_spec_ssd
     placement:
@@ -333,7 +551,7 @@ This would create the desired layout by using all HDDs as data_devices with two 
 The remaining SSDs(8) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
 
 The advanced case (with non-uniform nodes)
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The examples above assumed that all nodes have the same drives. That's however not always the case.
 
@@ -376,7 +594,7 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
       rotational: 1
     db_devices:
       rotational: 0
-    ---    
+    ---
     service_type: osd
     service_id: osd_spec_six_to_ten
     placement:
@@ -389,7 +607,7 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
 This applies different OSD specs to different hosts depending on the `host_pattern` key.
 
 Dedicated wal + db
-------------------
+^^^^^^^^^^^^^^^^^^
 
 All previous cases co-located the WALs with the DBs.
 It's however possible to deploy the WAL on a dedicated device as well, if it makes sense.
@@ -428,5 +646,25 @@ The OSD spec for this case would look like the following (using the `model` filt
       model: NVME-QQQQ-987
 
 
-This can easily be done with other filters, like `size` or `vendor` as well.
+It is also possible to specify directly device paths in specific hosts like the following:
 
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: osd_using_paths
+    placement:
+      hosts:
+        - Node01
+        - Node02
+    data_devices:
+      paths:
+        - /dev/sdb
+    db_devices:
+      paths:
+        - /dev/sdc
+    wal_devices:
+      paths:
+        - /dev/sdd
+
+
+This can easily be done with other filters, like `size` or `vendor` as well.

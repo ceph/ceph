@@ -291,11 +291,16 @@ class TestCephadm(object):
 
                 CephadmServe(cephadm_module)._check_daemons()
 
-                _run_cephadm.assert_called_with('test', 'mon.test', 'deploy', [
-                                                '--name', 'mon.test', '--reconfig', '--config-json', '-'],
-                                                stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
-                                                + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
-                                                image='')
+                _run_cephadm.assert_called_with(
+                    'test', 'mon.test', 'deploy', [
+                        '--name', 'mon.test',
+                        '--meta-json', '{"service_name": "mon"}',
+                        '--config-json', '-',
+                        '--reconfig',
+                    ],
+                    stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
+                    + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
+                    image='')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
@@ -430,6 +435,46 @@ class TestCephadm(object):
             _run_cephadm.assert_called_with(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_save_non_collocated(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+
+            spec = DriveGroupSpec(
+                service_id='noncollocated',
+                placement=PlacementSpec(
+                    hosts=['test']
+                ),
+                data_devices=DeviceSelection(paths=['/dev/sdb']),
+                db_devices=DeviceSelection(paths=['/dev/sdc']),
+                wal_devices=DeviceSelection(paths=['/dev/sdd'])
+            )
+
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd.noncollocated update...']
+
+            inventory = Devices([
+                Device('/dev/sdb', available=True),
+                Device('/dev/sdc', available=True),
+                Device('/dev/sdd', available=True)
+            ])
+
+            cephadm_module.cache.update_host_devices_networks('test', inventory.devices, {})
+
+            _run_cephadm.return_value = (['{}'], '', 0)
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume',
+                ['--config-json', '-', '--', 'lvm', 'batch',
+                    '--no-auto', '/dev/sdb', '--db-devices', '/dev/sdc',
+                    '--wal-devices', '/dev/sdd', '--yes', '--no-systemd'],
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
+                error_ok=True, stdin='{"config": "", "keyring": ""}')
+            _run_cephadm.assert_called_with(
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
     def test_apply_osd_save_placement(self, _save_spec, cephadm_module):
@@ -444,6 +489,15 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(paths=['']))
+            c = cephadm_module.create_osds(dg)
+            out = wait(cephadm_module, c)
+            assert out == "Created no osd(s) on host test; already created?"
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_create_noncollocated_osd(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
                                 data_devices=DeviceSelection(paths=['']))
@@ -515,7 +569,6 @@ class TestCephadm(object):
                                                       replace=False,
                                                       force=False,
                                                       hostname='test',
-                                                      fullname='osd.0',
                                                       process_started_at=datetime_now(),
                                                       remove_util=cephadm_module.to_remove_osds.rm_util
                                                       ))

@@ -1,12 +1,14 @@
 # type: ignore
 from typing import List, Optional
 import mock
-from mock import patch
+from mock import patch, call
 import os
 import sys
 import unittest
 import threading
 import time
+import errno
+import socket
 from http.server import HTTPServer
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
@@ -20,6 +22,113 @@ with patch('builtins.open', create=True):
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
 class TestCephAdm(object):
+
+    def test_docker_unit_file(self):
+        ctx = mock.Mock()
+        ctx.container_path = '/usr/bin/docker'
+        r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
+        assert 'Requires=docker.service' in r
+        ctx.container_path = '/usr/sbin/podman'
+        r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
+        assert 'Requires=docker.service' not in r
+
+    @mock.patch('cephadm.logger')
+    def test_attempt_bind(self, logger):
+        ctx = None
+        address = None
+        port = 0
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        for side_effect, expected_exception in (
+            (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
+            (os_error(errno.EAFNOSUPPORT), OSError),
+            (os_error(errno.EADDRNOTAVAIL), OSError),
+            (None, None),
+        ):
+            _socket = mock.Mock()
+            _socket.bind.side_effect = side_effect
+            try:
+                cd.attempt_bind(ctx, _socket, address, port)
+            except Exception as e:
+                assert isinstance(e, expected_exception)
+            else:
+                if expected_exception is not None:
+                    assert False
+
+    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use(self, logger, attempt_bind):
+        empty_ctx = None
+
+        assert cd.port_in_use(empty_ctx, 9100) == False
+
+        attempt_bind.side_effect = cd.PortOccupiedError('msg')
+        assert cd.port_in_use(empty_ctx, 9100) == True
+
+        os_error = OSError()
+        os_error.errno = errno.EADDRNOTAVAIL
+        attempt_bind.side_effect = os_error
+        assert cd.port_in_use(empty_ctx, 9100) == False
+
+        os_error = OSError()
+        os_error.errno = errno.EAFNOSUPPORT
+        attempt_bind.side_effect = os_error
+        assert cd.port_in_use(empty_ctx, 9100) == False
+
+    @mock.patch('socket.socket')
+    @mock.patch('cephadm.logger')
+    def test_check_ip_port_success(self, logger, _socket):
+        ctx = mock.Mock()
+        ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
+
+        for address, address_family in (
+            ('0.0.0.0', socket.AF_INET),
+            ('::', socket.AF_INET6),
+        ):
+            try:
+                cd.check_ip_port(ctx, address, 9100)
+            except:
+                assert False
+            else:
+                assert _socket.call_args == call(address_family, socket.SOCK_STREAM)
+
+    @mock.patch('socket.socket')
+    @mock.patch('cephadm.logger')
+    def test_check_ip_port_failure(self, logger, _socket):
+        ctx = mock.Mock()
+        ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        for address, address_family in (
+            ('0.0.0.0', socket.AF_INET),
+            ('::', socket.AF_INET6),
+        ):
+            for side_effect, expected_exception in (
+                (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
+                (os_error(errno.EADDRNOTAVAIL), OSError),
+                (os_error(errno.EAFNOSUPPORT), OSError),
+                (None, None),
+            ):
+                mock_socket_obj = mock.Mock()
+                mock_socket_obj.bind.side_effect = side_effect
+                _socket.return_value = mock_socket_obj
+                try:
+                    cd.check_ip_port(ctx, address, 9100)
+                except Exception as e:
+                    assert isinstance(e, expected_exception)
+                else:
+                    if side_effect is not None:
+                        assert False
+
+
     def test_is_not_fsid(self):
         assert not cd.is_fsid('no-uuid')
 
@@ -273,6 +382,18 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
             'image_id': '16f4549cf7a8f112bbebf7946749e961fbbd1b0838627fe619aab16bc17ce552',
             'repo_digests': ['quay.ceph.io/ceph-ci/ceph@sha256:4e13da36c1bd6780b312a985410ae678984c37e6a9493a74c87e4a50b9bda41f']
         }
+
+        # multiple digests (podman)
+        out = """e935122ab143a64d92ed1fbb27d030cf6e2f0258207be1baf1b509c466aeeb42,[docker.io/prom/prometheus@sha256:e4ca62c0d62f3e886e684806dfe9d4e0cda60d54986898173c1083856cfda0f4 docker.io/prom/prometheus@sha256:efd99a6be65885c07c559679a0df4ec709604bcdd8cd83f0d00a1a683b28fb6a]"""
+        r = cd.get_image_info_from_inspect(out, 'registry/prom/prometheus:latest')
+        assert r == {
+            'image_id': 'e935122ab143a64d92ed1fbb27d030cf6e2f0258207be1baf1b509c466aeeb42',
+            'repo_digests': [
+                'docker.io/prom/prometheus@sha256:e4ca62c0d62f3e886e684806dfe9d4e0cda60d54986898173c1083856cfda0f4',
+                'docker.io/prom/prometheus@sha256:efd99a6be65885c07c559679a0df4ec709604bcdd8cd83f0d00a1a683b28fb6a',
+            ]
+        }
+
 
     def test_dict_get(self):
         result = cd.dict_get({'a': 1}, 'a', require=True)
@@ -707,3 +828,39 @@ class TestMaintenance:
     def test_parser_BAD(self):
         with pytest.raises(SystemExit):
             cd._parse_args(['host-maintenance', 'wah'])
+
+
+class TestMonitoring(object):
+    @mock.patch('cephadm.call')
+    def test_get_version_alertmanager(self, _call):
+        ctx = mock.Mock()
+        daemon_type = 'alertmanager'
+
+        # binary `prometheus`
+        _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
+
+        # binary `prometheus-alertmanager`
+        _call.side_effect = (
+            ('', '', 1),
+            ('', '{}, version 0.16.1'.format(daemon_type), 0),
+        )
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
+
+    @mock.patch('cephadm.call')
+    def test_get_version_prometheus(self, _call):
+        ctx = mock.Mock()
+        daemon_type = 'prometheus'
+        _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
+
+    @mock.patch('cephadm.call')
+    def test_get_version_node_exporter(self, _call):
+        ctx = mock.Mock()
+        daemon_type = 'node-exporter'
+        _call.return_value = '', '{}, version 0.16.1'.format(daemon_type.replace('-', '_')), 0
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
