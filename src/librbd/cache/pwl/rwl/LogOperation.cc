@@ -24,6 +24,15 @@ void WriteLogOperation::copy_bl_to_cache_buffer(
   i.copy((unsigned)log_entry->write_bytes(), (char*)log_entry->cache_buffer);
 }
 
+void DiscardLogOperation::init_op(
+    uint64_t current_sync_gen, bool persist_on_flush,
+    uint64_t last_op_sequence_num, Context *write_persist,
+    Context *write_append) {
+  log_entry->init(current_sync_gen, persist_on_flush, last_op_sequence_num);
+  this->on_write_append = write_append;
+  this->on_write_persist = write_persist;
+}
+
 } // namespace rwl
 } // namespace pwl
 } // namespace cache

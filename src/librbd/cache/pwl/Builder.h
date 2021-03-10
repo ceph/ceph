@@ -45,6 +45,10 @@ public:
       WriteLogOperationSet &set, uint64_t image_offset_bytes,
       uint64_t write_bytes, uint32_t data_len, CephContext *cct,
       std::shared_ptr<WriteLogEntry> writesame_log_entry) = 0;
+  virtual std::shared_ptr<pwl::DiscardLogOperation> create_discard_log_operation(
+      std::shared_ptr<SyncPoint> sync_point, uint64_t image_offset_bytes,
+      uint64_t write_bytes, uint32_t discard_granularity_bytes,
+      utime_t dispatch_time, PerfCounters *perfcounter, CephContext *cct) = 0;
   virtual C_ReadRequest *create_read_request(CephContext *cct, utime_t arrived,
       PerfCounters *perfcounter, ceph::bufferlist *bl, Context *on_finish) = 0;
 
