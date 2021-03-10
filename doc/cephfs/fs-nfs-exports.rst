@@ -214,6 +214,68 @@ where:
 
 ``<binding>`` is the pseudo root path (must be an absolute path).
 
+
+Update CephFS Export
+====================
+
+.. code:: bash
+
+    $ ceph nfs export update -i <json_file>
+
+This updates the cephfs export specified in the json file. Export in json
+format can be fetched with above get command. For example::
+
+   $ ceph nfs export get vstart /cephfs > update_cephfs_export.json
+   $ cat update_cephfs_export.json
+   {
+     "export_id": 1,
+     "path": "/",
+     "cluster_id": "vstart",
+     "pseudo": "/cephfs",
+     "access_type": "RW",
+     "squash": "no_root_squash",
+     "security_label": true,
+     "protocols": [
+       4
+     ],
+     "transports": [
+       "TCP"
+     ],
+     "fsal": {
+       "name": "CEPH",
+       "user_id": "vstart1",
+       "fs_name": "a",
+       "sec_label_xattr": ""
+     },
+     "clients": []
+   }
+   # Here in the fetched export, pseudo and access_type is modified. Then the modified file is passed to update interface
+   $ ceph nfs export update -i update_cephfs_export.json
+   $ cat update_cephfs_export.json
+   {
+     "export_id": 1,
+     "path": "/",
+     "cluster_id": "vstart",
+     "pseudo": "/cephfs_testing",
+     "access_type": "RO",
+     "squash": "no_root_squash",
+     "security_label": true,
+     "protocols": [
+       4
+     ],
+     "transports": [
+       "TCP"
+     ],
+     "fsal": {
+       "name": "CEPH",
+       "user_id": "vstart1",
+       "fs_name": "a",
+       "sec_label_xattr": ""
+     },
+     "clients": []
+   }
+
+
 Configuring NFS Ganesha to export CephFS with vstart
 ====================================================
 
