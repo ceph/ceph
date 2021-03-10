@@ -830,8 +830,10 @@ class argdesc(object):
         """
         if self.t == CephBool:
             chunk = "--{0}".format(self.name.replace("_", "-"))
-        elif self.t == CephPrefix or self.t == CephChoices:
+        elif self.t == CephPrefix:
             chunk = str(self.instance)
+        elif self.t == CephChoices:
+            chunk = f'--{self.name} {{{str(self.instance)}}}'
         elif self.t == CephOsdName:
             # it just so happens all CephOsdName commands are named 'id' anyway,
             # so <id|osd.id> is perfect.
