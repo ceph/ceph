@@ -14619,6 +14619,15 @@ void BlueStore::_do_truncate(
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
     o->extent_map.dirty_range(offset, length);
+
+    if (bdev->is_smr()) {
+      // On zoned devices, we currently support only removing an object or
+      // truncating it to zero size, both of which fall through this code path.
+      ceph_assert(offset == 0 && !wctx.old_extents.empty());
+      int64_t ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
+      txc->zoned_note_truncated_object(o, ondisk_offset);
+    }
+
     _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
 
     // if we have shards past EOF, ask for a reshard
@@ -14634,14 +14643,6 @@ void BlueStore::_do_truncate(
   }
 
   o->onode.size = offset;
-
-  if (bdev->is_smr()) {
-    // On zoned devices, we currently support only removing an object or
-    // truncating it to zero size, both of which fall through this code path.
-    ceph_assert(offset == 0 && !wctx.old_extents.empty());
-    int64_t ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
-    txc->zoned_note_truncated_object(o, ondisk_offset);
-  }
 
   txc->write_onode(o);
 }
