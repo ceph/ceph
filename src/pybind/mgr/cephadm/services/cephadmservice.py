@@ -714,23 +714,8 @@ class RgwService(CephService):
                     % spec.rgw_frontend_ssl_certificate)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.service_name()}.crt',
+                'key': f'rgw/cert/{spec.service_name()}.crt',  # NOTE: actually a .pem!
                 'val': cert_data,
-            })
-
-        if spec.rgw_frontend_ssl_key:
-            if isinstance(spec.rgw_frontend_ssl_key, list):
-                key_data = '\n'.join(spec.rgw_frontend_ssl_key)
-            elif isinstance(spec.rgw_frontend_ssl_certificate, str):
-                key_data = spec.rgw_frontend_ssl_key
-            else:
-                raise OrchestratorError(
-                    'Invalid rgw_frontend_ssl_key: %s'
-                    % spec.rgw_frontend_ssl_key)
-            ret, out, err = self.mgr.check_mon_command({
-                'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.service_name()}.key',
-                'val': key_data,
             })
 
         # TODO: fail, if we don't have a spec
@@ -750,7 +735,6 @@ class RgwService(CephService):
         if spec.ssl:
             args.append(f"ssl_port={daemon_spec.ports[0]}")
             args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
-            args.append(f"ssl_private_key=config://rgw/cert/{spec.service_name()}.key")
         else:
             args.append(f"port={daemon_spec.ports[0]}")
         frontend = f'beast {" ".join(args)}'
