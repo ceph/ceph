@@ -2217,14 +2217,20 @@ def get_config_and_keyring(ctx):
         keyring = d.get('keyring')
 
     if 'config' in ctx and ctx.config:
-        with open(ctx.config, 'r') as f:
-            config = f.read()
+        try:
+            with open(ctx.config, 'r') as f:
+                config = f.read()
+        except FileNotFoundError:
+            raise Error('config file: %s does not exist' % ctx.config)
 
     if 'key' in ctx and ctx.key:
         keyring = '[%s]\n\tkey = %s\n' % (ctx.name, ctx.key)
     elif 'keyring' in ctx and ctx.keyring:
-        with open(ctx.keyring, 'r') as f:
-            keyring = f.read()
+        try:
+            with open(ctx.keyring, 'r') as f:
+                keyring = f.read()
+        except FileNotFoundError:
+            raise Error('keyring file: %s does not exist' % ctx.keyring)
 
     return config, keyring
 
@@ -4232,11 +4238,25 @@ def command_run(ctx):
 ##################################
 
 
+def fsid_conf_mismatch(ctx):
+    # type: (CephadmContext) -> bool
+    (config, _) = get_config_and_keyring(ctx)
+    if config:
+        for c in config.split('\n'):
+            if 'fsid = ' in c.strip():
+                if 'fsid = ' + ctx.fsid != c.strip():
+                    return True
+    return False
+
+
 @infer_fsid
 @infer_config
 @infer_image
 def command_shell(ctx):
     # type: (CephadmContext) -> int
+    if fsid_conf_mismatch(ctx):
+        raise Error('fsid does not match ceph conf')
+
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
     if ctx.name:
