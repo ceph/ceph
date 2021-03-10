@@ -8,6 +8,7 @@
 
 // value implementations
 #include "test/crimson/seastore/onode_tree/test_value.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -79,9 +80,7 @@ build_value_recorder_by_type(ceph::bufferlist& encoded,
     ret = std::make_unique<TestValue::Recorder>(encoded);
     break;
   case value_magic_t::ONODE:
-    // TODO: onode implementation
-    ceph_abort("not implemented");
-    ret = nullptr;
+    ret = std::make_unique<FLTreeOnode::Recorder>(encoded);
     break;
   default:
     ret = nullptr;

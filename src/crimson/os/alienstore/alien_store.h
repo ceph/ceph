@@ -31,7 +31,6 @@ public:
     bool valid() const;
     seastar::future<> next();
     std::string key();
-    seastar::future<std::string> tail_key();
     ceph::buffer::list value();
     int status() const;
   private:

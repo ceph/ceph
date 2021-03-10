@@ -12,37 +12,34 @@
 #include "include/buffer.h"
 #include "include/denc.h"
 
+#include "crimson/os/seastore/transaction.h"
+
 namespace crimson::os::seastore {
 
-// in-memory onode, in addition to the stuff that should be persisted to disk,
-// it may contain intrusive hooks for LRU, rw locks etc
+struct __attribute__((packed)) onode_layout_t {
+  ceph_le32 size = init_le32(0);
+  omap_root_le_t omap_root;
+} __attribute__((packed));
+
+/**
+ * Onode
+ *
+ * Interface manipulated by seastore.  OnodeManager implementations should
+ * return objects derived from this interface with layout referencing
+ * internal representation of onode_layout_t.
+ */
 class Onode : public boost::intrusive_ref_counter<
   Onode,
   boost::thread_unsafe_counter>
 {
 public:
-  Onode(std::string_view s)
-    : payload{s}
-  {}
-  size_t size() const;
-  const std::string& get() const {
-    return payload;
-  }
-  void encode(void* buffer, size_t len);
-  DENC(Onode, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.payload, p);
-    DENC_FINISH(p);
-  }
 
-private:
-  // dummy payload
-  std::string payload;
+  virtual const onode_layout_t &get_layout() const = 0;
+  virtual onode_layout_t &get_mutable_layout(Transaction &t) = 0;
+  virtual ~Onode() = default;
 };
 
-bool operator==(const Onode& lhs, const Onode& rhs);
+
 std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 using OnodeRef = boost::intrusive_ptr<Onode>;
 }
-
-WRITE_CLASS_DENC(crimson::os::seastore::Onode)
