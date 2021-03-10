@@ -934,6 +934,8 @@ class CephadmExporter(CephadmService):
         if not daemon_spec.ports:
             daemon_spec.ports = [int(cfg.port)]
 
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
