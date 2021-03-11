@@ -68,10 +68,8 @@ dict_templ = {
                     'debug mgr': 20,
                     'debug ms': 1},
                 'osd': {
-                    'debug filestore': 20,
-                    'debug journal': 20,
                     'debug ms': 1,
-                    'debug osd': 25
+                    'debug osd': 20
                 }
             },
             'log-whitelist': ['\(MDS_ALL_DOWN\)',
