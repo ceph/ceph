@@ -606,7 +606,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	  if (obj.pool != last_pool) {
 	    delete ctx;
 	    ctx = new IoCtx;
-	    ret = rgw_init_ioctx(store->get_rados_handle(), obj.pool, *ctx);
+	    ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, *ctx);
 	    if (ret < 0) {
         if (transitioned_objects_cache[index]) {
           goto done;

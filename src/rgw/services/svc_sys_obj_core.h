@@ -31,7 +31,7 @@ protected:
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;
   }
-  int get_rados_obj(RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
+  int get_rados_obj(const DoutPrefixProvider *dpp, RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
   virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize,
                        real_time *pmtime, uint64_t *epoch,
@@ -108,11 +108,13 @@ protected:
                      uint64_t timeout_ms, bufferlist *pbl,
                      optional_yield y);
 
-  virtual int pool_list_prefixed_objs(const rgw_pool& pool,
+  virtual int pool_list_prefixed_objs(const DoutPrefixProvider *dpp,
+                                      const rgw_pool& pool,
                                       const string& prefix,
                                       std::function<void(const string&)> cb);
 
-  virtual int pool_list_objects_init(const rgw_pool& pool,
+  virtual int pool_list_objects_init(const DoutPrefixProvider *dpp,
+                                     const rgw_pool& pool,
                                      const std::string& marker,
                                      const std::string& prefix,
                                      RGWSI_SysObj::Pool::ListCtx *ctx);

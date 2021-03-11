@@ -107,27 +107,30 @@ public:
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
-  int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
-  int cancel();
-  static int clear_resharding(rgw::sal::RGWRadosStore* store,
+  int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
+  int cancel(const DoutPrefixProvider *dpp);
+  static int clear_resharding(const DoutPrefixProvider *dpp,
+                              rgw::sal::RGWRadosStore* store,
 			      const RGWBucketInfo& bucket_info);
-  int clear_resharding() {
-    return clear_resharding(store, bucket_info);
+  int clear_resharding(const DoutPrefixProvider *dpp) {
+    return clear_resharding(dpp, store, bucket_info);
   }
-  static int clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
+  static int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp,
+                                              rgw::sal::RGWRadosStore* store,
 					      const RGWBucketInfo& bucket_info);
-  int clear_index_shard_reshard_status() {
-    return clear_index_shard_reshard_status(store, bucket_info);
+  int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp) {
+    return clear_index_shard_reshard_status(dpp, store, bucket_info);
   }
-  static int set_resharding_status(rgw::sal::RGWRadosStore* store,
+  static int set_resharding_status(const DoutPrefixProvider *dpp,
+                                   rgw::sal::RGWRadosStore* store,
 				   const RGWBucketInfo& bucket_info,
 				   const string& new_instance_id,
 				   int32_t num_shards,
 				   cls_rgw_reshard_status status);
-  int set_resharding_status(const string& new_instance_id,
+  int set_resharding_status(const DoutPrefixProvider *dpp, const string& new_instance_id,
 			    int32_t num_shards,
 			    cls_rgw_reshard_status status) {
-    return set_resharding_status(store, bucket_info,
+    return set_resharding_status(dpp, store, bucket_info,
 				 new_instance_id, num_shards, status);
   }
 

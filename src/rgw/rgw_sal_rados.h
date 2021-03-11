@@ -55,9 +55,9 @@ class RGWRadosUser : public RGWUser {
                            optional_yield y, RGWStorageStats* stats,
 			   ceph::real_time *last_stats_sync = nullptr,
 			   ceph::real_time *last_stats_update = nullptr) override;
-    virtual int read_stats_async(RGWGetUserStats_CB *cb) override;
+    virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB *cb) override;
     virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+    virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool *is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
@@ -132,7 +132,7 @@ class RGWRadosObject : public RGWObject {
     public:
       RadosStatOp(RGWRadosObject* _source, RGWObjectCtx* _rctx);
 
-      virtual int stat_async() override;
+      virtual int stat_async(const DoutPrefixProvider *dpp) override;
       virtual int wait() override;
     };
 
@@ -186,7 +186,7 @@ class RGWRadosObject : public RGWObject {
     virtual std::unique_ptr<RGWObject> clone() override {
       return std::unique_ptr<RGWObject>(new RGWRadosObject(*this));
     }
-    virtual MPSerializer* get_serializer(const std::string& lock_name) override;
+    virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
     virtual int transition(RGWObjectCtx& rctx,
 			   RGWBucket* bucket,
 			   const rgw_placement_rule& placement_rule,
@@ -221,7 +221,7 @@ class RGWRadosObject : public RGWObject {
 			      bool *pmore, optional_yield y) override;
     virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<string, bufferlist> *m,
 			     optional_yield y) override;
-    virtual int omap_get_vals_by_keys(const std::string& oid,
+    virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 			      const std::set<std::string>& keys,
 			      RGWAttrs *vals) override;
     virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
@@ -293,12 +293,12 @@ class RGWRadosBucket : public RGWBucket {
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int get_bucket_info(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int get_bucket_stats(int shard_id,
+    virtual int get_bucket_stats(const DoutPrefixProvider *dpp, int shard_id,
 				 std::string *bucket_ver, std::string *master_ver,
 				 std::map<RGWObjCategory, RGWStorageStats>& stats,
 				 std::string *max_marker = nullptr,
 				 bool *syncstopped = nullptr) override;
-    virtual int get_bucket_stats_async(int shard_id, RGWGetBucketStats_CB *ctx) override;
+    virtual int get_bucket_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB *ctx) override;
     virtual int read_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
@@ -314,14 +314,14 @@ class RGWRadosBucket : public RGWBucket {
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
     virtual int set_instance_attrs(const DoutPrefixProvider *dpp, RGWAttrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime) override;
-    virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+    virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool *is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
-    virtual int remove_objs_from_index(std::list<rgw_obj_index_key>& objs_to_unlink) override;
-    virtual int check_index(std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
-    virtual int rebuild_index() override;
-    virtual int set_tag_timeout(uint64_t timeout) override;
+    virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
+    virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
+    virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
+    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
     virtual int purge_instance(const DoutPrefixProvider *dpp) override;
     virtual std::unique_ptr<RGWBucket> clone() override {
       return std::make_unique<RGWRadosBucket>(*this);
@@ -408,16 +408,16 @@ class RGWRadosStore : public RGWStore {
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
     virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) override;
-    virtual int delete_raw_obj_aio(const rgw_raw_obj& obj, Completions* aio) override;
+    virtual int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio) override;
     virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) override;
     virtual int get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) override;
 
     virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
-    virtual int log_op(string& oid, bufferlist& bl) override;
+    virtual int log_op(const DoutPrefixProvider *dpp, string& oid, bufferlist& bl) override;
     virtual int register_to_service_map(const string& daemon_type,
 				const map<string, string>& meta) override;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
-    virtual int list_raw_objects(const rgw_pool& pool, const string& prefix_filter,
+    virtual int list_raw_objects(const DoutPrefixProvider *dpp, const rgw_pool& pool, const string& prefix_filter,
 				 int max, RGWListRawObjsCtx& ctx, std::list<string>& oids,
 				 bool *is_truncated) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled) override;
@@ -431,7 +431,7 @@ class RGWRadosStore : public RGWStore {
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) override { rados->wakeup_meta_sync_shards(shard_ids); }
     virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids) override { rados->wakeup_data_sync_shards(source_zone, shard_ids); }
     virtual int clear_usage(const DoutPrefixProvider *dpp) override { return rados->clear_usage(dpp); }
-    virtual int read_all_usage(uint64_t start_epoch, uint64_t end_epoch,
+    virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool *is_truncated,
 			       RGWUsageIter& usage_iter,
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
@@ -451,7 +451,7 @@ class RGWRadosStore : public RGWStore {
 			       boost::optional<obj_version> refresh_version = boost::none) override;
     virtual int delete_system_obj(const DoutPrefixProvider *dpp, const rgw_pool& pool, const string& oid,
 				  RGWObjVersionTracker *objv_tracker, optional_yield y) override;
-    virtual int meta_list_keys_init(const string& section, const string& marker, void** phandle) override;
+    virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void** phandle) override;
     virtual int meta_list_keys_next(void* handle, int max, list<string>& keys, bool* truncated) override;
     virtual void meta_list_keys_complete(void* handle) override;
     virtual std::string meta_get_marker(void *handle) override;
@@ -472,7 +472,7 @@ class RGWRadosStore : public RGWStore {
     }
 
     /* Unique to RGWRadosStore */
-    int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+    int get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   librados::IoCtx *ioctx);
 
     void setRados(RGWRados * st) { rados = st; }
@@ -492,7 +492,7 @@ class MPRadosSerializer : public MPSerializer {
   librados::ObjectWriteOperation op;
 
 public:
-  MPRadosSerializer(RGWRadosStore* store, RGWRadosObject* obj, const std::string& lock_name);
+  MPRadosSerializer(const DoutPrefixProvider *dpp, RGWRadosStore* store, RGWRadosObject* obj, const std::string& lock_name);
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
   virtual int unlock() override {
@@ -555,7 +555,7 @@ protected:
 
     virtual void update(const DoutPrefixProvider *dpp, RGWObjManifest* manifest) override;
     virtual int send(const std::string& tag) override;
-    virtual void delete_inline(const std::string& tag) override;
+    virtual void delete_inline(const DoutPrefixProvider *dpp, const std::string& tag) override;
 };
 
 class RadosWriter : public Writer {

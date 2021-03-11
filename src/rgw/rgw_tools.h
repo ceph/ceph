@@ -26,7 +26,8 @@ namespace rgw { namespace sal {
 struct obj_version;
 
 
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+int rgw_init_ioctx(const DoutPrefixProvider *dpp,
+                   librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx,
 		   bool create = false,
 		   bool mostly_omap = false);

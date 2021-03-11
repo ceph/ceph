@@ -58,13 +58,13 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
 
   while (is_truncated) {
     if (bucket) {
-      ret = bucket->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+      ret = bucket->read_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 			       usage_iter, usage);
     } else if (user) {
-      ret = user->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+      ret = user->read_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 			     usage_iter, usage);
     } else {
-      ret = store->read_all_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+      ret = store->read_all_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 				  usage_iter, usage);
     }
 

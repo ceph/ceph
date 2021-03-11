@@ -2397,7 +2397,7 @@ void RGWGetUsage::execute(optional_yield y)
   RGWUsageIter usage_iter;
   
   while (s->bucket && is_truncated) {
-    op_ret = s->bucket->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+    op_ret = s->bucket->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
 				   usage_iter, usage);
     if (op_ret == -ENOENT) {
       op_ret = 0;
@@ -5947,7 +5947,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   utime_t dur(max_lock_secs_mp, 0);
 
-  serializer = meta_obj->get_serializer("RGWCompleteMultipart");
+  serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
   op_ret = serializer->try_lock(this, dur, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "failed to acquire lock" << dendl;

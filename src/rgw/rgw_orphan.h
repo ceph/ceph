@@ -133,7 +133,7 @@ public:
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
-  int init();
+  int init(const DoutPrefixProvider *dpp);
 
   int read_job(const string& job_name, RGWOrphanSearchState& state);
   int write_job(const string& job_name, const RGWOrphanSearchState& state);
@@ -194,7 +194,7 @@ public:
     return orphan_store.write_job(search_info.job_name, state);
   }
 
-  int init(const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode=false);
+  int init(const DoutPrefixProvider *dpp, const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode=false);
 
   int create(const string& job_name, int num_shards);
 
@@ -202,7 +202,7 @@ public:
   int build_buckets_instance_index(const DoutPrefixProvider *dpp);
   int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const string& bucket_instance_id, map<int, list<string> >& oids);
   int build_linked_oids_index(const DoutPrefixProvider *dpp);
-  int compare_oid_indexes();
+  int compare_oid_indexes(const DoutPrefixProvider *dpp);
 
   int run(const DoutPrefixProvider *dpp);
   int finish();

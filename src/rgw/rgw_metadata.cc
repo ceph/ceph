@@ -220,14 +220,14 @@ RGWMetadataLogInfoCompletion::~RGWMetadataLogInfoCompletion()
   completion->release();
 }
 
-int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfoCompletion *completion)
+int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfoCompletion *completion)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
   completion->get(); // hold a ref until the completion fires
 
-  return svc.cls->timelog.info_async(completion->get_io_obj(), oid,
+  return svc.cls->timelog.info_async(dpp, completion->get_io_obj(), oid,
                                      &completion->get_header(),
                                      completion->get_completion());
 }
@@ -242,18 +242,18 @@ int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, const real
                                end_marker, nullptr, null_yield);
 }
   
-int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
+int RGWMetadataLog::lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return svc.cls->lock.lock_exclusive(svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
+  return svc.cls->lock.lock_exclusive(dpp, svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
 }
 
-int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
+int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return svc.cls->lock.unlock(svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
+  return svc.cls->lock.unlock(dpp, svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
 }
 
 void RGWMetadataLog::mark_modified(int shard_id)
@@ -329,7 +329,7 @@ public:
     return -ENOTSUP;
   }
 
-  int list_keys_init(const string& marker, void **phandle) override {
+  int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) override {
     iter_data *data = new iter_data;
     list<string> sections;
     mgr->get_sections(sections);
@@ -525,11 +525,11 @@ int RGWMetadataHandler_GenericMetaBE::get_shard_id(const string& entry, int *sha
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::list_keys_init(const string& marker, void **phandle)
+int RGWMetadataHandler_GenericMetaBE::list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle)
 {
   auto op = std::make_unique<RGWSI_MetaBackend_Handler::Op_ManagedCtx>(be_handler);
 
-  int ret = op->list_init(marker);
+  int ret = op->list_init(dpp, marker);
   if (ret < 0) {
     return ret;
   }
@@ -771,12 +771,12 @@ struct list_keys_handle {
   RGWMetadataHandler *handler;
 };
 
-int RGWMetadataManager::list_keys_init(const string& section, void **handle)
+int RGWMetadataManager::list_keys_init(const DoutPrefixProvider *dpp, const string& section, void **handle)
 {
-  return list_keys_init(section, string(), handle);
+  return list_keys_init(dpp, section, string(), handle);
 }
 
-int RGWMetadataManager::list_keys_init(const string& section,
+int RGWMetadataManager::list_keys_init(const DoutPrefixProvider *dpp, const string& section,
                                        const string& marker, void **handle)
 {
   string entry;
@@ -791,7 +791,7 @@ int RGWMetadataManager::list_keys_init(const string& section,
 
   list_keys_handle *h = new list_keys_handle;
   h->handler = handler;
-  ret = handler->list_keys_init(marker, &h->handle);
+  ret = handler->list_keys_init(dpp, marker, &h->handle);
   if (ret < 0) {
     delete h;
     return ret;

@@ -259,23 +259,24 @@ RGWBucketReshard::RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
   outer_reshard_lock(_outer_reshard_lock)
 { }
 
-int RGWBucketReshard::set_resharding_status(rgw::sal::RGWRadosStore* store,
+int RGWBucketReshard::set_resharding_status(const DoutPrefixProvider *dpp,
+                                            rgw::sal::RGWRadosStore* store,
 					    const RGWBucketInfo& bucket_info,
 					    const string& new_instance_id,
 					    int32_t num_shards,
 					    cls_rgw_reshard_status status)
 {
   if (new_instance_id.empty()) {
-    ldout(store->ctx(), 0) << __func__ << " missing new bucket instance id" << dendl;
+    ldpp_dout(dpp, 0) << __func__ << " missing new bucket instance id" << dendl;
     return -EINVAL;
   }
 
   cls_rgw_bucket_instance_entry instance_entry;
   instance_entry.set_status(new_instance_id, num_shards, status);
 
-  int ret = store->getRados()->bucket_set_reshard(bucket_info, instance_entry);
+  int ret = store->getRados()->bucket_set_reshard(dpp, bucket_info, instance_entry);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
+    ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
 		  << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -283,21 +284,22 @@ int RGWBucketReshard::set_resharding_status(rgw::sal::RGWRadosStore* store,
 }
 
 // reshard lock assumes lock is held
-int RGWBucketReshard::clear_resharding(rgw::sal::RGWRadosStore* store,
+int RGWBucketReshard::clear_resharding(const DoutPrefixProvider *dpp,
+                                       rgw::sal::RGWRadosStore* store,
 				       const RGWBucketInfo& bucket_info)
 {
-  int ret = clear_index_shard_reshard_status(store, bucket_info);
+  int ret = clear_index_shard_reshard_status(dpp, store, bucket_info);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
+    ldpp_dout(dpp, 0) << "RGWBucketReshard::" << __func__ <<
       " ERROR: error clearing reshard status from index shard " <<
       cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   cls_rgw_bucket_instance_entry instance_entry;
-  ret = store->getRados()->bucket_set_reshard(bucket_info, instance_entry);
+  ret = store->getRados()->bucket_set_reshard(dpp, bucket_info, instance_entry);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "RGWReshard::" << __func__ <<
+    ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ <<
       " ERROR: error setting bucket resharding flag on bucket index: " <<
       cpp_strerror(-ret) << dendl;
     return ret;
@@ -306,18 +308,19 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RGWRadosStore* store,
   return 0;
 }
 
-int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
+int RGWBucketReshard::clear_index_shard_reshard_status(const DoutPrefixProvider *dpp,
+                                                       rgw::sal::RGWRadosStore* store,
 						       const RGWBucketInfo& bucket_info)
 {
   uint32_t num_shards = bucket_info.layout.current_index.layout.normal.num_shards;
 
   if (num_shards < std::numeric_limits<uint32_t>::max()) {
-    int ret = set_resharding_status(store, bucket_info,
+    int ret = set_resharding_status(dpp, store, bucket_info,
 				    bucket_info.bucket.bucket_id,
 				    (num_shards < 1 ? 1 : num_shards),
 				    cls_rgw_reshard_status::NOT_RESHARDING);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
+      ldpp_dout(dpp, 0) << "RGWBucketReshard::" << __func__ <<
 	" ERROR: error clearing reshard status from index shard " <<
 	cpp_strerror(-ret) << dendl;
       return ret;
@@ -344,7 +347,7 @@ static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
   new_bucket_info.new_bucket_instance_id.clear();
   new_bucket_info.reshard_status = cls_rgw_reshard_status::NOT_RESHARDING;
 
-  int ret = store->svc()->bi->init_index(new_bucket_info);
+  int ret = store->svc()->bi->init_index(dpp, new_bucket_info);
   if (ret < 0) {
     cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -367,14 +370,14 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
 				      bucket_info, bucket_attrs, new_bucket_info, dpp);
 }
 
-int RGWBucketReshard::cancel()
+int RGWBucketReshard::cancel(const DoutPrefixProvider *dpp)
 {
   int ret = reshard_lock.lock();
   if (ret < 0) {
     return ret;
   }
 
-  ret = clear_resharding();
+  ret = clear_resharding(dpp);
 
   reshard_lock.unlock();
   return ret;
@@ -417,7 +420,7 @@ public:
     if (in_progress) {
       // resharding must not have ended correctly, clean up
       int ret =
-	RGWBucketReshard::clear_index_shard_reshard_status(store, bucket_info);
+	RGWBucketReshard::clear_index_shard_reshard_status(dpp, store, bucket_info);
       if (ret < 0) {
 	lderr(store->ctx()) << "Error: " << __func__ <<
 	  " clear_index_shard_status returned " << ret << dendl;
@@ -688,9 +691,9 @@ int RGWBucketReshard::do_reshard(int num_shards,
   // NB: some error clean-up is done by ~BucketInfoReshardUpdate
 } // RGWBucketReshard::do_reshard
 
-int RGWBucketReshard::get_status(list<cls_rgw_bucket_instance_entry> *status)
+int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_bucket_instance_entry> *status)
 {
-  return store->svc()->bi_rados->get_reshard_status(bucket_info, status);
+  return store->svc()->bi_rados->get_reshard_status(dpp, bucket_info, status);
 }
 
 
@@ -720,7 +723,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   // set resharding status of current bucket_info & shards with
   // information about planned resharding
-  ret = set_resharding_status(new_bucket_info.bucket.bucket_id,
+  ret = set_resharding_status(dpp, new_bucket_info.bucket.bucket_id,
 			      num_shards, cls_rgw_reshard_status::IN_PROGRESS);
   if (ret < 0) {
     goto error_out;
@@ -743,9 +746,9 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   // best effort and don't report out an error; the lock isn't needed
   // at this point since all we're using a best effor to to remove old
   // shard objects
-  ret = store->svc()->bi->clean_index(bucket_info);
+  ret = store->svc()->bi->clean_index(dpp, bucket_info);
   if (ret < 0) {
-    lderr(store->ctx()) << "Error: " << __func__ <<
+    ldpp_dout(dpp, -1) << "Error: " << __func__ <<
       " failed to clean up old shards; " <<
       "RGWRados::clean_bucket_index returned " << ret << dendl;
   }
@@ -773,9 +776,9 @@ error_out:
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->svc()->bi->clean_index(new_bucket_info);
+  int ret2 = store->svc()->bi->clean_index(dpp, new_bucket_info);
   if (ret2 < 0) {
-    lderr(store->ctx()) << "Error: " << __func__ <<
+    ldpp_dout(dpp, -1) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<
       "RGWRados::clean_bucket_index returned " << ret2 << dendl;
   }

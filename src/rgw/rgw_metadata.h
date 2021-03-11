@@ -87,7 +87,7 @@ public:
 		     RGWMDLogStatus op_type,
 		     std::function<int()> f) = 0;
 
-  virtual int list_keys_init(const string& marker, void **phandle) = 0;
+  virtual int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
@@ -182,7 +182,7 @@ public:
 
   int get_shard_id(const string& entry, int *shard_id) override;
 
-  int list_keys_init(const std::string& marker, void **phandle) override;
+  int list_keys_init(const DoutPrefixProvider *dpp, const std::string& marker, void **phandle) override;
   int list_keys_next(void *handle, int max, std::list<string>& keys, bool *truncated) override;
   void list_keys_complete(void *handle) override;
 
@@ -254,8 +254,8 @@ public:
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f);
 
-  int list_keys_init(const string& section, void **phandle);
-  int list_keys_init(const string& section, const string& marker, void **phandle);
+  int list_keys_init(const DoutPrefixProvider *dpp, const string& section, void **phandle);
+  int list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 

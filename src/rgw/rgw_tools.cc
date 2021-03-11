@@ -33,7 +33,8 @@
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+int rgw_init_ioctx(const DoutPrefixProvider *dpp,
+                   librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
 		   bool mostly_omap)
 {
@@ -41,7 +42,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
   if (r == -ENOENT && create) {
     r = rados->pool_create(pool.name.c_str());
     if (r == -ERANGE) {
-      dout(0)
+      ldpp_dout(dpp, 0)
         << __func__
         << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
         << " (this can be due to a pool or placement group misconfiguration, e.g."
@@ -72,7 +73,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
       // set pg_num_min
@@ -83,7 +84,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_num_min on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_num_min on "
 		 << pool.name << dendl;
       }
       // set recovery_priority
@@ -94,7 +95,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(p) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set recovery_priority on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
       }
     }

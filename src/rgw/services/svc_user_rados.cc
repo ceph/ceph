@@ -609,7 +609,7 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
 int RGWSI_User_RADOS::cls_user_update_buckets(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add, optional_yield y)
 {
   auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
+  int r = rados_obj.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -635,7 +635,7 @@ int RGWSI_User_RADOS::cls_user_add_bucket(const DoutPrefixProvider *dpp, rgw_raw
 int RGWSI_User_RADOS::cls_user_remove_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket& bucket, optional_yield y)
 {
   auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
+  int r = rados_obj.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -725,7 +725,7 @@ int RGWSI_User_RADOS::cls_user_list_buckets(const DoutPrefixProvider *dpp,
 					    optional_yield y)
 {
   auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
+  int r = rados_obj.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -816,7 +816,7 @@ int RGWSI_User_RADOS::cls_user_reset_stats(const DoutPrefixProvider *dpp, const 
 {
   rgw_raw_obj obj = get_buckets_obj(user);
   auto rados_obj = svc.rados->obj(obj);
-  int rval, r = rados_obj.open();
+  int rval, r = rados_obj.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -854,7 +854,7 @@ int RGWSI_User_RADOS::complete_flush_stats(const DoutPrefixProvider *dpp,
 {
   rgw_raw_obj obj = get_buckets_obj(user);
   auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
+  int r = rados_obj.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -869,7 +869,7 @@ int RGWSI_User_RADOS::cls_user_get_header(const DoutPrefixProvider *dpp,
 {
   rgw_raw_obj obj = get_buckets_obj(user);
   auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
+  int r = rados_obj.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -880,11 +880,11 @@ int RGWSI_User_RADOS::cls_user_get_header(const DoutPrefixProvider *dpp,
   return rados_obj.operate(dpp, &op, &ibl, y);
 }
 
-int RGWSI_User_RADOS::cls_user_get_header_async(const string& user_str, RGWGetUserHeader_CB *cb)
+int RGWSI_User_RADOS::cls_user_get_header_async(const DoutPrefixProvider *dpp, const string& user_str, RGWGetUserHeader_CB *cb)
 {
   rgw_raw_obj obj = get_buckets_obj(rgw_user(user_str));
   auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
+  int r = rados_obj.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -955,13 +955,13 @@ public:
   }
 };
 
-int RGWSI_User_RADOS::read_stats_async(RGWSI_MetaBackend::Context *ctx,
+int RGWSI_User_RADOS::read_stats_async(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
                                        const rgw_user& user, RGWGetUserStats_CB *_cb)
 {
   string user_str = user.to_str();
 
   RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
-  int r = cls_user_get_header_async(user_str, cb);
+  int r = cls_user_get_header_async(dpp, user_str, cb);
   if (r < 0) {
     _cb->put();
     delete cb;

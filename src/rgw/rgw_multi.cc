@@ -259,7 +259,7 @@ int abort_multipart_upload(const DoutPrefixProvider *dpp,
       return -ERR_NO_SUCH_UPLOAD;
     }
     //Delete objects inline if send chain to gc fails
-    chain->delete_inline(mp_obj.get_upload_id());
+    chain->delete_inline(dpp, mp_obj.get_upload_id());
   }
 
   std::unique_ptr<rgw::sal::RGWObject::DeleteOp> del_op = meta_obj->get_delete_op(obj_ctx);

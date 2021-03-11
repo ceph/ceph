@@ -93,7 +93,7 @@ class RGWSI_User_RADOS : public RGWSI_User
 
   int cls_user_reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
   int cls_user_get_header(const DoutPrefixProvider *dpp, const rgw_user& user, cls_user_header *header, optional_yield y);
-  int cls_user_get_header_async(const string& user, RGWGetUserHeader_CB *cb);
+  int cls_user_get_header_async(const DoutPrefixProvider *dpp, const string& user, RGWGetUserHeader_CB *cb);
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 public:
@@ -212,7 +212,7 @@ public:
 		 ceph::real_time *last_stats_update,
                  optional_yield y) override;  /* last time a stats update was done */
 
-  int read_stats_async(RGWSI_MetaBackend::Context *ctx,
+  int read_stats_async(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
 		       const rgw_user& user, RGWGetUserStats_CB *cb) override;
 };
 

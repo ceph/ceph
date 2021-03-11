@@ -51,7 +51,7 @@ public:
   };
 
 private:
-  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
+  int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
                     const OpenParams& params = {});
   int pool_iterate(librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
@@ -101,7 +101,7 @@ public:
     int create();
     int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
-    int open(const OpenParams& params = {});
+    int open(const DoutPrefixProvider *dpp, const OpenParams& params = {});
 
     const rgw_pool& get_pool() {
       return pool;
@@ -124,7 +124,7 @@ public:
       List() {}
       List(Pool *_pool) : pool(_pool) {}
 
-      int init(const string& marker, RGWAccessListFilter *filter = nullptr);
+      int init(const DoutPrefixProvider *dpp, const string& marker, RGWAccessListFilter *filter = nullptr);
       int get_next(int max,
                    std::vector<string> *oids,
                    bool *is_truncated);
@@ -164,7 +164,7 @@ public:
   public:
     Obj() {}
 
-    int open();
+    int open(const DoutPrefixProvider *dpp);
 
     int operate(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation *op, optional_yield y,
 		int flags = 0);

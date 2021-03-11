@@ -1274,7 +1274,7 @@ int RGWPeriod::update(const DoutPrefixProvider *dpp, optional_yield y)
   auto zone_svc = sysobj_svc->get_zone_svc();
   ldpp_dout(dpp, 20) << __func__ << " realm " << realm_id << " period " << get_id() << dendl;
   list<string> zonegroups;
-  int ret = zone_svc->list_zonegroups(zonegroups);
+  int ret = zone_svc->list_zonegroups(dpp, zonegroups);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to list zonegroups: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1626,7 +1626,7 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
 {
 
   list<string> zones;
-  int r = zone_svc->list_zones(zones);
+  int r = zone_svc->list_zones(dpp, zones);
   if (r < 0) {
     ldpp_dout(dpp, 10) << "WARNING: store->list_zones() returned r=" << r << dendl;
   }

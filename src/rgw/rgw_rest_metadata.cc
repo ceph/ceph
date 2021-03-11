@@ -77,7 +77,7 @@ void RGWOp_Metadata_Get_Myself::execute(optional_yield y) {
 
 void RGWOp_Metadata_List::execute(optional_yield y) {
   string marker;
-  ldpp_dout(s, 16) << __func__
+  ldpp_dout(this, 16) << __func__
 		    << " raw marker " << s->info.args.get("marker")
 		    << dendl;
 
@@ -86,7 +86,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
     if (!marker.empty()) {
       marker = rgw::from_base64(marker);
     }
-    ldpp_dout(s, 16) << __func__
+    ldpp_dout(this, 16) << __func__
 	     << " marker " << marker << dendl;
   } catch (...) {
     marker = std::string("");
@@ -104,7 +104,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
     string err;
     max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
     if (!err.empty()) {
-      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+      ldpp_dout(this, 5) << "Error parsing max-entries " << max_entries_str << dendl;
       op_ret = -EINVAL;
       return;
     }
@@ -123,9 +123,9 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
      marker = "3:bf885d8f:root::sorry_janefonda_665:head";
   */
 
-  op_ret = store->meta_list_keys_init(metadata_key, marker, &handle);
+  op_ret = store->meta_list_keys_init(this, metadata_key, marker, &handle);
   if (op_ret < 0) {
-    dout(5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
+    ldpp_dout(this, 5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
 
@@ -144,7 +144,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
     left = (max_entries_specified ? max_entries - count : max);
     op_ret = store->meta_list_keys_next(handle, left, keys, &truncated);
     if (op_ret < 0) {
-      dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(op_ret)
+      ldpp_dout(this, 5) << "ERROR: lists_keys_next(): " << cpp_strerror(op_ret)
 	      << dendl;
       return;
     }

@@ -343,7 +343,8 @@ public:
                          optional_yield y,
                          std::string *err_msg = NULL);
 
-  int check_index(RGWBucketAdminOpState& op_state,
+  int check_index(const DoutPrefixProvider *dpp,
+          RGWBucketAdminOpState& op_state,
           map<RGWObjCategory, RGWStorageStats>& existing_stats,
           map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
@@ -767,7 +768,7 @@ private:
 
 };
 
-bool rgw_find_bucket_by_id(CephContext *cct, rgw::sal::RGWStore* store, const string& marker,
+bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::RGWStore* store, const string& marker,
                            const string& bucket_id, rgw_bucket* bucket_out);
 
 #endif

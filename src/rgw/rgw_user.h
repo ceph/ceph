@@ -589,7 +589,7 @@ public:
   int info (RGWUserInfo& fetched_info, std::string *err_msg = NULL);
 
   /* list the existing users */
-  int list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+  int list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
@@ -601,7 +601,7 @@ public:
 class RGWUserAdminOp_User
 {
 public:
-  static int list(rgw::sal::RGWStore *store,
+  static int list(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   static int info(const DoutPrefixProvider *dpp,
@@ -863,7 +863,7 @@ public:
 		 optional_yield y,
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
-  int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);
+  int read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user, RGWGetUserStats_CB *ctx);
 };
 
 class RGWUserMetaHandlerAllocator {

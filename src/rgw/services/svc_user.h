@@ -126,7 +126,7 @@ public:
 			 ceph::real_time *last_stats_update,
                          optional_yield y) = 0;  /* last time a stats update was done */
 
-  virtual int read_stats_async(RGWSI_MetaBackend::Context *ctx,
+  virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
 			       const rgw_user& user, RGWGetUserStats_CB *cb) = 0;
 };
 

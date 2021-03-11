@@ -342,12 +342,12 @@ int rgw_log_op(rgw::sal::RGWStore *store, RGWREST* const rest, struct req_state 
     return 0;
 
   if (s->bucket_name.empty()) {
-    ldout(s->cct, 5) << "nothing to log for operation" << dendl;
+    ldpp_dout(s, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
   if (s->err.ret == -ERR_NO_SUCH_BUCKET || rgw::sal::RGWBucket::empty(s->bucket.get())) {
     if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
-      ldout(s->cct, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
+      ldpp_dout(s, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = "";
@@ -357,7 +357,7 @@ int rgw_log_op(rgw::sal::RGWStore *store, RGWREST* const rest, struct req_state 
   entry.bucket = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
 
   if (check_utf8(entry.bucket.c_str(), entry.bucket.size()) != 0) {
-    ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
+    ldpp_dout(s, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
 
@@ -463,14 +463,14 @@ int rgw_log_op(rgw::sal::RGWStore *store, RGWREST* const rest, struct req_state 
   if (s->cct->_conf->rgw_ops_log_rados) {
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        entry.bucket_id, entry.bucket);
-    ret = store->log_op(oid, bl);
+    ret = store->log_op(s, oid, bl);
   }
 
   if (olog) {
     olog->log(entry);
   }
   if (ret < 0)
-    ldout(s->cct, 0) << "ERROR: failed to log entry" << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to log entry" << dendl;
 
   return ret;
 }

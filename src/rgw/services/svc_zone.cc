@@ -267,44 +267,44 @@ void RGWSI_Zone::shutdown()
   }
 }
 
-int RGWSI_Zone::list_regions(list<string>& regions)
+int RGWSI_Zone::list_regions(const DoutPrefixProvider *dpp, list<string>& regions)
 {
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.list_prefixed_objs(region_info_oid_prefix, &regions);
+  return syspool.list_prefixed_objs(dpp, region_info_oid_prefix, &regions);
 }
 
-int RGWSI_Zone::list_zonegroups(list<string>& zonegroups)
+int RGWSI_Zone::list_zonegroups(const DoutPrefixProvider *dpp, list<string>& zonegroups)
 {
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups);
+  return syspool.list_prefixed_objs(dpp, zonegroup_names_oid_prefix, &zonegroups);
 }
 
-int RGWSI_Zone::list_zones(list<string>& zones)
+int RGWSI_Zone::list_zones(const DoutPrefixProvider *dpp, list<string>& zones)
 {
   RGWZoneParams zoneparams;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zoneparams.get_pool(cct));
 
-  return syspool.list_prefixed_objs(zone_names_oid_prefix, &zones);
+  return syspool.list_prefixed_objs(dpp, zone_names_oid_prefix, &zones);
 }
 
-int RGWSI_Zone::list_realms(list<string>& realms)
+int RGWSI_Zone::list_realms(const DoutPrefixProvider *dpp, list<string>& realms)
 {
   RGWRealm realm(cct, sysobj_svc);
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
-  return syspool.list_prefixed_objs(realm_names_oid_prefix, &realms);
+  return syspool.list_prefixed_objs(dpp, realm_names_oid_prefix, &realms);
 }
 
-int RGWSI_Zone::list_periods(list<string>& periods)
+int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, list<string>& periods)
 {
   RGWPeriod period;
   list<string> raw_periods;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
-  int ret = syspool.list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods);
+  int ret = syspool.list_prefixed_objs(dpp, period.get_info_oid_prefix(), &raw_periods);
   if (ret < 0) {
     return ret;
   }
@@ -385,7 +385,7 @@ int RGWSI_Zone::replace_region_with_zonegroup(const DoutPrefixProvider *dpp, opt
 
   /* convert regions to zonegroups */
   list<string> regions;
-  ret = list_regions(regions);
+  ret = list_regions(dpp, regions);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) <<  __func__ << " failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;

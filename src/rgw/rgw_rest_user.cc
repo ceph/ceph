@@ -42,7 +42,7 @@ void RGWOp_User_List::execute(optional_yield y)
 
   op_state.max_entries = max_entries;
   op_state.marker = marker;
-  op_ret = RGWUserAdminOp_User::list(store, op_state, flusher);
+  op_ret = RGWUserAdminOp_User::list(this, store, op_state, flusher);
 }
 
 class RGWOp_User_Info : public RGWRESTOp {

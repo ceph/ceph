@@ -230,17 +230,17 @@ public:
 
       Op(Pool& _source) : source(_source) {}
 
-      int init(const std::string& marker, const std::string& prefix);
+      int init(const DoutPrefixProvider *dpp, const std::string& marker, const std::string& prefix);
       int get_next(int max, std::vector<string> *oids, bool *is_truncated);
       int get_marker(string *marker);
     };
 
-    int list_prefixed_objs(const std::string& prefix, std::function<void(const string&)> cb);
+    int list_prefixed_objs(const DoutPrefixProvider *dpp, const std::string& prefix, std::function<void(const string&)> cb);
 
     template <typename Container>
-    int list_prefixed_objs(const string& prefix,
+    int list_prefixed_objs(const DoutPrefixProvider *dpp, const string& prefix,
                            Container *result) {
-      return list_prefixed_objs(prefix, [&](const string& val) {
+      return list_prefixed_objs(dpp, prefix, [&](const string& val) {
         result->push_back(val);
       });
     }

@@ -196,7 +196,8 @@ int RGWSI_MetaBackend_SObj::remove_entry(const DoutPrefixProvider *dpp,
                .remove(dpp, y);
 }
 
-int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
+int RGWSI_MetaBackend_SObj::list_init(const DoutPrefixProvider *dpp,
+                                      RGWSI_MetaBackend::Context *_ctx,
                                       const string& marker)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
@@ -210,7 +211,7 @@ int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
   ctx->list.op.emplace(ctx->list.pool->op());
 
   string prefix = ctx->module->get_oid_prefix();
-  ctx->list.op->init(marker, prefix);
+  ctx->list.op->init(dpp, marker, prefix);
 
   return 0;
 }

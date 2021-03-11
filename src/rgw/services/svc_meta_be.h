@@ -159,7 +159,7 @@ public:
                            RGWObjVersionTracker *objv_tracker,
                            optional_yield y) = 0;
 
-  virtual int list_init(RGWSI_MetaBackend::Context *ctx, const string& marker) = 0;
+  virtual int list_init(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const string& marker) = 0;
   virtual int list_next(RGWSI_MetaBackend::Context *ctx,
                         int max, list<string> *keys,
                         bool *truncated)  = 0;
@@ -256,8 +256,8 @@ public:
       return be->mutate(be_ctx, key, params, objv_tracker, y, f, dpp);
     }
 
-    int list_init(const string& marker) {
-      return be->list_init(be_ctx, marker);
+    int list_init(const DoutPrefixProvider *dpp, const string& marker) {
+      return be->list_init(dpp, be_ctx, marker);
     }
     int list_next(int max, list<string> *keys,
                   bool *truncated) {

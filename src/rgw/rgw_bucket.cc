@@ -331,7 +331,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWStore *store, rgw::sal::RGWBucket* 
   if (ret < 0)
     return ret;
 
-  ret = bucket->get_bucket_stats(RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -396,7 +396,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWStore *store, rgw::sal::RGWBucket* 
             continue;
           }
 
-          ret = store->delete_raw_obj_aio(last_obj, handles.get());
+          ret = store->delete_raw_obj_aio(dpp, last_obj, handles.get());
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
             return ret;
@@ -500,14 +500,14 @@ int RGWBucket::init(rgw::sal::RGWStore *_store, RGWBucketAdminOpState& op_state,
   return 0;
 }
 
-bool rgw_find_bucket_by_id(CephContext *cct, rgw::sal::RGWStore* store,
+bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::RGWStore* store,
                            const string& marker, const string& bucket_id, rgw_bucket* bucket_out)
 {
   void *handle = NULL;
   bool truncated = false;
   string s;
 
-  int ret = store->meta_list_keys_init("bucket.instance", marker, &handle);
+  int ret = store->meta_list_keys_init(dpp, "bucket.instance", marker, &handle);
   if (ret < 0) {
     cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
     store->meta_list_keys_complete(handle);
@@ -821,7 +821,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
     if (objs_to_unlink.size() > listing_max_entries) {
       if (fix_index) {
-	int r = bucket->remove_objs_from_index(objs_to_unlink);
+	int r = bucket->remove_objs_from_index(dpp, objs_to_unlink);
 	if (r < 0) {
 	  set_err_msg(err_msg, "ERROR: remove_obj_from_index() returned error: " +
 		      cpp_strerror(-r));
@@ -836,7 +836,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   }
 
   if (fix_index) {
-    int r = bucket->remove_objs_from_index(objs_to_unlink);
+    int r = bucket->remove_objs_from_index(dpp, objs_to_unlink);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: remove_obj_from_index() returned error: " +
               cpp_strerror(-r));
@@ -866,7 +866,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
 
-  bucket->set_tag_timeout(BUCKET_TAG_TIMEOUT);
+  bucket->set_tag_timeout(dpp, BUCKET_TAG_TIMEOUT);
 
   string prefix;
   string empty_delimiter;
@@ -895,27 +895,28 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
 
   formatter->close_section();
 
-  bucket->set_tag_timeout(0);
+  bucket->set_tag_timeout(dpp, 0);
 
   return 0;
 }
 
 
-int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
+int RGWBucket::check_index(const DoutPrefixProvider *dpp,
+        RGWBucketAdminOpState& op_state,
         map<RGWObjCategory, RGWStorageStats>& existing_stats,
         map<RGWObjCategory, RGWStorageStats>& calculated_stats,
         std::string *err_msg)
 {
   bool fix_index = op_state.will_fix_index();
 
-  int r = bucket->check_index(existing_stats, calculated_stats);
+  int r = bucket->check_index(dpp, existing_stats, calculated_stats);
   if (r < 0) {
     set_err_msg(err_msg, "failed to check index error=" + cpp_strerror(-r));
     return r;
   }
 
   if (fix_index) {
-    r = bucket->rebuild_index();
+    r = bucket->rebuild_index(dpp);
     if (r < 0) {
       set_err_msg(err_msg, "failed to rebuild index err=" + cpp_strerror(-r));
       return r;
@@ -948,13 +949,13 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   int shard_id = bucket->get_info().layout.current_index.layout.normal.num_shards? 0 : -1;
 
   if (!sync) {
-    r = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->bilog_rados->log_stop(bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->bilog_rados->log_stop(dpp, bucket->get_info(), -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing stop bilog:" + cpp_strerror(-r));
       return r;
     }
   } else {
-    r = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->bilog_rados->log_start(bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->bilog_rados->log_start(dpp, bucket->get_info(), -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing resync bilog:" + cpp_strerror(-r));
       return r;
@@ -1149,7 +1150,7 @@ int RGWBucketAdminOp::check_index(rgw::sal::RGWStore *store, RGWBucketAdminOpSta
   if (ret < 0)
     return ret;
 
-  ret = bucket.check_index(op_state, existing_stats, calculated_stats);
+  ret = bucket.check_index(dpp, op_state, existing_stats, calculated_stats);
   if (ret < 0)
     return ret;
 
@@ -1219,7 +1220,7 @@ static int bucket_stats(rgw::sal::RGWStore *store,
 
   string bucket_ver, master_ver;
   string max_marker;
-  ret = bucket->get_bucket_stats(RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
     return ret;
@@ -1326,7 +1327,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::RGWStore *store,
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->get_bucket_stats(RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+	ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)
 	  continue;
@@ -1457,7 +1458,7 @@ int RGWBucketAdminOp::info(rgw::sal::RGWStore *store,
     bool truncated = true;
 
     formatter->open_array_section("buckets");
-    ret = store->meta_list_keys_init("bucket", string(), &handle);
+    ret = store->meta_list_keys_init(dpp, "bucket", string(), &handle);
     while (ret == 0 && truncated) {
       std::list<std::string> buckets;
       constexpr int max_keys = 1000;
@@ -1585,7 +1586,7 @@ void get_stale_instances(rgw::sal::RGWStore *store, const std::string& bucket_na
     r = reshard_lock.lock();
     if (r < 0) {
       // most likely bucket is under reshard, return the sureshot stale instances
-      ldout(store->ctx(), 5) << __func__
+      ldpp_dout(dpp, 5) << __func__
                              << "failed to take reshard lock; reshard underway likey" << dendl;
       return;
     }
@@ -1612,7 +1613,7 @@ static int process_stale_instances(rgw::sal::RGWStore *store, RGWBucketAdminOpSt
   Formatter *formatter = flusher.get_formatter();
   static constexpr auto default_max_keys = 1000;
 
-  int ret = store->meta_list_keys_init("bucket.instance", marker, &handle);
+  int ret = store->meta_list_keys_init(dpp, "bucket.instance", marker, &handle);
   if (ret < 0) {
     cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -1748,7 +1749,7 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::RGWStore *store,
     process_single_lc_entry(store, formatter, user_id.tenant, bucket_name, dpp);
     formatter->flush(cout);
   } else {
-    int ret = store->meta_list_keys_init("bucket", marker, &handle);
+    int ret = store->meta_list_keys_init(dpp, "bucket", marker, &handle);
     if (ret < 0) {
       std::cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -2218,7 +2219,7 @@ public:
     ret = svc.bucket->store_bucket_entrypoint_info(ctx, RGWSI_Bucket::get_entrypoint_meta_key(new_be.bucket),
                                                    new_be, true, mtime, &attrs, nullptr, y, dpp);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
     }
 
@@ -2226,7 +2227,7 @@ public:
 
     ret = ctl.bucket->link_bucket(new_be.owner, new_be.bucket, new_be.creation_time, y, dpp, false);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
     }
 
@@ -2234,7 +2235,7 @@ public:
 
     ret = ctl.bucket->unlink_bucket(be.owner, entry_bucket, y, dpp, false);
     if (ret < 0) {
-        lderr(cct) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+        ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
     // if (ret == -ECANCELED) it means that there was a race here, and someone
@@ -2248,7 +2249,7 @@ public:
                                                     y,
                                                     dpp);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
     }
 
@@ -2544,7 +2545,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = bihandler->svc.bi->init_index(bci.info);
+  int ret = bihandler->svc.bi->init_index(dpp, bci.info);
   if (ret < 0) {
     return ret;
   }
@@ -2557,7 +2558,7 @@ public:
   RGWArchiveBucketInstanceMetadataHandler() {}
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) override {
-    ldout(cct, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
+    ldpp_dout(dpp, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
     return 0;
   }
 };
@@ -2853,7 +2854,7 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
                                                     &entry_point, &ot, &ep_mtime, &attrs, y, dpp);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: get_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: get_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket << dendl;
     return ret;
   }
 
@@ -2868,7 +2869,7 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 
   ret = do_store_linked_bucket_info(ctx, info, nullptr, false, ep_mtime, &ot.write_version, &attrs, true, y, dpp);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to put_linked_bucket_info(): " << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to put_linked_bucket_info(): " << ret << dendl;
     return ret;
   }
 
@@ -2888,7 +2889,7 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
       /* an old bucket object, need to convert it */
         int ret = convert_old_bucket_info(ctx, bucket, y, dpp);
         if (ret < 0) {
-          ldout(cct, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
           return ret;
         }
     }
@@ -2948,7 +2949,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                                     nullptr, &attrs,
                                                     y, dpp);
       if (ret < 0 && ret != -ENOENT) {
-        ldout(cct, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
+        ldpp_dout(dpp, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
                       << cpp_strerror(-ret) << dendl;
       }
       pattrs = &attrs;
@@ -2957,7 +2958,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 
   ret = ctl.user->add_bucket(dpp, user_id, bucket, creation_time, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
+    ldpp_dout(dpp, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
                   << " bucket=" << bucket
 		  << " err=" << cpp_strerror(-ret)
@@ -2981,7 +2982,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 done_err:
   int r = do_unlink_bucket(ctx, user_id, bucket, true, y, dpp);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed unlinking bucket on error cleanup: "
+    ldpp_dout(dpp, 0) << "ERROR: failed unlinking bucket on error cleanup: "
                            << cpp_strerror(-r) << dendl;
   }
   return ret;
@@ -3075,7 +3076,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWStore *store, rgw::sal::RGWBucket* bucket,
     results.objs.clear();
     int ret = bucket->list(dpp, params, max_entries, results, y);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
 
@@ -3087,7 +3088,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWStore *store, rgw::sal::RGWBucket* bucket,
 
       ret = r_obj->get_obj_attrs(&obj_ctx, y, dpp);
       if (ret < 0){
-        ldout(store->ctx(), 0) << "ERROR: failed to read object " << obj.key.name << cpp_strerror(-ret) << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to read object " << obj.key.name << cpp_strerror(-ret) << dendl;
         continue;
       }
       const auto& aiter = r_obj->get_attrs().find(RGW_ATTR_ACL);
@@ -3131,7 +3132,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWStore *store, rgw::sal::RGWBucket* bucket,
 	attrs[RGW_ATTR_ACL] = bl;
 	ret = r_obj->set_obj_attrs(dpp, &obj_ctx, &attrs, nullptr, y);
         if (ret < 0) {
-          ldout(store->ctx(), 0) << "ERROR: modify attr failed " << cpp_strerror(-ret) << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-ret) << dendl;
           return ret;
         }
       }
@@ -3170,7 +3171,7 @@ int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp,
   if (!pent) {
     pent = &ent;
   }
-  int r = svc.bi->read_stats(bucket_info, pent, null_yield);
+  int r = svc.bi->read_stats(dpp, bucket_info, pent, null_yield);
   if (r < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
     return r;
@@ -3189,7 +3190,7 @@ int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
     return svc.bucket_sync->get_policy_handler(ctx, zone, bucket, phandler, y, dpp);
   });
   if (r < 0) {
-    ldout(cct, 20) << __func__ << "(): failed to get policy handler for bucket=" << bucket << " (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): failed to get policy handler for bucket=" << bucket << " (r=" << r << ")" << dendl;
     return r;
   }
   return 0;

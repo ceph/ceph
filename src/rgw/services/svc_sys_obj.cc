@@ -113,14 +113,14 @@ int RGWSI_SysObj::Obj::WOp::write_attr(const DoutPrefixProvider *dpp, const char
   return svc->set_attrs(dpp, obj, m, nullptr, objv_tracker, y);
 }
 
-int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, std::function<void(const string&)> cb)
+int RGWSI_SysObj::Pool::list_prefixed_objs(const DoutPrefixProvider *dpp, const string& prefix, std::function<void(const string&)> cb)
 {
-  return core_svc->pool_list_prefixed_objs(pool, prefix, cb);
+  return core_svc->pool_list_prefixed_objs(dpp, pool, prefix, cb);
 }
 
-int RGWSI_SysObj::Pool::Op::init(const string& marker, const string& prefix)
+int RGWSI_SysObj::Pool::Op::init(const DoutPrefixProvider *dpp, const string& marker, const string& prefix)
 {
-  return source.core_svc->pool_list_objects_init(source.pool, marker, prefix, &ctx);
+  return source.core_svc->pool_list_objects_init(dpp, source.pool, marker, prefix, &ctx);
 }
 
 int RGWSI_SysObj::Pool::Op::get_next(int max, vector<string> *oids, bool *is_truncated)

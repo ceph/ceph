@@ -50,7 +50,9 @@ class RadosFixture : public ::testing::Test {
  protected:
   RGWSI_RADOS::Obj make_obj(const std::string& oid) {
     auto obj = RadosEnv::rados->obj({{RadosEnv::poolname}, oid});
-    ceph_assert_always(0 == obj.open());
+    RadosEnv::rados.emplace(g_ceph_context);
+    const NoDoutPrefix no_dpp(g_ceph_context, 1);
+    ceph_assert_always(0 == obj.open(&no_dpp));
     return obj;
   }
 };

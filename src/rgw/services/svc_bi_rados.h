@@ -36,13 +36,16 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {
   friend class RGWSI_BILog_RADOS;
 
-  int open_pool(const rgw_pool& pool,
+  int open_pool(const DoutPrefixProvider *dpp,
+                const rgw_pool& pool,
                 RGWSI_RADOS::Pool *index_pool,
                 bool mostly_omap);
 
-  int open_bucket_index_pool(const RGWBucketInfo& bucket_info,
+  int open_bucket_index_pool(const DoutPrefixProvider *dpp,
+                            const RGWBucketInfo& bucket_info,
                             RGWSI_RADOS::Pool *index_pool);
-  int open_bucket_index_base(const RGWBucketInfo& bucket_info,
+  int open_bucket_index_base(const DoutPrefixProvider *dpp,
+                             const RGWBucketInfo& bucket_info,
                              RGWSI_RADOS::Pool *index_pool,
                              string *bucket_oid_base);
 
@@ -55,7 +58,8 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               uint32_t num_shards, rgw::BucketHashType hash_type,
                               string *bucket_obj, int *shard_id);
 
-  int cls_bucket_head(const RGWBucketInfo& bucket_info,
+  int cls_bucket_head(const DoutPrefixProvider *dpp,
+                      const RGWBucketInfo& bucket_info,
                       int shard_id,
                       vector<rgw_bucket_dir_header> *headers,
                       map<int, string> *bucket_instance_ids,
@@ -92,37 +96,42 @@ public:
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  int init_index(RGWBucketInfo& bucket_info);
-  int clean_index(RGWBucketInfo& bucket_info);
+  int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
+  int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
 
 
   /* RADOS specific */
 
-  int read_stats(const RGWBucketInfo& bucket_info,
+  int read_stats(const DoutPrefixProvider *dpp,
+                 const RGWBucketInfo& bucket_info,
                  RGWBucketEnt *stats,
                  optional_yield y) override;
 
-  int get_reshard_status(const RGWBucketInfo& bucket_info,
+  int get_reshard_status(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
                          std::list<cls_rgw_bucket_instance_entry> *status);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info) override;
 
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
+  int open_bucket_index_shard(const DoutPrefixProvider *dpp,
+                              const RGWBucketInfo& bucket_info,
                               const string& obj_key,
                               RGWSI_RADOS::Obj *bucket_obj,
                               int *shard_id);
 
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
+  int open_bucket_index_shard(const DoutPrefixProvider *dpp,
+                              const RGWBucketInfo& bucket_info,
                               int shard_id,
                               const rgw::bucket_index_layout_generation& idx_layout,
                               RGWSI_RADOS::Obj *bucket_obj);
 
-  int open_bucket_index(const RGWBucketInfo& bucket_info,
+  int open_bucket_index(const DoutPrefixProvider *dpp,
+                        const RGWBucketInfo& bucket_info,
                         RGWSI_RADOS::Pool *index_pool,
                         string *bucket_oid);
 
-  int open_bucket_index(const RGWBucketInfo& bucket_info,
+  int open_bucket_index(const DoutPrefixProvider *dpp,
+                        const RGWBucketInfo& bucket_info,
                         std::optional<int> shard_id,
                         RGWSI_RADOS::Pool *index_pool,
                         map<int, string> *bucket_objs,

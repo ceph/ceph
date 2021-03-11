@@ -55,10 +55,10 @@ uint64_t RGWSI_RADOS::instance_id()
   return get_rados_handle()->get_instance_id();
 }
 
-int RGWSI_RADOS::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
+int RGWSI_RADOS::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
                                const OpenParams& params)
 {
-  return rgw_init_ioctx(get_rados_handle(), pool, io_ctx,
+  return rgw_init_ioctx(dpp, get_rados_handle(), pool, io_ctx,
                         params.create,
                         params.mostly_omap);
 }
@@ -106,9 +106,9 @@ void RGWSI_RADOS::Obj::init(const rgw_raw_obj& obj)
   ref.obj = obj;
 }
 
-int RGWSI_RADOS::Obj::open()
+int RGWSI_RADOS::Obj::open(const DoutPrefixProvider *dpp)
 {
-  int r = ref.pool.open();
+  int r = ref.pool.open(dpp);
   if (r < 0) {
     return r;
   }
@@ -286,12 +286,12 @@ int RGWSI_RADOS::Pool::lookup()
   return 0;
 }
 
-int RGWSI_RADOS::Pool::open(const OpenParams& params)
+int RGWSI_RADOS::Pool::open(const DoutPrefixProvider *dpp, const OpenParams& params)
 {
-  return rados_svc->open_pool_ctx(pool, state.ioctx, params);
+  return rados_svc->open_pool_ctx(dpp, pool, state.ioctx, params);
 }
 
-int RGWSI_RADOS::Pool::List::init(const string& marker, RGWAccessListFilter *filter)
+int RGWSI_RADOS::Pool::List::init(const DoutPrefixProvider *dpp, const string& marker, RGWAccessListFilter *filter)
 {
   if (ctx.initialized) {
     return -EINVAL;
@@ -301,14 +301,14 @@ int RGWSI_RADOS::Pool::List::init(const string& marker, RGWAccessListFilter *fil
     return -EINVAL;
   }
 
-  int r = pool->rados_svc->open_pool_ctx(pool->pool, ctx.ioctx);
+  int r = pool->rados_svc->open_pool_ctx(dpp, pool->pool, ctx.ioctx);
   if (r < 0) {
     return r;
   }
 
   librados::ObjectCursor oc;
   if (!oc.from_str(marker)) {
-    ldout(pool->rados_svc->cct, 10) << "failed to parse cursor: " << marker << dendl;
+    ldpp_dout(dpp, 10) << "failed to parse cursor: " << marker << dendl;
     return -EINVAL;
   }
 

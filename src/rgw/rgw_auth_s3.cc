@@ -188,7 +188,7 @@ bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
   if (content_md5) {
     for (const char *p = content_md5; *p; p++) {
       if (!is_base64_for_content_md5(*p)) {
-        dout(0) << "NOTICE: bad content-md5 provided (not base64),"
+        ldpp_dout(dpp, 0) << "NOTICE: bad content-md5 provided (not base64),"
                 << " aborting request p=" << *p << " " << (int)*p << dendl;
         return false;
       }
@@ -209,7 +209,7 @@ bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
     if (str == NULL) {
       req_date = info.env->get("HTTP_DATE");
       if (!req_date) {
-        dout(0) << "NOTICE: missing date for auth header" << dendl;
+        ldpp_dout(dpp, 0) << "NOTICE: missing date for auth header" << dendl;
         return false;
       }
       date = req_date;
@@ -218,11 +218,11 @@ bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
     if (header_time) {
       struct tm t;
       if (!parse_rfc2616(req_date, &t)) {
-        dout(0) << "NOTICE: failed to parse date for auth header" << dendl;
+        ldpp_dout(dpp, 0) << "NOTICE: failed to parse date for auth header" << dendl;
         return false;
       }
       if (t.tm_year < 70) {
-        dout(0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
+        ldpp_dout(dpp, 0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
         return false;
       }
       *header_time = utime_t(internal_timegm(&t), 0);

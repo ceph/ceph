@@ -66,17 +66,17 @@ int seed::get_torrent_file(rgw::sal::RGWObject* object,
 
   string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
-  ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
+  ldpp_dout(s, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
   const set<string> obj_key{RGW_OBJ_TORRENT};
   map<string, bufferlist> m;
-  const int r = object->omap_get_vals_by_keys(oid, obj_key, &m);
+  const int r = object->omap_get_vals_by_keys(s, oid, obj_key, &m);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
+    ldpp_dout(s, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
     return r;
   }
   if (m.size() != 1) {
-    ldout(s->cct, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
+    ldpp_dout(s, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
     return -EINVAL;
   }
   bl.append(std::move(m.begin()->second));

@@ -448,7 +448,7 @@ int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
   RGWListRawObjsCtx ctx;
   do {
     list<string> oids;
-    int r = store->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
+    int r = store->list_raw_objects(dpp, pool, prefix, 1000, ctx, oids, &is_truncated);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
                   << prefix << ": " << cpp_strerror(-r) << dendl;

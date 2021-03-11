@@ -258,8 +258,8 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     stop();
   }
 
-  int start() {
-    int r = store->getRados()->get_raw_obj_ref(obj, &ref);
+  int start(const DoutPrefixProvider *dpp) {
+    int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
     if (r < 0) {
       return r;
     }
@@ -274,13 +274,13 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
       }
     }
     if (r < 0) {
-      lderr(store->ctx()) << "Failed to watch " << ref.obj
+      ldpp_dout(dpp, -1) << "Failed to watch " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
       ref.pool.ioctx().close();
       return r;
     }
 
-    ldout(store->ctx(), 10) << "Watching " << ref.obj.oid << dendl;
+    ldpp_dout(dpp, 10) << "Watching " << ref.obj.oid << dendl;
     return 0;
   }
 
@@ -658,15 +658,15 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
   std::string marker;
 
   // start a listing at the given marker
-  int r = mgr->list_keys_init(section, start_marker, &handle);
+  int r = mgr->list_keys_init(dpp, section, start_marker, &handle);
   if (r == -EINVAL) {
     // restart with empty marker below
   } else if (r < 0) {
-    ldout(cct, 10) << "failed to init metadata listing: "
+    ldpp_dout(dpp, 10) << "failed to init metadata listing: "
         << cpp_strerror(r) << dendl;
     return r;
   } else {
-    ldout(cct, 20) << "starting metadata listing at " << start_marker << dendl;
+    ldpp_dout(dpp, 20) << "starting metadata listing at " << start_marker << dendl;
 
     // release the handle when scope exits
     auto g = make_scope_guard([=] { mgr->list_keys_complete(handle); });
@@ -675,7 +675,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
       // get the next key and marker
       r = mgr->list_keys_next(handle, 1, keys, &truncated);
       if (r < 0) {
-        ldout(cct, 10) << "failed to list metadata: "
+        ldpp_dout(dpp, 10) << "failed to list metadata: "
             << cpp_strerror(r) << dendl;
         return r;
       }
@@ -699,13 +699,13 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
   // restart the listing from the beginning (empty marker)
   handle = nullptr;
 
-  r = mgr->list_keys_init(section, "", &handle);
+  r = mgr->list_keys_init(dpp, section, "", &handle);
   if (r < 0) {
-    ldout(cct, 10) << "failed to restart metadata listing: "
+    ldpp_dout(dpp, 10) << "failed to restart metadata listing: "
         << cpp_strerror(r) << dendl;
     return r;
   }
-  ldout(cct, 20) << "restarting metadata listing" << dendl;
+  ldpp_dout(dpp, 20) << "restarting metadata listing" << dendl;
 
   // release the handle when scope exits
   auto g = make_scope_guard([=] { mgr->list_keys_complete(handle); });
@@ -713,7 +713,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
     // get the next key and marker
     r = mgr->list_keys_next(handle, 1, keys, &truncated);
     if (r < 0) {
-      ldout(cct, 10) << "failed to list metadata: "
+      ldpp_dout(dpp, 10) << "failed to list metadata: "
           << cpp_strerror(r) << dendl;
       return r;
     }
@@ -1128,7 +1128,7 @@ BucketTrimManager::~BucketTrimManager() = default;
 
 int BucketTrimManager::init()
 {
-  return impl->watcher.start();
+  return impl->watcher.start(this);
 }
 
 void BucketTrimManager::on_bucket_changed(const std::string_view& bucket)

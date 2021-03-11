@@ -192,7 +192,7 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
     notify_objs[i] = rados_svc->handle().obj({control_pool, notify_oid});
     auto& notify_obj = notify_objs[i];
 
-    int r = notify_obj.open();
+    int r = notify_obj.open(dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
       return r;

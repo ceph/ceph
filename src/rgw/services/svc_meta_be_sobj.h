@@ -165,7 +165,7 @@ public:
                    RGWObjVersionTracker *objv_tracker,
                    optional_yield y) override;
 
-  int list_init(RGWSI_MetaBackend::Context *_ctx, const string& marker) override;
+  int list_init(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *_ctx, const string& marker) override;
   int list_next(RGWSI_MetaBackend::Context *_ctx,
                 int max, list<string> *keys,
                 bool *truncated) override;

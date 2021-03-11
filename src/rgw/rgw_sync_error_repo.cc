@@ -71,7 +71,7 @@ class RGWErrorRepoWriteCR : public RGWSimpleCoroutine {
     if (r < 0) {
       return r;
     }
-    r = obj.open();
+    r = obj.open(dpp);
     if (r < 0) {
       return r;
     }
@@ -114,7 +114,7 @@ class RGWErrorRepoRemoveCR : public RGWSimpleCoroutine {
     if (r < 0) {
       return r;
     }
-    r = obj.open();
+    r = obj.open(dpp);
     if (r < 0) {
       return r;
     }

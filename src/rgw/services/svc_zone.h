@@ -146,10 +146,10 @@ public:
   bool can_reshard() const;
   bool is_syncing_bucket_meta(const rgw_bucket& bucket);
 
-  int list_zonegroups(list<string>& zonegroups);
-  int list_regions(list<string>& regions);
-  int list_zones(list<string>& zones);
-  int list_realms(list<string>& realms);
-  int list_periods(list<string>& periods);
+  int list_zonegroups(const DoutPrefixProvider *dpp, list<string>& zonegroups);
+  int list_regions(const DoutPrefixProvider *dpp, list<string>& regions);
+  int list_zones(const DoutPrefixProvider *dpp, list<string>& zones);
+  int list_realms(const DoutPrefixProvider *dpp, list<string>& realms);
+  int list_periods(const DoutPrefixProvider *dpp, list<string>& periods);
   int list_periods(const DoutPrefixProvider *dpp, const string& current_period, list<string>& periods, optional_yield y);
 };

@@ -313,19 +313,19 @@ int RGWMetaSyncStatusManager::init(const DoutPrefixProvider *dpp)
   }
 
   if (!store->svc()->zone->get_master_conn()) {
-    lderr(store->ctx()) << "no REST connection to master zone" << dendl;
+    ldpp_dout(dpp, -1) << "no REST connection to master zone" << dendl;
     return -EIO;
   }
 
-  int r = rgw_init_ioctx(store->getRados()->get_rados_handle(), store->svc()->zone->get_zone_params().log_pool, ioctx, true);
+  int r = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), store->svc()->zone->get_zone_params().log_pool, ioctx, true);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->svc()->zone->get_zone_params().log_pool << " ret=" << r << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to open log pool (" << store->svc()->zone->get_zone_params().log_pool << " ret=" << r << dendl;
     return r;
   }
 
   r = master_log.init();
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to init remote log, r=" << r << dendl;
     return r;
   }
 
@@ -2349,7 +2349,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
       io_complete();
     }), add_ref);
 
-  int ret = mdlog->get_info_async(shard_id, completion.get());
+  int ret = mdlog->get_info_async(sync_env->dpp, shard_id, completion.get());
   if (ret < 0) {
     ldpp_dout(sync_env->dpp, 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
     return set_cr_error(ret);
