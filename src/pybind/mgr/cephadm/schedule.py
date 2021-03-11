@@ -48,10 +48,11 @@ class DaemonPlacement(NamedTuple):
         # fixme: how to match against network?
         if self.name and self.name != dd.daemon_id:
             return False
-        if self.ip and self.ip != dd.ip:
-            return False
-        if self.port and [self.port] != dd.ports:
-            return False
+        if self.port:
+            if [self.port] != dd.ports:
+                return False
+            if self.ip != dd.ip:
+                return False
         return True
 
 
