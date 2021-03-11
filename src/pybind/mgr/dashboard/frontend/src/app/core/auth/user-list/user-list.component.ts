@@ -39,8 +39,8 @@ export class UserListComponent implements OnInit {
   tableActions: CdTableAction[];
   columns: CdTableColumn[];
   users: Array<any>;
-  expiration_warning_1: number;
-  expiration_warning_2: number;
+  expirationWarning1: number;
+  expirationWarning2: number;
   selection = new CdTableSelection();
 
   modalRef: NgbModalRef;
@@ -119,8 +119,8 @@ export class UserListComponent implements OnInit {
     ];
     const settings: string[] = ['USER_PWD_EXPIRATION_WARNING_1', 'USER_PWD_EXPIRATION_WARNING_2'];
     this.settingsService.getValues(settings).subscribe((data) => {
-      this.expiration_warning_1 = data['USER_PWD_EXPIRATION_WARNING_1'];
-      this.expiration_warning_2 = data['USER_PWD_EXPIRATION_WARNING_2'];
+      this.expirationWarning1 = data['USER_PWD_EXPIRATION_WARNING_1'];
+      this.expirationWarning2 = data['USER_PWD_EXPIRATION_WARNING_2'];
     });
   }
 
@@ -129,7 +129,6 @@ export class UserListComponent implements OnInit {
       users.forEach((user) => {
         if (user['pwdExpirationDate'] && user['pwdExpirationDate'] > 0) {
           user['pwdExpirationDate'] = user['pwdExpirationDate'] * 1000;
-          user['pwdExpirationDateInSeconds'] = (user['pwdExpirationDate'] - Date.now()) / 1000;
         }
       });
       this.users = users;
@@ -181,7 +180,7 @@ export class UserListComponent implements OnInit {
       return false;
     }
     const remainingDays = this.getRemainingDays(expirationDays);
-    if (remainingDays <= this.expiration_warning_1) {
+    if (remainingDays <= this.expirationWarning1) {
       return true;
     }
     return false;
@@ -189,11 +188,11 @@ export class UserListComponent implements OnInit {
 
   getWarningClass(row: any): any {
     const expirationDays = row['pwdExpirationDate'];
-    if (expirationDays === null || this.expiration_warning_1 > 10) {
+    if (expirationDays === null || this.expirationWarning1 > 10) {
       return '';
     }
     const remainingDays = this.getRemainingDays(expirationDays);
-    if (remainingDays <= this.expiration_warning_2) {
+    if (remainingDays <= this.expirationWarning2) {
       return 'danger-icon';
     } else {
       return 'warning-icon';

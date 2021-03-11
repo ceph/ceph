@@ -26,6 +26,7 @@
              let-value="value"
              let-row="row">
   <i *ngIf="shouldWarn(row)"
+     i18n-title
      title="User's password is about to expire"
      class="fa fa-exclamation-triangle"
      [ngClass]="getWarningClass(row)"></i>
