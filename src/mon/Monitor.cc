@@ -4190,31 +4190,30 @@ void Monitor::handle_route(MonOpRequestRef op)
     dout(10) << "handle_route tid " << m->session_mon_tid << " null" << dendl;
   
   // look it up
-  if (m->session_mon_tid) {
-    if (routed_requests.count(m->session_mon_tid)) {
-      RoutedRequest *rr = routed_requests[m->session_mon_tid];
-
-      // reset payload, in case encoding is dependent on target features
-      if (m->msg) {
-	m->msg->clear_payload();
-	rr->con->send_message(m->msg);
-	m->msg = NULL;
-      }
-      if (m->send_osdmap_first) {
-	dout(10) << " sending osdmaps from " << m->send_osdmap_first << dendl;
-	osdmon()->send_incremental(m->send_osdmap_first, rr->session,
-				   true, MonOpRequestRef());
-      }
-      ceph_assert(rr->tid == m->session_mon_tid && rr->session->routed_request_tids.count(m->session_mon_tid));
-      routed_requests.erase(m->session_mon_tid);
-      rr->session->routed_request_tids.erase(m->session_mon_tid);
-      delete rr;
-    } else {
-      dout(10) << " don't have routed request tid " << m->session_mon_tid << dendl;
-    }
-  } else {
+  if (!m->session_mon_tid) {
     dout(10) << " not a routed request, ignoring" << dendl;
+    return;
   }
+  auto found = routed_requests.find(m->session_mon_tid);
+  if (found == routed_requests.end()) {
+    dout(10) << " don't have routed request tid " << m->session_mon_tid << dendl;
+    return;
+  }
+  std::unique_ptr<RoutedRequest> rr{found->second};
+  // reset payload, in case encoding is dependent on target features
+  if (m->msg) {
+    m->msg->clear_payload();
+    rr->con->send_message(m->msg);
+    m->msg = NULL;
+  }
+  if (m->send_osdmap_first) {
+    dout(10) << " sending osdmaps from " << m->send_osdmap_first << dendl;
+    osdmon()->send_incremental(m->send_osdmap_first, rr->session,
+			       true, MonOpRequestRef());
+  }
+  ceph_assert(rr->tid == m->session_mon_tid && rr->session->routed_request_tids.count(m->session_mon_tid));
+  routed_requests.erase(found);
+  rr->session->routed_request_tids.erase(m->session_mon_tid);
 }
 
 void Monitor::resend_routed_requests()
