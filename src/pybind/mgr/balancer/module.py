@@ -1220,8 +1220,13 @@ class Module(MgrModule):
                                 'change balancer mode and retry might help'
 
     def get_compat_weight_set_weights(self, ms: MappingState):
-        if not CRUSHMap.have_default_choose_args(ms.crush_dump):
+        have_choose_args = CRUSHMap.have_default_choose_args(ms.crush_dump)
+        if have_choose_args:
+            # get number of buckets in choose_args
+            choose_args_len = len(CRUSHMap.get_default_choose_args(ms.crush_dump))
+        if not have_choose_args or choose_args_len != len(ms.crush_dump['buckets']):
             # enable compat weight-set first
+            self.log.debug('no choose_args or all buckets do not have weight-sets')
             self.log.debug('ceph osd crush weight-set create-compat')
             result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
