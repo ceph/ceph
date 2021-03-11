@@ -70,8 +70,7 @@ class TestMisc(CephFSTestCase):
 
         data_pool_name = self.fs.get_data_pool_name()
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
                                             '--yes-i-really-mean-it')
@@ -109,9 +108,10 @@ class TestMisc(CephFSTestCase):
                                             self.fs.metadata_pool_name,
                                             data_pool_name, "--force")
 
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'fail', self.fs.name)
+
         self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
                                             '--yes-i-really-mean-it')
-
 
         self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
                                             self.fs.metadata_pool_name,

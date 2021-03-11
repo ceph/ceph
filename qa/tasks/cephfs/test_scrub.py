@@ -12,8 +12,9 @@ ValidationError = namedtuple("ValidationError", ["exception", "backtrace"])
 
 
 class Workload(CephFSTestCase):
-    def __init__(self, filesystem, mount):
+    def __init__(self, test, filesystem, mount):
         super().__init__()
+        self._test =  test
         self._mount = mount
         self._filesystem = filesystem
         self._initial_state = None
@@ -94,13 +95,13 @@ class DupInodeWorkload(Workload):
         temp_bin_path = "/tmp/10000000000.00000000_omap.bin"
         self._mount.umount_wait()
         self._filesystem.mds_asok(["flush", "journal"])
-        self._filesystem.mds_stop()
+        self._filesystem.fail()
         self._filesystem.rados(["getomapval", "10000000000.00000000",
                                 "parentfile_head", temp_bin_path])
         self._filesystem.rados(["setomapval", "10000000000.00000000",
                                 "shadow_head"], stdin_file=temp_bin_path)
-        self._filesystem.set_ceph_conf('mds', 'mds hack allow loading invalid metadata', True)
-        self._filesystem.mds_restart()
+        self._test.config_set('mds', 'mds_hack_allow_loading_invalid_metadata', True)
+        self._filesystem.set_joinable()
         self._filesystem.wait_for_daemons()
 
     def validate(self):
@@ -170,10 +171,10 @@ class TestScrub(CephFSTestCase):
         self.assertEqual(self._get_damage_count(), 0)
 
     def test_scrub_backtrace_for_new_files(self):
-        self._scrub_new_files(BacktraceWorkload(self.fs, self.mount_a))
+        self._scrub_new_files(BacktraceWorkload(self, self.fs, self.mount_a))
 
     def test_scrub_backtrace(self):
-        self._scrub(BacktraceWorkload(self.fs, self.mount_a))
+        self._scrub(BacktraceWorkload(self, self.fs, self.mount_a))
 
     def test_scrub_dup_inode(self):
-        self._scrub(DupInodeWorkload(self.fs, self.mount_a))
+        self._scrub(DupInodeWorkload(self, self.fs, self.mount_a))
