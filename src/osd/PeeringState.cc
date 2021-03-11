@@ -2002,7 +2002,7 @@ void PeeringState::calc_replicated_acting_stretch(
       osd,
       pool.info.peering_crush_bucket_barrier,
       pool.info.crush_rule);
-    return ancestors[ancestor];
+    return &ancestors[ancestor];
   };
 
   unsigned bucket_max = pool.info.size / pool.info.peering_crush_bucket_target;
@@ -2019,7 +2019,7 @@ void PeeringState::calc_replicated_acting_stretch(
       want->push_back(osd);
       acting_backfill->insert(
 	pg_shard_t(osd, shard_id_t::NO_SHARD));
-      get_ancestor(osd).inc_selected();
+      get_ancestor(osd)->inc_selected();
     }
   };
   add_required(primary->first.osd);
@@ -2078,7 +2078,7 @@ void PeeringState::calc_replicated_acting_stretch(
 
     // We then filter these candidates by ancestor
     std::for_each(candidates.begin(), candidates.end(), [&](auto cand) {
-      get_ancestor(cand.second).add_osd(cand.first, cand.second);
+      get_ancestor(cand.second)->add_osd(cand.first, cand.second);
     });
   }
 
