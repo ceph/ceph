@@ -2036,6 +2036,10 @@ TEST(LibCephFS, ShutdownRace)
   ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rold), 0);
   rnew = rold;
   rnew.rlim_cur = rnew.rlim_max;
+
+  cout << "Setting RLIMIT_NOFILE from " << rold.rlim_cur <<
+	  " to " << rnew.rlim_cur << std::endl;
+
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rnew), 0);
 
   for (int i = 0; i < nthreads; ++i)
