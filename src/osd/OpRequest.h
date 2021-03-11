@@ -80,6 +80,7 @@ protected:
   void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
   void _unregistered() override;
   bool filter_out(const std::set<std::string>& filters) override;
+  void _dump_op_priority(unsigned& priority) const override;
 
 public:
   ~OpRequest() override {

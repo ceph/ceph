@@ -93,6 +93,11 @@ void OpRequest::_dump_op_descriptor_unlocked(ostream& stream) const
   get_req()->print(stream);
 }
 
+void OpRequest::_dump_op_priority(unsigned& priority) const
+{
+  priority = get_req()->get_priority();
+}
+
 void OpRequest::_unregistered() {
   request->clear_data();
   request->clear_payload();

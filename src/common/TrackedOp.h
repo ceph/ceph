@@ -262,6 +262,7 @@ protected:
   mutable std::string desc_str;   ///< protected by lock
   mutable const char *desc = nullptr;  ///< readable without lock
   mutable std::atomic<bool> want_new_desc = {false};
+  mutable unsigned priority = 0;
 
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
@@ -278,6 +279,8 @@ protected:
   virtual void _dump_op_descriptor_unlocked(std::ostream& stream) const = 0;
   /// called when the last non-OpTracker reference is dropped
   virtual void _unregistered() {}
+  /// return priority value of the Op
+  virtual void _dump_op_priority(unsigned& priority) const {}
 
   virtual bool filter_out(const std::set<std::string>& filters) { return true; }
 
@@ -333,6 +336,15 @@ public:
       _gen_desc();
     }
     return desc;
+  }
+  unsigned get_priority() const {
+    if (0 == priority) {
+      std::lock_guard l(lock);
+      unsigned _priority;
+      _dump_op_priority(_priority);
+      priority = _priority;
+    }
+    return priority;
   }
 private:
   void _gen_desc() const {

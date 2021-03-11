@@ -478,6 +478,7 @@ void TrackedOp::dump(utime_t now, Formatter *f) const
   if (!state)
     return;
   f->dump_string("description", get_desc());
+  f->dump_unsigned("priority", get_priority());
   f->dump_stream("initiated_at") << get_initiated();
   f->dump_float("age", now - get_initiated());
   f->dump_float("duration", get_duration());
