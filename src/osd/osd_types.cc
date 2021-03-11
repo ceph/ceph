@@ -2213,6 +2213,7 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
 bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
 				     std::ostream * out) const
 {
+  if (!is_stretch_pool()) return true;
   const uint32_t barrier_id = peering_crush_bucket_barrier;
   const uint32_t barrier_count = peering_crush_bucket_count;
   set<int> ancestors;

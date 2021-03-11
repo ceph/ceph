@@ -1444,6 +1444,7 @@ public:
 			    std::ostream *out) const;
   bool stretch_set_can_peer(const vector<int>& want, const OSDMap& osdmap,
 			    std::ostream *out) const {
+    if (!is_stretch_pool()) return true;
     set<int> swant;
     for (auto i : want) swant.insert(i);
     return stretch_set_can_peer(swant, osdmap, out);
