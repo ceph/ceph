@@ -235,6 +235,9 @@ class Module(MgrModule):
                 }
 
     def get_daemon_stats(self, now: str) -> Iterator[Dict[str, Any]]:
+        osd_devices = {
+            osd['id']: osd for osd in self.get('osd_map_crush')['devices']
+        }
         for daemon, counters in self.get_all_perf_counters().items():
             svc_type, svc_id = daemon.split(".", 1)
             metadata = self.get_metadata(svc_type, svc_id)
@@ -255,7 +258,9 @@ class Module(MgrModule):
                         "ceph_daemon": daemon,
                         "type_instance": path,
                         "host": hostname,
-                        "fsid": self.get_fsid()
+                        "fsid": self.get_fsid(),
+                        "device_class": osd_devices.get(int(svc_id), {}).get('class')
+                                        if svc_type == 'osd' else None
                     },
                     "time": now,
                     "fields": {
