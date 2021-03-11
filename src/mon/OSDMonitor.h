@@ -236,6 +236,7 @@ public:
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
+  utime_t get_grace_time(utime_t now, int target_osd, failure_info_t& fi) const;
   void force_failure(int target_osd, int by);
 
   bool _have_pending_crush();
