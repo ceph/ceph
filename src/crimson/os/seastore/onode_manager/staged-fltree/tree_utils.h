@@ -16,7 +16,6 @@
 #include "crimson/common/log.h"
 #include "stages/key_layout.h"
 #include "tree.h"
-#include "test/crimson/seastore/onode_tree/test_value.h"
 
 /**
  * tree_utils.h
@@ -26,22 +25,48 @@
 
 namespace crimson::os::seastore::onode {
 
-using TestBtree = Btree<TestValue>;
+/**
+ * ValueItem template to work with tree utility classes:
+ *
+ * struct ValueItem {
+ *   using ValueType = ConcreteValueType;
+ *   <public members>
+ *
+ *   value_size_t get_payload_size() const;
+ *   void initialize(Transaction& t, ValueType& value) const;
+ *   void validate(ValueType& value) const;
+ *   static ValueItem create(std::size_t expected_size, std::size_t id);
+ * };
+ * std::ostream& operator<<(std::ostream& os, const ValueItem& item);
+ */
 
-struct value_item_t {
-  value_size_t size;
-  TestValue::id_t id;
-  TestValue::magic_t magic;
-
-  TestBtree::tree_value_config_t get_config() const {
-    assert(size > sizeof(value_header_t));
-    return {static_cast<value_size_t>(size - sizeof(value_header_t))};
-  }
-};
-inline std::ostream& operator<<(std::ostream& os, const value_item_t& item) {
-  return os << "ValueItem(#" << item.id << ", " << item.size << "B)";
+template <typename ValueItem>
+void initialize_cursor_from_item(
+    Transaction& t,
+    const ghobject_t& key,
+    const ValueItem& item,
+    typename Btree<typename ValueItem::ValueType>::Cursor& cursor,
+    bool insert_success) {
+  ceph_assert(insert_success);
+  ceph_assert(!cursor.is_end());
+  ceph_assert(cursor.get_ghobj() == key);
+  auto tree_value = cursor.value();
+  item.initialize(t, tree_value);
 }
 
+
+template <typename ValueItem>
+void validate_cursor_from_item(
+    const ghobject_t& key,
+    const ValueItem& item,
+    typename Btree<typename ValueItem::ValueType>::Cursor& cursor) {
+  ceph_assert(!cursor.is_end());
+  ceph_assert(cursor.get_ghobj() == key);
+  auto value = cursor.value();
+  item.validate(value);
+}
+
+template <typename ValueItem>
 class Values {
  public:
   Values(size_t n) {
@@ -60,48 +85,22 @@ class Values {
 
   ~Values() = default;
 
-  value_item_t create(size_t _size) {
-    ceph_assert(_size <= std::numeric_limits<value_size_t>::max());
-    ceph_assert(_size > sizeof(value_header_t));
-    value_size_t size = _size;
-    auto current_id = id++;
-    return value_item_t{size, current_id, (TestValue::magic_t)current_id * 137};
+  ValueItem create(size_t size) {
+    return ValueItem::create(size, id++);
   }
 
-  value_item_t pick() const {
+  ValueItem pick() const {
     auto index = rd() % values.size();
     return values[index];
   }
 
-  static void initialize_cursor(
-      Transaction& t,
-      TestBtree::Cursor& cursor,
-      const value_item_t& item) {
-    ceph_assert(!cursor.is_end());
-    auto value = cursor.value();
-    ceph_assert(value.get_payload_size() + sizeof(value_header_t) == item.size);
-    value.set_id_replayable(t, item.id);
-    value.set_tail_magic_replayable(t, item.magic);
-  }
-
-  static void validate_cursor(
-      TestBtree::Cursor& cursor,
-      const ghobject_t& key,
-      const value_item_t& item) {
-    ceph_assert(!cursor.is_end());
-    ceph_assert(cursor.get_ghobj() == key);
-    auto value = cursor.value();
-    ceph_assert(value.get_payload_size() + sizeof(value_header_t) == item.size);
-    ceph_assert(value.get_id() == item.id);
-    ceph_assert(value.get_tail_magic() == item.magic);
-  }
-
  private:
-  TestValue::id_t id = 0;
+  std::size_t id = 0;
   mutable std::random_device rd;
-  std::vector<value_item_t> values;
+  std::vector<ValueItem> values;
 };
 
+template <typename ValueItem>
 class KVPool {
   struct kv_conf_t {
     index_t index2;
@@ -109,7 +108,7 @@ class KVPool {
     index_t index0;
     size_t ns_size;
     size_t oid_size;
-    value_item_t value;
+    ValueItem value;
 
     ghobject_t get_ghobj() const {
       assert(index1 < 10);
@@ -137,7 +136,7 @@ class KVPool {
   using kv_vector_t = std::vector<kv_conf_t>;
 
  public:
-  using kv_t = std::pair<ghobject_t, value_item_t>;
+  using kv_t = std::pair<ghobject_t, ValueItem>;
 
   KVPool(const std::vector<size_t>& str_sizes,
          const std::vector<size_t>& value_sizes,
@@ -224,19 +223,21 @@ class KVPool {
 
  private:
   std::vector<size_t> str_sizes;
-  Values values;
+  Values<ValueItem> values;
   kv_vector_t kvs;
   kv_vector_t random_kvs;
 };
 
-template <bool TRACK>
+template <bool TRACK, typename ValueItem>
 class TreeBuilder {
  public:
-  using ertr = TestBtree::btree_ertr;
+  using BtreeImpl = Btree<typename ValueItem::ValueType>;
+  using BtreeCursor = typename BtreeImpl::Cursor;
+  using ertr = typename BtreeImpl::btree_ertr;
   template <class ValueT=void>
-  using future = ertr::future<ValueT>;
+  using future = typename ertr::template future<ValueT>;
 
-  TreeBuilder(KVPool& kvs, NodeExtentManagerURef&& nm)
+  TreeBuilder(KVPool<ValueItem>& kvs, NodeExtentManagerURef&& nm)
       : kvs{kvs} {
     tree.emplace(std::move(nm));
   }
@@ -265,39 +266,39 @@ class TreeBuilder {
 
   future<> insert(Transaction& t) {
     kv_iter = kvs.random_begin();
-    auto cursors = seastar::make_lw_shared<std::vector<TestBtree::Cursor>>();
+    auto cursors = seastar::make_lw_shared<std::vector<BtreeCursor>>();
     logger().warn("start inserting {} kvs ...", kvs.size());
     auto start_time = mono_clock::now();
     return crimson::do_until([&t, this, cursors]() -> future<bool> {
       if (kv_iter.is_end()) {
-        return ertr::make_ready_future<bool>(true);
+        return ertr::template make_ready_future<bool>(true);
       }
       auto [key, value] = kv_iter.get_kv();
       logger().debug("[{}] {} -> {}", kv_iter.index(), key_hobj_t{key}, value);
-      return tree->insert(t, key, value.get_config()
-      ).safe_then([&t, this, cursors, value](auto ret) {
+      return tree->insert(
+          t, key, {value.get_payload_size()}
+      ).safe_then([&t, this, cursors, key, value](auto ret) {
         auto& [cursor, success] = ret;
-        assert(success == true);
-        Values::initialize_cursor(t, cursor, value);
+        initialize_cursor_from_item(t, key, value, cursor, success);
         if constexpr (TRACK) {
           cursors->emplace_back(cursor);
         }
 #ifndef NDEBUG
         auto [key, value] = kv_iter.get_kv();
-        Values::validate_cursor(cursor, key, value);
+        validate_cursor_from_item(key, value, cursor);
         return tree->find(t, key
         ).safe_then([this, cursor](auto cursor_) mutable {
           assert(!cursor_.is_end());
           auto [key, value] = kv_iter.get_kv();
           ceph_assert(cursor_.get_ghobj() == key);
           ceph_assert(cursor_.value() == cursor.value());
-          Values::validate_cursor(cursor_, key, value);
+          validate_cursor_from_item(key, value, cursor_);
           ++kv_iter;
-          return ertr::make_ready_future<bool>(false);
+          return ertr::template make_ready_future<bool>(false);
         });
 #else
         ++kv_iter;
-        return ertr::make_ready_future<bool>(false);
+        return ertr::template make_ready_future<bool>(false);
 #endif
       });
     }).safe_then([&t, this, start_time, cursors] {
@@ -311,19 +312,19 @@ class TreeBuilder {
           return crimson::do_until([&t, this, &c_iter, cursors]() -> future<bool> {
             if (kv_iter.is_end()) {
               logger().info("Verify done!");
-              return ertr::make_ready_future<bool>(true);
+              return ertr::template make_ready_future<bool>(true);
             }
             assert(c_iter != cursors->end());
             auto [k, v] = kv_iter.get_kv();
             // validate values in tree keep intact
             return tree->find(t, k).safe_then([this, &c_iter](auto cursor) {
               auto [k, v] = kv_iter.get_kv();
-              Values::validate_cursor(cursor, k, v);
+              validate_cursor_from_item(k, v, cursor);
               // validate values in cursors keep intact
-              Values::validate_cursor(*c_iter, k, v);
+              validate_cursor_from_item(k, v, *c_iter);
               ++kv_iter;
               ++c_iter;
-              return ertr::make_ready_future<bool>(false);
+              return ertr::template make_ready_future<bool>(false);
             });
           });
         });
@@ -351,7 +352,7 @@ class TreeBuilder {
       while (!iter.is_end()) {
         auto [k, v] = iter.get_kv();
         auto cursor = tree->find(t, k).unsafe_get0();
-        Values::validate_cursor(cursor, k, v);
+        validate_cursor_from_item(k, v, cursor);
         ++iter;
       }
 
@@ -361,7 +362,7 @@ class TreeBuilder {
       while (!iter.is_end()) {
         assert(!cursor.is_end());
         auto [k, v] = iter.get_kv();
-        Values::validate_cursor(cursor, k, v);
+        validate_cursor_from_item(k, v, cursor);
         cursor = cursor.get_next(t).unsafe_get0();
         ++iter;
       }
@@ -376,9 +377,9 @@ class TreeBuilder {
     return crimson::get_logger(ceph_subsys_filestore);
   }
 
-  KVPool& kvs;
-  std::optional<TestBtree> tree;
-  KVPool::iterator_t kv_iter;
+  KVPool<ValueItem>& kvs;
+  std::optional<BtreeImpl> tree;
+  typename KVPool<ValueItem>::iterator_t kv_iter;
 };
 
 }
