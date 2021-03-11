@@ -119,7 +119,7 @@ PGBackend::load_metadata(const hobject_t& oid)
       }));
 }
 
-PGBackend::interruptible_future<crimson::osd::acked_peers_t>
+PGBackend::rep_op_fut_t
 PGBackend::mutate_object(
   std::set<pg_shard_t> pg_shards,
   crimson::osd::ObjectContextRef &&obc,

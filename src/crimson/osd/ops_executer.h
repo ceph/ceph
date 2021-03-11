@@ -261,8 +261,12 @@ public:
   interruptible_errorated_future<osd_op_errorator>
   execute_op(OSDOp& osd_op);
 
+  using rep_op_fut_tuple =
+    std::tuple<interruptible_future<>, osd_op_ierrorator::future<>>;
+  using rep_op_fut_t =
+    interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
-  osd_op_ierrorator::future<> flush_changes_n_do_ops_effects(
+  rep_op_fut_t flush_changes_n_do_ops_effects(
     Ref<PG> pg,
     MutFunc&& mut_func) &&;
 
@@ -325,32 +329,42 @@ auto OpsExecuter::with_effect_on_obc(
 }
 
 template <typename MutFunc>
-OpsExecuter::osd_op_ierrorator::future<>
+OpsExecuter::rep_op_fut_t
 OpsExecuter::flush_changes_n_do_ops_effects(Ref<PG> pg, MutFunc&& mut_func) &&
 {
   const bool want_mutate = !txn.empty();
   // osd_op_params are instantiated by every wr-like operation.
   assert(osd_op_params || !want_mutate);
   assert(obc);
-  auto maybe_mutated = interruptor::make_interruptible(osd_op_errorator::now());
+  rep_op_fut_t maybe_mutated =
+    interruptor::make_ready_future<rep_op_fut_tuple>(
+	seastar::now(),
+	interruptor::make_interruptible(osd_op_errorator::now()));
   if (want_mutate) {
     osd_op_params->req_id = msg->get_reqid();
     osd_op_params->mtime = msg->get_mtime();
-    maybe_mutated = std::forward<MutFunc>(mut_func)(std::move(txn),
+    auto [submitted, all_completed] = std::forward<MutFunc>(mut_func)(std::move(txn),
                                                     std::move(obc),
                                                     std::move(*osd_op_params),
                                                     user_modify);
+    maybe_mutated = interruptor::make_ready_future<rep_op_fut_tuple>(
+	std::move(submitted),
+	osd_op_ierrorator::future<>(std::move(all_completed)));
   }
   if (__builtin_expect(op_effects.empty(), true)) {
     return maybe_mutated;
   } else {
-    return maybe_mutated.safe_then_interruptible([pg=std::move(pg),
-                                                  this] () mutable {
-      // let's do the cleaning of `op_effects` in destructor
-      return interruptor::do_for_each(op_effects,
-                                      [pg=std::move(pg)] (auto& op_effect) {
-        return op_effect->execute(pg);
-      });
+    return maybe_mutated.then_unpack_interruptible(
+      [this, pg=std::move(pg)](auto&& submitted, auto&& all_completed) mutable {
+      return interruptor::make_ready_future<rep_op_fut_tuple>(
+	  std::move(submitted),
+	  all_completed.safe_then_interruptible([this, pg=std::move(pg)] {
+	    // let's do the cleaning of `op_effects` in destructor
+	    return interruptor::do_for_each(op_effects,
+	      [pg=std::move(pg)](auto& op_effect) {
+	      return op_effect->execute(pg);
+	    });
+	  }));
     });
   }
 }

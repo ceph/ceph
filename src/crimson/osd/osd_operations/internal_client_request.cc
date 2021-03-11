@@ -81,9 +81,12 @@ seastar::future<> InternalClientRequest::start()
                     [] (const std::error_code& e) {
                       return PG::do_osd_ops_iertr::now();
                     }
-                  ).safe_then_interruptible(
-                    [] {
-                      return interruptor::now();
+                  ).safe_then_unpack_interruptible(
+                    [](auto submitted, auto all_completed) {
+                      return all_completed.handle_error_interruptible(
+                        crimson::ct_error::eagain::handle([] {
+                          return seastar::now();
+                        }));
                     }, crimson::ct_error::eagain::handle([] {
                       return interruptor::now();
                     })

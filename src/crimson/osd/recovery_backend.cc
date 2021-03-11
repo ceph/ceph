@@ -104,8 +104,7 @@ RecoveryBackend::handle_backfill_progress(
     m.op == MOSDPGBackfill::OP_BACKFILL_PROGRESS,
     t);
   return shard_services.get_store().do_transaction(
-    pg.get_collection_ref(), std::move(t)
-  ).or_terminate();
+    pg.get_collection_ref(), std::move(t)).or_terminate();
 }
 
 RecoveryBackend::interruptible_future<>
@@ -153,8 +152,7 @@ RecoveryBackend::handle_backfill_remove(
 	      ghobject_t(soid, ghobject_t::NO_GEN, pg.get_pg_whoami().shard));
   }
   return shard_services.get_store().do_transaction(
-    pg.get_collection_ref(), std::move(t)
-  ).or_terminate();
+    pg.get_collection_ref(), std::move(t)).or_terminate();
 }
 
 RecoveryBackend::interruptible_future<BackfillInterval>
