@@ -7381,6 +7381,13 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
 #endif
     .set_description("Directory where luarocks install packages from allowlist"),
+
+  Option("rgw_register_with_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Register in service map with unique name")
+    .set_long_description(
+        "If true, RGW will register in the service map with a unique identifier."
+        "The suffix unique identifier is the RADOS client session ID.")
   });
 }
 
