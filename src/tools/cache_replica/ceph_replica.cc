@@ -97,10 +97,13 @@ int main(int argc, const char **argv)
    */
   dout(1) << FN_NAME << " not setting numa affinity" << dendl;
 
+  std::string rnic_addr; // RDMA NIC IP Address
   std::string val;
   for (auto i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
+    } else if (ceph_argparse_witharg(args, i, &val, "--rnic", (char*)NULL)) {
+      rnic_addr = val;
     } else {
       // #TODO: check other supported options
       ++i;
