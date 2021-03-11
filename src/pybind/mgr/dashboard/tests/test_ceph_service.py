@@ -107,3 +107,23 @@ def test_get_smart_data(caplog, by, args, log):
             CephService._get_smart_data_by_device.assert_not_called()
             assert smart_data == {}
             assert log in caplog.text
+
+
+@mock.patch.object(CephService, 'send_command')
+def test_get_smart_data_from_appropriate_ceph_command(send_command):
+    # pylint: disable=protected-access
+    send_command.side_effect = [
+        {'nodes': [{'name': 'osd.1', 'status': 'up'}, {'name': 'mon.1', 'status': 'down'}]},
+        {'fake': {'device': {'name': '/dev/sda'}}}
+    ]
+    CephService._get_smart_data_by_device({'devid': '1', 'daemons': ['osd.1', 'mon.1']})
+    send_command.assert_has_calls([mock.call('mon', 'osd tree'),
+                                   mock.call('osd', 'smart', '1', devid='1')])
+
+    send_command.side_effect = [
+        {'nodes': [{'name': 'osd.1', 'status': 'down'}, {'name': 'mon.1', 'status': 'up'}]},
+        {'fake': {'device': {'name': '/dev/sda'}}}
+    ]
+    CephService._get_smart_data_by_device({'devid': '1', 'daemons': ['osd.1', 'mon.1']})
+    send_command.assert_has_calls([mock.call('mon', 'osd tree'),
+                                   mock.call('mon', 'device get-health-metrics', '1', devid='1')])
