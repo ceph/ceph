@@ -202,9 +202,25 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
       return conn->send(std::move(reply));
     }
   }
-  return pg->do_osd_ops(m, obc, op_info).safe_then_interruptible(
-      [this](Ref<MOSDOpReply> reply) -> interruptible_future<> {
-    return conn->send(std::move(reply));
+  return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
+    [this, pg](auto submitted, auto all_completed) mutable {
+    return submitted.then_interruptible(
+      [this, pg] {
+        return with_blocking_future_interruptible<IOInterruptCondition>(
+            handle.enter(pp(*pg).wait_repop));
+    }).then_interruptible(
+      [this, pg, all_completed=std::move(all_completed)]() mutable {
+      return all_completed.safe_then_interruptible(
+        [this, pg](Ref<MOSDOpReply> reply) {
+        return with_blocking_future_interruptible<IOInterruptCondition>(
+            handle.enter(pp(*pg).send_reply)).then_interruptible(
+              [this, reply=std::move(reply)] {
+              return conn->send(std::move(reply));
+            });
+      }, crimson::ct_error::eagain::handle([this, pg]() mutable {
+        return process_op(pg);
+      }));
+    });
   }, crimson::ct_error::eagain::handle([this, pg]() mutable {
     return process_op(pg);
   }));
