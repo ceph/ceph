@@ -1800,7 +1800,13 @@ void PG::calc_replicated_acting_stretch(
     aheap.push_if_nonempty(anc.second);
   });
 
-  /* and pull from this heap until it's empty or we have enough. */
+  /* and pull from this heap until it's empty or we have enough.
+   * "We have enough" is a sufficient check here for
+   * stretch_set_can_peer() because our heap sorting always
+   * pulls from ancestors with the least number of included OSDs,
+   * so if it is possible to satisfy the bucket_count constraints we
+   * will do so.
+   */
   while (!aheap.is_empty() && want->size() < pool.info.size) {
     auto next = aheap.pop();
     pop_ancestor(next.get());
