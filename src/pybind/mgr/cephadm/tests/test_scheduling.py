@@ -556,6 +556,18 @@ class NodeAssignmentTest(NamedTuple):
              'host2(port=81)', 'host3(port=81)'],
             ['rgw.c']
         ),
+        # cephadm.py teuth case
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(count=3, hosts=['host1=y', 'host2=x']),
+            'host1 host2'.split(),
+            [
+                DaemonDescription('mgr', 'y', 'host1'),
+                DaemonDescription('mgr', 'x', 'host2'),
+            ],
+            ['host1(name=y)', 'host2(name=x)'],
+            [], []
+        ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons,
                          expected, expected_add, expected_remove):
