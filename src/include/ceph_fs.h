@@ -131,7 +131,12 @@ extern const char *ceph_con_mode_name(int con_mode);
 #define CEPH_MSG_MON_GET_MAP            5
 #define CEPH_MSG_MON_GET_OSDMAP         6
 #define CEPH_MSG_MON_METADATA           7
+
+// need refactor:
+//  1. librbd need use message to send request to ReplicaMonitor
+//  2. Need define another message: ReplicaMonitor send reply message to librbd
 #define CEPH_MSG_MON_GET_REPLICADAEMONMAP     8
+
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
 #define CEPH_MSG_MON_SUBSCRIBE          15
@@ -176,7 +181,7 @@ extern const char *ceph_con_mode_name(int con_mode);
 /* FSMapUser subscribers (get MDS clusters name->ID mapping) */
 #define CEPH_MSG_FS_MAP_USER		103
 
-/* replica , occupy [30, 40)*/
+/* replica, occupy [30, 40)*/ //We don't need this Message anymore.
 #define CEPH_MSG_REPLICADAEMON_MAP            30
 
 /* watch-notify operations */

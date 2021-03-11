@@ -236,6 +236,8 @@
 #define MSG_MGR_COMMAND_REPLY     0x70a
 
 // *** Replica ***
+// Keep it here, we need this message used by ReplicaDaemon to
+// report ReplicaDaemonState info to ReplicaMonitor
 #define MSG_REPLICADAEMON_BLINK         0x800
 
 // ======================================================

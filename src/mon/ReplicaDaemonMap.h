@@ -13,6 +13,7 @@
 #include "include/types.h"
 #include "msg/msg_types.h"
 
+//No need ReplicaDaemonStatus, right?
 enum ReplicaDaemonStatus : uint32_t {
   STATE_BOOTING,
   STATE_ACTIVE,
@@ -81,7 +82,8 @@ public:
 
 private:
   epoch_t epoch = 0;
-  std::vector<ReplicaDaemonState> replicadaemons_state;
+  std::vector<ReplicaDaemonState> replicadaemons_state; // Let's change it to be map:
+  // std::map<std::pair<pool, rbd_image>, std::tuple<size, replicated>>;
 };
 WRITE_CLASS_ENCODER_FEATURES(ReplicaDaemonMap)
 

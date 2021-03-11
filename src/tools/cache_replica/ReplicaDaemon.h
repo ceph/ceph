@@ -27,6 +27,8 @@ public:
   int init();
   void ms_fast_dispatch(Message *m) override;
   bool ms_dispatch(Message *m) override;
+  // There's no need to keep below function here.
+  // Reason: ReplicaDaemon doesn't need ReplicaMap anymore
   void update_state_from_replicadaemon_map(ReplicaDaemonMap& replicadaemon_map_ref);
 
 protected:
@@ -39,7 +41,7 @@ protected:
   LogChannelRef clog;
 
 private:
-  std::unique_ptr<ReplicaDaemonMap> replicadaemon_map;
+  std::unique_ptr<ReplicaDaemonMap> replicadaemon_map; // ReplicaDaemon do not need ReplicaDaemonMap
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;

@@ -247,7 +247,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(*this, *paxos, "mgrstat"));
   paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
   paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
-  paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv"));
+  paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv")); //TODO: check KV
 #if defined(WITH_CACHE_REPLICA)
   paxos_service[PAXOS_REPLICAMAP].reset(new ReplicaMonitor(*this, *paxos, "replicamap"));
 #endif
@@ -5211,7 +5211,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
         ceph_assert(sub != nullptr);
         mdsmon()->check_sub(sub);
       }
-#if defined(WITH_CACHE_REPLICA)
+#if defined(WITH_CACHE_REPLICA) // still need?
     } else if (p->first == "replicamap") {
       dout(10) << __func__ << ": ReplicaDaemon sub '" << p->first << "'" << dendl;
       replicamon()->check_sub(s->sub_map[p->first]);

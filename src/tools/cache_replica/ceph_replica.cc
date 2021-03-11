@@ -121,7 +121,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 
-  //whoami
+  //whoami, replica daemon ID
   char *end = nullptr;
   const char *id = g_conf()->name.get_id().c_str();
   int whoami = strtol(id, &end, 10);
