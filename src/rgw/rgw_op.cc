@@ -6136,7 +6136,7 @@ void RGWCompleteMultipart::execute()
         if (!compressed)
           cs_info.compression_type = obj_part.cs_info.compression_type;
         cs_info.orig_size += obj_part.cs_info.orig_size;
-        cs_info.compressor_message = obj_part.cs_info.compressor_message;
+        cs_info.compressor_message = obj_part.cs_info.compressor_message; 
         compressed = true;
       }
 
