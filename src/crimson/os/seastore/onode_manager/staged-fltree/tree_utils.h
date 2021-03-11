@@ -102,76 +102,13 @@ class Values {
 
 template <typename ValueItem>
 class KVPool {
-  struct kv_conf_t {
-    index_t index2;
-    index_t index1;
-    index_t index0;
-    size_t ns_size;
-    size_t oid_size;
-    ValueItem value;
-
-    ghobject_t get_ghobj() const {
-      assert(index1 < 10);
-      std::ostringstream os_ns;
-      std::ostringstream os_oid;
-      if (index1 == 0) {
-        assert(!ns_size);
-        assert(!oid_size);
-      } else {
-        os_ns << "ns" << index1;
-        auto current_size = (size_t)os_ns.tellp();
-        assert(ns_size >= current_size);
-        os_ns << std::string(ns_size - current_size, '_');
-
-        os_oid << "oid" << index1;
-        current_size = (size_t)os_oid.tellp();
-        assert(oid_size >= current_size);
-        os_oid << std::string(oid_size - current_size, '_');
-      }
-
-      return ghobject_t(shard_id_t(index2), index2, index2,
-                        os_ns.str(), os_oid.str(), index0, index0);
-    }
-  };
-  using kv_vector_t = std::vector<kv_conf_t>;
-
  public:
-  using kv_t = std::pair<ghobject_t, ValueItem>;
-
-  KVPool(const std::vector<size_t>& str_sizes,
-         const std::vector<size_t>& value_sizes,
-         const std::pair<index_t, index_t>& range2,
-         const std::pair<index_t, index_t>& range1,
-         const std::pair<index_t, index_t>& range0)
-      : str_sizes{str_sizes}, values{value_sizes} {
-    ceph_assert(range2.first < range2.second);
-    ceph_assert(range2.second - 1 <= (index_t)std::numeric_limits<shard_t>::max());
-    ceph_assert(range2.second - 1 <= std::numeric_limits<crush_hash_t>::max());
-    ceph_assert(range1.first < range1.second);
-    ceph_assert(range1.second - 1 <= 9);
-    ceph_assert(range0.first < range0.second);
-    std::random_device rd;
-    for (index_t i = range2.first; i < range2.second; ++i) {
-      for (index_t j = range1.first; j < range1.second; ++j) {
-        size_t ns_size;
-        size_t oid_size;
-        if (j == 0) {
-          // store ns0, oid0 as empty strings for test purposes
-          ns_size = 0;
-          oid_size = 0;
-        } else {
-          ns_size = str_sizes[rd() % str_sizes.size()];
-          oid_size = str_sizes[rd() % str_sizes.size()];
-          assert(ns_size && oid_size);
-        }
-        for (index_t k = range0.first; k < range0.second; ++k) {
-          kvs.emplace_back(kv_conf_t{i, j, k, ns_size, oid_size, values.pick()});
-        }
-      }
-    }
-    random_kvs = kvs;
-    std::random_shuffle(random_kvs.begin(), random_kvs.end());
-  }
+  struct kv_t {
+    ghobject_t key;
+    ValueItem value;
+  };
+  using kv_vector_t = std::vector<kv_t>;
+  using kvptr_vector_t = std::vector<kv_t*>;
 
   class iterator_t {
    public:
@@ -181,12 +118,11 @@ class KVPool {
     iterator_t& operator=(const iterator_t&) = default;
     iterator_t& operator=(iterator_t&&) = default;
 
-    kv_t get_kv() const {
+    kv_t* get_p_kv() const {
       assert(!is_end());
-      auto& conf = (*p_kvs)[i];
-      return std::make_pair(conf.get_ghobj(), conf.value);
+      return (*p_kvptrs)[i];
     }
-    bool is_end() const { return !p_kvs || i >= p_kvs->size(); }
+    bool is_end() const { return i >= p_kvptrs->size(); }
     index_t index() const { return i; }
 
     iterator_t& operator++() {
@@ -202,30 +138,105 @@ class KVPool {
     }
 
    private:
-    iterator_t(const kv_vector_t& kvs) : p_kvs{&kvs} {}
+    iterator_t(const kvptr_vector_t& kvs) : p_kvptrs{&kvs} {}
 
-    const kv_vector_t* p_kvs = nullptr;
+    const kvptr_vector_t* p_kvptrs;
     index_t i = 0;
     friend class KVPool;
   };
 
   iterator_t begin() const {
-    return iterator_t(kvs);
+    return iterator_t(serial_p_kvs);
   }
 
   iterator_t random_begin() const {
-    return iterator_t(random_kvs);
+    return iterator_t(random_p_kvs);
   }
 
   size_t size() const {
     return kvs.size();
   }
 
+  static KVPool create_raw_range(
+      const std::vector<size_t>& str_sizes,
+      const std::vector<size_t>& value_sizes,
+      const std::pair<index_t, index_t>& range2,
+      const std::pair<index_t, index_t>& range1,
+      const std::pair<index_t, index_t>& range0) {
+    ceph_assert(range2.first < range2.second);
+    ceph_assert(range2.second - 1 <= (index_t)std::numeric_limits<shard_t>::max());
+    ceph_assert(range2.second - 1 <= std::numeric_limits<crush_hash_t>::max());
+    ceph_assert(range1.first < range1.second);
+    ceph_assert(range1.second - 1 <= 9);
+    ceph_assert(range0.first < range0.second);
+
+    kv_vector_t kvs;
+    std::random_device rd;
+    Values<ValueItem> values{value_sizes};
+    for (index_t i = range2.first; i < range2.second; ++i) {
+      for (index_t j = range1.first; j < range1.second; ++j) {
+        size_t ns_size;
+        size_t oid_size;
+        if (j == 0) {
+          // store ns0, oid0 as empty strings for test purposes
+          ns_size = 0;
+          oid_size = 0;
+        } else {
+          ns_size = str_sizes[rd() % str_sizes.size()];
+          oid_size = str_sizes[rd() % str_sizes.size()];
+          assert(ns_size && oid_size);
+        }
+        for (index_t k = range0.first; k < range0.second; ++k) {
+          kvs.emplace_back(
+              kv_t{make_raw_oid(i, j, k, ns_size, oid_size), values.pick()}
+          );
+        }
+      }
+    }
+    return KVPool(std::move(kvs));
+  }
+
  private:
-  std::vector<size_t> str_sizes;
-  Values<ValueItem> values;
+  KVPool(kv_vector_t&& _kvs)
+      : kvs(std::move(_kvs)), serial_p_kvs(kvs.size()), random_p_kvs(kvs.size()) {
+    std::transform(kvs.begin(), kvs.end(), serial_p_kvs.begin(),
+                   [] (kv_t& item) { return &item; });
+    std::transform(kvs.begin(), kvs.end(), random_p_kvs.begin(),
+                   [] (kv_t& item) { return &item; });
+    std::random_shuffle(random_p_kvs.begin(), random_p_kvs.end());
+    std::cout << "size: " << kvs.size()
+              << ", " << serial_p_kvs.size()
+              << ", " << random_p_kvs.size() << std::endl;
+  }
+
+  static ghobject_t make_raw_oid(
+      index_t index2, index_t index1, index_t index0,
+      size_t ns_size, size_t oid_size) {
+    assert(index1 < 10);
+    std::ostringstream os_ns;
+    std::ostringstream os_oid;
+    if (index1 == 0) {
+      assert(!ns_size);
+      assert(!oid_size);
+    } else {
+      os_ns << "ns" << index1;
+      auto current_size = (size_t)os_ns.tellp();
+      assert(ns_size >= current_size);
+      os_ns << std::string(ns_size - current_size, '_');
+
+      os_oid << "oid" << index1;
+      current_size = (size_t)os_oid.tellp();
+      assert(oid_size >= current_size);
+      os_oid << std::string(oid_size - current_size, '_');
+    }
+
+    return ghobject_t(shard_id_t(index2), index2, index2,
+                      os_ns.str(), os_oid.str(), index0, index0);
+  }
+
   kv_vector_t kvs;
-  kv_vector_t random_kvs;
+  kvptr_vector_t serial_p_kvs;
+  kvptr_vector_t random_p_kvs;
 };
 
 template <bool TRACK, typename ValueItem>
@@ -273,26 +284,27 @@ class TreeBuilder {
       if (kv_iter.is_end()) {
         return ertr::template make_ready_future<bool>(true);
       }
-      auto [key, value] = kv_iter.get_kv();
-      logger().debug("[{}] {} -> {}", kv_iter.index(), key_hobj_t{key}, value);
+      auto p_kv = kv_iter.get_p_kv();
+      logger().debug("[{}] {} -> {}",
+                     kv_iter.index(), key_hobj_t{p_kv->key}, p_kv->value);
       return tree->insert(
-          t, key, {value.get_payload_size()}
-      ).safe_then([&t, this, cursors, key, value](auto ret) {
+          t, p_kv->key, {p_kv->value.get_payload_size()}
+      ).safe_then([&t, this, cursors](auto ret) {
+        auto p_kv = kv_iter.get_p_kv();
         auto& [cursor, success] = ret;
-        initialize_cursor_from_item(t, key, value, cursor, success);
+        initialize_cursor_from_item(t, p_kv->key, p_kv->value, cursor, success);
         if constexpr (TRACK) {
           cursors->emplace_back(cursor);
         }
 #ifndef NDEBUG
-        auto [key, value] = kv_iter.get_kv();
-        validate_cursor_from_item(key, value, cursor);
-        return tree->find(t, key
+        validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
+        return tree->find(t, p_kv->key
         ).safe_then([this, cursor](auto cursor_) mutable {
           assert(!cursor_.is_end());
-          auto [key, value] = kv_iter.get_kv();
-          ceph_assert(cursor_.get_ghobj() == key);
+          auto p_kv = kv_iter.get_p_kv();
+          ceph_assert(cursor_.get_ghobj() == p_kv->key);
           ceph_assert(cursor_.value() == cursor.value());
-          validate_cursor_from_item(key, value, cursor_);
+          validate_cursor_from_item(p_kv->key, p_kv->value, cursor_);
           ++kv_iter;
           return ertr::template make_ready_future<bool>(false);
         });
@@ -315,13 +327,13 @@ class TreeBuilder {
               return ertr::template make_ready_future<bool>(true);
             }
             assert(c_iter != cursors->end());
-            auto [k, v] = kv_iter.get_kv();
+            auto p_kv = kv_iter.get_p_kv();
             // validate values in tree keep intact
-            return tree->find(t, k).safe_then([this, &c_iter](auto cursor) {
-              auto [k, v] = kv_iter.get_kv();
-              validate_cursor_from_item(k, v, cursor);
+            return tree->find(t, p_kv->key).safe_then([this, &c_iter](auto cursor) {
+              auto p_kv = kv_iter.get_p_kv();
+              validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
               // validate values in cursors keep intact
-              validate_cursor_from_item(k, v, *c_iter);
+              validate_cursor_from_item(p_kv->key, p_kv->value, *c_iter);
               ++kv_iter;
               ++c_iter;
               return ertr::template make_ready_future<bool>(false);
@@ -350,9 +362,9 @@ class TreeBuilder {
       logger().info("Verifing insertion ...");
       auto iter = kvs.begin();
       while (!iter.is_end()) {
-        auto [k, v] = iter.get_kv();
-        auto cursor = tree->find(t, k).unsafe_get0();
-        validate_cursor_from_item(k, v, cursor);
+        auto p_kv = iter.get_p_kv();
+        auto cursor = tree->find(t, p_kv->key).unsafe_get0();
+        validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
         ++iter;
       }
 
@@ -361,8 +373,8 @@ class TreeBuilder {
       auto cursor = tree->begin(t).unsafe_get0();
       while (!iter.is_end()) {
         assert(!cursor.is_end());
-        auto [k, v] = iter.get_kv();
-        validate_cursor_from_item(k, v, cursor);
+        auto p_kv = iter.get_p_kv();
+        validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
         cursor = cursor.get_next(t).unsafe_get0();
         ++iter;
       }

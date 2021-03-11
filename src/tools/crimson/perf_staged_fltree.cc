@@ -86,10 +86,11 @@ seastar::future<> run(const bpo::variables_map& config) {
     auto range0 = config["range0"].as<std::vector<unsigned>>();
     ceph_assert(range0.size() == 2);
 
-    KVPool<test_item_t> kvs{str_sizes, onode_sizes,
-                            {range2[0], range2[1]},
-                            {range1[0], range1[1]},
-                            {range0[0], range0[1]}};
+    auto kvs = KVPool<test_item_t>::create_raw_range(
+        str_sizes, onode_sizes,
+        {range2[0], range2[1]},
+        {range1[0], range1[1]},
+        {range0[0], range0[1]});
     PerfTree<TRACK> perf{is_dummy};
     perf.run(kvs).get0();
   });
