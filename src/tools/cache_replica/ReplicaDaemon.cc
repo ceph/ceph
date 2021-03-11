@@ -76,41 +76,6 @@ void ReplicaDaemon::ms_fast_dispatch(Message *m)
   derr << "TODO: deal with received message" << dendl;
 }
 
-// Remove below function
-void ReplicaDaemon::update_state_from_replicadaemon_map(ReplicaDaemonMap& replicadaemon_map_ref)
-{
-  const auto& replicadaemons_state = replicadaemon_map_ref.get_replicadaemons_stateref();
-  for(auto& replicadaemon_state: replicadaemons_state) {
-    if (!self_state.replica_route_addr.legacy_equals(replicadaemon_state.replica_route_addr)) {
-      continue;
-    }
-    if (replicadaemon_state.daemon_status == STATE_ACTIVE) {
-      switch(self_state.daemon_status) {
-      case STATE_BOOTING:
-        self_state.daemon_status = STATE_ACTIVE;
-        derr << __LINE__ << " change from booting to active" << dendl;
-        break;
-      default:
-        // nothing
-        break;
-      }
-      continue;
-    }
-    if (replicadaemon_state.daemon_status == STATE_DOWN) {
-      switch(self_state.daemon_status) {
-      case STATE_STOPPING:
-        self_state.daemon_status = STATE_DOWN;
-        derr << __LINE__ << " change from stopping to down" << dendl;
-        break;
-      default:
-        // nothing
-        break;
-      }
-      continue;
-    }
-  }
-}
-
 bool ReplicaDaemon::ms_dispatch(Message *m)
 {
   switch (m->get_type()) {
@@ -118,7 +83,6 @@ bool ReplicaDaemon::ms_dispatch(Message *m)
     {
     auto replicadaemon_map_msg = static_cast<MReplicaDaemonMap*>(m);
     auto replicadaemon_map_ref = replicadaemon_map_msg->get_map();
-    update_state_from_replicadaemon_map(replicadaemon_map_ref);
     }
     break;
   default:

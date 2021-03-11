@@ -38,9 +38,6 @@ public:
   const ReplicaDaemonState& get_replicadaemon_stateref(void) const {
     return replicadaemon_state;
   }
-  void update_replicadaemon_status(ReplicaDaemonStatus new_status) {
-    replicadaemon_state.update_replicadaemon_status(new_status);
-  }
   void print(std::ostream& out) const override {
     replicadaemon_state.print_state(out);
   }
