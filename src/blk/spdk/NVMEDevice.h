@@ -48,7 +48,6 @@ class NVMEDevice : public BlockDevice {
   string name;
 
  public:
-  std::atomic_int queue_number = {0};
   SharedDriverData *get_driver() { return driver; }
 
   NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);

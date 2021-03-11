@@ -3285,7 +3285,7 @@ void BlueFS::_close_writer(FileWriter *h)
     if (bdev[i]) {
       if (h->iocv[i]) {
 	h->iocv[i]->aio_wait();
-	bdev[i]->queue_reap_ioc(h->iocv[i]);
+	delete h->iocv[i];
       }
     }
   }
