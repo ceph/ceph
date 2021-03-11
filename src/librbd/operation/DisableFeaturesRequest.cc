@@ -305,15 +305,20 @@ Context *DisableFeaturesRequest<I>::handle_get_mirror_image(int *result) {
     return handle_finish(*result);
   }
 
-  if ((mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) && !m_force) {
-    lderr(cct) << "cannot disable journaling: image mirroring "
+  if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
+      mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL && !m_force) {
+    lderr(cct) << "cannot disable journaling: journal-based mirroring "
                << "enabled and mirror pool mode set to image"
                << dendl;
     *result = -EINVAL;
     return handle_finish(*result);
   }
 
-  send_disable_mirror_image();
+  if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    send_close_journal();
+  } else {
+    send_disable_mirror_image();
+  }
   return nullptr;
 }
 
