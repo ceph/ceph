@@ -917,7 +917,7 @@ class Filesystem(MDSCluster):
                 for mds_id, mds_status in mds_map['info'].items():
                     if mds_status['state'] == 'up:active':
                         try:
-                            daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
+                            daemon_status = self.mds_tell(["status"], mds_id=mds_status['name'])
                         except CommandFailedError as cfe:
                             if cfe.exitstatus == errno.EINVAL:
                                 # Old version, can't do this check
@@ -1130,6 +1130,12 @@ class Filesystem(MDSCluster):
             mds_id = self.get_lone_mds_id()
 
         return self.json_asok(command, 'mds', mds_id, timeout=timeout)
+
+    def mds_tell(self, command, mds_id=None):
+        if mds_id is None:
+            mds_id = self.get_lone_mds_id()
+
+        return json.loads(self.mon_manager.raw_cluster_cmd("tell", f"mds.{mds_id}", *command))
 
     def rank_asok(self, command, rank=0, status=None, timeout=None):
         info = self.get_rank(rank=rank, status=status)
