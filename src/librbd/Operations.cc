@@ -537,29 +537,16 @@ int Operations<I>::rename(const char *dstname) {
     return -EEXIST;
   }
 
-  if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    r = invoke_async_request("rename",
-                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
-                             true,
-                             boost::bind(&Operations<I>::execute_rename, this,
-                                         dstname, _1),
-                             boost::bind(&ImageWatcher<I>::notify_rename,
-                                         m_image_ctx.image_watcher, dstname,
-                                         _1));
-    if (r < 0 && r != -EEXIST) {
-      return r;
-    }
-  } else {
-    C_SaferCond cond_ctx;
-    {
-      std::shared_lock owner_lock{m_image_ctx.owner_lock};
-      execute_rename(dstname, &cond_ctx);
-    }
-
-    r = cond_ctx.wait();
-    if (r < 0) {
-      return r;
-    }
+  r = invoke_async_request("rename",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                           true,
+                           boost::bind(&Operations<I>::execute_rename, this,
+                                       dstname, _1),
+                           boost::bind(&ImageWatcher<I>::notify_rename,
+                                       m_image_ctx.image_watcher, dstname,
+                                       _1));
+  if (r < 0 && r != -EEXIST) {
+    return r;
   }
 
   m_image_ctx.set_image_name(dstname);
@@ -580,19 +567,19 @@ void Operations<I>::execute_rename(const std::string &dest_name,
     return;
   }
 
-  m_image_ctx.image_lock.lock_shared();
-  if (m_image_ctx.name == dest_name) {
-    m_image_ctx.image_lock.unlock_shared();
-    on_finish->complete(-EEXIST);
-    return;
-  }
-  m_image_ctx.image_lock.unlock_shared();
-
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": dest_name=" << dest_name
                 << dendl;
 
   if (m_image_ctx.old_format) {
+    m_image_ctx.image_lock.lock_shared();
+    if (m_image_ctx.name == dest_name) {
+      m_image_ctx.image_lock.unlock_shared();
+      on_finish->complete(-EEXIST);
+      return;
+    }
+    m_image_ctx.image_lock.unlock_shared();
+
     // unregister watch before and register back after rename
     on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
     on_finish = new LambdaContext([this, on_finish](int r) {
