@@ -1203,9 +1203,10 @@ TEST_F(d_seastore_tm_test_t, 6_random_insert_leaf_node)
   run_async([this] {
     constexpr bool TEST_SEASTORE = true;
     constexpr bool TRACK_CURSORS = true;
-    KVPool<test_item_t> kvs{{8, 11, 64, 256, 301, 320},
-                            {8, 16, 128, 512, 576, 640},
-                            {0, 32}, {0, 10}, {0, 4}};
+    auto kvs = KVPool<test_item_t>::create_raw_range(
+        {8, 11, 64, 256, 301, 320},
+        {8, 16, 128, 512, 576, 640},
+        {0, 32}, {0, 10}, {0, 4});
     auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, test_item_t>>(kvs,
         (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
                        : NodeExtentManager::create_dummy(IS_DUMMY_SYNC)));
