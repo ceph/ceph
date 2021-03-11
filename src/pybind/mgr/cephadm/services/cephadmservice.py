@@ -757,16 +757,28 @@ class RgwService(CephService):
         ftype = spec.rgw_frontend_type or "beast"
         if ftype == 'beast':
             if spec.ssl:
-                args.append(f"ssl_port={port}")
+                if daemon_spec.ip:
+                    args.append(f"ssl_endpoint={daemon_spec.ip}:{port}")
+                else:
+                    args.append(f"ssl_port={port}")
                 args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
             else:
-                args.append(f"port={port}")
+                if daemon_spec.ip:
+                    args.append(f"endpoint={daemon_spec.ip}:{port}")
+                else:
+                    args.append(f"port={port}")
         elif ftype == 'civetweb':
             if spec.ssl:
-                args.append(f"port={port}s")  # note the 's' suffix on port
+                if daemon_spec.ip:
+                    args.append(f"port={daemon_spec.ip}:{port}s")  # note the 's' suffix on port
+                else:
+                    args.append(f"port={port}s")  # note the 's' suffix on port
                 args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
             else:
-                args.append(f"port={port}")
+                if daemon_spec.ip:
+                    args.append(f"port={daemon_spec.ip}:{port}")
+                else:
+                    args.append(f"port={port}")
         frontend = f'{ftype} {" ".join(args)}'
 
         ret, out, err = self.mgr.check_mon_command({
