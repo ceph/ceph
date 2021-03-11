@@ -1983,10 +1983,14 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
     vector<int> candidate_want(*want);
     for (auto it = candidate_want.begin(); it != candidate_want.end(); ++it) {
       if (*it == cur_shard.osd) {
-        candidate_want.erase(it);
-	want->swap(candidate_want);
-	async_recovery->insert(cur_shard);
-        break;
+	candidate_want.erase(it);
+	if (pool.info.stretch_set_can_peer(candidate_want, *osdmap, NULL)) {
+	  // if we're in stretch mode, we can only remove the osd if it doesn't
+	  // break peering limits.
+	  want->swap(candidate_want);
+	  async_recovery->insert(cur_shard);
+	}
+	break;
       }
     }
   }
