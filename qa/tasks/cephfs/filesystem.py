@@ -893,15 +893,7 @@ class Filesystem(MDSCluster):
             mds.check_status()
 
         active_count = 0
-        try:
-            mds_map = self.get_mds_map(status=status)
-        except CommandFailedError as cfe:
-            # Old version, fall back to non-multi-fs commands
-            if cfe.exitstatus == errno.EINVAL:
-                mds_map = json.loads(
-                        self.mon_manager.raw_cluster_cmd('mds', 'dump', '--format=json'))
-            else:
-                raise
+        mds_map = self.get_mds_map(status=status)
 
         log.debug("are_daemons_healthy: mds map: {0}".format(mds_map))
 
