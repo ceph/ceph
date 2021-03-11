@@ -93,7 +93,7 @@ namespace {
     friend ostream& operator<<(ostream& os, const obj_rec& rec);
   };
 
-  ostream& operator<<(ostream& os, const obj_rec& rec)
+  [[maybe_unused]] ostream& operator<<(ostream& os, const obj_rec& rec)
   {
     RGWFileHandle* rgw_fh = rec.rgw_fh;
     if (rgw_fh) {
