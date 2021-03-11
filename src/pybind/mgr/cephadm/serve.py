@@ -554,6 +554,7 @@ class CephadmServe:
             spec=spec,
             hosts=self.mgr._hosts_with_daemon_inventory(),
             daemons=daemons,
+            networks=self.mgr.cache.networks,
             filter_new_host=matches_network if service_type == 'mon'
             else virtual_ip_allowed if service_type == 'ha-rgw' else None,
             allow_colo=svc.allow_colo(),
@@ -600,7 +601,8 @@ class CephadmServe:
 
                 daemon_spec = svc.make_daemon_spec(
                     slot.hostname, daemon_id, slot.network, spec, daemon_type=daemon_type,
-                    ports=[slot.port] if slot.port else None
+                    ports=[slot.port] if slot.port else None,
+                    ip=slot.ip,
                 )
                 self.log.debug('Placing %s.%s on host %s' % (
                     daemon_type, daemon_id, slot.hostname))
