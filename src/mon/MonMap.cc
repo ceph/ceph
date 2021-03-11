@@ -37,7 +37,7 @@ void mon_info_t::encode(bufferlist& bl, uint64_t features) const
     // so just leave the min_v at version 4. Monitors are protected
     // from misunderstandings about location because setting it is blocked
     // on FEATURE_PINGING
-    min_v = 4;
+    min_v = 1;
   }
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 2;
@@ -60,7 +60,7 @@ void mon_info_t::encode(bufferlist& bl, uint64_t features) const
     encode(public_addrs, bl, features);
   }
   encode(priority, bl);
-  uint16_t weight = 10; // default weight, for compatibility in backport
+  uint16_t weight = 0; // default weight, for compatibility in backport
   encode(weight, bl);
   encode(crush_loc, bl);
   ENCODE_FINISH(bl);
@@ -77,7 +77,6 @@ void mon_info_t::decode(bufferlist::const_iterator& p)
   if (struct_v >= 4) {
     uint16_t weight;
     decode(weight, p);
-    ceph_assert(weight == 10);
   }
   if (struct_v >= 5) {
     decode(crush_loc, p);
