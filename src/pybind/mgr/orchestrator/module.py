@@ -4,6 +4,7 @@ import json
 from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence
 import re
 import datetime
+import time
 
 import yaml
 from prettytable import PrettyTable
@@ -778,16 +779,20 @@ Usage:
         try:
             host_name, block_device = svc_arg.split(":")
             block_devices = block_device.split(',')
-            devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(placement=PlacementSpec(
-                host_pattern=host_name), data_devices=devs)
+            dg_specs = [
+                DriveGroupSpec(
+                    service_id=str(int(time.time())),
+                    placement=PlacementSpec(hosts=[host_name]),
+                    data_devices=DeviceSelection(paths=block_devices),
+                    unmanaged=False,
+                    preview_only=False
+                )
+            ]
+            return self._apply_misc(dg_specs, False, Format.plain)
+
         except (TypeError, KeyError, ValueError):
             msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
-
-        completion = self.create_osds(drive_group)
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch osd rm')
     def _osd_rm_start(self,
