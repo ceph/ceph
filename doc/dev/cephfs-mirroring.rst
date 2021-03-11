@@ -30,7 +30,8 @@ Creating Users
 --------------
 
 Start by creating a user (on the primary/local cluster) for the mirror daemon. This user
-has restrictive capabilities on the MDS and the OSD::
+requires write capability on the metadata pool to create RADOS objects (index objects)
+for watch/notify operation and read capability on the data pool(s).
 
   $ ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
 
