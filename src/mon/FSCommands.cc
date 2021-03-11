@@ -1132,8 +1132,10 @@ public:
 
   bool peer_add(FSMap &fsmap, Filesystem::const_ref &&fs,
                 const cmdmap_t &cmdmap, std::stringstream &ss) {
+    string peer_uuid;
     string remote_spec;
     string remote_fs_name;
+    cmd_getval(cmdmap, "uuid", peer_uuid);
     cmd_getval(cmdmap, "remote_cluster_spec", remote_spec);
     cmd_getval(cmdmap, "remote_fs_name", remote_fs_name);
 
@@ -1144,17 +1146,13 @@ public:
       return false;
     }
 
-    if (fs->mirror_info.has_peer((*remote_conf).first,
-                                 (*remote_conf).second, remote_fs_name)) {
+    if (fs->mirror_info.has_peer(peer_uuid)) {
       ss << "peer already exists";
       return true;
     }
 
-    uuid_d uuid_gen;
-    uuid_gen.generate_random();
-
-    auto f = [uuid_gen, remote_conf, remote_fs_name](auto &&fs) {
-               fs->mirror_info.peer_add(stringify(uuid_gen), (*remote_conf).first,
+    auto f = [peer_uuid, remote_conf, remote_fs_name](auto &&fs) {
+               fs->mirror_info.peer_add(peer_uuid, (*remote_conf).first,
                                         (*remote_conf).second, remote_fs_name);
              };
     fsmap.modify_filesystem(fs->fscid, std::move(f));

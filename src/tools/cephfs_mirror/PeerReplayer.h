@@ -19,8 +19,8 @@ class PeerReplayerAdminSocketHook;
 class PeerReplayer {
 public:
   PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
-               const Filesystem &filesystem, const Peer &peer,
-               const std::set<std::string, std::less<>> &directories,
+               RadosRef local_cluster, const Filesystem &filesystem,
+               const Peer &peer, const std::set<std::string, std::less<>> &directories,
                MountRef mount, ServiceDaemon *service_daemon);
   ~PeerReplayer();
 
@@ -219,6 +219,7 @@ private:
 
   CephContext *m_cct;
   FSMirror *m_fs_mirror;
+  RadosRef m_local_cluster;
   Filesystem m_filesystem;
   Peer m_peer;
   // probably need to be encapsulated when supporting cancelations
