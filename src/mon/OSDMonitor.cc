@@ -3186,6 +3186,53 @@ bool OSDMonitor::check_failures(utime_t now)
   return found_failure;
 }
 
+utime_t OSDMonitor::get_grace_time(utime_t now,
+				   int target_osd,
+				   failure_info_t& fi) const
+{
+  utime_t orig_grace(g_conf()->osd_heartbeat_grace, 0);
+  if (!g_conf()->mon_osd_adjust_heartbeat_grace) {
+    return orig_grace;
+  }
+  utime_t grace = orig_grace;
+  double halflife = (double)g_conf()->mon_osd_laggy_halflife;
+  double decay_k = ::log(.5) / halflife;
+
+  // scale grace period based on historical probability of 'lagginess'
+  // (false positive failures due to slowness).
+  const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
+  const utime_t failed_for = now - fi.get_failed_since();
+  double decay = exp((double)failed_for * decay_k);
+  dout(20) << " halflife " << halflife << " decay_k " << decay_k
+	   << " failed_for " << failed_for << " decay " << decay << dendl;
+  double my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
+  grace += my_grace;
+
+  // consider the peers reporting a failure a proxy for a potential
+  // 'subcluster' over the overall cluster that is similarly
+  // laggy.  this is clearly not true in all cases, but will sometimes
+  // help us localize the grace correction to a subset of the system
+  // (say, a rack with a bad switch) that is unhappy.
+  double peer_grace = 0;
+  for (auto& [reporter, report] : fi.reporters) {
+    if (osdmap.exists(reporter)) {
+      const osd_xinfo_t& xi = osdmap.get_xinfo(reporter);
+      utime_t elapsed = now - xi.down_stamp;
+      double decay = exp((double)elapsed * decay_k);
+      peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
+    }
+  }
+  peer_grace /= (double)fi.reporters.size();
+  grace += peer_grace;
+  dout(10) << " osd." << target_osd << " has "
+	   << fi.reporters.size() << " reporters, "
+	   << grace << " grace (" << orig_grace << " + " << my_grace
+	   << " + " << peer_grace << "), max_failed_since " << fi.get_failed_since()
+	   << dendl;
+
+  return grace;
+}
+
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 {
   // already pending failure?
@@ -3197,32 +3244,6 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 
   set<string> reporters_by_subtree;
   auto reporter_subtree_level = g_conf().get_val<string>("mon_osd_reporter_subtree_level");
-  utime_t orig_grace(g_conf()->osd_heartbeat_grace, 0);
-  utime_t max_failed_since = fi.get_failed_since();
-  utime_t failed_for = now - max_failed_since;
-
-  utime_t grace = orig_grace;
-  double my_grace = 0, peer_grace = 0;
-  double decay_k = 0;
-  if (g_conf()->mon_osd_adjust_heartbeat_grace) {
-    double halflife = (double)g_conf()->mon_osd_laggy_halflife;
-    decay_k = ::log(.5) / halflife;
-
-    // scale grace period based on historical probability of 'lagginess'
-    // (false positive failures due to slowness).
-    const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
-    double decay = exp((double)failed_for * decay_k);
-    dout(20) << " halflife " << halflife << " decay_k " << decay_k
-	     << " failed_for " << failed_for << " decay " << decay << dendl;
-    my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
-    grace += my_grace;
-  }
-
-  // consider the peers reporting a failure a proxy for a potential
-  // 'subcluster' over the overall cluster that is similarly
-  // laggy.  this is clearly not true in all cases, but will sometimes
-  // help us localize the grace correction to a subset of the system
-  // (say, a rack with a bad switch) that is unhappy.
   ceph_assert(fi.reporters.size());
   for (auto p = fi.reporters.begin(); p != fi.reporters.end();) {
     // get the parent bucket whose type matches with "reporter_subtree_level".
@@ -3235,32 +3256,18 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
       } else {
         reporters_by_subtree.insert(iter->second);
       }
-      if (g_conf()->mon_osd_adjust_heartbeat_grace) {
-        const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
-        utime_t elapsed = now - xi.down_stamp;
-        double decay = exp((double)elapsed * decay_k);
-        peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
-      }
       ++p;
     } else {
       fi.cancel_report(p->first);;
       p = fi.reporters.erase(p);
     }
   }
-  
-  if (g_conf()->mon_osd_adjust_heartbeat_grace) {
-    peer_grace /= (double)fi.reporters.size();
-    grace += peer_grace;
+  if (reporters_by_subtree.size() < g_conf().get_val<uint64_t>("mon_osd_min_down_reporters")) {
+    return false;
   }
-
-  dout(10) << " osd." << target_osd << " has "
-	   << fi.reporters.size() << " reporters, "
-	   << grace << " grace (" << orig_grace << " + " << my_grace
-	   << " + " << peer_grace << "), max_failed_since " << max_failed_since
-	   << dendl;
-
-  if (failed_for >= grace &&
-      reporters_by_subtree.size() >= g_conf().get_val<uint64_t>("mon_osd_min_down_reporters")) {
+  const utime_t failed_for = now - fi.get_failed_since();
+  const utime_t grace = get_grace_time(now, target_osd, fi);
+  if (failed_for >= grace) {
     dout(1) << " we have enough reporters to mark osd." << target_osd
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
