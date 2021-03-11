@@ -225,12 +225,20 @@ class CephService(object):
 
             for daemon in daemons:
                 svc_type, svc_id = daemon.split('.')
-                try:
-                    dev_smart_data = CephService.send_command(
-                        svc_type, 'smart', svc_id, devid=device['devid'])
-                except SendCommandError:
-                    # Try to retrieve SMART data from another daemon.
-                    continue
+                if 'osd' in svc_type:
+                    try:
+                        dev_smart_data = CephService.send_command(
+                            svc_type, 'smart', svc_id, devid=device['devid'])
+                    except SendCommandError:
+                        # Try to retrieve SMART data from another daemon.
+                        continue
+                else:
+                    try:
+                        dev_smart_data = CephService.send_command(
+                            svc_type, 'device get-health-metrics', svc_id, devid=device['devid'])
+                    except SendCommandError:
+                        # Try to retrieve SMART data from another daemon.
+                        continue
                 for dev_id, dev_data in dev_smart_data.items():
                     if 'error' in dev_data:
                         logger.warning(
