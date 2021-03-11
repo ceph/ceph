@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_pool_default_size: 1
+        osd_pool_default_min_size: 1
+      client:
+        debug ms: 1
+        debug client: 20
+      mds:
+        debug ms: 1
+        debug mds: 20
+      osd: # force bluestore since it's required for ec overwrites
+        osd objectstore: bluestore
+        bluestore block size: 1073741824
+tasks:
+- workunit:
+    cleanup: false
+    clients:
+      client.0:
+        - fs/full/subvolume_rm.sh
