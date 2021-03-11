@@ -172,7 +172,7 @@ class RGWBucket {
   protected:
     RGWBucketEnt ent;
     RGWBucketInfo info;
-    RGWUser* owner;
+    RGWUser* owner = nullptr;
     RGWAttrs attrs;
     obj_version bucket_version;
     ceph::real_time mtime;
@@ -198,19 +198,30 @@ class RGWBucket {
       rgw_obj_key next_marker;
     };
 
-    RGWBucket() : ent(), info(), owner(nullptr), attrs(), bucket_version() {}
-    RGWBucket(const rgw_bucket& _b) :
-      ent(), info(), owner(nullptr), attrs(), bucket_version() { ent.bucket = _b; info.bucket = _b; }
-    RGWBucket(const RGWBucketEnt& _e) :
-      ent(_e), info(), owner(nullptr), attrs(), bucket_version() { info.bucket = ent.bucket; info.placement_rule = ent.placement_rule; }
-    RGWBucket(const RGWBucketInfo& _i) :
-      ent(), info(_i), owner(nullptr), attrs(), bucket_version() {ent.bucket = info.bucket; ent.placement_rule = info.placement_rule; }
+    RGWBucket() = default;
+    RGWBucket(const rgw_bucket& _b) { ent.bucket = _b; info.bucket = _b; }
+    RGWBucket(const RGWBucketEnt& _e) : ent(_e) {
+      info.bucket = ent.bucket;
+      info.placement_rule = ent.placement_rule;
+      info.creation_time = ent.creation_time;
+    }
+    RGWBucket(const RGWBucketInfo& _i) : info(_i) {
+      ent.bucket = info.bucket;
+      ent.placement_rule = info.placement_rule;
+      ent.creation_time = info.creation_time;
+    }
     RGWBucket(const rgw_bucket& _b, RGWUser* _u) :
-      ent(), info(), owner(_u), attrs(), bucket_version() { ent.bucket = _b; info.bucket = _b; }
-    RGWBucket(const RGWBucketEnt& _e, RGWUser* _u) :
-      ent(_e), info(), owner(_u), attrs(), bucket_version() { info.bucket = ent.bucket; info.placement_rule = ent.placement_rule; }
-    RGWBucket(const RGWBucketInfo& _i, RGWUser* _u) :
-      ent(), info(_i), owner(_u), attrs(), bucket_version() { ent.bucket = info.bucket;  ent.placement_rule = info.placement_rule;}
+      owner(_u) { ent.bucket = _b; info.bucket = _b; }
+    RGWBucket(const RGWBucketEnt& _e, RGWUser* _u) : ent(_e), owner(_u) {
+      info.bucket = ent.bucket;
+      info.placement_rule = ent.placement_rule;
+      info.creation_time = ent.creation_time;
+    }
+    RGWBucket(const RGWBucketInfo& _i, RGWUser* _u) : info(_i), owner(_u) {
+      ent.bucket = info.bucket;
+      ent.placement_rule = info.placement_rule;
+      ent.creation_time = info.creation_time;
+    }
     virtual ~RGWBucket() = default;
 
     virtual int load_by_name(const std::string& tenant, const std::string& bucket_name, const std::string bucket_instance_id, RGWSysObjectCtx *rctx, optional_yield y) = 0;
