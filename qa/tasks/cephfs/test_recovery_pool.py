@@ -121,8 +121,8 @@ class TestRecoveryPool(CephFSTestCase):
         self.recovery_fs.table_tool([recovery_fs + ":0", "reset", "inode"])
 
         # Stop the MDS
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.mds_stop() # otherwise MDS will join once the fs is reset
+        self.fs.fail()
 
         # After recovery, we need the MDS to not be strict about stats (in production these options
         # are off by default, but in QA we need to explicitly disable them)
@@ -146,7 +146,6 @@ class TestRecoveryPool(CephFSTestCase):
                 # Normal reset should fail when no objects are present, we'll use --force instead
                 self.fs.journal_tool(["journal", "reset"], 0)
 
-        self.fs.mds_stop()
         self.fs.data_scan(['scan_extents', '--alternate-pool',
                            recovery_pool, '--filesystem', self.fs.name,
                            self.fs.get_data_pool_name()])
@@ -174,6 +173,7 @@ class TestRecoveryPool(CephFSTestCase):
 
         # Start the MDS
         self.fs.mds_restart()
+        self.fs.set_joinable()
         self.recovery_fs.mds_restart()
         self.fs.wait_for_daemons()
         self.recovery_fs.wait_for_daemons()

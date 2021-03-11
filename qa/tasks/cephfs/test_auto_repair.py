@@ -36,8 +36,7 @@ class TestMDSAutoRepair(CephFSTestCase):
 
         # Restart the MDS to drop the metadata cache (because we expired the journal,
         # nothing gets replayed into cache on restart)
-        self.fs.mds_stop()
-        self.fs.mds_fail_restart()
+        self.fs.rank_fail()
         self.fs.wait_for_daemons()
 
         # remove testdir1's backtrace

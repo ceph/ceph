@@ -135,13 +135,12 @@ class TestClientRecovery(CephFSTestCase):
         # =================
         # Check that if I stop an MDS and a client goes away, the MDS waits
         # for the reconnect period
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         mount_a_client_id = self.mount_a.get_global_id()
         self.mount_a.umount_wait(force=True)
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
 
         self.fs.wait_for_state('up:reconnect', reject='up:active', timeout=MDS_RESTART_GRACE)
         # Check that the MDS locally reports its state correctly
@@ -178,8 +177,7 @@ class TestClientRecovery(CephFSTestCase):
         # =========================
         mount_a_client_id = self.mount_a.get_global_id()
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # The mount goes away while the MDS is offline
         self.mount_a.kill()
@@ -187,7 +185,7 @@ class TestClientRecovery(CephFSTestCase):
         # wait for it to die
         time.sleep(5)
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
 
         # Enter reconnect phase
         self.fs.wait_for_state('up:reconnect', reject='up:active', timeout=MDS_RESTART_GRACE)
@@ -468,13 +466,12 @@ class TestClientRecovery(CephFSTestCase):
         )
 
         # Immediately kill the MDS and then client A
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
         self.mount_a.kill()
         self.mount_a.kill_cleanup()
 
         # Restart the MDS.  Wait for it to come up, it'll have to time out in clientreplay
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         log.info("Waiting for reconnect...")
         self.fs.wait_for_state("up:reconnect")
         log.info("Waiting for active...")
