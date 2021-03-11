@@ -328,8 +328,7 @@ class TestDataScan(CephFSTestCase):
         workload.flush()
 
         # Stop the MDS
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # After recovery, we need the MDS to not be strict about stats (in production these options
         # are off by default, but in QA we need to explicitly disable them)
@@ -343,7 +342,7 @@ class TestDataScan(CephFSTestCase):
         # only understands how to rebuild metadata under rank 0
         self.fs.reset()
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
 
         def get_state(mds_id):
             info = self.mds_cluster.get_mds_info(mds_id)
@@ -458,8 +457,7 @@ class TestDataScan(CephFSTestCase):
         # Flush journal and stop MDS
         self.mount_a.umount_wait()
         self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # Pick a dentry and wipe out its key
         # Because I did a 1 bit split, I know one frag will be named <inode>.01000000
@@ -471,7 +469,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.rados(["rmomapkey", frag_obj_id, victim_key])
 
         # Start filesystem back up, observe that the file appears to be gone in an `ls`
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
         self.mount_a.mount_wait()
         files = self.mount_a.run_shell(["ls", "subdir/"]).stdout.getvalue().strip().split("\n")
@@ -479,8 +477,7 @@ class TestDataScan(CephFSTestCase):
 
         # Stop the filesystem
         self.mount_a.umount_wait()
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # Run data-scan, observe that it inserts our dentry back into the correct fragment
         # by checking the omap now has the dentry's key again
@@ -491,7 +488,7 @@ class TestDataScan(CephFSTestCase):
 
         # Start the filesystem and check that the dentry we deleted is now once again visible
         # and points to the correct file data.
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
         self.mount_a.mount_wait()
         out = self.mount_a.run_shell(["cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
@@ -593,8 +590,7 @@ class TestDataScan(CephFSTestCase):
         self.mount_a.umount_wait()
 
         self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # repair linkage errors
         self.fs.data_scan(["scan_links"])
@@ -602,7 +598,7 @@ class TestDataScan(CephFSTestCase):
         # primary link in testdir2 was deleted?
         self.assertNotIn(file1_key, self._dirfrag_keys(dirfrag2_oid))
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         self.mount_a.mount_wait()
@@ -641,7 +637,7 @@ class TestDataScan(CephFSTestCase):
 
         self.fs.mds_asok(["flush", "journal"], mds0_id)
         self.fs.mds_asok(["flush", "journal"], mds1_id)
-        self.mds_cluster.mds_stop()
+        self.fs.fail()
 
         self.fs.rados(["rm", "mds0_inotable"])
         self.fs.rados(["rm", "mds1_inotable"])

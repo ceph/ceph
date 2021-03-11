@@ -51,8 +51,7 @@ class TestDamage(CephFSTestCase):
         for mds_name in self.fs.get_active_names():
             self.fs.mds_asok(["flush", "journal"], mds_name)
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         self.fs.rados(['export', '/tmp/metadata.bin'])
 
@@ -242,8 +241,7 @@ class TestDamage(CephFSTestCase):
 
             # Reset MDS state
             self.mount_a.umount_wait(force=True)
-            self.fs.mds_stop()
-            self.fs.mds_fail()
+            self.fs.fail()
             self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
 
             # Reset RADOS pool state
@@ -253,7 +251,7 @@ class TestDamage(CephFSTestCase):
             mutation.mutate_fn()
 
             # Try starting the MDS
-            self.fs.mds_restart()
+            self.fs.set_joinable()
 
             # How long we'll wait between starting a daemon and expecting
             # it to make it through startup, and potentially declare itself
@@ -388,8 +386,7 @@ class TestDamage(CephFSTestCase):
         for mds_name in self.fs.get_active_names():
             self.fs.mds_asok(["flush", "journal"], mds_name)
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # Corrupt a dentry
         junk = "deadbeef" * 10
@@ -397,7 +394,7 @@ class TestDamage(CephFSTestCase):
         self.fs.rados(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
 
         # Start up and try to list it
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         self.mount_a.mount_wait()
@@ -497,9 +494,9 @@ class TestDamage(CephFSTestCase):
         self.fs.mds_asok(["flush", "journal"])
 
         # Drop everything from the MDS cache
-        self.mds_cluster.mds_stop()
+        self.fs.fail()
         self.fs.journal_tool(['journal', 'reset'], 0)
-        self.mds_cluster.mds_fail_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         self.mount_a.mount_wait()

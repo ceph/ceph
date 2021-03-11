@@ -146,14 +146,13 @@ class TestForwardScrub(CephFSTestCase):
         # Orphan an inode by deleting its dentry
         # Our victim will be.... bravo.
         self.mount_a.umount_wait()
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
         self.fs.set_ceph_conf('mds', 'mds verify scatter', False)
         self.fs.set_ceph_conf('mds', 'mds debug scatterstat', False)
         frag_obj_id = "{0:x}.00000000".format(inos["./parent/flushed"])
         self.fs.rados(["rmomapkey", frag_obj_id, "bravo_head"])
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         # See that the orphaned file is indeed missing from a client's POV
@@ -177,8 +176,7 @@ class TestForwardScrub(CephFSTestCase):
         self.assertTagged(inos['./parent/unflushed/jfile'], tag, self.fs.get_data_pool_name())
 
         # Run cephfs-data-scan targeting only orphans
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
         self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
         self.fs.data_scan([
             "scan_inodes",
@@ -192,7 +190,7 @@ class TestForwardScrub(CephFSTestCase):
 
         # And we should have all the same linkage we started with,
         # and no lost+found, and no extra inodes!
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
         self.mount_a.mount_wait()
         self._validate_linkage(inos)
@@ -239,8 +237,7 @@ class TestForwardScrub(CephFSTestCase):
             self.assertEqual(out_json["return_code"], 0)
             self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
-        self.mds_cluster.mds_stop()
-        self.mds_cluster.mds_fail()
+        self.fs.fail()
 
         # Truncate the journal (to ensure the inotable on disk
         # is all that will be in the InoTable in memory)
@@ -255,7 +252,7 @@ class TestForwardScrub(CephFSTestCase):
         for key, value in inotable_copy.items():
            self.fs.put_metadata_object_raw(key, value)
 
-        self.mds_cluster.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         with self.assert_cluster_log("inode table repaired"):
@@ -264,7 +261,7 @@ class TestForwardScrub(CephFSTestCase):
             self.assertEqual(out_json["return_code"], 0)
             self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
-        self.mds_cluster.mds_stop()
+        self.fs.fail()
         table_text = self.fs.table_tool(["0", "show", "inode"])
         table = json.loads(table_text)
         self.assertGreater(
