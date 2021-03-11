@@ -313,12 +313,10 @@ class TestConfigCommands(CephFSTestCase):
         test_key = "mds_max_purge_ops"
         test_val = "123"
 
-        mds_id = self.fs.get_lone_mds_id()
-        self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id), "injectargs",
-                                            "--{0}={1}".format(test_key, test_val))
+        self.fs.rank_tell(['injectargs', "--{0}={1}".format(test_key, test_val)])
 
         # Read it back with asok because there is no `tell` equivalent
-        out = self.fs.mds_asok(['config', 'get', test_key])
+        out = self.fs.rank_tell(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
 
 

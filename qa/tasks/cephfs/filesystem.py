@@ -1050,21 +1050,6 @@ class Filesystem(MDSCluster):
 
             status = self.status()
 
-    def get_lone_mds_id(self):
-        """
-        Get a single MDS ID: the only one if there is only one
-        configured, else the only one currently holding a rank,
-        else raise an error.
-        """
-        if len(self.mds_ids) != 1:
-            alive = self.get_rank_names()
-            if len(alive) == 1:
-                return alive[0]
-            else:
-                raise ValueError("Explicit MDS argument required when multiple MDSs in use")
-        else:
-            return self.mds_ids[0]
-
     def put_metadata_object_raw(self, object_id, infile):
         """
         Save an object to the metadata pool
@@ -1127,13 +1112,13 @@ class Filesystem(MDSCluster):
 
     def mds_asok(self, command, mds_id=None, timeout=None):
         if mds_id is None:
-            mds_id = self.get_lone_mds_id()
+            return self.rank_asok(command, timeout=timeout)
 
         return self.json_asok(command, 'mds', mds_id, timeout=timeout)
 
     def mds_tell(self, command, mds_id=None):
         if mds_id is None:
-            mds_id = self.get_lone_mds_id()
+            return self.rank_tell(command)
 
         return json.loads(self.mon_manager.raw_cluster_cmd("tell", f"mds.{mds_id}", *command))
 
