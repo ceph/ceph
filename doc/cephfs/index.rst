@@ -91,6 +91,7 @@ Administration
     Health messages <health-messages>
     Upgrading old file systems <upgrading>
     CephFS Top Utility <cephfs-top>
+    Scheduled Snapshots <snap-schedule>
 
 
 .. raw:: html
