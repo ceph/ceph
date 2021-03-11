@@ -2,6 +2,8 @@
 NFS Service
 ===========
 
+.. note:: Only the NFSv4 protocol is supported.
+
 .. _deploy-cephadm-nfs-ganesha:
 
 Deploying NFS ganesha
