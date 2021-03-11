@@ -178,6 +178,7 @@ public:
   const char* name() const override {
     return "mdlog_notify";
   }
+  RGWOpType get_type() override { return RGW_OP_SYNC_MDLOG_NOTIFY; }
 };
 
 class RGWOp_MDLog_Delete : public RGWRESTOp {
@@ -266,6 +267,7 @@ public:
   const char* name() const override {
     return "datalog_notify";
   }
+  RGWOpType get_type() override { return RGW_OP_SYNC_DATALOG_NOTIFY; }
 };
 
 class RGWOp_DATALog_Delete : public RGWRESTOp {

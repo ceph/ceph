@@ -537,7 +537,7 @@ int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y)
 
   int r = 0;
   bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(r, data) = read_all_input(s, max_size, false);
 
   if (r < 0)
     return r;
@@ -630,7 +630,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
   int r = 0;
   bufferlist data;
 
-  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(r, data) = read_all_input(s, max_size, false);
 
   if (r < 0)
     return r;
@@ -1198,7 +1198,7 @@ int RGWPutBucketReplication_ObjStore_S3::get_params(optional_yield y)
   int r = 0;
   bufferlist data;
 
-  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(r, data) = read_all_input(s, max_size, false);
 
   if (r < 0)
     return r;
@@ -1966,12 +1966,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y)
   int r = 0;
   bufferlist data;
   std::tie(r, data) =
-    rgw_rest_read_all_input(s, s->cct->_conf->rgw_max_put_param_size, false);
-  if (r < 0) {
-    return r;
-  }
-
-  r = do_aws4_auth_completion();
+    read_all_input(s, s->cct->_conf->rgw_max_put_param_size, false);
   if (r < 0) {
     return r;
   }
@@ -2039,13 +2034,8 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
 
   int r = 0;
   bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(r, data) = read_all_input(s, max_size, false);
 
-  if (r < 0) {
-    return r;
-  }
-
-  r = do_aws4_auth_completion();
   if (r < 0) {
     return r;
   }
@@ -2255,15 +2245,10 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
 
   int op_ret = 0;
   bufferlist data;
-  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(op_ret, data) = read_all_input(s, max_size, false);
 
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
     return op_ret;
-
-  const int auth_ret = do_aws4_auth_completion();
-  if (auth_ret < 0) {
-    return auth_ret;
-  }
 
   in_data.append(data);
 
@@ -3461,12 +3446,7 @@ int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
 
   int r = 0;
   bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
-  if (r < 0) {
-    return r;
-  }
-
-  r = do_aws4_auth_completion();
+  std::tie(r, data) = read_all_input(s, max_size, false);
   if (r < 0) {
     return r;
   }
@@ -3614,7 +3594,7 @@ int RGWSetRequestPayment_ObjStore_S3::get_params(optional_yield y)
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
   int r = 0;
-  std::tie(r, in_data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(r, in_data) = read_all_input(s, max_size, false);
 
   if (r < 0) {
     return r;
@@ -4137,7 +4117,7 @@ int RGWPutObjRetention_ObjStore_S3::get_params(optional_yield y)
   }
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(op_ret, data) = read_all_input(s, max_size, false);
   return op_ret;
 }
 
@@ -5482,6 +5462,9 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_SET_BUCKET_VERSIONING:
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
+        case RGW_OP_SYNC_DATALOG_NOTIFY:
+        case RGW_OP_SYNC_MDLOG_NOTIFY:
+        case RGW_OP_PERIOD_POST:
         case RGW_OP_SET_BUCKET_WEBSITE:
         case RGW_OP_PUT_BUCKET_POLICY:
         case RGW_OP_PUT_OBJ_TAGGING:
@@ -6120,7 +6103,7 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
   bufferlist data;
   int ret;
   int max_size = 4096;
-  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(ret, data) = read_all_input(s, max_size, false);
   if (ret != 0) {
     ldout(s->cct, 10) << "s3-select query: failed to retrieve query; ret = " << ret << dendl;
     return ret;
