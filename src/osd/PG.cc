@@ -1746,7 +1746,9 @@ void PG::calc_replicated_acting_stretch(
     }
     if (!restrict_to_up_acting) {
       for (auto &[cand, info] : all_info) {
-	if (!used(cand.osd) && usable_info(info)) {
+	if (!used(cand.osd) && usable_info(info) &&
+	    (std::find(acting.begin(), acting.end(), cand.osd)
+	     == acting.end())) {
 	  ss << " other candidate " << cand << " " << info << std::endl;
 	  candidates.push_back(
 	    std::make_pair(get_osd_ord(false, info), cand.osd));
