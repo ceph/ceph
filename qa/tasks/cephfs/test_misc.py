@@ -205,14 +205,11 @@ class TestCacheDrop(CephFSTestCase):
 
     def _run_drop_cache_cmd(self, timeout=None):
         result = None
-        mds_id = self.fs.get_lone_mds_id()
+        args = ["cache", "drop"]
         if timeout is not None:
-            result = self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id),
-                                                    "cache", "drop", str(timeout))
-        else:
-            result = self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id),
-                                                    "cache", "drop")
-        return json.loads(result)
+            args.append(str(timeout))
+        result = self.fs.rank_tell(args)
+        return result
 
     def _setup(self, max_caps=20, threshold=400):
         # create some files
