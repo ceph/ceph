@@ -49,6 +49,11 @@ public:
     return m_blocklisted;
   }
 
+  bool is_failed() {
+    std::scoped_lock locker(m_lock);
+    return m_failed;
+  }
+
 private:
   librados::IoCtx &m_ioctx;
   Listener &m_listener;
@@ -59,6 +64,7 @@ private:
   Context *m_on_shutdown_finish = nullptr;
 
   bool m_blocklisted = false;
+  bool m_failed = false;
 
   void create_instance();
   void handle_create_instance(int r);

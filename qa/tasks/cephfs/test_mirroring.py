@@ -8,6 +8,7 @@ from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
+from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 
@@ -56,12 +57,7 @@ class TestMirroring(CephFSTestCase):
         else:
             raise RuntimeError('expected admin socket to be unavailable')
 
-    def peer_add(self, fs_name, fs_id, peer_spec, remote_fs_name=None):
-        if remote_fs_name:
-            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_add", fs_name, peer_spec, remote_fs_name)
-        else:
-            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_add", fs_name, peer_spec)
-        time.sleep(10)
+    def verify_peer_added(self, fs_name, fs_id, peer_spec, remote_fs_name=None):
         # verify via asok
         res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
                                          'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
@@ -75,6 +71,14 @@ class TestMirroring(CephFSTestCase):
         else:
             self.assertTrue(self.fs_name == res['peers'][peer_uuid]['remote']['fs_name'])
 
+    def peer_add(self, fs_name, fs_id, peer_spec, remote_fs_name=None):
+        if remote_fs_name:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_add", fs_name, peer_spec, remote_fs_name)
+        else:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_add", fs_name, peer_spec)
+        time.sleep(10)
+        self.verify_peer_added(fs_name, fs_id, peer_spec, remote_fs_name)
+
     def peer_remove(self, fs_name, fs_id, peer_spec):
         peer_uuid = self.get_peer_uuid(peer_spec)
         self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_remove", fs_name, peer_uuid)
@@ -83,6 +87,15 @@ class TestMirroring(CephFSTestCase):
         res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
                                          'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
         self.assertTrue(res['peers'] == {} and res['snap_dirs']['dir_count'] == 0)
+
+    def bootstrap_peer(self, fs_name, client_name, site_name):
+        outj = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "fs", "snapshot", "mirror", "peer_bootstrap", "create", fs_name, client_name, site_name))
+        return outj['token']
+
+    def import_peer(self, fs_name, token):
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_bootstrap", "import",
+                                                     fs_name, token)
 
     def add_directory(self, fs_name, fs_id, dir_name):
         # get initial dir count
@@ -689,4 +702,107 @@ class TestMirroring(CephFSTestCase):
         self.assertEquals(peer_stats['failure_count'], 1)
         self.assertEquals(peer_stats['recovery_count'], 1)
 
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_mirroring_init_failure(self):
+        """Test mirror daemon init failure"""
+
+        # enable mirroring through mon interface -- this should result in the mirror daemon
+        # failing to enable mirroring due to absence of `cephfs_mirorr` index object.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", self.primary_fs_name)
+
+        with safe_while(sleep=5, tries=10, action='wait for failed state') as proceed:
+            while proceed():
+                try:
+                    # verify via asok
+                    res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                                     'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+                    if not 'state' in res:
+                        return
+                    self.assertTrue(res['state'] == "failed")
+                    return True
+                except:
+                    pass
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", self.primary_fs_name)
+        time.sleep(10)
+        # verify via asok
+        try:
+            self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                       'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+        except CommandFailedError:
+            pass
+        else:
+            raise RuntimeError('expected admin socket to be unavailable')
+
+    def test_mirroring_init_failure_with_recovery(self):
+        """Test if the mirror daemon can recover from a init failure"""
+
+        # enable mirroring through mon interface -- this should result in the mirror daemon
+        # failing to enable mirroring due to absence of `cephfs_mirorr` index object.
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", self.primary_fs_name)
+        # need safe_while since non-failed status pops up as mirroring is restarted
+        # internally in mirror daemon.
+        with safe_while(sleep=5, tries=10, action='wait for failed state') as proceed:
+            while proceed():
+                try:
+                    # verify via asok
+                    res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                                     'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+                    if not 'state' in res:
+                        return
+                    self.assertTrue(res['state'] == "failed")
+                    return True
+                except:
+                    pass
+
+        # create the index object and check daemon recovery
+        try:
+            p = self.mount_a.client_remote.run(args=['rados', '-p', self.fs.metadata_pool_name, 'create', 'cephfs_mirror'],
+                                               stdout=StringIO(), stderr=StringIO(), timeout=30,
+                                               check_status=True, label="create index object")
+            p.wait()
+        except CommandFailedError as ce:
+            log.warn(f'mirror daemon command to create mirror index object failed: {ce}')
+            raise
+        time.sleep(30)
+        res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                         'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+        self.assertTrue(res['peers'] == {})
+        self.assertTrue(res['snap_dirs']['dir_count'] == 0)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", self.primary_fs_name)
+        time.sleep(10)
+        # verify via asok
+        try:
+            self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                       'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+        except CommandFailedError:
+            pass
+        else:
+            raise RuntimeError('expected admin socket to be unavailable')
+
+    def test_cephfs_mirror_peer_bootstrap(self):
+        """Test importing peer bootstrap token"""
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+        # create a bootstrap token for the peer
+        bootstrap_token = self.bootstrap_peer(self.secondary_fs_name, "client.mirror_peer_bootstrap", "site-remote")
+
+        # import the peer via bootstrap token
+        self.import_peer(self.primary_fs_name, bootstrap_token)
+        time.sleep(10)
+        self.verify_peer_added(self.primary_fs_name, self.primary_fs_id, "client.mirror_peer_bootstrap@site-remote",
+                               self.secondary_fs_name)
+
+        # verify via peer_list interface
+        peer_uuid = self.get_peer_uuid("client.mirror_peer_bootstrap@site-remote")
+        res = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "peer_list", self.primary_fs_name))
+        self.assertTrue(peer_uuid in res)
+        self.assertTrue('mon_host' in res[peer_uuid] and res[peer_uuid]['mon_host'] != '')
+
+        # remove peer
+        self.peer_remove(self.primary_fs_name, self.primary_fs_id, "client.mirror_peer_bootstrap@site-remote")
+        # disable mirroring
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)

@@ -116,8 +116,10 @@ void InstanceWatcher::handle_rewatch_complete(int r) {
     m_blocklisted = true;
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;
+    m_failed = true;
   } else if (r < 0) {
     derr << ": rewatch error: " << cpp_strerror(r) << dendl;
+    m_failed = true;
   }
 }
 
