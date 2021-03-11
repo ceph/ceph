@@ -20,8 +20,10 @@ class CephadmNoImage(Enum):
 
 
 # ceph daemon types that use the ceph container image.
-# NOTE: listed in upgrade order!
-CEPH_UPGRADE_ORDER = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror', 'cephfs-mirror']
+# NOTE: order important here as these are used for upgrade order
+CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror', 'cephfs-mirror']
+GATEWAY_TYPES = ['iscsi', 'nfs']
+CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES
 
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter

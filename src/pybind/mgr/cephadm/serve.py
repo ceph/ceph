@@ -24,7 +24,7 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo
+    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
 from mgr_module import MonCommandFailed
 
 from . import utils
@@ -34,8 +34,6 @@ if TYPE_CHECKING:
     from remoto.backends import BaseConnection
 
 logger = logging.getLogger(__name__)
-
-CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
 
 
 class CephadmServe:
