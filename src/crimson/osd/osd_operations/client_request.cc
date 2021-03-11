@@ -26,8 +26,7 @@ ClientRequest::ClientRequest(
   : osd(osd),
     conn(conn),
     m(m),
-    sequencer(get_osd_priv(conn.get()).op_sequencer[m->get_spg()]),
-    prev_op_id(sequencer.get_last_issued())
+    sequencer(get_osd_priv(conn.get()).op_sequencer[m->get_spg()])
 {}
 
 ClientRequest::~ClientRequest()
@@ -61,6 +60,14 @@ bool ClientRequest::is_pg_op() const
     [](auto& op) { return ceph_osd_op_type_pg(op.op.op); });
 }
 
+void ClientRequest::may_set_prev_op()
+{
+  // set prev_op_id if it's not set yet
+  if (__builtin_expect(prev_op_id == 0, true)) {
+    prev_op_id = sequencer.get_last_issued();
+  }
+}
+
 seastar::future<> ClientRequest::start()
 {
   logger().debug("{}: start", *this);
@@ -80,6 +87,7 @@ seastar::future<> ClientRequest::start()
 	return interruptor::with_interruption([this, pgref]() mutable {
           epoch_t same_interval_since = pgref->get_interval_start_epoch();
           logger().debug("{} same_interval_since: {}", *this, same_interval_since);
+          may_set_prev_op();
           return sequencer.start_op(
             handle, prev_op_id, get_id(),
             interruptor::wrap_function(
