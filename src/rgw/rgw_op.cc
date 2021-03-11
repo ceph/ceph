@@ -7557,7 +7557,7 @@ int RGWPutBucketPolicy::get_params(optional_yield y)
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   // At some point when I have more time I want to make a version of
   // rgw_rest_read_all_input that doesn't use malloc.
-  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(op_ret, data) = read_all_input(s, max_size, false);
 
   // And throws exceptions.
   return op_ret;
@@ -8002,7 +8002,7 @@ int RGWPutBucketPublicAccessBlock::verify_permission(optional_yield y)
 int RGWPutBucketPublicAccessBlock::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(op_ret, data) = read_all_input(s, max_size, false);
   return op_ret;
 }
 
