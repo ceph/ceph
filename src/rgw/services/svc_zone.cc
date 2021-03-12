@@ -1020,6 +1020,19 @@ bool RGWSI_Zone::find_zone_id_by_name(const string& name, rgw_zone_id *id) {
   return true;
 }
 
+bool RGWSI_Zone::find_zonegroup_by_zone(const rgw_zone_id& zid, std::shared_ptr<RGWZoneGroup> *zonegroup)
+{
+  auto& period_map = current_period->get_map();
+
+  auto iter = period_map.zonegroups_by_zone.find(zid);
+  if (iter == period_map.zonegroups_by_zone.end()) {
+    return false;
+  }
+
+  *zonegroup = iter->second;
+  return true;
+}
+
 bool RGWSI_Zone::need_to_sync() const
 {
   return !(zonegroup->master_zone.empty() ||

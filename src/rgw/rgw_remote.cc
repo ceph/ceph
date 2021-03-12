@@ -83,6 +83,10 @@ void RGWRemoteCtl::init_conn(const RGWDataProvider& z, bool need_notify)
   std::optional<string> api_name;
   std::shared_ptr<RGWZoneGroup> zonegroup;
 
+  if (svc.zone->find_zonegroup_by_zone(z.id, &zonegroup)) {
+    api_name = zonegroup->api_name;
+  }
+
   auto& conns = conns_map[id];
   ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
   if (z.data_access_conf) {

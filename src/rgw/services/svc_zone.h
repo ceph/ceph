@@ -127,6 +127,8 @@ public:
 
   bool find_zone_id_by_name(const std::string& name, rgw_zone_id *id);
 
+  bool find_zonegroup_by_zone(const rgw_zone_id& zid, std::shared_ptr<RGWZoneGroup> *zonegroup);
+
   int select_bucket_placement(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const std::string& zonegroup_id,
                               const rgw_placement_rule& rule,
                               rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info, optional_yield y);
