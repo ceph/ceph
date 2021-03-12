@@ -6730,7 +6730,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_ROLLBACK :
       ++ctx->num_write;
       tracepoint(osd, do_osd_op_pre_rollback, soid.oid.name.c_str(), soid.snap.val);
-      result = _rollback_to(ctx, op);
+      result = _rollback_to(ctx, osd_op);
       break;
 
     case CEPH_OSD_OP_ZERO:
@@ -8188,14 +8188,12 @@ inline int PrimaryLogPG::_delete_oid(
   return 0;
 }
 
-int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
+int PrimaryLogPG::_rollback_to(OpContext *ctx, OSDOp& op)
 {
-  SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
-  PGTransaction* t = ctx->op_t.get();
-  snapid_t snapid = (uint64_t)op.snap.snapid;
+  snapid_t snapid = (uint64_t)op.op.snap.snapid;
   hobject_t missing_oid;
 
   dout(10) << "_rollback_to " << soid << " snapid " << snapid << dendl;
@@ -8280,71 +8278,89 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       // rolling back to the head; we just need to clone it.
       ctx->modify = true;
     } else {
-      /* 1) Delete current head
-       * 2) Clone correct snapshot into head
-       * 3) Calculate clone_overlaps by following overlaps
-       *    forward from rollback snapshot */
-      dout(10) << "_rollback_to deleting " << soid.oid
-	       << " and rolling back to old snap" << dendl;
-
-      if (obs.exists) {
-	t->remove(soid);
-	if (obs.oi.has_manifest()) {
-	  dec_all_refcount_manifest(obs.oi, ctx);
-	}
-      }
-      t->clone(soid, rollback_to_sobject);
-      t->add_obc(rollback_to);
-
-      map<snapid_t, interval_set<uint64_t> >::iterator iter =
-	snapset.clone_overlap.lower_bound(snapid);
-      ceph_assert(iter != snapset.clone_overlap.end());
-      interval_set<uint64_t> overlaps = iter->second;
-      for ( ;
-	    iter != snapset.clone_overlap.end();
-	    ++iter)
-	overlaps.intersection_of(iter->second);
-
-      if (obs.oi.size > 0) {
-	interval_set<uint64_t> modified;
-	modified.insert(0, obs.oi.size);
-	overlaps.intersection_of(modified);
-	modified.subtract(overlaps);
-	ctx->modified_ranges.union_of(modified);
-      }
-
-      // Adjust the cached objectcontext
-      maybe_create_new_object(ctx, true);
-      ctx->delta_stats.num_bytes -= obs.oi.size;
-      ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
-      ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, rollback_to->obs.oi.size));
-      ctx->clean_regions.mark_omap_dirty();
-      obs.oi.size = rollback_to->obs.oi.size;
-      if (rollback_to->obs.oi.is_data_digest())
-	obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
-      else
-	obs.oi.clear_data_digest();
-      if (rollback_to->obs.oi.is_omap_digest())
-	obs.oi.set_omap_digest(rollback_to->obs.oi.omap_digest);
-      else
-	obs.oi.clear_omap_digest();
-
-      if (rollback_to->obs.oi.has_manifest() && rollback_to->obs.oi.manifest.is_chunked()) {
-	obs.oi.set_flag(object_info_t::FLAG_MANIFEST);
-	obs.oi.manifest.type = rollback_to->obs.oi.manifest.type;
-	obs.oi.manifest.chunk_map = rollback_to->obs.oi.manifest.chunk_map;
-      }
-
-      if (rollback_to->obs.oi.is_omap()) {
-	dout(10) << __func__ << " setting omap flag on " << obs.oi.soid << dendl;
-	obs.oi.set_flag(object_info_t::FLAG_OMAP);
-      } else {
-	dout(10) << __func__ << " clearing omap flag on " << obs.oi.soid << dendl;
-	obs.oi.clear_flag(object_info_t::FLAG_OMAP);
-      }
+      _do_rollback_to(ctx, rollback_to, op);
     }
   }
   return ret;
+}
+
+void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
+				    OSDOp& op)
+{
+  SnapSet& snapset = ctx->new_snapset;
+  ObjectState& obs = ctx->new_obs;
+  object_info_t& oi = obs.oi;
+  const hobject_t& soid = oi.soid;
+  PGTransaction* t = ctx->op_t.get();
+  snapid_t snapid = (uint64_t)op.op.snap.snapid;
+  hobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
+
+  /* 1) Delete current head
+   * 2) Clone correct snapshot into head
+   * 3) Calculate clone_overlaps by following overlaps
+   *    forward from rollback snapshot */
+  dout(10) << "_do_rollback_to deleting " << soid.oid
+	   << " and rolling back to old snap" << dendl;
+
+  if (obs.exists) {
+    t->remove(soid);
+    if (obs.oi.has_manifest()) {
+      dec_all_refcount_manifest(obs.oi, ctx);
+      ctx->delta_stats.num_objects_manifest--;
+      ctx->cache_operation = true; // do not trigger to call ref function to calculate refcount
+    }
+  }
+  t->clone(soid, rollback_to_sobject);
+  t->add_obc(rollback_to);
+
+  map<snapid_t, interval_set<uint64_t> >::iterator iter =
+    snapset.clone_overlap.lower_bound(snapid);
+  ceph_assert(iter != snapset.clone_overlap.end());
+  interval_set<uint64_t> overlaps = iter->second;
+  for ( ;
+	iter != snapset.clone_overlap.end();
+	++iter)
+    overlaps.intersection_of(iter->second);
+
+  if (obs.oi.size > 0) {
+    interval_set<uint64_t> modified;
+    modified.insert(0, obs.oi.size);
+    overlaps.intersection_of(modified);
+    modified.subtract(overlaps);
+    ctx->modified_ranges.union_of(modified);
+  }
+
+  // Adjust the cached objectcontext
+  maybe_create_new_object(ctx, true);
+  ctx->delta_stats.num_bytes -= obs.oi.size;
+  ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
+  ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, rollback_to->obs.oi.size));
+  ctx->clean_regions.mark_omap_dirty();
+  obs.oi.size = rollback_to->obs.oi.size;
+  if (rollback_to->obs.oi.is_data_digest())
+    obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
+  else
+    obs.oi.clear_data_digest();
+  if (rollback_to->obs.oi.is_omap_digest())
+    obs.oi.set_omap_digest(rollback_to->obs.oi.omap_digest);
+  else
+    obs.oi.clear_omap_digest();
+
+  if (rollback_to->obs.oi.has_manifest() && rollback_to->obs.oi.manifest.is_chunked()) {
+    obs.oi.set_flag(object_info_t::FLAG_MANIFEST);
+    obs.oi.manifest.type = rollback_to->obs.oi.manifest.type;
+    obs.oi.manifest.chunk_map = rollback_to->obs.oi.manifest.chunk_map;
+    ctx->cache_operation = true; 
+    ctx->delta_stats.num_objects_manifest++;
+  }
+
+  if (rollback_to->obs.oi.is_omap()) {
+    dout(10) << __func__ << " setting omap flag on " << obs.oi.soid << dendl;
+    obs.oi.set_flag(object_info_t::FLAG_OMAP);
+  } else {
+    dout(10) << __func__ << " clearing omap flag on " << obs.oi.soid << dendl;
+    obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+  }
 }
 
 void PrimaryLogPG::_make_clone(
