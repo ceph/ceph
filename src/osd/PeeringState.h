@@ -61,13 +61,10 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-  ceph_release_t require_osd_release;
   std::map<int, std::vector<MessageRef>> message_map;
 
-  BufferedRecoveryMessages(ceph_release_t r)
-    : require_osd_release(r) {
-  }
-  BufferedRecoveryMessages(ceph_release_t r, PeeringCtx &ctx);
+  BufferedRecoveryMessages() = default;
+  BufferedRecoveryMessages(PeeringCtx &ctx);
 
   void accept_buffered_messages(BufferedRecoveryMessages &m) {
     for (auto &[target, ls] : m.message_map) {
@@ -190,8 +187,7 @@ struct PeeringCtx : BufferedRecoveryMessages {
   ObjectStore::Transaction transaction;
   HBHandle* handle = nullptr;
 
-  PeeringCtx(ceph_release_t r)
-    : BufferedRecoveryMessages(r) {}
+  PeeringCtx() = default;
 
   PeeringCtx(const PeeringCtx &) = delete;
   PeeringCtx &operator=(const PeeringCtx &) = delete;

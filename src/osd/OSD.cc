@@ -9246,7 +9246,7 @@ void OSD::handle_pg_create(OpRequestRef op)
 
 PeeringCtx OSD::create_context()
 {
-  return PeeringCtx(get_osdmap()->require_osd_release);
+  return PeeringCtx();
 }
 
 void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
