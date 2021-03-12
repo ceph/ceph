@@ -53,6 +53,12 @@
 #include "rgw_http_client.h"
 #include "rgw_http_client_curl.h"
 #include "rgw_perf_counters.h"
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+#include "rgw_amqp.h"
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#include "rgw_kafka.h"
+#endif
 
 #include "services/svc_zone.h"
 
@@ -617,6 +623,17 @@ namespace rgw {
       /* ignore error */
     }
 
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+    if (!rgw::amqp::init(cct.get())) {
+      derr << "ERROR: failed to initialize AMQP manager" << dendl;
+    }
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+    if (!rgw::kafka::init(cct.get())) {
+      derr << "ERROR: failed to initialize Kafka manager" << dendl;
+    }
+#endif
+
     return 0;
   } /* RGWLib::init() */
 
@@ -645,6 +662,12 @@ namespace rgw {
     rgw_shutdown_resolver();
     rgw_http_client_cleanup();
     rgw::curl::cleanup_curl();
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+    rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+    rgw::kafka::shutdown();
+#endif
 
     rgw_perf_stop(g_ceph_context);
 
