@@ -2150,17 +2150,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     return false;
   }
 
-  // make sure we respect the stretch cluster rules -- and
-  // didn't break them with earlier choices!
-  const pg_pool_t& pg_pool = pool.info;
-  if (pg_pool.is_stretch_pool()) {
-    stringstream ss;
-    if (!pg_pool.stretch_set_can_peer(want, *get_osdmap(), &ss)) {
-      dout(5) << "peering blocked by stretch_can_peer: " << ss.str() << dendl;
-      return false;
-    }
-  }
-
   want_acting.clear();
   acting_recovery_backfill = want_acting_backfill;
   dout(10) << "acting_recovery_backfill is " << acting_recovery_backfill << dendl;
@@ -2237,7 +2226,8 @@ void PG::activate(ObjectStore::Transaction& t,
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size) {
+    if ((acting.size() >= pool.info.min_size) &&
+	pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL)) {
       ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
@@ -2549,7 +2539,8 @@ void PG::activate(ObjectStore::Transaction& t,
     release_pg_backoffs();
     projected_last_update = info.last_update;
   }
-  if (acting.size() >= pool.info.min_size) {
+  if ((acting.size() >= pool.info.min_size) &&
+      pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL)) {
     PGLogEntryHandler handler{this, &t};
     pg_log.roll_forward(&handler);
   }
@@ -2626,7 +2617,8 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
 
     i.info.history.last_epoch_started = activation_epoch;
     i.info.history.last_interval_started = i.info.history.same_interval_since;
-    if (acting.size() >= pool.info.min_size) {
+    if ((acting.size() >= pool.info.min_size) &&
+	pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL)) {
       state_set(PG_STATE_ACTIVE);
     } else {
       state_set(PG_STATE_PEERED);
@@ -9287,7 +9279,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 	pg->osd->set_not_ready_to_merge_source(pgid);
       }
     }
-  } else if (pg->acting.size() < pg->pool.info.min_size) {
+  } else if ((pg->acting.size() < pg->pool.info.min_size) ||
+	     !pg->pool.info.stretch_set_can_peer(pg->acting,
+						 *pg->get_osdmap(), NULL)) {
     pg->state_set(PG_STATE_PEERED);
   } else {
     pg->state_set(PG_STATE_ACTIVE);
