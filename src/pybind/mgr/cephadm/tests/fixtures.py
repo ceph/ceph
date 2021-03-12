@@ -91,6 +91,8 @@ def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):
     CephadmServe(cephadm)._purge_deleted_services()
     if not unmanaged:  # cause then we're not deleting daemons
         assert srv_name not in cephadm.spec_store, f'{cephadm.spec_store[srv_name]!r}'
+        if not srv_name.startswith('osd'):
+            assert not cephadm.cache.get_daemons_by_service(srv_name)
 
 
 @contextmanager

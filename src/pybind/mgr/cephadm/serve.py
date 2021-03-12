@@ -735,7 +735,7 @@ class CephadmServe:
         for service_name, spec in list(existing_services):
             if service_name not in self.mgr.spec_store.spec_deleted:
                 continue
-            if self.mgr.cache.get_daemons_by_service(service_name):
+            if not service_name.startswith('osd.') and self.mgr.cache.get_daemons_by_service(service_name):
                 continue
             if spec.service_type in ['mon', 'mgr']:
                 continue
@@ -785,7 +785,7 @@ class CephadmServe:
     def _create_daemon(self,
                        daemon_spec: CephadmDaemonDeploySpec,
                        reconfig: bool = False,
-                       osd_uuid_map: Optional[Dict[str, Any]] = None,
+                       osd_uuid_map: Optional[Dict[str, str]] = None,
                        ) -> str:
 
         with set_exception_subject('service', orchestrator.DaemonDescription(

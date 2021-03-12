@@ -6,6 +6,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.services.osd import OSD, OSDRemovalQueue
 
 try:
@@ -919,6 +920,26 @@ class TestCephadm(object):
                 'key': 'mds_join_fs',
             })
             assert not out
+
+    @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_purge_osds(self, cephadm_module: CephadmOrchestrator):
+        """osds are special as we're deleting the service even with existing daemons"""
+        spec = DriveGroupSpec(service_id='x', placement=PlacementSpec(
+            host_pattern='*'))
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, spec):
+                d_spec = CephadmDaemonDeploySpec(
+                    host='test',
+                    daemon_id='1',
+                    service_name='osd.x',
+                )
+                osd_uuid_map = {
+                    '1': 'osd_uuid'
+                }
+
+                CephadmServe(cephadm_module)._create_daemon(d_spec, False, osd_uuid_map)
+            assert cephadm_module.cache.get_daemon('osd.1').name() == 'osd.1'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")
