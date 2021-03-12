@@ -575,6 +575,9 @@ class Filesystem(MDSCluster):
         assert(mds_map['max_mds'] == max_mds)
         assert(mds_map['in'] == list(range(0, max_mds)))
 
+    def reset(self):
+        self.mon_manager.raw_cluster_cmd("fs", "reset", str(self.name), '--yes-i-really-mean-it')
+
     def fail(self):
         self.mon_manager.raw_cluster_cmd("fs", "fail", str(self.name))
 
