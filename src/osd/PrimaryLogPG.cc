@@ -3325,23 +3325,16 @@ struct C_SetManifestRefCountDone : public Context {
   PrimaryLogPGRef pg;
   PrimaryLogPG::ManifestOpRef mop;
   hobject_t soid;
+  uint64_t offset;
+  ceph_tid_t tid;
   C_SetManifestRefCountDone(PrimaryLogPG *p,
-    PrimaryLogPG::ManifestOpRef mop, hobject_t soid) : 
-    pg(p), mop(mop), soid(soid) {}
+    PrimaryLogPG::ManifestOpRef mop, hobject_t soid, uint64_t offset) : 
+          pg(p), mop(mop), soid(soid), offset(offset), tid(0) {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
     std::scoped_lock locker{*pg};
-    auto it = pg->manifest_ops.find(soid);
-    if (it == pg->manifest_ops.end()) {
-      // raced with cancel_manifest_ops
-      return;
-    }
-    if (it->second->cb) {
-      it->second->cb->complete(r);
-    }
-    pg->manifest_ops.erase(it);
-    mop.reset();
+    pg->finish_set_manifest_refcount(soid, r, tid, offset);
   }
 };
 
@@ -3377,6 +3370,10 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
     if (mop->objecter_tid) {
       tids->push_back(mop->objecter_tid);
       mop->objecter_tid = 0;
+    } else if (!mop->tids.empty()) {
+      for (auto &p : mop->tids) {
+	tids->push_back(p.second);
+      }
     }
     if (mop->cb) {
       mop->cb->set_requeue(requeue);
@@ -3532,37 +3529,53 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
     obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
     obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
     refs);
+  bool need_inc_ref = false;
   if (!refs.is_empty()) {
-    /* This is called by set-chunk, so we only consider a single chunk for the time being */
-    ceph_assert(refs.size() == 1);
-    auto p = refs.begin();
-    int inc_ref_count = p->second;
-    if (inc_ref_count > 0) {
-      /*
-       * In set-chunk case, the first thing we should do is to increment
-       * the reference the targe object has prior to update object_manifest in object_info_t.
-       * So, call directly refcount_manifest.
-       */
-      ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
-      C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, ctx->obs->oi.soid);
-      ceph_tid_t tid = refcount_manifest(ctx->obs->oi.soid, p->first,
-					  refcount_t::INCREMENT_REF, fin, std::nullopt);
-      mop->objecter_tid = tid;
+    ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
+    for (auto c : set_chunk.chunk_map) {
+      auto p = refs.find(c.second.oid);
+      if (p == refs.end()) {
+	continue;
+      }
+
+      int inc_ref_count = p->second;
+      if (inc_ref_count > 0) {
+	/*
+	 * In set-chunk case, the first thing we should do is to increment
+	 * the reference the targe object has prior to update object_manifest in object_info_t.
+	 * So, call directly refcount_manifest.
+	 */
+	auto target_oid = p->first;
+	auto offset = c.first;
+	auto length = c.second.length;	
+	C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, ctx->obs->oi.soid, offset);
+	ceph_tid_t tid = refcount_manifest(ctx->obs->oi.soid, target_oid,
+					    refcount_t::INCREMENT_REF, fin, std::nullopt);
+	fin->tid = tid;
+	mop->chunks[target_oid] = make_pair(offset, length);
+	mop->num_chunks++;
+	mop->tids[offset] = tid;
+
+	if (!ctx->obc->is_blocked()) {
+	  ctx->obc->start_block();
+	}
+	need_inc_ref = true;
+      } else if (inc_ref_count < 0) {
+	hobject_t src = ctx->obs->oi.soid;
+	hobject_t tgt = p->first;
+	ctx->register_on_commit(
+	    [src, tgt, this](){
+	      refcount_manifest(src, tgt, refcount_t::DECREMENT_REF, NULL, std::nullopt);
+	    });
+      }
+    }
+    if (mop->tids.size()) {
       manifest_ops[ctx->obs->oi.soid] = mop;
-      ctx->obc->start_block();
-      return true;
-    } else if (inc_ref_count < 0) {
-      hobject_t src = ctx->obs->oi.soid;
-      hobject_t tgt = p->first;
-      ctx->register_on_commit(
-	  [src, tgt, this](){
-	    refcount_manifest(src, tgt, refcount_t::DECREMENT_REF, NULL, std::nullopt);
-	  });
-      return false;
+      manifest_ops[ctx->obs->oi.soid]->op = ctx->op;
     }
   }
 
-  return false;
+  return need_inc_ref;
 }
 
 void PrimaryLogPG::update_chunk_map_by_dirty(OpContext* ctx) {
@@ -7042,10 +7055,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
 	  ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
-	  C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, soid);
+	  C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, soid, 0);
 	  ceph_tid_t tid = refcount_manifest(soid, target, 
 					      refcount_t::INCREMENT_REF, fin, std::nullopt);
-	  mop->objecter_tid = tid;
+	  fin->tid = tid;
+	  mop->num_chunks++;
+	  mop->tids[0] = tid;
 	  manifest_ops[soid] = mop;
 	  ctx->obc->start_block();
 	  result = -EINPROGRESS;
@@ -10533,6 +10548,36 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
 
   manifest_ops.erase(oid);
   return 0;
+}
+
+int PrimaryLogPG::finish_set_manifest_refcount(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset)
+{
+  dout(10) << __func__ << " " << oid << " tid " << tid
+	   << " " << cpp_strerror(r) << dendl;
+  map<hobject_t,ManifestOpRef>::iterator p = manifest_ops.find(oid);
+  if (p == manifest_ops.end()) {
+    dout(10) << __func__ << " no manifest_op found" << dendl;
+    return -EINVAL;
+  }
+  ManifestOpRef mop = p->second;
+  mop->results[offset] = r;
+  if (r < 0) {
+    // if any failure occurs, put a mark on the results to recognize the failure
+    mop->results[0] = r;
+  }
+  if (mop->num_chunks != mop->results.size()) {
+    // there are on-going works
+    return -EINPROGRESS;
+  }
+
+  if (mop->cb) {
+    mop->cb->complete(r);
+  }
+
+  manifest_ops.erase(p);
+  mop.reset();
+
+  return 0; 
 }
 
 int PrimaryLogPG::start_flush(
