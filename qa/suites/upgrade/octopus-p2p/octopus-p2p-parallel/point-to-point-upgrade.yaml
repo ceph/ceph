@@ -11,7 +11,7 @@ meta:
    run workload and upgrade-sequence in parallel
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
     - reached quota
     - scrub
     - osd_map_max_advance

@@ -6,7 +6,7 @@ meta:
 overrides:
   ceph:
     fs: xfs
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(MGR_DOWN\)
