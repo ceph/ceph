@@ -859,6 +859,8 @@ bool MgrMonitor::promote_standby()
     auto replacement_gid = pending_map.standbys.begin()->first;
     pending_map.active_gid = replacement_gid;
     pending_map.active_name = pending_map.standbys.at(replacement_gid).name;
+    pending_map.available_modules =
+      pending_map.standbys.at(replacement_gid).available_modules;
     pending_map.active_mgr_features =
       pending_map.standbys.at(replacement_gid).mgr_features;
     pending_map.available = false;
