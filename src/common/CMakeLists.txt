@@ -74,7 +74,6 @@ set(common_srcs
   hostname.cc
   ipaddr.cc
   iso_8601.cc
-  lockdep.cc
   mempool.cc
   mime.c
   numa.cc
@@ -103,6 +102,7 @@ set(common_srcs
 
 if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND common_srcs
+    lockdep.cc
     mutex_debug.cc
     shared_mutex_debug.cc)
 endif()
