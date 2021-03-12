@@ -1895,7 +1895,6 @@ protected:
   double scrub_sleep_time(bool must_scrub);
 
   // -- generic pg peering --
-  PeeringCtx create_context();
   void dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
                         ThreadPool::TPHandle *handle = NULL);
 
