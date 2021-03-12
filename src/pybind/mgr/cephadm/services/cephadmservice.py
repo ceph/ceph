@@ -147,12 +147,14 @@ class CephadmService(metaclass=ABCMeta):
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': entity,
-        })
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'auth caps',
-            'entity': entity,
             'caps': caps,
         })
+        if err:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'auth caps',
+                'entity': entity,
+                'caps': caps,
+            })
         return keyring
 
     def _inventory_get_addr(self, hostname: str) -> str:
