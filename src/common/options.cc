@@ -4051,6 +4051,14 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("bluefs_check_for_zeros", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Check data read for suspicious pages")
+    .set_long_description("Looks into data read to check if there is a 4K block entirely filled with zeros. "
+			  "If this happens, we re-read data. If there is difference, we print error to log.")
+    .add_see_also("bluestore_retry_disk_reads"),
+
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_flag(Option::FLAG_CREATE)
