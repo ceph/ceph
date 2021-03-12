@@ -2308,6 +2308,16 @@ public:
   }
 
   /**
+   * Returns whether the current acting set is able to go active
+   * and serve writes. It needs to satisfy min_size and any
+   * applicable stretch cluster constraints.
+   */
+  bool acting_set_writeable() {
+    return (acting.size() >= pool.info.min_size) &&
+      (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+  }
+
+  /**
    * Returns whether all peers which might have unfound objects have been
    * queried or marked lost.
    */
