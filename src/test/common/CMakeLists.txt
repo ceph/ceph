@@ -25,10 +25,12 @@ if(HAVE_BLKID AND LINUX)
 endif()
 
 # unittest_lockdep
-add_executable(unittest_lockdep
-  test_lockdep.cc)
-add_ceph_unittest(unittest_lockdep)
-target_link_libraries(unittest_lockdep ceph-common)
+if(WITH_CEPH_DEBUG_MUTEX)
+  add_executable(unittest_lockdep
+    test_lockdep.cc)
+  add_ceph_unittest(unittest_lockdep)
+  target_link_libraries(unittest_lockdep ceph-common)
+endif()
 
 # unittest_counter
 add_executable(unittest_counter

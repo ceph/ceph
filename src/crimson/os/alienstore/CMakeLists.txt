@@ -15,7 +15,6 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/Finisher.cc
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
-  ${PROJECT_SOURCE_DIR}/src/common/lockdep.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters_collection.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
@@ -31,6 +30,7 @@ set(crimson_alien_common_srcs
   $<TARGET_OBJECTS:common_prioritycache_obj>)
 if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND crimson_alien_common_srcs
+    ${PROJECT_SOURCE_DIR}/src/common/lockdep.cc
     ${PROJECT_SOURCE_DIR}/src/common/mutex_debug.cc
     ${PROJECT_SOURCE_DIR}/src/common/shared_mutex_debug.cc)
 endif()
