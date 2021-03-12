@@ -260,12 +260,12 @@ add_executable(unittest_weighted_priority_queue
 target_link_libraries(unittest_weighted_priority_queue ceph-common)
 add_ceph_unittest(unittest_weighted_priority_queue)
 
-# unittest_mutex_debug
-add_executable(unittest_mutex_debug
-  test_mutex_debug.cc
-  )
-add_ceph_unittest(unittest_mutex_debug)
-target_link_libraries(unittest_mutex_debug ceph-common)
+if(WITH_CEPH_DEBUG_MUTEX)
+  add_executable(unittest_mutex_debug
+    test_mutex_debug.cc)
+  add_ceph_unittest(unittest_mutex_debug)
+  target_link_libraries(unittest_mutex_debug ceph-common)
+endif()
 
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
