@@ -91,6 +91,8 @@ sc::result ReservingReplicas::react(const ReservationFailure&)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "ReservingReplicas::react(const ReservationFailure&)" << dendl;
 
+  // Mark PG so that we will try other PGs, before coming back to this one
+  scrbr->set_reserve_failed();
   // the Scrubber must release all resources and abort the scrubbing
   scrbr->clear_pgscrub_state();
   return transit<NotActive>();
