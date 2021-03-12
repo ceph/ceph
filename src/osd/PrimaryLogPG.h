@@ -1448,6 +1448,7 @@ protected:
   friend struct RefCountCallback;
   friend struct C_SetDedupChunks;
   friend struct C_SetManifestRefCountDone;
+  friend struct SetManifestFinisher;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
