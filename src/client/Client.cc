@@ -288,7 +288,7 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
-  : Dispatcher(m->cct),
+  : Dispatcher(m->cct->get()),
     timer(m->cct, timer_lock, false),
     messenger(m),
     monclient(mc),
@@ -296,6 +296,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     whoami(mc->get_global_id()),
     mount_state(CLIENT_UNMOUNTED, "Client::mountstate_lock"),
     initialize_state(CLIENT_NEW, "Client::initstate_lock"),
+    cct_deleter{m->cct, [](CephContext *p) {p->put();}},
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
     interrupt_finisher(m->cct),
