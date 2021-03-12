@@ -80,7 +80,8 @@ class CephadmDaemonDeploySpec:
             daemon_id=self.daemon_id,
             hostname=self.host,
             status=status,
-            status_desc=status_desc
+            status_desc=status_desc,
+            service_name=self.service_name,
         )
 
 
