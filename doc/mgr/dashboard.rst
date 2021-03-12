@@ -268,7 +268,7 @@ section.
 To create a user with the administrator role you can use the following
 commands::
 
-  $ ceph dashboard ac-user-create <username> <password> administrator
+  $ ceph dashboard ac-user-create <username> -i <file-containing-password> administrator
 
 Account Lock-out
 ^^^^^^^^^^^^^^^^
@@ -333,8 +333,8 @@ The credentials of an existing user can also be obtained by using
 
 Finally, provide the credentials to the dashboard::
 
-  $ ceph dashboard set-rgw-api-access-key <access_key>
-  $ ceph dashboard set-rgw-api-secret-key <secret_key>
+  $ ceph dashboard set-rgw-api-access-key -i <file-containing-access-key>
+  $ ceph dashboard set-rgw-api-secret-key -i <file-containing-secret-key>
 
 In a typical default configuration with a single RGW endpoint, this is all you
 have to do to get the Object Gateway management functionality working. The
@@ -396,7 +396,8 @@ To disable API SSL verification run the following command::
 The available iSCSI gateways must be defined using the following commands::
 
   $ ceph dashboard iscsi-gateway-list
-  $ ceph dashboard iscsi-gateway-add <scheme>://<username>:<password>@<host>[:port]
+  $ # Gateway URL format for a new gateway: <scheme>://<username>:<password>@<host>[:port]
+  $ ceph dashboard iscsi-gateway-add -i <file-containing-gateway-url> [<gateway_name>]
   $ ceph dashboard iscsi-gateway-rm <gateway_name>
 
 
@@ -795,7 +796,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Create User*::
 
-  $ ceph dashboard ac-user-create [--enabled] [--force-password] [--pwd_update_required] <username> [<password>] [<rolename>] [<name>] [<email>] [<pwd_expiration_date>]
+  $ ceph dashboard ac-user-create [--enabled] [--force-password] [--pwd_update_required] <username> -i <file-containing-password> [<rolename>] [<name>] [<email>] [<pwd_expiration_date>]
 
   To bypass the password policy checks use the `force-password` option.
   Use the option `pwd_update_required` so that a newly created user has
@@ -807,11 +808,11 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Change Password*::
 
-  $ ceph dashboard ac-user-set-password [--force-password] <username> <password>
+  $ ceph dashboard ac-user-set-password [--force-password] <username> -i <file-containing-password>
 
 - *Change Password Hash*::
 
-  $ ceph dashboard ac-user-set-password-hash <username> <hash>
+  $ ceph dashboard ac-user-set-password-hash <username> -i <file-containing-password-hash>
 
   The hash must be a bcrypt hash and salt, e.g. ``$2b$12$Pt3Vq/rDt2y9glTPSV.VFegiLkQeIpddtkhoFetNApYmIJOY8gau2``.
   This can be used to import users from an external database.
@@ -948,7 +949,7 @@ view and create Ceph pools, and have read-only access to any other scopes.
 
 1. *Create the user*::
 
-   $ ceph dashboard ac-user-create bob mypassword
+   $ ceph dashboard ac-user-create bob -i <file-containing-password>
 
 2. *Create role and specify scope permissions*::
 

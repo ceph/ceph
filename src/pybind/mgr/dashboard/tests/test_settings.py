@@ -3,6 +3,9 @@ from __future__ import absolute_import
 
 import errno
 import unittest
+
+from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
+
 from . import KVStoreMockMixin, ControllerTestCase
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
@@ -42,7 +45,9 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
 
     def test_get_cmd(self):
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard get-grafana-api-port'})
+            {'prefix': 'dashboard get-grafana-api-port'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, '3000')
         self.assertEqual(err, '')
@@ -50,14 +55,35 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
     def test_set_cmd(self):
         r, out, err = handle_option_command(
             {'prefix': 'dashboard set-grafana-api-port',
-             'value': '4000'})
+             'value': '4000'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, 'Option GRAFANA_API_PORT updated')
         self.assertEqual(err, '')
 
+    def test_set_secret_empty(self):
+        r, out, err = handle_option_command(
+            {'prefix': 'dashboard set-grafana-api-password'},
+            None
+        )
+        self.assertEqual(r, -errno.EINVAL)
+        self.assertEqual(out, '')
+        self.assertEqual(err, ERROR_MSG_EMPTY_INPUT_FILE)
+
+    def test_set_secret(self):
+        r, out, err = handle_option_command(
+            {'prefix': 'dashboard set-grafana-api-password'},
+            'my-secret'
+        )
+        self.assertEqual(r, 0)
+        self.assertEqual(out, 'Option GRAFANA_API_PASSWORD updated')
+        self.assertEqual(err, '')
+
     def test_reset_cmd(self):
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard reset-grafana-enabled'}
+            {'prefix': 'dashboard reset-grafana-enabled'},
+            None
         )
         self.assertEqual(r, 0)
         self.assertEqual(out, 'Option {} reset to default value "{}"'.format(
@@ -66,7 +92,9 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
 
     def test_inv_cmd(self):
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard get-non-existent-option'})
+            {'prefix': 'dashboard get-non-existent-option'},
+            None
+        )
         self.assertEqual(r, -errno.ENOSYS)
         self.assertEqual(out, '')
         self.assertEqual(err, "Command not found "
@@ -75,13 +103,17 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
     def test_sync(self):
         Settings.GRAFANA_API_PORT = 5000
         r, out, err = handle_option_command(
-            {'prefix': 'dashboard get-grafana-api-port'})
+            {'prefix': 'dashboard get-grafana-api-port'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, '5000')
         self.assertEqual(err, '')
         r, out, err = handle_option_command(
             {'prefix': 'dashboard set-grafana-api-host',
-             'value': 'new-local-host'})
+             'value': 'new-local-host'},
+            None
+        )
         self.assertEqual(r, 0)
         self.assertEqual(out, 'Option GRAFANA_API_HOST updated')
         self.assertEqual(err, '')

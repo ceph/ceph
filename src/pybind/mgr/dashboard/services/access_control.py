@@ -15,8 +15,7 @@ import re
 from datetime import datetime, timedelta
 
 import bcrypt
-
-from mgr_module import CLIReadCommand, CLIWriteCommand
+from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
 
 from .. import mgr
 from ..security import Scope, Permission
@@ -584,10 +583,11 @@ def load_access_control_db():
 # CLI dashboard access control scope commands
 
 @CLIWriteCommand('dashboard set-login-credentials',
-                 'name=username,type=CephString '
-                 'name=password,type=CephString',
-                 'Set the login credentials')
-def set_login_credentials_cmd(_, username, password):
+                 'name=username,type=CephString',
+                 'Set the login credentials. Password read from -i <file>')
+@CLICheckNonemptyFileInput
+def set_login_credentials_cmd(_, username, inbuf):
+    password = inbuf
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_password(password)
@@ -717,7 +717,6 @@ def ac_user_show_cmd(_, username=None):
 
 @CLIWriteCommand('dashboard ac-user-create',
                  'name=username,type=CephString '
-                 'name=password,type=CephString,req=false '
                  'name=rolename,type=CephString,req=false '
                  'name=name,type=CephString,req=false '
                  'name=email,type=CephString,req=false '
@@ -725,10 +724,12 @@ def ac_user_show_cmd(_, username=None):
                  'name=force_password,type=CephBool,req=false '
                  'name=pwd_expiration_date,type=CephInt,req=false '
                  'name=pwd_update_required,type=CephBool,req=false',
-                 'Create a user')
-def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
+                 'Create a user. Password read from -i <file>')
+@CLICheckNonemptyFileInput
+def ac_user_create_cmd(_, username, inbuf, rolename=None, name=None,
                        email=None, enabled=True, force_password=False,
                        pwd_expiration_date=None, pwd_update_required=False):
+    password = inbuf
     try:
         role = mgr.ACCESS_CTRL_DB.get_role(rolename) if rolename else None
     except RoleDoesNotExist as ex:
@@ -868,10 +869,11 @@ def ac_user_del_roles_cmd(_, username, roles):
 
 @CLIWriteCommand('dashboard ac-user-set-password',
                  'name=username,type=CephString '
-                 'name=password,type=CephString '
                  'name=force_password,type=CephBool,req=false',
-                 'Set user password')
-def ac_user_set_password(_, username, password, force_password=False):
+                 'Set user password from -i <file>')
+@CLICheckNonemptyFileInput
+def ac_user_set_password(_, username, inbuf, force_password=False):
+    password = inbuf
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         if not force_password:
@@ -887,10 +889,11 @@ def ac_user_set_password(_, username, password, force_password=False):
 
 
 @CLIWriteCommand('dashboard ac-user-set-password-hash',
-                 'name=username,type=CephString '
-                 'name=hashed_password,type=CephString',
-                 'Set user password bcrypt hash')
-def ac_user_set_password_hash(_, username, hashed_password):
+                 'name=username,type=CephString',
+                 'Set user password bcrypt hash from -i <file>')
+@CLICheckNonemptyFileInput
+def ac_user_set_password_hash(_, username, inbuf):
+    hashed_password = inbuf
     try:
         # make sure the hashed_password is actually a bcrypt hash
         bcrypt.checkpw(b'', hashed_password.encode('utf-8'))

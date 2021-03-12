@@ -197,7 +197,8 @@ class CephadmService(metaclass=ABCMeta):
         cmd_dicts = get_set_cmd_dicts(out.strip())
         for cmd_dict in list(cmd_dicts):
             try:
-                _, out, _ = self.mgr.check_mon_command(cmd_dict)
+                inbuf = cmd_dict.pop('inbuf', None)
+                _, out, _ = self.mgr.check_mon_command(cmd_dict, inbuf)
             except MonCommandFailed as e:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 

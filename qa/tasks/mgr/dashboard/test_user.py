@@ -286,39 +286,50 @@ class UserTest(DashboardTestCase):
         self.assertError(code='invalid_credentials', component='auth')
 
     def test_create_user_password_cli(self):
-        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create',
-                                          'test1', 'mypassword10#'])
+        exitcode = self._ceph_cmd_with_secret(['dashboard', 'ac-user-create',
+                                               'test1'],
+                                              'mypassword10#',
+                                              return_exit_code=True)
         self.assertEqual(exitcode, 0)
         self.delete_user('test1')
 
     @DashboardTestCase.RunAs('test2', 'foo_bar_10#', force_password=False, login=False)
     def test_change_user_password_cli(self):
-        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
-                                          'test2', 'foo_new-password01#'])
+        exitcode = self._ceph_cmd_with_secret(['dashboard', 'ac-user-set-password',
+                                               'test2'],
+                                              'foo_new-password01#',
+                                              return_exit_code=True)
         self.assertEqual(exitcode, 0)
 
     def test_create_user_password_force_cli(self):
-        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create',
-                                          '--force-password', 'test11',
-                                          'bar'])
+        exitcode = self._ceph_cmd_with_secret(['dashboard', 'ac-user-create',
+                                               '--force-password', 'test11'],
+                                              'bar',
+                                              return_exit_code=True)
         self.assertEqual(exitcode, 0)
         self.delete_user('test11')
 
     @DashboardTestCase.RunAs('test22', 'foo_bar_10#', force_password=False, login=False)
     def test_change_user_password_force_cli(self):
-        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
-                                          '--force-password', 'test22',
-                                          'bar'])
+        exitcode = self._ceph_cmd_with_secret(['dashboard', 'ac-user-set-password',
+                                               '--force-password', 'test22'],
+                                              'bar',
+                                              return_exit_code=True)
         self.assertEqual(exitcode, 0)
 
     def test_create_user_password_cli_fail(self):
-        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create', 'test3', 'foo'])
+        exitcode = self._ceph_cmd_with_secret(['dashboard', 'ac-user-create',
+                                               'test3'],
+                                              'foo',
+                                              return_exit_code=True)
         self.assertNotEqual(exitcode, 0)
 
     @DashboardTestCase.RunAs('test4', 'x1z_tst+_10#', force_password=False, login=False)
     def test_change_user_password_cli_fail(self):
-        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
-                                          'test4', 'bar'])
+        exitcode = self._ceph_cmd_with_secret(['dashboard', 'ac-user-set-password',
+                                               'test4'],
+                                              'bar',
+                                              return_exit_code=True)
         self.assertNotEqual(exitcode, 0)
 
     def test_create_user_with_pwd_expiration_date(self):

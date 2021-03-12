@@ -3252,10 +3252,11 @@ def command_bootstrap():
 
         logger.info('Creating initial admin user...')
         password = args.initial_dashboard_password or generate_password()
-        cmd = ['dashboard', 'ac-user-create', args.initial_dashboard_user, password, 'administrator', '--force-password']
+        tmp_password_file = write_tmp(password, uid, gid)
+        cmd = ['dashboard', 'ac-user-create', args.initial_dashboard_user, '-i', '/tmp/dashboard.pw', 'administrator', '--force-password']
         if not args.dashboard_password_noupdate:
             cmd.append('--pwd-update-required')
-        cli(cmd)
+        cli(cmd, extra_mounts={pathify(tmp_password_file.name): '/tmp/dashboard.pw:z'})
         logger.info('Fetching dashboard port number...')
         out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
         port = int(out)
