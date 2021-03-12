@@ -62,12 +62,13 @@ be up to 5x slower with some workloads. Please pass
 "-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug
 release.)
 
-(Note: `ninja` alone will use only one CPU thread, this could take a while. use
-the `-j` option to use more threads. Something like `ninja -j$(nproc)` would be
-a good start.
+(Note: the number of jobs used by `ninja` is derived from the the number of
+CPU cores of the building host if unspecified. Use the `-j` option to limit
+the job number if the build jobs are running out of memory. On average, each
+job takes around 2.5GiB memory.
 
 This assumes you make your build dir a subdirectory of the ceph.git
-checkout. If you put it elsewhere, just point `CEPH_GIT_DIR`to the correct
+checkout. If you put it elsewhere, just point `CEPH_GIT_DIR` to the correct
 path to the checkout. Any additional CMake args can be specified setting ARGS
 before invoking do_cmake. See [cmake options](#cmake-options)
 for more details. Eg.
