@@ -766,7 +766,15 @@ Trimming requires that the placement groups are ``active+clean``.
 :Default: ``500``
 
 
-``mon_mds_force_trim_to``
+``paxos service trim max multiplier``
+
+:Description: The factor by which paxos service trim max will be multiplied
+              to get a new upper bound when trim sizes are high (0 disables it)
+:Type: Integer
+:Default: ``20``
+
+
+``mon mds force trim to``
 
 :Description: Force monitor to trim mdsmaps to this point (0 disables it.
               dangerous, use with care)
