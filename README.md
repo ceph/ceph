@@ -55,15 +55,15 @@ Build instructions:
 
 	./do_cmake.sh
 	cd build
-	make
+	ninja
 
 (Note: do_cmake.sh now defaults to creating a debug build of ceph that can
 be up to 5x slower with some workloads. Please pass 
 "-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug
 release.)
 
-(Note: `make` alone will use only one CPU thread, this could take a while. use
-the `-j` option to use more threads. Something like `make -j$(nproc)` would be
+(Note: `ninja` alone will use only one CPU thread, this could take a while. use
+the `-j` option to use more threads. Something like `ninja -j$(nproc)` would be
 a good start.
 
 This assumes you make your build dir a subdirectory of the ceph.git
@@ -76,11 +76,11 @@ for more details. Eg.
 
 To build only certain targets use:
 
-	make [target name]
+	ninja [target name]
 
 To install:
 
-	make install
+	ninja install
  
 ### CMake Options
 
@@ -101,7 +101,7 @@ To view an exhaustive list of -D options, you can invoke `cmake` with:
 
 	cmake -LH
 
-If you often pipe `make` to `less` and would like to maintain the
+If you often pipe `ninja` to `less` and would like to maintain the
 diagnostic colors for errors and warnings (and if your compiler
 supports it), you can invoke `cmake` with:
 
@@ -109,7 +109,7 @@ supports it), you can invoke `cmake` with:
 
 Then you'll get the diagnostic colors when you execute:
 
-	make | less -R
+	ninja | less -R
 
 Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 'never'.
@@ -132,7 +132,7 @@ are committed to git.)
 To run a functional test cluster,
 
 	cd build
-	make vstart        # builds just enough to run vstart
+	ninja vstart        # builds just enough to run vstart
 	../src/vstart.sh --debug --new -x --localhost --bluestore
 	./bin/ceph -s
 
@@ -157,11 +157,11 @@ To start or stop individual daemons, the sysvinit script can be used:
 To build and run all tests (in parallel using all processors), use `ctest`:
 
 	cd build
-	make
+	ninja
 	ctest -j$(nproc)
 
 (Note: Many targets built from src/test are not run using `ctest`.
-Targets starting with "unittest" are run in `make check` and thus can
+Targets starting with "unittest" are run in `ninja check` and thus can
 be run with `ctest`. Targets starting with "ceph_test" can not, and should
 be run by hand.)
 
@@ -171,7 +171,7 @@ To build and run all tests and their dependencies without other
 unnecessary targets in Ceph:
 
 	cd build
-	make check -j$(nproc)
+	ninja check -j$(nproc)
 
 To run an individual test manually, run `ctest` with -R (regex matching):
 
