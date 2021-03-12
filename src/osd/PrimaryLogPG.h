@@ -1329,7 +1329,7 @@ protected:
   void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids);
-  void cancel_and_kick_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   friend struct C_Copyfrom;
 
@@ -1844,6 +1844,7 @@ public:
   bool maybe_await_blocked_head(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
+  void requeue_op_blocked_by_object(const hobject_t &soid);
 
   void maybe_force_recovery();
 
