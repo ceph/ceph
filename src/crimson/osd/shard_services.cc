@@ -16,7 +16,6 @@
 #include "crimson/osd/osdmap_service.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGCreated.h"
-#include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGQuery.h"
 
@@ -136,7 +135,7 @@ seastar::future<> ShardServices::dispatch_context(
   ceph_assert(col || ctx.transaction.empty());
   return seastar::when_all_succeed(
     dispatch_context_messages(
-      BufferedRecoveryMessages{ceph_release_t::octopus, ctx}),
+      BufferedRecoveryMessages{ctx}),
     col ? dispatch_context_transaction(col, ctx) : seastar::now()
   ).then_unpack([] {
     return seastar::now();
