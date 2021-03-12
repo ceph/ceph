@@ -88,6 +88,9 @@
   functionality configuration changes are required.  See the current
   documentation (radosgw/vault) for more details.
 
+* Scubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
+  It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.
+
 >=15.0.0
 --------
 
