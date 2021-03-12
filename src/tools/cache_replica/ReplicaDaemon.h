@@ -21,6 +21,8 @@
 class ReplicaDaemon : public Dispatcher {
 public:
   ReplicaDaemon(std::string_view name,
+                int32_t daemon_id,
+                std::string& rnic_addr,
                 Messenger* msgr_public,
                 MonClient *mon_client,
                 boost::asio::io_context& ioctx);
@@ -32,7 +34,7 @@ protected:
   std::string name;
   Messenger *msgr_public;
   MonClient *mon_client;
-  ReplicaDaemonState self_state;
+  ReplicaDaemonInfo self_state;
   boost::asio::io_context& ioctx;
   LogClient log_client;
   LogChannelRef clog;

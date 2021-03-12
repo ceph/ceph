@@ -237,7 +237,7 @@
 
 // *** Replica ***
 // Keep it here, we need this message used by ReplicaDaemon to
-// report ReplicaDaemonState info to ReplicaMonitor
+// report ReplicaDaemonInfo info to ReplicaMonitor
 #define MSG_REPLICADAEMON_BLINK         0x800
 
 // ======================================================

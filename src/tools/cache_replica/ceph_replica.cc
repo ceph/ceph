@@ -194,6 +194,8 @@ int main(int argc, const char **argv)
 
   // start cache replicadaemon
   cache_replica = new ReplicaDaemon(g_conf()->name.get_id().c_str(),
+                                    whoami,
+                                    rnic_addr,
                                     msgr_public,
                                     &mon_client,
                                     ctxpool);

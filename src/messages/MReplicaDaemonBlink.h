@@ -19,13 +19,13 @@ class MReplicaDaemonBlink : public PaxosServiceMessage {
 private:
   static constexpr int HEADER_VERSION = 0;
   static constexpr int COMPAT_VERSION = 0;
-  ReplicaDaemonState replicadaemon_state;
+  ReplicaDaemonInfo replicadaemon_state;
 
 public:
   MReplicaDaemonBlink() :
     PaxosServiceMessage{MSG_REPLICADAEMON_BLINK, 0, HEADER_VERSION, COMPAT_VERSION} {
   }
-  MReplicaDaemonBlink(ReplicaDaemonState &replicadaemon_state) :
+  MReplicaDaemonBlink(ReplicaDaemonInfo &replicadaemon_state) :
     PaxosServiceMessage{MSG_REPLICADAEMON_BLINK, replicadaemon_state.commit_epoch,
                         HEADER_VERSION, COMPAT_VERSION},
     replicadaemon_state(replicadaemon_state) {
@@ -35,7 +35,7 @@ public:
   }
 
 public:
-  const ReplicaDaemonState& get_replicadaemon_stateref(void) const {
+  const ReplicaDaemonInfo& get_replicadaemon_stateref(void) const {
     return replicadaemon_state;
   }
   void print(std::ostream& out) const override {

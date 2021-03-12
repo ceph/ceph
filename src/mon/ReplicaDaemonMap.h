@@ -13,27 +13,36 @@
 #include "include/types.h"
 #include "msg/msg_types.h"
 
-struct ReplicaDaemonState {
+struct ReplicaDaemonInfo {
   version_t commit_epoch = 0;
-  entity_addrvec_t replica_route_addr;
+  int32_t daemon_id;
+  int32_t rnic_bind_port;
+  std::string rnic_addr;
+  uint64_t free_size;
 
   void encode(bufferlist& replicadaemon_state_bl, uint64_t features = 0) const {
     ENCODE_START(0, 0, replicadaemon_state_bl);
     encode(commit_epoch, replicadaemon_state_bl);
-    encode(replica_route_addr, replicadaemon_state_bl, features);
+    encode(daemon_id, replicadaemon_state_bl);
+    encode(rnic_bind_port, replicadaemon_state_bl);
+    encode(rnic_addr, replicadaemon_state_bl, features);
+    encode(free_size, replicadaemon_state_bl, features);
     ENCODE_FINISH(replicadaemon_state_bl);
   }
 
   void decode(bufferlist::const_iterator& replicadaemon_state_bl_it) {
     DECODE_START(0, replicadaemon_state_bl_it);
     decode(commit_epoch, replicadaemon_state_bl_it);
-    decode(replica_route_addr, replicadaemon_state_bl_it);
+    decode(daemon_id, replicadaemon_state_bl_it);
+    decode(rnic_bind_port, replicadaemon_state_bl_it);
+    decode(rnic_addr, replicadaemon_state_bl_it);
+    decode(free_size, replicadaemon_state_bl_it);
     DECODE_FINISH(replicadaemon_state_bl_it);
   }
 
   void print_state(std::ostream& oss) const;
 };
-WRITE_CLASS_ENCODER(ReplicaDaemonState)
+WRITE_CLASS_ENCODER(ReplicaDaemonInfo)
 
 class ReplicaDaemonMap {
 public:
@@ -53,7 +62,7 @@ public:
     this->epoch = epoch;
   }
 
-  void update_daemonmap(const ReplicaDaemonState& new_daemon_state);
+  void update_daemonmap(const ReplicaDaemonInfo& new_daemon_state);
   void print_map(std::ostream& oss) const;
 
   bool empty() {
@@ -62,7 +71,7 @@ public:
 
 private:
   epoch_t epoch = 0;
-  std::vector<ReplicaDaemonState> replicadaemons_state; // Let's change it to be map:
+  std::vector<ReplicaDaemonInfo> replicadaemons_state; // Let's change it to be map:
   // std::map<std::pair<pool, rbd_image>, std::tuple<size, replicated>>;
 };
 WRITE_CLASS_ENCODER_FEATURES(ReplicaDaemonMap)

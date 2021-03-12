@@ -19,6 +19,8 @@
 #define dout_prefix *_dout << "replica." << name << ' ' << FN_NAME << " : "
 
 ReplicaDaemon::ReplicaDaemon(std::string_view name,
+                             int32_t daemon_id,
+                             std::string& rnic_addr,
                              Messenger *msgr_public,
                              MonClient *mon_client,
                              boost::asio::io_context& ioctx) :
@@ -26,7 +28,7 @@ ReplicaDaemon::ReplicaDaemon(std::string_view name,
   name(name),
   msgr_public(msgr_public),
   mon_client(mon_client),
-  self_state{0, STATE_BOOTING, {}},
+  self_state{0, daemon_id, -1, rnic_addr, 0},
   ioctx(ioctx),
   log_client(msgr_public->cct, msgr_public, &mon_client->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel()),
@@ -60,7 +62,6 @@ int ReplicaDaemon::init()
     return r;
   }
   ceph_assert(mon_client->is_connected());
-  self_state.replica_route_addr = msgr_public->get_myaddrs(); //It should be RNIC IP and its port
 
   mon_client->sub_want("replicamap", 0, 0); // do we still need replicamap???
   mon_client->renew_subs(); // does daemon need to subscribe the replicamap with all ReplicaDaemons's info

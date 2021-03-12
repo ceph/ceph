@@ -9,15 +9,11 @@
 
 #include "ReplicaDaemonMap.h"
 
-void ReplicaDaemonState::print_state(std::ostream& oss) const
+void ReplicaDaemonInfo::print_state(std::ostream& oss) const
 {
   oss << "commit at epoch: " << commit_epoch << ", "
-      << "state : " << (daemon_status == STATE_BOOTING ? "daemon booting" :
-                       daemon_status == STATE_ACTIVE   ? "daemon active" :
-                       daemon_status == STATE_STOPPING ? "daemon stopping" :
-                       daemon_status == STATE_DOWN     ? "daemon down" :
-                       "wrong state") << ", "
-      << "replica addr: " << replica_route_addr
+      << "rnic addr: " << rnic_addr << " port: " << rnic_bind_port << ", "
+      << "free size: " << free_size
       << std::endl;
 }
 
@@ -47,16 +43,17 @@ void ReplicaDaemonMap::decode(bufferlist::const_iterator& replicadaemon_map_bl_i
   DECODE_FINISH(replicadaemon_map_bl_it);
 }
 
-void ReplicaDaemonMap::update_daemonmap(const ReplicaDaemonState& new_daemon_state) {
+void ReplicaDaemonMap::update_daemonmap(const ReplicaDaemonInfo& new_daemon_state) {
   bool replicadaemon_state_exist = false;
+#if 0
   for (auto& replicadaemon_state : replicadaemons_state) {
     if (replicadaemon_state.replica_route_addr.legacy_equals(
         new_daemon_state.replica_route_addr)) {
         replicadaemon_state_exist = true;
-        replicadaemon_state.daemon_status = new_daemon_state.daemon_status;
         break;
     }
   }
+#endif
   if (!replicadaemon_state_exist) {
     replicadaemons_state.push_back(new_daemon_state);
   }
