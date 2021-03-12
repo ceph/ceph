@@ -448,7 +448,7 @@ class TestMirroringCommands(CephFSTestCase):
         self.assertTrue(uuid_peer_b is not None)
         # reset filesystem
         self.fs.fail()
-        self.fs.mon_manager.raw_cluster_cmd("fs", "reset", self.fs.name, "--yes-i-really-mean-it")
+        self.fs.reset()
         self.fs.wait_for_daemons()
         self._verify_mirroring(self.fs.name, "disabled")
 
