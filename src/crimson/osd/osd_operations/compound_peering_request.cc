@@ -5,7 +5,6 @@
 
 #include "osd/PeeringState.h"
 
-#include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGCreate2.h"
 
 #include "common/Formatter.h"
