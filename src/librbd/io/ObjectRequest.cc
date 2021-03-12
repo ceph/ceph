@@ -399,7 +399,8 @@ void AbstractObjectWriteRequest<I>::add_write_hint(
     neorados::WriteOp *wr) {
   I *image_ctx = this->m_ictx;
   std::shared_lock image_locker{image_ctx->image_lock};
-  if (image_ctx->object_map == nullptr || !this->m_object_may_exist) {
+  if (image_ctx->object_map == nullptr || !this->m_object_may_exist ||
+      image_ctx->alloc_hint_flags != 0U) {
     ObjectRequest<I>::add_write_hint(*image_ctx, wr);
   }
 }
