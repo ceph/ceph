@@ -107,7 +107,8 @@ class TestCephadmService:
                          'osd', 'allow rwx']
 
         expected_call = call({'prefix': 'auth get-or-create',
-                              'entity': 'client.iscsi.a'})
+                              'entity': 'client.iscsi.a',
+                              'caps': expected_caps})
         expected_call2 = call({'prefix': 'auth caps',
                                'entity': 'client.iscsi.a',
                                'caps': expected_caps})
