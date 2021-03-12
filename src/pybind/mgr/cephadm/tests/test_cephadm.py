@@ -374,6 +374,86 @@ class TestCephadm(object):
         out = cephadm_module.osd_service.find_destroyed_osds()
         assert out == {'host1': ['0']}
 
+    @ pytest.mark.parametrize(
+        "ceph_services, cephadm_daemons, strays_expected",
+        # [ ([(daemon_type, daemon_id), ... ], [...], [...]), ... ]
+        [
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [],
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+            ),
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [],
+            ),
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [('mds', 'a'), ('osd', '0')],
+                [('mgr', 'x')],
+            ),
+            # https://tracker.ceph.com/issues/49573
+            (
+                [('rgw-nfs', 'nfs.foo.host1-rgw')],
+                [],
+                [('nfs', 'foo.host1')],
+            ),
+            (
+                [('rgw-nfs', 'nfs.foo.host1-rgw')],
+                [('nfs', 'foo.host1')],
+                [],
+            ),
+            (
+                [],
+                [('nfs', 'foo.host1')],
+                [],
+            ),
+        ]
+    )
+    def test_check_for_stray_daemons(
+            self,
+            cephadm_module,
+            ceph_services,
+            cephadm_daemons,
+            strays_expected
+    ):
+        # mock ceph service-map
+        services = []
+        for service in ceph_services:
+            s = {'type': service[0], 'id': service[1]}
+            services.append(s)
+        ls = [{'hostname': 'host1', 'services': services}]
+
+        with mock.patch.object(cephadm_module, 'list_servers', mock.MagicMock()) as list_servers:
+            list_servers.return_value = ls
+            list_servers.__iter__.side_effect = ls.__iter__
+
+            # populate cephadm daemon cache
+            dm = {}
+            for daemon_type, daemon_id in cephadm_daemons:
+                dd = DaemonDescription(daemon_type=daemon_type, daemon_id=daemon_id)
+                dm[dd.name()] = dd
+            cephadm_module.cache.update_host_daemons('host1', dm)
+
+            # test
+            CephadmServe(cephadm_module)._check_for_strays()
+
+            # verify
+            strays = cephadm_module.health_checks.get('CEPHADM_STRAY_DAEMON')
+            if not strays:
+                assert len(strays_expected) == 0
+            else:
+                for dt, di in strays_expected:
+                    name = '%s.%s' % (dt, di)
+                    for detail in strays['detail']:
+                        if name in detail:
+                            strays['detail'].remove(detail)
+                            break
+                    assert name in detail
+                assert len(strays['detail']) == 0
+                assert strays['count'] == len(strays_expected)
+
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
     def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
         _mon_cmd.return_value = (1, "", "fail_msg")
