@@ -284,6 +284,9 @@ class DriveGroupSpec(ServiceSpec):
                 self.placement.host_pattern is not None:
             raise DriveGroupValidationError('host_pattern must be of type string')
 
+        if self.data_devices is None:
+            raise DriveGroupValidationError("`data_devices` element is required.")
+
         specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
         for s in filter(None, specs):
             s.validate()

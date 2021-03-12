@@ -1,4 +1,6 @@
 # flake8: noqa
+import re
+
 import pytest
 import yaml
 
@@ -30,22 +32,28 @@ def test_DriveGroup(test_input):
     assert all([isinstance(x, Device) for x in dg.data_devices.paths])
     assert dg.data_devices.paths[0].path == '/dev/sda'
 
-@pytest.mark.parametrize("test_input",
+@pytest.mark.parametrize("match,test_input",
 [
     (
-        {}
+        re.escape('Service Spec is not an (JSON or YAML) object. got "None"'),
+        ''
     ),
     (
-        yaml.safe_load("""
+        "Failed to validate Drive Group: OSD spec needs a `placement` key.",
+        '{}'
+    ),
+    (
+        'Failed to validate Drive Group: DeviceSelection cannot be empty', """
 service_type: osd
 service_id: mydg
 placement:
   host_pattern: '*'
 data_devices:
   limit: 1
-"""),
-
-        yaml.safe_load("""
+"""
+    ),
+    (
+        'Failed to validate Drive Group: filter_logic must be either <AND> or <OR>', """
 service_type: osd
 service_id: mydg
 placement:
@@ -53,13 +61,24 @@ placement:
 data_devices:
   all: True
 filter_logic: XOR
-""")
-    )
+"""
+    ),
+    (
+        'Failed to validate Drive Group: `data_devices` element is required.', """
+service_type: osd
+service_id: mydg
+placement:
+  host_pattern: '*'
+spec:
+  db_devices:
+    model: model
+"""
+    ),
 ])
-def test_DriveGroup_fail(test_input):
-    with pytest.raises(ServiceSpecValidationError):
-        DriveGroupSpec.from_json(test_input)
-
+def test_DriveGroup_fail(match, test_input):
+    with pytest.raises(ServiceSpecValidationError, match=match):
+        osd_spec = DriveGroupSpec.from_json(yaml.safe_load(test_input))
+        osd_spec.validate()
 
 
 def test_drivegroup_pattern():
