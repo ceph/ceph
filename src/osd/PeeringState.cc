@@ -2024,7 +2024,7 @@ void PeeringState::calc_replicated_acting_stretch(
     }
   }
 
-  if (want->size() >= pool.info.size) {
+  if (want->size() >= pool.info.size) { // non-failed CRUSH mappings are valid
     ss << " up set sufficient" << std::endl;
     return;
   }
@@ -2095,7 +2095,7 @@ void PeeringState::calc_replicated_acting_stretch(
   if (pool.info.peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
     auto aiter = ancestors.find(pool.info.peering_crush_mandatory_member);
     if (aiter != ancestors.end() &&
-	aiter->second.get_num_selected()) {
+	!aiter->second.get_num_selected()) {
       ss << " adding required ancestor " << aiter->first << std::endl;
       ceph_assert(!aiter->second.is_empty()); // wouldn't exist otherwise
       pop_ancestor(aiter->second);
