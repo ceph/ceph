@@ -7,7 +7,6 @@
 #include <atomic>
 
 #include "include/stringify.h"
-#include "common/RWLock.h"
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"

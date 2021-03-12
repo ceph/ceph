@@ -5,7 +5,6 @@
 #define CEPH_RGW_HTTP_CLIENT_H
 
 #include "common/async/yield_context.h"
-#include "common/RWLock.h"
 #include "common/Cond.h"
 #include "rgw_common.h"
 #include "rgw_string.h"
