@@ -172,8 +172,8 @@ static int _lockdep_register(const char *name)
     if (current_maxid <= (unsigned)id) {
       current_maxid = (unsigned)id + 1;
       if (current_maxid == follows.size()) {
-        follows.resize(current_maxid);
-        follows_bt.resize(current_maxid);
+        follows.resize(current_maxid + 1);
+        follows_bt.resize(current_maxid + 1);
       }
     }
     lock_ids[name] = id;
