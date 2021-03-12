@@ -18,7 +18,7 @@ using depth_t = uint32_t;
 using depth_le_t = ceph_le32;
 
 inline depth_le_t init_depth_le(uint32_t i) {
-  return init_le32(i);
+  return ceph_le32(i);
 }
 
 using checksum_t = uint32_t;
@@ -177,14 +177,14 @@ constexpr paddr_t make_fake_paddr(segment_off_t off) {
 }
 
 struct __attribute((packed)) paddr_le_t {
-  ceph_le32 segment = init_le32(NULL_SEG_ID);
-  ceph_les32 offset = init_les32(NULL_SEG_OFF);
+  ceph_le32 segment = ceph_le32(NULL_SEG_ID);
+  ceph_les32 offset = ceph_les32(NULL_SEG_OFF);
 
   paddr_le_t() = default;
   paddr_le_t(ceph_le32 segment, ceph_les32 offset)
     : segment(segment), offset(offset) {}
   paddr_le_t(segment_id_t segment, segment_off_t offset)
-    : segment(init_le32(segment)), offset(init_les32(offset)) {}
+    : segment(ceph_le32(segment)), offset(ceph_les32(offset)) {}
   paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
 
   operator paddr_t() const {
@@ -230,12 +230,12 @@ constexpr laddr_t L_ADDR_ROOT = std::numeric_limits<laddr_t>::max() - 1;
 constexpr laddr_t L_ADDR_LBAT = std::numeric_limits<laddr_t>::max() - 2;
 
 struct __attribute((packed)) laddr_le_t {
-  ceph_le64 laddr = init_le64(L_ADDR_NULL);
+  ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
 
   laddr_le_t() = default;
   laddr_le_t(const laddr_le_t &) = default;
   explicit laddr_le_t(const laddr_t &addr)
-    : laddr(init_le64(addr)) {}
+    : laddr(ceph_le64(addr)) {}
 
   operator laddr_t() const {
     return laddr_t(laddr);
@@ -255,7 +255,7 @@ constexpr extent_len_t EXTENT_LEN_MAX =
 
 using extent_len_le_t = ceph_le32;
 inline extent_len_le_t init_extent_len_le(extent_len_t len) {
-  return init_le32(len);
+  return ceph_le32(len);
 }
 
 struct laddr_list_t : std::list<std::pair<laddr_t, extent_len_t>> {

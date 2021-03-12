@@ -63,7 +63,7 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
     auto remaining_buf_bytes = buf->length();
     while (remaining_buf_bytes > 0) {
       if (leftover_size == 0) {
-        auto block_offset_le = init_le64(sector_number);
+        auto block_offset_le = ceph_le64(sector_number);
         memcpy(iv, &block_offset_le, sizeof(block_offset_le));
         auto r = m_data_cryptor->init_context(ctx, iv, m_iv_size);
         if (r != 0) {
