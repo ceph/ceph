@@ -109,52 +109,27 @@ class KVPool {
   };
   using kv_vector_t = std::vector<kv_t>;
   using kvptr_vector_t = std::vector<kv_t*>;
-
-  class iterator_t {
-   public:
-    iterator_t() = default;
-    iterator_t(const iterator_t&) = default;
-    iterator_t(iterator_t&&) = default;
-    iterator_t& operator=(const iterator_t&) = default;
-    iterator_t& operator=(iterator_t&&) = default;
-
-    kv_t* get_p_kv() const {
-      assert(!is_end());
-      return (*p_kvptrs)[i];
-    }
-    bool is_end() const { return i >= p_kvptrs->size(); }
-    index_t index() const { return i; }
-
-    iterator_t& operator++() {
-      assert(!is_end());
-      ++i;
-      return *this;
-    }
-
-    iterator_t operator++(int) {
-      iterator_t tmp = *this;
-      ++*this;
-      return tmp;
-    }
-
-   private:
-    iterator_t(const kvptr_vector_t& kvs) : p_kvptrs{&kvs} {}
-
-    const kvptr_vector_t* p_kvptrs;
-    index_t i = 0;
-    friend class KVPool;
-  };
-
-  iterator_t begin() const {
-    return iterator_t(serial_p_kvs);
-  }
-
-  iterator_t random_begin() const {
-    return iterator_t(random_p_kvs);
-  }
+  using iterator_t = typename kvptr_vector_t::iterator;
 
   size_t size() const {
     return kvs.size();
+  }
+
+  iterator_t begin() {
+    return serial_p_kvs.begin();
+  }
+  iterator_t end() {
+    return serial_p_kvs.end();
+  }
+  iterator_t random_begin() {
+    return random_p_kvs.begin();
+  }
+  iterator_t random_end() {
+    return random_p_kvs.end();
+  }
+
+  void shuffle() {
+    std::random_shuffle(random_p_kvs.begin(), random_p_kvs.end());
   }
 
   static KVPool create_raw_range(
@@ -196,6 +171,20 @@ class KVPool {
     return KVPool(std::move(kvs));
   }
 
+  static KVPool create_range(
+      const std::pair<index_t, index_t>& range_i,
+      const std::vector<size_t>& value_sizes) {
+    kv_vector_t kvs;
+    std::random_device rd;
+    for (index_t i = range_i.first; i < range_i.second; ++i) {
+      auto value_size = value_sizes[rd() % value_sizes.size()];
+      kvs.emplace_back(
+          kv_t{make_oid(i), ValueItem::create(value_size, i)}
+      );
+    }
+    return KVPool(std::move(kvs));
+  }
+
  private:
   KVPool(kv_vector_t&& _kvs)
       : kvs(std::move(_kvs)), serial_p_kvs(kvs.size()), random_p_kvs(kvs.size()) {
@@ -203,10 +192,7 @@ class KVPool {
                    [] (kv_t& item) { return &item; });
     std::transform(kvs.begin(), kvs.end(), random_p_kvs.begin(),
                    [] (kv_t& item) { return &item; });
-    std::random_shuffle(random_p_kvs.begin(), random_p_kvs.end());
-    std::cout << "size: " << kvs.size()
-              << ", " << serial_p_kvs.size()
-              << ", " << random_p_kvs.size() << std::endl;
+    shuffle();
   }
 
   static ghobject_t make_raw_oid(
@@ -232,6 +218,16 @@ class KVPool {
 
     return ghobject_t(shard_id_t(index2), index2, index2,
                       os_ns.str(), os_oid.str(), index0, index0);
+  }
+
+  static ghobject_t make_oid(index_t i) {
+    std::stringstream ss;
+    ss << "object_" << i;
+    auto ret = ghobject_t(
+      hobject_t(
+        sobject_t(ss.str(), CEPH_NOSNAP)));
+    ret.hobj.nspace = "asdf";
+    return ret;
   }
 
   kv_vector_t kvs;
@@ -281,16 +277,18 @@ class TreeBuilder {
     logger().warn("start inserting {} kvs ...", kvs.size());
     auto start_time = mono_clock::now();
     return crimson::do_until([&t, this, cursors]() -> future<bool> {
-      if (kv_iter.is_end()) {
+      if (kv_iter == kvs.random_end()) {
         return ertr::template make_ready_future<bool>(true);
       }
-      auto p_kv = kv_iter.get_p_kv();
+      auto p_kv = *kv_iter;
       logger().debug("[{}] {} -> {}",
-                     kv_iter.index(), key_hobj_t{p_kv->key}, p_kv->value);
+                     kv_iter - kvs.random_begin(),
+                     key_hobj_t{p_kv->key},
+                     p_kv->value);
       return tree->insert(
           t, p_kv->key, {p_kv->value.get_payload_size()}
       ).safe_then([&t, this, cursors](auto ret) {
-        auto p_kv = kv_iter.get_p_kv();
+        auto p_kv = *kv_iter;
         auto& [cursor, success] = ret;
         initialize_cursor_from_item(t, p_kv->key, p_kv->value, cursor, success);
         if constexpr (TRACK) {
@@ -301,7 +299,7 @@ class TreeBuilder {
         return tree->find(t, p_kv->key
         ).safe_then([this, cursor](auto cursor_) mutable {
           assert(!cursor_.is_end());
-          auto p_kv = kv_iter.get_p_kv();
+          auto p_kv = *kv_iter;
           ceph_assert(cursor_.get_ghobj() == p_kv->key);
           ceph_assert(cursor_.value() == cursor.value());
           validate_cursor_from_item(p_kv->key, p_kv->value, cursor_);
@@ -322,15 +320,15 @@ class TreeBuilder {
         return seastar::do_with(
             cursors->begin(), [&t, this, cursors](auto& c_iter) {
           return crimson::do_until([&t, this, &c_iter, cursors]() -> future<bool> {
-            if (kv_iter.is_end()) {
+            if (kv_iter == kvs.random_end()) {
               logger().info("Verify done!");
               return ertr::template make_ready_future<bool>(true);
             }
             assert(c_iter != cursors->end());
-            auto p_kv = kv_iter.get_p_kv();
+            auto p_kv = *kv_iter;
             // validate values in tree keep intact
             return tree->find(t, p_kv->key).safe_then([this, &c_iter](auto cursor) {
-              auto p_kv = kv_iter.get_p_kv();
+              auto p_kv = *kv_iter;
               validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
               // validate values in cursors keep intact
               validate_cursor_from_item(p_kv->key, p_kv->value, *c_iter);
@@ -360,23 +358,17 @@ class TreeBuilder {
   future<> validate(Transaction& t) {
     return seastar::async([this, &t] {
       logger().info("Verifing insertion ...");
-      auto iter = kvs.begin();
-      while (!iter.is_end()) {
-        auto p_kv = iter.get_p_kv();
+      for (auto& p_kv : kvs) {
         auto cursor = tree->find(t, p_kv->key).unsafe_get0();
         validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
-        ++iter;
       }
 
       logger().info("Verifing range query ...");
-      iter = kvs.begin();
       auto cursor = tree->begin(t).unsafe_get0();
-      while (!iter.is_end()) {
+      for (auto& p_kv : kvs) {
         assert(!cursor.is_end());
-        auto p_kv = iter.get_p_kv();
         validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
         cursor = cursor.get_next(t).unsafe_get0();
-        ++iter;
       }
       assert(cursor.is_end());
 
