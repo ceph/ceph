@@ -8246,43 +8246,33 @@ next:
     CHECK_TRUE(require_opt(opt_dest_object), "ERROR: --dest-object was not specified", EINVAL);
     CHECK_TRUE(opt_source_zone_id || opt_endpoint, "ERROR: either--source-zone or --endpoint needs to be specified", EINVAL);
 
+    if (!opt_source_bucket) {
+      opt_source_bucket = opt_dest_bucket;
+    }
+
     if (!opt_source_object) {
       opt_source_object = opt_dest_object;
     }
 
-    rgw_bucket dest_bucket;
-
-    RGWBucketInfo dest_bucket_info;
-    int ret = init_bucket(*opt_dest_bucket, dest_bucket_info, dest_bucket);
+    std::unique_ptr<rgw::sal::RGWBucket> sal_dest_bucket;
+    int ret = init_bucket(user.get(), *opt_dest_bucket, &sal_dest_bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    rgw::sal::RGWRadosBucket sal_dest_bucket(store, dest_bucket_info);
-
-    rgw_bucket source_bucket;
-    RGWBucketInfo _source_bucket_info;
-    std::unique_ptr<rgw::sal::RGWRadosBucket> psal_source_bucket;
-    if (opt_source_bucket) {
-      ret = init_bucket(*opt_source_bucket, _source_bucket_info, source_bucket);
-      if (ret < 0) {
-        cerr << "WARNING: could not init source bucket: " << cpp_strerror(-ret) << std::endl;
-        source_bucket = *opt_source_bucket;
-        psal_source_bucket.reset(new rgw::sal::RGWRadosBucket(store, source_bucket));
-      } else {
-        psal_source_bucket.reset(new  rgw::sal::RGWRadosBucket(store, _source_bucket_info));
-      }
-    } else {
-      source_bucket = dest_bucket;
-      psal_source_bucket.reset(new  rgw::sal::RGWRadosBucket(store, dest_bucket_info));
+    unique_ptr<rgw::sal::RGWBucket> sal_source_bucket;
+    ret = init_bucket(user.get(), *opt_source_bucket, &sal_source_bucket);
+    if (ret < 0) {
+      cerr << "WARNING: could not init source bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
     }
 
-    rgw_obj source_object(source_bucket, *opt_source_object);
-    rgw_obj dest_object(dest_bucket, *opt_dest_object);
+    rgw_obj source_object(sal_source_bucket->get_key(), *opt_source_object);
+    rgw_obj dest_object(sal_dest_bucket->get_key(), *opt_dest_object);
 
     auto conn  = get_source_conn(store->ctx(),
-                                 store->ctl()->remote,
+                                 static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->remote,
                                  opt_source_zone_id,
                                  opt_endpoint,
                                  opt_region,
@@ -8293,27 +8283,27 @@ next:
     }
 
     if (!opt_dest_owner) {
-      if (!user_id.empty()) {
-        opt_dest_owner = user_id;
+      if (!user_id_arg.empty()) {
+        opt_dest_owner = user_id_arg;
       } else {
-        opt_dest_owner = dest_bucket_info.owner;
+        opt_dest_owner = sal_dest_bucket->get_info().owner;
       }
     }
 
-    rgw::sal::RGWRadosObject sal_source_object(store, source_object.key, psal_source_bucket.get());
-    rgw::sal::RGWRadosObject sal_dest_object(store, dest_object.key, &sal_dest_bucket);
+    rgw::sal::RGWRadosObject sal_source_object(static_cast<rgw::sal::RGWRadosStore*>(store), source_object.key, sal_source_bucket.get());
+    rgw::sal::RGWRadosObject sal_dest_object(static_cast<rgw::sal::RGWRadosStore*>(store), dest_object.key, sal_dest_bucket.get());
 
     RGWRados::FetchRemoteObjParams params;
 
     RGWObjectCtx obj_ctx(store);
-    ret = store->getRados()->fetch_remote_obj(obj_ctx,
+    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->fetch_remote_obj(obj_ctx,
                                               conn,
                                               false, /* foreign source */
                                               *opt_dest_owner,
                                               &sal_dest_object,
                                               &sal_source_object,
-                                              &sal_dest_bucket,
-                                              psal_source_bucket.get(),
+                                              sal_dest_bucket.get(),
+                                              sal_source_bucket.get(),
                                               params);
     if (ret < 0) {
       cerr << "ERROR: fetch_remote_obj() failed: " << cpp_strerror(-ret) << std::endl;
