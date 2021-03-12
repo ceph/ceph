@@ -33,7 +33,6 @@
 
 #include "PGLog.h"
 #include "OSDMap.h"
-#include "messages/MOSDPGLog.h"
 #include "include/str_list.h"
 #include "PGBackend.h"
 #include "PGPeeringEvent.h"
@@ -57,14 +56,10 @@ class OSD;
 class OSDService;
 class OSDShard;
 class OSDShardPGSlot;
-class MOSDPGScan;
-class MOSDPGBackfill;
-class MOSDPGInfo;
 
 class PG;
 struct OpRequest;
 typedef OpRequest::Ref OpRequestRef;
-class MOSDPGLog;
 class DynamicPerfStats;
 class PgScrubber;
 

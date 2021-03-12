@@ -29,8 +29,6 @@
 #include "common/perf_counters.h"
 
 #include "messages/MOSDOp.h"
-#include "messages/MOSDPGNotify.h"
-#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
