@@ -301,11 +301,6 @@ class TestConfigCommands(CephFSTestCase):
         out = self.mount_a.admin_socket(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
 
-        self.mount_a.write_n_mb("file.bin", 1);
-
-        # Implicitly asserting that things don't have lockdep error in shutdown
-        self.mount_a.umount_wait(require_clean=True)
-        self.fs.mds_stop()
 
     def test_mds_config_asok(self):
         test_key = "mds_max_purge_ops"
@@ -313,10 +308,6 @@ class TestConfigCommands(CephFSTestCase):
         self.fs.mds_asok(['config', 'set', test_key, test_val])
         out = self.fs.mds_asok(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
-
-        # Implicitly asserting that things don't have lockdep error in shutdown
-        self.mount_a.umount_wait(require_clean=True)
-        self.fs.mds_stop()
 
     def test_mds_config_tell(self):
         test_key = "mds_max_purge_ops"
@@ -329,10 +320,6 @@ class TestConfigCommands(CephFSTestCase):
         # Read it back with asok because there is no `tell` equivalent
         out = self.fs.mds_asok(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
-
-        # Implicitly asserting that things don't have lockdep error in shutdown
-        self.mount_a.umount_wait(require_clean=True)
-        self.fs.mds_stop()
 
 
 class TestMirroringCommands(CephFSTestCase):
