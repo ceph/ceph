@@ -52,7 +52,7 @@ describe('Configuration page', () => {
 
     it('should show only modified configurations', () => {
       configuration.filterTable('Modified', 'yes');
-      configuration.getTableFoundCount().should('eq', 1);
+      configuration.getTableFoundCount().should('eq', 2);
     });
 
     it('should hide all modified configurations', () => {
