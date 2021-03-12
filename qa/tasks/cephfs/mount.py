@@ -1306,8 +1306,10 @@ class CephFSMount(object):
             "available": int(avail)
         }
 
-    def dir_checksum(self, path=None):
+    def dir_checksum(self, path=None, follow_symlinks=False):
         cmd = ["find"]
+        if follow_symlinks:
+            cmd.append("-L")
         if path:
             cmd.append(path)
         cmd.extend(["-type", "f", "-exec", "md5sum", "{}", "+"])
