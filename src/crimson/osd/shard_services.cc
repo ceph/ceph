@@ -4,6 +4,8 @@
 #include "crimson/osd/shard_services.h"
 
 #include "messages/MOSDAlive.h"
+#include "messages/MOSDPGCreated.h"
+#include "messages/MOSDPGTemp.h"
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
@@ -14,10 +16,6 @@
 #include "crimson/net/Connection.h"
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/osd/osdmap_service.h"
-#include "messages/MOSDPGTemp.h"
-#include "messages/MOSDPGCreated.h"
-#include "messages/MOSDPGInfo.h"
-#include "messages/MOSDPGQuery.h"
 
 namespace {
   seastar::logger& logger() {
