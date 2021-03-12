@@ -2478,16 +2478,6 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     }
     return false;
   }
-  // make sure we respect the stretch cluster rules -- and
-  // didn't break them with earlier choices!
-  const pg_pool_t& pg_pool = pool.info;
-  if (pg_pool.is_stretch_pool()) {
-    stringstream ss;
-    if (!pg_pool.stretch_set_can_peer(want, *get_osdmap(), &ss)) {
-      psdout(5) << "peering blocked by stretch_can_peer: " << ss.str() << dendl;
-      return false;
-    }
-  }
 
   if (request_pg_temp_change_only)
     return true;
@@ -2698,7 +2688,8 @@ void PeeringState::activate(
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size) {
+    if ((acting.size() >= pool.info.min_size) &&
+	 pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL)) {
       ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
@@ -3000,7 +2991,8 @@ void PeeringState::activate(
     state_set(PG_STATE_ACTIVATING);
     pl->on_activate(std::move(to_trim));
   }
-  if (acting.size() >= pool.info.min_size) {
+  if ((acting.size() >= pool.info.min_size) &&
+      pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL)) {
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
     pg_log.roll_forward(rollbacker.get());
   }
@@ -6266,7 +6258,9 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
 	pl->set_not_ready_to_merge_source(pgid);
       }
     }
-  } else if (ps->acting.size() < ps->pool.info.min_size) {
+  } else if ((ps->acting.size() < ps->pool.info.min_size) ||
+	     !ps->pool.info.stretch_set_can_peer(ps->acting,
+						 *ps->get_osdmap(), NULL)) {
     ps->state_set(PG_STATE_PEERED);
   } else {
     ps->state_set(PG_STATE_ACTIVE);
@@ -6425,7 +6419,9 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     {}, /* lease */
     ps->get_lease_ack());
 
-  if (ps->acting.size() >= ps->pool.info.min_size) {
+  if ((ps->acting.size() >= ps->pool.info.min_size) &&
+      ps->pool.info.stretch_set_can_peer(ps->acting,
+					 *ps->get_osdmap(), NULL)) {
     ps->state_set(PG_STATE_ACTIVE);
   } else {
     ps->state_set(PG_STATE_PEERED);
