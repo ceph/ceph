@@ -296,7 +296,7 @@ else
     case "$ID" in
     debian|ubuntu|devuan|elementary)
         echo "Using apt-get to install dependencies"
-        $SUDO apt install -y docker.io
+        $SUDO apt install -y docker-ce || $SUDO apt install -y docker.io
         $SUDO systemctl start docker
         $SUDO systemctl enable docker
         $SUDO apt-get install -y devscripts equivs
