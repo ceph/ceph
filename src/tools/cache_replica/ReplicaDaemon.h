@@ -19,6 +19,10 @@
 #include "common/errno.h"
 
 class ReplicaDaemon : public Dispatcher {
+private:
+  bool clean_cache();
+  bool init_connection();
+
 public:
   ReplicaDaemon(std::string_view name,
                 int32_t daemon_id,

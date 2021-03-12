@@ -40,6 +40,14 @@ struct ReplicaDaemonInfo {
     DECODE_FINISH(replicadaemon_state_bl_it);
   }
 
+  void set_rnic_bind_port(int32_t rnic_bind_port) {
+    this->rnic_bind_port = rnic_bind_port;
+  }
+
+  void set_free_size(uint64_t free_size) {
+    this->free_size = free_size;
+  }
+
   void print_state(std::ostream& oss) const;
 };
 WRITE_CLASS_ENCODER(ReplicaDaemonInfo)

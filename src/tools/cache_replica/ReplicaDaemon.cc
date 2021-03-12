@@ -36,6 +36,19 @@ ReplicaDaemon::ReplicaDaemon(std::string_view name,
 {
 }
 
+bool ReplicaDaemon::clean_cache()
+{
+  // TODO
+  self_state.set_free_size(-1);
+  return true;
+}
+bool ReplicaDaemon::init_connection()
+{
+  // TODO
+  self_state.set_rnic_bind_port(-1);
+  return true;
+}
+
 int ReplicaDaemon::init()
 {
   msgr_public->add_dispatcher_tail(this);
@@ -62,6 +75,9 @@ int ReplicaDaemon::init()
     return r;
   }
   ceph_assert(mon_client->is_connected());
+
+  ceph_assert(clean_cache());
+  ceph_assert(init_connection());
 
   mon_client->sub_want("replicamap", 0, 0); // do we still need replicamap???
   mon_client->renew_subs(); // does daemon need to subscribe the replicamap with all ReplicaDaemons's info
