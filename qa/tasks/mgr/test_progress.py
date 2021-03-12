@@ -37,6 +37,73 @@ class TestProgress(MgrTestCase):
         log.info(json.dumps(p, indent=2))
         return p['events'] + p['completed']
 
+    def _events_in_progress(self):
+        """
+        this function returns all events that are in progress
+        """
+        p = self._get_progress()
+        log.info(json.dumps(p, indent=2))
+        return p['events']
+
+    def _completed_events(self):
+        """
+        This function returns all events that are completed
+        """
+        p = self._get_progress()
+        log.info(json.dumps(p, indent=2))
+        return p['completed']
+
+    def is_osd_marked_out(self, ev):
+        return ev['message'].endswith('marked out')
+
+    def is_osd_marked_in(self, ev):
+        return ev['message'].endswith('marked in')
+
+    def _get_osd_in_out_events(self, marked='both'):
+        """
+        Return the event that deals with OSDs being
+        marked in, out or both
+        """
+
+        marked_in_events = []
+        marked_out_events = []
+
+        events_in_progress = self._events_in_progress()
+        for ev in events_in_progress:
+            if self.is_osd_marked_out(ev):
+                marked_out_events.append(ev)
+            elif self.is_osd_marked_in(ev):
+                marked_in_events.append(ev)
+
+        if marked == 'both':
+            return [marked_in_events] + [marked_out_events]
+        elif marked == 'in':
+            return marked_in_events
+        else:
+            return marked_out_events
+
+    def _osd_in_out_events_count(self, marked='both'):
+        """
+        Count the number of on going recovery events that deals with
+        OSDs being marked in, out or both.
+        """
+        events_in_progress = self._events_in_progress()
+        marked_in_count = 0
+        marked_out_count = 0
+
+        for ev in events_in_progress:
+            if self.is_osd_marked_out(ev):
+                marked_out_count += 1
+            elif self.is_osd_marked_in(ev):
+                marked_in_count += 1
+
+        if marked == 'both':
+            return marked_in_count + marked_out_count
+        elif marked == 'in':
+            return marked_in_count
+        else:
+            return marked_out_count
+
     def _setup_pool(self, size=None):
         self.mgr_cluster.mon_manager.create_pool(self.POOL)
         if size is not None:
@@ -98,13 +165,47 @@ class TestProgress(MgrTestCase):
                 'osd', 'out', str(osd_id))
 
         # Wait for a progress event to pop up
-        self.wait_until_equal(lambda: len(self._all_events()), 1,
-                              timeout=self.EVENT_CREATION_PERIOD)
-        ev = self._all_events()[0]
+        self.wait_until_equal(lambda: self._osd_in_out_events_count('out'), 1,
+                              timeout=self.EVENT_CREATION_PERIOD*2,
+                              period=1)
+        ev = self._get_osd_in_out_events('out')[0]
         log.info(json.dumps(ev, indent=1))
         self.assertIn("Rebalancing after osd.0 marked out", ev['message'])
-
+        
         return ev
+
+    def _simulate_back_in(self, osd_ids, initial_event):
+        
+        for osd_id in osd_ids:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'in', str(osd_id))
+        
+        # First Event should complete promptly
+        self.wait_until_true(lambda: self._is_complete(initial_event['id']),
+                             timeout=self.EVENT_CREATION_PERIOD)
+       
+        try:
+            # Wait for progress event marked in to pop up
+            self.wait_until_equal(lambda: self._osd_in_out_events_count('in'), 1,
+                                  timeout=self.EVENT_CREATION_PERIOD*2,
+                                  period=1)
+        except RuntimeError as ex:
+            if not "Timed out after" in str(ex):
+                raise ex
+
+            log.info("There was no PGs affected by osd being marked in")
+            return None
+
+        new_event = self._get_osd_in_out_events('in')[0]
+        return new_event
+
+    def _no_events_anywhere(self):
+        """
+        Whether there are any live or completed events
+        """
+        p = self._get_progress()
+        total_events = len(p['events']) + len(p['completed'])
+        return total_events == 0
 
     def _is_quiet(self):
         """
@@ -167,14 +268,17 @@ class TestProgress(MgrTestCase):
         """
         When a recovery is underway, but then the out OSD
         comes back in, such that recovery is no longer necessary.
+        It should create another event for when osd is marked in
+        and cancel the one that is still ongoing.
         """
-        ev = self._simulate_failure()
+        ev1 = self._simulate_failure()
 
-        self.mgr_cluster.mon_manager.raw_cluster_cmd('osd', 'in', '0')
+        ev2 = self._simulate_back_in([0], ev1)
+        
+        # Wait for progress event to ultimately complete
+        self.wait_until_true(lambda: self._is_complete(ev2['id']),
+                             timeout=self.RECOVERY_PERIOD)
 
-        # Event should complete promptly
-        self.wait_until_true(lambda: self._is_complete(ev['id']),
-                             timeout=self.EVENT_CREATION_PERIOD)
         self.assertTrue(self._is_quiet())
 
     def test_osd_cannot_recover(self):
@@ -224,3 +328,49 @@ class TestProgress(MgrTestCase):
         time.sleep(self.EVENT_CREATION_PERIOD)
 
         self.assertEqual(len(self._all_events()), osd_count - pool_size)
+
+    def test_turn_off_module(self):
+        """
+        When the the module is turned off, there should not
+        be any on going events or completed events.
+        Also module should not accept any kind of Remote Event
+        coming in from other module, however, once it is turned
+        back, on creating an event should be working as it is.
+        """
+
+        pool_size = 3
+        self._setup_pool(size=pool_size)
+        self._write_some_data(self.WRITE_PERIOD)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", "off")
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'osd', 'out', '0')
+
+        time.sleep(self.EVENT_CREATION_PERIOD)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'in', '0')
+
+        time.sleep(self.EVENT_CREATION_PERIOD)
+
+        self.assertTrue(self._is_quiet())
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", "on")
+
+        self._write_some_data(self.WRITE_PERIOD)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'osd', 'out', '0')
+
+        # Wait for a progress event to pop up
+        self.wait_until_equal(lambda: len(self._all_events()), 1,
+                              timeout=self.EVENT_CREATION_PERIOD*2)
+
+        ev = self._all_events()[0]
+
+        log.info(json.dumps(ev, indent=1))
+
+        self.wait_until_true(lambda: self._is_complete(ev['id']),
+                             timeout=self.RECOVERY_PERIOD)
+        self.assertTrue(self._is_quiet())

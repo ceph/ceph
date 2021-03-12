@@ -295,6 +295,21 @@ describe('TableComponent', () => {
     });
   });
 
+  describe('select row', () => {
+    beforeEach(() => {
+      component.ngOnInit();
+      component.data = [];
+    });
+
+    it('should select the row item', () => {
+      spyOn(component, 'onSelect').and.callThrough();
+      component.data = createFakeData(3);
+      component.selection.selected = [_.clone(component.data[1])];
+      component.onSelect(new Event('click'));
+      expect(component.selection.hasSelection).toBeTruthy();
+    });
+  });
+
   describe('reload data', () => {
     beforeEach(() => {
       component.ngOnInit();

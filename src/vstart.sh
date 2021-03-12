@@ -40,7 +40,7 @@ if [ -e CMakeCache.txt ]; then
   fi
 fi
 
-# use CEPH_BUILD_ROOT to vstart from a 'make install' 
+# use CEPH_BUILD_ROOT to vstart from a 'make install'
 if [ -n "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
@@ -67,7 +67,7 @@ export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
-# development version. vstart.sh is only used during testing and 
+# development version. vstart.sh is only used during testing and
 # development
 export CEPH_DEV=1
 
@@ -307,12 +307,12 @@ case $1 in
     -X )
 	    cephx=0
 	    ;;
-    
+
     -g | --gssapi)
-	    gssapi_authx=1 
+	    gssapi_authx=1
 	    ;;
     -G)
-	    gssapi_authx=0 
+	    gssapi_authx=0
 	    ;;
 
     -k )
@@ -539,7 +539,7 @@ EOF
 	auth client required = gss
 	gss ktab client file = $CEPH_DEV_DIR/gss_\$name.keytab
 EOF
-	else 
+	else
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
@@ -828,7 +828,10 @@ EOF
     if [ "$new" -eq 1 ]; then
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
-            ceph_adm tell mgr dashboard ac-user-create admin admin administrator
+            DASHBOARD_ADMIN_SECRET_FILE="${CEPH_CONF_PATH}/dashboard-admin-secret.txt"
+            printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
+            ceph_adm tell mgr dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}" \
+                administrator
             if [ "$ssl" != "0" ]; then
                 if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
                     echo dashboard module not working correctly!
@@ -1085,7 +1088,7 @@ do
     [ $fs -eq $CEPH_NUM_FS ] && break
     fs=$(($fs + 1))
     if [ "$CEPH_MAX_MDS" -gt 1 ]; then
-        ceph_adm fs set "cephfs_${name}" max_mds "$CEPH_MAX_MDS"
+        ceph_adm fs set "${name}" max_mds "$CEPH_MAX_MDS"
     fi
 done
 

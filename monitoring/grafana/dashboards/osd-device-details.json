@@ -126,7 +126,7 @@
           "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {

@@ -431,16 +431,25 @@ public:
     }
     void requeue_front(T *item) {
       std::lock_guard pool_locker(m_pool->_lock);
+      requeue_front(pool_locker, item);
+    }
+    void requeue_front(const std::lock_guard<ceph::mutex>&, T *item) {
       _void_process_finish(nullptr);
       m_items.push_front(item);
     }
     void requeue_back(T *item) {
       std::lock_guard pool_locker(m_pool->_lock);
+      requeue_back(pool_locker, item);
+    }
+    void requeue_back(const std::lock_guard<ceph::mutex>&, T *item) {
       _void_process_finish(nullptr);
       m_items.push_back(item);
     }
     void signal() {
       std::lock_guard pool_locker(m_pool->_lock);
+      signal(pool_locker);
+    }
+    void signal(const std::lock_guard<ceph::mutex>&) {
       m_pool->_cond.notify_one();
     }
     ceph::mutex &get_pool_lock() {

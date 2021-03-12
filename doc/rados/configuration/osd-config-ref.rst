@@ -1071,6 +1071,42 @@ Miscellaneous
 :Default: ``10*60``
 
 
+``osd delete sleep``
+
+:Description: Time in seconds to sleep before next removal transaction. This
+              helps to throttle the pg deletion process.
+
+:Type: Float
+:Default: ``0``
+
+
+``osd delete sleep hdd``
+
+:Description: Time in seconds to sleep before next removal transaction
+              for HDDs.
+
+:Type: Float
+:Default: ``5``
+
+
+``osd delete sleep ssd``
+
+:Description: Time in seconds to sleep before next removal transaction
+              for SSDs.
+
+:Type: Float
+:Default: ``0``
+
+
+``osd delete sleep hybrid``
+
+:Description: Time in seconds to sleep before next removal transaction
+              when osd data is on HDD and osd journal is on SSD.
+
+:Type: Float
+:Default: ``1``
+
+
 ``osd command max records``
 
 :Description: Limits the number of lost objects to return.

@@ -1,4 +1,4 @@
-# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-public-methods, too-many-lines
 
 import copy
 import errno
@@ -9,6 +9,8 @@ try:
     import mock
 except ImportError:
     import unittest.mock as mock
+
+from mgr_module import ERROR_MSG_NO_INPUT_FILE
 
 from . import CmdException, ControllerTestCase, CLICommandTestMixin, KVStoreMockMixin
 from .. import mgr
@@ -28,19 +30,23 @@ class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
 
     def test_cli_add_gateway_invalid_url(self):
         with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('iscsi-gateway-add', name='node1',
-                          service_url='http:/hello.com')
+            self.exec_cmd('iscsi-gateway-add', inbuf='http:/hello.com')
 
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
         self.assertEqual(str(ctx.exception),
                          "Invalid service URL 'http:/hello.com'. Valid format: "
                          "'<scheme>://<username>:<password>@<host>[:port]'.")
 
+    def test_cli_add_gateway_empty_url(self):
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('iscsi-gateway-add', inbuf='')
+
+        self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
+        self.assertEqual(str(ctx.exception), ERROR_MSG_NO_INPUT_FILE)
+
     def test_cli_add_gateway(self):
-        self.exec_cmd('iscsi-gateway-add', name='node1',
-                      service_url='https://admin:admin@10.17.5.1:5001')
-        self.exec_cmd('iscsi-gateway-add', name='node2',
-                      service_url='https://admin:admin@10.17.5.2:5001')
+        self.exec_cmd('iscsi-gateway-add', inbuf='https://admin:admin@10.17.5.1:5001')
+        self.exec_cmd('iscsi-gateway-add', inbuf='https://admin:admin@10.17.5.2:5001')
         iscsi_config = json.loads(self.get_key("_iscsi_config"))
         self.assertEqual(iscsi_config['gateways'], {
             'node1': {

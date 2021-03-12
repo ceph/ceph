@@ -133,7 +133,10 @@ int MgrStandby::init()
   // We must register our config callback before calling init(), so
   // that we see the initial configuration message
   monc.register_config_callback([this](const std::string &k, const std::string &v){
-      dout(10) << "config_callback: " << k << " : " << v << dendl;
+      // removing value to hide sensitive data going into mgr logs
+      // leaving this for debugging purposes
+      // dout(10) << "config_callback: " << k << " : " << v << dendl;
+      dout(10) << "config_callback: " << k << " : " << dendl;
       if (k.substr(0, 4) == "mgr/") {
 	const std::string global_key = PyModule::config_prefix + k.substr(4);
         py_module_registry.handle_config(global_key, v);

@@ -1948,22 +1948,14 @@ bool RGWGetObj::prefetch_data()
     return false;
   }
 
-  bool prefetch_first_chunk = true;
   range_str = s->info.env->get("HTTP_RANGE");
-
+  // TODO: add range prefetch
   if (range_str) {
-    int r = parse_range();
-    /* error on parsing the range, stop prefetch and will fail in execute() */
-    if (r < 0) {
-      return false; /* range_parsed==false */
-    }
-    /* range get goes to shadow objects, stop prefetch */
-    if (ofs >= s->cct->_conf->rgw_max_chunk_size) {
-      prefetch_first_chunk = false;
-    }
+    parse_range();
+    return false;
   }
 
-  return get_data && prefetch_first_chunk;
+  return get_data;
 }
 
 void RGWGetObj::pre_exec()
@@ -7500,6 +7492,10 @@ void RGWDefaultResponseOp::send_response() {
 
 void RGWPutBucketPolicy::send_response()
 {
+  if (!op_ret) {
+    /* A successful Put Bucket Policy should return a 204 on success */
+    op_ret = STATUS_NO_CONTENT;
+  }
   if (op_ret) {
     set_req_state_err(s, op_ret);
   }

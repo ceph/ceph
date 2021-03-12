@@ -510,6 +510,7 @@ Requires:       python%{_python_buildid}-CherryPy
 Requires:       python%{_python_buildid}-PyJWT
 Requires:       python%{_python_buildid}-Routes
 Requires:       python%{_python_buildid}-Werkzeug
+Recommends:     python%{_python_buildid}-python3-saml
 %endif
 %if 0%{?rhel} == 7
 Requires:       pyOpenSSL
@@ -1296,7 +1297,7 @@ ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 
 # sudoers.d
-install -m 0600 -D sudoers.d/ceph-osd-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-osd-smartctl
+install -m 0440 -D sudoers.d/ceph-osd-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-osd-smartctl
 
 %if 0%{?rhel} >= 8
 pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*

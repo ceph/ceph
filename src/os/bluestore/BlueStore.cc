@@ -54,13 +54,13 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
 
 // bluestore_cache_other
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
-			      bluestore_cache_other);
+			      bluestore_Buffer);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
-			      bluestore_cache_other);
+			      bluestore_Extent);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
-			      bluestore_cache_other);
+			      bluestore_Blob);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
-			      bluestore_cache_other);
+			      bluestore_SharedBlob);
 
 // bluestore_txc
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
@@ -718,6 +718,16 @@ public:
   virtual void upper_bound(const ghobject_t &oid) = 0;
   virtual void next() = 0;
 
+  virtual int cmp(const ghobject_t &oid) const = 0;
+
+  bool is_ge(const ghobject_t &oid) const {
+    return cmp(oid) >= 0;
+  }
+
+  bool is_lt(const ghobject_t &oid) const {
+    return cmp(oid) < 0;
+  }
+
 protected:
   KeyValueDB::Iterator m_it;
 };
@@ -759,6 +769,15 @@ public:
 
     m_it->next();
     get_oid();
+  }
+
+  int cmp(const ghobject_t &oid) const override {
+    ceph_assert(valid());
+
+    string key;
+    get_object_key(m_cct, oid, &key);
+
+    return m_it->key().compare(key);
   }
 
 private:
@@ -834,6 +853,18 @@ public:
     if (m_chunk_iter == m_chunk.end()) {
       get_next_chunk();
     }
+  }
+
+  int cmp(const ghobject_t &oid) const override {
+    ceph_assert(valid());
+
+    if (this->oid() < oid) {
+      return -1;
+    }
+    if (this->oid() > oid) {
+      return 1;
+    }
+    return 0;
   }
 
 private:
@@ -1835,7 +1866,7 @@ void BlueStore::OnodeSpace::rename(
   OnodeRef& oldo,
   const ghobject_t& old_oid,
   const ghobject_t& new_oid,
-  const mempool::bluestore_cache_other::string& new_okey)
+  const mempool::bluestore_cache_meta::string& new_okey)
 {
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
@@ -2378,7 +2409,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       unsigned n;
       // we need to encode inline_bl to measure encoded length
       bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
-      inline_bl.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      inline_bl.reassign_to_mempool(mempool::mempool_bluestore_inline_bl);
       ceph_assert(!never_happen);
       size_t len = inline_bl.length();
       dout(20) << __func__ << "  inline shard " << len << " bytes from " << n
@@ -3401,7 +3432,7 @@ BlueStore::Onode* BlueStore::Onode::decode(
   auto p = v.front().begin_deep();
   on->onode.decode(p);
   for (auto& i : on->onode.attrs) {
-    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   }
 
   // initialize extent_map
@@ -3410,7 +3441,7 @@ BlueStore::Onode* BlueStore::Onode::decode(
     denc(on->extent_map.inline_bl, p);
     on->extent_map.decode_some(on->extent_map.inline_bl);
     on->extent_map.inline_bl.reassign_to_mempool(
-      mempool::mempool_bluestore_cache_other);
+      mempool::mempool_bluestore_cache_data);
   }
   else {
     on->extent_map.init_shards(false, false);
@@ -4674,8 +4705,15 @@ void BlueStore::_init_logger()
     "Average omap iterator lower_bound call latency");
   b.add_time_avg(l_bluestore_omap_next_lat, "omap_next_lat",
     "Average omap iterator next call latency");
+  b.add_time_avg(l_bluestore_omap_get_keys_lat, "omap_get_keys_lat",
+    "Average omap get_keys call latency");
+  b.add_time_avg(l_bluestore_omap_get_values_lat, "omap_get_values_lat",
+    "Average omap get_values call latency");
   b.add_time_avg(l_bluestore_clist_lat, "clist_lat",
     "Average collection listing latency");
+  b.add_time_avg(l_bluestore_remove_lat, "remove_lat",
+    "Average removal latency");
+
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -9849,7 +9887,7 @@ int BlueStore::getattr(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    mempool::bluestore_cache_other::string k(name);
+    mempool::bluestore_cache_meta::string k(name);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -10063,14 +10101,14 @@ int BlueStore::_collection_list(
   }
   dout(20) << __func__ << " pend " << pend << dendl;
   while (true) {
-    if (!it->valid() || it->oid() >= pend) {
+    if (!it->valid() || it->is_ge(pend)) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
 	dout(20) << __func__ << " oid " << it->oid() << " >= " << pend << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
-          if (it->valid() && it->oid() < coll_range_temp_end) {
+          if (it->valid() && it->is_lt(coll_range_temp_end)) {
             *pnext = it->oid();
             set_next = true;
           }
@@ -10086,7 +10124,7 @@ int BlueStore::_collection_list(
 	dout(30) << __func__ << " pend " << pend << dendl;
 	continue;
       }
-      if (it->valid() && it->oid() < coll_range_end) {
+      if (it->valid() && it->is_lt(coll_range_end)) {
         *pnext = it->oid();
         set_next = true;
       }
@@ -10222,6 +10260,7 @@ int BlueStore::omap_get_keys(
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
+  auto start1 = mono_clock::now();
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -10254,6 +10293,12 @@ int BlueStore::omap_get_keys(
     }
   }
  out:
+  c->store->log_latency(
+    __func__,
+    l_bluestore_omap_get_keys_lat,
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
+
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
@@ -10271,6 +10316,7 @@ int BlueStore::omap_get_values(
   if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
+  auto start1 = mono_clock::now();
   int r = 0;
   string final_key;
   OnodeRef o = c->get_onode(oid, false);
@@ -10298,6 +10344,12 @@ int BlueStore::omap_get_values(
     }
   }
  out:
+  c->store->log_latency(
+    __func__,
+    l_bluestore_omap_get_values_lat,
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
+
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
@@ -11243,7 +11295,25 @@ void BlueStore::_kv_sync_thread()
   ceph_assert(!kv_sync_started);
   kv_sync_started = true;
   kv_cond.notify_all();
+
+  auto t0 = mono_clock::now();
+  timespan twait = ceph::make_timespan(0);
+  size_t kv_submitted = 0;
+
   while (true) {
+    auto period = cct->_conf->bluestore_kv_sync_util_logging_s;
+    auto observation_period =
+      ceph::make_timespan(period);
+    auto elapsed = mono_clock::now() - t0;
+    if (period && elapsed >= observation_period) {
+      dout(5) << __func__ << " utilization: idle "
+	      << twait << " of " << elapsed
+	      << ", submitted: " << kv_submitted
+	      <<dendl;
+      t0 = mono_clock::now();
+      twait = ceph::make_timespan(0);
+      kv_submitted = 0;
+    }
     ceph_assert(kv_committing.empty());
     if (kv_queue.empty() &&
 	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
@@ -11251,7 +11321,10 @@ void BlueStore::_kv_sync_thread()
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
+      auto t = mono_clock::now();
       kv_cond.wait(l);
+      twait += mono_clock::now() - t;
+
       dout(20) << __func__ << " wake" << dendl;
     } else {
       deque<TransContext*> kv_submitting;
@@ -11347,6 +11420,7 @@ void BlueStore::_kv_sync_thread()
 	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
 	  ceph_assert(r == 0);
+	  ++kv_submitted;
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  _txc_applied_kv(txc);
 	  --txc->osr->kv_committing_serially;
@@ -13694,7 +13768,23 @@ int BlueStore::_remove(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " onode " << o.get()
 	   << " txc "<< txc << dendl;
+
+  auto start_time = mono_clock::now();
   int r = _do_remove(txc, c, o);
+  log_latency_fn(
+    __func__,
+    l_bluestore_remove_lat,
+    mono_clock::now() - start_time,
+    cct->_conf->bluestore_log_op_age,
+    [&](const ceph::timespan& lat) {
+      ostringstream ostr;
+      ostr << ", lat = " << timespan_str(lat)
+        << " cid =" << c->cid
+        << " oid =" << o->oid;
+      return ostr.str();
+    }
+  );
+
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
@@ -13712,10 +13802,10 @@ int BlueStore::_setattr(TransContext *txc,
   if (val.is_partial()) {
     auto& b = o->onode.attrs[name.c_str()] = bufferptr(val.c_str(),
 						       val.length());
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   } else {
     auto& b = o->onode.attrs[name.c_str()] = val;
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -13738,10 +13828,10 @@ int BlueStore::_setattrs(TransContext *txc,
     if (p->second.is_partial()) {
       auto& b = o->onode.attrs[p->first.c_str()] =
 	bufferptr(p->second.c_str(), p->second.length());
-      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
     } else {
       auto& b = o->onode.attrs[p->first.c_str()] = p->second;
-      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
     }
   }
   txc->write_onode(o);
@@ -14162,7 +14252,7 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
-  mempool::bluestore_cache_other::string new_okey;
+  mempool::bluestore_cache_meta::string new_okey;
 
   if (newo) {
     if (newo->exists) {

@@ -26,6 +26,16 @@ class TestDashboard(MgrTestCase):
                                                      "mgr/dashboard/standby_error_status_code",
                                                      "500")
 
+    def wait_until_webserver_available(self, url):
+        def _check_connection():
+            try:
+                requests.get(url, allow_redirects=False, verify=False)
+                return True
+            except requests.ConnectionError:
+                pass
+            return False
+        self.wait_until_true(_check_connection, timeout=30)
+
     def test_standby(self):
         original_active_id = self.mgr_cluster.get_active_id()
         original_uri = self._get_uri("dashboard")
@@ -46,6 +56,9 @@ class TestDashboard(MgrTestCase):
 
         self.assertNotEqual(original_uri, failed_over_uri)
 
+        # Wait until web server of the standby node is settled.
+        self.wait_until_webserver_available(original_uri)
+
         # The original active daemon should have come back up as a standby
         # and be doing redirects to the new active daemon.
         r = requests.get(original_uri, allow_redirects=False, verify=False)
@@ -53,7 +66,7 @@ class TestDashboard(MgrTestCase):
         self.assertEqual(r.headers['Location'], failed_over_uri)
 
         # Ensure that every URL redirects to the active daemon.
-        r = requests.get("{}/runtime.js".format(original_uri),
+        r = requests.get("{}/runtime.js".format(original_uri.strip('/')),
                          allow_redirects=False,
                          verify=False)
         self.assertEqual(r.status_code, 303)
@@ -82,6 +95,9 @@ class TestDashboard(MgrTestCase):
             failed_active_id, failed_over_uri))
 
         self.assertNotEqual(original_uri, failed_over_uri)
+
+        # Wait until web server of the standby node is settled.
+        self.wait_until_webserver_available(original_uri)
 
         # Redirection should be disabled now, instead a 500 must be returned.
         r = requests.get(original_uri, allow_redirects=False, verify=False)

@@ -192,6 +192,9 @@ struct AuthConnectionMeta {
 
   std::unique_ptr<AuthAuthorizer> authorizer;
   std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
+
+  ///< set if msgr1 peer doesn't support CEPHX_V2
+  bool skip_authorizer_challenge = false;
 };
 
 /*

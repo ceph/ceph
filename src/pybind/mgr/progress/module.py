@@ -184,6 +184,8 @@ class PgRecoveryEvent(Event):
 
         self._progress = 0.0
 
+        self._start_epoch = _module.get_osdmap().get_epoch() 
+
         self.id = str(uuid.uuid4())
         self._refresh()
 
@@ -195,7 +197,6 @@ class PgRecoveryEvent(Event):
         # FIXME: O(pg_num) in python
         # FIXME: far more fields getting pythonized than we really care about
         pg_to_state = dict([(p['pgid'], p) for p in raw_pg_stats['pg_stats']])
-
         if self._original_bytes_recovered is None:
             self._original_bytes_recovered = {}
             missing_pgs = []
@@ -229,15 +230,15 @@ class PgRecoveryEvent(Event):
                 # The PG is gone!  Probably a pool was deleted. Drop it.
                 complete.add(pg)
                 continue
+            # Only checks the state of each PGs when it's epoch >= the OSDMap's epoch
+            if int(info['reported_epoch']) < int(self._start_epoch):
+                continue
 
             state = info['state']
 
             states = state.split("+")
 
-            unmoved = bool(set(self._evacuate_osds) & (
-                set(info['up']) | set(info['acting'])))
-
-            if "active" in states and "clean" in states and not unmoved:
+            if "active" in states and "clean" in states:
                 complete.add(pg)
             else:
                 if info['stat_sum']['num_bytes'] == 0:
@@ -251,7 +252,6 @@ class PgRecoveryEvent(Event):
                         ratio = float(recovered -
                                       self._original_bytes_recovered[pg]) / \
                             total_bytes
-
                         # Since the recovered bytes (over time) could perhaps
                         # exceed the contents of the PG (moment in time), we
                         # must clamp this
@@ -261,7 +261,6 @@ class PgRecoveryEvent(Event):
                         # Dataless PGs (e.g. containing only OMAPs) count
                         # as half done.
                         ratio = 0.5
-
                     complete_accumulate += ratio
 
         self._pgs = list(set(self._pgs) ^ complete)
@@ -304,7 +303,14 @@ class Module(MgrModule):
          "perm": "r"},
         {"cmd": "progress clear",
          "desc": "Reset progress tracking",
+         "perm": "rw"},
+        {"cmd": "progress on",
+         "desc": "Enable progress tracking",
+         "perm": "rw"},
+        {"cmd": "progress off",
+         "desc": "Disable progress tracking",
          "perm": "rw"}
+
     ]
 
     MODULE_OPTIONS = [
@@ -322,6 +328,11 @@ class Module(MgrModule):
             'desc': 'how frequently to persist completed events',
             'runtime': True,
         },
+        {
+            'name': 'enabled',
+            'default': True,
+            'type': 'bool',
+        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -349,40 +360,50 @@ class Module(MgrModule):
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    def _osd_out(self, old_map, old_dump, new_map, osd_id):
+    def _osd_in_out(self, old_map, old_dump, new_map, osd_id, marked):
+        # A function that will create or complete an event when an 
+        # OSD is marked in or out according to the affected PGs
         affected_pgs = []
         unmoved_pgs = []
         for pool in old_dump['pools']:
             pool_id = pool['pool']
             for ps in range(0, pool['pg_num']):
-                up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
 
-                # Was this OSD affected by the OSD going out?
-                old_osds = set(up_acting['up']) | set(up_acting['acting'])
-                was_on_out_osd = osd_id in old_osds
-                if not was_on_out_osd:
+                # Was this OSD affected by the OSD coming in/out?
+                # Compare old and new osds using
+                # data from the json dump
+                old_up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
+                old_osds = set(old_up_acting['acting'])
+
+                new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
+                new_osds = set(new_up_acting['acting'])
+                
+                # Check the osd_id being in the acting set for both old
+                # and new maps to cover both out and in cases
+                was_on_out_or_in_osd = osd_id in old_osds or osd_id in new_osds
+                if not was_on_out_or_in_osd:
                     continue
-
+                
                 self.log.debug("pool_id, ps = {0}, {1}".format(
                     pool_id, ps
                 ))
 
                 self.log.debug(
-                    "up_acting: {0}".format(json.dumps(up_acting, indent=2)))
-
-                new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
-                new_osds = set(new_up_acting['up']) | set(new_up_acting['acting'])
+                    "old_up_acting: {0}".format(json.dumps(old_up_acting, indent=2)))
 
                 # Has this OSD been assigned a new location?
                 # (it might not be if there is no suitable place to move
-                #  after an OSD failure)
-                is_relocated = len(new_osds - old_osds) > 0
+                #  after an OSD is marked in/out)
+                if marked == "in":
+                    is_relocated = len(old_osds - new_osds) > 0
+                else:
+                    is_relocated = len(new_osds - old_osds) > 0
 
                 self.log.debug(
                     "new_up_acting: {0}".format(json.dumps(new_up_acting,
                                                            indent=2)))
-
-                if was_on_out_osd and is_relocated:
+                
+                if was_on_out_or_in_osd and is_relocated:
                     # This PG is now in motion, track its progress
                     affected_pgs.append(PgId(pool_id, ps))
                 elif not is_relocated:
@@ -395,31 +416,31 @@ class Module(MgrModule):
             self.log.warn("{0} PGs were on osd.{1}, but didn't get new locations".format(
                 len(unmoved_pgs), osd_id))
 
-        self.log.warn("{0} PGs affected by osd.{1} going out".format(
-            len(affected_pgs), osd_id))
+        self.log.warn("{0} PGs affected by osd.{1} being marked {2}".format(
+            len(affected_pgs), osd_id, marked))
 
-        if len(affected_pgs) == 0:
-            # Don't emit events if there were no PGs
-            return
+           
+        # In the case of the osd coming back in, we might need to cancel 
+        # previous recovery event for that osd
+        if marked == "in":
+            for ev_id in list(self._events):
+                ev = self._events[ev_id]
+                if isinstance(ev, PgRecoveryEvent) and osd_id in ev.evacuating_osds:
+                    self.log.info("osd.{0} came back in, cancelling event".format(
+                        osd_id
+                    ))
+                    self._complete(ev)
 
-        # TODO: reconcile with existing events referring to this OSD going out
-        ev = PgRecoveryEvent(
-            "Rebalancing after osd.{0} marked out".format(osd_id),
-            refs=[("osd", osd_id)],
-            which_pgs=affected_pgs,
-            evacuate_osds=[osd_id]
-        )
-        ev.pg_update(self.get("pg_stats"), self.get("pg_ready"), self.log)
-        self._events[ev.id] = ev
-
-    def _osd_in(self, osd_id):
-        for ev_id, ev in self._events.items():
-            if isinstance(ev, PgRecoveryEvent) and osd_id in ev.evacuating_osds:
-                self.log.info("osd.{0} came back in, cancelling event".format(
-                    osd_id
-                ))
-                self._complete(ev)
-
+        if len(affected_pgs) > 0:
+            ev = PgRecoveryEvent(
+                    "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
+                    refs=[("osd", osd_id)],
+                    which_pgs=affected_pgs,
+                    evacuate_osds=[osd_id]
+                    )
+            ev.pg_update(self.get("pg_dump"), self.get("pg_ready"), self.log)
+            self._events[ev.id] = ev
+                 
     def _osdmap_changed(self, old_osdmap, new_osdmap):
         old_dump = old_osdmap.dump()
         new_dump = new_osdmap.dump()
@@ -434,17 +455,18 @@ class Module(MgrModule):
 
                 if new_weight == 0.0 and old_weight > new_weight:
                     self.log.warn("osd.{0} marked out".format(osd_id))
-                    self._osd_out(old_osdmap, old_dump, new_osdmap, osd_id)
+                    self._osd_in_out(old_osdmap, old_dump, new_osdmap, osd_id, "out")
                 elif new_weight >= 1.0 and old_weight == 0.0:
                     # Only consider weight>=1.0 as "in" to avoid spawning
                     # individual recovery events on every adjustment
                     # in a gradual weight-in
                     self.log.warn("osd.{0} marked in".format(osd_id))
-                    self._osd_in(osd_id)
+                    self._osd_in_out(old_osdmap, old_dump, new_osdmap, osd_id, "in")
 
     def notify(self, notify_type, notify_data):
         self._ready.wait()
-
+        if not self.enabled:
+            return
         if notify_type == "osd_map":
             old_osdmap = self._latest_osdmap
             self._latest_osdmap = self.get_osdmap()
@@ -454,7 +476,7 @@ class Module(MgrModule):
             ))
             self._osdmap_changed(old_osdmap, self._latest_osdmap)
         elif notify_type == "pg_summary":
-            # if there are no events we will skip this here to avoid 
+            # if there are no events we will skip this here to avoid
             # expensive get calls
             if len(self._events) == 0:
                 return
@@ -538,6 +560,9 @@ class Module(MgrModule):
         """
         For calling from other mgr modules
         """
+        if not self.enabled:
+            return
+
         if refs is None:
             refs = []
         try:
@@ -572,6 +597,8 @@ class Module(MgrModule):
         """
         For calling from other mgr modules
         """
+        if not self.enabled:
+            return
         try:
             ev = self._events[ev_id]
             ev.set_progress(1.0)
@@ -596,6 +623,12 @@ class Module(MgrModule):
             self._complete(ev)
         except KeyError:
             self.log.warn("fail: ev {0} does not exist".format(ev_id))
+
+    def on(self):
+        self.set_module_option('enabled', True)
+
+    def off(self):
+        self.set_module_option('enabled', False)
 
     def _handle_ls(self):
         if len(self._events) or len(self._completed_events):
@@ -623,12 +656,15 @@ class Module(MgrModule):
             'completed': [ev.to_json() for ev in self._completed_events]
         }
 
-    def _handle_clear(self):
+    def clear(self):
         self._events = {}
         self._completed_events = []
         self._dirty = True
         self._save()
+        self.clear_all_progress_events()
 
+    def _handle_clear(self):
+        self.clear()
         return 0, "", ""
 
     def handle_command(self, _, cmd):
@@ -641,6 +677,17 @@ class Module(MgrModule):
             # that never finishes)
             return self._handle_clear()
         elif cmd['prefix'] == "progress json":
-            return 0, json.dumps(self._json(), indent=2), ""
+            return 0, json.dumps(self._json(), indent=4, sort_keys=True), ""
+        elif cmd['prefix'] == "progress on":
+            if self.enabled:
+                return 0, "", "progress already enabled!"
+            self.on()
+            return 0, "", "progress enabled"
+        elif cmd['prefix'] == "progress off":
+            if not self.enabled:
+                return 0, "", "progress already disabled!"
+            self.off()
+            self.clear()
+            return 0, "", "progress disabled"
         else:
             raise NotImplementedError(cmd['prefix'])

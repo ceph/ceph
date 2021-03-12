@@ -135,7 +135,8 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
 
 static void get_fuse_groups(UserPerm& perms, fuse_req_t req)
 {
-  if (g_conf().get_val<bool>("fuse_set_user_groups")) {
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  if (cfuse->client->cct->_conf.get_val<bool>("fuse_set_user_groups")) {
     gid_t *gids = NULL;
     int count = getgroups(req, &gids);
 

@@ -292,8 +292,14 @@ struct cls_rgw_obj_key {
     }
     return (r < 0);
   }
+  bool operator>(const cls_rgw_obj_key& k) const {
+    return k < *this;
+  }
   bool operator<=(const cls_rgw_obj_key& k) const {
     return !(k < *this);
+  }
+  bool operator>=(const cls_rgw_obj_key& k) const {
+    return !(k > *this);
   }
   bool empty() const {
     return name.empty();
@@ -392,16 +398,18 @@ struct rgw_bucket_dir_entry {
     DECODE_FINISH(bl);
   }
 
-  bool is_current() {
+  bool is_current() const {
     int test_flags = RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT;
     return (flags & RGW_BUCKET_DIRENT_FLAG_VER) == 0 ||
            (flags & test_flags) == test_flags;
   }
-  bool is_delete_marker() { return (flags & RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER) != 0; }
-  bool is_visible() {
+  bool is_delete_marker() const {
+    return (flags & RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER) != 0;
+  }
+  bool is_visible() const {
     return is_current() && !is_delete_marker();
   }
-  bool is_valid() { return (flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0; }
+  bool is_valid() const { return (flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0; }
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);

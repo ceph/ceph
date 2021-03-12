@@ -36,6 +36,7 @@
 
 	mon cluster log file level = debug
 	debug asserts on shutdown = true
+	mon health detail to clog = false
 
 	# we see this fail in qa on *nautilus*; bump up retries
 	mon_client_directed_command_retry = 4

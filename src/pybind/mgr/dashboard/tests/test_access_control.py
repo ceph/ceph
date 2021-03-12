@@ -7,6 +7,8 @@ import json
 import time
 import unittest
 
+from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
+
 from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
@@ -271,7 +273,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_create_user(self, username='admin', rolename=None):
         user = self.exec_cmd('ac-user-create', username=username,
-                             rolename=rolename, password='admin',
+                             rolename=rolename, inbuf='admin',
                              name='{} User'.format(username),
                              email='{}@user.com'.format(username))
 
@@ -309,7 +311,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.test_create_user()
 
         with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('ac-user-create', username='admin', password='admin')
+            self.exec_cmd('ac-user-create', username='admin', inbuf='admin')
 
         self.assertEqual(ctx.exception.retcode, -errno.EEXIST)
         self.assertEqual(str(ctx.exception), "User 'admin' already exists")
@@ -321,7 +323,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         # create a user with a role that does not exist; expect a failure
         try:
             self.exec_cmd('ac-user-create', username='foo',
-                          rolename='dne_role', password='foopass',
+                          rolename='dne_role', inbuf='foopass',
                           name='foo User', email='foo@user.com')
         except CmdException as e:
             self.assertEqual(e.retcode, -errno.ENOENT)
@@ -341,7 +343,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         # create a role (this will be 'test_role')
         self.test_create_role()
         self.exec_cmd('ac-user-create', username='bar',
-                      rolename='test_role', password='barpass',
+                      rolename='test_role', inbuf='barpass',
                       name='bar User', email='bar@user.com')
 
         # validate db:
@@ -540,7 +542,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password(self):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-set-password', username='admin',
-                             password='newpass')
+                             inbuf='newpass')
         pass_hash = password_hash('newpass', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
@@ -557,14 +559,21 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-user-set-password', username='admin',
-                          password='newpass')
+                          inbuf='newpass')
 
         self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
         self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
 
+    def test_set_user_password_empty(self):
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-set-password', username='admin', inbuf='\n')
+
+        self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
+        self.assertEqual(str(ctx.exception), ERROR_MSG_EMPTY_INPUT_FILE)
+
     def test_set_login_credentials(self):
         self.exec_cmd('set-login-credentials', username='admin',
-                      password='admin')
+                      inbuf='admin')
         user = self.exec_cmd('ac-user-show', username='admin')
         pass_hash = password_hash('admin', user['password'])
         self.assertDictEqual(user, {
@@ -581,7 +590,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_login_credentials_for_existing_user(self):
         self.test_add_user_roles('admin', ['read-only'])
         self.exec_cmd('set-login-credentials', username='admin',
-                      password='admin2')
+                      inbuf='admin2')
         user = self.exec_cmd('ac-user-show', username='admin')
         pass_hash = password_hash('admin2', user['password'])
         self.assertDictEqual(user, {

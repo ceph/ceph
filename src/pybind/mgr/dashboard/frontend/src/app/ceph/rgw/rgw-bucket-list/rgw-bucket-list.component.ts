@@ -1,6 +1,7 @@
-import { Component, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
@@ -13,6 +14,8 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
+import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 
@@ -24,9 +27,13 @@ const BASE_URL = 'rgw/bucket';
   styleUrls: ['./rgw-bucket-list.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RgwBucketListComponent {
+export class RgwBucketListComponent implements OnInit {
   @ViewChild(TableComponent)
   table: TableComponent;
+  @ViewChild('bucketSizeTpl')
+  bucketSizeTpl: TemplateRef<any>;
+  @ViewChild('bucketObjectTpl')
+  bucketObjectTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -36,25 +43,16 @@ export class RgwBucketListComponent {
 
   constructor(
     private authStorageService: AuthStorageService,
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private dimlessPipe: DimlessPipe,
     private rgwBucketService: RgwBucketService,
     private bsModalService: BsModalService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private changeDetectorRef: ChangeDetectorRef
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
-    this.columns = [
-      {
-        name: this.i18n('Name'),
-        prop: 'bid',
-        flexGrow: 1
-      },
-      {
-        name: this.i18n('Owner'),
-        prop: 'owner',
-        flexGrow: 1
-      }
-    ];
     const getBucketUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
     const addAction: CdTableAction = {
@@ -78,10 +76,70 @@ export class RgwBucketListComponent {
     this.tableActions = [addAction, editAction, deleteAction];
   }
 
+  ngOnInit() {
+    this.columns = [
+      {
+        name: this.i18n('Name'),
+        prop: 'bid',
+        flexGrow: 2
+      },
+      {
+        name: this.i18n('Owner'),
+        prop: 'owner',
+        flexGrow: 3
+      },
+      {
+        name: this.i18n('Used Capacity'),
+        prop: 'bucket_size',
+        flexGrow: 0.5,
+        pipe: this.dimlessBinaryPipe
+      },
+      {
+        name: this.i18n('Capacity Limit %'),
+        prop: 'size_usage',
+        cellTemplate: this.bucketSizeTpl,
+        flexGrow: 1
+      },
+      {
+        name: this.i18n('Objects'),
+        prop: 'num_objects',
+        flexGrow: 0.5,
+        pipe: this.dimlessPipe
+      },
+      {
+        name: this.i18n('Object Limit %'),
+        prop: 'object_usage',
+        cellTemplate: this.bucketObjectTpl,
+        flexGrow: 1
+      }
+    ];
+  }
+
+  transformBucketData() {
+    _.forEach(this.buckets, (bucketKey) => {
+      const usageList = bucketKey['usage'];
+      const maxBucketSize = bucketKey['bucket_quota']['max_size'];
+      const maxBucketObjects = bucketKey['bucket_quota']['max_objects'];
+      let totalBucketSize = 0;
+      let numOfObjects = 0;
+      _.forEach(usageList, (usageKey) => {
+        totalBucketSize = totalBucketSize + usageKey.size_actual;
+        numOfObjects = numOfObjects + usageKey.num_objects;
+      });
+      bucketKey['bucket_size'] = totalBucketSize;
+      bucketKey['num_objects'] = numOfObjects;
+      bucketKey['size_usage'] = maxBucketSize > 0 ? totalBucketSize / maxBucketSize : undefined;
+      bucketKey['object_usage'] =
+        maxBucketObjects > 0 ? numOfObjects / maxBucketObjects : undefined;
+    });
+  }
+
   getBucketList(context: CdTableFetchDataContext) {
     this.rgwBucketService.list().subscribe(
       (resp: object[]) => {
         this.buckets = resp;
+        this.transformBucketData();
+        this.changeDetectorRef.detectChanges();
       },
       () => {
         context.error();

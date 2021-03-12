@@ -1,3 +1,7 @@
+if(Boost_VERSION VERSION_GREATER 1.73)
+  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
+endif()
+
 add_library(rbd_types STATIC
   journal/Types.cc
   mirroring_watcher/Types.cc

@@ -32,7 +32,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
 
-
+std::set<std::string> obsolete_modules = {
+  "orchestrator_cli",
+};
 
 void PyModuleRegistry::init()
 {
@@ -370,6 +372,12 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
 
     // report failed always_on modules as health errors
     for (const auto& name : mgr_map.get_always_on_modules()) {
+      if (obsolete_modules.count(name)) {
+	continue;
+      }
+      if (active_modules->is_pending(name)) {
+	continue;
+      }
       if (!active_modules->module_exists(name)) {
         if (failed_modules.find(name) == failed_modules.end() &&
             dependency_modules.find(name) == dependency_modules.end()) {
@@ -419,7 +427,10 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
   std::lock_guard l(module_config.lock);
 
   if (!v.empty()) {
-    dout(4) << "Loaded module_config entry " << k << ":" << v << dendl;
+    // removing value to hide sensitive data going into mgr logs
+    // leaving this for debugging purposes
+    // dout(10) << "Loaded module_config entry " << k << ":" << v << dendl;
+    dout(4) << "Loaded module_config entry " << k << ":" << dendl;
     module_config.config[k] = v;
   } else {
     module_config.config.erase(k);

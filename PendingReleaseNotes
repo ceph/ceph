@@ -1,3 +1,22 @@
+14.2.16
+-------
+
+* The structured output of ``ceph status`` or ``ceph -s`` is now more
+  concise, particularly the ``mgrmap`` and ``monmap`` sections, and the
+  structure of the ``osdmap`` section has been cleaned up.
+
+* MON: The cluster log now logs health detail every ``mon_health_to_clog_interval``,
+  which has been changed from 1hr to 10min. Logging of health detail will be
+  skipped if there is no change in health summary since last known.
+
+
+14.2.15
+-------
+
+* MGR: progress module can now be turned on/off, using the commands:
+  ``ceph progress on`` and ``ceph progress off``.
+
+
 14.2.13
 -------
 

@@ -559,6 +559,7 @@ void ObjectCacher::Object::truncate(loff_t s)
   ceph_assert(oc->lock.is_locked());
   ldout(oc->cct, 10) << "truncate " << *this << " to " << s << dendl;
 
+  std::list<Context*> waiting_for_read;
   while (!data.empty()) {
     BufferHead *bh = data.rbegin()->second;
     if (bh->end() <= s)
@@ -573,11 +574,18 @@ void ObjectCacher::Object::truncate(loff_t s)
 
     // remove bh entirely
     ceph_assert(bh->start() >= s);
-    ceph_assert(bh->waitfor_read.empty());
+    for ([[maybe_unused]] auto& [off, ctxs] : bh->waitfor_read) {
+      waiting_for_read.splice(waiting_for_read.end(), ctxs);
+    }
+    bh->waitfor_read.clear();
     replace_journal_tid(bh, 0);
     oc->bh_remove(this, bh);
     delete bh;
   }
+  if (!waiting_for_read.empty()) {
+    ldout(oc->cct, 10) <<  "restarting reads post-truncate" << dendl;
+  }
+  finish_contexts(oc->cct, waiting_for_read, 0);
 }
 
 void ObjectCacher::Object::discard(loff_t off, loff_t len,
@@ -596,6 +604,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
     complete = false;
   }
 
+  std::list<Context*> waiting_for_read;
   map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
@@ -633,12 +642,19 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
       // we should mark all Rx bh to zero
       continue;
     } else {
-      ceph_assert(bh->waitfor_read.empty());
+      for ([[maybe_unused]] auto& [off, ctxs] : bh->waitfor_read) {
+        waiting_for_read.splice(waiting_for_read.end(), ctxs);
+      }
+      bh->waitfor_read.clear();
     }
 
     oc->bh_remove(this, bh);
     delete bh;
   }
+  if (!waiting_for_read.empty()) {
+    ldout(oc->cct, 10) <<  "restarting reads post-discard" << dendl;
+  }
+  finish_contexts(oc->cct, waiting_for_read, 0); /* restart reads */
 }
 
 

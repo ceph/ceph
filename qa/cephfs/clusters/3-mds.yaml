@@ -4,7 +4,8 @@ roles:
 - [client.0, client.1]
 overrides:
   ceph:
-    max_mds: 3
+    cephfs:
+      max_mds: 3
 openstack:
 - volumes: # attached to each instance
     count: 4

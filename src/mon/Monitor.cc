@@ -2809,7 +2809,16 @@ void Monitor::do_health_to_clog(bool force)
       summary == health_status_cache.summary &&
       level == health_status_cache.overall)
     return;
-  clog->health(level) << "overall " << summary;
+
+  if (g_conf()->mon_health_detail_to_clog &&
+      summary != health_status_cache.summary &&
+      level != HEALTH_OK) {
+    string details;
+    level = get_health_status(true, nullptr, &details);
+    clog->health(level) << "Health detail: " << details;
+  } else {
+    clog->health(level) << "overall " << summary;
+  }
   health_status_cache.summary = summary;
   health_status_cache.overall = level;
 }
@@ -2987,7 +2996,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	  mono_clock::now() - quorum_since).count());
     }
     f->open_object_section("monmap");
-    monmap->dump(f);
+    monmap->dump_summary(f);
     f->close_section();
     f->open_object_section("osdmap");
     osdmon()->osdmap.print_summary(f, cout, string(12, ' '));
@@ -3369,18 +3378,20 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
-    (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-      << "from='" << session->name << " " << session->addrs << "' "
-      << "entity='" << session->entity_name << "' "
-      << "cmd=" << m->cmd << ":  access denied";
+    if (prefix != "config set" && prefix != "config-key set")
+      (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+        << "from='" << session->name << " " << session->addrs << "' "
+        << "entity='" << session->entity_name << "' "
+        << "cmd=" << m->cmd << ":  access denied";
     reply_command(op, -EACCES, "access denied", 0);
     return;
   }
 
-  (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-      << "from='" << session->name << " " << session->addrs << "' "
-      << "entity='" << session->entity_name << "' "
-      << "cmd=" << m->cmd << ": dispatch";
+  if (prefix != "config set" && prefix != "config-key set")
+    (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+        << "from='" << session->name << " " << session->addrs << "' "
+        << "entity='" << session->entity_name << "' "
+        << "cmd=" << m->cmd << ": dispatch";
 
   if (mon_cmd->is_mgr()) {
     const auto& hdr = m->get_header();

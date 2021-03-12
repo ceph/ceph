@@ -800,13 +800,6 @@ void ConfigMonitor::load_config()
     it->next();
   }
   dout(10) << __func__ << " got " << num << " keys" << dendl;
-  dout(20) << __func__ << " config map:\n";
-  JSONFormatter jf(true);
-  jf.open_object_section("config_map");
-  config_map.dump(&jf);
-  jf.close_section();
-  jf.flush(*_dout);
-  *_dout << dendl;
 
   // refresh our own config
   {
@@ -887,8 +880,9 @@ bool ConfigMonitor::refresh_config(MonSession *s)
     dout(20) << __func__ << " no change, " << out << dendl;
     return false;
   }
-
-  dout(20) << __func__ << " " << out << dendl;
+  // removing this to hide sensitive data going into logs
+  // leaving this for debugging purposes
+  // dout(20) << __func__ << " " << out << dendl;
   s->last_config = out;
   s->any_config = true;
   return true;

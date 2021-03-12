@@ -461,6 +461,7 @@ public:
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
   void dump(ceph::Formatter *f) const;
+  void dump_summary(ceph::Formatter *f) const;
 
   void check_health(health_check_map_t *checks) const;
 

@@ -4310,7 +4310,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
        On failure, we need the double-error handler
      */
     new_err_no = RGWHandler_REST_S3Website::serve_errordoc(http_error_code, s->bucket_info.website_conf.error_doc);
-    if (new_err_no && new_err_no != -1) {
+    if (new_err_no != -1) {
       err_no = new_err_no;
     }
   } else {

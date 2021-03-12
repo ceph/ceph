@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(ceph CXX C ASM)
-set(VERSION 14.2.13)
+set(VERSION 14.2.16)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
@@ -23,6 +23,9 @@ if(POLICY CMP0051)
 endif()
 if(POLICY CMP0075)
   cmake_policy(SET CMP0075 NEW)
+endif()
+if(POLICY CMP0093)
+  cmake_policy(SET CMP0093 NEW)
 endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -105,6 +108,7 @@ CHECK_FUNCTION_EXISTS(strerror_r HAVE_Strerror_R)
 CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
 CHECK_FUNCTION_EXISTS(accept4 HAVE_ACCEPT4)
+CHECK_FUNCTION_EXISTS(sigdescr_np HAVE_SIGDESCR_NP)
 
 include(CMakePushCheckState)
 cmake_push_check_state(RESET)

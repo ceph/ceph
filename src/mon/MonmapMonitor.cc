@@ -285,10 +285,29 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "mon stat") {
-    mon->monmap->print_summary(ss);
-    ss << ", election epoch " << mon->get_epoch() << ", leader "
-       << mon->get_leader() << " " << mon->get_leader_name()
-       << ", quorum " << mon->get_quorum() << " " << mon->get_quorum_names();
+    if (f) {
+      f->open_object_section("monmap");
+      mon->monmap->dump_summary(f.get());
+      f->dump_string("leader", mon->get_leader_name());
+      f->open_array_section("quorum");
+      for (auto rank: mon->get_quorum()) {
+        std::string name = mon->monmap->get_name(rank);
+        f->open_object_section("mon");
+        f->dump_int("rank", rank);
+        f->dump_string("name", name);
+        f->close_section();  // mon
+      }
+      f->close_section();  // quorum
+      f->close_section();  // monmap
+      f->flush(ss);
+    } else {
+      mon->monmap->print_summary(ss);
+      ss << ", election epoch " << mon->get_epoch() << ", leader "
+         << mon->get_leader() << " " << mon->get_leader_name()
+         << ", quorum " << mon->get_quorum()
+         << " " << mon->get_quorum_names();
+    }
+
     rdata.append(ss);
     ss.str("");
     r = 0;

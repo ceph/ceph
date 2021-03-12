@@ -20,6 +20,8 @@
 
 source src/script/run-make.sh
 
+set -e
+
 function run() {
     # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
     $DRY_RUN ulimit -n $(ulimit -Hn)
@@ -55,7 +57,8 @@ function main() {
     FOR_MAKE_CHECK=1 prepare
     # Init defaults after deps are installed.
     configure "-DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_SEASTAR=ON -DENABLE_GIT_VERSION=OFF $@"
-    build tests && echo "make check: successful run on $(git rev-parse HEAD)"
+    build tests
+    echo "make check: successful build on $(git rev-parse HEAD)"
     run
 }
 

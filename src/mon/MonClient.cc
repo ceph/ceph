@@ -1429,13 +1429,8 @@ int MonClient::handle_auth_request(
   }
 
   auto ac = &auth_meta->authorizer_challenge;
-  if (!HAVE_FEATURE(con->get_features(), CEPHX_V2)) {
-    if (cct->_conf->cephx_service_require_version >= 2) {
-      ldout(cct,10) << __func__ << " client missing CEPHX_V2 ("
-		    << "cephx_service_requre_version = "
-		    << cct->_conf->cephx_service_require_version << ")" << dendl;
-      return -EACCES;
-    }
+  if (auth_meta->skip_authorizer_challenge) {
+    ldout(cct, 10) << __func__ << " skipping challenge on " << con << dendl;
     ac = nullptr;
   }
 

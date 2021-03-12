@@ -1934,7 +1934,7 @@ std::vector<Option> get_global_options() {
     .set_description("log monitor health to cluster log"),
 
     Option("mon_health_to_clog_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(1_hr)
+    .set_default(10_min)
     .add_service("mon")
     .set_description("frequency to log monitor health to cluster log")
     .add_see_also("mon_health_to_clog"),
@@ -1943,6 +1943,10 @@ std::vector<Option> get_global_options() {
     .set_default(60.0)
     .add_service("mon")
     .set_description(""),
+
+    Option("mon_health_detail_to_clog", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("log health detail to cluster log"),
 
     Option("mon_health_max_detail", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
@@ -3942,11 +3946,11 @@ std::vector<Option> get_global_options() {
     .set_description("Time in seconds to sleep before next removal transaction for HDDs"),
 
     Option("osd_delete_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0)
+    .set_default(1)
     .set_description("Time in seconds to sleep before next removal transaction for SSDs"),
 
     Option("osd_delete_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(2)
+    .set_default(1)
     .set_description("Time in seconds to sleep before next removal transaction when data is on HDD and journal is on SSD"),
 
     Option("osd_failsafe_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -5077,6 +5081,14 @@ std::vector<Option> get_global_options() {
     Option("bluestore_hybrid_alloc_mem_cap", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(64_M)
     .set_description("Maximum RAM hybrid allocator should use before enabling bitmap supplement"),
+
+    Option("bluestore_kv_sync_util_logging_s", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(10.0)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("KV sync thread utilization logging period")
+    .set_long_description("How often (in seconds) to print KV sync thread utilization, "
+      "not logged when set to 0 or when utilization is 0%"),
+
 
     // -----------------------------------------
     // kstore

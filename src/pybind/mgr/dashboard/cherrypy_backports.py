@@ -95,11 +95,16 @@ def accept_exceptions_from_builtin_ssl(v):
                         # Check if it's one of the known errors
                         # Errors that are caught by PyOpenSSL, but thrown by
                         # built-in ssl
-                        _block_errors = ('unknown protocol', 'unknown ca',
-                                         'unknown_ca', 'inappropriate fallback',
+                        _block_errors = ('unknown protocol', 'unknown ca', 'unknown_ca',
+                                         'unknown error',
+                                         'https proxy request', 'inappropriate fallback',
                                          'wrong version number',
                                          'no shared cipher', 'certificate unknown',
-                                         'ccs received early')
+                                         'ccs received early',
+                                         'certificate verify failed',  # client cert w/o trusted CA
+                                         'version too low',  # caused by SSL3 connections
+                                         'unsupported protocol',  # caused by TLS1 connections
+                                         'sslv3 alert bad certificate')
                         for error_text in _block_errors:
                             if error_text in e.args[1].lower():
                                 # Accepted error, let's pass

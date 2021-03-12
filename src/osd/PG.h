@@ -499,7 +499,8 @@ public:
 
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
-  void _delete_some(ObjectStore::Transaction *t);
+  ghobject_t _delete_some(ObjectStore::Transaction *t,
+    ghobject_t _next);
 
   virtual void set_dynamic_perf_stats_queries(
     const std::list<OSDPerfMetricQuery> &queries) {
@@ -2773,6 +2774,8 @@ protected:
 	boost::statechart::custom_reaction< DeleteSome >,
 	boost::statechart::transition<DeleteInterrupted, WaitDeleteReserved>
 	> reactions;
+      ghobject_t next;
+      ceph::mono_clock::time_point start;	
       explicit Deleting(my_context ctx);
       boost::statechart::result react(const DeleteSome &evt);
       void exit();

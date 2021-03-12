@@ -10,7 +10,7 @@ import time
 
 import bcrypt
 
-from mgr_module import CLIReadCommand, CLIWriteCommand
+from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
 
 from .. import mgr, logger
 from ..security import Scope, Permission
@@ -367,10 +367,11 @@ def load_access_control_db():
 # CLI dashboard access control scope commands
 
 @CLIWriteCommand('dashboard set-login-credentials',
-                 'name=username,type=CephString '
-                 'name=password,type=CephString',
-                 'Set the login credentials')
-def set_login_credentials_cmd(_, username, password):
+                 'name=username,type=CephString',
+                 'Set the login credentials. Password read from -i <file>')
+@CLICheckNonemptyFileInput
+def set_login_credentials_cmd(_, username, inbuf):
+    password = inbuf
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_password(password)
@@ -500,13 +501,14 @@ def ac_user_show_cmd(_, username=None):
 
 @CLIWriteCommand('dashboard ac-user-create',
                  'name=username,type=CephString '
-                 'name=password,type=CephString,req=false '
                  'name=rolename,type=CephString,req=false '
                  'name=name,type=CephString,req=false '
                  'name=email,type=CephString,req=false',
-                 'Create a user')
-def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
+                 'Create a user. Password read from -i <file>')
+@CLICheckNonemptyFileInput
+def ac_user_create_cmd(_, username, inbuf, rolename=None, name=None,
                        email=None):
+    password = inbuf
     try:
         role = mgr.ACCESS_CTRL_DB.get_role(rolename) if rolename else None
     except RoleDoesNotExist as ex:
@@ -609,10 +611,11 @@ def ac_user_del_roles_cmd(_, username, roles):
 
 
 @CLIWriteCommand('dashboard ac-user-set-password',
-                 'name=username,type=CephString '
-                 'name=password,type=CephString',
-                 'Set user password')
-def ac_user_set_password(_, username, password):
+                 'name=username,type=CephString',
+                 'Set user password from -i <file>')
+@CLICheckNonemptyFileInput
+def ac_user_set_password(_, username, inbuf):
+    password = inbuf
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_password(password)

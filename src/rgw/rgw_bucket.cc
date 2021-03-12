@@ -1589,32 +1589,28 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 	  continue;
 
 	for (const auto& s : stats) {
-	    num_objects += s.second.num_objects;
+	  num_objects += s.second.num_objects;
 	}
 
 	num_shards = info.num_shards;
 	uint64_t objs_per_shard =
 	  (num_shards) ? num_objects/num_shards : num_objects;
 	{
-	  bool warn = false;
+	  bool warn;
 	  stringstream ss;
-	  if (objs_per_shard > safe_max_objs_per_shard) {
-	    double over =
-	      100 - (safe_max_objs_per_shard/objs_per_shard * 100);
-	      ss << boost::format("OVER %4f%%") % over;
-	      warn = true;
+	  uint64_t fill_pct = objs_per_shard * 100 / safe_max_objs_per_shard;
+	  if (fill_pct > 100) {
+	    ss << "OVER " << fill_pct << "%";
+	    warn = true;
+	  } else if (fill_pct >= shard_warn_pct) {
+	    ss << "WARN " << fill_pct << "%";
+	    warn = true;
 	  } else {
-	    double fill_pct =
-	      objs_per_shard / safe_max_objs_per_shard * 100;
-	    if (fill_pct >= shard_warn_pct) {
-	      ss << boost::format("WARN %4f%%") % fill_pct;
-	      warn = true;
-	    } else {
-	      ss << "OK";
-	    }
+	    ss << "OK";
+	    warn = false;
 	  }
 
-	  if (warn || (! warnings_only)) {
+	  if (warn || !warnings_only) {
 	    formatter->open_object_section("bucket");
 	    formatter->dump_string("bucket", bucket.name);
 	    formatter->dump_string("tenant", bucket.tenant);
@@ -1644,8 +1640,17 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
+  RGWBucket bucket;
   int ret = 0;
   const std::string& bucket_name = op_state.get_bucket_name();
+  if (!bucket_name.empty()) {
+    ret = bucket.init(store, op_state);
+    if (-ENOENT == ret)
+      return -ERR_NO_SUCH_BUCKET;
+    else if (ret < 0)
+      return ret;
+  }
+
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 

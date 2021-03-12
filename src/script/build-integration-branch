@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from __future__ import print_function
 
@@ -20,8 +20,13 @@ with open(os.environ['HOME'] + '/.github_token', 'r') as myfile:
     token = myfile.readline().strip()
 
 # get prs
-baseurl = urljoin('https://api.github.com',
-                  'repos/{repo}/issues?labels={label}&access_token={token}')
+baseurl = urljoin('https://api.github.com', (
+                      'repos/{repo}/issues?labels={label}'
+                      '&access_token={token}'
+                      '&sort=created'
+                      '&direction=asc'
+                    )
+                 )
 url = baseurl.format(
     label=label,
     repo=repo,

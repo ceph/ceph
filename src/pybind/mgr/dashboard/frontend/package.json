@@ -7,7 +7,7 @@
   },
   "scripts": {
     "ng": "ng",
-    "start": "npm run env_build && ng serve --host 0.0.0.0",
+    "start": "npm run env_build && ng serve --host 0.0.0.0 --ssl",
     "build": "export _locale=${LOCALE:-$npm_package_config_locale}; if [ ${_locale} = $npm_package_config_locale ]; then export _file=; else export _file=src/locale/messages.${_locale}.xlf; fi; ng build --outputPath=dist/${_locale} --i18nFile=${_file} --i18nLocale=${_locale}",
     "prebuild": "npm run env_build",
     "build:en-US": "LOCALE=en-US npm run build",
