@@ -681,6 +681,7 @@ int PeerReplayer::remote_file_op(const std::string &dir_path,
       return r;
     }
 
+    target[stx.stx_size] = '\0';
     r = ceph_symlink(m_remote_mount, target, remote_path.c_str());
     if (r < 0 && r != EEXIST) {
       derr << ": failed to symlink remote path=" << remote_path << " to target=" << target
