@@ -79,9 +79,8 @@ int ReplicaDaemon::init()
   ceph_assert(clean_cache());
   ceph_assert(init_connection());
 
-  mon_client->sub_want("replicamap", 0, 0); // do we still need replicamap???
-  mon_client->renew_subs(); // does daemon need to subscribe the replicamap with all ReplicaDaemons's info
-  MReplicaDaemonBlink *blink_msg = new MReplicaDaemonBlink(self_state); // reconstruct the message which should include: 1) ID 2) RNIC IP+PORT 3) Size 4) free_size (no need to report free_size currently)
+  // reconstruct the message which should include: 1) ID 2) RNIC IP+PORT 3) free_size
+  MReplicaDaemonBlink *blink_msg = new MReplicaDaemonBlink(self_state);
   mon_client->send_mon_message(blink_msg); // send the second(first) message to ReplicaMonitor
 
   return 0;
