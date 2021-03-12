@@ -10,7 +10,6 @@
 #include "include/int_types.h"
 #include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
-#include "common/RWLock.h"
 #include <boost/shared_ptr.hpp>
 #include <list>
 #include <map>

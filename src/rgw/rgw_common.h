@@ -358,7 +358,7 @@ class RGWHTTPArgs {
   bool exist_obj_excl_sub_resource() const {
     const char* const obj_sub_resource[] = {"append", "torrent", "uploadId",
                                             "partNumber", "versionId"};
-    for (int i = 0; i != std::size(obj_sub_resource); i++) {
+    for (unsigned i = 0; i != std::size(obj_sub_resource); i++) {
       if (sub_resource_exists(obj_sub_resource[i])) return true;
     }
     return false;

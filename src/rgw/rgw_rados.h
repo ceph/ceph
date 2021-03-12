@@ -10,7 +10,6 @@
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/RefCountedObj.h"
-#include "common/RWLock.h"
 #include "common/ceph_time.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"

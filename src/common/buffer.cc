@@ -33,7 +33,6 @@
 #include "common/likely.h"
 #include "common/valgrind.h"
 #include "common/deleter.h"
-#include "common/RWLock.h"
 #include "common/error_code.h"
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
