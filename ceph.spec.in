@@ -31,6 +31,14 @@
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
+%ifarch x86_64 ppc64le
+%bcond_without rbd_rwl_cache
+%bcond_without rbd_ssd_cache
+%global _system_pmdk 1
+%else
+%bcond_with rbd_rwl_cache
+%bcond_with rbd_ssd_cache
+%endif
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
 %else
@@ -43,9 +51,6 @@
 %bcond_without ocf
 %global luarocks_package_name luarocks
 %bcond_without lua_packages
-%bcond_without rbd_rwl_cache
-%bcond_without rbd_ssd_cache
-%global _system_pmdk 0
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
@@ -273,6 +278,10 @@ BuildRequires:  nlohmann_json-devel
 BuildRequires:  libevent-devel
 BuildRequires:  yaml-cpp-devel
 %endif
+%if 0%{?_system_pmdk}
+BuildRequires:  libpmem-devel
+BuildRequires:  libpmemobj-devel
+%endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
 BuildRequires:  gnutls-devel
@@ -323,10 +332,6 @@ BuildRequires:  rdma-core-devel
 BuildRequires:	liblz4-devel >= 1.7
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
-%if 0%{?_system_pmdk}
-BuildRequires:  libpmem-devel
-BuildRequires:  libpmemobj-devel
-%endif
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
