@@ -11,9 +11,9 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
-class Transaction;
 
 struct segment_info_t {
   Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
@@ -310,6 +310,20 @@ public:
     using release_segment_ret = release_segment_ertr::future<>;
     virtual release_segment_ret release_segment(
       segment_id_t id) = 0;
+
+    /**
+     * submit_transaction_direct
+     *
+     * Submits transaction without any space throttling.
+     */
+    using submit_transaction_direct_ertr = crimson::errorator<
+      crimson::ct_error::eagain,
+      crimson::ct_error::input_output_error
+      >;
+    using submit_transaction_direct_ret =
+      submit_transaction_direct_ertr::future<>;
+    virtual submit_transaction_direct_ret submit_transaction_direct(
+      TransactionRef t) = 0;
   };
 
 private:

@@ -49,7 +49,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 	  return lba_manager->mkfs(*transaction);
 	}).safe_then([this, &transaction] {
 	  logger().debug("TransactionManager::mkfs: about to submit_transaction");
-	  return submit_transaction(std::move(transaction)).handle_error(
+	  return submit_transaction_direct(std::move(transaction)).handle_error(
 	    crimson::ct_error::eagain::handle([] {
 	      ceph_assert(0 == "eagain impossible");
 	      return mkfs_ertr::now();
@@ -216,6 +216,47 @@ TransactionManager::submit_transaction(
       if (to_release != NULL_SEG_ID) {
 	segment_cleaner->mark_segment_released(to_release);
 	return segment_manager.release(to_release);
+      } else {
+	return SegmentManager::release_ertr::now();
+      }
+    }).safe_then([&tref] {
+      return tref.handle.complete();
+    }).handle_error(
+      submit_transaction_ertr::pass_further{},
+      crimson::ct_error::all_same_way([](auto e) {
+	ceph_assert(0 == "Hit error submitting to journal");
+      }));
+    }).finally([t=std::move(t)]() mutable {
+      t->handle.exit();
+    });
+}
+
+TransactionManager::submit_transaction_direct_ret
+TransactionManager::submit_transaction_direct(
+  TransactionRef t)
+{
+  logger().debug("TransactionManager::submit_transaction_direct");
+  auto &tref = *t;
+  return tref.handle.enter(write_pipeline.prepare
+  ).then([this, &tref]() mutable
+	 -> submit_transaction_ertr::future<> {
+    auto record = cache->try_construct_record(tref);
+    if (!record) {
+      return crimson::ct_error::eagain::make();
+    }
+
+    return journal->submit_record(std::move(*record), tref.handle
+    ).safe_then([this, &tref](auto p) mutable {
+      auto [addr, journal_seq] = p;
+      segment_cleaner->set_journal_head(journal_seq);
+      cache->complete_commit(tref, addr, journal_seq, segment_cleaner.get());
+      lba_manager->complete_transaction(tref);
+      auto to_release = tref.get_segment_to_release();
+      if (to_release != NULL_SEG_ID) {
+	return segment_manager.release(to_release
+	).safe_then([this, to_release] {
+	  segment_cleaner->mark_segment_released(to_release);
+	});
       } else {
 	return SegmentManager::release_ertr::now();
       }

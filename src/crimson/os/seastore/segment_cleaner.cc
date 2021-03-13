@@ -3,7 +3,6 @@
 
 #include "crimson/common/log.h"
 
-#include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 
 namespace {
