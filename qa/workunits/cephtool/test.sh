@@ -345,6 +345,11 @@ function test_tiering_1()
   ceph osd tier add slow cache
   ceph osd tier add slow cache2
   expect_false ceph osd tier add slow2 cache
+  # application metadata should propagate to the tiers
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "slow") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "slow2") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "cache") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "cache2") | .application_metadata["rados"]' | grep '{}'
   # forward and proxy are removed/deprecated
   expect_false ceph osd tier cache-mode cache forward
   expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
