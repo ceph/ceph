@@ -679,19 +679,14 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
 			   uint64_t max_objects, uint64_t max_dirty,
 			   uint64_t target_dirty, double max_dirty_age,
 			   bool block_writes_upfront)
-  : perfcounter(NULL),
-    cct(cct_), writeback_handler(wb), name(name), lock(l),
+  : cct(cct_), writeback_handler(wb), name(name), lock(l),
     max_dirty(max_dirty), target_dirty(target_dirty),
     max_size(max_bytes), max_objects(max_objects),
     max_dirty_age(ceph::make_timespan(max_dirty_age)),
     block_writes_upfront(block_writes_upfront),
-    trace_endpoint("ObjectCacher"),
     flush_set_callback(flush_callback),
     flush_set_callback_arg(flush_callback_arg),
-    last_read_tid(0), flusher_stop(false), flusher_thread(this),finisher(cct),
-    stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0),
-    stat_missing(0), stat_error(0), stat_dirty_waiting(0),
-    stat_nr_dirty_waiters(0), reads_outstanding(0)
+    flusher_thread(this),finisher(cct)
 {
   perf_start();
   finisher.start();

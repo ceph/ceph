@@ -50,7 +50,7 @@ enum {
 };
 
 class ObjectCacher {
-  PerfCounters *perfcounter;
+  PerfCounters *perfcounter = NULL;
  public:
   CephContext *cct;
   class Object;
@@ -111,39 +111,28 @@ class ObjectCacher {
 
   private:
     // my fields
-    int state;
-    int ref;
+    int state = STATE_MISSING;
+    int ref = 0;
     struct {
       loff_t start, length;   // bh extent in object
-    } ex;
-    bool dontneed; //indicate bh don't need by anyone
-    bool nocache; //indicate bh don't need by this caller
+    } ex{};
+    bool dontneed = false; //indicate bh don't need by anyone
+    bool nocache = false; //indicate bh don't need by this caller
 
   public:
     Object *ob;
     ceph::buffer::list  bl;
-    ceph_tid_t last_write_tid;  // version of bh (if non-zero)
-    ceph_tid_t last_read_tid;   // tid of last read op (if any)
+    ceph_tid_t last_write_tid = 0;  // version of bh (if non-zero)
+    ceph_tid_t last_read_tid = 0;   // tid of last read op (if any)
     ceph::real_time last_write;
     SnapContext snapc;
-    ceph_tid_t journal_tid;
-    int error; // holds return value for failed reads
+    ceph_tid_t journal_tid = 0;
+    int error = 0; // holds return value for failed reads
 
     std::map<loff_t, std::list<Context*> > waitfor_read;
 
     // cons
-    explicit BufferHead(Object *o) :
-      state(STATE_MISSING),
-      ref(0),
-      dontneed(false),
-      nocache(false),
-      ob(o),
-      last_write_tid(0),
-      last_read_tid(0),
-      journal_tid(0),
-      error(0) {
-      ex.start = ex.length = 0;
-    }
+    explicit BufferHead(Object *o) : ob(o) {}
 
     // extent
     loff_t start() const { return ex.start; }
@@ -228,7 +217,7 @@ class ObjectCacher {
   class Object : public LRUObject {
   private:
     // ObjectCacher::Object fields
-    int ref;
+    int ref = 0;
     ObjectCacher *oc;
     sobject_t oid;
     friend struct ObjectSet;
@@ -240,15 +229,15 @@ class ObjectCacher {
     object_locator_t oloc;
     uint64_t truncate_size, truncate_seq;
 
-    bool complete;
-    bool exists;
+    bool complete = false;
+    bool exists = false;
 
     std::map<loff_t, BufferHead*>     data;
 
-    ceph_tid_t last_write_tid;  // version of bh (if non-zero)
-    ceph_tid_t last_commit_tid; // last update committed.
+    ceph_tid_t last_write_tid = 0;  // version of bh (if non-zero)
+    ceph_tid_t last_commit_tid = 0; // last update committed.
 
-    int dirty_or_tx;
+    int dirty_or_tx = 0;
 
     std::map< ceph_tid_t, std::list<Context*> > waitfor_commit;
     xlist<C_ReadFinish*> reads;
@@ -258,13 +247,8 @@ class ObjectCacher {
 
     Object(ObjectCacher *_oc, sobject_t o, uint64_t ono, ObjectSet *os,
 	   object_locator_t& l, uint64_t ts, uint64_t tq) :
-      ref(0),
-      oc(_oc),
-      oid(o), object_no(ono), oset(os), set_item(this), oloc(l),
-      truncate_size(ts), truncate_seq(tq),
-      complete(false), exists(true),
-      last_write_tid(0), last_commit_tid(0),
-      dirty_or_tx(0) {
+      oc(_oc), oid(o), object_no(ono), oset(os), set_item(this), oloc(l),
+      truncate_size(ts), truncate_seq(tq) {
       // add to set
       os->objects.push_back(&set_item);
     }
@@ -376,19 +360,17 @@ class ObjectCacher {
     void *parent;
 
     inodeno_t ino;
-    uint64_t truncate_seq, truncate_size;
+    uint64_t truncate_seq = 0;
+    uint64_t truncate_size = 0;
 
     int64_t poolid;
     xlist<Object*> objects;
 
-    int dirty_or_tx;
-    bool return_enoent;
+    int dirty_or_tx = 0;
+    bool return_enoent = false;
 
     ObjectSet(void *p, int64_t _poolid, inodeno_t i)
-      : parent(p), ino(i), truncate_seq(0),
-	truncate_size(0), poolid(_poolid), dirty_or_tx(0),
-	return_enoent(false) {}
-
+      : parent(p), ino(i), poolid(_poolid) {}
   };
 
 
@@ -405,7 +387,7 @@ class ObjectCacher {
   ceph::timespan max_dirty_age;
   bool block_writes_upfront;
 
-  ZTracer::Endpoint trace_endpoint;
+  ZTracer::Endpoint trace_endpoint{"ObjectCacher"};
 
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
@@ -415,14 +397,14 @@ class ObjectCacher {
 
   std::list<Context*> waitfor_read;
 
-  ceph_tid_t last_read_tid;
+  ceph_tid_t last_read_tid = 0;
 
   std::set<BufferHead*, BufferHead::ptr_lt> dirty_or_tx_bh;
   LRU   bh_lru_dirty, bh_lru_rest;
   LRU   ob_lru;
 
   ceph::condition_variable flusher_cond;
-  bool flusher_stop;
+  bool flusher_stop = false;
   void flusher_entry();
   class FlusherThread : public Thread {
     ObjectCacher *oc;
@@ -453,16 +435,16 @@ class ObjectCacher {
   // bh stats
   ceph::condition_variable  stat_cond;
 
-  loff_t stat_clean;
-  loff_t stat_zero;
-  loff_t stat_dirty;
-  loff_t stat_rx;
-  loff_t stat_tx;
-  loff_t stat_missing;
-  loff_t stat_error;
-  loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
+  loff_t stat_clean = 0;
+  loff_t stat_zero = 0;
+  loff_t stat_dirty = 0;
+  loff_t stat_rx = 0;
+  loff_t stat_tx = 0;
+  loff_t stat_missing = 0;
+  loff_t stat_error = 0;
+  loff_t stat_dirty_waiting = 0;   // bytes that writers are waiting on to write
 
-  size_t stat_nr_dirty_waiters;
+  size_t stat_nr_dirty_waiters = 0;
 
   void verify_stats() const;
 
@@ -552,7 +534,7 @@ class ObjectCacher {
   loff_t release(Object *o);
   void purge(Object *o);
 
-  int64_t reads_outstanding;
+  int64_t reads_outstanding = 0;
   ceph::condition_variable read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
