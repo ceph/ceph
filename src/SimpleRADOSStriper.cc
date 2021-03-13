@@ -120,7 +120,8 @@ int SimpleRADOSStriper::remove()
     return -EBLOCKLISTED;
   }
 
-  if (int rc = wait_for_updates(); rc < 0) {
+  if (int rc = wait_for_aios(true); rc < 0) {
+    aios_failure = 0;
     return rc;
   }
 
@@ -155,19 +156,29 @@ int SimpleRADOSStriper::truncate(uint64_t size)
   return 0;
 }
 
-int SimpleRADOSStriper::wait_for_updates()
+int SimpleRADOSStriper::wait_for_aios(bool block)
 {
-  d(10) << dendl;
-
-  for (auto& aiocp : updates) {
-    if (int rc = aiocp->wait_for_complete(); rc < 0) {
-      d(5) << " update failed: " << cpp_strerror(rc) << dendl;
-      return rc;
+  while (!aios.empty()) {
+    auto& aiocp = aios.front();
+    int rc;
+    if (block) {
+      rc = aiocp->wait_for_complete();
+    } else {
+      if (aiocp->is_complete()) {
+        rc = aiocp->get_return_value();
+      } else {
+        return 0;
+      }
     }
+    if (rc) {
+      d(5) << " aio failed: " << cpp_strerror(rc) << dendl;
+      if (aios_failure == 0) {
+        aios_failure = rc;
+      }
+    }
+    aios.pop();
   }
-  updates.clear();
-
-  return 0;
+  return aios_failure;
 }
 
 int SimpleRADOSStriper::flush()
@@ -184,7 +195,8 @@ int SimpleRADOSStriper::flush()
     }
   }
 
-  if (int rc = wait_for_updates(); rc < 0) {
+  if (int rc = wait_for_aios(true); rc < 0) {
+    aios_failure = 0;
     return rc;
   }
 
@@ -418,7 +430,7 @@ int SimpleRADOSStriper::set_metadata(uint64_t new_size, bool update_size)
       allocated = new_allocated;
     }
     if (aiocp) {
-      updates.emplace_back(std::move(aiocp));
+      aios.emplace(std::move(aiocp));
     }
     if (update_size) {
       size = new_size;
@@ -452,9 +464,11 @@ ssize_t SimpleRADOSStriper::write(const void* data, size_t len, uint64_t off)
     if (int rc = ioctx.aio_write(ext.soid, aiocp.get(), bl, ext.len, ext.off); rc < 0) {
       break;
     }
-    updates.emplace_back(std::move(aiocp));
+    aios.emplace(std::move(aiocp));
     w += ext.len;
   }
+
+  wait_for_aios(false); // clean up finished completions
 
   if (size < (len+off)) {
     size = len+off;
