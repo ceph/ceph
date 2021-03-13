@@ -217,7 +217,7 @@ class ObjectCacher {
   class Object : public LRUObject {
   private:
     // ObjectCacher::Object fields
-    int ref = 0;
+    int oref = 0;
     ObjectCacher *oc;
     sobject_t oid;
     friend struct ObjectSet;
@@ -254,7 +254,7 @@ class ObjectCacher {
     }
     ~Object() {
       reads.clear();
-      ceph_assert(ref == 0);
+      ceph_assert(oref == 0);
       ceph_assert(data.empty());
       ceph_assert(dirty_or_tx == 0);
       set_item.remove_myself();
@@ -308,7 +308,7 @@ class ObjectCacher {
     // add to my map
     void add_bh(BufferHead *bh) {
       if (data.empty())
-	get();
+	oget();
       ceph_assert(data.count(bh->start()) == 0);
       data[bh->start()] = bh;
     }
@@ -316,7 +316,7 @@ class ObjectCacher {
       ceph_assert(data.count(bh->start()));
       data.erase(bh->start());
       if (data.empty())
-	put();
+	oput();
     }
 
     bool is_empty() const { return data.empty(); }
@@ -342,16 +342,16 @@ class ObjectCacher {
     void discard(loff_t off, loff_t len, C_GatherBuilder* commit_gather);
 
     // reference counting
-    int get() {
-      ceph_assert(ref >= 0);
-      if (ref == 0) lru_pin();
-      return ++ref;
+    int oget() {
+      ceph_assert(oref >= 0);
+      if (oref == 0) lru_pin();
+      return ++oref;
     }
-    int put() {
-      ceph_assert(ref > 0);
-      if (ref == 1) lru_unpin();
-      --ref;
-      return ref;
+    int oput() {
+      ceph_assert(oref > 0);
+      if (oref == 1) lru_unpin();
+      --oref;
+      return oref;
     }
   };
 

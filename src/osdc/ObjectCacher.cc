@@ -1074,7 +1074,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
   ceph_assert(ceph_mutex_is_locked(lock));
 
   Object *ob = blist.front()->ob;
-  ob->get();
+  ob->oget();
 
   ceph::real_time last_write;
   SnapContext snapc;
@@ -1127,7 +1127,7 @@ void ObjectCacher::bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace)
   ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 7) << "bh_write " << *bh << dendl;
 
-  bh->ob->get();
+  bh->ob->oget();
 
   ZTracer::Trace trace;
   if (parent_trace.valid()) {
@@ -1258,7 +1258,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 
   // is the entire object set now clean and fully committed?
   ObjectSet *oset = ob->oset;
-  ob->put();
+  ob->oput();
 
   if (flush_set_callback &&
       was_dirty_or_tx > 0 &&
