@@ -1101,6 +1101,7 @@ protected:
    */
   void _finish_init();
 
+  ceph::spinlock ll_snap_ref_lock;
   std::map<snapid_t, int> ll_snap_ref;
 
   InodeRef               root = nullptr;

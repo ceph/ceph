@@ -11741,8 +11741,10 @@ void Client::_ll_get(Inode *in)
       ceph_assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->get(); // pin dentry
     }
-    if (in->snapid != CEPH_NOSNAP)
+    if (in->snapid != CEPH_NOSNAP) {
+      std::scoped_lock rl{ll_snap_ref_lock};
       ll_snap_ref[in->snapid]++;
+    }
   }
   in->ll_get();
   ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
@@ -11758,6 +11760,7 @@ int Client::_ll_put(Inode *in, uint64_t num)
       in->get_first_parent()->put(); // unpin dentry
     }
     if (in->snapid != CEPH_NOSNAP) {
+      std::scoped_lock rl{ll_snap_ref_lock};
       auto p = ll_snap_ref.find(in->snapid);
       ceph_assert(p != ll_snap_ref.end());
       ceph_assert(p->second > 0);
@@ -11833,7 +11836,7 @@ bool Client::ll_put(Inode *in)
 
 int Client::ll_get_snap_ref(snapid_t snap)
 {
-  std::scoped_lock lock(client_lock);
+  std::scoped_lock rl{ll_snap_ref_lock};
   auto p = ll_snap_ref.find(snap);
   if (p != ll_snap_ref.end())
     return p->second;
