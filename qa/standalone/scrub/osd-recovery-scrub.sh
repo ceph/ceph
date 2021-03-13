@@ -42,7 +42,6 @@ function TEST_recovery_scrub_1() {
     OSDS=4
     PGS=1
     OBJECTS=100
-    ERRORS=0
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true \
@@ -190,63 +189,10 @@ function pg_scrub_mod() {
     wait_for_scrub_mod $pgid $my_primary "$last_scrub"
 }
 
-# update a map of 'log filename' -> 'current line count'
-#
-# @param (pos. 1) logfiles directory
-# @param (pos. 2) the map to update. An associative array of starting line
-#                 numbers (indexed by filename)
-function mark_logs_linecount() {
-    local odir=$1
-    local -n wca=$2
-    for f in  $odir/osd.*.log ;
-    do
-	local W=`wc -l $f | gawk '  {print($1);}' `
-	wca["$f"]=$W
-    done
-}
-
-##
-# search a (log) file for a string, starting the search from a specific line
-#
-# @param (pos. 1) associative array of starting line numbers (indexed by filename)
-# @param (pos. 2) the file to search
-# @param (pos. 3) the text string to search for
-# @returns 0 if found
-function grep_log_after_linecount() {
-    local -n lwca=$1
-    local logfile=$2
-    local from_line=${lwca[$logfile]}
-    local text=$3
-    from_line=`expr $from_line + 1`
-
-    tail --lines=+$from_line $logfile | grep -q -e $text
-    return $?
-}
-
-##
-# search all osd logs for a string, starting the search from a specific line
-#
-# @param (pos. 1) logfiles directory
-# @param (pos. 2) associative array of starting line numbers (indexed by filename)
-# @param (pos. 3) the text string to search for
-# @returns 0 if found in any of the files
-function grep_all_after_linecount() {
-    local dir=$1
-    local -n wca=$2
-    local text=$3
-
-    for osd in $(seq 0 $(expr $OSDS - 1))
-    do
-        grep_log_after_linecount wca $dir/osd.$osd.log $text  && return 0
-    done
-    return 1
-}
-
 # osd_scrub_during_recovery=true make sure scrub happens
 function TEST_recovery_scrub_2() {
     local dir=$1
     local poolname=test
-    declare -A logwc # an associative array: log -> line number
 
     TESTDATA="testdata.$$"
     OSDS=8
@@ -274,9 +220,6 @@ function TEST_recovery_scrub_2() {
     done
     rm -f $TESTDATA
 
-    flush_pg_stats
-    date  --rfc-3339=ns
-    mark_logs_linecount $dir logwc
     ceph osd pool set $poolname size 3
 
     ceph pg dump pgs
@@ -286,13 +229,11 @@ function TEST_recovery_scrub_2() {
     count=0
     while(true)
     do
-      grep_all_after_linecount $dir logwc recovering && break
       if ceph --format json pg dump pgs |
         jq '.pg_stats | [.[] | .state | contains("recovering")]' | grep -q true
       then
         break
       fi
-      flush_pg_stats
       sleep 2
       if test "$count" -eq "10"
       then
@@ -301,8 +242,6 @@ function TEST_recovery_scrub_2() {
       fi
       count=$(expr $count + 1)
     done
-    flush_pg_stats
-    sleep 2
     set +o pipefail
     ceph pg dump pgs
 
