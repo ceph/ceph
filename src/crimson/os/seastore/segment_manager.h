@@ -24,8 +24,7 @@ public:
   enum class segment_state_t : uint8_t {
     EMPTY = 0,
     OPEN = 1,
-    CLOSED = 2,
-    RELEASING = 3
+    CLOSED = 2
   };
 
   /**
