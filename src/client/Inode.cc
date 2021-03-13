@@ -20,6 +20,7 @@ using std::string;
 
 void Cap::touch() {
   // move to back of LRU
+  std::scoped_lock cl{client->client_lock};
   session->caps.push_back(&cap_item);
 }
 
@@ -668,7 +669,7 @@ void Inode::break_deleg(bool skip_read)
   recall_deleg(skip_read);
 
   while (!delegations_broken(skip_read))
-    client->wait_on_list(waitfor_deleg);
+    client->wait_on_list(waitfor_deleg, inode_lock);
 }
 
 /**
@@ -787,6 +788,8 @@ void Inode::mark_caps_dirty(int caps)
   if (caps && !caps_dirty())
     iget();
   dirty_caps |= caps;
+
+  std::scoped_lock cl(client->client_lock);
   client->get_dirty_list().push_back(&dirty_cap_item);
 }
 
@@ -797,6 +800,8 @@ void Inode::mark_caps_clean()
 {
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << dendl;
   dirty_caps = 0;
+
+  std::scoped_lock cl(client->client_lock);
   dirty_cap_item.remove_myself();
 }
 

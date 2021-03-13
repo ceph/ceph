@@ -42,7 +42,10 @@ public:
       delete this;
   }
   void link(InodeRef in) {
+    ceph_assert(ceph_mutex_is_locked_by_me(dir->parent_inode->inode_lock));
+
     inode = in;
+    std::scoped_lock il{inode->inode_lock};
     inode->dentries.push_back(&inode_xlist_link);
     if (inode->is_dir()) {
       if (inode->dir)
@@ -53,6 +56,9 @@ public:
     dir->num_null_dentries--;
   }
   void unlink(void) {
+    ceph_assert(ceph_mutex_is_locked_by_me(dir->parent_inode->inode_lock));
+
+    std::scoped_lock il{inode->inode_lock};
     if (inode->is_dir()) {
       if (inode->dir)
         put(); // dir -> dn pin

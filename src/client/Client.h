@@ -211,6 +211,10 @@ struct dir_result_t {
   }
 
   InodeRef inode;
+  UserPerm perms;
+
+  // the above members no need to be placed under the Clinet::client_lock
+
   int64_t offset;        // hash order:
 			 //   (0xff << 52) | ((24 bits hash) << 28) |
 			 //   (the nth entry has hash collision);
@@ -224,7 +228,6 @@ struct dir_result_t {
   uint64_t ordered_count;
   unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
-  UserPerm perms;
 
   frag_t buffer_frag;
 
@@ -537,6 +540,7 @@ public:
   int rmsnap(const char *path, const char *name, const UserPerm& perm, bool check_perms=false);
 
   // Inode permission checking
+  int _inode_permission(Inode *in, const UserPerm& perms, unsigned want);
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
 
   // expose caps
@@ -792,6 +796,7 @@ public:
   void update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,
 			      utime_t ctime, utime_t mtime, utime_t atime);
 
+  void get_inode_lock_name(std::string &name, vinodeno_t vino);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
 			  const UserPerm& request_perms);
   Dentry *insert_dentry_inode(Dir *dir, const std::string& dname, LeaseStat *dlease,
@@ -825,9 +830,11 @@ public:
   }
 
   void inc_dentry_nr() {
+    std::scoped_lock cl(client_lock);
     ++dentry_nr;
   }
   void dec_dentry_nr() {
+    std::scoped_lock cl{client_lock};
     --dentry_nr;
   }
   void dlease_hit() {

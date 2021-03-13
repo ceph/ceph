@@ -217,6 +217,8 @@ struct Inode : RefCountedObject {
   std::map<int,int> open_by_mode;
   std::map<int,int> cap_refs;
 
+  ceph::mutex inode_lock;
+
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
   uint64_t reported_size = 0;
@@ -275,10 +277,11 @@ struct Inode : RefCountedObject {
   mds_rank_t dir_pin = MDS_RANK_NONE;
 
   Inode() = delete;
-  Inode(Client *c, vinodeno_t vino, file_layout_t *newlayout)
+  Inode(Client *c, vinodeno_t vino, file_layout_t *newlayout, std::string lock_name)
     : client(c), ino(vino.ino), snapid(vino.snapid), delay_cap_item(this),
       dirty_cap_item(this), flushing_cap_item(this), snaprealm_item(this),
-      oset((void *)this, newlayout->pool_id, this->ino) {}
+      inode_lock(ceph::make_mutex("Inode::inode_lock:" + lock_name)),
+      oset((void *)this, newlayout->pool_id, this->ino, inode_lock) {}
   ~Inode();
 
   vinodeno_t vino() const { return vinodeno_t(ino, snapid); }
