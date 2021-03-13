@@ -1338,7 +1338,7 @@ void ObjectCacher::trim()
   }
 
   while (ob_lru.lru_get_size() > max_objects) {
-    Object *ob = static_cast<Object*>(ob_lru.lru_expire());
+    Object *ob = static_cast<Object*>(ob_lru.lru_get_next_expire());
     if (!ob)
       break;
 
