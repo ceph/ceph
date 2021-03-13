@@ -748,7 +748,7 @@ void ObjectCacher::perf_stop()
 }
 
 /* private */
-ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid,
+ObjectCacher::ObjectRef ObjectCacher::get_object(sobject_t oid,
 					       uint64_t object_no,
 					       ObjectSet *oset,
 					       object_locator_t &l,
@@ -760,7 +760,7 @@ ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid,
   // have it?
   if ((uint32_t)l.pool < objects.size()) {
     if (objects[l.pool].count(oid)) {
-      Object *o = objects[l.pool][oid];
+      ObjectRef o = objects[l.pool][oid];
       o->object_no = object_no;
       o->truncate_size = truncate_size;
       o->truncate_seq = truncate_seq;
@@ -771,10 +771,10 @@ ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid,
   }
 
   // create it.
-  Object *o = new Object(this, oid, object_no, oset, l, truncate_size,
+  ObjectRef o = new Object(this, oid, object_no, oset, l, truncate_size,
 			 truncate_seq);
   objects[l.pool][oid] = o;
-  ob_lru.lru_insert_top(o);
+  ob_lru.lru_insert_top(o.get());
   return o;
 }
 
@@ -788,7 +788,7 @@ void ObjectCacher::close_object(Object *ob)
   ob_lru.lru_remove(ob);
   objects[ob->oloc.pool].erase(ob->get_soid());
   ob->set_item.remove_myself();
-  delete ob;
+  ob->put();
 }
 
 void ObjectCacher::bh_read(BufferHead *bh, int op_flags,
@@ -849,7 +849,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_read_finish no object cache" << dendl;
   } else {
-    Object *ob = objects[poolid][oid];
+    ObjectRef ob = objects[poolid][oid];
 
     if (r == -ENOENT && !ob->complete) {
       // wake up *all* rx waiters, or else we risk reordering
@@ -900,7 +900,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	    BufferHead *bh = p->second;
 	    // current iterator will be invalidated by bh_remove()
 	    ++p;
-	    bh_remove(ob, bh);
+	    bh_remove(ob.get(), bh);
 	    delete bh;
 	  }
 	}
@@ -964,7 +964,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       if (r == -ENOENT) {
 	if (trust_enoent) {
 	  ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
-	  bh_remove(ob, bh);
+	  bh_remove(ob.get(), bh);
 	  delete bh;
 	} else {
 	  ldout(cct, 10) << "skipping unstrusted -ENOENT and will retry for "
@@ -1175,7 +1175,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
     return;
   }
 
-  Object *ob = objects[poolid][oid];
+  ObjectRef ob = objects[poolid][oid];
   int was_dirty_or_tx = ob->oset->dirty_or_tx;
 
   for (vector<pair<loff_t, uint64_t> >::iterator p = ranges.begin();
@@ -1333,12 +1333,12 @@ void ObjectCacher::trim()
   }
 
   while (ob_lru.lru_get_size() > max_objects) {
-    Object *ob = static_cast<Object*>(ob_lru.lru_expire());
+    ObjectRef ob = static_cast<Object*>(ob_lru.lru_expire());
     if (!ob)
       break;
 
     ldout(cct, 10) << "trim trimming " << *ob << dendl;
-    close_object(ob);
+    close_object(ob.get());
   }
 
   ldout(cct, 10) << "trim finish:  max " << max_size << "  clean "
@@ -1361,7 +1361,7 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 
     // get Object cache
     sobject_t soid(ex_it->oid, snapid);
-    Object *o = get_object_maybe(soid, ex_it->oloc);
+    ObjectRef o = get_object_maybe(soid, ex_it->oloc);
     if (!o)
       return false;
     if (!o->is_cached(ex_it->offset, ex_it->length))
@@ -1422,10 +1422,10 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
     // get Object cache
     sobject_t soid(ex_it->oid, rd->snap);
-    Object *o = get_object(soid, ex_it->objectno, oset, ex_it->oloc,
+    ObjectRef o = get_object(soid, ex_it->objectno, oset, ex_it->oloc,
 			   ex_it->truncate_size, oset->truncate_seq);
     if (external_call)
-      touch_ob(o);
+      touch_ob(o.get());
 
     // does not exist and no hits?
     if (oset->return_enoent && !o->exists) {
@@ -1480,7 +1480,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 		       << dendl;
 	delete rd;
 	if (dontneed)
-	  bottouch_ob(o);
+	  bottouch_ob(o.get());
 	return -ENOENT;
       }
     }
@@ -1519,7 +1519,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 						   *trace));
 	  }
 
-	  bh_remove(o, bh_it->second);
+	  bh_remove(o.get(), bh_it->second);
 	  delete bh_it->second;
 	} else {
 	  bh_it->second->set_nocache(nocache);
@@ -1641,7 +1641,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       }
 
       if (dontneed && o->include_all_cached_data(ex_it->offset, ex_it->length))
-	  bottouch_ob(o);
+	  bottouch_ob(o.get());
     }
   }
 
@@ -1737,7 +1737,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
        ++ex_it) {
     // get object cache
     sobject_t soid(ex_it->oid, CEPH_NOSNAP);
-    Object *o = get_object(soid, ex_it->objectno, oset, ex_it->oloc,
+    ObjectRef o = get_object(soid, ex_it->objectno, oset, ex_it->oloc,
 			   ex_it->truncate_size, oset->truncate_seq);
 
     // map it all into a single bufferhead.
@@ -2268,12 +2268,12 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
     sobject_t soid(ex.oid, CEPH_NOSNAP);
     if (objects[oset->poolid].count(soid) == 0)
       continue;
-    Object *ob = objects[oset->poolid][soid];
+    ObjectRef ob = objects[oset->poolid][soid];
 
     ldout(cct, 20) << "flush_set " << oset << " ex " << ex << " ob " << soid
-		   << " " << ob << dendl;
+		   << " " << ob.get() << dendl;
 
-    if (!flush(ob, ex.offset, ex.length, trace)) {
+    if (!flush(ob.get(), ex.offset, ex.length, trace)) {
       // we'll need to gather...
       ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid "
 		     << ob->last_write_tid << " on " << *ob << dendl;
@@ -2454,17 +2454,17 @@ uint64_t ObjectCacher::release_all()
   ldout(cct, 10) << "release_all" << dendl;
   uint64_t unclean = 0;
 
-  vector<ceph::unordered_map<sobject_t, Object*> >::iterator i
+  vector<ceph::unordered_map<sobject_t, ObjectRef> >::iterator i
     = objects.begin();
   while (i != objects.end()) {
-    ceph::unordered_map<sobject_t, Object*>::iterator p = i->begin();
+    ceph::unordered_map<sobject_t, ObjectRef>::iterator p = i->begin();
     while (p != i->end()) {
-      ceph::unordered_map<sobject_t, Object*>::iterator n = p;
+      ceph::unordered_map<sobject_t, ObjectRef>::iterator n = p;
       ++n;
 
-      Object *ob = p->second;
+      ObjectRef ob = p->second;
 
-      loff_t o_unclean = release(ob);
+      loff_t o_unclean = release(ob.get());
       unclean += o_unclean;
 
       if (o_unclean)
@@ -2491,7 +2491,7 @@ void ObjectCacher::clear_nonexistence(ObjectSet *oset)
 
   for (xlist<Object*>::iterator p = oset->objects.begin();
        !p.end(); ++p) {
-    Object *ob = *p;
+    ObjectRef ob = *p;
     if (!ob->exists) {
       ldout(cct, 10) << " setting exists and complete on " << *ob << dendl;
       ob->exists = true;
@@ -2565,7 +2565,7 @@ void ObjectCacher::_discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
     sobject_t soid(ex.oid, CEPH_NOSNAP);
     if (objects[oset->poolid].count(soid) == 0)
       continue;
-    Object *ob = objects[oset->poolid][soid];
+    ObjectRef ob = objects[oset->poolid][soid];
 
     ob->discard(ex.offset, ex.length, gather);
   }
@@ -2594,15 +2594,15 @@ void ObjectCacher::verify_stats() const
 
   loff_t clean = 0, zero = 0, dirty = 0, rx = 0, tx = 0, missing = 0,
     error = 0;
-  for (vector<ceph::unordered_map<sobject_t, Object*> >::const_iterator i
+  for (vector<ceph::unordered_map<sobject_t, ObjectRef> >::const_iterator i
 	 = objects.begin();
        i != objects.end();
        ++i) {
-    for (ceph::unordered_map<sobject_t, Object*>::const_iterator p
+    for (ceph::unordered_map<sobject_t, ObjectRef>::const_iterator p
 	   = i->begin();
 	 p != i->end();
 	 ++p) {
-      Object *ob = p->second;
+      ObjectRef ob = p->second;
       for (map<loff_t, BufferHead*>::const_iterator q = ob->data.begin();
 	   q != ob->data.end();
 	  ++q) {

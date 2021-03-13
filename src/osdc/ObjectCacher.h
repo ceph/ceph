@@ -3,6 +3,8 @@
 #ifndef CEPH_OBJECTCACHER_H
 #define CEPH_OBJECTCACHER_H
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/Context.h"
@@ -13,6 +15,7 @@
 #include "common/Finisher.h"
 #include "common/Thread.h"
 #include "common/zipkin_trace.h"
+#include "common/RefCountedObj.h"
 
 #include "Objecter.h"
 #include "Striper.h"
@@ -214,7 +217,7 @@ class ObjectCacher {
   };
 
   // ******* Object *********
-  class Object : public LRUObject {
+  class Object : public LRUObject, public RefCountedObject {
   private:
     // ObjectCacher::Object fields
     int oref = 0;
@@ -354,7 +357,9 @@ class ObjectCacher {
       return oref;
     }
   };
-
+  void intrusive_ptr_add_ref(Object *ob) { ob->get(); }
+  void intrusive_ptr_release(Object *ob) { ob->put(); }
+  typedef boost::intrusive_ptr<Object> ObjectRef;
 
   struct ObjectSet {
     void *parent;
@@ -393,7 +398,7 @@ class ObjectCacher {
   void *flush_set_callback_arg;
 
   // indexed by pool_id
-  std::vector<ceph::unordered_map<sobject_t, Object*> > objects;
+  std::vector<ceph::unordered_map<sobject_t, ObjectRef> > objects;
 
   std::list<Context*> waitfor_read;
 
@@ -419,7 +424,7 @@ class ObjectCacher {
   Finisher finisher;
 
   // objects
-  Object *get_object_maybe(sobject_t oid, object_locator_t &l) {
+  ObjectRef get_object_maybe(sobject_t oid, object_locator_t &l) {
     // have it?
     if (((uint32_t)l.pool < objects.size()) &&
 	(objects[l.pool].count(oid)))
@@ -427,9 +432,9 @@ class ObjectCacher {
     return NULL;
   }
 
-  Object *get_object(sobject_t oid, uint64_t object_no, ObjectSet *oset,
-		     object_locator_t &l, uint64_t truncate_size,
-		     uint64_t truncate_seq);
+  ObjectRef get_object(sobject_t oid, uint64_t object_no, ObjectSet *oset,
+		       object_locator_t &l, uint64_t truncate_size,
+		       uint64_t truncate_seq);
   void close_object(Object *ob);
 
   // bh stats
