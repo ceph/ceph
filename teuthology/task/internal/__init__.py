@@ -467,6 +467,9 @@ def coredump(ctx, config):
                 args=[
                     'sudo', 'sysctl', '-w', 'kernel.core_pattern=core',
                     run.Raw('&&'),
+                    'sudo', 'bash', '-c',
+                    f'for f in `find {archive_dir}/coredump -type f`; do file $f | grep -q systemd-sysusers && rm $f ; done',
+                    run.Raw('&&'),
                     # don't litter the archive dir if there were no cores dumped
                     'rmdir',
                     '--ignore-fail-on-non-empty',
