@@ -104,8 +104,10 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 }
 
 TransactionManager::close_ertr::future<> TransactionManager::close() {
-  return cache->close(
-  ).safe_then([this] {
+  return segment_cleaner->stop(
+  ).then([this] {
+    return cache->close();
+  }).safe_then([this] {
     return journal->close();
   });
 }
@@ -195,40 +197,12 @@ TransactionManager::submit_transaction(
 {
   logger().debug("TransactionManager::submit_transaction");
   auto &tref = *t;
-  return tref.handle.enter(write_pipeline.prepare
-  ).then([this, &tref]() mutable {
-    return segment_cleaner->do_immediate_work(tref);
-  }).safe_then([this, &tref]() mutable
-	       -> submit_transaction_ertr::future<> {
-    logger().debug("TransactionManager::submit_transaction after do_immediate");
-    auto record = cache->try_construct_record(tref);
-    if (!record) {
-      return crimson::ct_error::eagain::make();
-    }
-
-    return journal->submit_record(std::move(*record), tref.handle
-    ).safe_then([this, &tref](auto p) mutable {
-      auto [addr, journal_seq] = p;
-      segment_cleaner->set_journal_head(journal_seq);
-      cache->complete_commit(tref, addr, journal_seq, segment_cleaner.get());
-      lba_manager->complete_transaction(tref);
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-	segment_cleaner->mark_segment_released(to_release);
-	return segment_manager.release(to_release);
-      } else {
-	return SegmentManager::release_ertr::now();
-      }
-    }).safe_then([&tref] {
-      return tref.handle.complete();
-    }).handle_error(
-      submit_transaction_ertr::pass_further{},
-      crimson::ct_error::all_same_way([](auto e) {
-	ceph_assert(0 == "Hit error submitting to journal");
-      }));
-    }).finally([t=std::move(t)]() mutable {
-      t->handle.exit();
-    });
+  return tref.handle.enter(write_pipeline.wait_throttle
+  ).then([this] {
+    return segment_cleaner->await_hard_limits();
+  }).then([this, t=std::move(t)]() mutable {
+    return submit_transaction_direct(std::move(t));
+  });
 }
 
 TransactionManager::submit_transaction_direct_ret
