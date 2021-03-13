@@ -30,7 +30,6 @@ int KrbServiceHandler::handle_request(
   bufferlist::const_iterator& indata,
   size_t connection_secret_required_length,
   bufferlist *buff_list,
-  uint64_t *global_id,
   AuthCapsInfo *caps,
   CryptoKey *session_key,
   std::string *connection_secret)
