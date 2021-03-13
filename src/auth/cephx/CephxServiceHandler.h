@@ -19,6 +19,8 @@
 #include "auth/Auth.h"
 
 class KeyServer;
+struct CephXAuthenticate;
+struct CephXServiceTicketInfo;
 
 class CephxServiceHandler  : public AuthServiceHandler {
   KeyServer *key_server;
@@ -33,7 +35,6 @@ public:
     ceph::buffer::list::const_iterator& indata,
     size_t connection_secret_required_length,
     ceph::buffer::list *result_bl,
-    uint64_t *global_id,
     AuthCapsInfo *caps,
     CryptoKey *session_key,
     std::string *connection_secret) override;
@@ -43,6 +44,9 @@ private:
 		       ceph::buffer::list *result_bl,
 		       AuthCapsInfo *caps) override;
 
+  int verify_old_ticket(const CephXAuthenticate& req,
+			CephXServiceTicketInfo& old_ticket_info,
+			bool& should_enc_ticket);
   void build_cephx_response_header(int request_type, int status,
 				   ceph::buffer::list& bl);
 };

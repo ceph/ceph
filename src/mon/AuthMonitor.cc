@@ -752,7 +752,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	indata,
 	0, // no connection_secret needed
 	&response_bl,
-	&s->con->peer_global_id,
 	&s->con->peer_caps_info,
 	nullptr, nullptr);
     }
