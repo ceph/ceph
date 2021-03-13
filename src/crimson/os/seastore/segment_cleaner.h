@@ -221,9 +221,6 @@ public:
     double reclaim_ratio_hard_limit = 0;
     double reclaim_ratio_gc_threshhold = 0;
 
-    // don't apply reclaim ratio with available space below this (TODO remove)
-    double reclaim_ratio_usage_min = 0;
-
     double available_ratio_hard_limit = 0;
 
     size_t reclaim_bytes_stride = 0; // Number of bytes to reclaim on each cycle
@@ -239,7 +236,6 @@ public:
 	  .9,   // available_ratio_gc_max
 	  .6,   // reclaim_ratio_hard_limit
 	  .3,   // reclaim_ratio_gc_threshhold
-	  .95,  // reclaim_ratio_usage_min
 	  .1,   // available_ratio_hard_limit
 	  1<<20 // reclaim 1MB per gc cycle
 	};
@@ -501,36 +497,6 @@ public:
 
   using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
 
-  /**
-   * do_immediate_work
-   *
-   * Should be invoked prior to submission of any transaction,
-   * will piggy-back work required to maintain deferred work
-   * constraints.
-   */
-  using do_immediate_work_ertr = work_ertr;
-  using do_immediate_work_ret = do_immediate_work_ertr::future<>;
-  do_immediate_work_ret do_immediate_work(
-    Transaction &t);
-
-
-  /**
-   * do_deferred_work
-   *
-   * Should be called at idle times -- will perform background
-   * operations based on deferred work constraints.
-   *
-   * If returned timespan is non-zero, caller should pause calling
-   * back into do_deferred_work before returned timespan has elapsed,
-   * or a foreground operation occurs.
-   */
-  using do_deferred_work_ertr = work_ertr;
-  using do_deferred_work_ret = do_deferred_work_ertr::future<
-    ceph::timespan
-    >;
-  do_deferred_work_ret do_deferred_work(
-    Transaction &t);
-
 private:
 
   // journal status helpers
@@ -655,19 +621,6 @@ private:
   using gc_reclaim_space_ertr = gc_ertr;
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
   gc_reclaim_space_ret gc_reclaim_space();
-
-
-  /**
-   * do_gc
-   *
-   * Performs bytes worth of gc work on t.
-   */
-  using do_gc_ertr = ExtentCallbackInterface::extent_mapping_ertr::extend_ertr<
-    ExtentCallbackInterface::scan_extents_ertr>;
-  using do_gc_ret = do_gc_ertr::future<>;
-  do_gc_ret do_gc(
-    Transaction &t,
-    size_t bytes);
 
   size_t get_bytes_used_current_segment() const {
     assert(journal_head != journal_seq_t());
@@ -840,60 +793,6 @@ private:
    */
   bool gc_should_run() const {
     return gc_should_reclaim_space() || gc_should_trim_journal();
-  }
-
-  /**
-   * get_immediate_bytes_to_gc_for_reclaim
-   *
-   * Returns the number of bytes to gc in order to bring the
-   * reclaim ratio below reclaim_ratio_hard_limit.
-   */
-  size_t get_immediate_bytes_to_gc_for_reclaim() const {
-    if (get_reclaim_ratio() < config.reclaim_ratio_hard_limit)
-      return 0;
-
-    const size_t unavailable_target = std::max(
-      get_used_bytes() / (1.0 - config.reclaim_ratio_hard_limit),
-      (1 - config.reclaim_ratio_usage_min) * get_total_bytes());
-
-    if (unavailable_target > get_unavailable_bytes())
-      return 0;
-
-    return (get_unavailable_bytes() - unavailable_target) / get_reclaim_ratio();
-  }
-
-  /**
-   * get_immediate_bytes_to_gc_for_available
-   *
-   * Returns the number of bytes to gc in order to bring the
-   * the ratio of available disk space to total disk space above
-   * available_ratio_hard_limit.
-   */
-  size_t get_immediate_bytes_to_gc_for_available() const {
-    if (get_available_ratio() > config.available_ratio_hard_limit) {
-      return 0;
-    }
-
-    const double ratio_to_make_available = config.available_ratio_hard_limit -
-      get_available_ratio();
-    return ratio_to_make_available * (double)get_total_bytes()
-      / get_reclaim_ratio();
-  }
-
-  /**
-   * get_immediate_bytes_to_gc
-   *
-   * Returns number of bytes to gc in order to restore any strict
-   * limits.
-   */
-  size_t get_immediate_bytes_to_gc() const {
-    // number of bytes to gc in order to correct reclaim ratio
-    size_t for_reclaim = get_immediate_bytes_to_gc_for_reclaim();
-
-    // number of bytes to gc in order to correct available_ratio
-    size_t for_available = get_immediate_bytes_to_gc_for_available();
-
-    return std::max(for_reclaim, for_available);
   }
 
   void mark_closed(segment_id_t segment) {

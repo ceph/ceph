@@ -199,49 +199,6 @@ void SegmentCleaner::close_segment(segment_id_t segment)
   mark_closed(segment);
 }
 
-SegmentCleaner::do_immediate_work_ret SegmentCleaner::do_immediate_work(
-  Transaction &t)
-{
-  auto next_target = get_dirty_tail_limit();
-  logger().debug(
-    "{}: journal_tail_target={} get_dirty_tail_limit()={}",
-    __func__,
-    journal_tail_target,
-    next_target);
-
-  logger().debug(
-    "SegmentCleaner::do_immediate_work gc total {}, available {}, unavailable {}, used {}  available_ratio {}, reclaim_ratio {}, bytes_to_gc_for_available {}, bytes_to_gc_for_reclaim {}",
-    get_total_bytes(),
-    get_available_bytes(),
-    get_unavailable_bytes(),
-    get_used_bytes(),
-    get_available_ratio(),
-    get_reclaim_ratio(),
-    get_immediate_bytes_to_gc_for_available(),
-    get_immediate_bytes_to_gc_for_reclaim());
-
-  auto dirty_fut = do_immediate_work_ertr::now();
-  if (journal_tail_target < next_target) {
-    dirty_fut = rewrite_dirty(t, next_target);
-  }
-  return dirty_fut.safe_then([=, &t] {
-    return do_gc(t, get_immediate_bytes_to_gc());
-  }).handle_error(
-    do_immediate_work_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in SegmentCleaner::do_immediate_work"
-    }
-  );
-}
-
-SegmentCleaner::do_deferred_work_ret SegmentCleaner::do_deferred_work(
-  Transaction &t)
-{
-  return do_deferred_work_ret(
-    do_deferred_work_ertr::ready_future_marker{},
-    ceph::timespan());
-}
-
 SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
   Transaction &t,
   journal_seq_t limit)
@@ -394,78 +351,6 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     if (scan_cursor->is_complete()) {
       scan_cursor.reset();
     }
-  });
-}
-
-SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
-  Transaction &t,
-  size_t bytes)
-{
-  if (bytes == 0) {
-    return do_gc_ertr::now();
-  }
-
-  if (!scan_cursor) {
-    paddr_t next = P_ADDR_NULL;
-    next.segment = get_next_gc_target();
-    if (next == P_ADDR_NULL) {
-      logger().debug(
-	"SegmentCleaner::do_gc: no segments to gc");
-      return do_gc_ertr::now();
-    }
-    next.offset = 0;
-    scan_cursor =
-      std::make_unique<ExtentCallbackInterface::scan_extents_cursor>(
-	next);
-    logger().debug(
-      "SegmentCleaner::do_gc: starting gc on segment {}",
-      scan_cursor->get_offset().segment);
-  }
-
-  return ecb->scan_extents(
-    *scan_cursor,
-    bytes
-  ).safe_then([=, &t](auto addrs) {
-    return seastar::do_with(
-      std::move(addrs),
-      [=, &t](auto &addr_list) {
-	return crimson::do_for_each(
-	  addr_list,
-	  [=, &t](auto &addr_pair) {
-	    auto &[addr, info] = addr_pair;
-	    logger().debug(
-	      "SegmentCleaner::do_gc: checking addr {}",
-	      addr);
-	    return ecb->get_extent_if_live(
-	      t,
-	      info.type,
-	      addr,
-	      info.addr,
-	      info.len
-	    ).safe_then([addr=addr, &t, this](CachedExtentRef ext) {
-	      if (!ext) {
-		logger().debug(
-		  "SegmentCleaner::do_gc: addr {} dead, skipping",
-		  addr);
-		return ExtentCallbackInterface::rewrite_extent_ertr::now();
-	      } else {
-		logger().debug(
-		  "SegmentCleaner::do_gc: addr {} alive, gc'ing {}",
-		  addr,
-		  *ext);
-	      }
-	      return ecb->rewrite_extent(
-		t,
-		ext);
-	    });
-	  }).safe_then([&t, this] {
-	    if (scan_cursor->is_complete()) {
-	      t.mark_segment_to_release(scan_cursor->get_offset().segment);
-	      scan_cursor.reset();
-	    }
-	    return ExtentCallbackInterface::release_segment_ertr::now();
-	  });
-      });
   });
 }
 
