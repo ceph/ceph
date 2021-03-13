@@ -7,6 +7,7 @@
 
 #include "common/ceph_time.h"
 
+#include "crimson/common/log.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/seastore_types.h"
@@ -212,14 +213,20 @@ public:
     size_t num_segments = 0;
     size_t segment_size = 0;
     size_t block_size = 0;
+
     size_t target_journal_segments = 0;
     size_t max_journal_segments = 0;
 
+    double available_ratio_gc_max = 0;
     double reclaim_ratio_hard_limit = 0;
-    // don't apply reclaim ratio with available space below this
+    double reclaim_ratio_gc_threshhold = 0;
+
+    // don't apply reclaim ratio with available space below this (TODO remove)
     double reclaim_ratio_usage_min = 0;
 
     double available_ratio_hard_limit = 0;
+
+    size_t reclaim_bytes_stride = 0; // Number of bytes to reclaim on each cycle
 
     static config_t default_from_segment_manager(
       SegmentManager &manager) {
@@ -227,11 +234,14 @@ public:
 	manager.get_num_segments(),
 	static_cast<size_t>(manager.get_segment_size()),
 	(size_t)manager.get_block_size(),
-	2,
-	4,
-	.5,
-	.95,
-	.2
+	  2,    // target_journal_segments
+	  4,    // max_journal_segments
+	  .9,   // available_ratio_gc_max
+	  .6,   // reclaim_ratio_hard_limit
+	  .3,   // reclaim_ratio_gc_threshhold
+	  .95,  // reclaim_ratio_usage_min
+	  .1,   // available_ratio_hard_limit
+	  1<<20 // reclaim 1MB per gc cycle
 	};
     }
   };
@@ -341,6 +351,9 @@ private:
 
   ExtentCallbackInterface *ecb = nullptr;
 
+  /// populated if there is an IO blocked on hard limits
+  std::optional<seastar::promise<>> blocked_io_wake;
+
 public:
   SegmentCleaner(config_t config, bool detailed = false)
     : config(config),
@@ -353,7 +366,8 @@ public:
 	(SpaceTrackerI*)new SpaceTrackerSimple(
 	  config.num_segments)),
       segments(config.num_segments),
-      empty_segments(config.num_segments) {}
+      empty_segments(config.num_segments),
+      gc_process(*this) {}
 
   get_segment_ret get_segment() final;
 
@@ -381,6 +395,7 @@ public:
   void set_journal_head(journal_seq_t head) {
     assert(journal_head == journal_seq_t() || head >= journal_head);
     journal_head = head;
+    gc_process.maybe_wake_on_space_used();
   }
 
   void init_mark_segment_closed(segment_id_t segment, segment_seq_t seq) final {
@@ -414,6 +429,7 @@ public:
       addr.segment,
       addr.offset,
       len);
+    gc_process.maybe_wake_on_space_used();
     assert(ret > 0);
   }
 
@@ -430,6 +446,7 @@ public:
       addr.segment,
       addr.offset,
       len);
+    maybe_wake_gc_blocked_io();
     assert(ret >= 0);
   }
 
@@ -457,7 +474,22 @@ public:
     return space_tracker->make_empty();
   }
 
-  void complete_init() { init_complete = true; }
+  void start() {
+    gc_process.start();
+  }
+
+  void complete_init() {
+    init_complete = true;
+    start();
+  }
+
+  seastar::future<> stop() {
+    return gc_process.stop();
+  }
+
+  seastar::future<> run_until_halt() {
+    return gc_process.run_until_halt();
+  }
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
     ecb = cb;
@@ -531,7 +563,99 @@ private:
   }
 
   // GC status helpers
-  std::unique_ptr<ExtentCallbackInterface::scan_extents_cursor> scan_cursor;
+  std::unique_ptr<
+    ExtentCallbackInterface::scan_extents_cursor
+    > scan_cursor;
+
+  /**
+   * GCProcess
+   *
+   * Background gc process.
+   */
+  using gc_cycle_ret = seastar::future<>;
+  class GCProcess {
+    std::optional<gc_cycle_ret> process_join;
+
+    SegmentCleaner &cleaner;
+
+    bool stopping = false;
+
+    std::optional<seastar::promise<>> blocking;
+
+    gc_cycle_ret run();
+
+    void wake() {
+      if (blocking) {
+	blocking->set_value();
+	blocking = std::nullopt;
+      }
+    }
+
+    seastar::future<> maybe_wait_should_run() {
+      return seastar::do_until(
+	[this] {
+	  cleaner.log_gc_state("GCProcess::maybe_wait_should_run");
+	  return stopping || cleaner.gc_should_run();
+	},
+	[this] {
+	  ceph_assert(!blocking);
+	  blocking = seastar::promise<>();
+	  return blocking->get_future();
+	});
+    }
+  public:
+    GCProcess(SegmentCleaner &cleaner) : cleaner(cleaner) {}
+
+    void start() {
+      ceph_assert(!process_join);
+      process_join = run();
+    }
+
+    gc_cycle_ret stop() {
+      if (!process_join)
+	return seastar::now();
+      stopping = true;
+      wake();
+      ceph_assert(process_join);
+      auto ret = std::move(*process_join);
+      process_join = std::nullopt;
+      return ret.then([this] { stopping = false; });
+    }
+
+    gc_cycle_ret run_until_halt() {
+      ceph_assert(!process_join);
+      return seastar::do_until(
+	[this] {
+	  cleaner.log_gc_state("GCProcess::run_until_halt");
+	  return !cleaner.gc_should_run();
+	},
+	[this] {
+	  return cleaner.do_gc_cycle();
+	});
+    }
+
+    void maybe_wake_on_space_used() {
+      cleaner.log_gc_state("GCProcess::maybe_wake_on_space_used");
+      if (cleaner.gc_should_run()) {
+	wake();
+      }
+    }
+  } gc_process;
+
+  using gc_ertr = ExtentCallbackInterface::extent_mapping_ertr::extend_ertr<
+    ExtentCallbackInterface::scan_extents_ertr
+    >;
+
+  gc_cycle_ret do_gc_cycle();
+
+  using gc_trim_journal_ertr = gc_ertr;
+  using gc_trim_journal_ret = gc_trim_journal_ertr::future<>;
+  gc_trim_journal_ret gc_trim_journal();
+
+  using gc_reclaim_space_ertr = gc_ertr;
+  using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
+  gc_reclaim_space_ret gc_reclaim_space();
+
 
   /**
    * do_gc
@@ -611,10 +735,118 @@ private:
   }
 
   /**
+   * should_block_on_gc
+   *
+   * Encapsulates whether block pending gc.
+   */
+  bool should_block_on_gc() const {
+    auto aratio = get_available_ratio();
+    return (
+      ((aratio < config.available_ratio_gc_max) &&
+       (get_reclaim_ratio() > config.reclaim_ratio_hard_limit ||
+	aratio < config.available_ratio_hard_limit)) ||
+      (get_dirty_tail_limit() > journal_tail_target)
+    );
+  }
+
+  void log_gc_state(const char *caller) const {
+    auto &logger = crimson::get_logger(ceph_subsys_filestore);
+    if (logger.is_enabled(seastar::log_level::debug)) {
+      logger.debug(
+	"SegmentCleaner::log_gc_state({}): "
+	"total {}, "
+	"available {}, "
+	"unavailable {}, "
+	"used {}, "
+	"reclaimable {}, "
+	"reclaim_ratio {}, "
+	"available_ratio {}, "
+	"should_block_on_gc {}, "
+	"gc_should_reclaim_space {}, "
+	"journal_head {}, "
+	"journal_tail_target {}, "
+	"dirty_tail {}, "
+	"dirty_tail_limit {}, "
+	"gc_should_trim_journal {}, ",
+	caller,
+	get_total_bytes(),
+	get_available_bytes(),
+	get_unavailable_bytes(),
+	get_used_bytes(),
+	get_reclaimable_bytes(),
+	get_reclaim_ratio(),
+	get_available_ratio(),
+	should_block_on_gc(),
+	gc_should_reclaim_space(),
+	journal_head,
+	journal_tail_target,
+	get_dirty_tail(),
+	get_dirty_tail_limit(),
+	gc_should_trim_journal()
+      );
+    }
+  }
+
+public:
+  seastar::future<> await_hard_limits() {
+    // The pipeline configuration prevents another IO from entering
+    // prepare until the prior one exits and clears this.
+    ceph_assert(!blocked_io_wake);
+    return seastar::do_until(
+      [this] {
+	log_gc_state("await_hard_limits");
+	return !should_block_on_gc();
+      },
+      [this] {
+	blocked_io_wake = seastar::promise<>();
+	return blocked_io_wake->get_future();
+      });
+  }
+private:
+  void maybe_wake_gc_blocked_io() {
+    if (!should_block_on_gc() && blocked_io_wake) {
+      blocked_io_wake->set_value();
+      blocked_io_wake = std::nullopt;
+    }
+  }
+
+  /**
+   * gc_should_reclaim_space
+   *
+   * Encapsulates logic for whether gc should be reclaiming segment space.
+   */
+  bool gc_should_reclaim_space() const {
+    auto aratio = get_available_ratio();
+    return (
+      (aratio < config.available_ratio_gc_max) &&
+      (get_reclaim_ratio() > config.reclaim_ratio_gc_threshhold ||
+       aratio < config.available_ratio_hard_limit)
+    );
+  }
+
+  /**
+   * gc_should_trim_journal
+   *
+   * Encapsulates logic for whether gc should be reclaiming segment space.
+   */
+  bool gc_should_trim_journal() const {
+    return get_dirty_tail() > journal_tail_target;
+  }
+
+  /**
+   * gc_should_run
+   *
+   * True if gc should be running.
+   */
+  bool gc_should_run() const {
+    return gc_should_reclaim_space() || gc_should_trim_journal();
+  }
+
+  /**
    * get_immediate_bytes_to_gc_for_reclaim
    *
    * Returns the number of bytes to gc in order to bring the
-   * reclaim ratio below reclaim_ratio_usage_min.
+   * reclaim ratio below reclaim_ratio_hard_limit.
    */
   size_t get_immediate_bytes_to_gc_for_reclaim() const {
     if (get_reclaim_ratio() < config.reclaim_ratio_hard_limit)
@@ -689,6 +921,7 @@ private:
       assert(space_tracker->get_usage(segment) == 0);
     }
     segments[segment].state = Segment::segment_state_t::EMPTY;
+    maybe_wake_gc_blocked_io();
   }
 
   void mark_open(segment_id_t segment) {
