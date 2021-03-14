@@ -22,7 +22,7 @@ public:
   static const int READ_FLAGS_MASK  = 0xF000;
   static const int READ_FLAGS_SHIFT = 24;
 
-  ObjectCacherWriteback(ImageCtx *ictx, ceph::mutex& lock);
+  ObjectCacherWriteback(ImageCtx *ictx);
 
   // Note that oloc, trunc_size, and trunc_seq are ignored
   void read(const object_t& oid, uint64_t object_no,
@@ -66,7 +66,7 @@ private:
   void complete_writes(const std::string& oid);
 
   ceph_tid_t m_tid;
-  ceph::mutex& m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("ObjectCacherWriteback::m_lock");
   librbd::ImageCtx *m_ictx;
   ceph::unordered_map<std::string, std::queue<write_result_d*> > m_writes;
   friend class C_OrderedWrite;

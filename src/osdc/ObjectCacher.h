@@ -111,6 +111,8 @@ class ObjectCacher {
     static const int STATE_RX = 4;
     static const int STATE_TX = 5;
     static const int STATE_ERROR = 6; // a read error occurred
+    // already remove from the objects
+    static const int STATE_REMOVED = 7;
 
   private:
     // my fields
@@ -147,6 +149,7 @@ class ObjectCacher {
 
     // states
     void set_state(int s) {
+      ceph_assert(ceph_mutex_is_locked_by_me(ob->oc->oc_lock));
       if (s == STATE_RX || s == STATE_TX) bget();
       if (state == STATE_RX || state == STATE_TX) bput();
       state = s;
@@ -167,14 +170,17 @@ class ObjectCacher {
     bool is_tx() const { return state == STATE_TX; }
     bool is_rx() const { return state == STATE_RX; }
     bool is_error() const { return state == STATE_ERROR; }
+    bool is_removed() const { return state == STATE_REMOVED; }
 
     // reference counting
     int bget() {
+      ceph_assert(ceph_mutex_is_locked_by_me(ob->oc->oc_lock));
       ceph_assert(bref >= 0);
       if (bref == 0) lru_pin();
       return ++bref;
     }
     int bput() {
+      ceph_assert(ceph_mutex_is_locked_by_me(ob->oc->oc_lock));
       ceph_assert(bref > 0);
       if (bref == 1) lru_unpin();
       --bref;
@@ -225,11 +231,11 @@ class ObjectCacher {
   private:
     // ObjectCacher::Object fields
     int oref = 0;
-    ObjectCacher *oc;
     sobject_t oid;
     friend struct ObjectSet;
 
   public:
+    ObjectCacher *oc;
     uint64_t object_no;
     ObjectSet *oset;
     xlist<Object*>::item set_item;
@@ -254,7 +260,7 @@ class ObjectCacher {
 
     Object(ObjectCacher *_oc, sobject_t o, uint64_t ono, ObjectSet *os,
 	   object_locator_t& l, uint64_t ts, uint64_t tq) :
-      oc(_oc), oid(o), object_no(ono), oset(os), set_item(this), oloc(l),
+      oid(o), oc(_oc), object_no(ono), oset(os), set_item(this), oloc(l),
       truncate_size(ts), truncate_seq(tq) {
       // add to set
       os->objects.push_back(&set_item);
@@ -286,6 +292,11 @@ class ObjectCacher {
       return false;
     }
 
+    bool can_close_with_lock() const {
+      std::scoped_lock ocl{oc->oc_lock};
+      return can_close();
+    }
+
     /**
      * Check buffers and waiters for consistency
      * - no overlapping buffers
@@ -314,12 +325,14 @@ class ObjectCacher {
     // bh
     // add to my map
     void add_bh(BufferHead *bh) {
+      ceph_assert(ceph_mutex_is_locked_by_me(oc->oc_lock));
       if (data.empty())
 	oget();
       ceph_assert(data.count(bh->start()) == 0);
       data[bh->start()] = bh;
     }
     void remove_bh(BufferHead *bh) {
+      ceph_assert(ceph_mutex_is_locked_by_me(oc->oc_lock));
       ceph_assert(data.count(bh->start()));
       data.erase(bh->start());
       if (data.empty())
@@ -350,11 +363,13 @@ class ObjectCacher {
 
     // reference counting
     int oget() {
+      ceph_assert(ceph_mutex_is_locked_by_me(oc->oc_lock));
       ceph_assert(oref >= 0);
       if (oref == 0) lru_pin();
       return ++oref;
     }
     int oput() {
+      ceph_assert(ceph_mutex_is_locked_by_me(oc->oc_lock));
       ceph_assert(oref > 0);
       if (oref == 1) lru_unpin();
       --oref;
@@ -368,6 +383,8 @@ class ObjectCacher {
   struct ObjectSet {
     void *parent;
 
+    ceph::mutex& lock;
+
     inodeno_t ino;
     uint64_t truncate_seq = 0;
     uint64_t truncate_size = 0;
@@ -378,8 +395,8 @@ class ObjectCacher {
     int dirty_or_tx = 0;
     bool return_enoent = false;
 
-    ObjectSet(void *p, int64_t _poolid, inodeno_t i)
-      : parent(p), ino(i), poolid(_poolid) {}
+    ObjectSet(void *p, int64_t _poolid, inodeno_t i, ceph::mutex &l)
+      : parent(p), lock(l), ino(i), poolid(_poolid) {}
   };
 
 
@@ -390,7 +407,7 @@ class ObjectCacher {
   bool scattered_write;
 
   std::string name;
-  ceph::mutex& lock;
+  ceph::mutex oc_lock = ceph::make_mutex("osdc::ObjectCacher_lock");
 
   uint64_t max_dirty, target_dirty, max_size, max_objects;
   ceph::timespan max_dirty_age;
@@ -429,6 +446,7 @@ class ObjectCacher {
 
   // objects
   ObjectRef get_object_maybe(sobject_t oid, object_locator_t &l) {
+    std::scoped_lock ocl{oc_lock};
     // have it?
     if (((uint32_t)l.pool < objects.size()) &&
 	(objects[l.pool].count(oid)))
@@ -439,7 +457,7 @@ class ObjectCacher {
   ObjectRef get_object(sobject_t oid, uint64_t object_no, ObjectSet *oset,
 		       object_locator_t &l, uint64_t truncate_size,
 		       uint64_t truncate_seq);
-  void close_object(Object *ob);
+  bool close_object(Object *ob);
 
   // bh stats
   ceph::condition_variable  stat_cond;
@@ -455,7 +473,7 @@ class ObjectCacher {
 
   size_t stat_nr_dirty_waiters = 0;
 
-  void verify_stats() const;
+  void verify_stats();// const;
 
   void bh_stat_add(BufferHead *bh);
   void bh_stat_sub(BufferHead *bh);
@@ -468,6 +486,7 @@ class ObjectCacher {
   size_t get_stat_nr_dirty_waiters() const { return stat_nr_dirty_waiters; }
 
   void touch_bh(BufferHead *bh) {
+    ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
     if (bh->is_dirty())
       bh_lru_dirty.lru_touch(bh);
     else
@@ -478,9 +497,11 @@ class ObjectCacher {
     touch_ob(bh->ob);
   }
   void touch_ob(Object *ob) {
+    ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
     ob_lru.lru_touch(ob);
   }
   void bottouch_ob(Object *ob) {
+    ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
     ob_lru.lru_bottouch(ob);
   }
 
@@ -509,6 +530,8 @@ class ObjectCacher {
   }
   void mark_dirty(BufferHead *bh) {
     bh_set_state(bh, BufferHead::STATE_DIRTY);
+
+    std::scoped_lock ocl{oc_lock};
     bh_lru_dirty.lru_touch(bh);
     //bh->set_dirty_stamp(ceph_clock_now());
   }
@@ -567,7 +590,7 @@ class ObjectCacher {
 
 
 
-  ObjectCacher(CephContext *cct_, std::string name, WritebackHandler& wb, ceph::mutex& l,
+  ObjectCacher(CephContext *cct_, std::string name, WritebackHandler& wb,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg,
 	       uint64_t max_bytes, uint64_t max_objects,
@@ -580,10 +603,10 @@ class ObjectCacher {
   }
   void stop() {
     ceph_assert(flusher_thread.is_started());
-    lock.lock();  // hmm.. watch out for deadlock!
+    oc_lock.lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;
     flusher_cond.notify_all();
-    lock.unlock();
+    oc_lock.unlock();
     flusher_thread.join();
   }
 
@@ -646,18 +669,23 @@ public:
 
   // cache sizes
   void set_max_dirty(uint64_t v) {
+    std::scoped_lock ocl{oc_lock};
     max_dirty = v;
   }
   void set_target_dirty(int64_t v) {
+    std::scoped_lock ocl{oc_lock};
     target_dirty = v;
   }
   void set_max_size(int64_t v) {
+    std::scoped_lock ocl{oc_lock};
     max_size = v;
   }
   void set_max_dirty_age(double a) {
+    std::scoped_lock ocl{oc_lock};
     max_dirty_age = ceph::make_timespan(a);
   }
   void set_max_objects(int64_t v) {
+    std::scoped_lock ocl{oc_lock};
     max_objects = v;
   }
 
@@ -667,6 +695,8 @@ public:
   /*** async+caching (non-blocking) file interface ***/
   int file_is_cached(ObjectSet *oset, file_layout_t *layout,
 		     snapid_t snapid, loff_t offset, uint64_t len) {
+    ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
     std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, extents);
@@ -676,6 +706,8 @@ public:
   int file_read(ObjectSet *oset, file_layout_t *layout, snapid_t snapid,
 		loff_t offset, uint64_t len, ceph::buffer::list *bl, int flags,
 		Context *onfinish) {
+    ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
     OSDRead *rd = prepare_read(snapid, bl, flags);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, rd->extents);
@@ -685,6 +717,8 @@ public:
   int file_write(ObjectSet *oset, file_layout_t *layout,
 		 const SnapContext& snapc, loff_t offset, uint64_t len,
 		 ceph::buffer::list& bl, ceph::real_time mtime, int flags) {
+    ceph_assert(ceph_mutex_is_locked_by_me(oset->lock));
+
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, wr->extents);

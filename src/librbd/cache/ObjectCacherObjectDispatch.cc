@@ -102,7 +102,7 @@ void ObjectCacherObjectDispatch<I>::init() {
 
   m_cache_lock.lock();
   ldout(cct, 5) << "enabling caching..." << dendl;
-  m_writeback_handler = new ObjectCacherWriteback(m_image_ctx, m_cache_lock);
+  m_writeback_handler = new ObjectCacherWriteback(m_image_ctx);
 
   auto init_max_dirty = m_max_dirty;
   if (m_writethrough_until_flush) {
@@ -128,7 +128,7 @@ void ObjectCacherObjectDispatch<I>::init() {
                 << " max_dirty_age=" << max_dirty_age << dendl;
 
   m_object_cacher = new ObjectCacher(cct, m_image_ctx->perfcounter->get_name(),
-                                     *m_writeback_handler, m_cache_lock,
+                                     *m_writeback_handler,
                                      nullptr, nullptr, cache_size,
                                      10,  /* reset this in init */
                                      init_max_dirty, target_dirty,
@@ -145,7 +145,8 @@ void ObjectCacherObjectDispatch<I>::init() {
   m_object_cacher->set_max_objects(max_dirty_object);
 
   m_object_set = new ObjectCacher::ObjectSet(nullptr,
-                                             m_image_ctx->data_ctx.get_id(), 0);
+                                             m_image_ctx->data_ctx.get_id(),
+                                             0, m_cache_lock);
   m_object_cacher->start();
   m_cache_lock.unlock();
 
