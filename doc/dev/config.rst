@@ -7,11 +7,14 @@ proper configuration information. The configuration can be viewed as a set of
 key-value pairs.
 
 How can the configuration be set? Well, there are several sources:
+
  - the ceph configuration file, usually named ceph.conf
  - command line arguments::
+
     --debug-ms=1
     --debug-pg=10
-    etc.
+
+   etc.
  - arguments injected at runtime using "injectargs" or "config set"
 
 
@@ -21,6 +24,7 @@ The Configuration File
 Most configuration settings originate in the Ceph configuration file.
 
 How do we find the configuration file? Well, in order, we check:
+
  - the default locations
  - the environment variable CEPH_CONF
  - the command line argument -c
@@ -44,6 +48,7 @@ substituted into another value using the ``$varname`` syntax, similar
 to how bash shell expansion works.
 
 A few additional special metavariables are also defined:
+
  - $host: expands to the current hostname
  - $type: expands to one of "mds", "osd", "mon", or "client"
  - $id: expands to the daemon identifier. For ``osd.0``, this would be ``0``; for ``mds.a``, it would be ``a``; for ``client.admin``, it would be ``admin``.
@@ -65,6 +70,7 @@ and is invoked only when one of the relevant keys changes.
 The interface to implement is found in common/config_obs.h.
 
 The observer method should be preferred in new code because
+
  - It is more flexible, allowing the code to do whatever reinitialization needs
    to be done to implement the new configuration value.
  - It is the only way to create a std::string configuration variable that can
