@@ -115,7 +115,7 @@ class ObjectCacher {
   private:
     // my fields
     int state = STATE_MISSING;
-    int ref = 0;
+    int bref = 0;
     struct {
       loff_t start, length;   // bh extent in object
     } ex{};
@@ -147,8 +147,8 @@ class ObjectCacher {
 
     // states
     void set_state(int s) {
-      if (s == STATE_RX || s == STATE_TX) get();
-      if (state == STATE_RX || state == STATE_TX) put();
+      if (s == STATE_RX || s == STATE_TX) bget();
+      if (state == STATE_RX || state == STATE_TX) bput();
       state = s;
     }
     int get_state() const { return state; }
@@ -169,16 +169,16 @@ class ObjectCacher {
     bool is_error() const { return state == STATE_ERROR; }
 
     // reference counting
-    int get() {
-      ceph_assert(ref >= 0);
-      if (ref == 0) lru_pin();
-      return ++ref;
+    int bget() {
+      ceph_assert(bref >= 0);
+      if (bref == 0) lru_pin();
+      return ++bref;
     }
-    int put() {
-      ceph_assert(ref > 0);
-      if (ref == 1) lru_unpin();
-      --ref;
-      return ref;
+    int bput() {
+      ceph_assert(bref > 0);
+      if (bref == 1) lru_unpin();
+      --bref;
+      return bref;
     }
 
     void set_dontneed(bool v) {
