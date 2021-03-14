@@ -647,7 +647,9 @@ which is the hallmark of the ``GSS`` *(Generic Security Standard)* ``-API``.
 It does not actually provide security services itself.
 
 Rather, it is a framework that provides security services to callers in a
-generic way.  ::
+generic way.
+
+.. ditaa::
 
     +---------------------------------+
     |        Application              |
