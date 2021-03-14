@@ -173,7 +173,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   }
   right->set_journal_tid(0);
 
-  oc->bh_remove(this, right);
+  oc->bh_remove(this, right, false);
   oc->bh_stat_sub(left);
   left->set_length(left->length() + right->length());
   oc->bh_stat_add(left);
@@ -197,7 +197,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
 					p->second );
 
   // hose right
-  delete right;
+  right->put();
 
   ldout(oc->cct, 10) << "merge_left result " << *left << dendl;
 }
@@ -587,7 +587,6 @@ void ObjectCacher::Object::truncate(loff_t s)
     bh->waitfor_read.clear();
     replace_journal_tid(bh, 0);
     oc->bh_remove(this, bh);
-    delete bh;
   }
   if (!waiting_for_read.empty()) {
     ldout(oc->cct, 10) <<  "restarting reads post-truncate" << dendl;
@@ -656,7 +655,6 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
     }
 
     oc->bh_remove(this, bh);
-    delete bh;
   }
   if (!waiting_for_read.empty()) {
     ldout(oc->cct, 10) <<  "restarting reads post-discard" << dendl;
@@ -901,7 +899,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	    // current iterator will be invalidated by bh_remove()
 	    ++p;
 	    bh_remove(ob.get(), bh);
-	    delete bh;
 	  }
 	}
       }
@@ -965,7 +962,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	if (trust_enoent) {
 	  ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
 	  bh_remove(ob.get(), bh);
-	  delete bh;
 	} else {
 	  ldout(cct, 10) << "skipping unstrusted -ENOENT and will retry for "
 			 << *bh << dendl;
@@ -1322,7 +1318,6 @@ void ObjectCacher::trim()
 
     Object *ob = bh->ob;
     bh_remove(ob, bh);
-    delete bh;
 
     --nr_clean_bh;
 
@@ -1520,7 +1515,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  }
 
 	  bh_remove(o.get(), bh_it->second);
-	  delete bh_it->second;
 	} else {
 	  bh_it->second->set_nocache(nocache);
 	  bh_read(bh_it->second, rd->fadvise_flags, *trace);
@@ -2164,8 +2158,9 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
   // order. But items in oset->objects are not sorted. So the iterator can
   // point to any buffer head in the ObjectSet
-  BufferHead key(*oset->objects.begin());
-  it = dirty_or_tx_bh.lower_bound(&key);
+  BufferHead *key = new BufferHead(*oset->objects.begin());
+  it = dirty_or_tx_bh.lower_bound(key);
+  key->put();
   p = q = it;
 
   bool backwards = true;
@@ -2387,7 +2382,6 @@ loff_t ObjectCacher::release(Object *ob)
        p != clean.end();
        ++p) {
     bh_remove(ob, *p);
-    delete *p;
   }
 
   if (ob->can_close()) {
@@ -2778,7 +2772,7 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
   bh_stat_add(bh);
 }
 
-void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
+void ObjectCacher::bh_remove(Object *ob, BufferHead *bh, bool delete_bh)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph_assert(bh->get_journal_tid() == 0);
@@ -2797,5 +2791,8 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
   bh_stat_sub(bh);
   if (get_stat_dirty_waiting() > 0)
     stat_cond.notify_all();
+
+  if (delete_bh)
+    bh->put();
 }
 

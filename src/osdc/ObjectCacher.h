@@ -101,7 +101,7 @@ class ObjectCacher {
 
 
   // ******* BufferHead *********
-  class BufferHead : public LRUObject {
+  class BufferHead : public LRUObject, public RefCountedObject {
   public:
     // states
     static const int STATE_MISSING = 0;
@@ -215,6 +215,10 @@ class ObjectCacher {
       }
     };
   };
+  void intrusive_ptr_add_ref(BufferHead *bh) { bh->get(); }
+  void intrusive_ptr_release(BufferHead *bh) { bh->put(); }
+  typedef boost::intrusive_ptr<BufferHead> BufferHeadRef;
+
 
   // ******* Object *********
   class Object : public LRUObject, public RefCountedObject {
@@ -510,7 +514,7 @@ class ObjectCacher {
   }
 
   void bh_add(Object *ob, BufferHead *bh);
-  void bh_remove(Object *ob, BufferHead *bh);
+  void bh_remove(Object *ob, BufferHead *bh, bool delete_bh=true);
 
   // io
   void bh_read(BufferHead *bh, int op_flags,
