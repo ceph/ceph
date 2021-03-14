@@ -19,25 +19,17 @@ executing the following::
 Compiling Ceph for Profiling
 ============================
 
-To compile Ceph for profiling, first clean everything. :: 
+To compile Ceph for profiling, first clean everything. ::
 
-	make distclean
+    git clean -dfx
 	
-Then, export the following settings so that you can see callgraph output. :: 
+Finally, compile Ceph. ::
 
-	export CFLAGS="-fno-omit-frame-pointer -O2 -g"
+	./do-cmake.sh -DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer -O2 -g"
+    cd build
+    cmake --build .
 
-Finally, compile Ceph. :: 
-
-	./autogen.sh
-	./configure
-	make
-
-You can use ``make -j`` to execute multiple jobs depending upon your system. For
-example::
-
-	make -j4
-
+In this command, ``CMAKE_CXX_FLAGS`` is specified. This provides callgraph output.
 
 Ceph Configuration 
 ==================

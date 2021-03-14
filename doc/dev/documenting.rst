@@ -55,7 +55,7 @@ To generate the doxygen documentation in HTML format use:
 
 ::
 
-   # make doxygen
+   # cmake --build . --target doxygen
 
 HTML output will be under: ``build-doc/doxygen/html`` 
 
