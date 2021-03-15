@@ -31,10 +31,12 @@
 #include "common/debug.h"
 #include "common/config.h"
 #include "common/ceph_crypto.h"
-#include "common/lockdep.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/Graylog.h"
+#ifdef CEPH_DEBUG_MUTEX
+#include "common/lockdep.h"
+#endif
 
 #include "log/Log.h"
 
@@ -105,6 +107,7 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
 #else  // WITH_SEASTAR
 namespace {
 
+#ifdef CEPH_DEBUG_MUTEX
 class LockdepObs : public md_config_obs_t {
 public:
   explicit LockdepObs(CephContext *cct)
@@ -137,6 +140,7 @@ private:
   bool m_registered;
   ceph::mutex lock;
 };
+#endif // CEPH_DEBUG_MUTEX
 
 class MempoolObs : public md_config_obs_t,
 		  public AdminSocketHook {
@@ -679,7 +683,9 @@ CephContext::CephContext(uint32_t module_type_,
     _crypto_none(NULL),
     _crypto_aes(NULL),
     _plugin_registry(NULL),
+#ifdef CEPH_DEBUG_MUTEX
     _lockdep_obs(NULL),
+#endif
     crush_location(this)
 {
   _log = new ceph::logging::Log(&_conf->subsys);
@@ -689,10 +695,10 @@ CephContext::CephContext(uint32_t module_type_,
 
   _cct_obs = new CephContextObs(this);
   _conf.add_observer(_cct_obs);
-
+#ifdef CEPH_DEBUG_MUTEX
   _lockdep_obs = new LockdepObs(this);
   _conf.add_observer(_lockdep_obs);
-
+#endif
   _perf_counters_collection = new PerfCountersCollection(this);
  
   _admin_socket = new AdminSocket(this);
@@ -768,11 +774,11 @@ CephContext::~CephContext()
   _conf.remove_observer(_cct_obs);
   delete _cct_obs;
   _cct_obs = NULL;
-
+#ifdef CEPH_DEBUG_MUTEX
   _conf.remove_observer(_lockdep_obs);
   delete _lockdep_obs;
   _lockdep_obs = NULL;
-
+#endif
   _log->stop();
   delete _log;
   _log = NULL;

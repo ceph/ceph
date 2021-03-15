@@ -74,10 +74,8 @@ set(common_srcs
   hostname.cc
   ipaddr.cc
   iso_8601.cc
-  lockdep.cc
   mempool.cc
   mime.c
-  mutex_debug.cc
   numa.cc
   openssl_opts_handler.cc
   options.cc
@@ -90,7 +88,6 @@ set(common_srcs
   reverse.c
   run_cmd.cc
   scrub_types.cc
-  shared_mutex_debug.cc
   signal.cc
   snap_types.cc
   str_list.cc
@@ -102,6 +99,13 @@ set(common_srcs
   utf8.c
   util.cc
   version.cc)
+
+if(WITH_CEPH_DEBUG_MUTEX)
+  list(APPEND common_srcs
+    lockdep.cc
+    mutex_debug.cc
+    shared_mutex_debug.cc)
+endif()
 
 if(WIN32)
   if(MINGW)

@@ -320,7 +320,8 @@ if(WITH_LZ4)
   set(HAVE_LZ4 ${LZ4_FOUND})
 endif(WITH_LZ4)
 
-option(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" ON
+  "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
 
 #if allocator is set on command line make sure it matches below strings
 set(ALLOCATOR "" CACHE STRING
