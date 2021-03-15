@@ -162,7 +162,7 @@ class CephadmServe:
                     failures.append(r)
 
             if self.mgr.cache.host_needs_facts_refresh(host):
-                self.log.info(('Refreshing %s facts' % host))
+                self.log.debug(('Refreshing %s facts' % host))
                 r = self._refresh_facts(host)
                 if r:
                     failures.append(r)
