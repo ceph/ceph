@@ -124,7 +124,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 17 05 * * 1,5       CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
 23 14 * * 3,6       CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
 20 01 * * 1,5       CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
-22 14 * * 2,6       CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c   $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/octopus-x -e $CEPH_QA_EMAIL -p 70 --force-priority
+22 14 * * 2,6       CEPH_BRANCH=pacific; MACHINE_NAME=smithi; SUITE_NAME=upgrade:octopus-x; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 10 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 70 --force-priority
 
 #********** pacific branch END
 
@@ -135,5 +135,5 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 #20 01 * * 4  CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
 
-#22 14 * * 5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c   $CEPH_BRANCH -k distro -n 100 -m $MACHINE_NAME -s upgrade/octopus-x -e $CEPH_QA_EMAIL
+#22 14 * * 5 CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=upgrade:octopus-x; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 10 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 70 --force-priority
 
