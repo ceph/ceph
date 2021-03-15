@@ -318,6 +318,8 @@ struct MockImageCtx {
 
   ZTracer::Endpoint trace_endpoint;
 
+  crypto::CryptoInterface* crypto = nullptr;
+
   uint64_t sparse_read_threshold_bytes;
   uint32_t discard_granularity_bytes;
   int mirroring_replay_delay;

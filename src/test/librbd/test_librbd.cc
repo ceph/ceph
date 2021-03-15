@@ -2141,10 +2141,21 @@ TEST_F(TestLibRBD, TestEncryptionLUKS1)
 #else
   ASSERT_EQ(0, rbd_encryption_format(
           image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
-  ASSERT_EQ(0, rbd_encryption_load(
+  ASSERT_EQ(-EEXIST, rbd_encryption_load(
           image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
 
   test_io(image);
+
+  bool passed;
+  write_test_data(image, "test", 0, 4, 0, &passed);
+  ASSERT_TRUE(passed);
+  ASSERT_EQ(0, rbd_close(image));
+
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_EQ(0, rbd_encryption_load(
+          image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
+  read_test_data(image, "test", 0, 4, 0, &passed);
+  ASSERT_TRUE(passed);
 #endif
 
   ASSERT_EQ(0, rbd_close(image));
@@ -2182,10 +2193,21 @@ TEST_F(TestLibRBD, TestEncryptionLUKS2)
 #else
   ASSERT_EQ(0, rbd_encryption_format(
           image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
-  ASSERT_EQ(0, rbd_encryption_load(
+  ASSERT_EQ(-EEXIST, rbd_encryption_load(
           image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
 
   test_io(image);
+
+  bool passed;
+  write_test_data(image, "test", 0, 4, 0, &passed);
+  ASSERT_TRUE(passed);
+  ASSERT_EQ(0, rbd_close(image));
+
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_EQ(0, rbd_encryption_load(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
+  read_test_data(image, "test", 0, 4, 0, &passed);
+  ASSERT_TRUE(passed);
 #endif
 
   ASSERT_EQ(0, rbd_close(image));

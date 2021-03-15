@@ -34,6 +34,14 @@ public:
       return m_data_offset;
     }
 
+    const unsigned char* get_key() const override {
+      return m_data_cryptor->get_key();
+    }
+
+    int get_key_length() const override {
+      return m_data_cryptor->get_key_length();
+    }
+
 private:
     CephContext* m_cct;
     DataCryptor<T>* m_data_cryptor;
