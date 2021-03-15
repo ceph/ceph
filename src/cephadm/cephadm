@@ -144,7 +144,7 @@ class CephadmContext:
         if "_conf" in self.__dict__ and hasattr(self._conf, name):
             return getattr(self._conf, name)
         elif "_args" in self.__dict__ and hasattr(self._args, name):
-            return getattr(self._args, name)        
+            return getattr(self._args, name)
         else:
             return super().__getattribute__(name)
 
@@ -3253,7 +3253,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
     """
 
     rc = 0
-    versions = set() 
+    versions = set()
     errors = []
     subnet_list = subnets.split(',')
     for subnet in subnet_list:
@@ -3374,7 +3374,7 @@ def prepare_mon_addresses(
 def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
     cluster_network = ""
     ipv6_cluster_network = False
-    # the cluster network may not exist on this node, so all we can do is 
+    # the cluster network may not exist on this node, so all we can do is
     # validate that the address given is valid ipv4 or ipv6 subnet
     if ctx.cluster_network:
         rc, versions, err_msg = check_subnet(ctx.cluster_network)
@@ -6453,6 +6453,7 @@ class CephadmCache:
         self.daemons = {}
         self.host = {}
         self.lock = RLock()
+
 
     @property
     def health(self):
