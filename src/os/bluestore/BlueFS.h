@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <limits>
 
 #include "bluefs_types.h"
 #include "BlockDevice.h"
@@ -201,11 +202,15 @@ public:
     // to use buffer_appender exclusively here (e.g., it's notion of
     // offset will remain accurate).
     void append(const char *buf, size_t len) {
+      uint64_t l0 = buffer.length();
+      ceph_assert(l0 + len <= std::numeric_limits<unsigned>::max());
       buffer_appender.append(buf, len);
     }
 
     // note: used internally only, for ino 1 or 0.
-    void append(bufferlist& bl) {
+    void append(ceph::buffer::list& bl) {
+      uint64_t l0 = buffer.length();
+      ceph_assert(l0 + bl.length() <= std::numeric_limits<unsigned>::max());
       buffer.claim_append(bl);
     }
 
@@ -563,6 +568,27 @@ public:
     std::unique_lock l(lock);
     int r = _flush(h, force, l);
     ceph_assert(r == 0);
+  }
+
+  void append_try_flush(FileWriter *h, const char* buf, size_t len) {
+    size_t max_size = 1ull << 30; // cap to 1GB
+    while (len > 0) {
+      bool need_flush = true;
+      auto l0 = h->buffer.length();
+      if (l0 < max_size) {
+	size_t l = std::min(len, max_size - l0);
+	h->append(buf, l);
+	buf += l;
+	len -= l;
+	need_flush = h->buffer.length() >= cct->_conf->bluefs_min_flush_size;
+      }
+      if (need_flush) {
+	flush(h, true);
+	// make sure we've made any progress with flush hence the
+	// loop doesn't iterate forever
+	ceph_assert(h->buffer.length() < max_size);
+      }
+    }
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
     std::lock_guard l(lock);

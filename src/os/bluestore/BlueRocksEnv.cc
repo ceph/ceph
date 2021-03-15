@@ -171,7 +171,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
     }*/
 
   rocksdb::Status Append(const rocksdb::Slice& data) override {
-    h->append(data.data(), data.size());
+    fs->append_try_flush(h, data.data(), data.size());
     return rocksdb::Status::OK();
   }
 
