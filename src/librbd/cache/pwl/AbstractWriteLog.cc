@@ -1355,7 +1355,9 @@ void AbstractWriteLog<I>::dispatch_deferred_writes(void)
         }
         ceph_assert(!allocated);
         if (!allocated && front_req) {
-          /* front_req->alloc_resources() failed on the last iteration. We'll stop dispatching. */
+          /* front_req->alloc_resources() failed on the last iteration.
+           * We'll stop dispatching. */
+          wake_up();
           front_req = nullptr;
           ceph_assert(!cleared_dispatching_flag);
           m_dispatching_deferred_ops = false;
@@ -1477,7 +1479,7 @@ bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
     /* Don't attempt buffer allocate if we've exceeded the "full" threshold */
     if (m_bytes_allocated + bytes_allocated > bytes_allocated_cap) {
       if (!req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_entries(true);
+        req->set_io_waited_for_buffers(true);
         ldout(m_image_ctx.cct, 1) << "Waiting for allocation cap (cap="
                                   << bytes_allocated_cap
                                   << ", allocated=" << m_bytes_allocated
@@ -1504,6 +1506,10 @@ bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
       m_bytes_allocated += bytes_allocated;
       m_bytes_cached += bytes_cached;
       m_bytes_dirty += bytes_dirtied;
+      if (req->has_io_waited_for_buffers()) {
+        req->set_io_waited_for_buffers(false);
+      }
+
     } else {
       alloc_succeeds = false;
     }
