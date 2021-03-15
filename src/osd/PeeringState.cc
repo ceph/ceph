@@ -10,13 +10,10 @@
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
-#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLog.h"
-#include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGNotify2.h"
-#include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLease.h"
 #include "messages/MOSDPGLeaseAck.h"
@@ -37,22 +34,15 @@ using std::vector;
 using ceph::Formatter;
 using ceph::make_message;
 
-BufferedRecoveryMessages::BufferedRecoveryMessages(
-  ceph_release_t r,
-  PeeringCtx &ctx)
-  : require_osd_release(r) {
+BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   // steal messages from ctx
-  message_map.swap(ctx.message_map);
-}
+  : message_map{std::move(ctx.message_map)}
+{}
 
 void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
 {
-  if (require_osd_release >= ceph_release_t::octopus) {
-    spg_t pgid(n.info.pgid.pgid, n.to);
-    send_osd_message(to, make_message<MOSDPGNotify2>(pgid, n));
-  } else {
-    send_osd_message(to, make_message<MOSDPGNotify>(n.epoch_sent, vector{n}));
-  }
+  spg_t pgid(n.info.pgid.pgid, n.to);
+  send_osd_message(to, make_message<MOSDPGNotify2>(pgid, n));
 }
 
 void BufferedRecoveryMessages::send_query(
@@ -60,15 +50,7 @@ void BufferedRecoveryMessages::send_query(
   spg_t to_spgid,
   const pg_query_t &q)
 {
-  if (require_osd_release >= ceph_release_t::octopus) {
-    send_osd_message(to,
-		     make_message<MOSDPGQuery2>(to_spgid, q));
-  } else {
-    auto m = make_message<MOSDPGQuery>(
-      q.epoch_sent,
-      MOSDPGQuery::pg_list_t{{to_spgid, q}});
-    send_osd_message(to, m);
-  }
+  send_osd_message(to, make_message<MOSDPGQuery2>(to_spgid, q));
 }
 
 void BufferedRecoveryMessages::send_info(
@@ -80,28 +62,16 @@ void BufferedRecoveryMessages::send_info(
   std::optional<pg_lease_t> lease,
   std::optional<pg_lease_ack_t> lease_ack)
 {
-  if (require_osd_release >= ceph_release_t::octopus) {
-    send_osd_message(
-      to,
-      make_message<MOSDPGInfo2>(
-	to_spgid,
-	info,
-	cur_epoch,
-	min_epoch,
-	lease,
-	lease_ack)
-      );
-  } else {
-    send_osd_message(
-      to,
-      make_message<MOSDPGInfo>(
-        cur_epoch,
-        vector{pg_notify_t{to_spgid.shard,
-			   info.pgid.shard,
-			   min_epoch, cur_epoch,
-			   info, PastIntervals{}}})
-      );
-  }
+  send_osd_message(
+    to,
+    make_message<MOSDPGInfo2>(
+      to_spgid,
+      info,
+      cur_epoch,
+      min_epoch,
+      lease,
+      lease_ack)
+  );
 }
 
 void PGPool::update(OSDMapRef map)
@@ -174,8 +144,7 @@ void PeeringState::begin_block_outgoing() {
   ceph_assert(!messages_pending_flush);
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
-  messages_pending_flush = BufferedRecoveryMessages(
-    orig_ctx->require_osd_release);
+  messages_pending_flush.emplace();
   rctx.emplace(*messages_pending_flush, *orig_ctx);
 }
 
@@ -2974,24 +2943,12 @@ void PeeringState::share_pg_info()
       peer->second.last_interval_started = info.last_interval_started;
       peer->second.history.merge(info.history);
     }
-    MessageRef m;
-    if (last_require_osd_release >= ceph_release_t::octopus) {
-      m = make_message<MOSDPGInfo2>(spg_t{info.pgid.pgid, pg_shard.shard},
+    MessageRef m = make_message<MOSDPGInfo2>(spg_t{info.pgid.pgid, pg_shard.shard},
 			  info,
 			  get_osdmap_epoch(),
 			  get_osdmap_epoch(),
 			  std::optional<pg_lease_t>{get_lease()},
 			  std::nullopt);
-    } else {
-      m = make_message<MOSDPGInfo>(get_osdmap_epoch(),
-	      MOSDPGInfo::pg_list_t{
-	        pg_notify_t{pg_shard.shard,
-			    pg_whoami.shard,
-			    get_osdmap_epoch(),
-			    get_osdmap_epoch(),
-			    info,
-			    past_intervals}});
-    }
     pl->send_cluster_message(pg_shard.osd, m, get_osdmap_epoch());
   }
 }

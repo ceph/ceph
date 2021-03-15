@@ -29,8 +29,6 @@
 #include "common/perf_counters.h"
 
 #include "messages/MOSDOp.h"
-#include "messages/MOSDPGNotify.h"
-#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
@@ -1148,7 +1146,7 @@ void PG::read_state(ObjectStore *store)
   // init pool options
   store->set_collection_opts(ch, pool.info.opts);
 
-  PeeringCtx rctx(ceph_release_t::unknown);
+  PeeringCtx rctx;
   handle_initialize(rctx);
   // note: we don't activate here because we know the OSD will advance maps
   // during boot.

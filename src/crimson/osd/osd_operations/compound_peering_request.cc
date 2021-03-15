@@ -5,7 +5,6 @@
 
 #include "osd/PeeringState.h"
 
-#include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGCreate2.h"
 
 #include "common/Formatter.h"
@@ -28,7 +27,7 @@ struct compound_state {
   seastar::promise<BufferedRecoveryMessages> promise;
   // assuming crimson-osd won't need to be compatible with pre-octopus
   // releases
-  BufferedRecoveryMessages ctx{ceph_release_t::octopus};
+  BufferedRecoveryMessages ctx;
   compound_state() = default;
   ~compound_state() {
     promise.set_value(std::move(ctx));
