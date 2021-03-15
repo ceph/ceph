@@ -389,7 +389,22 @@ effectively throughout their lifetime. In past releases Lifecycle processing was
 by single threaded processing. With the Nautilus release this has been addressed and the
 Ceph Object Gateway now allows for parallel thread processing of bucket lifecycles across
 additional Ceph Object Gateway instances and replaces the in-order
-index shard enumeration with a random ordered sequence.
+index shard enumeration with a random ordered sequence. The following settings may added to
+the Ceph configuration file under the ``[client.radosgw.{instance-name}]`` section.
+
+``rgw_enable_lc_threads``
+
+:Description: Enables the lifecycle maintenance thread. This is required on at least one rgw for each zone.
+
+:Type: Boolean
+:Default: ``true``
+
+``rgw_lc_max_objs``
+
+:Description: Number of lifecycle data shards.
+
+:Type: Integer
+:Default: ``32``
 
 There are two options in particular to look at when looking to increase the
 aggressiveness of lifecycle processing:
