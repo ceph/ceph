@@ -147,11 +147,13 @@ class CephadmService(metaclass=ABCMeta):
             'caps': caps,
         })
         if err:
-            ret, out, err = self.mgr.check_mon_command({
+            ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth caps',
                 'entity': entity,
                 'caps': caps,
             })
+            if err:
+                self.mgr.log.warning(f"Unable to update caps for {entity}")
         return keyring
 
     def _inventory_get_addr(self, hostname: str) -> str:
