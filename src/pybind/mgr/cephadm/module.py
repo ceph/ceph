@@ -1605,7 +1605,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         osd_count += 1
                         sm[n].size = osd_count
                     else:
-                        sm[n].size = spec.placement.get_host_selection_size(
+                        sm[n].size = spec.placement.get_target_count(
                             self.inventory.all_specs())
 
                     sm[n].created = self.spec_store.spec_created[n]
@@ -1636,7 +1636,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 continue
             sm[n] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=spec.placement.get_host_selection_size(self.inventory.all_specs()),
+                size=spec.placement.get_target_count(self.inventory.all_specs()),
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
             )
@@ -2086,19 +2086,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ha = HostAssignment(
             spec=spec,
             hosts=self._hosts_with_daemon_inventory(),
-            get_daemons_func=self.cache.get_daemons_by_service,
+            daemons=self.cache.get_daemons_by_service(spec.service_name()),
+            allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
         )
         ha.validate()
-        hosts = ha.place()
-
-        add_daemon_hosts = ha.add_daemon_hosts(hosts)
-        remove_daemon_hosts = ha.remove_daemon_hosts(hosts)
+        hosts, to_add, to_remove = ha.place()
 
         return {
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
-            'add': [hs.hostname for hs in add_daemon_hosts],
-            'remove': [d.hostname for d in remove_daemon_hosts]
+            'add': [hs.hostname for hs in to_add],
+            'remove': [d.hostname for d in to_remove]
         }
 
     @handle_orch_error
@@ -2144,7 +2142,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         HostAssignment(
             spec=spec,
             hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh
-            get_daemons_func=self.cache.get_daemons_by_service,
+            daemons=self.cache.get_daemons_by_service(spec.service_name()),
+            allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
         ).validate()
 
         self.log.info('Saving service %s spec with placement %s' % (
