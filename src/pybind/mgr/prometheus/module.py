@@ -189,18 +189,25 @@ class Metric(object):
 
 
 class MetricCounter(Metric):
-    def __init__(self, name, desc, labels=None):
+    def __init__(self,
+                 name: str,
+                 desc: str,
+                 labels: Optional[Tuple[str, ...]] = None) -> None:
         super(MetricCounter, self).__init__('counter', name, desc, labels)
         self.value = defaultdict(lambda: 0)
 
-    def clear(self):
+    def clear(self) -> None:
         pass  # Skip calls to clear as we want to keep the counters here.
 
-    def set(self, value, labelvalues=None):
+    def set(self,
+            value: Union[float, int],
+            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
         msg = 'This method must not be used for instances of MetricCounter class'
         raise NotImplementedError(msg)
 
-    def add(self, value, labelvalues=None):
+    def add(self,
+            value: Union[float, int],
+            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
         # labelvalues must be a tuple
         labelvalues = labelvalues or ('',)
         self.value[labelvalues] += value
@@ -1121,19 +1128,21 @@ class Module(MgrModule):
 
         self.metrics.update(new_metrics)
 
-    def get_collect_time_metrics(self):
-        if 'prometheus_collect_duration_seconds_sum' not in self.metrics:
-            self.metrics['prometheus_collect_duration_seconds_sum'] = MetricCounter(
+    def get_collect_time_metrics(self) -> None:
+        sum_metric = self.metrics.get('prometheus_collect_duration_seconds_sum')
+        count_metric = self.metrics.get('prometheus_collect_duration_seconds_count')
+        if sum_metric is None:
+            sum_metrics = MetricCounter(
                 'prometheus_collect_duration_seconds_sum',
                 'The sum of seconds took to collect all metrics of this exporter',
-                ('method',),
-            )
-        if 'prometheus_collect_duration_seconds_count' not in self.metrics:
-            self.metrics['prometheus_collect_duration_seconds_count'] = MetricCounter(
+                ('method',))
+            self.metrics['prometheus_collect_duration_seconds_sum'] = sum_metrics
+        if count_metric is None:
+            count_metric = MetricCounter(
                 'prometheus_collect_duration_seconds_count',
                 'The amount of metrics gathered for this exporter',
-                ('method',),
-            )
+                ('method',))
+            self.metrics['prometheus_collect_duration_seconds_sum'] = count_metric
 
         # Collect all timing data and make it available as metric, excluding the
         # `collect` method because it has not finished at this point and hence
@@ -1141,11 +1150,10 @@ class Module(MgrModule):
         # `_execution_duration` attribute is added by the `profile_method`
         # decorator.
         for method_name, method in Module.__dict__.items():
-            if hasattr(method, '_execution_duration'):
-                self.metrics['prometheus_collect_duration_seconds_sum'].add(
-                    method._execution_duration, (method_name, ))
-                self.metrics['prometheus_collect_duration_seconds_count'].add(
-                    1, (method_name, ))
+            duration = getattr(method, '_execution_duration', None)
+            if duration is not None:
+                cast(MetricCounter, sum_metric).add(duration, (method_name,))
+                cast(MetricCounter, count_metric).add(1, (method_name,))
 
     @profile_method(True)
     def collect(self):
