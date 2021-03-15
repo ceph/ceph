@@ -410,7 +410,8 @@ class CephadmServe:
                     name = '%s.%s' % (s.get('type'), daemon_id)
                     if s.get('type') == 'rbd-mirror':
                         metadata = self.mgr.get_metadata(
-                            "rbd-mirror", daemon_id)
+                            "rbd-mirror", daemon_id, {})
+                        assert metadata is not None
                         try:
                             name = '%s.%s' % (s.get('type'), metadata['id'])
                         except (KeyError, TypeError):
