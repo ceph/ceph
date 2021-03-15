@@ -861,16 +861,16 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
   logger().debug("{} {}", __func__, oid);
   boost::intrusive_ptr<PG> pgref{this};
   assert(oid.is_head());
-  auto [obc, existed] = shard_services.obc_registry.get_cached_obc(oid);
+  auto [obc, existed] =
+    shard_services.obc_registry.get_cached_obc(std::move(oid));
   obc->append_to(obc_set_accessing);
   return obc->with_lock<State, IOInterruptCondition>(
-    [oid=std::move(oid), existed=existed, obc=obc,
-     func=std::move(func), this] {
+    [existed=existed, obc=obc, func=std::move(func), this] {
     auto loaded = load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
     if (existed) {
-      logger().debug("with_head_obc: found {} in cache", oid);
+      logger().debug("with_head_obc: found {} in cache", obc->get_oid());
     } else {
-      logger().debug("with_head_obc: cache miss on {}", oid);
+      logger().debug("with_head_obc: cache miss on {}", obc->get_oid());
       loaded = obc->with_promoted_lock<State, IOInterruptCondition>([this, obc] {
         return load_head_obc(obc);
       });
