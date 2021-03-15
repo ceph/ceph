@@ -1,6 +1,5 @@
-14.2.17
+14.2.18
 -------
 
-* $pid expansion in config paths like `admin_socket` will now properly expand
-  to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
-  `ceph-fuse`/`rbd-nbd` expanded `$pid` with the actual daemon pid.
+* This release fixes issues loading the dashboard and volumes manager
+  modules in some environments.
