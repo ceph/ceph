@@ -1685,29 +1685,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             for dd in dds
         ]
 
-    def _daemon_action(self, daemon_type: str, daemon_id: str, host: str, action: str, image: Optional[str] = None) -> str:
-        dd = DaemonDescription(
-            hostname=host,
-            daemon_type=daemon_type,
-            daemon_id=daemon_id
-        )
-        daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
-            host=host,
-            daemon_id=daemon_id,
-            daemon_type=daemon_type,
-            service_name=dd.service_name(),
-        )
+    def _daemon_action(self,
+                       daemon_spec: CephadmDaemonDeploySpec,
+                       action: str,
+                       image: Optional[str] = None) -> str:
+        self._daemon_action_set_image(action, image, daemon_spec.daemon_type,
+                                      daemon_spec.daemon_id)
 
-        self._daemon_action_set_image(action, image, daemon_type, daemon_id)
-
-        if action == 'redeploy' and self.daemon_is_self(daemon_type, daemon_id):
+        if action == 'redeploy' and self.daemon_is_self(daemon_spec.daemon_type,
+                                                        daemon_spec.daemon_id):
             self.mgr_service.fail_over()
             return ''  # unreachable
 
         if action == 'redeploy' or action == 'reconfig':
-            if daemon_type != 'osd':
+            if daemon_spec.daemon_type != 'osd':
                 daemon_spec = self.cephadm_services[daemon_type_to_service(
-                    daemon_type)].prepare_create(daemon_spec)
+                    daemon_spec.daemon_type)].prepare_create(daemon_spec)
             return CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'))
 
         actions = {
@@ -1719,10 +1712,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         for a in actions[action]:
             try:
                 out, err, code = CephadmServe(self)._run_cephadm(
-                    host, name, 'unit',
+                    daemon_spec.host, name, 'unit',
                     ['--name', name, a])
             except Exception:
-                self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
+                self.log.exception(f'`{daemon_spec.host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(daemon_spec.host)
         msg = "{} {} from host '{}'".format(action, name, daemon_spec.host)
         self.events.for_daemon(name, 'INFO', msg)
