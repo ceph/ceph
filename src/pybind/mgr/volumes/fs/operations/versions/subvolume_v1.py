@@ -6,7 +6,10 @@ import errno
 import logging
 import json
 from datetime import datetime
-from typing import List, Dict
+try:
+    from typing import List, Dict
+except ImportError:
+    pass # For typing only
 
 import cephfs
 
