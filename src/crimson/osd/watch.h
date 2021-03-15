@@ -116,7 +116,7 @@ class Notify : public seastar::enable_shared_from_this<Notify> {
   bool complete{false};
   bool discarded{false};
   seastar::timer<seastar::lowres_clock> timeout_timer{
-    [this] { do_timeout(); }
+    [this] { do_notify_timeout(); }
   };
 
   /// (gid,cookie) -> reply_bl for everyone who acked the notify
@@ -129,7 +129,7 @@ class Notify : public seastar::enable_shared_from_this<Notify> {
     std::set<WatchRef> timedout_watchers = {});
 
   /// Called on Notify timeout
-  void do_timeout();
+  void do_notify_timeout();
 
   Notify(crimson::net::ConnectionRef conn,
          const notify_info_t& ninfo,

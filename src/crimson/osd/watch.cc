@@ -209,7 +209,7 @@ seastar::future<> Notify::send_completion(
   return conn->send(std::move(reply));
 }
 
-void Notify::do_timeout()
+void Notify::do_notify_timeout()
 {
   logger().debug("{} complete={}", __func__, complete);
   if (complete) {
