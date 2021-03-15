@@ -911,7 +911,6 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
         auto [pg, startmap] = std::move(ret);
         if (!pg)
           return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
-        PeeringCtx rctx{ceph_release_t::octopus};
         const pg_pool_t* pp = startmap->get_pg_pool(info->pgid.pool());
 
         int up_primary, acting_primary;
@@ -922,6 +921,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
         int role = startmap->calc_pg_role(pg_shard_t(whoami, info->pgid.shard),
                                           acting);
 
+        PeeringCtx rctx;
         create_pg_collection(
           rctx.transaction,
           info->pgid,
@@ -1296,7 +1296,7 @@ seastar::future<> OSD::consume_map(epoch_t epoch)
   return seastar::parallel_for_each(pgs.begin(), pgs.end(), [=](auto& pg) {
     return shard_services.start_operation<PGAdvanceMap>(
       *this, pg.second, pg.second->get_osdmap_epoch(), epoch,
-      PeeringCtx{ceph_release_t::octopus}, false).second;
+      PeeringCtx{}, false).second;
   }).then([epoch, this] {
     osdmap_gate.got_map(epoch);
     return seastar::make_ready_future();
