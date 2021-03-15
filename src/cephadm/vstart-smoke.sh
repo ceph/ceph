@@ -64,7 +64,7 @@ bin/ceph orch apply grafana 1
 
 while ! bin/ceph dashboard get-grafana-api-url | grep $host ; do sleep 1 ; done
 
-bin/ceph orch apply rgw myrealm myzone 1
+bin/ceph orch apply rgw foo --placement=1
 
 bin/ceph orch ps
 bin/ceph orch ls
