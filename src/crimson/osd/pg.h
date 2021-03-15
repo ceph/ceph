@@ -520,7 +520,6 @@ public:
   load_obc_iertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
     const OpInfo &op_info,
-    Operation *op,
     with_obc_func_t&& f);
 
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
