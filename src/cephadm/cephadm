@@ -3268,7 +3268,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
         except ValueError as e:
             rc = 1
             errors.append(f"{subnet} invalid: {str(e)}")
-    
+
     return rc, list(versions), ", ".join(errors)
 
 
@@ -3367,7 +3367,7 @@ def prepare_mon_addresses(
         if not mon_network:
             raise Error('Failed to infer CIDR network for mon ip %s; pass '
                         '--skip-mon-network to configure it later' % base_ip)
-    
+
     return (addr_arg, ipv6, mon_network)
 
 
@@ -3792,7 +3792,7 @@ def finish_bootstrap_config(
     if mon_network:
         logger.info(f"Setting mon public_network to {mon_network}")
         cli(['config', 'set', 'mon', 'public_network', mon_network])
-    
+
     if cluster_network:
         logger.info(f"Setting cluster_network to {cluster_network}")
         cli(['config', 'set', 'global', 'cluster_network', cluster_network])
@@ -4208,7 +4208,7 @@ def command_deploy(ctx):
         if not daemon_ports:
             logger.info("cephadm-exporter will use default port ({})".format(CephadmDaemon.default_port))
             daemon_ports = [CephadmDaemon.default_port]
-           
+
         CephadmDaemon.validate_config(config_js)
 
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
@@ -6453,7 +6453,6 @@ class CephadmCache:
         self.daemons = {}
         self.host = {}
         self.lock = RLock()
-
 
     @property
     def health(self):
