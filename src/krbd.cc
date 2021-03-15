@@ -495,6 +495,9 @@ static int do_map(krbd_ctx *ctx, const krbd_spec& spec, const string& buf,
   close(fds[0]);
   close(fds[1]);
 
+  if (r < 0)
+    return r;
+
   /*
    * Make sure our device node is there.  This is intended to help
    * diagnose environments where "rbd map" is run from a container with
@@ -504,6 +507,7 @@ static int do_map(krbd_ctx *ctx, const krbd_spec& spec, const string& buf,
    * and in some cases can even lead to data loss, depending on higher
    * level logic and orchestration layers involved.
    */
+  ceph_assert(mapped);
   if (stat(pname->c_str(), &sb) < 0 || !S_ISBLK(sb.st_mode)) {
     std::cerr << "rbd: mapping succeeded but " << *pname
               << " is not accessible, is host /dev mounted?" << std::endl;
@@ -518,7 +522,7 @@ static int do_map(krbd_ctx *ctx, const krbd_spec& spec, const string& buf,
     return -EINVAL;
   }
 
-  return r;
+  return 0;
 }
 
 static int map_image(struct krbd_ctx *ctx, const krbd_spec& spec,
