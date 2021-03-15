@@ -846,8 +846,9 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
   rgw_bucket bucket;
 
+  RGWBucketInfo *pbucket_info = nullptr;
+  RGWBucketInfo bucket_info;
   if (bucket_name.compare(s->bucket.name) != 0) {
-    RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
     r = store->getRados()->get_bucket_info(store->svc(), s->user->get_id().tenant,
 			       bucket_name, bucket_info, nullptr,
@@ -858,8 +859,10 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
       return r;
     }
     bucket = bucket_info.bucket;
+    pbucket_info = &bucket_info;
   } else {
     bucket = s->bucket;
+    pbucket_info = &s->bucket_info;
   }
 
   /* fetch the stored size of the seg (or error if not valid) */
@@ -870,7 +873,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   RGWObjectCtx obj_ctx(store);
   obj_ctx.set_atomic(slo_seg);
 
-  RGWRados::Object op_target(store->getRados(), s->bucket_info, obj_ctx, slo_seg);
+  RGWRados::Object op_target(store->getRados(), *pbucket_info, obj_ctx, slo_seg);
   RGWRados::Object::Read read_op(&op_target);
 
   bool compressed;
