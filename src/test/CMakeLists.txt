@@ -584,6 +584,8 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
+add_ceph_test(run-promtool-unittests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
+
 set_property(
   TEST ${tox_tests}
   PROPERTY ENVIRONMENT ${env_vars_for_tox_tests})
