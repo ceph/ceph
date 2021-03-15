@@ -54,7 +54,20 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
                                 store->svc()->rados->get_async_processor());
         mgr->sip_cr.reset(mgr->sip_cr_mgr->alloc_instance(mgr->sip));
 
-        mgr->sid = mgr->sip->get_first_stage(dpp);
+        {
+          bool found = false;
+          auto stages = mgr->sip->get_info(dpp).stages;
+          for (const auto& stage : stages) {
+            if (stage.type == mgr->sip_stage_type) {
+              found = true;
+              mgr->sid = stage.sid;
+            }
+          }
+          if (!found) {
+            ldpp_dout(dpp, 0) << "ERROR: BUG: couldn't find a sip stage matching type=" << mgr->sip_stage_type << dendl;
+            return set_cr_error(-EIO);
+          }
+        }
 
         yield call(mgr->sip_cr->get_stage_info_cr(mgr->sid, &mgr->stage_info));
         if (retcode < 0) {
