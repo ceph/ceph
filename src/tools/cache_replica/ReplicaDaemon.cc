@@ -31,8 +31,7 @@ ReplicaDaemon::ReplicaDaemon(std::string_view name,
   self_state{0, daemon_id, -1, rnic_addr, 0},
   ioctx(ioctx),
   log_client(msgr_public->cct, msgr_public, &mon_client->monmap, LogClient::NO_FLAGS),
-  clog(log_client.create_channel()),
-  replicadaemon_map(new ReplicaDaemonMap)
+  clog(log_client.create_channel())
 {
 }
 
