@@ -110,6 +110,7 @@ public:
   const char* name() const override {
     return "sip_set_marker_info";
   }
+  RGWOpType get_type() override { return RGW_OP_SIP_MARKER_SET_INFO; }
 };
 
 class RGWOp_SIP_RemoveMarkerInfo : public RGWRESTOp {

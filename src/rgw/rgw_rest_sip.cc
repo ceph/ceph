@@ -197,7 +197,7 @@ void RGWOp_SIP_SetMarkerInfo::execute(optional_yield y) {
 
   RGWSI_SIP_Marker::SetParams params;
   bool empty;
-  op_ret = rgw_rest_get_json_input(store->ctx(), s, params, SET_PARAMS_INPUT_MAX_LEN, &empty);
+  op_ret = get_json_input(store->ctx(), s, params, SET_PARAMS_INPUT_MAX_LEN, &empty);
   if (op_ret < 0) {
     ldout(s->cct,  5) << "ERROR: " << __func__ << "(): failed parsing input" << dendl;
     return;
