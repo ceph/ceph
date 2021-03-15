@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import Cookie
+try:
+    import Cookie
+except ImportError:
+    import http.cookies as Cookie
 import sys
 import jwt
 
