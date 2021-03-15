@@ -1564,7 +1564,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // finalize up pending_inc
   pending_inc.modified = ceph_clock_now();
 
-  int r = pending_inc.propagate_snaps_to_tiers(cct, osdmap);
+  int r = pending_inc.propagate_base_properties_to_tiers(cct, osdmap);
   ceph_assert(r == 0);
 
   if (mapping_job) {
