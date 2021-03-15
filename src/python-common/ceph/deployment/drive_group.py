@@ -255,6 +255,8 @@ class DriveGroupSpec(ServiceSpec):
         else:
             args.update(cls._drive_group_spec_from_json(json_drive_group))
 
+        args['unmanaged'] = json_drive_group.pop('unmanaged', False)
+
         return cls(**args)
 
     @classmethod

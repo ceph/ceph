@@ -181,6 +181,16 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     assert spec.validate() is None
     ServiceSpec.from_json(spec.to_json())
 
+def test_osd_unmanaged():
+    osd_spec = {"placement": {"host_pattern": "*"},
+                "service_id": "all-available-devices",
+                "service_name": "osd.all-available-devices",
+                "service_type": "osd",
+                "spec": {"data_devices": {"all": True}, "filter_logic": "AND", "objectstore": "bluestore"},
+                "unmanaged": True}
+
+    dg_spec = ServiceSpec.from_json(osd_spec)
+    assert dg_spec.unmanaged == True
 
 def test_yaml():
     y = """service_type: crash
