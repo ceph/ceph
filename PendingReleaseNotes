@@ -69,6 +69,10 @@
 
 * Scubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
   It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.
+* OSD: the option ``osd_fast_shutdown_notify_mon`` has been introduced to allow
+  the OSD to notify the monitor it is shutting down even if ``osd_fast_shutdown``
+  is enabled. This helps with the monitor logs on larger clusters, that may get
+  many 'osd.X reported immediately failed by osd.Y' messages, and confuse tools.
 
 >=15.0.0
 --------
