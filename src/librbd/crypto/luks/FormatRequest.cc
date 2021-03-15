@@ -3,9 +3,13 @@
 
 #include "FormatRequest.h"
 
+#include <stdlib.h>
+#include <openssl/rand.h>
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/compat.h"
 #include "librbd/Utils.h"
+#include "librbd/crypto/Utils.h"
 #include "librbd/crypto/luks/Header.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -24,10 +28,12 @@ using librbd::util::create_context_callback;
 template <typename I>
 FormatRequest<I>::FormatRequest(
         I* image_ctx, encryption_format_t format, encryption_algorithm_t alg,
-        std::string&& passphrase, Context* on_finish,
+        std::string&& passphrase, ceph::ref_t<CryptoInterface>* result_crypto,
+        Context* on_finish,
         bool insecure_fast_mode) : m_image_ctx(image_ctx), m_format(format),
                                    m_alg(alg),
                                    m_passphrase(std::move(passphrase)),
+                                   m_result_crypto(result_crypto),
                                    m_on_finish(on_finish),
                                    m_insecure_fast_mode(insecure_fast_mode),
                                    m_header(image_ctx->cct) {
@@ -71,6 +77,15 @@ void FormatRequest<I>::send() {
       return;
   }
 
+  // generate encryption key
+  unsigned char* key = (unsigned char*)alloca(key_size);
+  if (RAND_bytes((unsigned char *)key, key_size) != 1) {
+    lderr(m_image_ctx->cct) << "cannot generate random encryption key"
+                            << dendl;
+    finish(-EAGAIN);
+    return;
+  }
+
   // setup interface with libcryptsetup
   auto r = m_header.init();
   if (r < 0) {
@@ -79,7 +94,8 @@ void FormatRequest<I>::send() {
   }
 
   // format (create LUKS header)
-  r = m_header.format(type, cipher, key_size, "xts-plain64", sector_size,
+  r = m_header.format(type, cipher, reinterpret_cast<char*>(key), key_size,
+                      "xts-plain64", sector_size,
                       m_image_ctx->get_object_size(), m_insecure_fast_mode);
   if (r != 0) {
     finish(r);
@@ -104,6 +120,15 @@ void FormatRequest<I>::send() {
     return;
   }
 
+  r = util::build_crypto(m_image_ctx->cct, key, key_size,
+                         m_header.get_sector_size(),
+                         m_header.get_data_offset(), m_result_crypto);
+  ceph_memzero_s(key, key_size, key_size);
+  if (r != 0) {
+    finish(r);
+    return;
+  }
+
   // read header from libcryptsetup interface
   ceph::bufferlist bl;
   r = m_header.read(&bl);
@@ -116,7 +141,7 @@ void FormatRequest<I>::send() {
   auto ctx = create_context_callback<
           FormatRequest<I>, &FormatRequest<I>::handle_write_header>(this);
   auto aio_comp = io::AioCompletion::create_and_start(
-          ctx, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_WRITE);
+          ctx, librbd::util::get_image_ctx(m_image_ctx), io::AIO_TYPE_WRITE);
 
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_write(
@@ -140,7 +165,8 @@ void FormatRequest<I>::handle_write_header(int r) {
 
 template <typename I>
 void FormatRequest<I>::finish(int r) {
-  ceph_memzero_s(&m_passphrase[0], m_passphrase.capacity(), m_passphrase.size());
+  ceph_memzero_s(
+          &m_passphrase[0], m_passphrase.capacity(), m_passphrase.size());
   m_on_finish->complete(r);
   delete this;
 }
