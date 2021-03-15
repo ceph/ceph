@@ -9919,6 +9919,15 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
   std::lock_guard l{osd_lock};
 
   if (changed.count("osd_max_backfills") ||
+      changed.count("osd_delete_sleep") ||
+      changed.count("osd_delete_sleep_hdd") ||
+      changed.count("osd_delete_sleep_ssd") ||
+      changed.count("osd_delete_sleep_hybrid") ||
+      changed.count("osd_snap_trim_sleep") ||
+      changed.count("osd_snap_trim_sleep_hdd") ||
+      changed.count("osd_snap_trim_sleep_ssd") ||
+      changed.count("osd_snap_trim_sleep_hybrid") ||
+      changed.count("osd_scrub_sleep") ||
       changed.count("osd_recovery_sleep") ||
       changed.count("osd_recovery_sleep_hdd") ||
       changed.count("osd_recovery_sleep_ssd") ||
@@ -9950,6 +9959,21 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
       cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
       cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
+
+      // Disable delete sleep
+      cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
+      cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
+      cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
+      cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
+
+      // Disable snap trim sleep
+      cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));
+      cct->_conf.set_val("osd_snap_trim_sleep_hdd", std::to_string(0));
+      cct->_conf.set_val("osd_snap_trim_sleep_ssd", std::to_string(0));
+      cct->_conf.set_val("osd_snap_trim_sleep_hybrid", std::to_string(0));
+
+      // Disable scrub sleep
+      cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
     } else {
       service.local_reserver.set_max(cct->_conf->osd_max_backfills);
       service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
