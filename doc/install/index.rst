@@ -64,5 +64,10 @@ Ceph can also be :ref:`installed manually <install-manual>`.
 
    index_manual
 
+Windows
+~~~~~~~
 
+For Windows installations, please consult this document:
+`Windows installation guide`_.
 
+.. _Windows installation guide: ./windows-install
