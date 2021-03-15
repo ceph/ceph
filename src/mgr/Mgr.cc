@@ -237,6 +237,15 @@ void Mgr::init()
 	mon_allows_kv_sub = true;
       }
     });
+  if (!mon_allows_kv_sub) {
+    // mons are still pre-pacific.  wait long enough to ensure our
+    // next beacon is processed so that our module options are
+    // propagated.  See https://tracker.ceph.com/issues/49778
+    lock.unlock();
+    dout(10) << "waiting a bit for the pre-pacific mon to process our beacon" << dendl;
+    sleep(g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count() * 3);
+    lock.lock();
+  }
 
   // subscribe to all the maps
   monc->sub_want("log-info", 0, 0);
