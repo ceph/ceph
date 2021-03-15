@@ -2,7 +2,7 @@ import json
 import logging
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, List, cast, Set, Dict, Any, Union, Tuple, Iterator
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
 
 from cephadm import remotes
 
@@ -520,6 +520,7 @@ class CephadmServe:
             # return a solid indication
             return False
 
+        svc = self.mgr.cephadm_services[service_type]
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
 
         public_network = None
@@ -551,14 +552,15 @@ class CephadmServe:
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr._hosts_with_daemon_inventory(),
-            get_daemons_func=self.mgr.cache.get_daemons_by_service,
+            daemons=daemons,
             filter_new_host=matches_network if service_type == 'mon'
             else virtual_ip_allowed if service_type == 'ha-rgw' else None,
+            allow_colo=svc.allow_colo(),
         )
 
         try:
-            hosts: List[HostPlacementSpec] = ha.place()
-            self.log.debug('Usable hosts: %s' % hosts)
+            all_slots, slots_to_add, daemons_to_remove = ha.place()
+            self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
         except OrchestratorError as e:
             self.log.error('Failed to apply %s spec %s: %s' % (
                 spec.service_name(), spec, e))
@@ -568,40 +570,37 @@ class CephadmServe:
         r = None
 
         # sanity check
-        if service_type in ['mon', 'mgr'] and len(hosts) < 1:
-            self.log.debug('cannot scale mon|mgr below 1 (hosts=%s)' % hosts)
+        final_count = len(daemons) + len(slots_to_add) - len(daemons_to_remove)
+        if service_type in ['mon', 'mgr'] and final_count < 1:
+            self.log.debug('cannot scale mon|mgr below 1)')
             return False
 
         # add any?
         did_config = False
 
-        add_daemon_hosts: Set[HostPlacementSpec] = ha.add_daemon_hosts(hosts)
-        self.log.debug('Hosts that will receive new daemons: %s' % add_daemon_hosts)
-
-        remove_daemon_hosts: Set[orchestrator.DaemonDescription] = ha.remove_daemon_hosts(hosts)
-        self.log.debug('Hosts that will loose daemons: %s' % remove_daemon_hosts)
+        self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
+        self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
 
         if service_type == 'ha-rgw':
-            spec = self.update_ha_rgw_definitive_hosts(spec, hosts, add_daemon_hosts)
+            spec = self.update_ha_rgw_definitive_hosts(spec, all_slots, slots_to_add)
 
-        for host, network, name in add_daemon_hosts:
+        for host, network, name in slots_to_add:
             for daemon_type in service_to_daemon_types(service_type):
                 daemon_id = self.mgr.get_unique_name(daemon_type, host, daemons,
                                                      prefix=spec.service_id,
                                                      forcename=name)
 
                 if not did_config:
-                    self.mgr.cephadm_services[service_type].config(spec, daemon_id)
+                    svc.config(spec, daemon_id)
                     did_config = True
 
-                daemon_spec = self.mgr.cephadm_services[service_type].make_daemon_spec(
+                daemon_spec = svc.make_daemon_spec(
                     host, daemon_id, network, spec, daemon_type=daemon_type)
                 self.log.debug('Placing %s.%s on host %s' % (
                     daemon_type, daemon_id, host))
 
                 try:
-                    daemon_spec = self.mgr.cephadm_services[service_type].prepare_create(
-                        daemon_spec)
+                    daemon_spec = svc.prepare_create(daemon_spec)
                     self._create_daemon(daemon_spec)
                     r = True
                 except (RuntimeError, OrchestratorError) as e:
@@ -623,18 +622,17 @@ class CephadmServe:
                 daemons.append(sd)
 
         # remove any?
-        def _ok_to_stop(remove_daemon_hosts: Set[orchestrator.DaemonDescription]) -> bool:
-            daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
+        def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
+            daemon_ids = [d.daemon_id for d in remove_daemons]
             assert None not in daemon_ids
-            # setting force flag retains previous behavior, should revisit later.
-            r = self.mgr.cephadm_services[service_type].ok_to_stop(
-                cast(List[str], daemon_ids), force=True)
+            # setting force flag retains previous behavior
+            r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
             return not r.retval
 
-        while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
+        while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
             # let's find a subset that is ok-to-stop
-            remove_daemon_hosts.pop()
-        for d in remove_daemon_hosts:
+            daemons_to_remove.pop()
+        for d in daemons_to_remove:
             r = True
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
@@ -769,8 +767,12 @@ class CephadmServe:
     # if definitive host list has changed, all ha-rgw daemons must get new
     # config, including those that are already on the correct host and not
     # going to be deployed
-    def update_ha_rgw_definitive_hosts(self, spec: ServiceSpec, hosts: List[HostPlacementSpec],
-                                       add_hosts: Set[HostPlacementSpec]) -> HA_RGWSpec:
+    def update_ha_rgw_definitive_hosts(
+            self,
+            spec: ServiceSpec,
+            hosts: List[HostPlacementSpec],
+            add_hosts: List[HostPlacementSpec]
+    ) -> HA_RGWSpec:
         spec = cast(HA_RGWSpec, spec)
         if not (set(hosts) == set(spec.definitive_host_list)):
             spec.definitive_host_list = hosts
