@@ -4145,7 +4145,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   // issue replica writes
   ceph_tid_t rep_tid = osd->get_tid();
 
-  RepGather *repop = new_repop(ctx, obc, rep_tid);
+  RepGather *repop = new_repop(ctx, rep_tid);
 
   issue_repop(repop, ctx);
   eval_repop(repop);
@@ -11019,7 +11019,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 }
 
 PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
-  OpContext *ctx, ObjectContextRef obc,
+  OpContext *ctx,
   ceph_tid_t rep_tid)
 {
   if (ctx->op)
@@ -11097,7 +11097,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::simple_opc_create(ObjectContextRef obc
 
 void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
 {
-  RepGather *repop = new_repop(ctx.get(), ctx->obc, ctx->reqid.tid);
+  RepGather *repop = new_repop(ctx.get(), ctx->reqid.tid);
   dout(20) << __func__ << " " << repop << dendl;
   issue_repop(repop, ctx.get());
   eval_repop(repop);
