@@ -187,6 +187,24 @@ class Metric(object):
         return expfmt
 
 
+class MetricCounter(Metric):
+    def __init__(self, name, desc, labels=None):
+        super(MetricCounter, self).__init__('counter', name, desc, labels)
+        self.value = defaultdict(lambda: 0)
+
+    def clear(self):
+        pass  # Skip calls to clear as we want to keep the counters here.
+
+    def set(self, value, labelvalues=None):
+        msg = 'This method must not be used for instances of MetricCounter class'
+        raise NotImplementedError(msg)
+
+    def add(self, value, labelvalues=None):
+        # labelvalues must be a tuple
+        labelvalues = labelvalues or ('',)
+        self.value[labelvalues] += value
+
+
 class MetricCollectionThread(threading.Thread):
     def __init__(self, module: 'Module') -> None:
         self.mod = module
@@ -753,6 +771,8 @@ class Module(MgrModule):
                 ))
 
             osd_dev_node = None
+            osd_wal_dev_node = ''
+            osd_db_dev_node = ''
             if obj_store == "filestore":
                 # collect filestore backend device
                 osd_dev_node = osd_metadata.get(
@@ -1101,6 +1121,32 @@ class Module(MgrModule):
 
         self.metrics.update(new_metrics)
 
+    def get_collect_time_metrics(self):
+        if 'prometheus_collect_duration_seconds_sum' not in self.metrics:
+            self.metrics['prometheus_collect_duration_seconds_sum'] = MetricCounter(
+                'prometheus_collect_duration_seconds_sum',
+                'The sum of seconds took to collect all metrics of this exporter',
+                ('method',),
+            )
+        if 'prometheus_collect_duration_seconds_count' not in self.metrics:
+            self.metrics['prometheus_collect_duration_seconds_count'] = MetricCounter(
+                'prometheus_collect_duration_seconds_count',
+                'The amount of metrics gathered for this exporter',
+                ('method',),
+            )
+
+        # Collect all timing data and make it available as metric, excluding the
+        # `collect` method because it has not finished at this point and hence
+        # there's no `_execution_duration` attribute to be found. The
+        # `_execution_duration` attribute is added by the `profile_method`
+        # decorator.
+        for method_name, method in Module.__dict__.items():
+            if hasattr(method, '_execution_duration'):
+                self.metrics['prometheus_collect_duration_seconds_sum'].add(
+                    method._execution_duration, (method_name, ))
+                self.metrics['prometheus_collect_duration_seconds_count'].add(
+                    1, (method_name, ))
+
     @profile_method(True)
     def collect(self) -> str:
         # Clear the metrics before scraping
@@ -1166,6 +1212,8 @@ class Module(MgrModule):
 
         self.add_fixed_name_metrics()
         self.get_rbd_stats()
+
+        self.get_collect_time_metrics()
 
         # Return formatted metrics and clear no longer used data
         _metrics = [m.str_expfmt() for m in self.metrics.values()]
