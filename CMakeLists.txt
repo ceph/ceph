@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(ceph CXX C ASM)
-set(VERSION 14.2.17)
+set(VERSION 14.2.18)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
