@@ -3493,6 +3493,10 @@ int BlueFS::unlock_file(FileLock *fl)
 
 int BlueFS::readdir(std::string_view dirname, vector<string> *ls)
 {
+  // dirname may contain a trailing /
+  if (!dirname.empty() && dirname.back() == '/') {
+    dirname.remove_suffix(1);
+  }
   std::lock_guard l(lock);
   dout(10) << __func__ << " " << dirname << dendl;
   if (dirname.empty()) {
