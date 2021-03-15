@@ -49,7 +49,7 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
-  ObjectContext(const hobject_t &hoid) : obs(hoid) {}
+  ObjectContext(hobject_t hoid) : obs(std::move(hoid)) {}
 
   const hobject_t &get_oid() const {
     return obs.oi.soid;
