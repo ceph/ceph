@@ -5073,7 +5073,7 @@ void RGWCopyObj::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
-						s, rgw::notify::ObjectCreatedPost);
+						s, rgw::notify::ObjectCreatedCopy);
   op_ret = res->publish_reserve();
   if (op_ret < 0) {
     return;
@@ -5762,7 +5762,7 @@ void RGWInitMultipart::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
-				s, rgw::notify::ObjectCreatedCompleteMultipartUpload);
+				s, rgw::notify::ObjectCreatedPost);
   op_ret = res->publish_reserve();
   if (op_ret < 0) {
     return;
