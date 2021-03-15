@@ -465,8 +465,8 @@ public:
       return new_erasure_code_profiles;
     }
 
-    /// propagate update pools' snap metadata to any of their tiers
-    int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
+    /// propagate update pools' (snap and other) metadata to any of their tiers
+    int propagate_base_properties_to_tiers(CephContext *cct, const OSDMap &base);
 
     /// filter out osds with any pending state changing
     size_t get_pending_state_osds(std::vector<int> *osds) {
