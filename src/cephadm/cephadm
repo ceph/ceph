@@ -17,7 +17,7 @@ LOGROTATE_DIR = '/etc/logrotate.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
-CONTAINER_INIT=True
+CONTAINER_INIT = True
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 MIN_PODMAN_VERSION = (2, 0, 2)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
@@ -465,7 +465,7 @@ class NFSGanesha(object):
         entrypoint = '/usr/bin/ganesha-rados-grace'
 
         assert self.pool
-        args=['--pool', self.pool]
+        args = ['--pool', self.pool]
         if self.namespace:
             args += ['--ns', self.namespace]
         if self.userid:
@@ -2588,7 +2588,7 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
         # unit file, makes it easier to read and grok.
         file_obj.write('# ' + comment + '\n')
     # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
-    file_obj.write('! '+ ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
+    file_obj.write('! ' + ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
     # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
     if 'podman' in ctx.container_path:
         file_obj.write(
@@ -2711,7 +2711,7 @@ def deploy_daemon_units(
             # make sure we also stop the tcmu container
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-            f.write('! '+ ' '.join(tcmu_container.stop_cmd()) + '\n')
+            f.write('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.poststop.new',
@@ -3539,7 +3539,7 @@ def wait_for_mon(
     # wait for the service to become available
     def is_mon_available():
         # type: () -> bool
-        timeout=ctx.timeout if ctx.timeout else 60 # seconds
+        timeout = ctx.timeout if ctx.timeout else 60 # seconds
         out, err, ret = call(ctx, c.run_cmd(),
                              desc=c.entrypoint,
                              timeout=timeout)
@@ -3566,7 +3566,7 @@ def create_mgr(
     logger.info('Waiting for mgr to start...')
     def is_mgr_available():
         # type: () -> bool
-        timeout=ctx.timeout if ctx.timeout else 60 # seconds
+        timeout = ctx.timeout if ctx.timeout else 60 # seconds
         try:
             out = clifunc(['status', '-f', 'json-pretty'], timeout=timeout)
             j = json.loads(out)
@@ -4201,8 +4201,8 @@ def command_deploy(ctx):
         config_js = get_parm(ctx.config_json)  # type: Dict[str, str]
         if not daemon_ports:
             logger.info("cephadm-exporter will use default port ({})".format(CephadmDaemon.default_port))
-            daemon_ports =[CephadmDaemon.default_port]
-
+            daemon_ports = [CephadmDaemon.default_port]
+           
         CephadmDaemon.validate_config(config_js)
 
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
@@ -5112,12 +5112,12 @@ def _adjust_grafana_ini(filename):
         with open(filename, "r") as grafana_ini:
             lines = grafana_ini.readlines()
         with open("{}.new".format(filename), "w") as grafana_ini:
-            server_section=False
+            server_section = False
             for line in lines:
                 if line.startswith('['):
-                    server_section=False
+                    server_section = False
                 if line.startswith('[server]'):
-                    server_section=True
+                    server_section = True
                 if server_section:
                     line = re.sub(r'^cert_file.*',
                                   'cert_file = /etc/grafana/certs/cert_file', line)
@@ -6342,7 +6342,7 @@ class HostFacts():
                         summary = {}  # type: Dict[str, int]
                         for line in profiles.split('\n'):
                             item, mode = line.split(' ')
-                            mode= mode.strip('()')
+                            mode = mode.strip('()')
                             if mode in summary:
                                 summary[mode] += 1
                             else:
