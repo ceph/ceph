@@ -67,8 +67,8 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
     Header header(mock_image_ctx->cct);
 
     ASSERT_EQ(0, header.init());
-    ASSERT_EQ(0, header.format(type, alg, key_size, cipher_mode, sector_size,
-                               OBJECT_SIZE, true));
+    ASSERT_EQ(0, header.format(type, alg, nullptr, key_size, cipher_mode,
+                               sector_size, OBJECT_SIZE, true));
     ASSERT_EQ(0, header.add_keyslot(passphrase_cstr, strlen(passphrase_cstr)));
     ASSERT_LE(0, header.read(&header_bl));
 

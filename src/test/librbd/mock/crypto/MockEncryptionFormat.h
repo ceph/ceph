@@ -14,9 +14,8 @@ namespace crypto {
 struct MockEncryptionFormat : EncryptionFormat<MockImageCtx> {
 
   MOCK_METHOD2(format, void(MockImageCtx* ictx, Context* on_finish));
-  MOCK_METHOD3(load, void(MockImageCtx* ictx,
-                          ceph::ref_t<CryptoInterface>* result_crypto,
-                          Context* on_finish));
+  MOCK_METHOD2(load, void(MockImageCtx* ictx, Context* on_finish));
+  MOCK_METHOD0(get_crypto, ceph::ref_t<CryptoInterface>());
 };
 
 } // namespace crypto
