@@ -76,6 +76,20 @@ class CephadmDaemonDeploySpec:
 
         return files
 
+    @staticmethod
+    def from_daemon_description(dd: DaemonDescription) -> 'CephadmDaemonDeploySpec':
+        assert dd.hostname
+        assert dd.daemon_id
+        assert dd.daemon_type
+        return CephadmDaemonDeploySpec(
+            host=dd.hostname,
+            daemon_id=dd.daemon_id,
+            daemon_type=dd.daemon_type,
+            service_name=dd.service_name(),
+            ip=dd.ip,
+            ports=dd.ports,
+        )
+
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
         return DaemonDescription(
             daemon_type=self.daemon_type,
