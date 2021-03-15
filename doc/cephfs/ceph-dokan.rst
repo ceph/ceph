@@ -6,38 +6,7 @@ Mount CephFS on Windows
 It leverages Dokany, a Windows driver that allows implementing filesystems in
 userspace, pretty much like FUSE.
 
-Prerequisites
-=============
-
-Dokany
-------
-
-``ceph-dokan`` requires Dokany to be installed. You may fetch the installer as
-well as the source code from the Dokany Github repository:
-https://github.com/dokan-dev/dokany/releases
-
-The minimum supported Dokany version is 1.3.1. At the time of the writing,
-Dokany 2.0 is in Beta stage and is unsupported.
-
-Supported platforms
--------------------
-
-Windows Server 2019 and Windows Server 2016 are supported. Previous Windows
-Server versions, including Windows client versions such as Windows 10, might
-work but haven't been tested.
-
-Configuration
-=============
-
-``ceph-dokan`` requires minimal configuration. Please check the
-`Windows configuration sample`_ to get started.
-
-You'll also need a keyring file. The `General Prerequisites`_ page provides a
-simple example, showing how a new CephX user can be created and how its secret
-key can be retrieved.
-
-For more details on CephX user management, see the `Client Authentication`_
-and :ref:`User Management <user-management>`.
+Please check the `installation guide`_ to get started.
 
 Usage
 =====
@@ -87,6 +56,10 @@ Unlike ``rbd-wnbd``, ``ceph-dokan`` doesn't currently provide a ``service``
 command. In order for the cephfs mount to survive host reboots, consider using
 ``NSSM``.
 
-.. _Windows configuration sample: ../windows-basic-config
-.. _General Prerequisites: ../mount-prerequisites
-.. _Client Authentication: ../client-auth
+Troubleshooting
+===============
+
+Please consult the `Windows troubleshooting`_ page.
+
+.. _Windows troubleshooting: ../../install/windows-troubleshooting
+.. _installation guide: ../../install/windows-install
