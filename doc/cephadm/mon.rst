@@ -4,8 +4,8 @@ MON Service
 
 .. _deploy_additional_monitors:
 
-Deploying additional monitors (beyond the default three)
-========================================================
+Deploying additional monitors 
+-----------------------------
 
 A typical Ceph cluster has three or five monitor daemons that are spread
 across different hosts.  We recommend deploying five monitors if there are
@@ -29,7 +29,7 @@ manual administration of the ceph monitor daemons is not necessary.
 needed, as new hosts are added to the cluster. 
 
 Designating a Particular Subnet for Monitors
-============================================
+--------------------------------------------
 
 To designate a particular IP subnet for use by ceph monitor daemons, use a
 command of the following form, including the subnet's address in `CIDR`_
@@ -49,18 +49,18 @@ Cephadm deploys new monitor daemons only on hosts that have IP addresses in
 the designated subnet.
 
 Changing the number of monitors from the default
-================================================
+------------------------------------------------
 
-* If you want to adjust the default of 5 monitors, run this command:
+If you want to adjust the default of 5 monitors, run this command:
 
   .. prompt:: bash #
 
      ceph orch apply mon *<number-of-monitors>*
 
 Deploying monitors only to specific hosts
-=========================================
+-----------------------------------------
 
-* To deploy monitors on a specific set of hosts, run this command:
+To deploy monitors on a specific set of hosts, run this command:
 
   .. prompt:: bash #
 
@@ -69,11 +69,10 @@ Deploying monitors only to specific hosts
   Be sure to include the first (bootstrap) host in this list.
 
 Using Host Labels
-=================
+-----------------
 
-* You can control which hosts the monitors run on by making use of
-  host labels.  To set the ``mon`` label to the appropriate
-  hosts, run this command:
+You can control which hosts the monitors run on by making use of host labels.
+To set the ``mon`` label to the appropriate hosts, run this command:
   
   .. prompt:: bash #
 
@@ -109,12 +108,14 @@ Using Host Labels
 
     ceph orch apply mon label:mon
 
-Deploying Monitors Manually 
-===========================
+See also :ref:`host labels <orchestrator-host-labels>`.
 
-* You can explicitly specify the IP address or CIDR network for each monitor
-  and control where it is placed.  To disable automated monitor deployment, run
-  this command:
+Deploying Monitors on a Particular Network 
+------------------------------------------
+
+You can explicitly specify the IP address or CIDR network for each monitor and
+control where each monitor is placed.  To disable automated monitor deployment,
+run this command:
 
   .. prompt:: bash #
 
