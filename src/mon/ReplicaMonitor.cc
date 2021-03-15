@@ -169,7 +169,7 @@ bool ReplicaMonitor::prepare_blink(MonOpRequestRef mon_op_req)
 {
   auto blink_msg = mon_op_req->get_req<MReplicaDaemonBlink>();
 
-  bool peer_updated = false;
+  bool peer_updated = true;
   const auto& recv_replicadaemon_state = blink_msg->get_replicadaemon_stateref();
 #if 0
   if (recv_replicadaemon_state.daemon_status == STATE_BOOTING) {
