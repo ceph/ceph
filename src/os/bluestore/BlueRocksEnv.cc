@@ -429,7 +429,10 @@ rocksdb::Status BlueRocksEnv::GetChildren(
   std::vector<std::string>* result)
 {
   result->clear();
-  int r = fs->readdir(dir, result);
+  // dir may contain trailing /
+  std::string dir_only, empty;
+  split(dir, &dir_only, &empty);
+  int r = fs->readdir(dir_only, result);
   if (r < 0)
     return rocksdb::Status::NotFound(dir, strerror(ENOENT));//    return err_to_status(r);
   return rocksdb::Status::OK();
