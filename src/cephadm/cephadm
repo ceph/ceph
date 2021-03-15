@@ -164,9 +164,6 @@ class CephadmContext:
             super().__setattr__(name, value)
 
 
-##################################
-
-
 # Log and console output config
 logging_config = {
     'version': 1,
@@ -1875,7 +1872,7 @@ def move_files(ctx, src, dst, uid=None, gid=None):
             os.chown(dst_file, uid, gid)
 
 
-## copied from distutils ##
+# copied from distutils
 def find_executable(executable, path=None):
     """Tries to find 'executable' in the directories listed in 'path'.
     A string listing directories separated by 'os.pathsep'; defaults to
@@ -4425,9 +4422,9 @@ def command_logs(ctx):
 def list_networks(ctx):
     # type: (CephadmContext) -> Dict[str,List[str]]
 
-    ## sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
-    ## so we'll need to use a regex to parse 'ip' command output.
-    ##
+    # sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
+    # so we'll need to use a regex to parse 'ip' command output.
+    #
     # out, _, _ = call_throws(['ip', '-j', 'route', 'ls'])
     # j = json.loads(out)
     # for x in j:
