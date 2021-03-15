@@ -4,10 +4,10 @@ set -x
 
 ./bin/ceph config set osd osd_crush_update_on_start false
 
-./bin/ceph osd crush move osd.0 host=host1-1 datacenter=site1
-./bin/ceph osd crush move osd.1 host=host1-2 datacenter=site1
-./bin/ceph osd crush move osd.2 host=host2-1 datacenter=site2
-./bin/ceph osd crush move osd.3 host=host2-2 datacenter=site2
+./bin/ceph osd crush move osd.0 host=host1-1 datacenter=site1 root=default
+./bin/ceph osd crush move osd.1 host=host1-2 datacenter=site1 root=default
+./bin/ceph osd crush move osd.2 host=host2-1 datacenter=site2 root=default
+./bin/ceph osd crush move osd.3 host=host2-2 datacenter=site2 root=default
 
 ./bin/ceph osd getcrushmap > crush.map.bin
 ./bin/crushtool -d crush.map.bin -o crush.map.txt
@@ -32,5 +32,5 @@ EOF
 ./bin/ceph mon set_location a datacenter=site1
 ./bin/ceph mon set_location b datacenter=site2
 ./bin/ceph mon set_location c datacenter=site3
-./bin/ceph osd pool create test_stretch1 replicated
+./bin/ceph osd pool create test_stretch1 1024 1024 replicated
 ./bin/ceph mon enable_stretch_mode c stretch_rule datacenter
