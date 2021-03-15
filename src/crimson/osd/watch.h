@@ -11,6 +11,7 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/pg.h"
 #include "include/denc.h"
 
 namespace crimson::osd {
@@ -39,21 +40,29 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   watch_info_t winfo;
   entity_name_t entity_name;
 
+  seastar::timer<seastar::lowres_clock> timeout_timer;
+
   seastar::future<> start_notify(NotifyRef);
   seastar::future<> send_notify_msg(NotifyRef);
   seastar::future<> send_disconnect_msg();
   void discard_state();
+  void do_watch_timeout(Ref<PG> pg);
 
   friend Notify;
+  friend class WatchTimeoutRequest;
 
 public:
   Watch(private_ctag_t,
         crimson::osd::ObjectContextRef obc,
         const watch_info_t& winfo,
-        const entity_name_t& entity_name)
+        const entity_name_t& entity_name,
+        Ref<PG> pg)
     : obc(std::move(obc)),
       winfo(winfo),
-      entity_name(entity_name) {
+      entity_name(entity_name),
+      timeout_timer([this, pg=std::move(pg)] {
+        return do_watch_timeout(pg);
+      }) {
   }
   ~Watch();
 
@@ -64,9 +73,7 @@ public:
   bool is_connected() const {
     return static_cast<bool>(conn);
   }
-  void got_ping(utime_t) {
-    // NOP
-  }
+  void got_ping(utime_t);
 
   seastar::future<> remove(bool send_disconnect);
 
