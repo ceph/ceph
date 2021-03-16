@@ -40,10 +40,19 @@ export class PoolPageHelper extends PageHelper {
 
     cy.get('input[name=pgNum]').clear().type(`${new_pg}`);
     cy.get('cd-submit-button').click();
-    const str = `${new_pg} active+clean`;
     this.getTableRow(name);
     if (wait) {
-      this.getTableRow(name).contains(str);
+      this.getTableRow(name)
+        .get('.datatable-body-cell')
+        .eq(4)
+        .text()
+        .should((pgStatus) => {
+          expect(
+            pgStatus
+              .split(',')
+              .reduce((acc, curr) => (acc += curr ? parseInt(curr.trim().split(' ')[0], 10) : 0), 0)
+          ).to.equal(new_pg);
+        });
     }
   }
 
