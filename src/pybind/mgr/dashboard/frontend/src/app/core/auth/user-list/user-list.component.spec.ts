@@ -82,11 +82,11 @@ describe('UserListComponent', () => {
   it('should calculate remaining days', () => {
     const day = 60 * 60 * 24 * 1000;
     let today = Date.now();
-    expect(component.getRemainingDays(today + day * 2)).toBe(2);
+    expect(component.getRemainingDays(today + day * 2 + 1000)).toBe(2);
     today = Date.now();
-    expect(component.getRemainingDays(today + (day - 1) * 2)).toBe(1);
+    expect(component.getRemainingDays(today + day * 2 - 1000)).toBe(1);
     today = Date.now();
-    expect(component.getRemainingDays(today + (day + 1))).toBe(1);
+    expect(component.getRemainingDays(today + day + 1000)).toBe(1);
     today = Date.now();
     expect(component.getRemainingDays(today + 1)).toBe(0);
     today = Date.now();

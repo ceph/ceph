@@ -186,7 +186,7 @@ export class UserListComponent implements OnInit {
     return false;
   }
 
-  getWarningClass(row: any): any {
+  getWarningIconClass(row: any): any {
     const expirationDays = row['pwdExpirationDate'];
     if (expirationDays === null || this.expirationWarning1 > 10) {
       return '';
@@ -196,6 +196,18 @@ export class UserListComponent implements OnInit {
       return 'danger-icon';
     } else {
       return 'warning-icon';
+    }
+  }
+  getWarningClass(row: any): any {
+    const expirationDays = row['pwdExpirationDate'];
+    if (expirationDays === null || this.expirationWarning1 > 10) {
+      return '';
+    }
+    const remainingDays = this.getRemainingDays(expirationDays);
+    if (remainingDays <= this.expirationWarning2) {
+      return 'danger-border';
+    } else {
+      return 'warning-border';
     }
   }
 
@@ -209,6 +221,12 @@ export class UserListComponent implements OnInit {
     const toDays = 1000 * 60 * 60 * 24;
     return Math.max(0, Math.floor(this.getRemainingTime(time) / toDays));
   }
+
+  getRemainingTimeWithoutSeconds(time: number): number {
+    const withSeconds = this.getRemainingTime(time);
+    return Math.floor(withSeconds / (1000 * 60)) * 60 * 1000;
+  }
+
   getRemainingTime(time: number): number {
     return time - Date.now();
   }
