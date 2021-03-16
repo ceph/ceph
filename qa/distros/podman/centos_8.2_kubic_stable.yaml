@@ -6,7 +6,7 @@ overrides:
       - scontext=system_u:system_r:logrotate_t:s0
 
 tasks:
-- exec:
+- pexec:
     all:
     - sudo dnf -y module disable container-tools
     - sudo dnf -y install 'dnf-command(copr)'
