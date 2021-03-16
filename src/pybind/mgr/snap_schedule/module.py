@@ -6,7 +6,7 @@ LGPL2.1.  See file COPYING.
 import errno
 import json
 import sqlite3
-from typing import Sequence, Optional
+from typing import Dict, Sequence, Optional
 from .fs.schedule_client import SnapSchedClient
 from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option
 from mgr_util import CephfsConnectionException
@@ -92,6 +92,9 @@ class Module(MgrModule):
         except CephfsConnectionException as e:
             return e.to_tuple()
         if not scheds:
+            if format == 'json':
+                output = {} # type: Dict[str,str]
+                return 0, json.dumps(output), ''
             return -errno.ENOENT, '', f'SnapSchedule for {path} not found'
         if format == 'json':
             # json_list = ','.join([sched.json_list() for sched in scheds])
