@@ -658,11 +658,10 @@ template <typename I>
 void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item, uint64_t flag) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 15) << "r=" << r << ", " << "req=" << item << dendl;
-
-  ceph_assert(m_io_throttled.load() > 0);
   item->set_throttled(flag);
   if (item->were_all_throttled()) {
     this->requeue_back(item);
+    ceph_assert(m_io_throttled.load() > 0);
     --m_io_throttled;
     this->signal();
   }
