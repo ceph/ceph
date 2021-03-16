@@ -12,3 +12,4 @@
    OpenStack <rbd-openstack>
    CloudStack <rbd-cloudstack>
    LIO iSCSI Gateway <iscsi-overview>
+   Windows <rbd-windows>
