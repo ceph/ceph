@@ -917,4 +917,14 @@ export class PoolFormComponent extends CdForm implements OnInit {
   appSelection() {
     this.form.get('name').updateValueAndValidity({ emitEvent: false, onlySelf: true });
   }
+
+  getApplicationWarning() {
+    if (this.data.applications.selected <= 0) {
+      return true;
+    }
+    return false;
+  }
+  getApplicationWarningClass() {
+    return 'warning-icon';
+  }
 }

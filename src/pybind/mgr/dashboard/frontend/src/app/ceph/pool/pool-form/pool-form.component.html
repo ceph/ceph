@@ -184,6 +184,12 @@
                               [selectionLimit]="4"
                               (selection)="appSelection()">
             </cd-select-badges>
+            <i *ngIf="getApplicationWarning()"
+                i18n-title
+                title="It is recommended to select application tag"
+                class="fa fa-exclamation-triangle"
+                [ngClass]="getApplicationWarningClass()"
+            ></i>
           </div>
         </div>
 

@@ -1,0 +1,8 @@
+@use './src/styles/vendor/variables' as vv;
+
+.warning-icon {
+  align-items: center;
+  color: vv.$warning;
+  margin-bottom: 5px;
+  margin-left: 3px;
+}
