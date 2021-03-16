@@ -15,7 +15,9 @@ The default location for the ``ceph.conf`` file on Windows is
 ``C:\ProgramData\ceph\ceph.conf``.
 
 Below you may find a sample. Please fill in the monitor addresses
-accordingly::
+accordingly.
+
+.. code:: ini
 
     [global]
         log to stderr = true
