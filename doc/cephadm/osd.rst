@@ -1,34 +1,87 @@
 ***********
 OSD Service
 ***********
+.. _device management: ../rados/operations/devices
+.. _libstoragemgmt: https://github.com/libstorage/libstoragemgmt
 
 List Devices
 ============
-
-Print a list of discovered devices, grouped by host and optionally
+Periodically, each host in the cluster is scanned using ``ceph-volume`` to determine
+the devices present and their eliigibility for use as an OSD.
+To print a list of discovered devices, grouped by host and optionally
 filtered to a particular host:
 
 .. prompt:: bash #
 
-    ceph orch device ls [--host=...] [--refresh]
+    ceph orch device ls [--hostname=...] [--wide] [--refresh]
 
-Example::
+Example
+::
 
-    HOST    PATH      TYPE   SIZE  DEVICE  AVAIL  REJECT REASONS
-    master  /dev/vda  hdd   42.0G          False  locked
-    node1   /dev/vda  hdd   42.0G          False  locked
-    node1   /dev/vdb  hdd   8192M  387836  False  locked, LVM detected, Insufficient space (<5GB) on vgs
-    node1   /dev/vdc  hdd   8192M  450575  False  locked, LVM detected, Insufficient space (<5GB) on vgs
-    node3   /dev/vda  hdd   42.0G          False  locked
-    node3   /dev/vdb  hdd   8192M  395145  False  LVM detected, locked, Insufficient space (<5GB) on vgs
-    node3   /dev/vdc  hdd   8192M  165562  False  LVM detected, locked, Insufficient space (<5GB) on vgs
-    node2   /dev/vda  hdd   42.0G          False  locked
-    node2   /dev/vdb  hdd   8192M  672147  False  LVM detected, Insufficient space (<5GB) on vgs, locked
-    node2   /dev/vdc  hdd   8192M  228094  False  LVM detected, Insufficient space (<5GB) on vgs, locked
+  Hostname  Path      Type  Serial              Size   Health   Ident  Fault  Available
+  srv-01    /dev/sdb  hdd   15P0A0YFFRD6         300G  Unknown  N/A    N/A    No
+  srv-01    /dev/sdc  hdd   15R0A08WFRD6         300G  Unknown  N/A    N/A    No
+  srv-01    /dev/sdd  hdd   15R0A07DFRD6         300G  Unknown  N/A    N/A    No
+  srv-01    /dev/sde  hdd   15P0A0QDFRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sdb  hdd   15R0A033FRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sdc  hdd   15R0A05XFRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sde  hdd   15R0A0ANFRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sdf  hdd   15R0A06EFRD6         300G  Unknown  N/A    N/A    No
+  srv-03    /dev/sdb  hdd   15R0A0OGFRD6         300G  Unknown  N/A    N/A    No
+  srv-03    /dev/sdc  hdd   15R0A0P7FRD6         300G  Unknown  N/A    N/A    No
+  srv-03    /dev/sdd  hdd   15R0A0O7FRD6         300G  Unknown  N/A    N/A    No
 
+Using the ``--wide`` option provides all details relating to the device including any
+reasons for the device not being eligible for use as an OSD.
+
+In the above example you can see the fields; Health, Ident and Fault. This information
+is provided by integration with `libstoragemgmt`_. By default, this integration is disabled
+since it may not be 100% compatible with your hardware. If you would like cephadm to
+include these fields you need to enable cephadm's "enhanced device scan" option as follows;
+
+.. prompt:: bash #
+
+    ceph config set mgr mgr/cephadm/device_enhanced_scan true
+
+.. warning::
+    Although the libstoragemgmt library performs standard SCSI inquiry calls, there is no
+    guarantee that your firmware fully implements these standards which can lead to erratic
+    behaviour and even bus resets on some older hardware. It is therefore recommended that
+    before enabling this feature you test compatibility with libstoragemgmt first to avoid
+    any potenial unplanned interruptions to services.
+
+    There are a number of ways to test compatibility, but the simplist may be to use the
+    cephadm shell to call libstoragemgmt directly - ``cephadm shell lsmcli ldl``. If your
+    hardware is supported you should see something like this -
+
+    ::
+
+      Path     | SCSI VPD 0x83    | Link Type | Serial Number      | Health Status
+      ----------------------------------------------------------------------------
+      /dev/sda | 50000396082ba631 | SAS       | 15P0A0R0FRD6       | Good
+      /dev/sdb | 50000396082bbbf9 | SAS       | 15P0A0YFFRD6       | Good
+
+
+Once you have enabled libstoragemgmt support, the output will look something like this;
+
+::
+
+  # ceph orch device ls
+  Hostname   Path      Type  Serial              Size   Health   Ident  Fault  Available
+  srv-01     /dev/sdb  hdd   15P0A0YFFRD6         300G  Good     Off    Off    No
+  srv-01     /dev/sdc  hdd   15R0A08WFRD6         300G  Good     Off    Off    No
+  :
+
+In this example, libstoragemgmt has confirmed the health of the drives and the ability to
+interact with the Identification and Fault LEDs on the drive enclosures. For further
+information about interacting with these LEDs, refer to `device management`_
+
+.. note::
+    The current release of `libstoragemgmt`_ (1.8.8) supports SCSI, SAS, and SATA based
+    local disks only. There is no official support for NVMe devices (PCIe)
 
 .. _cephadm-deploy-osds:
-             
+
 Deploy OSDs
 ===========
 
@@ -59,13 +112,13 @@ There are a few ways to create new OSDs:
     ceph orch apply osd --all-available-devices
 
 * Create an OSD from a specific device on a specific host:
-  
+
   .. prompt:: bash #
 
     ceph orch daemon add osd *<host>*:*<device-path>*
 
   For example:
-  
+
   .. prompt:: bash #
 
     ceph orch daemon add osd host1:/dev/sdb
@@ -73,11 +126,11 @@ There are a few ways to create new OSDs:
 * Use :ref:`drivegroups` to describe device(s) to consume
   based on their properties, such device type (SSD or HDD), device
   model names, size, or the hosts on which the devices exist:
-  
+
   .. prompt:: bash #
 
     ceph orch apply -i spec.yml
-    
+
 Dry Run
 -------
 
@@ -93,7 +146,7 @@ Example::
     all-available-devices node3 /dev/vdd -  -
 
 .. _cephadm-osd-declarative:
-    
+
 Declarative State
 -----------------
 
@@ -112,7 +165,7 @@ If you want to avoid this behavior (disable automatic creation of OSD on availab
     ceph orch apply osd --all-available-devices --unmanaged=true
 
 * For cephadm, see also :ref:`cephadm-spec-unmanaged`.
-    
+
 
 Remove an OSD
 =============
@@ -668,3 +721,16 @@ It is also possible to specify directly device paths in specific hosts like the 
 
 
 This can easily be done with other filters, like `size` or `vendor` as well.
+
+Activate existing OSDs
+======================
+
+In case the OS of a host was reinstalled, existing OSDs need to be activated
+again. For this use case, cephadm provides a wrapper for :ref:`ceph-volume-lvm-activate` that
+activates all existing OSDs on a host.
+
+.. prompt:: bash #
+
+   ceph cephadm osd activate <host>...
+
+This will scan all existing disks for OSDs and deploy corresponding daemons.

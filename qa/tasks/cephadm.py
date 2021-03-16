@@ -4,7 +4,6 @@ Ceph cluster task, deployed via cephadm orchestrator
 import argparse
 import configobj
 import contextlib
-import errno
 import logging
 import os
 import json
@@ -13,7 +12,6 @@ import uuid
 import yaml
 
 from io import BytesIO, StringIO
-import toml
 from tarfile import ReadError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
@@ -310,14 +308,12 @@ def ceph_crash(ctx, config):
                     pass
 
 @contextlib.contextmanager
-def ceph_bootstrap(ctx, config, registry):
+def ceph_bootstrap(ctx, config):
     """
-    Bootstrap ceph cluster, setup containers' registry mirror before
-    the bootstrap if the registry is provided.
+    Bootstrap ceph cluster.
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
-    :param registry: url to  containers' mirror registry
     """
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
@@ -334,8 +330,6 @@ def ceph_bootstrap(ctx, config, registry):
     ctx.cluster.run(args=[
         'sudo', 'chmod', '777', '/etc/ceph',
         ]);
-    if registry:
-        add_mirror_to_cluster(ctx, registry)
     try:
         # write seed config
         log.info('Writing seed config...')
@@ -579,7 +573,7 @@ def ceph_mgrs(ctx, config):
         if nodes:
             _shell(ctx, cluster_name, remote, [
                 'ceph', 'orch', 'apply', 'mgr',
-                str(len(nodes) + 1) + ';' + ';'.join(nodes)]
+                str(len(nodes)) + ';' + ';'.join(nodes)]
             )
         for mgr, i in daemons.items():
             remote, id_ = i
@@ -738,30 +732,15 @@ def ceph_rgw(ctx, config):
                     if teuthology.is_type('rgw', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
-            realmzone = '.'.join(id_.split('.')[0:2])
-            if realmzone not in nodes:
-                nodes[realmzone] = []
-            nodes[realmzone].append(remote.shortname + '=' + id_)
+            svc = '.'.join(id_.split('.')[0:2])
+            if svc not in nodes:
+                nodes[svc] = []
+            nodes[svc].append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
 
-    for realmzone in nodes.keys():
-        (realm, zone) = realmzone.split('.', 1)
-
-        # TODO: those should be moved to mgr/cephadm
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'realm', 'create', '--rgw-realm', realm, '--default']
-        )
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'zonegroup', 'create', '--rgw-zonegroup=default', '--master', '--default']
-        )
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'zone', 'create', '--rgw-zonegroup=default', '--rgw-zone', zone,  '--master', '--default']
-        )
-
-    for realmzone, nodes in nodes.items():
-        (realm, zone) = realmzone.split('.', 1)
+    for svc, nodes in nodes.items():
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'orch', 'apply', 'rgw', realm, zone,
+            'ceph', 'orch', 'apply', 'rgw', svc,
              '--placement',
              str(len(nodes)) + ';' + ';'.join(nodes)]
         )
@@ -1162,16 +1141,11 @@ def task(ctx, config):
     """
     Deploy ceph cluster using cephadm
 
-    Setup containers' mirrors before the bootstrap, if corresponding
-    config provided in teuthology server config yaml file.
-
     For example, teuthology.yaml can contain the 'defaults' section:
 
         defaults:
           cephadm:
             containers:
-              registry_mirrors:
-                docker.io: 'registry.mirror.example.com:5000'
               image: 'quay.io/ceph-ci/ceph'
 
     Using overrides makes it possible to customize it per run.
@@ -1180,8 +1154,6 @@ def task(ctx, config):
         overrides:
           cephadm:
             containers:
-              registry_mirrors:
-                docker.io: 'registry.mirror.example.com:5000'
               image: 'quay.io/ceph-ci/ceph'
 
     :param ctx: the argparse.Namespace object
@@ -1213,15 +1185,10 @@ def task(ctx, config):
     teuth_defaults = teuth_config.get('defaults', {})
     cephadm_defaults = teuth_defaults.get('cephadm', {})
     containers_defaults = cephadm_defaults.get('containers', {})
-    mirrors_defaults = containers_defaults.get('registry_mirrors', {})
-    container_registry_mirror = mirrors_defaults.get('docker.io', None)
     container_image_name = containers_defaults.get('image', None)
 
     containers = config.get('containers', {})
-    mirrors = containers.get('registry_mirrors', {})
     container_image_name = containers.get('image', container_image_name)
-    container_registry_mirror = mirrors.get('docker.io',
-                                            container_registry_mirror)
 
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
@@ -1262,8 +1229,7 @@ def task(ctx, config):
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
             lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
-                              else ceph_bootstrap(ctx, config,
-                                                  container_registry_mirror),
+                              else ceph_bootstrap(ctx, config),
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
@@ -1297,55 +1263,3 @@ def task(ctx, config):
         finally:
             log.info('Teardown begin')
 
-
-def registries_add_mirror_to_docker_io(conf, mirror):
-    config = toml.loads(conf)
-    is_v1 = 'registries' in config
-    if is_v1:
-        search = config.get('registries', {}).get('search', {}).get('registries', [])
-        insecure = config.get('registries', {}).get('search', {}).get('insecure', [])
-        # v2: MutableMapping[str, Any] = { needs Python 3
-        v2 = {
-            'unqualified-search-registries': search,
-            'registry': [
-                {
-                    'prefix': reg,
-                    'location': reg,
-                    'insecure': reg in insecure,
-                    'blocked': False,
-                } for reg in search
-            ]
-        }
-    else:
-        v2 = config  # type: ignore
-    dockers = [
-        r for r in v2['registry'] if
-           r.get('prefix') == 'docker.io' or r.get('location') == 'docker.io'
-    ]
-    if dockers:
-        docker = dockers[0]
-        if 'mirror' not in docker:
-            docker['mirror'] = [{
-                "location": mirror,
-                "insecure": True,
-            }]
-    return v2
-
-
-def add_mirror_to_cluster(ctx, mirror):
-    log.info('Adding local image mirror %s' % mirror)
-
-    registries_conf = '/etc/containers/registries.conf'
-
-    for remote in ctx.cluster.remotes.keys():
-        try:
-            config = remote.read_file(registries_conf)
-            new_config = toml.dumps(registries_add_mirror_to_docker_io(config.decode('utf-8'), mirror))
-
-            remote.sudo_write_file(registries_conf, new_config)
-        except IOError as e:  # py3: use FileNotFoundError instead.
-            if e.errno != errno.ENOENT:
-                raise
-
-            # Docker doesn't ship a registries.conf
-            log.info('Failed to add mirror: %s' % str(e))

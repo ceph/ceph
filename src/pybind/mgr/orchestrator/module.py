@@ -43,6 +43,7 @@ class ServiceType(enum.Enum):
     mon = 'mon'
     mgr = 'mgr'
     rbd_mirror = 'rbd-mirror'
+    cephfs_mirror = 'cephfs-mirror'
     crash = 'crash'
     alertmanager = 'alertmanager'
     grafana = 'grafana'
@@ -853,38 +854,7 @@ Usage:
         return self._daemon_add_misc(spec)
 
     def _daemon_add_misc(self, spec: ServiceSpec) -> HandleCommandResult:
-        daemon_type = ServiceType(spec.service_type)
-
-        if daemon_type == ServiceType.mon:
-            completion = self.add_mon(spec)
-        elif daemon_type == ServiceType.mgr:
-            completion = self.add_mgr(spec)
-        elif daemon_type == ServiceType.rbd_mirror:
-            completion = self.add_rbd_mirror(spec)
-        elif daemon_type == ServiceType.crash:
-            completion = self.add_crash(spec)
-        elif daemon_type == ServiceType.alertmanager:
-            completion = self.add_alertmanager(spec)
-        elif daemon_type == ServiceType.grafana:
-            completion = self.add_grafana(spec)
-        elif daemon_type == ServiceType.node_exporter:
-            completion = self.add_node_exporter(spec)
-        elif daemon_type == ServiceType.prometheus:
-            completion = self.add_prometheus(spec)
-        elif daemon_type == ServiceType.mds:
-            completion = self.add_mds(spec)
-        elif daemon_type == ServiceType.rgw:
-            completion = self.add_rgw(cast(RGWSpec, spec))
-        elif daemon_type == ServiceType.nfs:
-            completion = self.add_nfs(cast(NFSServiceSpec, spec))
-        elif daemon_type == ServiceType.iscsi:
-            completion = self.add_iscsi(cast(IscsiServiceSpec, spec))
-        elif daemon_type == ServiceType.cephadm_exporter:
-            completion = self.add_cephadm_exporter(spec)
-        else:
-            tp = type(daemon_type)
-            raise OrchestratorValidationError(f'unknown daemon type `{tp}`')
-
+        completion = self.add_daemon(spec)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -906,9 +876,7 @@ Usage:
 
     @_cli_write_command('orch daemon add rgw')
     def _rgw_add(self,
-                 realm_name: str,
-                 zone_name: str,
-                 subcluster: Optional[str] = None,
+                 svc_id: str,
                  port: Optional[int] = None,
                  ssl: bool = False,
                  placement: Optional[str] = None,
@@ -918,9 +886,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = RGWSpec(
-            rgw_realm=realm_name,
-            rgw_zone=zone_name,
-            subcluster=subcluster,
+            service_id=svc_id,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
@@ -1096,9 +1062,9 @@ Usage:
 
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
-                   realm_name: str,
-                   zone_name: str,
-                   subcluster: Optional[str] = None,
+                   svc_id: str,
+                   realm_name: Optional[str] = None,
+                   zone_name: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
                    placement: Optional[str] = None,
@@ -1111,9 +1077,9 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = RGWSpec(
+            service_id=svc_id,
             rgw_realm=realm_name,
             rgw_zone=zone_name,
-            subcluster=subcluster,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),

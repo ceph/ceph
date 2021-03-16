@@ -157,7 +157,8 @@ class PlacementSpec(object):
                  label=None,  # type: Optional[str]
                  hosts=None,  # type: Union[List[str],List[HostPlacementSpec], None]
                  count=None,  # type: Optional[int]
-                 host_pattern=None  # type: Optional[str]
+                 count_per_host=None,  # type: Optional[int]
+                 host_pattern=None,  # type: Optional[str]
                  ):
         # type: (...) -> None
         self.label = label
@@ -167,6 +168,7 @@ class PlacementSpec(object):
             self.set_hosts(hosts)
 
         self.count = count  # type: Optional[int]
+        self.count_per_host = count_per_host   # type: Optional[int]
 
         #: fnmatch patterns to select hosts. Can also be a single host.
         self.host_pattern = host_pattern  # type: Optional[str]
@@ -174,17 +176,21 @@ class PlacementSpec(object):
         self.validate()
 
     def is_empty(self) -> bool:
-        return self.label is None and \
-            not self.hosts and \
-            not self.host_pattern and \
-            self.count is None
+        return (
+            self.label is None
+            and not self.hosts
+            and not self.host_pattern
+            and self.count is None
+            and self.count_per_host is None
+        )
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, PlacementSpec):
             return self.label == other.label \
                    and self.hosts == other.hosts \
                    and self.count == other.count \
-                   and self.host_pattern == other.host_pattern
+                   and self.host_pattern == other.host_pattern \
+                   and self.count_per_host == other.count_per_host
         return NotImplemented
 
     def set_hosts(self, hosts: Union[List[str], List[HostPlacementSpec]]) -> None:
@@ -204,20 +210,17 @@ class PlacementSpec(object):
         if self.hosts:
             all_hosts = [hs.hostname for hs in hostspecs]
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
-        elif self.label:
+        if self.label:
             return [hs.hostname for hs in hostspecs if self.label in hs.labels]
-        elif self.host_pattern:
-            all_hosts = [hs.hostname for hs in hostspecs]
+        all_hosts = [hs.hostname for hs in hostspecs]
+        if self.host_pattern:
             return fnmatch.filter(all_hosts, self.host_pattern)
-        else:
-            # This should be caught by the validation but needs to be here for
-            # get_host_selection_size
-            return []
+        return all_hosts
 
-    def get_host_selection_size(self, hostspecs: Iterable[HostSpec]) -> int:
+    def get_target_count(self, hostspecs: Iterable[HostSpec]) -> int:
         if self.count:
             return self.count
-        return len(self.filter_matching_hostspecs(hostspecs))
+        return len(self.filter_matching_hostspecs(hostspecs)) * (self.count_per_host or 1)
 
     def pretty_str(self) -> str:
         """
@@ -230,6 +233,8 @@ class PlacementSpec(object):
             kv.append(';'.join([str(h) for h in self.hosts]))
         if self.count:
             kv.append('count:%d' % self.count)
+        if self.count_per_host:
+            kv.append('count-per-host:%d' % self.count_per_host)
         if self.label:
             kv.append('label:%s' % self.label)
         if self.host_pattern:
@@ -240,6 +245,8 @@ class PlacementSpec(object):
         kv = []
         if self.count:
             kv.append('count=%d' % self.count)
+        if self.count_per_host:
+            kv.append('count_per_host=%d' % self.count_per_host)
         if self.label:
             kv.append('label=%s' % repr(self.label))
         if self.hosts:
@@ -269,6 +276,8 @@ class PlacementSpec(object):
             r['hosts'] = [host.to_json() for host in self.hosts]
         if self.count:
             r['count'] = self.count
+        if self.count_per_host:
+            r['count_per_host'] = self.count_per_host
         if self.host_pattern:
             r['host_pattern'] = self.host_pattern
         return r
@@ -279,6 +288,26 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
             raise ServiceSpecValidationError("num/count must be > 1")
+        if self.count_per_host is not None and self.count_per_host < 1:
+            raise ServiceSpecValidationError("count-per-host must be >= 1")
+        if self.count_per_host is not None and not (
+                self.label
+                or self.hosts
+                or self.host_pattern
+        ):
+            raise ServiceSpecValidationError(
+                "count-per-host must be combined with label or hosts or host_pattern"
+            )
+        if self.count is not None and self.count_per_host is not None:
+            raise ServiceSpecValidationError("cannot combine count and count-per-host")
+        if (
+                self.count_per_host is not None
+                and self.hosts
+                and any([hs.network or hs.name for hs in self.hosts])
+        ):
+            raise ServiceSpecValidationError(
+                "count-per-host cannot be combined explicit placement with names or networks"
+            )
         if self.host_pattern and self.hosts:
             raise ServiceSpecValidationError('cannot combine host patterns and hosts')
         for h in self.hosts:
@@ -336,6 +365,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
             raise ServiceSpecValidationError('invalid placement %s' % arg)
 
         count = None
+        count_per_host = None
         if strings:
             try:
                 count = int(strings[0])
@@ -345,7 +375,15 @@ tPlacementSpec(hostname='host2', network='', name='')])
         for s in strings:
             if s.startswith('count:'):
                 try:
-                    count = int(s[6:])
+                    count = int(s[len('count:'):])
+                    strings.remove(s)
+                    break
+                except ValueError:
+                    pass
+        for s in strings:
+            if s.startswith('count-per-host:'):
+                try:
+                    count_per_host = int(s[len('count-per-host:'):])
                     strings.remove(s)
                     break
                 except ValueError:
@@ -370,6 +408,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
                 'more than one host pattern provided: {}'.format(host_patterns))
 
         ps = PlacementSpec(count=count,
+                           count_per_host=count_per_host,
                            hosts=advanced_hostspecs,
                            label=label,
                            host_pattern=host_patterns[0] if host_patterns else None)
@@ -389,7 +428,7 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container cephadm-exporter ha-rgw'.split()
+                          'container cephadm-exporter ha-rgw cephfs-mirror'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
@@ -657,7 +696,6 @@ class RGWSpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  rgw_realm: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
-                 subcluster: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[List[str]] = None,
                  rgw_frontend_ssl_key: Optional[List[str]] = None,
@@ -665,20 +703,14 @@ class RGWSpec(ServiceSpec):
                  ssl: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
+                 subcluster: Optional[str] = None,  # legacy, only for from_json on upgrade
                  ):
         assert service_type == 'rgw', service_type
-        if service_id:
-            a = service_id.split('.', 2)
-            rgw_realm = a[0]
-            if len(a) > 1:
-                rgw_zone = a[1]
-            if len(a) > 2:
-                subcluster = a[2]
-        else:
-            if subcluster:
-                service_id = '%s.%s.%s' % (rgw_realm, rgw_zone, subcluster)
-            else:
-                service_id = '%s.%s' % (rgw_realm, rgw_zone)
+
+        # for backward compatibility with octopus spec files,
+        if not service_id and (rgw_realm and rgw_zone):
+            service_id = rgw_realm + '.' + rgw_zone
+
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
@@ -686,7 +718,6 @@ class RGWSpec(ServiceSpec):
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
-        self.subcluster = subcluster
         self.rgw_frontend_port = rgw_frontend_port
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
         self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
@@ -709,16 +740,6 @@ class RGWSpec(ServiceSpec):
         else:
             ports.append(f"port={self.get_port()}")
         return f'beast {" ".join(ports)}'
-
-    def validate(self) -> None:
-        super(RGWSpec, self).validate()
-
-        if not self.rgw_realm:
-            raise ServiceSpecValidationError(
-                'Cannot add RGW: No realm specified')
-        if not self.rgw_zone:
-            raise ServiceSpecValidationError(
-                'Cannot add RGW: No zone specified')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)

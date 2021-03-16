@@ -246,9 +246,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 'done'
 
     @handle_orch_error
-    def add_nfs(self, spec):
-        # type: (NFSServiceSpec) -> List[str]
-        assert isinstance(spec.pool, str)
+    def add_daemon(self, spec: ServiceSpec):
         return [spec.one_line_str()]
 
     @handle_orch_error
@@ -256,22 +254,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return spec.one_line_str()
 
     @handle_orch_error
-    def add_iscsi(self, spec):
-        # type: (IscsiServiceSpec) -> List[str]
-        return [spec.one_line_str()]
-
-    @handle_orch_error
     def apply_iscsi(self, spec):
         # type: (IscsiServiceSpec) -> str
         return spec.one_line_str()
-
-    @handle_orch_error
-    def add_mds(self, spec):
-        return 'done'
-
-    @handle_orch_error
-    def add_rgw(self, spec):
-        return 'done'
 
     @handle_orch_error
     def get_hosts(self):

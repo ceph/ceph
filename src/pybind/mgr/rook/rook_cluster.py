@@ -416,14 +416,19 @@ class RookCluster(object):
             _update_fs, _create_fs)
 
     def apply_objectstore(self, spec):
+        assert spec.service_id is not None
 
-        # FIXME: service_id is $realm.$zone, but rook uses realm
-        # $crname and zone $crname.  The '.'  will confuse kubernetes.
-        # For now, assert that realm==zone.
-        (realm, zone) = spec.service_id.split('.', 1)
-        assert realm == zone
-        assert spec.subcluster is None
-        name = realm
+        name = spec.service_id
+
+        if '.' in spec.service_id:
+            # rook does not like . in the name.  this is could
+            # there because it is a legacy rgw spec that was named
+            # like $realm.$zone, except that I doubt there were any
+            # users of this code.  Instead, focus on future users and
+            # translate . to - (fingers crossed!) instead.
+            name = spec.service_id.replace('.', '-')
+
+        # FIXME: pass realm and/or zone through to the CR
 
         def _create_zone() -> cos.CephObjectStore:
             port = None

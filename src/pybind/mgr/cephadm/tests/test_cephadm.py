@@ -52,10 +52,10 @@ def assert_rm_daemon(cephadm: CephadmOrchestrator, prefix, host):
 
 
 @contextmanager
-def with_daemon(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str):
+def with_daemon(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, host: str):
     spec.placement = PlacementSpec(hosts=[host], count=1)
 
-    c = meth(cephadm_module, spec)
+    c = cephadm_module.add_daemon(spec)
     [out] = wait(cephadm_module, c)
     match_glob(out, f"Deployed {spec.service_name()}.* on host '{host}'")
 
@@ -101,13 +101,12 @@ class TestCephadm(object):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
             with with_service(cephadm_module, ServiceSpec('mds', 'name', unmanaged=True)) as _, \
-                    with_daemon(cephadm_module, ServiceSpec('mds', 'name'), CephadmOrchestrator.add_mds, 'test') as _:
+                    with_daemon(cephadm_module, ServiceSpec('mds', 'name'), 'test') as _:
 
                 c = cephadm_module.list_daemons()
 
@@ -143,10 +142,6 @@ class TestCephadm(object):
                             'placement': {
                                 'count': 1,
                                 'hosts': ["test"]
-                            },
-                            'spec': {
-                                'rgw_realm': 'r',
-                                'rgw_zone': 'z',
                             },
                             'service_id': 'r.z',
                             'service_name': 'rgw.r.z',
@@ -185,12 +180,11 @@ class TestCephadm(object):
             assert wait(cephadm_module, c)[0].name() == 'rgw.myrgw.foobar'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_daemon_action(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, RGWSpec(service_id='myrgw.foobar', unmanaged=True)) as _, \
-                    with_daemon(cephadm_module, RGWSpec(service_id='myrgw.foobar'), CephadmOrchestrator.add_rgw, 'test') as daemon_id:
+                    with_daemon(cephadm_module, RGWSpec(service_id='myrgw.foobar'), 'test') as daemon_id:
 
                 c = cephadm_module.daemon_action('redeploy', 'rgw.' + daemon_id)
                 assert wait(cephadm_module,
@@ -211,12 +205,11 @@ class TestCephadm(object):
                 CephadmServe(cephadm_module)._check_daemons()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_daemon_action_fail(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, RGWSpec(service_id='myrgw.foobar', unmanaged=True)) as _, \
-                    with_daemon(cephadm_module, RGWSpec(service_id='myrgw.foobar'), CephadmOrchestrator.add_rgw, 'test') as daemon_id:
+                    with_daemon(cephadm_module, RGWSpec(service_id='myrgw.foobar'), 'test') as daemon_id:
                 with mock.patch('ceph_module.BaseMgrModule._ceph_send_command') as _ceph_send_command:
 
                     _ceph_send_command.side_effect = Exception("myerror")
@@ -328,12 +321,12 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, ServiceSpec(service_type='mon', unmanaged=True)):
                 ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-                c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
+                c = cephadm_module.add_daemon(ServiceSpec('mon', placement=ps))
                 assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
                 with pytest.raises(OrchestratorError, match="Must set public_network config option or specify a CIDR network,"):
                     ps = PlacementSpec(hosts=['test'], count=1)
-                    c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
+                    c = cephadm_module.add_daemon(ServiceSpec('mon', placement=ps))
                     wait(cephadm_module, c)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -390,6 +383,86 @@ class TestCephadm(object):
         out = cephadm_module.osd_service.find_destroyed_osds()
         assert out == {'host1': ['0']}
 
+    @ pytest.mark.parametrize(
+        "ceph_services, cephadm_daemons, strays_expected",
+        # [ ([(daemon_type, daemon_id), ... ], [...], [...]), ... ]
+        [
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [],
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+            ),
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [],
+            ),
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [('mds', 'a'), ('osd', '0')],
+                [('mgr', 'x')],
+            ),
+            # https://tracker.ceph.com/issues/49573
+            (
+                [('rgw-nfs', 'nfs.foo.host1-rgw')],
+                [],
+                [('nfs', 'foo.host1')],
+            ),
+            (
+                [('rgw-nfs', 'nfs.foo.host1-rgw')],
+                [('nfs', 'foo.host1')],
+                [],
+            ),
+            (
+                [],
+                [('nfs', 'foo.host1')],
+                [],
+            ),
+        ]
+    )
+    def test_check_for_stray_daemons(
+            self,
+            cephadm_module,
+            ceph_services,
+            cephadm_daemons,
+            strays_expected
+    ):
+        # mock ceph service-map
+        services = []
+        for service in ceph_services:
+            s = {'type': service[0], 'id': service[1]}
+            services.append(s)
+        ls = [{'hostname': 'host1', 'services': services}]
+
+        with mock.patch.object(cephadm_module, 'list_servers', mock.MagicMock()) as list_servers:
+            list_servers.return_value = ls
+            list_servers.__iter__.side_effect = ls.__iter__
+
+            # populate cephadm daemon cache
+            dm = {}
+            for daemon_type, daemon_id in cephadm_daemons:
+                dd = DaemonDescription(daemon_type=daemon_type, daemon_id=daemon_id)
+                dm[dd.name()] = dd
+            cephadm_module.cache.update_host_daemons('host1', dm)
+
+            # test
+            CephadmServe(cephadm_module)._check_for_strays()
+
+            # verify
+            strays = cephadm_module.health_checks.get('CEPHADM_STRAY_DAEMON')
+            if not strays:
+                assert len(strays_expected) == 0
+            else:
+                for dt, di in strays_expected:
+                    name = '%s.%s' % (dt, di)
+                    for detail in strays['detail']:
+                        if name in detail:
+                            strays['detail'].remove(detail)
+                            break
+                    assert name in detail
+                assert len(strays['detail']) == 0
+                assert strays['count'] == len(strays_expected)
+
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
     def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
         _mon_cmd.return_value = (1, "", "fail_msg")
@@ -433,7 +506,7 @@ class TestCephadm(object):
                     '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save_non_collocated(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -473,7 +546,7 @@ class TestCephadm(object):
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -580,24 +653,23 @@ class TestCephadm(object):
             assert out == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_rgw_update(self, cephadm_module):
         with with_host(cephadm_module, 'host1'):
             with with_host(cephadm_module, 'host2'):
-                with with_service(cephadm_module, RGWSpec(rgw_realm='realm', rgw_zone='zone1', unmanaged=True)):
+                with with_service(cephadm_module, RGWSpec(service_id="foo", unmanaged=True)):
                     ps = PlacementSpec(hosts=['host1'], count=1)
-                    c = cephadm_module.add_rgw(
-                        RGWSpec(rgw_realm='realm', rgw_zone='zone1', placement=ps))
+                    c = cephadm_module.add_daemon(
+                        RGWSpec(service_id="foo", placement=ps))
                     [out] = wait(cephadm_module, c)
-                    match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
+                    match_glob(out, "Deployed rgw.foo.* on host 'host1'")
 
                     ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
                     r = CephadmServe(cephadm_module)._apply_service(
-                        RGWSpec(rgw_realm='realm', rgw_zone='zone1', placement=ps))
+                        RGWSpec(service_id="foo", placement=ps))
                     assert r
 
-                    assert_rm_daemon(cephadm_module, 'rgw.realm.zone1', 'host1')
-                    assert_rm_daemon(cephadm_module, 'rgw.realm.zone1', 'host2')
+                    assert_rm_daemon(cephadm_module, 'rgw.foo', 'host1')
+                    assert_rm_daemon(cephadm_module, 'rgw.foo', 'host2')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([
@@ -621,28 +693,29 @@ class TestCephadm(object):
             assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
 
     @pytest.mark.parametrize(
-        "spec, meth",
+        "spec",
         [
-            (ServiceSpec('crash'), CephadmOrchestrator.add_crash),
-            (ServiceSpec('prometheus'), CephadmOrchestrator.add_prometheus),
-            (ServiceSpec('grafana'), CephadmOrchestrator.add_grafana),
-            (ServiceSpec('node-exporter'), CephadmOrchestrator.add_node_exporter),
-            (ServiceSpec('alertmanager'), CephadmOrchestrator.add_alertmanager),
-            (ServiceSpec('rbd-mirror'), CephadmOrchestrator.add_rbd_mirror),
-            (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.add_mds),
-            (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.add_rgw),
-            (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.add_cephadm_exporter),
+            ServiceSpec('crash'),
+            ServiceSpec('prometheus'),
+            ServiceSpec('grafana'),
+            ServiceSpec('node-exporter'),
+            ServiceSpec('alertmanager'),
+            ServiceSpec('rbd-mirror'),
+            ServiceSpec('cephfs-mirror'),
+            ServiceSpec('mds', service_id='fsname'),
+            RGWSpec(rgw_realm='realm', rgw_zone='zone'),
+            RGWSpec(service_id="foo"),
+            ServiceSpec('cephadm-exporter'),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
-    def test_daemon_add(self, spec: ServiceSpec, meth, cephadm_module):
+    def test_daemon_add(self, spec: ServiceSpec, cephadm_module):
         unmanaged_spec = ServiceSpec.from_json(spec.to_json())
         unmanaged_spec.unmanaged = True
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, unmanaged_spec):
-                with with_daemon(cephadm_module, spec, meth, 'test'):
+                with with_daemon(cephadm_module, spec, 'test'):
                     pass
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -657,7 +730,7 @@ class TestCephadm(object):
             with with_service(cephadm_module, spec):
                 _run_cephadm.side_effect = OrchestratorError('fail')
                 with pytest.raises(OrchestratorError):
-                    wait(cephadm_module, cephadm_module.add_mgr(spec))
+                    wait(cephadm_module, cephadm_module.add_daemon(spec))
                 cephadm_module.assert_issued_mon_command({
                     'prefix': 'auth rm',
                     'entity': 'mgr.x',
@@ -676,7 +749,7 @@ class TestCephadm(object):
             unmanaged_spec = ServiceSpec.from_json(spec.to_json())
             unmanaged_spec.unmanaged = True
             with with_service(cephadm_module, unmanaged_spec):
-                c = cephadm_module.add_nfs(spec)
+                c = cephadm_module.add_daemon(spec)
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed nfs.name.* on host 'test'")
 
@@ -697,7 +770,7 @@ class TestCephadm(object):
             unmanaged_spec.unmanaged = True
             with with_service(cephadm_module, unmanaged_spec):
 
-                c = cephadm_module.add_iscsi(spec)
+                c = cephadm_module.add_daemon(spec)
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed iscsi.name.* on host 'test'")
 
@@ -761,6 +834,7 @@ class TestCephadm(object):
             (ServiceSpec('node-exporter'), CephadmOrchestrator.apply_node_exporter),
             (ServiceSpec('alertmanager'), CephadmOrchestrator.apply_alertmanager),
             (ServiceSpec('rbd-mirror'), CephadmOrchestrator.apply_rbd_mirror),
+            (ServiceSpec('cephfs-mirror'), CephadmOrchestrator.apply_rbd_mirror),
             (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.apply_mds),
             (ServiceSpec(
                 'mds', service_id='fsname',
@@ -772,13 +846,14 @@ class TestCephadm(object):
                     )]
                 )
             ), CephadmOrchestrator.apply_mds),
-            (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.apply_rgw),
+            (RGWSpec(service_id='foo'), CephadmOrchestrator.apply_rgw),
             (RGWSpec(
+                service_id='bar',
                 rgw_realm='realm', rgw_zone='zone',
                 placement=PlacementSpec(
                     hosts=[HostPlacementSpec(
                         hostname='test',
-                        name='realm.zone.a',
+                        name='bar',
                         network=''
                     )]
                 )
@@ -821,7 +896,6 @@ class TestCephadm(object):
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec, meth, 'test'):
@@ -907,14 +981,14 @@ class TestCephadm(object):
             """
             fuse = False
 
-            @staticmethod
+            @ staticmethod
             def has_connection():
                 return False
 
             def import_module(self, *args, **kargs):
                 return mock.Mock()
 
-            @staticmethod
+            @ staticmethod
             def exit():
                 pass
 
@@ -1088,3 +1162,29 @@ Traceback (most recent call last):
                           ['--', 'inventory', '--format=json'], image='',
                           no_fsid=False),
             ]
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_activate(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test', refresh_hosts=False):
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'osds': [
+                    {
+                        'osd': 1,
+                        'up_from': 0,
+                        'uuid': 'uuid'
+                    }
+                ]
+            })
+
+            ceph_volume_lvm_list = {
+                '1': [{
+                    'tags': {
+                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                        'ceph.osd_fsid': 'uuid'
+                    }
+                }]
+            }
+            _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
+            assert cephadm_module._osd_activate(
+                ['test']).stdout == "Created osd(s) 1 on host 'test'"

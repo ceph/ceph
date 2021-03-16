@@ -3,8 +3,8 @@ os_version: "20.04"
 
 tasks:
 - cephadm:
-    image: docker.io/ceph/ceph:v15.2.0
-    cephadm_branch: v15.2.0
+    image: docker.io/ceph/ceph:v15.2.9
+    cephadm_branch: v15.2.9
     cephadm_git_url: https://github.com/ceph/ceph
     # avoid --cap-add=PTRACE + --privileged for older cephadm versions
     allow_ptrace: false
@@ -18,7 +18,7 @@ roles:
   - osd.2
   - osd.3
   - client.0
-#   - ceph.rgw.realm.zone.a # Disabled, needs 15.2.4 as an upgrade start
+#  - ceph.rgw.realm.zone.a  # CLI change in v16 pacific
   - node-exporter.a
   - alertmanager.a
 - - mon.b
@@ -31,4 +31,4 @@ roles:
   - prometheus.a
   - grafana.a
   - node-exporter.b
-#  - ceph.iscsi.iscsi.a  # needs later start point
+  - ceph.iscsi.iscsi.a

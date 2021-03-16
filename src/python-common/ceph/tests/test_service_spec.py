@@ -62,6 +62,7 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         ('3 data[1-3]', "PlacementSpec(count=3, host_pattern='data[1-3]')"),
         ('3 data?', "PlacementSpec(count=3, host_pattern='data?')"),
         ('3 data*', "PlacementSpec(count=3, host_pattern='data*')"),
+        ("count-per-host:4 label:foo", "PlacementSpec(count_per_host=4, label='foo')"),
     ])
 def test_parse_placement_specs(test_input, expected):
     ret = PlacementSpec.from_string(test_input)
@@ -74,6 +75,12 @@ def test_parse_placement_specs(test_input, expected):
         ("host=a host*"),
         ("host=a label:wrong"),
         ("host? host*"),
+        ('host=a count-per-host:0'),
+        ('host=a count-per-host:-10'),
+        ('count:2 count-per-host:1'),
+        ('host1=a host2=b count-per-host:2'),
+        ('host1:10/8 count-per-host:2'),
+        ('count-per-host:2'),
     ]
 )
 def test_parse_placement_specs_raises(test_input):
@@ -89,6 +96,41 @@ def test_parse_placement_specs_raises(test_input):
 def test_parse_host_placement_specs_raises_wrong_format(test_input):
     with pytest.raises(ValueError):
         HostPlacementSpec.parse(test_input)
+
+
+@pytest.mark.parametrize(
+    "p,hosts,size",
+    [
+        (
+            PlacementSpec(count=3),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            3
+        ),
+        (
+            PlacementSpec(host_pattern='*'),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            5
+        ),
+        (
+            PlacementSpec(count_per_host=2, host_pattern='*'),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            10
+        ),
+        (
+            PlacementSpec(host_pattern='foo*'),
+            ['foo1', 'foo2', 'bar1', 'bar2'],
+            2
+        ),
+        (
+            PlacementSpec(count_per_host=2, host_pattern='foo*'),
+            ['foo1', 'foo2', 'bar1', 'bar2'],
+            4
+        ),
+    ])
+def test_placement_target_size(p, hosts, size):
+    assert p.get_target_count(
+        [HostPlacementSpec(n, '', '') for n in hosts]
+    ) == size
 
 
 def _get_dict_spec(s_type, s_id):
@@ -161,7 +203,6 @@ placement:
 spec:
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
-  subcluster: '1'
 ---
 service_type: osd
 service_id: osd_spec_default
@@ -236,9 +277,10 @@ spec:
                              ),
                              (
                                      ServiceSpec(
-                                         service_type='rgw'
+                                         service_type='rgw',
+                                         service_id='foo',
                                      ),
-                                     RGWSpec(),
+                                     RGWSpec(service_id='foo'),
                                      True
                              ),
                          ])

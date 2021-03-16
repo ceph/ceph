@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec
+    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec, HostPlacementSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -576,32 +576,20 @@ class Orchestrator(object):
         """Zap/Erase a device (DESTROYS DATA)"""
         raise NotImplementedError()
 
-    def add_mon(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create mon daemon(s)"""
+    def add_daemon(self, spec: ServiceSpec) -> OrchResult[List[str]]:
+        """Create daemons daemon(s) for unmanaged services"""
         raise NotImplementedError()
 
     def apply_mon(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update mon cluster"""
         raise NotImplementedError()
 
-    def add_mgr(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create mgr daemon(s)"""
-        raise NotImplementedError()
-
     def apply_mgr(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update mgr cluster"""
         raise NotImplementedError()
 
-    def add_mds(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create MDS daemon(s)"""
-        raise NotImplementedError()
-
     def apply_mds(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update MDS cluster"""
-        raise NotImplementedError()
-
-    def add_rgw(self, spec: RGWSpec) -> OrchResult[List[str]]:
-        """Create RGW daemon(s)"""
         raise NotImplementedError()
 
     def apply_rgw(self, spec: RGWSpec) -> OrchResult[str]:
@@ -612,72 +600,36 @@ class Orchestrator(object):
         """Update ha-rgw daemons"""
         raise NotImplementedError()
 
-    def add_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create rbd-mirror daemon(s)"""
-        raise NotImplementedError()
-
     def apply_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update rbd-mirror cluster"""
-        raise NotImplementedError()
-
-    def add_nfs(self, spec: NFSServiceSpec) -> OrchResult[List[str]]:
-        """Create NFS daemon(s)"""
         raise NotImplementedError()
 
     def apply_nfs(self, spec: NFSServiceSpec) -> OrchResult[str]:
         """Update NFS cluster"""
         raise NotImplementedError()
 
-    def add_iscsi(self, spec: IscsiServiceSpec) -> OrchResult[List[str]]:
-        """Create iscsi daemon(s)"""
-        raise NotImplementedError()
-
     def apply_iscsi(self, spec: IscsiServiceSpec) -> OrchResult[str]:
         """Update iscsi cluster"""
-        raise NotImplementedError()
-
-    def add_prometheus(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create new prometheus daemon"""
         raise NotImplementedError()
 
     def apply_prometheus(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update prometheus cluster"""
         raise NotImplementedError()
 
-    def add_node_exporter(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new Node-Exporter service"""
-        raise NotImplementedError()
-
     def apply_node_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Node-Exporter daemon(s)"""
-        raise NotImplementedError()
-
-    def add_crash(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new crash service"""
         raise NotImplementedError()
 
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a crash daemon(s)"""
         raise NotImplementedError()
 
-    def add_grafana(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new grafana service"""
-        raise NotImplementedError()
-
     def apply_grafana(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a grafana service"""
         raise NotImplementedError()
 
-    def add_alertmanager(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new AlertManager service"""
-        raise NotImplementedError()
-
     def apply_alertmanager(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update an existing AlertManager daemon(s)"""
-        raise NotImplementedError()
-
-    def add_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new cephadm exporter daemon"""
         raise NotImplementedError()
 
     def apply_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
@@ -739,6 +691,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'keepalived': 'ha-rgw',
         'iscsi': 'iscsi',
         'rbd-mirror': 'rbd-mirror',
+        'cephfs-mirror': 'cephfs-mirror',
         'nfs': 'nfs',
         'grafana': 'grafana',
         'alertmanager': 'alertmanager',
@@ -762,6 +715,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'ha-rgw': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
         'rbd-mirror': ['rbd-mirror'],
+        'cephfs-mirror': ['cephfs-mirror'],
         'nfs': ['nfs'],
         'grafana': ['grafana'],
         'alertmanager': ['alertmanager'],
@@ -965,6 +919,14 @@ class DaemonDescription(object):
         if daemon_type_to_service(self.daemon_type) in ServiceSpec.REQUIRES_SERVICE_ID:
             return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
         return daemon_type_to_service(self.daemon_type)
+
+    def get_host_placement(self) -> HostPlacementSpec:
+        return HostPlacementSpec(
+            hostname=self.hostname or '',
+            # FIXME: include the ip:port here?
+            network='',
+            name='',
+        )
 
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
