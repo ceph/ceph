@@ -84,7 +84,7 @@ public:
   virtual ~BlueFSVolumeSelector() {
   }
   virtual void* get_hint_for_log() const = 0;
-  virtual void* get_hint_by_dir(const std::string& dirname) const = 0;
+  virtual void* get_hint_by_dir(std::string_view dirname) const = 0;
 
   virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
   virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
@@ -489,14 +489,14 @@ public:
   int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
 
   int open_for_write(
-    const string& dir,
-    const string& file,
+    std::string_view dir,
+    std::string_view file,
     FileWriter **h,
     bool overwrite);
 
   int open_for_read(
-    const string& dir,
-    const string& file,
+    std::string_view dir,
+    std::string_view file,
     FileReader **h,
     bool random = false);
 
@@ -505,21 +505,21 @@ public:
     _close_writer(h);
   }
 
-  int rename(const string& old_dir, const string& old_file,
-	     const string& new_dir, const string& new_file);
+  int rename(std::string_view old_dir, std::string_view old_file,
+	     std::string_view new_dir, std::string_view new_file);
 
-  int readdir(const string& dirname, vector<string> *ls);
+  int readdir(std::string_view dirname, std::vector<std::string> *ls);
 
-  int unlink(const string& dirname, const string& filename);
-  int mkdir(const string& dirname);
-  int rmdir(const string& dirname);
+  int unlink(std::string_view dirname, std::string_view filename);
+  int mkdir(std::string_view dirname);
+  int rmdir(std::string_view dirname);
   bool wal_is_rotational();
 
-  bool dir_exists(const string& dirname);
-  int stat(const string& dirname, const string& filename,
+  bool dir_exists(std::string_view dirname);
+  int stat(std::string_view dirname, std::string_view filename,
 	   uint64_t *size, utime_t *mtime);
 
-  int lock_file(const string& dirname, const string& filename, FileLock **p);
+  int lock_file(std::string_view dirname, std::string_view filename, FileLock **p);
   int unlock_file(FileLock *l);
 
   void compact_log();
@@ -659,7 +659,7 @@ public:
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
   void* get_hint_for_log() const override;
-  void* get_hint_by_dir(const std::string& dirname) const override;
+  void* get_hint_by_dir(std::string_view dirname) const override;
 
   void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
     // do nothing
