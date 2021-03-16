@@ -2107,8 +2107,9 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 					     &truncated,
 					     &cur_marker,
                                              y);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     // NB: while regions of ent_list will be sorted, we have no
     // guarantee that all items will be sorted since they can cross
@@ -2168,8 +2169,10 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
   } // while (truncated && count <= max)
 
 done:
-  if (is_truncated)
+
+  if (is_truncated) {
     *is_truncated = truncated;
+  }
 
   return 0;
 } // list_objects_unordered
@@ -8343,13 +8346,17 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
    * few results, perhaps due to filtering or to a series of
    * namespaced entries */
 
-  ldpp_dout(dpp, 10) << "RGWRados::" << __func__ << ": " << bucket_info.bucket <<
-    " start_after=\"" << start_after.name <<
-    "[" << start_after.instance <<
-    "]\", prefix=\"" << prefix <<
-    "\" num_entries=" << num_entries <<
+  ldpp_dout(dpp, 10) << "RGWRados::" << __func__ << ": " <<
+    bucket_info.bucket <<
+    " start_after=\"" << start_after <<
+    "\", prefix=\"" << prefix <<
+    ", delimiter=\"" << delimiter <<
+    "\", shard_id=" << shard_id <<
+    "\", num_entries=" << num_entries <<
     ", list_versions=" << list_versions <<
-    ", expansion_factor=" << expansion_factor << dendl;
+    ", expansion_factor=" << expansion_factor <<
+    ", force_check_filter is " <<
+    (force_check_filter ? "set" : "unset") << dendl;
 
   m.clear();
 
@@ -8517,13 +8524,15 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       r = 0;
     }
 
-    if (r >= 0) {
+    // at this point either r >= 0 or r == -ENOENT
+    if (r >= 0) { // i.e., if r != -ENOENT
       ldpp_dout(dpp, 10) << "RGWRados::" << __func__ << ": got " <<
-	dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
+	dirent.key << dendl;
+
       m[name] = std::move(dirent);
       last_entry_visited = &(m[name]);
       ++count;
-    } else {
+    } else { // r == -ENOENT
       ldpp_dout(dpp, 10) << "RGWRados::" << __func__ << ": skipping " <<
 	dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
       last_entry_visited = &tracker.dir_entry();
@@ -8602,9 +8611,14 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
 					check_filter_t force_check_filter) {
-  ldpp_dout(dpp, 10) << "cls_bucket_list_unordered " << bucket_info.bucket <<
-    " start_after " << start_after.name << "[" << start_after.instance <<
-    "] num_entries " << num_entries << dendl;
+  ldpp_dout(dpp, 10) << __func__ << " " << bucket_info.bucket <<
+    " start_after=\"" << start_after <<
+    "\", prefix=\"" << prefix <<
+    "\", shard_id=" << shard_id <<
+    "\", num_entries=" << num_entries <<
+    ", list_versions=" << list_versions <<
+    ", force_check_filter is " <<
+    (force_check_filter ? "set" : "unset") << dendl;
 
   ent_list.clear();
   static MultipartMetaFilter multipart_meta_filter;
@@ -8614,8 +8628,9 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 
   map<int, string> oids;
   int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id, &index_pool, &oids, nullptr);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
   auto& ioctx = index_pool.ioctx();
 
@@ -8676,8 +8691,9 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 			   num_entries,
                            list_versions, &result);
     r = rgw_rados_operate(ioctx, oid, &op, nullptr, null_yield);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     for (auto& entry : result.dir.m) {
       rgw_bucket_dir_entry& dirent = entry.second;
@@ -8699,10 +8715,10 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
         r = 0;
       }
 
-      // at this point either r >=0 or r == -ENOENT
+      // at this point either r >= 0 or r == -ENOENT
       if (r >= 0) { // i.e., if r != -ENOENT
 	ldpp_dout(dpp, 10) << "RGWRados::cls_bucket_list_unordered: got " <<
-	  dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
+	  dirent.key << dendl;
 
 	if (count < num_entries) {
 	  marker = last_added_entry = dirent.key; // double assign
