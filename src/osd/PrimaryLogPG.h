@@ -868,44 +868,7 @@ protected:
    * @param ctx [in,out] ctx to get locks for
    * @return true on success, false if we are queued
    */
-  bool get_rw_locks(bool write_ordered, OpContext *ctx) {
-    /* If head_obc, !obc->obs->exists and we will always take the
-     * snapdir lock *before* the head lock.  Since all callers will do
-     * this (read or write) if we get the first we will be guaranteed
-     * to get the second.
-     */
-    if (write_ordered && ctx->op->may_read()) {
-      ctx->lock_type = RWState::RWEXCL;
-    } else if (write_ordered) {
-      ctx->lock_type = RWState::RWWRITE;
-    } else {
-      ceph_assert(ctx->op->may_read());
-      ctx->lock_type = RWState::RWREAD;
-    }
-
-    if (ctx->head_obc) {
-      ceph_assert(!ctx->obc->obs.exists);
-      if (!ctx->lock_manager.get_lock_type(
-	    ctx->lock_type,
-	    ctx->head_obc->obs.oi.soid,
-	    ctx->head_obc,
-	    ctx->op)) {
-	ctx->lock_type = RWState::RWNONE;
-	return false;
-      }
-    }
-    if (ctx->lock_manager.get_lock_type(
-	  ctx->lock_type,
-	  ctx->obc->obs.oi.soid,
-	  ctx->obc,
-	  ctx->op)) {
-      return true;
-    } else {
-      ceph_assert(!ctx->head_obc);
-      ctx->lock_type = RWState::RWNONE;
-      return false;
-    }
-  }
+  bool get_rw_locks(bool write_ordered, OpContext *ctx);
 
   /**
    * Cleans up OpContext
