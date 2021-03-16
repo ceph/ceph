@@ -158,6 +158,9 @@ add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PRIVATE "TEST_LIBRBD_INTERNALS")
+set_target_properties(unittest_librbd PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool
+  JOB_POOL_LINK heavy_link_job_pool)
 add_dependencies(unittest_librbd
   cls_journal
   cls_lock

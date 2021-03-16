@@ -105,6 +105,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 include(GNUInstallDirs)
 include(CephChecks)
+if(CMAKE_GENERATOR MATCHES Ninja)
+  include(LimitJobs)
+endif()
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 

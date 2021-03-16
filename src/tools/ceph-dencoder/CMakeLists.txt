@@ -25,6 +25,9 @@ if(WITH_RADOSGW)
 endif()
 
 add_executable(ceph-dencoder ${dencoder_srcs})
+set_target_properties(ceph-dencoder PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool
+  JOB_POOL_LINK heavy_link_job_pool)
 
 if(WITH_RADOSGW)
   list(APPEND DENCODER_EXTRALIBS

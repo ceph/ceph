@@ -39,3 +39,5 @@ add_library(crimson-seastore STATIC
 	)
 target_link_libraries(crimson-seastore
   crimson)
+set_target_properties(crimson-seastore PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool)
