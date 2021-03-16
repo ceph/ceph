@@ -1612,6 +1612,52 @@ int PrimaryLogPG::do_scrub_ls(const MOSDOp *m, OSDOp *osd_op)
 }
 
 /**
+ * Grabs locks for OpContext, should be cleaned up in close_op_ctx
+ *
+ * @param ctx [in,out] ctx to get locks for
+ * @return true on success, false if we are queued
+ */
+bool PrimaryLogPG::get_rw_locks(bool write_ordered, OpContext *ctx)
+{
+  /* If head_obc, !obc->obs->exists and we will always take the
+   * snapdir lock *before* the head lock.  Since all callers will do
+   * this (read or write) if we get the first we will be guaranteed
+   * to get the second.
+   */
+  if (write_ordered && ctx->op->may_read()) {
+    ctx->lock_type = RWState::RWEXCL;
+  } else if (write_ordered) {
+    ctx->lock_type = RWState::RWWRITE;
+  } else {
+    ceph_assert(ctx->op->may_read());
+    ctx->lock_type = RWState::RWREAD;
+  }
+
+  if (ctx->head_obc) {
+    ceph_assert(!ctx->obc->obs.exists);
+    if (!ctx->lock_manager.get_lock_type(
+          ctx->lock_type,
+          ctx->head_obc->obs.oi.soid,
+          ctx->head_obc,
+          ctx->op)) {
+      ctx->lock_type = RWState::RWNONE;
+      return false;
+    }
+  }
+  if (ctx->lock_manager.get_lock_type(
+        ctx->lock_type,
+        ctx->obc->obs.oi.soid,
+        ctx->obc,
+        ctx->op)) {
+    return true;
+  } else {
+    ceph_assert(!ctx->head_obc);
+    ctx->lock_type = RWState::RWNONE;
+    return false;
+  }
+}
+
+/**
  * Releases locks
  *
  * @param manager [in] manager with locks to release
@@ -4181,7 +4227,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   // issue replica writes
   ceph_tid_t rep_tid = osd->get_tid();
 
-  RepGather *repop = new_repop(ctx, obc, rep_tid);
+  RepGather *repop = new_repop(ctx, rep_tid);
 
   issue_repop(repop, ctx);
   eval_repop(repop);
@@ -11054,7 +11100,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 }
 
 PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
-  OpContext *ctx, ObjectContextRef obc,
+  OpContext *ctx,
   ceph_tid_t rep_tid)
 {
   if (ctx->op)
@@ -11132,7 +11178,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::simple_opc_create(ObjectContextRef obc
 
 void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
 {
-  RepGather *repop = new_repop(ctx.get(), ctx->obc, ctx->reqid.tid);
+  RepGather *repop = new_repop(ctx.get(), ctx->reqid.tid);
   dout(20) << __func__ << " " << repop << dendl;
   issue_repop(repop, ctx.get());
   eval_repop(repop);
