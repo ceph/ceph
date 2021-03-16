@@ -44,9 +44,7 @@
       "kWpZ2ypBDH45h2o3LyqvGjsu/BFkeG6JpEDCWbClKWcjKxOrLVDufhSDduffDjja",
       "zOsgQJg0Yf//Ubb5p0c54GjHM/XDXEcV3m3sEtbmMYz6xGwuag4bx8P2E/QY8sFp",
       "JxgIdS8vdl6YhDCjKJ2XzI30JwCdftgDIAiWSE0ivoDc+8+gG1nb11GT52HFzA==",
-      "-----END CERTIFICATE-----"
-	],
-  "rgw_frontend_ssl_key": [
+      "-----END CERTIFICATE-----",
       "-----BEGIN PRIVATE KEY-----",
       "MIIJQwIBADANBgkqhkiG9w0BAQEFAASCCS0wggkpAgEAAoICAQDKbRiedt0JBG3N",
       "+82vIrgk2oY9Ga+ocvk6El/1X3c8Y4mB7g9j4mWciQe7dnjqogPLEOTeddxFLX9m",

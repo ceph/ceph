@@ -573,6 +573,11 @@ class ServiceSpec(object):
             n += '.' + self.service_id
         return n
 
+    def get_port_start(self) -> Optional[int]:
+        # If defined, we will allocate and number ports starting at this
+        # point.
+        return None
+
     def to_json(self):
         # type: () -> OrderedDict[str, Any]
         ret: OrderedDict[str, Any] = OrderedDict()
@@ -702,7 +707,7 @@ class RGWSpec(ServiceSpec):
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[List[str]] = None,
-                 rgw_frontend_ssl_key: Optional[List[str]] = None,
+                 rgw_frontend_type: Optional[str] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
                  preview_only: bool = False,
@@ -724,8 +729,11 @@ class RGWSpec(ServiceSpec):
         self.rgw_zone = rgw_zone
         self.rgw_frontend_port = rgw_frontend_port
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
-        self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
+        self.rgw_frontend_type = rgw_frontend_type
         self.ssl = ssl
+
+    def get_port_start(self) -> Optional[int]:
+        return self.get_port()
 
     def get_port(self) -> int:
         if self.rgw_frontend_port:
@@ -734,16 +742,6 @@ class RGWSpec(ServiceSpec):
             return 443
         else:
             return 80
-
-    def rgw_frontends_config_value(self) -> str:
-        ports = []
-        if self.ssl:
-            ports.append(f"ssl_port={self.get_port()}")
-            ports.append(f"ssl_certificate=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.crt")
-            ports.append(f"ssl_key=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.key")
-        else:
-            ports.append(f"port={self.get_port()}")
-        return f'beast {" ".join(ports)}'
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
@@ -861,7 +859,7 @@ class HA_RGWSpec(ServiceSpec):
                  ha_proxy_ssl_options: Optional[List[str]] = None,
                  haproxy_container_image: Optional[str] = None,
                  keepalived_container_image: Optional[str] = None,
-                 definitive_host_list: Optional[List[HostPlacementSpec]] = None
+                 definitive_host_list: Optional[List[str]] = None
                  ):
         assert service_type == 'ha-rgw'
         super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id,
@@ -887,7 +885,7 @@ class HA_RGWSpec(ServiceSpec):
         # placeholder variable. Need definitive list of hosts this service will
         # be placed on in order to generate keepalived config. Will be populated
         # when applying spec
-        self.definitive_host_list = []  # type: List[HostPlacementSpec]
+        self.definitive_host_list = []  # type: List[str]
 
     def validate(self) -> None:
         super(HA_RGWSpec, self).validate()

@@ -2549,7 +2549,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         else:
             if c:
                 deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id,
-                                    c, osd_fsid=osd_fsid)
+                                    c, osd_fsid=osd_fsid, ports=ports)
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
 
@@ -2613,6 +2613,7 @@ def deploy_daemon_units(
     enable: bool = True,
     start: bool = True,
     osd_fsid: Optional[str] = None,
+    ports: Optional[List[int]] = None,
 ) -> None:
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
@@ -2674,6 +2675,8 @@ def deploy_daemon_units(
             'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
             'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
         })
+        if not meta.get('ports'):
+            meta['ports'] = ports
         metaf.write(json.dumps(meta, indent=4) + '\n')
 
         os.fchmod(f.fileno(), 0o600)

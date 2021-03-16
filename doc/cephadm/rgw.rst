@@ -26,12 +26,31 @@ To deploy a set of radosgw daemons, with an arbitrary service name
 
   ceph orch apply rgw *<name>* [--rgw-realm=*<realm-name>*] [--rgw-zone=*<zone-name>*] --placement="*<num-daemons>* [*<host1>* ...]"
 
+Trivial setup
+-------------
+
 For example, to deploy 2 RGW daemons (the default) for a single-cluster RGW deployment
 under the arbitrary service id *foo*:
 
 .. prompt:: bash #
 
    ceph orch apply rgw foo
+
+Designated gateways
+-------------------
+
+A common scenario is to have a labeled set of hosts that will act
+as gateways, with multiple instances of radosgw running on consecutive
+ports 8000 and 8001:
+
+.. prompt:: bash #
+
+   ceph orch host label add gwhost1 rgw  # the 'rgw' label can be anything
+   ceph orch host label add gwhost2 rgw
+   ceph orch apply rgw foo '--placement=label:rgw count-per-host:2' --port=8000
+
+Multisite zones
+---------------
 
 To deploy RGWs serving the multisite *myorg* realm and the *us-east-1* zone on
 *myhost1* and *myhost2*:
@@ -70,7 +89,7 @@ High availability service for RGW
 =================================
 
 This service allows the user to create a high avalilability RGW service
-providing a mimimun set of configuration options.
+providing a minimun set of configuration options.
 
 The orchestrator will deploy and configure automatically several HAProxy and
 Keepalived containers to assure the continuity of the RGW service while the

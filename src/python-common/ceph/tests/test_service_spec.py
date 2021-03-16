@@ -201,6 +201,7 @@ placement:
   hosts:
   - ceph-001
 spec:
+  rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
 ---
