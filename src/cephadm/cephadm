@@ -2117,7 +2117,6 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
 
     if daemon_type in Monitoring.components.keys():
         config_json: Dict[str, Any] = get_parm(ctx.config_json)
-        required_files = Monitoring.components[daemon_type].get('config-json-files', list())
 
         # Set up directories specific to the monitoring component
         config_dir = ''
@@ -2145,10 +2144,14 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
 
         # populate the config directory for the component from the config-json
-        for fname in required_files:
-            if 'files' in config_json:  # type: ignore
+        if 'files' in config_json:
+            for fname in config_json['files']:
                 content = dict_get_join(config_json['files'], fname)
-                with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
+                if os.path.isabs(fname):
+                    fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
+                else:
+                    fpath = os.path.join(data_dir_root, config_dir, fname)
+                with open(fpath, 'w') as f:
                     os.fchown(f.fileno(), uid, gid)
                     os.fchmod(f.fileno(), 0o600)
                     f.write(content)
