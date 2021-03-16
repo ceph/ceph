@@ -728,7 +728,7 @@ class RgwService(CephService):
                     % spec.rgw_frontend_ssl_certificate)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.service_name()}.crt',  # NOTE: actually a .pem!
+                'key': f'rgw/cert/{spec.service_name()}',
                 'val': cert_data,
             })
 
@@ -761,7 +761,7 @@ class RgwService(CephService):
                     args.append(f"ssl_endpoint={daemon_spec.ip}:{port}")
                 else:
                     args.append(f"ssl_port={port}")
-                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
+                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
                 if daemon_spec.ip:
                     args.append(f"endpoint={daemon_spec.ip}:{port}")
@@ -773,7 +773,7 @@ class RgwService(CephService):
                     args.append(f"port={daemon_spec.ip}:{port}s")  # note the 's' suffix on port
                 else:
                     args.append(f"port={port}s")  # note the 's' suffix on port
-                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
+                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
                 if daemon_spec.ip:
                     args.append(f"port={daemon_spec.ip}:{port}")
