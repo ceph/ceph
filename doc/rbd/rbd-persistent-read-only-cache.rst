@@ -128,7 +128,7 @@ command, user name, monitor caps, and OSD caps::
 The ``ceph-immutable-object-cache`` daemon can be managed by ``systemd`` by specifying the user
 ID as the daemon instance::
 
-  systemctl enable ceph-immutable-object-cache@immutable-object-cache.{unique id}
+  systemctl enable ceph-immutable-object-cache@ceph-immutable-object-cache.{unique id}
 
 The ``ceph-immutable-object-cache`` can also be run in foreground by ``ceph-immutable-object-cache`` command::
 
