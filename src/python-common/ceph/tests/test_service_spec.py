@@ -200,6 +200,9 @@ service_name: rgw.default-rgw-realm.eu-central-1.1
 placement:
   hosts:
   - ceph-001
+networks:
+- 10.0.0.0/8
+- 192.168.0.0/16
 spec:
   rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
