@@ -5903,7 +5903,7 @@ int Server::xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_pt
   }
 
   if (op == CEPH_MDS_OP_RMXATTR) {
-    if (xattrs && xattrs->count(mempool::mds_co::string(xattr_name)) == 0) {
+    if (!xattrs || xattrs->count(mempool::mds_co::string(xattr_name)) == 0) {
       dout(10) << "removexattr '" << xattr_name << "' and CEPHFS_ENODATA on " << *cur << dendl;
       return -CEPHFS_ENODATA;
     }
