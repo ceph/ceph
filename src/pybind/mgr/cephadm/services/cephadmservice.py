@@ -144,7 +144,7 @@ class CephadmService(metaclass=ABCMeta):
         return DaemonDescription()
 
     def get_keyring_with_caps(self, entity: AuthEntity, caps: List[str]) -> str:
-        ret, keyring, err = self.mgr.check_mon_command({
+        ret, keyring, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
             'entity': entity,
             'caps': caps,

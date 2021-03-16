@@ -115,7 +115,7 @@ class TestCephadmService:
                                'entity': 'client.iscsi.a',
                                'caps': expected_caps})
 
-        assert expected_call in mgr.check_mon_command.mock_calls
+        assert expected_call in mgr.mon_command.mock_calls
         assert expected_call2 in mgr.mon_command.mock_calls
 
     def test_get_auth_entity(self):
