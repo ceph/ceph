@@ -194,7 +194,7 @@ void MetricsHandler::handle_payload(Session *session, const WriteLatencyPayload 
 
 void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPayload &payload) {
   dout(20) << ": type=" << static_cast<ClientMetricType>(MetadataLatencyPayload::METRIC_TYPE)
-	   << ", session=" << session << ", latenc]y=" << payload.lat << dendl;
+	   << ", session=" << session << ", latency=" << payload.lat << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
