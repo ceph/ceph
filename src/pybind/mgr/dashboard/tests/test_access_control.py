@@ -585,6 +585,18 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                                       'admin@user.com')
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
 
+    def test_sanitize_password(self):
+        self.test_create_user()
+        password = 'myPass\\n\\r\\n'
+        with open('/tmp/test_sanitize_password.txt', 'w+') as pwd_file:
+            # Add new line separators (like some text editors when a file is saved).
+            pwd_file.write('{}{}'.format(password, '\n\r\n\n'))
+            pwd_file.seek(0)
+            user = self.exec_cmd('ac-user-set-password', username='admin',
+                                 inbuf=pwd_file.read(), force_password=True)
+            pass_hash = password_hash(password, user['password'])
+            self.assertEqual(user['password'], pass_hash)
+
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-user-set-password', username='admin',
