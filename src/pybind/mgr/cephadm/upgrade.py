@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Optional, Dict, List
 
 import orchestrator
 from cephadm.serve import CephadmServe
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER
 from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service
 
@@ -530,10 +531,9 @@ class CephadmUpgrade:
                     logger.info('Upgrade: Updating %s.%s' %
                                 (d.daemon_type, d.daemon_id))
                 try:
+                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d)
                     self.mgr._daemon_action(
-                        d.daemon_type,
-                        d.daemon_id,
-                        d.hostname,
+                        daemon_spec,
                         'redeploy',
                         image=target_image
                     )

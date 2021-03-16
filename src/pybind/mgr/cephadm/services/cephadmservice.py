@@ -4,7 +4,7 @@ import re
 import logging
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
-    Optional, Dict, Any, Tuple, NewType
+    Optional, Dict, Any, Tuple, NewType, cast
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
@@ -33,7 +33,8 @@ class CephadmDaemonDeploySpec:
                  ceph_conf: str = '',
                  extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
-                 ports: Optional[List[int]] = None,):
+                 ip: Optional[str] = None,
+                 ports: Optional[List[int]] = None):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -58,6 +59,7 @@ class CephadmDaemonDeploySpec:
 
         # TCP ports used by the daemon
         self.ports: List[int] = ports or []
+        self.ip: Optional[str] = ip
 
         # values to be populated during generate_config calls
         # and then used in _run_cephadm
@@ -74,13 +76,29 @@ class CephadmDaemonDeploySpec:
 
         return files
 
+    @staticmethod
+    def from_daemon_description(dd: DaemonDescription) -> 'CephadmDaemonDeploySpec':
+        assert dd.hostname
+        assert dd.daemon_id
+        assert dd.daemon_type
+        return CephadmDaemonDeploySpec(
+            host=dd.hostname,
+            daemon_id=dd.daemon_id,
+            daemon_type=dd.daemon_type,
+            service_name=dd.service_name(),
+            ip=dd.ip,
+            ports=dd.ports,
+        )
+
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
         return DaemonDescription(
             daemon_type=self.daemon_type,
             daemon_id=self.daemon_id,
             hostname=self.host,
             status=status,
-            status_desc=status_desc
+            status_desc=status_desc,
+            ip=self.ip,
+            ports=self.ports,
         )
 
 
@@ -100,17 +118,21 @@ class CephadmService(metaclass=ABCMeta):
     def allow_colo(self) -> bool:
         return False
 
-    def make_daemon_spec(self, host: str,
-                         daemon_id: str,
-                         network: str,
-                         spec: ServiceSpecs,
-                         daemon_type: Optional[str] = None,) -> CephadmDaemonDeploySpec:
+    def make_daemon_spec(
+            self, host: str,
+            daemon_id: str,
+            network: str,
+            spec: ServiceSpecs,
+            daemon_type: Optional[str] = None,
+            ports: Optional[List[int]] = None
+    ) -> CephadmDaemonDeploySpec:
         return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
             service_name=spec.service_name(),
             network=network,
-            daemon_type=daemon_type
+            daemon_type=daemon_type,
+            ports=ports,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -673,6 +695,9 @@ class MdsService(CephService):
 class RgwService(CephService):
     TYPE = 'rgw'
 
+    def allow_colo(self) -> bool:
+        return True
+
     def config(self, spec: RGWSpec, rgw_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
 
@@ -692,13 +717,6 @@ class RgwService(CephService):
                 'value': spec.rgw_zone,
             })
 
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
-            'name': 'rgw_frontends',
-            'value': spec.rgw_frontends_config_value(),
-        })
-
         if spec.rgw_frontend_ssl_certificate:
             if isinstance(spec.rgw_frontend_ssl_certificate, list):
                 cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
@@ -710,23 +728,8 @@ class RgwService(CephService):
                     % spec.rgw_frontend_ssl_certificate)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
+                'key': f'rgw/cert/{spec.service_name()}.crt',  # NOTE: actually a .pem!
                 'val': cert_data,
-            })
-
-        if spec.rgw_frontend_ssl_key:
-            if isinstance(spec.rgw_frontend_ssl_key, list):
-                key_data = '\n'.join(spec.rgw_frontend_ssl_key)
-            elif isinstance(spec.rgw_frontend_ssl_certificate, str):
-                key_data = spec.rgw_frontend_ssl_key
-            else:
-                raise OrchestratorError(
-                    'Invalid rgw_frontend_ssl_key: %s'
-                    % spec.rgw_frontend_ssl_key)
-            ret, out, err = self.mgr.check_mon_command({
-                'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
-                'val': key_data,
             })
 
         # TODO: fail, if we don't have a spec
@@ -737,11 +740,43 @@ class RgwService(CephService):
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
+        spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
         keyring = self.get_keyring(rgw_id)
 
-        daemon_spec.keyring = keyring
+        if daemon_spec.ports:
+            port = daemon_spec.ports[0]
+        else:
+            # this is a redeploy of older instance that doesn't have an explicitly
+            # assigned port, in which case we can assume there is only 1 per host
+            # and it matches the spec.
+            port = spec.get_port()
 
+        # configure frontend
+        args = []
+        ftype = spec.rgw_frontend_type or "beast"
+        if ftype == 'beast':
+            if spec.ssl:
+                args.append(f"ssl_port={port}")
+                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
+            else:
+                args.append(f"port={port}")
+        elif ftype == 'civetweb':
+            if spec.ssl:
+                args.append(f"port={port}s")  # note the 's' suffix on port
+                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
+            else:
+                args.append(f"port={port}")
+        frontend = f'{ftype} {" ".join(args)}'
+
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config set',
+            'who': utils.name_to_config_section(daemon_spec.name()),
+            'name': 'rgw_frontends',
+            'value': frontend
+        })
+
+        daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec

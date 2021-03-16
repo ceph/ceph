@@ -122,7 +122,9 @@ class TestCephadm(object):
                         'hostname': 'test',
                         'status': 1,
                         'status_desc': 'starting',
-                        'is_active': False}
+                        'is_active': False,
+                        'ports': [],
+                    }
                 ]
 
                 with with_service(cephadm_module, ServiceSpec('rgw', 'r.z'), CephadmOrchestrator.apply_rgw, 'test'):
@@ -287,7 +289,7 @@ class TestCephadm(object):
                 _run_cephadm.assert_called_with(
                     'test', 'mon.test', 'deploy', [
                         '--name', 'mon.test',
-                        '--meta-json', '{"service_name": "mon"}',
+                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null}',
                         '--config-json', '-',
                         '--reconfig',
                     ],
