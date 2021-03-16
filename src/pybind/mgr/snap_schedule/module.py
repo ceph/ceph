@@ -100,6 +100,9 @@ class Module(MgrModule):
         except CephfsConnectionException as e:
             return e.to_tuple()
         if not scheds:
+            if format == 'json':
+                output: Dict[str, str] = {}
+                return 0, json.dumps(output), ''
             return -errno.ENOENT, '', f'SnapSchedule for {path} not found'
         if format == 'json':
             # json_list = ','.join([sched.json_list() for sched in scheds])
