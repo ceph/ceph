@@ -7,6 +7,8 @@
 #include "kv/RocksDBStore.h"
 #include "string.h"
 
+namespace {
+
 rocksdb::Status err_to_status(int r)
 {
   switch (r) {
@@ -26,6 +28,17 @@ rocksdb::Status err_to_status(int r)
     ceph_abort_msg("unrecognized error code");
     return rocksdb::Status::NotSupported(rocksdb::Status::kNone);
   }
+}
+
+void split(const std::string &fn, std::string *dir, std::string *file)
+{
+  size_t slash = fn.rfind('/');
+  *file = fn.substr(slash + 1);
+  while (slash && fn[slash-1] == '/')
+    --slash;
+  *dir = fn.substr(0, slash);
+}
+
 }
 
 // A file abstraction for reading sequentially through a file
