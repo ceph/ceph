@@ -153,7 +153,7 @@ public:
   struct Dir : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
 
-    mempool::bluefs::map<std::string,FileRef> file_map;
+    mempool::bluefs::map<std::string, FileRef, std::less<>> file_map;
 
   private:
     FRIEND_MAKE_REF(Dir);
@@ -309,8 +309,8 @@ private:
   };
 
   // cache
-  mempool::bluefs::map<std::string, DirRef> dir_map;              ///< dirname -> Dir
-  mempool::bluefs::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
+  mempool::bluefs::map<std::string, DirRef, std::less<>> dir_map;          ///< dirname -> Dir
+  mempool::bluefs::unordered_map<uint64_t, FileRef> file_map; ///< ino -> File
 
   // map of dirty files, files of same dirty_seq are grouped into list.
   std::map<uint64_t, dirty_file_list_t> dirty_files;
