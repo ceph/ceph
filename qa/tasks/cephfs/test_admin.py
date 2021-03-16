@@ -1,4 +1,5 @@
 import json
+import uuid
 from io import StringIO
 from os.path import join as os_path_join
 
@@ -346,7 +347,8 @@ class TestMirroringCommands(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", fs_name)
 
     def _add_peer(self, fs_name, peer_spec, remote_fs_name):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_spec, remote_fs_name)
+        peer_uuid = str(uuid.uuid4())
+        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
 
     def _remove_peer(self, fs_name, peer_uuid):
         self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
@@ -366,12 +368,12 @@ class TestMirroringCommands(CephFSTestCase):
         fs_map = status.get_fsmap_byname(fs_name)
         mirror_info = fs_map.get('mirror_info', None)
         self.assertTrue(mirror_info is not None)
-        for uuid, remote in mirror_info['peers'].items():
+        for peer_uuid, remote in mirror_info['peers'].items():
             client_name = remote['remote']['client_name']
             cluster_name = remote['remote']['cluster_name']
             spec = f'{client_name}@{cluster_name}'
             if spec == peer_spec:
-                return uuid
+                return peer_uuid
         return None
 
     def test_mirroring_command(self):
