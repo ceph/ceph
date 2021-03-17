@@ -105,6 +105,9 @@ class Notification;
 class GCChain;
 class Writer;
 class Zone;
+class LuaScriptManager;
+class RGWOIDCProvider;
+class RGWRole;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -184,9 +187,6 @@ class Store {
     virtual int register_to_service_map(const std::string& daemon_type,
 					const map<std::string, std::string>& meta) = 0;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) = 0;
-    virtual int list_raw_objects(const rgw_pool& pool, const std::string& prefix_filter,
-				 int max, RGWListRawObjsCtx& ctx, std::list<std::string>& oids,
-				 bool* is_truncated) = 0;
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled) = 0;
     virtual uint64_t get_new_req_id() = 0;
     virtual int get_sync_policy_handler(const DoutPrefixProvider* dpp,
@@ -204,19 +204,6 @@ class Store {
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_all_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual int get_config_key_val(std::string name, bufferlist* bl) = 0;
-    virtual int put_system_obj(const rgw_pool& pool, const std::string& oid,
-			       bufferlist& data, bool exclusive,
-			       RGWObjVersionTracker* objv_tracker, real_time set_mtime,
-			       optional_yield y, map<std::string, bufferlist>* pattrs = nullptr) = 0;
-    virtual int get_system_obj(const DoutPrefixProvider* dpp,
-			       const rgw_pool& pool, const std::string& key,
-			       bufferlist& bl,
-			       RGWObjVersionTracker* objv_tracker, real_time* pmtime,
-			       optional_yield y, map<std::string, bufferlist>* pattrs = nullptr,
-			       rgw_cache_entry_info* cache_info = nullptr,
-			       boost::optional<obj_version> refresh_version = boost::none) = 0;
-    virtual int delete_system_obj(const rgw_pool& pool, const std::string& oid,
-				  RGWObjVersionTracker* objv_tracker, optional_yield y) = 0;
     virtual int meta_list_keys_init(const std::string& section, const std::string& marker, void** phandle) = 0;
     virtual int meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated) = 0;
     virtual void meta_list_keys_complete(void* handle) = 0;
@@ -224,6 +211,22 @@ class Store {
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) = 0;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() = 0;
     virtual std::string get_host_id() = 0;
+    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() = 0;
+    virtual std::unique_ptr<RGWRole> get_role(std::string name,
+					      std::string tenant,
+					      std::string path="",
+					      std::string trust_policy="",
+					      std::string max_session_duration_str="") = 0;
+    virtual std::unique_ptr<RGWRole> get_role(std::string id) = 0;
+    virtual int get_roles(const DoutPrefixProvider *dpp,
+			  optional_yield y,
+			  const std::string& path_prefix,
+			  const std::string& tenant,
+			  vector<std::unique_ptr<RGWRole>>& roles) = 0;
+    virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() = 0;
+    virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
+				   const std::string& tenant,
+				   vector<std::unique_ptr<RGWOIDCProvider>>& providers) = 0;
 
     virtual void finalize(void) = 0;
 
@@ -910,6 +913,18 @@ class Zone {
     virtual bool get_redirect_endpoint(std::string* endpoint) = 0;
     virtual bool has_zonegroup_api(const std::string& api) const = 0;
     virtual const std::string& get_current_period_id() = 0;
+};
+
+class LuaScriptManager {
+protected:
+  std::string script;
+
+public:
+  virtual ~LuaScriptManager() = default;
+
+  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) = 0;
+  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) = 0;
+  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
 };
 
 } } // namespace rgw::sal
