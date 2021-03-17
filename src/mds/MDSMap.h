@@ -167,6 +167,13 @@ public:
   static CompatSet get_compat_set_default();
   static CompatSet get_compat_set_base(); // pre v0.20
 
+  static MDSMap create_null_mdsmap() {
+    MDSMap null_map;
+    /* Use the largest epoch so it's always bigger than whatever the MDS has. */
+    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+    return null_map;
+  }
+
   bool get_inline_data_enabled() const { return inline_data_enabled; }
   void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
 
