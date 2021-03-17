@@ -676,8 +676,6 @@ class CephadmConfigChecks:
     def run_checks(self) -> None:
         checks_enabled = self.mgr.get_module_option('config_checks_enabled')
         if checks_enabled is not True:
-            self.log.info("ALL cephadm checks are disabled, use 'ceph config set mgr "
-                          "mgr/cephadm/config_checks_enabled true' to enable")
             return
 
         self.reset()
