@@ -1063,7 +1063,7 @@ public:
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
 
-    std::atomic_int nref;  ///< reference count
+    std::atomic<uint32_t> nref;  ///< reference count
     Collection *c;
     ghobject_t oid;
 
@@ -1075,10 +1075,8 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
     bool cached;              ///< Onode is logically in the cache
-                              /// (it can be pinned and hence physically out
-                              /// of it at the moment though)
-    std::atomic_bool pinned;  ///< Onode is pinned
-                              /// (or should be pinned when cached)
+    bool pinned;              ///< Onode is pinned, i.e. logically it's in the cache
+                              ///< but physically it doesn't
     ExtentMap extent_map;
 
     // track txc's that have not been committed to kv store (and whose
@@ -1134,17 +1132,6 @@ public:
     void flush();
     void get();
     void put();
-
-    inline bool put_cache() {
-      ceph_assert(!cached);
-      cached = true;
-      return !pinned;
-    }
-    inline bool pop_cache() {
-      ceph_assert(cached);
-      cached = false;
-      return !pinned;
-    }
 
     const std::string& get_omap_prefix();
     void get_omap_header(std::string *out);
@@ -1218,11 +1205,7 @@ public:
   /// A Generic onode Cache Shard
   struct OnodeCacheShard : public CacheShard {
     std::atomic<uint64_t> num_pinned = {0};
-
     std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
-
-    virtual void _pin(Onode* o) = 0;
-    virtual void _unpin(Onode* o) = 0;
 
   public:
     OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
@@ -1230,9 +1213,7 @@ public:
                                    PerfCounters *logger);
     virtual void _add(Onode* o, int level) = 0;
     virtual void _rm(Onode* o) = 0;
-    virtual void _unpin_and_rm(Onode* o) = 0;
-
-    virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
+    virtual void touch_and_maybe_unpin(Onode* o) = 0;
     virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
     bool empty() {
       return _get_num() == 0;
