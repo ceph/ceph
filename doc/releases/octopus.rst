@@ -6,6 +6,77 @@ Octopus is the 15th stable release of Ceph.  It is named after an
 order of 8-limbed cephalopods.
 
 
+v15.2.10 Octopus
+================
+
+This is the 10th backport release in the Octopus series. We recommend all
+users update to this release.
+
+Notable Changes
+---------------
+
+* The containers include an updated tcmalloc that avoids crashes seen on 15.2.9.  See `issue#49618 <https://tracker.ceph.com/issues/49618>`_ for details.
+
+* RADOS: BlueStore handling of huge(>4GB) writes from RocksDB to BlueFS has been fixed.
+
+* When upgrading from a previous cephadm release, systemctl may hang when trying to start or restart the monitoring containers. (This is caused by a change in the systemd unit to use ``type=forking``.) After the upgrade, please run::
+
+    ceph orch redeploy nfs
+    ceph orch redeploy iscsi
+    ceph orch redeploy node-exporter
+    ceph orch redeploy prometheus
+    ceph orch redeploy grafana
+    ceph orch redeploy alertmanager
+
+Changelog
+---------
+
+* octopus: .github: add workflow for adding label and milestone (`pr#39890 <https://github.com/ceph/ceph/pull/39890>`_, Kefu Chai, Ernesto Puerta)
+* octopus: ceph-volume: Fix usage of is_lv (`pr#39220 <https://github.com/ceph/ceph/pull/39220>`_, Michał Nasiadka)
+* octopus: ceph-volume: Update batch.py (`pr#39469 <https://github.com/ceph/ceph/pull/39469>`_, shenjiatong)
+* octopus: ceph-volume: add some flexibility to bytes_to_extents (`pr#39271 <https://github.com/ceph/ceph/pull/39271>`_, Jan Fajerski)
+* octopus: ceph-volume: pass --filter-for-batch from drive-group subcommand (`pr#39523 <https://github.com/ceph/ceph/pull/39523>`_, Jan Fajerski)
+* octopus: cephadm: Delete the unnecessary error line in open_ports (`pr#39633 <https://github.com/ceph/ceph/pull/39633>`_, Donggyu Park)
+* octopus: cephadm: fix 'inspect' and 'pull' (`pr#39715 <https://github.com/ceph/ceph/pull/39715>`_, Sage Weil)
+* octopus: cephfs: pybind/ceph_volume_client: Update the 'volumes' key to 'subvolumes' in auth-metadata file (`pr#39906 <https://github.com/ceph/ceph/pull/39906>`_, Kotresh HR)
+* octopus: cmake: boost>=1.74 adds BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT to radosgw (`pr#39885 <https://github.com/ceph/ceph/pull/39885>`_, Casey Bodley)
+* octopus: librbd: allow disabling journaling for snapshot based mirroring image (`pr#39864 <https://github.com/ceph/ceph/pull/39864>`_, Mykola Golub)
+* octopus: librbd: correct incremental deep-copy object-map inconsistencies (`pr#39577 <https://github.com/ceph/ceph/pull/39577>`_, Mykola Golub, Jason Dillaman)
+* octopus: librbd: don't log error if get mirror status fails due to mirroring disabled (`pr#39862 <https://github.com/ceph/ceph/pull/39862>`_, Mykola Golub)
+* octopus: librbd: use on-disk image name when storing mirror snapshot state (`pr#39866 <https://github.com/ceph/ceph/pull/39866>`_, Mykola Golub)
+* octopus: mgr/dashboard/monitoring: upgrade Grafana version due to CVE-2020-13379 (`pr#39306 <https://github.com/ceph/ceph/pull/39306>`_, Alfonso Martínez)
+* octopus: mgr/dashboard: CLI commands: read passwords from file (`pr#39436 <https://github.com/ceph/ceph/pull/39436>`_, Ernesto Puerta, Alfonso Martínez, Juan Miguel Olmo Martínez)
+* octopus: mgr/dashboard: Fix for incorrect validation in rgw user form (`pr#39027 <https://github.com/ceph/ceph/pull/39027>`_, Nizamudeen A)
+* octopus: mgr/dashboard: Fix missing root path of each session for CephFS (`pr#39868 <https://github.com/ceph/ceph/pull/39868>`_, Yongseok Oh)
+* octopus: mgr/dashboard: Monitoring alert badge includes suppressed alerts (`pr#39512 <https://github.com/ceph/ceph/pull/39512>`_, Aashish Sharma)
+* octopus: mgr/dashboard: add ssl verify option for prometheus and alert manager (`pr#39872 <https://github.com/ceph/ceph/pull/39872>`_, Jean "henyxia" Wasilewski)
+* octopus: mgr/dashboard: avoid using document.write() (`pr#39527 <https://github.com/ceph/ceph/pull/39527>`_, Avan Thakkar)
+* octopus: mgr/dashboard: delete EOF when reading passwords from file (`pr#40155 <https://github.com/ceph/ceph/pull/40155>`_, Alfonso Martínez)
+* octopus: mgr/dashboard: fix MTU Mismatch alert (`pr#39854 <https://github.com/ceph/ceph/pull/39854>`_, Aashish Sharma)
+* octopus: mgr/dashboard: fix issues related with PyJWT versions >=2.0.0 (`pr#39836 <https://github.com/ceph/ceph/pull/39836>`_, Alfonso Martínez)
+* octopus: mgr/dashboard: fix tooltip for Provisioned/Total Provisioned fields (`pr#39645 <https://github.com/ceph/ceph/pull/39645>`_, Avan Thakkar)
+* octopus: mgr/dashboard: prometheus alerting: add some leeway for package drops and errors (`pr#39507 <https://github.com/ceph/ceph/pull/39507>`_, Patrick Seidensal)
+* octopus: mgr/dashboard: report mgr fsid (`pr#39852 <https://github.com/ceph/ceph/pull/39852>`_, Ernesto Puerta)
+* octopus: mgr/dashboard: set security headers (`pr#39627 <https://github.com/ceph/ceph/pull/39627>`_, Avan Thakkar)
+* octopus: mgr/dashboard: trigger alert if some nodes have a MTU different than the median value (`pr#39103 <https://github.com/ceph/ceph/pull/39103>`_, Aashish Sharma)
+* octopus: mgr/dashboard:minimize console log traces of Ceph backend API tests (`pr#39545 <https://github.com/ceph/ceph/pull/39545>`_, Aashish Sharma)
+* octopus: mgr/rbd_support: create mirror snapshots asynchronously (`pr#39376 <https://github.com/ceph/ceph/pull/39376>`_, Mykola Golub, Kefu Chai)
+* octopus: mgr/rbd_support: mirror snapshot schedule should skip non-primary images (`pr#39863 <https://github.com/ceph/ceph/pull/39863>`_, Mykola Golub)
+* octopus: mgr/volume: subvolume auth_id management and few bug fixes (`pr#39390 <https://github.com/ceph/ceph/pull/39390>`_, Rishabh Dave, Patrick Donnelly, Kotresh HR, Ramana Raja)
+* octopus: mgr/zabbix: format ceph.[{#POOL},percent_used as float (`pr#39235 <https://github.com/ceph/ceph/pull/39235>`_, Kefu Chai)
+* octopus: os/bluestore: Add option to check BlueFS reads (`pr#39754 <https://github.com/ceph/ceph/pull/39754>`_, Adam Kupczyk)
+* octopus: os/bluestore: fix huge reads/writes at BlueFS (`pr#39701 <https://github.com/ceph/ceph/pull/39701>`_, Jianpeng Ma, Igor Fedotov)
+* octopus: os/bluestore: introduce bluestore_rocksdb_options_annex config parame… (`pr#39325 <https://github.com/ceph/ceph/pull/39325>`_, Igor Fedotov)
+* octopus: qa/suites/rados/dashboard: whitelist TELEMETRY_CHANGED (`pr#39704 <https://github.com/ceph/ceph/pull/39704>`_, Sage Weil)
+* octopus: qa/suites/upgrade: s/whitelist/ignorelist for octopus specific tests (`pr#40074 <https://github.com/ceph/ceph/pull/40074>`_, Deepika Upadhyay)
+* octopus: qa: use normal build for valgrind (`pr#39583 <https://github.com/ceph/ceph/pull/39583>`_, Sage Weil)
+* octopus: rbd-mirror: reset update_status_task pointer in timer thread (`pr#39867 <https://github.com/ceph/ceph/pull/39867>`_, Mykola Golub)
+* octopus: rgw: fix trailing null in object names of multipart reuploads (`pr#39277 <https://github.com/ceph/ceph/pull/39277>`_, Casey Bodley)
+* octopus: rgw: radosgw-admin: clarify error when email address already in use (`pr#39662 <https://github.com/ceph/ceph/pull/39662>`_, Matthew Vernon)
+* octopus: whitelist -> ignorelist for qa/\* only (`pr#39534 <https://github.com/ceph/ceph/pull/39534>`_, Neha Ojha, Sage Weil)
+* qa/tests: fixed branch entry (`pr#39819 <https://github.com/ceph/ceph/pull/39819>`_, Yuri Weinstein)
+
+
 v15.2.9 Octopus
 ===============
 
