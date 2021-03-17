@@ -146,9 +146,7 @@ R/O, unpartitioned:
   $ blockdev --setrw $DEV
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw $DEV
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw $DEV  # succeeds but effectively ignored
   $ blockdev --getro $DEV
   1
   $ dd if=/dev/urandom of=$DEV bs=1k seek=1 count=1 status=none
@@ -182,15 +180,11 @@ R/O, partitioned:
   $ blockdev --setrw ${DEV}p1
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p1
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p1  # succeeds but effectively ignored
   $ blockdev --setrw ${DEV}p2
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p2
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p2  # succeeds but effectively ignored
   $ blockdev --getro ${DEV}p1
   1
   $ blockdev --getro ${DEV}p2
@@ -227,9 +221,7 @@ Unpartitioned:
   $ blockdev --setrw $DEV
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw $DEV
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw $DEV  # succeeds but effectively ignored
   $ blockdev --getro $DEV
   1
   $ dd if=/dev/urandom of=$DEV bs=1k seek=1 count=1 status=none
@@ -263,15 +255,11 @@ Partitioned:
   $ blockdev --setrw ${DEV}p1
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p1
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p1  # succeeds but effectively ignored
   $ blockdev --setrw ${DEV}p2
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p2
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p2  # succeeds but effectively ignored
   $ blockdev --getro ${DEV}p1
   1
   $ blockdev --getro ${DEV}p2
