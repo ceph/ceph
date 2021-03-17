@@ -4,7 +4,10 @@
 #include "common/config_proxy.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#include <sys/resource.h>
 
+#include <mutex>
+#include <condition_variable>
 #include <algorithm>
 #include <thread>
 #include <errno.h>
@@ -43,6 +46,130 @@ TEST(LibRadosService, RegisterLate) {
   ASSERT_EQ(-EEXIST, rados_service_register(cluster, "laundry", name.c_str(),
                                             "foo\0bar\0this\0that\0"));
   rados_shutdown(cluster);
+}
+
+static void status_format_func(const int i, std::mutex &lock,
+                               std::condition_variable &cond,
+                               int &threads_started, bool &stopped)
+{
+  rados_t cluster;
+  char *metadata_buf = NULL;
+
+  ASSERT_EQ(0, rados_create(&cluster, "admin"));
+  ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
+  ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
+
+  ASSERT_EQ(0, rados_connect(cluster));
+  if (i == 0) {
+    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c",
+                           "foo", '\0', "bar", '\0'));
+  } else if (i == 1) {
+    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c",
+                           "daemon_type", '\0', "portal", '\0'));
+  } else if (i == 2) {
+    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c",
+                           "daemon_prefix", '\0', "gateway", '\0'));
+  } else {
+    string prefix = string("gw") + stringify(i % 4);
+    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c%s%c%s%c",
+                           "daemon_type", '\0', "portal", '\0',
+                           "daemon_prefix", '\0', prefix.c_str(), '\0'));
+  }
+  string name = string("rbd/image") + stringify(i);
+  ASSERT_EQ(0, rados_service_register(cluster, "iscsi", name.c_str(),
+		                      metadata_buf));
+
+  std::unique_lock<std::mutex> l(lock);
+  threads_started++;
+  cond.notify_all();
+  cond.wait(l, [&stopped] {
+    return stopped;
+  });
+
+  rados_shutdown(cluster);
+}
+
+TEST(LibRadosService, StatusFormat) {
+  const int nthreads = 16;
+  std::thread threads[nthreads];
+  std::mutex lock;
+  std::condition_variable cond;
+  bool stopped = false;
+  int threads_started = 0;
+
+  // Need a bunch of fd's for this test
+  struct rlimit rold, rnew;
+  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rold), 0);
+  rnew = rold;
+  rnew.rlim_cur = rnew.rlim_max;
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rnew), 0);
+
+  for (int i = 0; i < nthreads; ++i)
+    threads[i] = std::thread(status_format_func, i, std::ref(lock),
+                             std::ref(cond), std::ref(threads_started),
+                             std::ref(stopped));
+
+  {
+    std::unique_lock<std::mutex> l(lock);
+    cond.wait(l, [nthreads, &threads_started] {
+      return nthreads == threads_started;
+    });
+  }
+
+  int retry = 5;
+  while (retry) {
+    rados_t cluster;
+
+    ASSERT_EQ(0, rados_create(&cluster, "admin"));
+    ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
+    ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
+
+    ASSERT_EQ(0, rados_connect(cluster));
+    JSONFormatter cmd_f;
+    cmd_f.open_object_section("command");
+    cmd_f.dump_string("prefix", "status");
+    cmd_f.close_section();
+    std::ostringstream cmd_stream;
+    cmd_f.flush(cmd_stream);
+    const std::string serialized_cmd = cmd_stream.str();
+    const char *cmd[2];
+    cmd[1] = NULL;
+    cmd[0] = serialized_cmd.c_str();
+    char *outbuf = NULL;
+    size_t outlen = 0;
+    ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0,
+              &outbuf, &outlen, NULL, NULL));
+    std::string out(outbuf, outlen);
+    bool success = false;
+    auto r1 = out.find("5 portals active (gw0, gw1, gw2, gw3, rbd/image1)");
+    auto r2 = out.find("2 daemons active (gateway, rbd/image0");
+    if (std::string::npos != r1 && std::string::npos != r2) {
+      success = true;
+    }
+    rados_buffer_free(outbuf);
+    rados_shutdown(cluster);
+
+    if (success || !retry) {
+      break;
+    }
+
+    // wait for 2 seconds to make sure all the
+    // services have been successfully updated
+    // to ceph mon, then retry it.
+    sleep(2);
+    retry--;
+  }
+  ASSERT_NE(0, retry);
+
+  {
+    std::scoped_lock<std::mutex> l(lock);
+    stopped = true;
+    cond.notify_all();
+  }
+  for (int i = 0; i < nthreads; ++i)
+    threads[i].join();
+
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
 
 TEST(LibRadosService, Status) {
