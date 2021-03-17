@@ -494,6 +494,24 @@ int parse_v4_credentials(const req_info& info,                     /* in */
   return 0;
 }
 
+string gen_v4_scope(const ceph::real_time& timestamp,
+                    const string& region,
+                    const string& service)
+{
+
+  auto sec = real_clock::to_time_t(timestamp);
+
+  struct tm bt;
+  gmtime_r(&sec, &bt);
+
+  auto year = 1900 + bt.tm_year;
+  auto mon = bt.tm_mon + 1;
+  auto day = bt.tm_mday;
+
+  return fmt::format(FMT_STRING("{:d}{:02d}{:02d}/{:s}/{:s}/aws4_request"),
+                     year, mon, day, region, service);
+}
+
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 {
   const std::string *params = &info.request_params;
@@ -535,6 +553,56 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
   }
 
   /* Thanks to the early exist we have the guarantee that canonical_qs_map has
+   * at least one element. */
+  auto iter = std::begin(canonical_qs_map);
+  std::string canonical_qs;
+  canonical_qs.append(iter->first)
+              .append("=", ::strlen("="))
+              .append(iter->second);
+
+  for (iter++; iter != std::end(canonical_qs_map); iter++) {
+    canonical_qs.append("&", ::strlen("&"))
+                .append(iter->first)
+                .append("=", ::strlen("="))
+                .append(iter->second);
+  }
+
+  return canonical_qs;
+}
+
+static void add_v4_canonical_params_from_map(const map<string, string>& m,
+                                        std::map<string, string> *result)
+{
+  for (auto& entry : m) {
+    const auto& key = entry.first;
+    if (key.empty()) {
+      continue;
+    }
+    const string *pval = &(entry.second);
+    string _val;
+
+    if (pval->find_first_of('+') != std::string::npos) {
+      _val = *pval;
+      boost::replace_all(_val, "+", " ");
+      pval = &_val;
+    }
+
+    (*result)[aws4_uri_recode(key, true)] = aws4_uri_recode(*pval, true);
+  }
+}
+
+std::string gen_v4_canonical_qs(const req_info& info)
+{
+  std::map<std::string, std::string> canonical_qs_map;
+
+  add_v4_canonical_params_from_map(info.args.get_params(), &canonical_qs_map);
+  add_v4_canonical_params_from_map(info.args.get_sys_params(), &canonical_qs_map);
+
+  if (canonical_qs_map.empty()) {
+    return string();
+  }
+
+  /* Thanks to the early exit we have the guarantee that canonical_qs_map has
    * at least one element. */
   auto iter = std::begin(canonical_qs_map);
   std::string canonical_qs;
@@ -613,6 +681,66 @@ get_v4_canonical_headers(const req_info& info,
     const std::string_view& name = header.first;
     std::string value = header.second;
     boost::trim_all<std::string>(value);
+
+    canonical_hdrs.append(name.data(), name.length())
+                  .append(":", std::strlen(":"))
+                  .append(value)
+                  .append("\n", std::strlen("\n"));
+  }
+  return canonical_hdrs;
+}
+
+static void handle_header(const string& header, const string& val,
+                          std::map<std::string, std::string> *canonical_hdrs_map)
+{
+  /* TODO(rzarzynski): we'd like to switch to sstring here but it should
+   * get push_back() and reserve() first. */
+
+  std::string token;
+  token.reserve(header.length());
+
+  if (header == "HTTP_CONTENT_LENGTH") {
+    token = "content-length";
+  } else if (header == "HTTP_CONTENT_TYPE") {
+    token = "content-type";
+  } else {
+    auto start = std::begin(header);
+    if (boost::algorithm::starts_with(header, "HTTP_")) {
+      start += 5; /* len("HTTP_") */
+    }
+
+    std::transform(start, std::end(header),
+                   std::back_inserter(token), [](const int c) {
+                   return c == '_' ? '-' : std::tolower(c);
+                   });
+  }
+
+  (*canonical_hdrs_map)[token] = rgw_trim_whitespace(val);
+}
+
+std::string gen_v4_canonical_headers(const req_info& info,
+                                     const map<string, string>& extra_headers,
+                                     string *signed_hdrs)
+{
+  std::map<std::string, std::string> canonical_hdrs_map;
+  for (auto& entry : info.env->get_map()) {
+    handle_header(entry.first, entry.second, &canonical_hdrs_map);
+  }
+  for (auto& entry : extra_headers) {
+    handle_header(entry.first, entry.second, &canonical_hdrs_map);
+  }
+
+  std::string canonical_hdrs;
+  signed_hdrs->clear();
+  for (const auto& header : canonical_hdrs_map) {
+    const auto& name = header.first;
+    std::string value = header.second;
+    boost::trim_all<std::string>(value);
+
+    if (!signed_hdrs->empty()) {
+      signed_hdrs->append(";");
+    }
+    signed_hdrs->append(name);
 
     canonical_hdrs.append(name.data(), name.length())
                   .append(":", std::strlen(":"))

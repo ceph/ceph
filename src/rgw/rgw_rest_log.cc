@@ -322,7 +322,7 @@ void RGWOp_MDLog_Notify::execute(optional_yield y) {
 
   int r = 0;
   bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
+  std::tie(r, data) = read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
     op_ret = r;
     return;
@@ -665,7 +665,7 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
 
   int r = 0;
   bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
+  std::tie(r, data) = read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
     op_ret = r;
     return;

@@ -1079,6 +1079,49 @@ public:
   auth_data_t get_auth_data(const req_state* s) const override;
 };
 
+class AWSSignerV4 {
+  const DoutPrefixProvider *dpp;
+  CephContext *cct;
+
+public:
+  AWSSignerV4(const DoutPrefixProvider *_dpp) : dpp(_dpp),
+                                                cct(_dpp->get_cct()) {}
+
+  using access_key_id_t = std::string_view;
+  using string_to_sign_t = AWSEngine::VersionAbstractor::string_to_sign_t;
+  using signature_headers_t = std::map<std::string, std::string>;
+
+  struct prepare_result_t;
+
+  using signature_factory_t = \
+      std::function<signature_headers_t(const DoutPrefixProvider* dpp,
+                                        const std::string& secret_key,
+                                        const prepare_result_t&)>;
+
+  struct prepare_result_t {
+    access_key_id_t access_key_id;
+    std::string date;
+    std::string scope;
+    std::string signed_headers;
+    string_to_sign_t string_to_sign;
+    std::map<std::string, std::string> extra_headers;
+    signature_factory_t signature_factory;
+  };
+
+  static prepare_result_t prepare(const DoutPrefixProvider *dpp,
+                                  const std::string& access_key_id,
+                                  const string& region,
+                                  const string& service,
+                                  const req_info& info,
+                                  const bufferlist *opt_content,
+                                  bool s3_op);
+};
+
+
+extern AWSSignerV4::signature_headers_t
+gen_v4_signature(const DoutPrefixProvider *dpp,
+                 const std::string_view& secret_key,
+                 const AWSSignerV4::prepare_result_t& sig_info);
 
 class LDAPEngine : public AWSEngine {
   static rgw::LDAPHelper* ldh;

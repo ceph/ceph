@@ -89,6 +89,7 @@ class RGWOp_Period_Post : public RGWOp_Period_Base {
     return check_caps(s->user->get_caps());
   }
   const char* name() const override { return "post_period"; }
+  RGWOpType get_type() override { return RGW_OP_PERIOD_POST; }
 };
 
 void RGWOp_Period_Post::execute(optional_yield y)
@@ -101,7 +102,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
   bool empty;
-  op_ret = rgw_rest_get_json_input(cct, s, period, max_size, &empty);
+  op_ret = get_json_input(cct, s, period, max_size, &empty);
   if (op_ret < 0) {
     lderr(cct) << "failed to decode period" << dendl;
     return;
