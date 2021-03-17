@@ -40,7 +40,7 @@ static string get_key_oid(const rgw_obj_key& key)
   string oid = key.name;
   if (!key.instance.empty() &&
       !key.have_null_instance()) {
-    oid += string(":") + key.instance;
+    oid += string("-") + key.instance;
   }
   return oid;
 }
@@ -531,16 +531,29 @@ class RGWLCStreamObjToCloudPlainCR : public RGWCoroutine {
         tier_ctx.acl_mappings,
         tier_ctx.target_storage_class);
 
-    rgw_bucket target_bucket;
     string target_obj_name;
+    RGWBucketInfo b;
+    int reterr = 0;
 
-    target_bucket.name = tier_ctx.target_bucket_name;
+    b.bucket.name = tier_ctx.target_bucket_name;
     target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                      (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
+                      (*tier_ctx.obj)->get_name();
+    if (!tier_ctx.o.is_current()) {
+      target_obj_name += get_key_instance((*tier_ctx.obj)->get_key());
+    }
 
-    tier_ctx.store->get_bucket(tier_ctx.dpp, nullptr, target_bucket, &dest_bucket, null_yield);
-
+    reterr = tier_ctx.store->get_bucket(nullptr, b, &dest_bucket);
+    if (reterr < 0) {
+      ldout(tier_ctx.cct, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , reterr = " << reterr << dendl;
+      return reterr;
+    }
+  
     dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
+    if (!dest_obj) {
+      ldout(tier_ctx.cct, 0) << "ERROR: failed to initialize dest_object path - " << target_obj_name << dendl;
+      return -1;
+    }
+
     rgw::sal::RGWObject *o = static_cast<rgw::sal::RGWObject *>(dest_obj.get());
 
 
@@ -588,19 +601,33 @@ class RGWLCStreamObjToCloudMultipartPartCR : public RGWCoroutine {
                                        upload_id(_upload_id), part_info(_part_info), petag(_petag) {}
 
   int operate() override {
+    ldout(cct, 0) << "In CloudMultipartPartCR XXXXXXXXXXXXXXXXXXX" << dendl;
     rgw_lc_obj_properties obj_properties(tier_ctx.o.meta.mtime, tier_ctx.o.meta.etag,
                                          tier_ctx.o.versioned_epoch, tier_ctx.acl_mappings,
                                          tier_ctx.target_storage_class);
-    rgw_bucket target_bucket;
     string target_obj_name;
     off_t end;
+    RGWBucketInfo b;
+    int reterr = 0;
 
-    target_bucket.name = tier_ctx.target_bucket_name;
+    b.bucket.name = tier_ctx.target_bucket_name;
     target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                      (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
+                      (*tier_ctx.obj)->get_name();
+    if (!tier_ctx.o.is_current()) {
+      target_obj_name += get_key_instance((*tier_ctx.obj)->get_key());
+    }
 
-    tier_ctx.store->get_bucket(tier_ctx.dpp, nullptr, target_bucket, &dest_bucket, null_yield);
+    reterr = tier_ctx.store->get_bucket(nullptr, b, &dest_bucket);
+    if (reterr < 0) {
+      ldout(tier_ctx.cct, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , reterr = " << reterr << dendl;
+      return reterr;
+    }
+  
     dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
+    if (!dest_obj) {
+      ldout(tier_ctx.cct, 0) << "ERROR: failed to initialize dest_object path - " << target_obj_name << dendl;
+      return -1;
+    }
 
     reenter(this) {
     //  tier_ctx.obj.set_atomic(&tier_ctx.rctx); -- might need when updated to zipper SAL
@@ -915,10 +942,9 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
   rgw_rest_obj rest_obj;
 
   rgw_lc_multipart_upload_info status;
+  std::shared_ptr<RGWStreamReadCRF> in_crf;
 
   map<string, string> new_attrs;
-
-  rgw_lc_multipart_part_info *pcur_part_info{nullptr};
 
   int ret_err{0};
 
@@ -943,10 +969,14 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
 
     string target_obj_name;
     target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                      (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
+                      (*tier_ctx.obj)->get_name();
+    if (!tier_ctx.o.is_current()) {
+      target_obj_name += get_key_instance((*tier_ctx.obj)->get_key());
+    }
     rgw_obj dest_obj(target_bucket, target_obj_name);
-    std::shared_ptr<RGWStreamReadCRF> in_crf;
     rgw_rest_obj rest_obj;
+
+    reenter(this) {
 
     status_obj = rgw_raw_obj(tier_ctx.store->get_zone()->get_params().log_pool,
         "lc_multipart_" + (*tier_ctx.obj)->get_oid());
@@ -967,8 +997,6 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
           return -EIO;
         }
       }
-
-    reenter(this) {
 
       if (ret_err >= 0) {
         /* check here that mtime and size did not change */
@@ -1007,19 +1035,18 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
         status.part_size = std::max(min_conf_size, min_part_size);
         status.num_parts = (obj_size + status.part_size - 1) / status.part_size;
         status.cur_part = 1;
+        status.cur_ofs = 0;
       }
 
       for (; (uint32_t)status.cur_part <= status.num_parts; ++status.cur_part) {
-        ldout(tier_ctx.cct, 20) << "status.cur_part = "<<status.cur_part <<", info.ofs = "<< status.cur_ofs <<", info.size = "<< status.part_size<< ", obj size = " << status.obj_size<<dendl;
+        ldout(tier_ctx.cct, 20) << "status.cur_part = "<<status.cur_part <<", info.ofs = "<< status.cur_ofs <<", info.size = "<< status.part_size<< ", obj size = " << status.obj_size<< ", status.num_parts:" << status.num_parts << dendl;
         yield {
           rgw_lc_multipart_part_info& cur_part_info = status.parts[status.cur_part];
           cur_part_info.part_num = status.cur_part;
           cur_part_info.ofs = status.cur_ofs;
           cur_part_info.size = std::min((uint64_t)status.part_size, status.obj_size - status.cur_ofs);
 
-          pcur_part_info = &cur_part_info;
-
-          status.cur_ofs += status.part_size;
+          status.cur_ofs += cur_part_info.size;
 
           call(new RGWLCStreamObjToCloudMultipartPartCR(tier_ctx,
                 status.upload_id,
@@ -1041,7 +1068,7 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
           ldout(tier_ctx.cct, 0) << "ERROR: failed to store multipart upload state, retcode=" << ret_err << dendl;
           /* continue with upload anyway */
         }
-        ldout(tier_ctx.cct, 0) << "sync of object=" << tier_ctx.obj << " via multipart upload, finished sending part #" << status.cur_part << " etag=" << pcur_part_info->etag << dendl;
+        ldout(tier_ctx.cct, 0) << "sync of object=" << tier_ctx.obj << " via multipart upload, finished sending part #" << status.cur_part << " etag=" << status.parts[status.cur_part].etag << dendl;
       }
 
       yield call(new RGWLCCompleteMultipartCR(tier_ctx.cct, tier_ctx.http_manager, tier_ctx.conn.get(), dest_obj, status.upload_id, status.parts));
@@ -1071,20 +1098,32 @@ int RGWLCCloudCheckCR::operate() {
                                        tier_ctx.o.versioned_epoch, tier_ctx.acl_mappings,
                                        tier_ctx.target_storage_class);
 
-  rgw_bucket target_bucket;
+  RGWBucketInfo b;
   string target_obj_name;
+  int reterr = 0;
 
-  target_bucket.name = tier_ctx.target_bucket_name;
+  b.bucket.name = tier_ctx.target_bucket_name;
   target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                    (*tier_ctx.obj)->get_name() + get_key_instance((*tier_ctx.obj)->get_key());
+                    (*tier_ctx.obj)->get_name();
+    if (!tier_ctx.o.is_current()) {
+      target_obj_name += get_key_instance((*tier_ctx.obj)->get_key());
+    }
 
   std::unique_ptr<rgw::sal::RGWBucket> dest_bucket;
   std::unique_ptr<rgw::sal::RGWObject> dest_obj;
 
-    tier_ctx.store->get_bucket(tier_ctx.dpp, nullptr, target_bucket, &dest_bucket, null_yield);
 
-    dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
-
+  reterr = tier_ctx.store->get_bucket(nullptr, b, &dest_bucket);
+  if (reterr < 0) {
+    ldout(tier_ctx.cct, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , reterr = " << reterr << dendl;
+    return reterr;
+  }
+  
+  dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
+  if (!dest_obj) {
+    ldout(tier_ctx.cct, 0) << "ERROR: failed to initialize dest_object path - " << target_obj_name << dendl;
+    return -1;
+  }
 
   std::shared_ptr<RGWLCStreamGetCRF> get_crf;
   get_crf.reset(new RGWLCStreamGetCRF((CephContext *)(tier_ctx.cct), get_env(), this,
@@ -1141,7 +1180,7 @@ int RGWLCCloudTierCR::operate() {
              tier_ctx.target_bucket_name, nullptr, bl, &out_bl));
       }
       if (retcode < 0 ) {
-        ldout(tier_ctx.cct, 0) << "ERROR: failed to create target bucket: " << tier_ctx.target_bucket_name << dendl;
+        ldout(tier_ctx.cct, 0) << "ERROR: failed to create target bucket: " << tier_ctx.target_bucket_name << ", retcode:" << retcode << dendl;
         return set_cr_error(retcode);
       }
       if (out_bl.length() > 0) {

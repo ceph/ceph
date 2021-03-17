@@ -2099,12 +2099,12 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
 {
   int r = -1;
 
-  if (config.exists("retain_object")) {
-    string s = config["retain_object"];
+  if (config.exists("retain_head_object")) {
+    string s = config["retain_head_object"];
     if (s == "true") {
-      retain_object = true;
+      retain_head_object = true;
     } else {
-      retain_object = false;
+      retain_head_object = false;
     }
   }
 
@@ -2179,8 +2179,8 @@ int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
 }
 int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
 {
-  if (config.exists("retain_object")) {
-    retain_object = false;
+  if (config.exists("retain_head_object")) {
+    retain_head_object = false;
   }
 
   if (tier_type == "cloud-s3") {

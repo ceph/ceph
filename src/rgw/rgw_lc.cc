@@ -1278,8 +1278,13 @@ public:
 
     /* If bucket is versioned, create delete_marker for current version
      */
-    ret = remove_expired_obj(oc.dpp, oc,
-                 !(oc.o.is_current() && oc.bucket->versioned()));
+    if (oc.bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
+        ret = remove_expired_obj(oc.dpp, oc, false);
+        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << "s versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+    } else {
+        ret = remove_expired_obj(oc.dpp, oc, true);
+        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "s versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+    }
     return ret;
   }
 
@@ -1364,6 +1369,8 @@ public:
 
     obj_op->params.attrs = &attrs;
 
+    r = obj_op->prepare(null_yield);
+
     r = obj_op->write_meta(oc.dpp, tier_ctx.o.meta.size, 0, null_yield);
     if (r < 0) {
       return r;
@@ -1384,8 +1391,8 @@ public:
     const RGWZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
     bool delete_object;
    
-    /* Option 'retain_object' is not applicable for CurrentVersionTransition */
-    delete_object = (!oc.tier.retain_object ||
+    /* If CurrentVersion object, remove it & create delete marker */
+    delete_object = (!oc.tier.retain_head_object ||
                      (oc.o.is_current() && oc.bucket->versioned()));
 
     if (bucket_name.empty()) {
@@ -1426,17 +1433,16 @@ public:
       ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudCheckCR() ret=" << ret << dendl;
     }
 
-    if (!al_tiered) {
-       ldout(tier_ctx.cct, 20) << "is already tiered false" << dendl;
-	   ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
+    if (al_tiered) {
+      ldout(tier_ctx.cct, 20) << "Object (" << oc.o.key << ") is already tiered" << dendl;
+      http_manager.stop();
+      return 0;
     } else {
-        ldout(tier_ctx.cct, 20) << "is already tiered true" << dendl;
+	  ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
     }
-    http_manager.stop();
          
     if (ret < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudTierCR() ret=" << ret << dendl;
-      return ret;
     }
 
     if (delete_object) {
@@ -1452,6 +1458,7 @@ public:
         return ret;
       }
     }
+    http_manager.stop();
 
     return 0;
   }
@@ -1470,17 +1477,24 @@ public:
 
     if (!r && oc.tier.tier_type == "cloud-s3") {
       ldpp_dout(oc.dpp, 20) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
+      if (oc.o.meta.category == RGWObjCategory::CloudTiered) {
+        /* Skip objects which are already cloud tiered. */
+        ldpp_dout(oc.dpp, 20) << "Object(key:" << oc.o.key << ") is already cloud tiered to cloud-s3 tier: " << oc.o.meta.storage_class << dendl;
+        return 0;
+      }
 
       if (!oc.o.is_current() &&
           !pass_object_lock_check(oc.store, oc.obj.get(), oc.rctx, oc.dpp)) {
         /* Skip objects which has object lock enabled. */
-        ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
+        ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
+        return 0;
       }
 
       r = transition_obj_to_cloud(oc);
       if (r < 0) {
-        ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj to cloud (r=" << r << ")"
+        ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj(key:" << oc.o.key << ") to cloud (r=" << r << ")"
                              << dendl;
+        return r;
       }
     } else {
       if (!oc.store->get_zone()->get_params().
