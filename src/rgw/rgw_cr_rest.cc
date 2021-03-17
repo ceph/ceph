@@ -382,13 +382,13 @@ int RGWStreamWriteCR::operate() {
         ldout(cct, 0) << "ERROR: fail to read object data, ret = " << ret << dendl;
         return set_cr_error(ret);
       }
-      read_len = ret;
- 
       if (retcode < 0) {
         ldout(cct, 20) << __func__ << ": read_op.read() retcode=" << retcode << dendl;
         return set_cr_error(ret);
       }
 
+      read_len = bl.length();
+ 
       if (bl.length() == 0) {
         break;
       } 

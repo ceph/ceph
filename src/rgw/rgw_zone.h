@@ -782,7 +782,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)
 struct RGWZoneGroupPlacementTier {
   std::string tier_type;
   std::string storage_class;
-  bool retain_object = false;
+  bool retain_head_object = false;
 
   struct _tier {
     RGWZoneGroupPlacementTierS3 s3;
@@ -795,7 +795,7 @@ struct RGWZoneGroupPlacementTier {
     ENCODE_START(1, 1, bl);
     encode(tier_type, bl);
     encode(storage_class, bl);
-    encode(retain_object, bl);
+    encode(retain_head_object, bl);
     if (tier_type == "cloud-s3") {
       encode(t.s3, bl);
     }
@@ -806,7 +806,7 @@ struct RGWZoneGroupPlacementTier {
     DECODE_START(1, bl);
     decode(tier_type, bl);
     decode(storage_class, bl);
-    decode(retain_object, bl);
+    decode(retain_head_object, bl);
     if (tier_type == "cloud-s3") {
       decode(t.s3, bl);
     }
