@@ -62,7 +62,7 @@ class FuseMount(CephFSMount):
         log.info("Client client.%s config is %s" % (self.client_id,
                                                     self.client_config))
 
-        self._create_mntpt(cwd=self.test_dir)
+        self._create_mntpt()
 
         retval = self._run_mount_cmd(mntopts, check_status)
         if retval:
