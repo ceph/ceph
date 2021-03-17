@@ -4634,7 +4634,7 @@ std::vector<Option> get_global_options() {
     .set_description("Run deep fsck at mount when bluestore_fsck_on_mount is set to true"),
 
     Option("bluestore_fsck_quick_fix_on_mount", Option::TYPE_BOOL, Option::LEVEL_DEV)
-      .set_default(true)
+      .set_default(false)
       .set_description("Do quick-fix for the store at mount"),
 
     Option("bluestore_fsck_on_umount", Option::TYPE_BOOL, Option::LEVEL_DEV)
