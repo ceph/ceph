@@ -975,7 +975,7 @@ int PeerReplayer::synchronize(const std::string &dir_path, uint64_t snap_id,
   auto snap_id_str{stringify(snap_id)};
   snap_metadata snap_meta[] = {{PRIMARY_SNAP_ID_KEY.c_str(), snap_id_str.c_str()}};
   r = ceph_mksnap(m_remote_mount, dir_path.c_str(), snap_name.c_str(), 0755,
-                  snap_meta, 1);
+                  snap_meta, sizeof(snap_meta)/sizeof(snap_metadata));
   if (r < 0) {
     derr << ": failed to snap remote directory dir_path=" << dir_path
          << ": " << cpp_strerror(r) << dendl;
