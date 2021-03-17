@@ -414,10 +414,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
        * know which FS it was part of. Nor does this matter. Sending an empty
        * MDSMap is sufficient for getting the MDS to respawn.
        */
-      MDSMap null_map;
-      null_map.epoch = fsmap.epoch;
-      null_map.compat = fsmap.compat;
-      auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+      auto m = make_message<MMDSMap>(mon.monmap->fsid, MDSMap::create_null_mdsmap());
       mon.send_reply(op, m.detach());
       return true;
     } else {
@@ -713,11 +710,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
        */
       wait_for_finished_proposal(op, new LambdaContext([op, this](int r){
         if (r >= 0) {
-          const auto& fsmap = get_fsmap();
-          MDSMap null_map;
-          null_map.epoch = fsmap.epoch;
-          null_map.compat = fsmap.compat;
-          auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+          auto m = make_message<MMDSMap>(mon.monmap->fsid, MDSMap::create_null_mdsmap());
           mon.send_reply(op, m.detach());
         } else {
           dispatch(op);        // try again
@@ -909,10 +902,7 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
-    MDSMap null_map;
-    null_map.epoch = fsmap.epoch;
-    null_map.compat = fsmap.compat;
-    auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+    auto m = make_message<MMDSMap>(mon.monmap->fsid, MDSMap::create_null_mdsmap());
     mon.send_reply(op, m.detach());
   } else {
     auto beacon = make_message<MMDSBeacon>(mon.monmap->fsid,
@@ -1788,8 +1778,7 @@ void MDSMonitor::check_sub(Subscription *sub)
 
     // Work out the effective latest epoch
     const MDSMap *mds_map = nullptr;
-    MDSMap null_map;
-    null_map.compat = fsmap.compat;
+    MDSMap null_map = MDSMap::create_null_mdsmap();
     if (fscid == FS_CLUSTER_ID_NONE) {
       // For a client, we should have already dropped out
       ceph_assert(is_mds);
