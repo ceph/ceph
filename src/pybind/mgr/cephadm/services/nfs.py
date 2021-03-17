@@ -117,7 +117,7 @@ class NFSService(CephService):
         if spec.namespace:
             osd_caps = '%s namespace=%s' % (osd_caps, spec.namespace)
 
-        logger.info('Create keyring: %s' % entity)
+        logger.info('Creating key for %s' % entity)
         keyring = self.get_keyring_with_caps(entity,
                                              ['mon', 'allow r',
                                               'osd', osd_caps])
@@ -128,7 +128,7 @@ class NFSService(CephService):
         daemon_id = daemon_spec.daemon_id
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
-        logger.info('Create keyring: %s' % entity)
+        logger.info('Creating key for %s' % entity)
         keyring = self.get_keyring_with_caps(entity,
                                              ['mon', 'allow r',
                                               'osd', 'allow rwx tag rgw *=*'])
@@ -140,7 +140,7 @@ class NFSService(CephService):
         daemon_id: str = daemon.daemon_id
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
-        logger.info(f'Remove keyring: {entity}')
+        logger.info(f'Removing key for {entity}')
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'auth rm',
             'entity': entity,
