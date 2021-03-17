@@ -212,6 +212,16 @@ struct string_key_view_t {
   }
   bool operator!=(const string_key_view_t& x) const { return !(*this == x); }
 
+  void reset_to(const char* origin_base, const char* new_base) {
+    reset_ptr(p_key, origin_base, new_base);
+    reset_ptr(p_length, origin_base, new_base);
+#ifndef NDEBUG
+    string_size_t current_length;
+    std::memcpy(&current_length, p_length, sizeof(string_size_t));
+    assert(length == current_length);
+#endif
+  }
+
   static void append_str(
       NodeExtentMutable&, std::string_view, char*& p_append);
 
@@ -403,6 +413,11 @@ struct ns_oid_view_t {
             string_view_masked_t{oid} == string_view_masked_t{x.oid});
   }
   bool operator!=(const ns_oid_view_t& x) const { return !(*this == x); }
+
+  void reset_to(const char* origin_base, const char* new_base) {
+    nspace.reset_to(origin_base, new_base);
+    oid.reset_to(origin_base, new_base);
+  }
 
   template <KeyT KT>
   static node_offset_t estimate_size(const full_key_t<KT>& key);
@@ -645,6 +660,21 @@ class key_view_t {
   void set(const snap_gen_t& key) {
     assert(!has_snap_gen());
     replace(key);
+  }
+
+  void reset_to(const char* origin_base, const char* new_base) {
+    if (p_shard_pool != nullptr) {
+      reset_ptr(p_shard_pool, origin_base, new_base);
+    }
+    if (p_crush != nullptr) {
+      reset_ptr(p_crush, origin_base, new_base);
+    }
+    if (p_ns_oid.has_value()) {
+      p_ns_oid->reset_to(origin_base, new_base);
+    }
+    if (p_snap_gen != nullptr) {
+      reset_ptr(p_snap_gen, origin_base, new_base);
+    }
   }
 
   std::ostream& dump(std::ostream& os) const {

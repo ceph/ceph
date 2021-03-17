@@ -294,6 +294,12 @@ class NodeExtentAccessorT {
 
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }
+  bool is_duplicate() const {
+    // we cannot rely on whether the extent state is MUTATION_PENDING because
+    // we may access the extent (internally) after it becomes DIRTY after
+    // transaction submission.
+    return recorder != nullptr;
+  }
 
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.

@@ -70,8 +70,10 @@ struct FLTreeOnode : Onode, Value {
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
-    p.second->record_delta(
-      p.first);
+    if (p.second) {
+      p.second->record_delta(
+        p.first);
+    }
     status = status_t::STABLE;
   }
 

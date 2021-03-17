@@ -47,6 +47,19 @@ namespace crimson::os::seastore::onode {
 class LeafNode;
 class InternalNode;
 
+using layout_version_t = uint32_t;
+struct node_version_t {
+  layout_version_t layout;
+  bool is_duplicate;
+
+  bool operator==(const node_version_t& rhs) const {
+    return (layout == rhs.layout && is_duplicate == rhs.is_duplicate);
+  }
+  bool operator!=(const node_version_t& rhs) const {
+    return !(*this == rhs);
+  }
+};
+
 /**
  * tree_cursor_t
  *
@@ -57,7 +70,6 @@ class InternalNode;
  *
  * Exposes public interfaces for Btree::Cursor.
  */
-using layout_version_t = uint32_t;
 class tree_cursor_t final
   : public boost::intrusive_ref_counter<
            tree_cursor_t, boost::thread_unsafe_counter> {
@@ -90,8 +102,8 @@ class tree_cursor_t final
 
   /// Returns the key view in tree if it is not an end cursor.
   const key_view_t& get_key_view(value_magic_t magic) const {
-    maybe_update_cache(magic);
-    return cache.get_key_view();
+    assert(!is_end());
+    return cache.get_key_view(magic, position);
   }
 
   /// Returns the next tree_cursor_t in tree, can be end if there's no next.
@@ -106,15 +118,15 @@ class tree_cursor_t final
 
   /// Get the latest value_header_t pointer for read.
   const value_header_t* read_value_header(value_magic_t magic) const {
-    maybe_update_cache(magic);
-    return cache.get_p_value_header();
+    assert(!is_end());
+    return cache.get_p_value_header(magic, position);
   }
 
   /// Prepare the node extent to be mutable and recorded.
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
   prepare_mutate_value_payload(context_t c) {
-    maybe_update_cache(c.vb.get_header_magic());
-    return cache.prepare_mutate_value_payload(c);
+    assert(!is_end());
+    return cache.prepare_mutate_value_payload(c, position);
   }
 
   /// Extends the size of value payload.
@@ -134,8 +146,8 @@ class tree_cursor_t final
   Ref<LeafNode> get_leaf_node() const { return ref_leaf_node; }
   template <bool VALIDATE>
   void update_track(Ref<LeafNode>, const search_position_t&);
-  void update_cache(LeafNode&, const key_view_t&, const value_header_t*) const;
-  void maybe_update_cache(value_magic_t magic) const;
+  void update_cache_same_node(const key_view_t&,
+                              const value_header_t*) const;
 
   static Ref<tree_cursor_t> create(Ref<LeafNode> node, const search_position_t& pos) {
     return new tree_cursor_t(node, pos);
@@ -162,40 +174,44 @@ class tree_cursor_t final
   /** Cache
    *
    * Cached memory pointers or views which may be outdated due to
-   * asynchronous leaf node updates.
+   * extent copy-on-write or asynchronous leaf node updates.
    */
   class Cache {
    public:
-    Cache();
-    bool is_latest() const;
-    void invalidate() { valid = false; }
-    void update(LeafNode&, const key_view_t&, const value_header_t*);
-    void validate_is_latest(const LeafNode&, const search_position_t&) const;
-
-    const key_view_t& get_key_view() const {
-      assert(is_latest());
-      assert(key_view.has_value());
+    Cache(Ref<LeafNode>&);
+    void validate_is_latest(const search_position_t&) const;
+    void invalidate() { needs_update_all = true; }
+    void update_all(const node_version_t&, const key_view_t&, const value_header_t*);
+    const key_view_t& get_key_view(
+        value_magic_t magic, const search_position_t& pos) {
+      make_latest(magic, pos);
       return *key_view;
     }
-    const value_header_t* get_p_value_header() const {
-      assert(is_latest());
-      assert(p_value_header);
+    const value_header_t* get_p_value_header(
+        value_magic_t magic, const search_position_t& pos) {
+      make_latest(magic, pos);
       return p_value_header;
     }
     std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
-    prepare_mutate_value_payload(context_t);
+    prepare_mutate_value_payload(context_t, const search_position_t&);
 
    private:
-    LeafNode* p_leaf_node = nullptr;
+    void maybe_duplicate(const node_version_t&);
+    void make_latest(value_magic_t, const search_position_t&);
+
+    // metadata about how cache is valid
+    Ref<LeafNode>& ref_leaf_node;
+    bool needs_update_all = true;
+    node_version_t version;
+
+    // cached key value info
+    const char* p_node_base = nullptr;
     std::optional<key_view_t> key_view;
     const value_header_t* p_value_header = nullptr;
 
-    // to update value payload
+    // cached data-structures to update value payload
     std::optional<NodeExtentMutable> value_payload_mut;
     ValueDeltaRecorder* p_value_recorder = nullptr;
-
-    layout_version_t version;
-    bool valid = false;
   };
   mutable Cache cache;
 
@@ -486,7 +502,8 @@ class LeafNode final : public Node {
   LeafNode& operator=(LeafNode&&) = delete;
 
   bool is_level_tail() const;
-  layout_version_t get_layout_version() const { return layout_version; }
+  node_version_t get_version() const;
+  const char* read() const;
   std::tuple<key_view_t, const value_header_t*> get_kv(const search_position_t&) const;
   node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
 

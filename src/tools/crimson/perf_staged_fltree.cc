@@ -9,6 +9,8 @@
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
+
+#include "test/crimson/seastore/onode_tree/test_value.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson::os::seastore::onode;
@@ -23,10 +25,10 @@ class PerfTree : public TMTestState {
  public:
   PerfTree(bool is_dummy) : is_dummy{is_dummy} {}
 
-  seastar::future<> run(KVPool& kvs) {
+  seastar::future<> run(KVPool<test_item_t>& kvs) {
     return tm_setup().then([this, &kvs] {
       return seastar::async([this, &kvs] {
-        auto tree = std::make_unique<TreeBuilder<TRACK>>(kvs,
+        auto tree = std::make_unique<TreeBuilder<TRACK, test_item_t>>(kvs,
             (is_dummy ? NodeExtentManager::create_dummy(true)
                       : NodeExtentManager::create_seastore(*tm)));
         {
@@ -84,10 +86,11 @@ seastar::future<> run(const bpo::variables_map& config) {
     auto range0 = config["range0"].as<std::vector<unsigned>>();
     ceph_assert(range0.size() == 2);
 
-    KVPool kvs{str_sizes, onode_sizes,
-               {range2[0], range2[1]},
-               {range1[0], range1[1]},
-               {range0[0], range0[1]}};
+    auto kvs = KVPool<test_item_t>::create_raw_range(
+        str_sizes, onode_sizes,
+        {range2[0], range2[1]},
+        {range1[0], range1[1]},
+        {range0[0], range0[1]});
     PerfTree<TRACK> perf{is_dummy};
     perf.run(kvs).get0();
   });
