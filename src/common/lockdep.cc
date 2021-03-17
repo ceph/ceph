@@ -41,9 +41,8 @@ static constexpr size_t MAX_LOCKS = 128 * 1024;   // increase me as needed
 static std::bitset<MAX_LOCKS> free_ids; // bit set = free
 static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
 static constexpr size_t NR_LOCKS = 4096; // the initial number of locks
-static constexpr size_t MAX_FOLLOWERS = 4096;
-static std::vector<std::bitset<MAX_FOLLOWERS>> follows(NR_LOCKS); // follows[a][b] means b taken after a
-static std::vector<std::array<ceph::BackTrace *, MAX_FOLLOWERS>> follows_bt(NR_LOCKS);
+static std::vector<std::bitset<MAX_LOCKS>> follows(NR_LOCKS); // follows[a][b] means b taken after a
+static std::vector<std::map<int,ceph::BackTrace *>> follows_bt(NR_LOCKS);
 // upper bound of lock id
 unsigned current_maxid;
 int last_freed_id = -1;
@@ -173,8 +172,8 @@ static int _lockdep_register(const char *name)
     if (current_maxid <= (unsigned)id) {
       current_maxid = (unsigned)id + 1;
       if (current_maxid == follows.size()) {
-        follows.resize(current_maxid);
-        follows_bt.resize(current_maxid);
+        follows.resize(current_maxid + 1);
+        follows_bt.resize(current_maxid + 1);
       }
     }
     lock_ids[name] = id;
