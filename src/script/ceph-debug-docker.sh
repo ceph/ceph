@@ -115,7 +115,7 @@ EOF
         if [ "${FLAVOR}" = "crimson" ]; then
             ceph_debuginfo+=" ceph-crimson-osd-debuginfo ceph-crimson-osd"
         fi
-        time run docker build $CACHE --tag "$tag" - <<EOF
+        cat > Dockerfile <<EOF
 FROM ${env}
 
 WORKDIR /root
@@ -126,6 +126,7 @@ RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
     yum upgrade -y && \
     yum install -y ceph ${ceph_debuginfo} ceph-fuse ${python_bindings}
 EOF
+        time run docker build $CACHE --tag "$tag" .
     fi
     popd
     rm -rf -- "$T"
