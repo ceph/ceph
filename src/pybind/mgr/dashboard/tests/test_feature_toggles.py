@@ -8,7 +8,7 @@ try:
 except ImportError:
     from unittest.mock import Mock, patch
 
-from ..plugins.feature_toggles import Features, FeatureToggles
+from ..plugins.feature_toggles import Actions, Features, FeatureToggles
 from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
@@ -56,7 +56,7 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
         import cherrypy
 
         self.plugin.register_commands()['handle_command'](
-            self.mgr, 'disable', ['cephfs'])
+            self.mgr, Actions.DISABLE, [Features.CEPHFS])
 
         with patch.object(self.plugin, '_get_feature_from_request',
                           return_value=Features.CEPHFS):
