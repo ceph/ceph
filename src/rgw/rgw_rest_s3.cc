@@ -5188,9 +5188,6 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
 {
   std::string signed_hdrs;
 
-  std::string_view client_signature;
-  std::string_view session_token;
-
   ceph::real_time timestamp = ceph::real_clock::now();
 
   map<string, string> extra_headers;
