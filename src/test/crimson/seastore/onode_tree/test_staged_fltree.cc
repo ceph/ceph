@@ -169,6 +169,8 @@ TEST_F(a_basic_test_t, 2_node_sizes)
   });
 }
 
+using TestBtree = Btree<TestValue>;
+
 struct b_dummy_tree_test_t : public seastar_test_suite_t {
   NodeExtentManagerURef moved_nm;
   TransactionRef ref_t;
@@ -206,23 +208,21 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     ASSERT_TRUE(tree.last(t).unsafe_get0().is_end());
 
     std::vector<std::tuple<ghobject_t,
-                           value_item_t,
+                           test_item_t,
                            TestBtree::Cursor>> insert_history;
     auto f_validate_insert_new = [this, &insert_history] (
-        const ghobject_t& key, const value_item_t& value) {
+        const ghobject_t& key, const test_item_t& value) {
       auto [cursor, success] = tree.insert(
-          t, key, value.get_config()).unsafe_get0();
-      ceph_assert(success);
-      ceph_assert(cursor.get_ghobj() == key);
-      Values::initialize_cursor(t, cursor, value);
+          t, key, {value.get_payload_size()}).unsafe_get0();
+      initialize_cursor_from_item(t, key, value, cursor, success);
       insert_history.emplace_back(key, value, cursor);
       auto cursor_ = tree.find(t, key).unsafe_get0();
       ceph_assert(cursor_ != tree.end());
       ceph_assert(cursor_.value() == cursor.value());
-      Values::validate_cursor(cursor_, key, value);
+      validate_cursor_from_item(key, value, cursor_);
       return cursor.value();
     };
-    auto values = Values(15);
+    auto values = Values<test_item_t>(15);
 
     // insert key1, value1 at STAGE_LEFT
     auto key1 = make_ghobj(3, 3, 3, "ns3", "oid3", 3, 3);
@@ -242,9 +242,9 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     {
       auto value1_dup = values.pick();
       auto [cursor1_dup, ret1_dup] = tree.insert(
-          t, key1, value1_dup.get_config()).unsafe_get0();
+          t, key1, {value1_dup.get_payload_size()}).unsafe_get0();
       ASSERT_FALSE(ret1_dup);
-      Values::validate_cursor(cursor1_dup, key1, value1);
+      validate_cursor_from_item(key1, value1, cursor1_dup);
     }
 
     // insert key2, value2 to key1's left at STAGE_LEFT
@@ -300,7 +300,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     f_validate_insert_new(key11, value11);
 
     // insert key, value randomly until a perfect 3-ary tree is formed
-    std::vector<std::pair<ghobject_t, value_item_t>> kvs{
+    std::vector<std::pair<ghobject_t, test_item_t>> kvs{
       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2), values.pick()},
       {make_ghobj(2, 2, 2, "ns2", "oid2", 4, 4), values.pick()},
       {make_ghobj(2, 2, 2, "ns3", "oid3", 4, 4), values.pick()},
@@ -330,21 +330,21 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       // validate values in tree keep intact
       auto cursor = tree.find(t, k).unsafe_get0();
       EXPECT_NE(cursor, tree.end());
-      Values::validate_cursor(cursor, k, v);
+      validate_cursor_from_item(k, v, cursor);
       // validate values in cursors keep intact
-      Values::validate_cursor(c, k, v);
+      validate_cursor_from_item(k, v, c);
     }
     {
       auto cursor = tree.lower_bound(t, key_s).unsafe_get0();
-      Values::validate_cursor(cursor, smallest_key, smallest_value);
+      validate_cursor_from_item(smallest_key, smallest_value, cursor);
     }
     {
       auto cursor = tree.begin(t).unsafe_get0();
-      Values::validate_cursor(cursor, smallest_key, smallest_value);
+      validate_cursor_from_item(smallest_key, smallest_value, cursor);
     }
     {
       auto cursor = tree.last(t).unsafe_get0();
-      Values::validate_cursor(cursor, largest_key, largest_value);
+      validate_cursor_from_item(largest_key, largest_value, cursor);
     }
 
     // validate range query
@@ -360,7 +360,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       auto cursor = tree.begin(t).unsafe_get0();
       for (auto& [k, v] : kvs) {
         ASSERT_FALSE(cursor.is_end());
-        Values::validate_cursor(cursor, k, v);
+        validate_cursor_from_item(k, v, cursor);
         cursor = cursor.get_next(t).unsafe_get0();
       }
       ASSERT_TRUE(cursor.is_end());
@@ -432,7 +432,7 @@ class TestTree {
   }
 
   seastar::future<> build_tree(
-      const std::vector<ghobject_t>& keys, const std::vector<value_item_t>& values) {
+      const std::vector<ghobject_t>& keys, const std::vector<test_item_t>& values) {
     return seastar::async([this, keys, values] {
       tree.mkfs(t).unsafe_get0();
       //logger().info("\n---------------------------------------------"
@@ -453,7 +453,7 @@ class TestTree {
     });
   }
 
-  seastar::future<> split(const ghobject_t& key, const value_item_t& value,
+  seastar::future<> split(const ghobject_t& key, const test_item_t& value,
                           const split_expectation_t& expected) {
     return seastar::async([this, key, value, expected] {
       TestBtree tree_clone(NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
@@ -463,10 +463,8 @@ class TestTree {
 
       logger().info("insert {}:", key_hobj_t(key));
       auto [cursor, success] = tree_clone.insert(
-          t_clone, key, value.get_config()).unsafe_get0();
-      ASSERT_TRUE(success);
-      ASSERT_EQ(cursor.get_ghobj(), key);
-      Values::initialize_cursor(t_clone, cursor, value);
+          t_clone, key, {value.get_payload_size()}).unsafe_get0();
+      initialize_cursor_from_item(t, key, value, cursor, success);
 
       std::ostringstream oss;
       tree_clone.dump(t_clone, oss);
@@ -476,27 +474,25 @@ class TestTree {
       for (auto& [k, v, c] : insert_history) {
         auto result = tree_clone.find(t_clone, k).unsafe_get0();
         EXPECT_NE(result, tree_clone.end());
-        Values::validate_cursor(result, k, v);
+        validate_cursor_from_item(k, v, result);
       }
       auto result = tree_clone.find(t_clone, key).unsafe_get0();
       EXPECT_NE(result, tree_clone.end());
-      Values::validate_cursor(result, key, value);
+      validate_cursor_from_item(key, value, result);
       EXPECT_TRUE(last_split.match(expected));
     });
   }
 
-  value_item_t create_value(size_t size) {
+  test_item_t create_value(size_t size) {
     return values.create(size);
   }
 
  private:
-  seastar::future<> insert_tree(const ghobject_t& key, const value_item_t& value) {
+  seastar::future<> insert_tree(const ghobject_t& key, const test_item_t& value) {
     return seastar::async([this, &key, &value] {
       auto [cursor, success] = tree.insert(
-          t, key, value.get_config()).unsafe_get0();
-      ASSERT_TRUE(success);
-      ASSERT_EQ(cursor.get_ghobj(), key);
-      Values::initialize_cursor(t, cursor, value);
+          t, key, {value.get_payload_size()}).unsafe_get0();
+      initialize_cursor_from_item(t, key, value, cursor, success);
       insert_history.emplace_back(key, value, cursor);
     });
   }
@@ -507,9 +503,9 @@ class TestTree {
   ValueBuilderImpl<TestValue> vb;
   context_t c;
   TestBtree tree;
-  Values values;
+  Values<test_item_t> values;
   std::vector<std::tuple<
-    ghobject_t, value_item_t, TestBtree::Cursor>> insert_history;
+    ghobject_t, test_item_t, TestBtree::Cursor>> insert_history;
 };
 
 struct c_dummy_test_t : public seastar_test_suite_t {};
@@ -661,7 +657,7 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       std::vector<ghobject_t> keys = {
         make_ghobj(2, 2, 2, "ns3", "oid3", 3, 3),
         make_ghobj(3, 3, 3, "ns3", "oid3", 3, 3)};
-      std::vector<value_item_t> values = {
+      std::vector<test_item_t> values = {
         test.create_value(1360),
         test.create_value(1632)};
       test.build_tree(keys, values).get0();
@@ -712,6 +708,10 @@ class DummyChildPool {
    protected:
     node_type_t node_type() const override { return node_type_t::LEAF; }
     field_type_t field_type() const override { return field_type_t::N0; }
+    const char* read() const override {
+      ceph_abort("impossible path"); }
+    bool is_duplicate() const override {
+      ceph_abort("impossible path"); }
     level_t level() const override { return 0u; }
     void prepare_mutate(context_t) override {
       ceph_abort("impossible path"); }
@@ -1203,10 +1203,11 @@ TEST_F(d_seastore_tm_test_t, 6_random_insert_leaf_node)
   run_async([this] {
     constexpr bool TEST_SEASTORE = true;
     constexpr bool TRACK_CURSORS = true;
-    KVPool kvs{{8, 11, 64, 256, 301, 320},
-               {8, 16, 128, 512, 576, 640},
-               {0, 32}, {0, 10}, {0, 4}};
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS>>(kvs,
+    auto kvs = KVPool<test_item_t>::create_raw_range(
+        {8, 11, 64, 256, 301, 320},
+        {8, 16, 128, 512, 576, 640},
+        {0, 32}, {0, 10}, {0, 4});
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, test_item_t>>(kvs,
         (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
                        : NodeExtentManager::create_dummy(IS_DUMMY_SYNC)));
     {
