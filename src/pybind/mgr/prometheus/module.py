@@ -1132,11 +1132,11 @@ class Module(MgrModule):
         sum_metric = self.metrics.get('prometheus_collect_duration_seconds_sum')
         count_metric = self.metrics.get('prometheus_collect_duration_seconds_count')
         if sum_metric is None:
-            sum_metrics = MetricCounter(
+            sum_metric = MetricCounter(
                 'prometheus_collect_duration_seconds_sum',
                 'The sum of seconds took to collect all metrics of this exporter',
                 ('method',))
-            self.metrics['prometheus_collect_duration_seconds_sum'] = sum_metrics
+            self.metrics['prometheus_collect_duration_seconds_sum'] = sum_metric
         if count_metric is None:
             count_metric = MetricCounter(
                 'prometheus_collect_duration_seconds_count',
