@@ -313,6 +313,7 @@ int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
 
 #define MAX_LC_LIST_ENTRIES 100
   do {
+    entries.clear();
     int ret = sal_lc->list_entries(obj_names[index], marker, MAX_LC_LIST_ENTRIES, entries);
     if (ret < 0)
       return ret;
