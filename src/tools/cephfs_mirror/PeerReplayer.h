@@ -258,7 +258,7 @@ private:
   int synchronize(const std::string &dir_path, uint64_t snap_id, const std::string &snap_name);
   int do_synchronize(const std::string &path, const std::string &snap_name);
 
-  int cleanup_remote_dir(const std::string &dir_path);
+  int cleanup_remote_dir(const std::string &dir_root, const std::string &path={});
   int remote_mkdir(const std::string &local_path, const std::string &remote_path,
                    const struct ceph_statx &stx);
   int remote_file_op(const std::string &dir_path,
