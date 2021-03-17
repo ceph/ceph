@@ -68,6 +68,7 @@ CLIENT_METADATA_MOUNT_POINT_KEY = "mount_point"
 CLIENT_METADATA_MOUNT_ROOT_KEY = "root"
 CLIENT_METADATA_IP_KEY = "IP"
 CLIENT_METADATA_HOSTNAME_KEY = "hostname"
+CLIENT_METADATA_VALID_METRICS_KEY = "valid_metrics"
 
 GLOBAL_METRICS_KEY = "global_metrics"
 GLOBAL_COUNTERS_KEY = "global_counters"
@@ -201,14 +202,30 @@ class FSTop(object):
         self.topl.addstr(0, 0, ITEMS_PAD.join(heading), curses.A_STANDOUT | curses.A_BOLD)
         return x_coord_map
 
+    @staticmethod
+    def has_metric(metadata, metrics_key):
+        return metrics_key in metadata
+
+    @staticmethod
+    def has_metrics(metadata, metrics_keys):
+        for key in metrics_keys:
+            if not FSTop.has_metric(metadata, key):
+                return False
+        return True
+
     def refresh_client(self, client_id, metrics, counters, client_meta, x_coord_map, y_coord):
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_END:
             coord = x_coord_map[item]
             if item == FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR:
-                self.mainw.addstr(y_coord, coord[0],
-                                  f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'
-                                  f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'
-                                  f'{client_meta[CLIENT_METADATA_IP_KEY]}')
+                if FSTop.has_metrics(client_meta, [CLIENT_METADATA_MOUNT_POINT_KEY,
+                                                   CLIENT_METADATA_HOSTNAME_KEY,
+                                                   CLIENT_METADATA_IP_KEY]):
+                    self.mainw.addstr(y_coord, coord[0],
+                                      f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'
+                                      f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'
+                                      f'{client_meta[CLIENT_METADATA_IP_KEY]}')
+                else:
+                    self.mainw.addstr(y_coord, coord[0], "N/A")
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_START:
             coord = x_coord_map[item]
             hlen = coord[1] - len(ITEMS_PAD)
@@ -216,14 +233,17 @@ class FSTop(object):
                 self.mainw.addstr(y_coord, coord[0],
                                   wrap(client_id.split('.')[1], hlen))
             elif item == FS_TOP_MAIN_WINDOW_COL_MNT_ROOT:
-                self.mainw.addstr(y_coord, coord[0],
-                                  wrap(client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY], hlen))
+                if FSTop.has_metric(client_meta, CLIENT_METADATA_MOUNT_ROOT_KEY):
+                    self.mainw.addstr(y_coord, coord[0],
+                                      wrap(client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY], hlen))
+                else:
+                    self.mainw.addstr(y_coord, coord[0], "N/A")
         cidx = 0
         for item in counters:
             coord = x_coord_map[item]
             m = metrics[cidx]
             typ = MAIN_WINDOW_TOP_LINE_METRICS[MGR_STATS_COUNTERS[cidx]]
-            if item.lower() in client_meta['valid_metrics']:
+            if item.lower() in client_meta.get(CLIENT_METADATA_VALID_METRICS_KEY, []):
                 if typ == MetricType.METRIC_TYPE_PERCENTAGE:
                     self.mainw.addstr(y_coord, coord[0], f'{calc_perc(m)}')
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
@@ -253,8 +273,9 @@ class FSTop(object):
             return False
         client_metadata = stats_json[CLIENT_METADATA_KEY]
         num_clients = len(client_metadata)
-        num_mounts = len([client for client, metadata in client_metadata.items() if not
-                          metadata[CLIENT_METADATA_MOUNT_POINT_KEY] == 'N/A'])
+        num_mounts = len([client for client, metadata in client_metadata.items() if
+                          CLIENT_METADATA_MOUNT_POINT_KEY in metadata
+                          and metadata[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A'])
         num_kclients = len([client for client, metadata in client_metadata.items() if
                             "kernel_version" in metadata])
         num_libs = num_clients - (num_mounts + num_kclients)
