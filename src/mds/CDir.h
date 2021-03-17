@@ -645,9 +645,8 @@ protected:
   friend class C_IO_Dir_Commit_Ops;
 
   void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
-  void _omap_fetch_more(
-    ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
-    MDSContext *fin);
+  void _omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
+			map<string, bufferlist>& omap, MDSContext *fin);
   CDentry *_load_dentry(
       std::string_view key,
       std::string_view dname,
