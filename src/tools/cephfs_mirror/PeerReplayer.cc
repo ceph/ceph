@@ -714,11 +714,16 @@ int PeerReplayer::remote_file_op(const std::string &dir_path,
   return 0;
 }
 
-int PeerReplayer::cleanup_remote_dir(const std::string &dir_path) {
-  dout(20) << ": dir_path=" << dir_path << dendl;
+int PeerReplayer::cleanup_remote_dir(const std::string &dir_root, const std::string &path) {
+  dout(20) << ": dir_root=" << dir_root << ", path=" << path
+           << dendl;
 
   std::stack<SyncEntry> rm_stack;
   ceph_dir_result *tdirp;
+  auto dir_path = dir_root;
+  if (!path.empty()) {
+    dir_path = entry_path(dir_root, path);
+  }
   int r = ceph_opendir(m_remote_mount, dir_path.c_str(), &tdirp);
   if (r < 0) {
     derr << ": failed to open remote directory=" << dir_path << ": "
@@ -739,7 +744,7 @@ int PeerReplayer::cleanup_remote_dir(const std::string &dir_path) {
 
   rm_stack.emplace(SyncEntry(dir_path, tdirp, tstx));
   while (!rm_stack.empty()) {
-    if (should_backoff(dir_path, &r)) {
+    if (should_backoff(dir_root, &r)) {
       dout(0) << ": backing off r=" << r << dendl;
       break;
     }
