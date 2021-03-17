@@ -588,6 +588,23 @@ class CephadmServe:
 
         for slot in slots_to_add:
             for daemon_type in service_to_daemon_types(service_type):
+                # first remove daemon on conflicting port?
+                if slot.port:
+                    for d in daemons_to_remove:
+                        if d.hostname != slot.hostname or d.ports != [slot.port]:
+                            continue
+                        if d.ip and slot.ip and d.ip != slot.ip:
+                            continue
+                        self.log.info(
+                            f'Removing {d.name()} before deploying to {slot} to avoid a port conflict'
+                        )
+                        # NOTE: we don't check ok-to-stop here to avoid starvation if
+                        # there is only 1 gateway.
+                        self._remove_daemon(d.name(), d.hostname)
+                        daemons_to_remove.remove(d)
+                        break
+
+                # deploy new daemon
                 daemon_id = self.mgr.get_unique_name(
                     daemon_type,
                     slot.hostname,
