@@ -252,7 +252,6 @@ BuildRequires:  %{luarocks_package_name}
 %if 0%{with make_check}
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
-BuildRequires:	ninja-build
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
@@ -356,6 +355,7 @@ BuildRequires:	lz4-devel >= 1.7
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	libtool-ltdl-devel
+BuildRequires:	ninja-build
 BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-devel
 %ifarch x86_64
@@ -374,6 +374,7 @@ BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
+BuildRequires:	ninja
 BuildRequires:	python%{python3_pkgversion}-CherryPy
 BuildRequires:	python%{python3_pkgversion}-PyJWT
 BuildRequires:	python%{python3_pkgversion}-Routes
