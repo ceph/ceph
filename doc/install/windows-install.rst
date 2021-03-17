@@ -43,21 +43,7 @@ MSI installer
 =============
 
 Using the MSI installer is the recommended way of installing Ceph on Windows.
-It performs the following steps:
-
-* copy the required files to the configured install location
-  (defaulting to ``C:\Program Files\Ceph``)
-* install the required Visual C++ runtime
-* install the WNBD driver and create a new WNBD SCSI adapter device
-* register the WNBD ETW manifest
-* register and start the ``ceph-rbd`` Windows service
-* update the environment ``PATH`` variable
-
-..
-    TODO: Update the link once we have a download page.
-
-The MSI can be downloaded from here:
-https://cloudbase.it/downloads/ceph_v16_0_0_beta.msi
+It can be downloaded from here: https://cloudbase.it/ceph-for-windows/
 
 As mentioned earlier, the Ceph installer does not include Dokany, which has
 to be installed separately.
