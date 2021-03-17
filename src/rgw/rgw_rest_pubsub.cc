@@ -431,7 +431,7 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
     const auto max_size = s->cct->_conf->rgw_max_put_param_size;
     int r;
     bufferlist data;
-    std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+    std::tie(r, data) = read_all_input(s, max_size, false);
 
     if (r < 0) {
       ldout(s->cct, 1) << "failed to read XML payload" << dendl;

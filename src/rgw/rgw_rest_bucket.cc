@@ -273,7 +273,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
   RGWQuotaInfo quota;
   if (!use_http_params) {
     bool empty;
-    op_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
+    op_ret = get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
     if (op_ret < 0) {
       if (!empty)
         return;

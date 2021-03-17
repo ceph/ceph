@@ -1534,12 +1534,12 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RGWRadosStore *sto
 {
   boost::optional<RGWRESTConn> conn;
   if (remote == zonegroup.get_id()) {
-    conn.emplace(store->ctx(), store->svc()->zone, remote, zonegroup.endpoints);
+    conn.emplace(store->ctx(), store->svc()->zone, remote, zonegroup.endpoints, zonegroup.api_name);
   } else {
     for (const auto& z : zonegroup.zones) {
       const auto& zone = z.second;
       if (remote == zone.id) {
-        conn.emplace(store->ctx(), store->svc()->zone, remote, zone.endpoints);
+        conn.emplace(store->ctx(), store->svc()->zone, remote, zone.endpoints, zonegroup.api_name);
         break;
       }
     }
@@ -1584,7 +1584,9 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
   return ret;
 }
 
-static int send_to_url(const string& url, const string& access,
+static int send_to_url(const string& url,
+                       std::optional<string> opt_region,
+                       const string& access,
                        const string& secret, req_info& info,
                        bufferlist& in_data, JSONParser& parser)
 {
@@ -1597,7 +1599,7 @@ static int send_to_url(const string& url, const string& access,
   key.key = secret;
 
   param_vec_t params;
-  RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params);
+  RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params, opt_region);
 
   bufferlist response;
   int ret = req.forward_request(key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
@@ -1611,6 +1613,7 @@ static int send_to_url(const string& url, const string& access,
 }
 
 static int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
+                                 std::optional<string> opt_region,
                                  const string& access, const string& secret,
                                  req_info& info, bufferlist& in_data,
                                  JSONParser& parser)
@@ -1618,11 +1621,12 @@ static int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
   if (url.empty()) {
     return send_to_remote_gateway(conn, info, in_data, parser);
   }
-  return send_to_url(url, access, secret, info, in_data, parser);
+  return send_to_url(url, opt_region, access, secret, info, in_data, parser);
 }
 
 static int commit_period(RGWRealm& realm, RGWPeriod& period,
                          string remote, const string& url,
+                         std::optional<string> opt_region,
                          const string& access, const string& secret,
                          bool force)
 {
@@ -1683,7 +1687,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   jf.flush(bl);
 
   JSONParser p;
-  int ret = send_to_remote_or_url(remote_conn, url, access, secret, info, bl, p);
+  int ret = send_to_remote_or_url(remote_conn, url, opt_region, access, secret, info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
 
@@ -1731,6 +1735,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
 static int update_period(const string& realm_id, const string& realm_name,
                          const string& period_id, const string& period_epoch,
                          bool commit, const string& remote, const string& url,
+                         std::optional<string> opt_region,
                          const string& access, const string& secret,
                          Formatter *formatter, bool force)
 {
@@ -1763,7 +1768,7 @@ static int update_period(const string& realm_id, const string& realm_name,
     return ret;
   }
   if (commit) {
-    ret = commit_period(realm, period, remote, url, access, secret, force);
+    ret = commit_period(realm, period, remote, url, opt_region, access, secret, force);
     if (ret < 0) {
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -1789,6 +1794,7 @@ static int init_bucket_for_sync(rgw::sal::RGWUser* user,
 }
 
 static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
+                          std::optional<string> opt_region,
                           const string& access_key, const string& secret_key,
                           const string& realm_id, const string& realm_name,
                           const string& period_id, const string& period_epoch,
@@ -1811,7 +1817,7 @@ static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
 
   bufferlist bl;
   JSONParser p;
-  int ret = send_to_remote_or_url(remote_conn, url, access_key, secret_key,
+  int ret = send_to_remote_or_url(remote_conn, url, opt_region, access_key, secret_key,
                                   info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
@@ -3016,6 +3022,7 @@ int main(int argc, const char **argv)
   std::string start_date, end_date;
   std::string key_type_str;
   std::string period_id, period_epoch, remote, url;
+  std::optional<string> opt_region;
   std::string master_zone;
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
@@ -3460,6 +3467,8 @@ int main(int argc, const char **argv)
       remote = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--url", (char*)NULL)) {
       url = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--region", (char*)NULL)) {
+      opt_region = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*)NULL)) {
       realm_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
@@ -3980,7 +3989,8 @@ int main(int argc, const char **argv)
     case OPT::PERIOD_UPDATE:
       {
         int ret = update_period(realm_id, realm_name, period_id, period_epoch,
-                                commit, remote, url, access_key, secret_key,
+                                commit, remote, url, opt_region,
+                                access_key, secret_key,
                                 formatter.get(), yes_i_really_mean_it);
 	if (ret < 0) {
 	  return -ret;
@@ -4019,7 +4029,8 @@ int main(int argc, const char **argv)
         }
 
         RGWPeriod period;
-        int ret = do_period_pull(remote_conn, url, access_key, secret_key,
+        int ret = do_period_pull(remote_conn, url, opt_region,
+                                 access_key, secret_key,
                                  realm_id, realm_name, period_id, period_epoch,
                                  &period);
         if (ret < 0) {
@@ -4337,7 +4348,7 @@ int main(int argc, const char **argv)
 
         bufferlist bl;
         JSONParser p;
-        int ret = send_to_url(url, access_key, secret_key, info, bl, p);
+        int ret = send_to_url(url, opt_region, access_key, secret_key, info, bl, p);
         if (ret < 0) {
           cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
           if (ret == -EACCES) {
@@ -4359,7 +4370,8 @@ int main(int argc, const char **argv)
         auto& current_period = realm.get_current_period();
         if (!current_period.empty()) {
           // pull the latest epoch of the realm's current period
-          ret = do_period_pull(nullptr, url, access_key, secret_key,
+          ret = do_period_pull(nullptr, url, opt_region,
+                               access_key, secret_key,
                                realm_id, realm_name, current_period, "",
                                &period);
           if (ret < 0) {
@@ -5699,7 +5711,8 @@ int main(int argc, const char **argv)
       jf.flush(bl);
 
       JSONParser p;
-      ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
+      ret = send_to_remote_or_url(nullptr, url, opt_region,
+                                  access_key, secret_key,
                                   info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
@@ -5710,7 +5723,8 @@ int main(int argc, const char **argv)
   case OPT::PERIOD_UPDATE:
     {
       int ret = update_period(realm_id, realm_name, period_id, period_epoch,
-                              commit, remote, url, access_key, secret_key,
+                              commit, remote, url, opt_region,
+                              access_key, secret_key,
                               formatter.get(), yes_i_really_mean_it);
       if (ret < 0) {
 	return -ret;
@@ -5732,7 +5746,7 @@ int main(int argc, const char **argv)
         cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-      ret = commit_period(realm, period, remote, url, access_key, secret_key,
+      ret = commit_period(realm, period, remote, url, opt_region, access_key, secret_key,
                           yes_i_really_mean_it);
       if (ret < 0) {
         cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
