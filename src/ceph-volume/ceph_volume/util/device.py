@@ -478,6 +478,8 @@ class Device(object):
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
             rejected.append('Has BlueStore device label')
+        if self.has_gpt_headers:
+            rejected.append('Has GPT headers')
         return rejected
 
     def _check_lvm_reject_reasons(self):
