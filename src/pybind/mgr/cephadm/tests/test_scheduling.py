@@ -534,10 +534,10 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(count=6, label='foo'),
             'host1 host2 host3'.split(),
             [],
-            ['host1(port=80)', 'host2(port=80)', 'host3(port=80)',
-             'host1(port=81)', 'host2(port=81)', 'host3(port=81)'],
-            ['host1(port=80)', 'host2(port=80)', 'host3(port=80)',
-             'host1(port=81)', 'host2(port=81)', 'host3(port=81)'],
+            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
+             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
+            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
+             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
             []
         ),
         # label + count_per_host + ports (+ xisting)
@@ -550,10 +550,10 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('rgw', 'b', 'host2', ports=[80]),
                 DaemonDescription('rgw', 'c', 'host1', ports=[82]),
             ],
-            ['host1(port=80)', 'host2(port=80)', 'host3(port=80)',
-             'host1(port=81)', 'host2(port=81)', 'host3(port=81)'],
-            ['host1(port=80)', 'host3(port=80)',
-             'host2(port=81)', 'host3(port=81)'],
+            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
+             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
+            ['host1(*:80)', 'host3(*:80)',
+             'host2(*:81)', 'host3(*:81)'],
             ['rgw.c']
         ),
         # cephadm.py teuth case
@@ -753,12 +753,12 @@ class NodeAssignmentTest4(NamedTuple):
                 'host3': {'192.168.0.0/16': ['192.168.0.1']},
             },
             [],
-            ['host1(ip=10.0.0.1 port=80)', 'host2(ip=10.0.0.2 port=80)',
-             'host1(ip=10.0.0.1 port=81)', 'host2(ip=10.0.0.2 port=81)',
-             'host1(ip=10.0.0.1 port=82)', 'host2(ip=10.0.0.2 port=82)'],
-            ['host1(ip=10.0.0.1 port=80)', 'host2(ip=10.0.0.2 port=80)',
-             'host1(ip=10.0.0.1 port=81)', 'host2(ip=10.0.0.2 port=81)',
-             'host1(ip=10.0.0.1 port=82)', 'host2(ip=10.0.0.2 port=82)'],
+            ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
+             'host1(10.0.0.1:81)', 'host2(10.0.0.2:81)',
+             'host1(10.0.0.1:82)', 'host2(10.0.0.2:82)'],
+            ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
+             'host1(10.0.0.1:81)', 'host2(10.0.0.2:81)',
+             'host1(10.0.0.1:82)', 'host2(10.0.0.2:82)'],
             []
         ),
     ])
