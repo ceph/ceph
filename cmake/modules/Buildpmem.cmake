@@ -3,23 +3,13 @@ function(build_pmem)
   set(PMDK_SRC "${CMAKE_BINARY_DIR}/src/pmdk/src")
   set(PMDK_INCLUDE "${PMDK_SRC}/include")
 
-  # Use debug PMDK libs in debug lib/rbd builds
-  if(CMAKE_BUILD_TYPE STREQUAL Debug)
-    set(PMDK_LIB_DIR "debug")
-  else()
-    set(PMDK_LIB_DIR "nondebug")
-  endif()
-  set(PMDK_LIB "${PMDK_SRC}/${PMDK_LIB_DIR}")
+  set(PMDK_LIB "${PMDK_SRC}/lib")
 
   include(FindMake)
   find_make("MAKE_EXECUTABLE" "make_cmd")
 
   ExternalProject_Add(pmdk_ext
-      GIT_REPOSITORY "https://github.com/ceph/pmdk.git"
-      GIT_TAG "1.7"
-      GIT_SHALLOW TRUE
-      GIT_CONFIG advice.detachedHead=false
-      SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
+      SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/pmdk
       CONFIGURE_COMMAND ""
       # Explicitly built w/o NDCTL, otherwise if ndtcl is present on the
       # build system tests statically linking to librbd (which uses
@@ -28,7 +18,7 @@ function(build_pmem)
       BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} NDCTL_ENABLE=n
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "${PMDK_LIB}/libpmem.a" "${PMDK_LIB}/libpmemobj.a"
-      INSTALL_COMMAND "")
+      INSTALL_COMMAND ${make_cmd} install prefix= LIB_PREFIX=lib DESTDIR=${PMDK_SRC} NDCTL_ENABLE=n)
 
   # libpmem
   add_library(pmem::pmem STATIC IMPORTED)

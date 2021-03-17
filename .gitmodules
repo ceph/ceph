@@ -81,3 +81,6 @@
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
 	branch = ceph-master
+[submodule "src/pmdk"]
+	path = src/pmdk
+	url = https://github.com/ceph/pmdk.git
