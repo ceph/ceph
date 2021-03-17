@@ -64,7 +64,7 @@ endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   if(MINGW)
     # The MINGW headers are missing some "const" qualifiers.
-    add_compile_options($<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:-fpermissive>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fpermissive>)
   else()
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -rdynamic")
   endif()
