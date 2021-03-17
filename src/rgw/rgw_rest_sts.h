@@ -29,7 +29,7 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_cert_valid(const vector<string>& thumbprints, const string& cert) const;
 
-  boost::optional<RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const;
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const;
 
   std::string get_role_tenant(const string& role_arn) const;
 

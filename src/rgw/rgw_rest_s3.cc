@@ -6020,18 +6020,18 @@ rgw::auth::s3::STSEngine::authenticate(
   string role_id;
   rgw::auth::RoleApplier::Role r;
   if (! token.roleId.empty()) {
-    RGWRole role(s->cct, store, token.roleId);
-    if (role.get_by_id(dpp, y) < 0) {
+    std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(token.roleId);
+    if (role->get_by_id(dpp, y) < 0) {
       return result_t::deny(-EPERM);
     }
     r.id = token.roleId;
-    r.name = role.get_name();
-    r.tenant = role.get_tenant();
+    r.name = role->get_name();
+    r.tenant = role->get_tenant();
 
-    vector<string> role_policy_names = role.get_role_policy_names();
+    vector<string> role_policy_names = role->get_role_policy_names();
     for (auto& policy_name : role_policy_names) {
       string perm_policy;
-      if (int ret = role.get_role_policy(policy_name, perm_policy); ret == 0) {
+      if (int ret = role->get_role_policy(dpp, policy_name, perm_policy); ret == 0) {
         r.role_policies.push_back(std::move(perm_policy));
       }
     }
