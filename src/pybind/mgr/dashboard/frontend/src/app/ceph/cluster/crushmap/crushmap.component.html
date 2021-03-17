@@ -23,7 +23,8 @@
                 <span>&nbsp;</span>
                 <span class="node-name"
                       [ngClass]="{'type-osd': node.data.type === 'osd'}"
-                      [innerHTML]="node.data.name"></span>
+                      [innerHTML]="node.data.name"
+                      (click)="node.mouseAction('click', $event)"></span>
               </ng-template>
             </tree-root>
           </div>
