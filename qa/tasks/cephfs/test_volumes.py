@@ -3727,6 +3727,48 @@ class TestVolumes(CephFSTestCase):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_snapshot_clone_retain_suid_guid(self):
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # Create a file with suid, guid bits set along with executable bit.
+        args = ["subvolume", "getpath", self.volname, subvolume]
+        args = tuple(args)
+        subvolpath = self._fs_cmd(*args)
+        self.assertNotEqual(subvolpath, None)
+        subvolpath = subvolpath[1:].rstrip() # remove "/" prefix and any trailing newline
+
+        file_path = subvolpath
+        file_path = os.path.join(subvolpath, "test_suid_file")
+        self.mount_a.run_shell(["touch", file_path])
+        self.mount_a.run_shell(["chmod", "u+sx,g+sx", file_path])
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone
+        self._verify_clone(subvolume, snapshot, clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_snapshot_reconf_max_concurrent_clones(self):
         """
         Validate 'max_concurrent_clones' config option
