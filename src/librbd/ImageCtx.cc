@@ -147,7 +147,7 @@ public:
     } else {
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
     }
-    journal_policy = new journal::StandardPolicy<ImageCtx>(this);
+    journal_policy = new journal::StandardPolicy(this);
   }
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
