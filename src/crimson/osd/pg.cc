@@ -708,8 +708,8 @@ PG::do_osd_ops(
     throw crimson::common::system_shutdown_exception();
   }
 
-  using osd_op_ierrorator =
-    OpsExecuter::osd_op_ierrorator;
+  using osd_op_ierrorator = OpsExecuter::osd_op_ierrorator;
+  using osd_op_errorator = OpsExecuter::osd_op_errorator;
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
   auto ox = std::make_unique<OpsExecuter>(
@@ -769,10 +769,10 @@ PG::do_osd_ops(
       return PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>>(
       crimson::ct_error::eagain::make());
     });
-  }), OpsExecuter::osd_op_errorator::all_same_way([ox = std::move(ox),
-                                     m,
-                                     obc,
-                                     this] (const std::error_code& e) {
+  }), osd_op_errorator::all_same_way([ox = std::move(ox),
+                                      m,
+                                      obc,
+                                      this] (const std::error_code& e) {
     return handle_failed_op(e, std::move(obc), *ox, *m);
   }));
 }
