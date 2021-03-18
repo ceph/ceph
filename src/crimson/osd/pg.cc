@@ -976,7 +976,7 @@ PG::reload_obc(crimson::osd::ObjectContext& obc) const
 
 PG::load_obc_iertr::future<>
 PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
-		    Operation *op, PG::with_obc_func_t &&f)
+		    Operation *op, with_obc_func_t &&f)
 {
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
