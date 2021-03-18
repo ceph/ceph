@@ -166,7 +166,7 @@ ClientRequest::process_op(Ref<PG> &pg)
       handle.enter(pp(*pg).recover_missing))
   .then_interruptible(
     [this, pg]() mutable {
-    return do_recover_missing(pg);
+    return do_recover_missing(pg, m->get_hobj());
   }).then_interruptible([this, pg]() mutable {
     return pg->already_complete(m->get_reqid()).then_unpack_interruptible(
       [this, pg](bool completed, int ret) mutable
@@ -201,10 +201,9 @@ ClientRequest::process_op(Ref<PG> &pg)
 }
 
 ClientRequest::interruptible_future<>
-ClientRequest::do_recover_missing(Ref<PG>& pg)
+ClientRequest::do_recover_missing(Ref<PG>& pg, const hobject_t& soid)
 {
   eversion_t ver;
-  const hobject_t& soid = m->get_hobj();
   logger().debug("{} check for recovery, {}", *this, soid);
   if (!pg->is_unreadable_object(soid, &ver) &&
       !pg->is_degraded_or_backfilling_object(soid)) {

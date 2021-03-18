@@ -62,7 +62,7 @@ public:
   seastar::future<> start();
 
 private:
-  interruptible_future<> do_recover_missing(Ref<PG>& pgref);
+  interruptible_future<> do_recover_missing(Ref<PG>& pgref, const hobject_t& soid);
   interruptible_future<> do_process(
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
