@@ -117,6 +117,11 @@ namespace {
 
 struct MockReplayerListener : public image_replayer::ReplayerListener {
   MOCK_METHOD0(handle_notification, void());
+  MOCK_METHOD5(create_mirror_snapshot_start, void(const std::string &,
+                                                  int64_t *, std::string *,
+                                                  std::string *, Context *));
+  MOCK_METHOD3(create_mirror_snapshot_finish, void(const std::string &,
+                                                   uint64_t, Context *));
 };
 
 } // anonymous namespace

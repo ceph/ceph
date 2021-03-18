@@ -14,6 +14,8 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
+class Context;
+
 namespace rbd {
 namespace mirror {
 
@@ -165,11 +167,25 @@ struct PeerSpec {
 std::ostream& operator<<(std::ostream& lhs, const PeerSpec &peer);
 
 struct GroupCtx {
+  struct Listener {
+    virtual ~Listener() {
+    }
+
+    virtual void create_mirror_snapshot_start(
+        const std::string &remote_group_snap_id, void *arg,
+        int64_t *local_group_pool_id, std::string *local_group_id,
+        std::string *local_group_snap_id, Context *on_finish) = 0;
+    virtual void create_mirror_snapshot_finish(
+        const std::string &remote_group_snap_id, void *arg, uint64_t snap_id,
+        Context *on_finish) = 0;
+  };
+
   std::string name;
   std::string group_id;
   std::string global_group_id;
   bool primary = false;
   mutable librados::IoCtx io_ctx;
+  Listener *listener = nullptr;
 
   GroupCtx() {
   }

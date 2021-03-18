@@ -160,6 +160,31 @@ private:
     STATE_STOPPED,
   };
 
+  struct Listener : public GroupCtx::Listener {
+    GroupReplayer *group_replayer;
+
+    Listener(GroupReplayer *group_replayer) : group_replayer(group_replayer) {
+    }
+
+    void create_mirror_snapshot_start(const std::string &remote_group_snap_id,
+                                      void *arg, int64_t *local_group_pool_id,
+                                      std::string *local_group_id,
+                                      std::string *local_group_snap_id,
+                                      Context *on_finish) override {
+      group_replayer->create_mirror_snapshot_start(
+          remote_group_snap_id, static_cast<ImageReplayer<ImageCtxT> *>(arg),
+          local_group_pool_id, local_group_id, local_group_snap_id, on_finish);
+    }
+
+    void create_mirror_snapshot_finish(const std::string &remote_group_snap_id,
+                                       void *arg, uint64_t snap_id,
+                                       Context *on_finish) override {
+      group_replayer->create_mirror_snapshot_finish(
+          remote_group_snap_id, static_cast<ImageReplayer<ImageCtxT> *>(arg),
+          snap_id, on_finish);
+    }
+  };
+
   librados::IoCtx &m_local_io_ctx;
   std::string m_local_mirror_uuid;
   std::string m_global_group_id;
@@ -174,6 +199,7 @@ private:
   GroupCtx m_local_group_ctx;
   Peers m_peers;
   Peer<ImageCtxT> m_remote_group_peer;
+  std::string m_remote_group_id;
 
   mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
@@ -191,6 +217,12 @@ private:
 
   group_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> m_image_replayers;
+
+  Listener m_listener = {this};
+  std::string m_remote_group_snap_id;
+  cls::rbd::GroupSnapshot m_group_snap;
+  std::map<ImageReplayer<ImageCtxT> *, Context *> m_create_snap_requests;
+  bool m_pending_snap_create = false;
 
   static std::string state_to_string(const State &state) {
     switch (state) {
@@ -236,6 +268,19 @@ private:
 
   void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
                                       const std::string &desc);
+
+  void create_mirror_snapshot_start(const std::string &remote_group_snap_id,
+                                    ImageReplayer<ImageCtxT> *image_replayer,
+                                    int64_t *local_group_pool_id,
+                                    std::string *local_group_id,
+                                    std::string *local_group_snap_id,
+                                    Context *on_finish);
+  void handle_create_mirror_snapshot_start(int r);
+
+  void create_mirror_snapshot_finish(const std::string &remote_group_snap_id,
+                                     ImageReplayer<ImageCtxT> *image_replayer,
+                                     uint64_t snap_id, Context *on_finish);
+  void handle_create_mirror_snapshot_finish(int r);
 };
 
 } // namespace mirror

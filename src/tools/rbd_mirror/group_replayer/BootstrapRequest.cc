@@ -76,6 +76,7 @@ BootstrapRequest<I>::BootstrapRequest(
     MirrorStatusUpdater<I> *remote_status_updater,
     journal::CacheManagerHandler *cache_manager_handler,
     PoolMetaCache *pool_meta_cache,
+    std::string *remote_group_id,
     GroupCtx *local_group_ctx,
     std::list<std::pair<librados::IoCtx, ImageReplayer<I> *>> *image_replayers,
     Context* on_finish)
@@ -92,6 +93,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_remote_status_updater(remote_status_updater),
     m_cache_manager_handler(cache_manager_handler),
     m_pool_meta_cache(pool_meta_cache),
+    m_remote_group_id(remote_group_id),
     m_local_group_ctx(local_group_ctx),
     m_image_replayers(image_replayers),
     m_on_finish(on_finish) {
@@ -162,7 +164,7 @@ void BootstrapRequest<I>::handle_get_remote_group_id(int r) {
   if (r == 0) {
     auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_group_get_group_id_finish(
-        &iter, &m_remote_group_id);
+        &iter, m_remote_group_id);
   }
 
   if (r < 0) {
@@ -179,7 +181,7 @@ void BootstrapRequest<I>::get_remote_group_name() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::dir_get_name_start(&op, m_remote_group_id);
+  librbd::cls_client::dir_get_name_start(&op, *m_remote_group_id);
   m_out_bl.clear();
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -224,7 +226,7 @@ void BootstrapRequest<I>::get_remote_mirror_group() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_group_get_start(&op, m_remote_group_id);
+  librbd::cls_client::mirror_group_get_start(&op, *m_remote_group_id);
   m_out_bl.clear();
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -336,7 +338,8 @@ void BootstrapRequest<I>::list_remote_group() {
       &BootstrapRequest<I>::handle_list_remote_group>(this);
   m_out_bl.clear();
   int r = m_remote_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_remote_group_id), comp, &op, &m_out_bl);
+      librbd::util::group_header_name(*m_remote_group_id), comp, &op,
+      &m_out_bl);
   ceph_assert(r == 0);
   comp->release();
 }
