@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <type_traits>
+#include <utility>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <boost/smart_ptr/local_shared_ptr.hpp>
@@ -13,6 +14,7 @@
 #include <seastar/core/shared_future.hh>
 
 #include "common/dout.h"
+#include "common/static_ptr.h"
 #include "messages/MOSDOp.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
@@ -79,6 +81,40 @@ class OpsExecuter {
       IOInterruptCondition, T>;
 
 public:
+  // ExecutableMessage -- an interface class to allow using OpsExecuter
+  // with other message types than just the `MOSDOp`. The type erasure
+  // happens in the ctor of `OpsExecuter`.
+  struct ExecutableMessage {
+    virtual crimson::net::ConnectionRef get_connection() const = 0;
+    virtual osd_reqid_t get_reqid() const = 0;
+    virtual epoch_t get_map_epoch() const = 0;
+    virtual entity_inst_t get_orig_source_inst() const = 0;
+    virtual uint64_t get_features() const = 0;
+  };
+
+  template <class ImplT>
+  class ExecutableMessagePimpl final : ExecutableMessage {
+    const ImplT* pimpl;
+  public:
+    ExecutableMessagePimpl(const ImplT* pimpl) : pimpl(pimpl) {
+    }
+    crimson::net::ConnectionRef get_connection() const final {
+      return pimpl->get_connection();
+    }
+    osd_reqid_t get_reqid() const final {
+      return pimpl->get_reqid();
+    }
+    epoch_t get_map_epoch() const final {
+      return pimpl->get_map_epoch();
+    }
+    entity_inst_t get_orig_source_inst() const final {
+      return pimpl->get_orig_source_inst();
+    }
+    uint64_t get_features() const final {
+      return pimpl->get_features();
+    }
+  };
+
   // because OpsExecuter is pretty heavy-weight object we want to ensure
   // it's not copied nor even moved by accident. Performance is the sole
   // reason for prohibiting that.
@@ -114,7 +150,8 @@ private:
   const OpInfo& op_info;
   const pg_pool_t& pool_info;  // for the sake of the ObjClass API
   PGBackend& backend;
-  const MOSDOp& msg;
+  ceph::static_ptr<ExecutableMessage,
+                   sizeof(ExecutableMessagePimpl<void>)> msg;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -189,16 +226,17 @@ private:
   }
 
 public:
+  template <class MsgT>
   OpsExecuter(ObjectContextRef obc,
               const OpInfo& op_info,
               const pg_pool_t& pool_info,
               PGBackend& backend,
-              const MOSDOp& msg)
+              const MsgT& msg)
     : obc(std::move(obc)),
       op_info(op_info),
       pool_info(pool_info),
       backend(backend),
-      msg(msg) {
+      msg(std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{}, &msg) {
   }
 
   interruptible_errorated_future<osd_op_errorator>
@@ -214,7 +252,7 @@ public:
   }
 
   const auto& get_message() const {
-    return msg;
+    return *msg;
   }
 
   size_t get_processed_rw_ops_num() const {
