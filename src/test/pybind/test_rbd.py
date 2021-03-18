@@ -1362,23 +1362,43 @@ class TestImage(object):
     @require_linux()
     @blocklist_features([RBD_FEATURE_JOURNALING])
     def test_encryption_luks1(self):
-        self.image.write(b'hello world', 0)
-        self.image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
-        read_bytes = self.image.read(0, 11)
-        assert_not_equal(b'hello world', read_bytes)
-        self.image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
-        assert_not_equal(read_bytes, self.image.read(0, 11))
+        data = b'hello world'
+        offset = 16<<20
+        image_size = 32<<20
+
+        with Image(ioctx, image_name) as image:
+            image.resize(image_size)
+            image.write(data, offset)
+            image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+            image.write(data, offset)
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            eq(data, image.read(offset, len(data)))
 
     @require_linux()
     @blocklist_features([RBD_FEATURE_JOURNALING])
     def test_encryption_luks2(self):
-        self.image.resize(256 << 20)
-        self.image.write(b'hello world', 0)
-        self.image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
-        read_bytes = self.image.read(0, 11)
-        assert_not_equal(b'hello world', read_bytes)
-        self.image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
-        assert_not_equal(read_bytes, self.image.read(0, 11))
+        data = b'hello world'
+        offset = 16<<20
+        image_size = 256<<20
+
+        with Image(ioctx, image_name) as image:
+            image.resize(image_size)
+            image.write(data, offset)
+            image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+            image.write(data, offset)
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            eq(data, image.read(offset, len(data)))
+
 
 class TestImageId(object):
 
