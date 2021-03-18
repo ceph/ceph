@@ -4000,8 +4000,50 @@ void BlueStore::Collection::split_cache(
   bool is_pg = dest->cid.is_pg(&destpg);
   ceph_assert(is_pg);
 
+  //map of visited onodes; it should be exactly the same next time
+  std::list<void*> visited_onodes;
+  // paranoid walk-through onodes
+  auto px = onode_map.onode_map.begin();
+  while (px != onode_map.onode_map.end()) {
+    visited_onodes.push_back(px->second.get());
+    const Onode &x = *px->second.get();
+    int x_nref = x.nref.load();
+    bool x_exists = x.exists;
+    bool x_cached = x.cached;
+    bool x_pinned = x.pinned.load();
+    OnodeRef o = px->second;
+    OnodeRef o_pin = o;
+    if (!o->pinned) {
+      bool will_split = px->second->oid.match(destbits, destpg.pgid.ps());
+      lderr(store->cct) << __func__ << "Onode:" <<
+	" oid=" << o->oid <<
+	" nref=" << o->nref.load() <<
+	" exists=" << o->exists <<
+	" cached=" << o->cached <<
+	" pinned=" << o->pinned <<
+	" x_nref=" << x_nref <<
+	" x_exists=" << x_exists <<
+	" x_cached=" << x_cached <<
+	" x_pinned=" << x_pinned <<
+	". will_split=" << will_split << dendl;
+    }
+  }
+
   auto p = onode_map.onode_map.begin();
   while (p != onode_map.onode_map.end()) {
+    if (!visited_onodes.empty()) {
+      void* onode_x = px->second.get();
+      if (visited_onodes.front() != onode_x) {
+	lderr(store->cct) << __func__ <<
+	  " Expected onode " << visited_onodes.front() <<
+	  " but got " << onode_x << dendl;
+      }
+      visited_onodes.pop_front();
+    } else {
+      lderr(store->cct) << __func__ <<
+	" onode_map snapshot exhaused" << dendl;
+    }
+
     OnodeRef o = p->second;
     if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
       // onode does not belong to this child
