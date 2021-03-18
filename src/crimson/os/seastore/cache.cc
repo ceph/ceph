@@ -177,8 +177,6 @@ CachedExtentRef Cache::duplicate_for_write(
   ret->prior_instance = i;
   t.add_mutated_extent(ret);
   if (ret->get_type() == extent_types_t::ROOT) {
-    // root must be loaded before mutate
-    assert(t.root == i);
     t.root = ret->cast<RootBlock>();
   } else {
     ret->last_committed_crc = i->last_committed_crc;
