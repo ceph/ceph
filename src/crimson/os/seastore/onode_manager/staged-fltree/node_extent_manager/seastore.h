@@ -89,7 +89,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
 
   tm_future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) override {
-    logger().debug("OTree::Seastore: allocating {}B ...", len);
+    logger().trace("OTree::Seastore: allocating {}B ...", len);
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
     ).safe_then([len](auto extent) {
       logger().debug("OTree::Seastore: allocated {}B at {:#x}",
