@@ -744,15 +744,14 @@ void InternalNode::replace_track(
 void InternalNode::track_split(
     const search_position_t& split_pos, Ref<InternalNode> right_node)
 {
-  auto first = tracked_child_nodes.lower_bound(split_pos);
-  auto iter = first;
+  auto iter = tracked_child_nodes.lower_bound(split_pos);
   while (iter != tracked_child_nodes.end()) {
-    search_position_t new_pos = iter->first;
+    auto new_pos = iter->first;
+    auto p_node = iter->second;
+    iter = tracked_child_nodes.erase(iter);
     new_pos -= split_pos;
-    iter->second->as_child<false>(new_pos, right_node);
-    ++iter;
+    p_node->as_child<false>(new_pos, right_node);
   }
-  tracked_child_nodes.erase(first, tracked_child_nodes.end());
 }
 
 void InternalNode::validate_child(const Node& child) const
@@ -1082,15 +1081,14 @@ void LeafNode::track_split(
     const search_position_t& split_pos, Ref<LeafNode> right_node)
 {
   // update cursor ownership and position
-  auto first = tracked_cursors.lower_bound(split_pos);
-  auto iter = first;
+  auto iter = tracked_cursors.lower_bound(split_pos);
   while (iter != tracked_cursors.end()) {
-    search_position_t new_pos = iter->first;
+    auto new_pos = iter->first;
+    auto p_cursor = iter->second;
+    iter = tracked_cursors.erase(iter);
     new_pos -= split_pos;
-    iter->second->update_track<false>(right_node, new_pos);
-    ++iter;
+    p_cursor->update_track<false>(right_node, new_pos);
   }
-  tracked_cursors.erase(first, tracked_cursors.end());
 }
 
 node_future<LeafNode::fresh_node_t> LeafNode::allocate(
