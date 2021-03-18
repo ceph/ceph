@@ -290,7 +290,10 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     request_uri_encode = string("/") + bucket_encode;
   new_info.request_uri = request_uri_encode;
   new_env.set("HTTP_DATE", date_str.c_str());
-
+  const char* const content_md5 = info.env->get("HTTP_CONTENT_MD5");
+  if (content_md5) {
+    new_env.set("HTTP_CONTENT_MD5", content_md5);
+  }
   int ret = sign_request(cct, key, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
