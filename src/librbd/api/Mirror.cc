@@ -1992,8 +1992,13 @@ int Mirror<I>::image_info_list(
 
       mirror_image_info_t info;
       r = image_get_info(io_ctx, op_work_queue, image_id, &info);
-      if (r >= 0) {
-        (*entries)[image_id] = std::make_pair(mode, info);
+      if (r < 0) {
+        continue;
+      }
+
+      (*entries)[image_id] = std::make_pair(mode, info);
+      if (entries->size() == max) {
+        break;
       }
     }
 
