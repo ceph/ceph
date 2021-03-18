@@ -309,6 +309,7 @@ else
                 $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
             *Focal*)
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
             *)
