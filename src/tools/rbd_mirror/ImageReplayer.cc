@@ -24,7 +24,6 @@
 #include "Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayerListener.h"
-#include "tools/rbd_mirror/image_replayer/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
@@ -200,13 +199,40 @@ template <typename I>
 struct ImageReplayer<I>::ReplayerListener
   : public image_replayer::ReplayerListener {
   ImageReplayer<I>* image_replayer;
+  GroupCtx *local_group_ctx;
 
-  ReplayerListener(ImageReplayer<I>* image_replayer)
-    : image_replayer(image_replayer) {
+  ReplayerListener(ImageReplayer<I>* image_replayer, GroupCtx *local_group_ctx)
+    : image_replayer(image_replayer), local_group_ctx(local_group_ctx) {
   }
 
   void handle_notification() override {
     image_replayer->handle_replayer_notification();
+  }
+
+  void create_mirror_snapshot_start(
+      const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
+      int64_t *local_group_pool_id, std::string *local_group_id,
+      std::string *local_group_snap_id, Context *on_finish) override {
+    if (local_group_ctx == nullptr) {
+      on_finish->complete(0);
+      return;
+    }
+
+    local_group_ctx->listener->create_mirror_snapshot_start(
+        remote_group_snap_ns, image_replayer, local_group_pool_id,
+        local_group_id, local_group_snap_id, on_finish);
+  }
+
+  void create_mirror_snapshot_finish(const std::string &remote_group_snap_id,
+                                     uint64_t snap_id,
+                                     Context *on_finish) override {
+    if (local_group_ctx == nullptr) {
+      on_finish->complete(0);
+      return;
+    }
+
+    local_group_ctx->listener->create_mirror_snapshot_finish(
+        remote_group_snap_id, image_replayer, snap_id, on_finish);
   }
 };
 
@@ -229,8 +255,7 @@ ImageReplayer<I>::ImageReplayer(
   m_lock(ceph::make_mutex("rbd::mirror::ImageReplayer " +
       stringify(local_io_ctx.get_id()) + " " + global_image_id)),
   m_progress_cxt(this),
-  m_replayer_listener(new ReplayerListener(this))
-{
+  m_replayer_listener(new ReplayerListener(this, local_group_ctx)) {
   // Register asok commands using a temporary "remote_pool_name/global_image_id"
   // name.  When the image name becomes known on start the asok commands will be
   // re-registered using "remote_pool_name/remote_image_name" name.

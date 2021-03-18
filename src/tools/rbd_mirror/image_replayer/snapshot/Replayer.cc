@@ -947,7 +947,7 @@ void Replayer<I>::handle_get_remote_image_state(int r) {
     return;
   }
 
-  create_non_primary_snapshot();
+  create_group_snap_start();
 }
 
 template <typename I>
@@ -975,6 +975,46 @@ void Replayer<I>::handle_get_local_image_state(int r) {
   }
 
   request_sync();
+}
+
+template <typename I>
+void Replayer<I>::create_group_snap_start() {
+
+  if (!m_remote_mirror_snap_ns.group_spec.is_valid() ||
+      m_remote_mirror_snap_ns.group_snap_id.empty()) {
+    create_non_primary_snapshot();
+    return;
+  }
+
+  dout(10) << dendl;
+
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_create_group_snap_start>(this);
+
+  m_replayer_listener->create_mirror_snapshot_start(
+      m_remote_mirror_snap_ns, &m_local_group_pool_id,
+      &m_local_group_id, &m_local_group_snap_id, ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_create_group_snap_start(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -EEXIST) {
+    if (r == -EAGAIN) {
+      dout(15) << "restarting replayer" << dendl;
+      load_local_image_meta();
+    } else if (r == -ESTALE) {
+      dout(15) << "waiting for shut down" << dendl;
+      handle_replay_complete(r, "waiting for shut down");
+    } else {
+      derr << "failed to create group snapshot: " << cpp_strerror(r) << dendl;
+      handle_replay_complete(r, "failed to create group snapshot");
+    }
+    return;
+  }
+
+  create_non_primary_snapshot();
 }
 
 template <typename I>
@@ -1054,8 +1094,8 @@ void Replayer<I>::create_non_primary_snapshot() {
   auto req = librbd::mirror::snapshot::CreateNonPrimaryRequest<I>::create(
     local_image_ctx, m_remote_mirror_snap_ns.is_demoted(),
     m_state_builder->remote_mirror_uuid, m_remote_snap_id_end,
-    m_local_mirror_snap_ns.snap_seqs, -1, {}, {}, m_image_state,
-    &m_local_snap_id_end, ctx);
+    m_local_mirror_snap_ns.snap_seqs, m_local_group_pool_id, m_local_group_id,
+    m_local_group_snap_id, m_image_state, &m_local_snap_id_end, ctx);
   req->send();
 }
 
@@ -1071,6 +1111,36 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
   }
 
   dout(15) << "local_snap_id_end=" << m_local_snap_id_end << dendl;
+
+  create_group_snap_finish();
+}
+
+template <typename I>
+void Replayer<I>::create_group_snap_finish() {
+  if (!m_remote_mirror_snap_ns.group_spec.is_valid() ||
+      m_remote_mirror_snap_ns.group_snap_id.empty()) {
+    update_mirror_image_state();
+    return;
+  }
+
+  dout(10) << dendl;
+
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_create_group_snap_finish>(this);
+
+  m_replayer_listener->create_mirror_snapshot_finish(
+      m_remote_mirror_snap_ns.group_snap_id, m_local_snap_id_end, ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_create_group_snap_finish(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -EEXIST) {
+    derr << "failed to create group snapshot: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "failed to create group snapshot");
+    return;
+  }
 
   update_mirror_image_state();
 }
