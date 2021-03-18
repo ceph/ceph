@@ -124,7 +124,8 @@ class CephadmService(metaclass=ABCMeta):
             network: str,
             spec: ServiceSpecs,
             daemon_type: Optional[str] = None,
-            ports: Optional[List[int]] = None
+            ports: Optional[List[int]] = None,
+            ip: Optional[str] = None,
     ) -> CephadmDaemonDeploySpec:
         return CephadmDaemonDeploySpec(
             host=host,
@@ -133,6 +134,7 @@ class CephadmService(metaclass=ABCMeta):
             network=network,
             daemon_type=daemon_type,
             ports=ports,
+            ip=ip,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -728,7 +730,7 @@ class RgwService(CephService):
                     % spec.rgw_frontend_ssl_certificate)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.service_name()}.crt',  # NOTE: actually a .pem!
+                'key': f'rgw/cert/{spec.service_name()}',
                 'val': cert_data,
             })
 
@@ -757,16 +759,28 @@ class RgwService(CephService):
         ftype = spec.rgw_frontend_type or "beast"
         if ftype == 'beast':
             if spec.ssl:
-                args.append(f"ssl_port={port}")
-                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
+                if daemon_spec.ip:
+                    args.append(f"ssl_endpoint={daemon_spec.ip}:{port}")
+                else:
+                    args.append(f"ssl_port={port}")
+                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
-                args.append(f"port={port}")
+                if daemon_spec.ip:
+                    args.append(f"endpoint={daemon_spec.ip}:{port}")
+                else:
+                    args.append(f"port={port}")
         elif ftype == 'civetweb':
             if spec.ssl:
-                args.append(f"port={port}s")  # note the 's' suffix on port
-                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}.crt")
+                if daemon_spec.ip:
+                    args.append(f"port={daemon_spec.ip}:{port}s")  # note the 's' suffix on port
+                else:
+                    args.append(f"port={port}s")  # note the 's' suffix on port
+                args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
-                args.append(f"port={port}")
+                if daemon_spec.ip:
+                    args.append(f"port={daemon_spec.ip}:{port}")
+                else:
+                    args.append(f"port={port}")
         frontend = f'{ftype} {" ".join(args)}'
 
         ret, out, err = self.mgr.check_mon_command({
@@ -787,6 +801,30 @@ class RgwService(CephService):
                                               'mgr', 'allow rw',
                                               'osd', 'allow rwx tag rgw *=*'])
         return keyring
+
+    def purge(self, service_name: str) -> None:
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(service_name),
+            'name': 'rgw_realm',
+        })
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(service_name),
+            'name': 'rgw_zone',
+        })
+        self.mgr.check_mon_command({
+            'prefix': 'config-key rm',
+            'key': f'rgw/cert/{service_name}',
+        })
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        super().post_remove(daemon)
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(daemon.name()),
+            'name': 'rgw_frontends',
+        })
 
     def ok_to_stop(
             self,
