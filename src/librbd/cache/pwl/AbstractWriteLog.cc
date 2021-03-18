@@ -818,9 +818,11 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
-  /* Split images because PMDK doesn't support allocating too big extent
-   * TODO: If the bluestore allocator is implemented as a library,
-   * the split operation is not necessary
+  /* Split images because PMDK's space management is not perfect, there are
+   * fragment problems. The larger the block size difference of the block,
+   * the easier the fragmentation problem will occur, resulting in the
+   * remaining space can not be allocated in large size. We plan to manage
+   * pmem space and allocation by ourselves in the future.
    */
   Extents split_image_extents;
   uint64_t max_extent_size = get_max_extent();
@@ -1430,6 +1432,11 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
     {
       std::lock_guard locker(m_lock);
       dispatch_here = m_deferred_ios.empty();
+      // Only flush req's total_bytes is the max uint64
+      if ((req->image_extents_summary.total_bytes ==
+          std::numeric_limits<uint64_t>::max())) {
+        dispatch_here = true;
+      }
     }
     if (dispatch_here) {
       dispatch_here = req->alloc_resources();
