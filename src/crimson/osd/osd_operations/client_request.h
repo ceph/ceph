@@ -7,6 +7,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDOp.h"
 
@@ -31,21 +32,9 @@ public:
     };
     friend class ClientRequest;
   };
-  class PGPipeline {
+  class PGPipeline : public CommonPGPipeline {
     OrderedExclusivePhase await_map = {
       "ClientRequest::PGPipeline::await_map"
-    };
-    OrderedExclusivePhase wait_for_active = {
-      "ClientRequest::PGPipeline::wait_for_active"
-    };
-    OrderedExclusivePhase recover_missing = {
-      "ClientRequest::PGPipeline::recover_missing"
-    };
-    OrderedExclusivePhase get_obc = {
-      "ClientRequest::PGPipeline::get_obc"
-    };
-    OrderedExclusivePhase process = {
-      "ClientRequest::PGPipeline::process"
     };
     friend class ClientRequest;
   };
