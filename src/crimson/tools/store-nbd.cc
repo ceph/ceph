@@ -647,7 +647,9 @@ public:
       logger().debug("mkfs complete");
       return TransactionManager::mkfs_ertr::now();
     }).handle_error(
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all{
+	"Invalid errror during TMDriver::mkfs"
+      }
     );
   }
 
@@ -662,7 +664,9 @@ public:
       init();
       return tm->mount();
     }).handle_error(
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all{
+	"Invalid errror during TMDriver::mount"
+      }
     );
   };
 
@@ -674,7 +678,9 @@ public:
       clear();
       return seastar::now();
     }).handle_error(
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all{
+	"Invalid errror during TMDriver::close"
+      }
     );
   }
 };
