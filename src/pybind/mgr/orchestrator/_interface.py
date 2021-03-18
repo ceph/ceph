@@ -973,6 +973,40 @@ class DaemonDescription(object):
             del out[e]
         return out
 
+    def to_dict(self) -> dict:
+        out: Dict[str, Any] = OrderedDict()
+        out['daemon_type'] = self.daemon_type
+        out['daemon_id'] = self.daemon_id
+        out['hostname'] = self.hostname
+        out['container_id'] = self.container_id
+        out['container_image_id'] = self.container_image_id
+        out['container_image_name'] = self.container_image_name
+        out['container_image_digests'] = self.container_image_digests
+        out['memory_usage'] = self.memory_usage
+        out['memory_request'] = self.memory_request
+        out['memory_limit'] = self.memory_limit
+        out['version'] = self.version
+        out['status'] = self.status.value if self.status is not None else None
+        out['status_desc'] = self.status_desc
+        if self.daemon_type == 'osd':
+            out['osdspec_affinity'] = self.osdspec_affinity
+        out['is_active'] = self.is_active
+        out['ports'] = self.ports
+        out['ip'] = self.ip
+
+        for k in ['last_refresh', 'created', 'started', 'last_deployed',
+                  'last_configured']:
+            if getattr(self, k):
+                out[k] = datetime_to_str(getattr(self, k))
+
+        if self.events:
+            out['events'] = [e.to_dict() for e in self.events]
+
+        empty = [k for k, v in out.items() if v is None]
+        for e in empty:
+            del out[e]
+        return out
+
     @classmethod
     @handle_type_error
     def from_json(cls, data: dict) -> 'DaemonDescription':
@@ -1090,6 +1124,29 @@ class ServiceDescription(object):
         out['status'] = status
         if self.events:
             out['events'] = [e.to_json() for e in self.events]
+        return out
+
+    def to_dict(self) -> OrderedDict:
+        out = self.spec.to_json()
+        status = {
+            'container_image_id': self.container_image_id,
+            'container_image_name': self.container_image_name,
+            'rados_config_location': self.rados_config_location,
+            'service_url': self.service_url,
+            'size': self.size,
+            'running': self.running,
+            'last_refresh': self.last_refresh,
+            'created': self.created,
+            'virtual_ip': self.virtual_ip,
+            'ports': self.ports if self.ports else None,
+        }
+        for k in ['last_refresh', 'created']:
+            if getattr(self, k):
+                status[k] = datetime_to_str(getattr(self, k))
+        status = {k: v for (k, v) in status.items() if v is not None}
+        out['status'] = status
+        if self.events:
+            out['events'] = [e.to_dict() for e in self.events]
         return out
 
     @classmethod
@@ -1248,6 +1305,15 @@ class OrchestratorEvent:
         # Make a long list of events readable.
         created = datetime_to_str(self.created)
         return f'{created} {self.kind_subject()} [{self.level}] "{self.message}"'
+
+    def to_dict(self) -> dict:
+        # Convert events data to dict.
+        return {
+            'created': datetime_to_str(self.created),
+            'subject': self.kind_subject(),
+            'level': self.level,
+            'message': self.message
+        }
 
     @classmethod
     @handle_type_error
