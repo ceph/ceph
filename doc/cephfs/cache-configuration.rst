@@ -162,7 +162,7 @@ readdir. The behavior of the decay counter is the same as for cache trimming or
 caps recall. Each readdir call increments the counter by the number of files in
 the result.
 
-The ratio of ``mds_max_maps_per_client`` that client must exceed before readdir
+The ratio of ``mds_max_caps_per_client`` that client must exceed before readdir
 maybe throttled by cap acquisition throttle::
 
     mds_session_max_caps_throttle_ratio (default: 1.1)
