@@ -62,7 +62,8 @@ template <typename I>
 void MirrorStatusWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
                                            uint64_t notifier_id,
                                            bufferlist &bl) {
-  dout(20) << dendl;
+  dout(10) << "notify_id=" << notify_id << ", handle=" << handle
+           << ", notifier_id=" << notifier_id << dendl;
 
   bufferlist out;
   acknowledge_notify(notify_id, handle, out);
