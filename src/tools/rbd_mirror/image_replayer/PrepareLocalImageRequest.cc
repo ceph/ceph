@@ -33,7 +33,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void PrepareLocalImageRequest<I>::send() {
-  dout(10) << dendl;
+  dout(10) << "global_image_id: " << m_global_image_id << dendl;
   get_local_image_id();
 }
 
@@ -51,8 +51,8 @@ void PrepareLocalImageRequest<I>::get_local_image_id() {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_local_image_id(int r) {
-  dout(10) << "r=" << r << ", "
-           << "local_image_id=" << m_local_image_id << dendl;
+  dout(10) << "r=" << r << ", global_image_id: " << m_global_image_id
+           << ", local_image_id=" << m_local_image_id << dendl;
 
   if (r < 0) {
     finish(r);
@@ -116,7 +116,7 @@ void PrepareLocalImageRequest<I>::get_mirror_info() {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
-  dout(10) << ": r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
     derr << "failed to retrieve local mirror image info: " << cpp_strerror(r)
@@ -125,7 +125,8 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
     return;
   }
 
-  if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_CREATING) {
+  if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_CREATING &&
+      !m_mirror_image.group_spec.is_valid()) {
     dout(5) << "local image is still in creating state, issuing a removal"
             << dendl;
     move_to_trash();
