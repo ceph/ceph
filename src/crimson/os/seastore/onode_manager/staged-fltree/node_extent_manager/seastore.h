@@ -100,6 +100,18 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     });
   }
 
+  tm_future<> retire_extent(
+      Transaction& t, NodeExtentRef _extent) override {
+    LogicalCachedExtentRef extent = _extent;
+    auto addr = extent->get_laddr();
+    auto len = extent->get_length();
+    logger().debug("OTree::Seastore: retiring {}B at {:#x} ...", len, addr);
+    return tm.dec_ref(t, extent).safe_then([addr, len] (unsigned cnt) {
+      assert(cnt == 0);
+      logger().trace("OTree::Seastore: retired {}B at {:#x} ...", len, addr);
+    });
+  }
+
   tm_future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     logger().trace("OTree::Seastore: get root ...");
