@@ -525,7 +525,7 @@ public:
     bufferptr ptr) final {
     logger().debug("Writing offset {}", offset);
     assert(offset % segment_manager->get_block_size() == 0);
-    assert(ptr.length() == (size_t)segment_manager->get_block_size());
+    assert((ptr.length() % (size_t)segment_manager->get_block_size()) == 0);
     return repeat_eagain([this, offset, ptr=std::move(ptr)] {
       return seastar::do_with(
 	tm->create_transaction(),
