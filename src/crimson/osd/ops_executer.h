@@ -13,24 +13,18 @@
 #include <seastar/core/shared_future.hh>
 
 #include "common/dout.h"
-#include "crimson/net/Fwd.h"
+#include "messages/MOSDOp.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
-#include "crimson/osd/object_context.h"
 
 #include "crimson/common/errorator.h"
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
-#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
-#include "crimson/osd/shard_services.h"
-#include "crimson/osd/osdmap_gate.h"
-
 #include "crimson/osd/pg_backend.h"
-#include "crimson/osd/exceptions.h"
-
-#include "messages/MOSDOp.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
+#include "crimson/osd/shard_services.h"
 
 class PG;
 class PGLSFilter;
