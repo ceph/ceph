@@ -76,7 +76,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_do_resync(do_resync),
     m_lock(ceph::make_mutex(unique_lock_name("BootstrapRequest::m_lock",
                                              this))) {
-  dout(10) << dendl;
+  dout(10) << "global_image_id: " << m_global_image_id << dendl;
 }
 
 template <typename I>
