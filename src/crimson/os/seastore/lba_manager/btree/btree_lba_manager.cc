@@ -406,6 +406,12 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
     nlba_extent->resolve_relative_addrs(
       make_record_relative_paddr(0) - nlba_extent->get_paddr());
 
+    logger().debug(
+      "{}: rewriting {} into {}",
+      __func__,
+      *lba_extent,
+      *nlba_extent);
+
     return update_internal_mapping(
       t,
       nlba_extent->get_node_meta().depth,
