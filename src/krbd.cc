@@ -340,8 +340,9 @@ static std::pair<int, bool> wait_for_mapping(int sysfs_r_fd, udev_monitor *mon,
 
 class UdevMapHandler {
 public:
-  UdevMapHandler(const krbd_spec *spec, std::string *pdevnode) :
-      m_spec(spec), m_pdevnode(pdevnode) {}
+  UdevMapHandler(const krbd_spec *spec, std::string *pdevnode,
+                 std::string *majnum, std::string *minnum) :
+      m_spec(spec), m_pdevnode(pdevnode), m_majnum(majnum), m_minnum(minnum) {}
 
   /*
    * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
@@ -374,13 +375,14 @@ public:
     if (m_bus_dev && !m_block_devs.empty()) {
       for (const auto& p : m_block_devs) {
         if (udev_device_get_devnode(p.get()) == m_devnode) {
-          ceph_assert(!strcmp(
-              udev_device_get_sysattr_value(m_bus_dev.get(), "major"),
-              udev_device_get_property_value(p.get(), "MAJOR")));
-          ceph_assert(!have_minor_attr() || !strcmp(
-              udev_device_get_sysattr_value(m_bus_dev.get(), "minor"),
-              udev_device_get_property_value(p.get(), "MINOR")));
           *m_pdevnode = std::move(m_devnode);
+          *m_majnum = udev_device_get_property_value(p.get(), "MAJOR");
+          *m_minnum = udev_device_get_property_value(p.get(), "MINOR");
+          ceph_assert(*m_majnum == udev_device_get_sysattr_value(
+                          m_bus_dev.get(), "major"));
+          ceph_assert(!have_minor_attr() ||
+                      *m_minnum == udev_device_get_sysattr_value(
+                          m_bus_dev.get(), "minor"));
           return true;
         }
       }
@@ -395,6 +397,8 @@ private:
   std::string m_devnode;
   const krbd_spec *m_spec;
   std::string *m_pdevnode;
+  std::string *m_majnum;
+  std::string *m_minnum;
 };
 
 static const char *get_event_source(const krbd_ctx *ctx)
@@ -432,6 +436,8 @@ static const char *get_event_source(const krbd_ctx *ctx)
 static int do_map(krbd_ctx *ctx, const krbd_spec& spec, const string& buf,
                   string *pname)
 {
+  std::string majnum, minnum;
+  struct stat sb;
   bool mapped;
   int fds[2];
   int r;
@@ -474,7 +480,8 @@ static int do_map(krbd_ctx *ctx, const krbd_spec& spec, const string& buf,
   });
 
   std::tie(r, mapped) = wait_for_mapping(fds[0], mon.get(),
-                                         UdevMapHandler(&spec, pname));
+                                         UdevMapHandler(&spec, pname, &majnum,
+                                                        &minnum));
   if (r < 0) {
     if (!mapped) {
       std::cerr << "rbd: sysfs write failed" << std::endl;
@@ -487,7 +494,35 @@ static int do_map(krbd_ctx *ctx, const krbd_spec& spec, const string& buf,
   mapper.join();
   close(fds[0]);
   close(fds[1]);
-  return r;
+
+  if (r < 0)
+    return r;
+
+  /*
+   * Make sure our device node is there.  This is intended to help
+   * diagnose environments where "rbd map" is run from a container with
+   * a private /dev and some external mechanism (e.g. udev) is used to
+   * add the device to the container asynchronously, possibly seconds
+   * after "rbd map" successfully exits.  These setups are very fragile
+   * and in some cases can even lead to data loss, depending on higher
+   * level logic and orchestration layers involved.
+   */
+  ceph_assert(mapped);
+  if (stat(pname->c_str(), &sb) < 0 || !S_ISBLK(sb.st_mode)) {
+    std::cerr << "rbd: mapping succeeded but " << *pname
+              << " is not accessible, is host /dev mounted?" << std::endl;
+    return -EINVAL;
+  }
+  if (stringify(major(sb.st_rdev)) != majnum ||
+      stringify(minor(sb.st_rdev)) != minnum) {
+    std::cerr << "rbd: mapping succeeded but " << *pname
+              << " (" << major(sb.st_rdev) << ":" << minor(sb.st_rdev)
+              << ") does not match expected " << majnum << ":" << minnum
+              << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 static int map_image(struct krbd_ctx *ctx, const krbd_spec& spec,
