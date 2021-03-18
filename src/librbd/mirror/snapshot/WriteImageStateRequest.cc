@@ -66,7 +66,7 @@ void WriteImageStateRequest<I>::write_object() {
 
   auto oid = util::image_state_object_name(m_image_ctx, m_snap_id,
                                            m_object_count);
-  ldout(cct, 20) << oid << dendl;
+  ldout(cct, 15) << oid << dendl;
 
   size_t off = m_object_count * m_object_size;
   size_t len = std::min(m_bl.length() - off, m_object_size);
@@ -87,7 +87,7 @@ void WriteImageStateRequest<I>::write_object() {
 template <typename I>
 void WriteImageStateRequest<I>::handle_write_object(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to write object: " << cpp_strerror(r)
@@ -107,7 +107,7 @@ void WriteImageStateRequest<I>::handle_write_object(int r) {
 template <typename I>
 void WriteImageStateRequest<I>::finish(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

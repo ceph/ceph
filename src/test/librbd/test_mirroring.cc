@@ -1154,7 +1154,7 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(0, image.snap_list(snaps1));
   ASSERT_EQ(3U, snaps1.size());
   ASSERT_EQ(snaps1[0].id, snaps[0].id);
-  ASSERT_EQ(snaps1[1].id, snaps[2].id);
+  ASSERT_EQ(snaps1[1].id, snaps[1].id);
   ASSERT_EQ(snaps1[2].id, snap_id);
 
   librbd::snap_namespace_type_t snap_ns_type;
