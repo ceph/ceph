@@ -20,7 +20,7 @@
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::group_replayer::" \
-                           << "BootstrapRequest: " << this << " " \
+                           << "BootstrapRequest: " << " " \
                            << __func__ << ": "
 
 namespace rbd {
@@ -33,6 +33,20 @@ using librbd::util::create_rados_callback;
 namespace {
 
 static const uint32_t MAX_RETURN = 1024;
+
+bool is_demoted_snap_exists(
+    const std::vector<cls::rbd::GroupSnapshot> &snaps) {
+  for (auto it = snaps.rbegin(); it != snaps.rend(); it++) {
+     auto ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+       &it->snapshot_namespace);
+    if (ns != nullptr) {
+      if (ns->is_demoted()) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 int get_last_mirror_snapshot_state(
     const std::vector<cls::rbd::GroupSnapshot> &snaps,
@@ -74,8 +88,10 @@ BootstrapRequest<I>::BootstrapRequest(
     MirrorStatusUpdater<I> *remote_status_updater,
     journal::CacheManagerHandler *cache_manager_handler,
     PoolMetaCache *pool_meta_cache,
+    std::string *remote_group_id,
     GroupCtx *local_group_ctx,
     std::list<std::pair<librados::IoCtx, ImageReplayer<I> *>> *image_replayers,
+    std::map<std::pair<int64_t, std::string>, ImageReplayer<I> *> *image_replayer_index,
     Context* on_finish)
   : CancelableRequest("rbd::mirror::group_replayer::BootstrapRequest",
 		      reinterpret_cast<CephContext*>(local_io_ctx.cct()),
@@ -90,8 +106,10 @@ BootstrapRequest<I>::BootstrapRequest(
     m_remote_status_updater(remote_status_updater),
     m_cache_manager_handler(cache_manager_handler),
     m_pool_meta_cache(pool_meta_cache),
+    m_remote_group_id(remote_group_id),
     m_local_group_ctx(local_group_ctx),
     m_image_replayers(image_replayers),
+    m_image_replayer_index(image_replayer_index),
     m_on_finish(on_finish) {
   dout(10) << dendl;
 }
@@ -160,7 +178,7 @@ void BootstrapRequest<I>::handle_get_remote_group_id(int r) {
   if (r == 0) {
     auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_group_get_group_id_finish(
-        &iter, &m_remote_group_id);
+        &iter, m_remote_group_id);
   }
 
   if (r < 0) {
@@ -177,7 +195,7 @@ void BootstrapRequest<I>::get_remote_group_name() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::dir_get_name_start(&op, m_remote_group_id);
+  librbd::cls_client::dir_get_name_start(&op, *m_remote_group_id);
   m_out_bl.clear();
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -222,7 +240,7 @@ void BootstrapRequest<I>::get_remote_mirror_group() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_group_get_start(&op, m_remote_group_id);
+  librbd::cls_client::mirror_group_get_start(&op, *m_remote_group_id);
   m_out_bl.clear();
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -334,7 +352,8 @@ void BootstrapRequest<I>::list_remote_group() {
       &BootstrapRequest<I>::handle_list_remote_group>(this);
   m_out_bl.clear();
   int r = m_remote_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_remote_group_id), comp, &op, &m_out_bl);
+      librbd::util::group_header_name(*m_remote_group_id), comp, &op,
+      &m_out_bl);
   ceph_assert(r == 0);
   comp->release();
 }
@@ -438,7 +457,7 @@ void BootstrapRequest<I>::handle_get_remote_mirror_image(int r) {
     return;
   }
 
-  m_remote_images.insert({spec.pool_id, mirror_image.global_image_id});
+  m_remote_images[{spec.pool_id, mirror_image.global_image_id}] = spec.image_id;
 
   m_images.pop_front();
 
@@ -689,10 +708,16 @@ void BootstrapRequest<I>::handle_list_local_group_snapshots(int r) {
     r = get_last_mirror_snapshot_state(m_local_group_snaps, &state);
     if (r == -ENOENT) {
       derr << "failed to find local mirror group snapshot" << dendl;
-      finish(-EINVAL);
-      return;
+    } else {
+      if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
+        // if local snapshot is primary demoted, check if there is demote snapshot
+        // in remote, if not then split brain
+        if (!is_demoted_snap_exists(m_remote_group_snaps)) {
+          finish(-EEXIST);
+          return;
+        }
+      }
     }
-    ceph_assert(r == 0);
     m_local_mirror_group_primary = (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY);
   }
 
@@ -701,8 +726,6 @@ void BootstrapRequest<I>::handle_list_local_group_snapshots(int r) {
       if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
           m_local_mirror_group_primary) {
         derr << "both remote and local groups are primary" << dendl;
-        finish(-EEXIST); // split-brain
-        return;
       }
     } else if (m_local_mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED ||
                !m_local_mirror_group_primary) {
@@ -1014,9 +1037,8 @@ void BootstrapRequest<I>::handle_remove_local_mirror_group(int r) {
   }
 
   m_local_mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_DISABLED;
-
-  if (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
-      m_remote_mirror_group_primary) {
+  if (r != -ENOENT && (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
+       m_remote_mirror_group_primary)) {
     create_local_mirror_group();
   } else {
     remove_local_group();
@@ -1224,7 +1246,7 @@ void BootstrapRequest<I>::handle_create_local_non_primary_group_snapshot(int r) 
   dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
-    derr << "error creating local non-primary group snpashot: "
+    derr << "error creating local non-primary group snapshot: "
          << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -1258,7 +1280,10 @@ int BootstrapRequest<I>::create_replayers() {
   int r = 0;
   if (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
       m_remote_mirror_group_primary) {
-    for (auto &[remote_pool_id, global_image_id] : m_remote_images) {
+    for (auto &[p, remote_image_id] : m_remote_images) {
+      auto &remote_pool_id = p.first;
+      auto &global_image_id = p.second;
+
       m_image_replayers->emplace_back(librados::IoCtx(), nullptr);
       auto &local_io_ctx = m_image_replayers->back().first;
       auto &image_replayer = m_image_replayers->back().second;
@@ -1318,6 +1343,8 @@ int BootstrapRequest<I>::create_replayers() {
       // TODO only a single peer is currently supported
       image_replayer->add_peer({local_pool_meta.mirror_uuid, remote_io_ctx,
                                 remote_pool_meta, m_remote_status_updater});
+
+      (*m_image_replayer_index)[{remote_pool_id, remote_image_id}] = image_replayer;
     }
   } else if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
              m_local_mirror_group_primary) {

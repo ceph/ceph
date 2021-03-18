@@ -55,7 +55,7 @@ void GetInfoRequest<I>::send() {
 
 template <typename I>
 void GetInfoRequest<I>::get_mirror_image() {
-  ldout(m_cct, 20) << dendl;
+  ldout(m_cct, 20) << "image_id: " << m_image_id << dendl;
 
   librados::ObjectReadOperation op;
   cls_client::mirror_image_get_start(&op, m_image_id);
