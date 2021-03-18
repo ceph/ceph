@@ -10,6 +10,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "ProgressContext.h"
 #include "tools/rbd_mirror/Types.h"
+#include "tools/rbd_mirror/image_replayer/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
 #include <boost/optional.hpp>
 #include <string>
@@ -127,6 +128,9 @@ public:
   }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
+  }
+  inline const std::string& get_local_image_id() const {
+    return m_state_builder->local_image_id;
   }
 
   void start(Context *on_finish, bool manual = false, bool restart = false);
