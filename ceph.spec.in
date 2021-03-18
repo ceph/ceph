@@ -784,6 +784,7 @@ in realtime.
 %if %{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
+BuildArch:	noarch
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
