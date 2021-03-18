@@ -189,6 +189,8 @@ cdef nogil:
         pass
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
+    int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode):
+        pass
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode):
         pass
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid):
