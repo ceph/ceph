@@ -4118,8 +4118,6 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
   
-  bool need_auth = !file_mode_is_readonly(cmode) ||
-		   (flags & (CEPH_O_TRUNC | CEPH_O_DIRECTORY));
 
   if ((cmode & CEPH_FILE_MODE_WR) && mdcache->is_readonly()) {
     dout(7) << "read-only FS" << dendl;
@@ -4127,6 +4125,8 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
   
+  bool need_auth = !file_mode_is_readonly(cmode) ||
+		   (flags & (CEPH_O_TRUNC | CEPH_O_DIRECTORY));
   CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
   if (!cur)
     return;
@@ -4342,6 +4342,21 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   bool excl = req->head.args.open.flags & CEPH_O_EXCL;
+  if (!excl && req->get_num_fwd() >= 2 &&
+      !(mdr->locking_state & MutationImpl::PATH_LOCKED)) {
+    CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
+    int r = mdcache->path_traverse(mdr, cf, mdr->get_filepath(),
+				   MDS_TRAVERSE_WANT_AUTH,
+				   &mdr->dn[0], &mdr->in[0]);
+    if (r > 0)
+      return; // delayed
+    if (r == 0) {
+      handle_client_open(mdr);
+      return;
+    }
+    // fall-thru, -ENOENT?
+  }
+
   mdr->enable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, !excl, true);
   if (!dn)
@@ -4349,11 +4364,18 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   if (!excl && !dnl->is_null()) {
+    CInode *in = dnl->get_inode();
+    if (!in->is_auth()) {
+      ceph_assert(dnl->is_remote());
+      mdcache->request_forward(mdr, in->authority().first);
+      return;
+    }
+
     // it existed.
     mds->locker->xlock_downgrade(&dn->lock, mdr.get());
 
     MutationImpl::LockOpVec lov;
-    lov.add_rdlock(&dnl->get_inode()->snaplock);
+    lov.add_rdlock(&in->snaplock);
     if (!mds->locker->acquire_locks(mdr, lov))
       return;
 
