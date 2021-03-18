@@ -381,12 +381,14 @@ Set ``Boost_NO_BOOST_CMAKE`` to ``ON``, to disable the search for boost-cmake.
 
 # The FPHSA helper provides standard way of reporting final search results to
 # the user including the version and component checks.
-include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
+include(FindPackageHandleStandardArgs)
 
 # Save project's policies
 cmake_policy(PUSH)
 cmake_policy(SET CMP0057 NEW) # if IN_LIST
-cmake_policy(SET CMP0102 NEW) # if mark_as_advanced(non_cache_var)
+if(POLICY CMP0102)
+  cmake_policy(SET CMP0102 NEW) # if mark_as_advanced(non_cache_var)
+endif()
 
 function(_boost_get_existing_target component target_var)
   set(names "${component}")
@@ -584,19 +586,16 @@ if (NOT Boost_NO_BOOST_CMAKE)
   # Do the same find_package call but look specifically for the CMake version.
   # Note that args are passed in the Boost_FIND_xxxxx variables, so there is no
   # need to delegate them to this find_package call.
+  cmake_policy(PUSH)
   if(BOOST_ROOT AND NOT Boost_ROOT)
     # Honor BOOST_ROOT by setting Boost_ROOT with CMP0074 NEW behavior.
-    cmake_policy(PUSH)
-    cmake_policy(SET CMP0074 NEW)
+    if(POLICY CMP0074)
+      cmake_policy(SET CMP0074 NEW)
+    endif()
     set(Boost_ROOT "${BOOST_ROOT}")
-    set(_Boost_ROOT_FOR_CONFIG 1)
   endif()
   find_package(Boost QUIET NO_MODULE ${_boost_FIND_PACKAGE_ARGS})
-  if(_Boost_ROOT_FOR_CONFIG)
-    unset(_Boost_ROOT_FOR_CONFIG)
-    unset(Boost_ROOT)
-    cmake_policy(POP)
-  endif()
+  cmake_policy(POP)
   if (DEFINED Boost_DIR)
     mark_as_advanced(Boost_DIR)
   endif ()
@@ -1661,11 +1660,13 @@ _Boost_DEBUG_PRINT_VAR("${CMAKE_CURRENT_LIST_FILE}" "${CMAKE_CURRENT_LIST_LINE}"
 _Boost_DEBUG_PRINT_VAR("${CMAKE_CURRENT_LIST_FILE}" "${CMAKE_CURRENT_LIST_LINE}" "Boost_ADDITIONAL_VERSIONS")
 _Boost_DEBUG_PRINT_VAR("${CMAKE_CURRENT_LIST_FILE}" "${CMAKE_CURRENT_LIST_LINE}" "Boost_NO_SYSTEM_PATHS")
 
-cmake_policy(GET CMP0074 _Boost_CMP0074)
-if(NOT "x${_Boost_CMP0074}x" STREQUAL "xNEWx")
-  _Boost_CHECK_SPELLING(Boost_ROOT)
+if(POLICY CMP0074)
+  cmake_policy(GET CMP0074 _Boost_CMP0074)
+  if(NOT "x${_Boost_CMP0074}x" STREQUAL "xNEWx")
+    _Boost_CHECK_SPELLING(Boost_ROOT)
+  endif()
+  unset(_Boost_CMP0074)
 endif()
-unset(_Boost_CMP0074)
 _Boost_CHECK_SPELLING(Boost_LIBRARYDIR)
 _Boost_CHECK_SPELLING(Boost_INCLUDEDIR)
 
@@ -1814,15 +1815,19 @@ if(Boost_INCLUDE_DIR)
   set(Boost_VERSION_STRING "${Boost_VERSION_MAJOR}.${Boost_VERSION_MINOR}.${Boost_VERSION_PATCH}")
 
   # Define final Boost_VERSION
-  cmake_policy(GET CMP0093 _Boost_CMP0093
-    PARENT_SCOPE # undocumented, do not use outside of CMake
-  )
-  if("x${_Boost_CMP0093}x" STREQUAL "xNEWx")
-    set(Boost_VERSION ${Boost_VERSION_STRING})
+  if(POLICY CMP0093)
+    cmake_policy(GET CMP0093 _Boost_CMP0093
+      PARENT_SCOPE # undocumented, do not use outside of CMake
+    )
+    if("x${_Boost_CMP0093}x" STREQUAL "xNEWx")
+      set(Boost_VERSION ${Boost_VERSION_STRING})
+    else()
+      set(Boost_VERSION ${Boost_VERSION_MACRO})
+    endif()
+    unset(_Boost_CMP0093)
   else()
     set(Boost_VERSION ${Boost_VERSION_MACRO})
   endif()
-  unset(_Boost_CMP0093)
 
   _Boost_DEBUG_PRINT_VAR("${CMAKE_CURRENT_LIST_FILE}" "${CMAKE_CURRENT_LIST_LINE}" "Boost_VERSION")
   _Boost_DEBUG_PRINT_VAR("${CMAKE_CURRENT_LIST_FILE}" "${CMAKE_CURRENT_LIST_LINE}" "Boost_VERSION_STRING")
