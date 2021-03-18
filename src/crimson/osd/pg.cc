@@ -1042,7 +1042,7 @@ PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
 
 template <RWState::State State>
 PG::interruptible_future<>
-PG::with_locked_obc(ObjectContextRef obc, PG::with_obc_func_t &&f)
+PG::with_locked_obc(ObjectContextRef obc, with_obc_func_t &&f)
 {
   // TODO: a question from rebase: do we really need such checks when
   // the interruptible stuff is being used?
