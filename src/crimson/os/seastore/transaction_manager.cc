@@ -225,6 +225,8 @@ TransactionManager::submit_transaction_direct(
       segment_cleaner->set_journal_head(journal_seq);
       cache->complete_commit(tref, addr, journal_seq, segment_cleaner.get());
       lba_manager->complete_transaction(tref);
+      segment_cleaner->update_journal_tail_target(
+	cache->get_oldest_dirty_from().value_or(journal_seq));
       auto to_release = tref.get_segment_to_release();
       if (to_release != NULL_SEG_ID) {
 	return segment_manager.release(to_release
