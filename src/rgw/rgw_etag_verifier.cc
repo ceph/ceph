@@ -29,7 +29,7 @@ int create_etag_verifier(CephContext* cct, DataProcessor* filter,
     return -EIO;
   }
 
-  if (rule.part_size == 0) {
+  if (rule.start_part_num == 0) {
     /* Atomic object */
     verifier.emplace<ETagVerifier_Atomic>(cct, filter);
     return 0;
