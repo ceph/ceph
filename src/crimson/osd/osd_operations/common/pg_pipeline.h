@@ -10,6 +10,8 @@ namespace crimson::osd {
 
 class CommonPGPipeline {
 protected:
+  friend class InternalClientRequest;
+
   OrderedExclusivePhase wait_for_active = {
     "CommonPGPipeline:::wait_for_active"
   };
