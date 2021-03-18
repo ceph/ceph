@@ -143,7 +143,11 @@ protected:
     return tm->mount(
     ).handle_error(
       crimson::ct_error::assert_all{"Error in mount"}
-    );
+    ).then([this] {
+      return segment_cleaner->stop();
+    }).then([this] {
+      return segment_cleaner->run_until_halt();
+    });
   }
 
   virtual seastar::future<> _mkfs() {
