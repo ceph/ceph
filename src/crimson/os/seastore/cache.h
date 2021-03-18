@@ -453,6 +453,7 @@ public:
       if (t.root) {
 	return t.root;
       } else {
+	t.add_to_read_set(extent);
 	return extent;
       }
     } else {
@@ -460,6 +461,9 @@ public:
       if (result == Transaction::get_extent_ret::RETIRED) {
 	return CachedExtentRef();
       } else {
+	if (result == Transaction::get_extent_ret::ABSENT) {
+	  t.add_to_read_set(extent);
+	}
 	return extent;
       }
     }
