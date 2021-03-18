@@ -5,9 +5,21 @@ set -ex
 SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
 : ${CEPH_ROOT:=$SCRIPTPATH/../../}
 
-sudo docker run --rm \
-         -v "$CEPH_ROOT":/ceph \
-         --name=promtool \
-         --network=host \
-         dnanexus/promtool:2.9.2 \
-         test rules /ceph/monitoring/prometheus/alerts/test_alerts.yml
+source /etc/os-release
+
+case "$ID" in
+fedora|centos|rhel)
+    sudo dnf -y install golang-github-prometheus
+esac
+
+case "$ID" in
+opensuse)
+    sudo dnf -y install golang-github-prometheus-prometheus
+esac
+
+case "$ID" in
+debian|ubuntu)
+    sudo apt install -y prometheus
+esac
+
+promtool test rules $CEPH_ROOT/monitoring/prometheus/alerts/test_alerts.yml
