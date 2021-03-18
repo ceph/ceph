@@ -169,6 +169,11 @@ LBAInternalNode::mutate_internal_address_ret LBAInternalNode::mutate_internal_ad
     }
     auto iter = get_containing_child(laddr);
     if (iter->get_key() != laddr) {
+      logger().debug(
+	"LBAInternalNode::mutate_internal_address laddr {} "
+	"not found in extent {}",
+	laddr,
+	*this);
       return crimson::ct_error::enoent::make();
     }
 
