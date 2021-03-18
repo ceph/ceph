@@ -55,6 +55,9 @@ WRITE_CLASS_ENCODER(ReplicaDaemonInfo)
 class ReplicaDaemonMap {
 public:
   ReplicaDaemonMap();
+  ReplicaDaemonMap(std::vector<ReplicaDaemonInfo> replicadaemons_state)
+    : replicadaemons_state(replicadaemons_state) {
+  }
 
   void encode(bufferlist& replicadaemon_map_bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& replicadaemon_map_bl_it);
@@ -75,6 +78,21 @@ public:
 
   bool empty() {
     return replicadaemons_state.empty();
+  }
+
+  std::vector<ReplicaDaemonInfo> get_replica_daemons(int32_t replicas = 1, uint64_t replica_size = 1ULL << 30) {
+    ceph_assert(replicas == 1);
+    ceph_assert(replica_size == 1ULL << 30);
+    if (replicadaemons_state.empty()) {
+      return {};
+    }
+
+    std::vector<ReplicaDaemonInfo> rst;
+    rst.insert(rst.end(), replicadaemons_state[0]);
+    for (auto& r: rst) {
+      r.free_size = replica_size;
+    }
+    return rst;
   }
 
 private:

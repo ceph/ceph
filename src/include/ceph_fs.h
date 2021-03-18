@@ -181,8 +181,8 @@ extern const char *ceph_con_mode_name(int con_mode);
 /* FSMapUser subscribers (get MDS clusters name->ID mapping) */
 #define CEPH_MSG_FS_MAP_USER		103
 
-/* replica, occupy [30, 40)*/ //We don't need this Message anymore.
-#define CEPH_MSG_REPLICADAEMON_MAP            30
+/* replica, occupy [30, 40)*/
+#define CEPH_MSG_REPLICADAEMON_MAP      30
 
 /* watch-notify operations */
 enum {

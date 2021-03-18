@@ -10,6 +10,7 @@
 #include "ReplicaMonitor.h"
 #include "messages/MReplicaDaemonMap.h"
 #include "messages/MReplicaDaemonBlink.h"
+#include "messages/MMonGetReplicaDaemonMap.h"
 #include "common/cmdparse.h"
 
 using TOPNSPC::common::bad_cmd_get;
@@ -130,7 +131,7 @@ bool ReplicaMonitor::preprocess_query(MonOpRequestRef mon_op_req)
     return preprocess_blink(mon_op_req);
 
   case CEPH_MSG_MON_GET_REPLICADAEMONMAP:
-    return get_replicadaemon_map(mon_op_req);
+    return false;
 
   default:
     ceph_abort();
@@ -156,6 +157,9 @@ bool ReplicaMonitor::prepare_update(MonOpRequestRef mon_op_req)
 
   case MSG_REPLICADAEMON_BLINK:
     return prepare_blink(mon_op_req);
+
+  case CEPH_MSG_MON_GET_REPLICADAEMONMAP:
+    return get_replicadaemon_map(mon_op_req);
 
   default:
     mon.no_reply(mon_op_req);
@@ -233,9 +237,18 @@ bool ReplicaMonitor::should_propose(double& delay)
 
 bool ReplicaMonitor::get_replicadaemon_map(MonOpRequestRef mon_op_req)
 {
-  ReplicaDaemonMap *replicadaemon_map = &cur_cache_replicadaemon_map;
+  auto get_replica_msg = mon_op_req->get_req<MMonGetReplicaDaemonMap>();
+  auto const& req_daemon_info = get_replica_msg->req_daemon_info;
+
+  // construct reply message
+  auto reply_daemons_info = cur_cache_replicadaemon_map.get_replica_daemons(req_daemon_info.replicas, req_daemon_info.replica_size);
+  ReplicaDaemonMap replica_daemon_map(reply_daemons_info);
+
+  ReplicaDaemonMap *replicadaemon_map = &replica_daemon_map;
   auto reply_msg = make_message<MReplicaDaemonMap>(*replicadaemon_map);
   mon.send_reply(mon_op_req, reply_msg.detach());
+
+  //TODO: 1. update ReplicaDaemonMap 2. go through paxos
 
   return true;
 }
