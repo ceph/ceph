@@ -45,14 +45,16 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
+      std::string *remote_group_id,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
+      std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *image_replayer_index,
       Context *on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, global_group_id, local_mirror_uuid,
       instance_watcher, local_status_updater, remote_status_updater,
-      cache_manager_handler, pool_meta_cache, local_group_ctx, image_replayers,
-      on_finish);
+      cache_manager_handler, pool_meta_cache, remote_group_id, local_group_ctx,
+      image_replayers, image_replayer_index, on_finish);
   }
 
   BootstrapRequest(
@@ -66,8 +68,10 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
+      std::string *remote_group_id,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
+      std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *image_replayer_index,
       Context* on_finish);
 
   void send() override;
@@ -158,14 +162,15 @@ private:
   MirrorStatusUpdater<ImageCtxT> *m_remote_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
   PoolMetaCache *m_pool_meta_cache;
+  std::string *m_remote_group_id;
   GroupCtx *m_local_group_ctx;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
+  std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *m_image_replayer_index;
   Context *m_on_finish;
 
   std::atomic<bool> m_canceled = false;
 
   std::string m_group_name;
-  std::string m_remote_group_id;
   std::string m_local_group_id;
   bool m_local_group_id_by_name = false;
   cls::rbd::MirrorGroup m_remote_mirror_group;
@@ -177,7 +182,7 @@ private:
   std::list<cls::rbd::GroupImageStatus> m_images;
   librados::IoCtx m_image_io_ctx;
 
-  std::set<GlobalImageId> m_remote_images;
+  std::map<GlobalImageId, std::string> m_remote_images;
   std::set<GlobalImageId> m_local_images;
   std::map<GlobalImageId, std::string> m_local_trash_images;
 

@@ -16,6 +16,8 @@
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "GroupReplayer.h"
 
+#include <algorithm>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -28,19 +30,10 @@ namespace rbd {
 namespace mirror {
 
 using librbd::util::create_context_callback;
+using librbd::util::create_rados_callback;
 using librbd::util::unique_lock_name;
 
 namespace {
-
-std::string calc_ind_mirror_snap_name(uint64_t pool_id,
-                                      const std::string &group_id,
-                                      const std::string &snap_id)
-{
-  std::stringstream ind_snap_name_stream;
-  ind_snap_name_stream << ".mirror." << std::hex << pool_id << "_"
-                       << group_id << "_" << snap_id;
-  return ind_snap_name_stream.str();
-}
 
 template <typename I>
 class GroupReplayerAdminSocketCommand {
@@ -227,14 +220,16 @@ GroupReplayer<I>::~GroupReplayer() {
 
 template <typename I>
 bool GroupReplayer<I>::needs_restart() const {
-  std::lock_guard locker{m_lock};
+  dout(10) << dendl;
 
+  std::lock_guard locker{m_lock};
   if (m_state != STATE_REPLAYING) {
     return false;
   }
 
   for (auto &[_, image_replayer] : m_image_replayers) {
     if (image_replayer->is_stopped()) {
+      dout(10) << "image replayer is in stopped state, needs restart" << dendl;
       return true;
     }
   }
@@ -277,7 +272,7 @@ void GroupReplayer<I>::start(Context *on_finish, bool manual, bool restart) {
   {
     std::lock_guard locker{m_lock};
     if (!is_stopped_()) {
-      derr << "already running" << dendl;
+      derr << "already running: " << m_state << dendl;
       r = -EINVAL;
     } else if (m_manual_stop && !manual) {
       dout(5) << "stopped manually, ignoring start without manual flag"
@@ -290,6 +285,11 @@ void GroupReplayer<I>::start(Context *on_finish, bool manual, bool restart) {
       m_state = STATE_STARTING;
       m_last_r = 0;
       m_state_desc.clear();
+      m_local_group_snaps.clear();
+      m_remote_group_snaps.clear();
+      m_image_replayers.clear();
+      m_image_replayer_index.clear();
+      m_get_remote_group_snap_ret_vals.clear();
       m_manual_stop = false;
       ceph_assert(m_on_start_finish == nullptr);
       std::swap(m_on_start_finish, on_finish);
@@ -312,6 +312,7 @@ void GroupReplayer<I>::stop(Context *on_finish, bool manual, bool restart) {
            << ", restart=" << restart << dendl;
 
   group_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
+  std::map<std::string, std::map<ImageReplayer<I> *, Context *>> create_snap_requests;
   bool shut_down_replay = false;
   bool running = true;
   {
@@ -321,13 +322,16 @@ void GroupReplayer<I>::stop(Context *on_finish, bool manual, bool restart) {
       m_restart_requested = true;
     }
 
+    dout(10) << "state: " << m_state << ", m_stop_requested: " << m_stop_requested << dendl;
     if (!is_running_()) {
+      dout(10) << "replayers not running" << dendl;
       running = false;
       if (!restart && m_restart_requested) {
         dout(10) << "canceling restart" << dendl;
         m_restart_requested = false;
       }
     } else {
+      dout(10) << "replayers still running" << dendl;
       if (!is_stopped_()) {
 	if (m_state == STATE_STARTING) {
 	  dout(10) << "canceling start" << dendl;
@@ -335,11 +339,32 @@ void GroupReplayer<I>::stop(Context *on_finish, bool manual, bool restart) {
             bootstrap_request = m_bootstrap_request;
             bootstrap_request->get();
 	  }
-	} else {
-	  dout(10) << "interrupting replay" << dendl;
 	  shut_down_replay = true;
-          m_state = STATE_STOPPING;
+	} else {
+          dout(10) << "interrupting replay" << dendl;
+          shut_down_replay = true;
+          for (auto it = m_create_snap_requests.begin();
+               it != m_create_snap_requests.end(); ) {
+            auto &remote_group_snap_id = it->first;
+            auto &requests = it->second;
+            if (m_get_remote_group_snap_ret_vals.count(remote_group_snap_id) == 0) {
+              dout(20) << "getting remote group snap for "
+                       << remote_group_snap_id << " is still in-progress"
+                       << dendl;
+              shut_down_replay = false;
+            } else if (m_pending_snap_create.count(remote_group_snap_id) > 0) {
+              dout(20) << "group snap create for " << remote_group_snap_id
+                       << " is still in-progress" << dendl;
+              shut_down_replay = false;
+            } else {
+              create_snap_requests[remote_group_snap_id] = requests;
+              it = m_create_snap_requests.erase(it);
+              continue;
+            }
+            it++;
+          }
 	}
+        m_state = STATE_STOPPING;
 
         ceph_assert(m_on_stop_finish == nullptr);
         std::swap(m_on_stop_finish, on_finish);
@@ -355,12 +380,10 @@ void GroupReplayer<I>::stop(Context *on_finish, bool manual, bool restart) {
     bootstrap_request->put();
   }
 
-  if (!running) {
-    dout(20) << "not running" << dendl;
-    if (on_finish) {
-      on_finish->complete(-EINVAL);
+  for (auto &[_, requests] : create_snap_requests) {
+    for (auto &[_, on_finish] : requests) {
+      on_finish->complete(-ESTALE);
     }
-    return;
   }
 
   if (shut_down_replay) {
@@ -373,13 +396,22 @@ void GroupReplayer<I>::stop(Context *on_finish, bool manual, bool restart) {
     }
     on_finish->complete(0);
   }
+
+  if (!running && shut_down_replay) {
+    dout(20) << "not running" << dendl;
+    if (on_finish) {
+      on_finish->complete(-EINVAL);
+    }
+  }
 }
 
 template <typename I>
 void GroupReplayer<I>::restart(Context *on_finish) {
+  dout(10) << dendl;
   {
     std::lock_guard locker{m_lock};
     m_restart_requested = true;
+    m_on_start_finish = nullptr;
   }
 
   auto ctx = new LambdaContext(
@@ -457,7 +489,8 @@ void GroupReplayer<I>::bootstrap_group() {
     m_threads, m_local_io_ctx, m_remote_group_peer.io_ctx, m_global_group_id,
     m_local_mirror_uuid, m_instance_watcher, m_local_status_updater,
     m_remote_group_peer.mirror_status_updater, m_cache_manager_handler,
-    m_pool_meta_cache, &m_local_group_ctx, &m_image_replayers, ctx);
+    m_pool_meta_cache, &m_remote_group_id, &m_local_group_ctx,
+    &m_image_replayers, &m_image_replayer_index, ctx);
 
   request->get();
   m_bootstrap_request = request;
@@ -473,9 +506,21 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   dout(10) << "r=" << r << dendl;
   {
     std::lock_guard locker{m_lock};
-    m_bootstrap_request->put();
-    m_bootstrap_request = nullptr;
+    if (m_state == STATE_STOPPING || m_state == STATE_STOPPED) {
+      dout(10) << "stop prevailed" <<dendl;
+      return;
+    }
+    if (m_bootstrap_request != nullptr) {
+      m_bootstrap_request->put();
+      m_bootstrap_request = nullptr;
+    }
+    m_local_group_ctx.listener = &m_listener;
+    if (!m_local_group_ctx.name.empty()) {
+      m_local_group_name = m_local_group_ctx.name;
+    }
   }
+
+  reregister_admin_socket_hook();
 
   if (finish_start_if_interrupted()) {
     return;
@@ -492,12 +537,6 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     finish_start(r, "bootstrap failed");
     return;
   }
-
-  {
-    std::lock_guard locker{m_lock};
-    m_local_group_name = m_local_group_ctx.name;
-  }
-  reregister_admin_socket_hook();
 
   start_image_replayers();
 }
@@ -524,6 +563,13 @@ void GroupReplayer<I>::start_image_replayers() {
 template <typename I>
 void GroupReplayer<I>::handle_start_image_replayers(int r) {
   dout(10) << "r=" << r << dendl;
+  {
+    std::lock_guard locker{m_lock};
+    if (m_state == STATE_STOPPING || m_state == STATE_STOPPED) {
+      dout(10) << "stop prevailed" <<dendl;
+      return;
+    }
+  }
 
   if (finish_start_if_interrupted()) {
     return;
@@ -565,6 +611,8 @@ void GroupReplayer<I>::handle_stop_image_replayers(int r) {
     m_stop_requested = false;
     m_state = STATE_STOPPED;
     std::swap(on_finish, m_on_stop_finish);
+
+    m_image_replayer_index.clear();
 
     for (auto &[_, image_replayer] : m_image_replayers) {
       delete image_replayer;
@@ -766,97 +814,226 @@ void GroupReplayer<I>::set_mirror_group_status_update(
 
 template <typename I>
 void GroupReplayer<I>::create_mirror_snapshot_start(
-    const std::string &remote_group_snap_id, ImageReplayer<I> *image_replayer,
-    int64_t *local_group_pool_id, std::string *local_group_id,
-    std::string *local_group_snap_id, Context *on_finish) {
-  dout(20) << remote_group_snap_id << " " << image_replayer << dendl;
+    const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
+    ImageReplayer<I> *image_replayer, int64_t *local_group_pool_id,
+    std::string *local_group_id, std::string *local_group_snap_id,
+    Context *on_finish) {
+  dout(20) << remote_group_snap_ns << " " << image_replayer << dendl;
 
+  ceph_assert(remote_group_snap_ns.is_primary());
+
+  int r = 0;
   std::unique_lock locker{m_lock};
-  ceph_assert(m_pending_snap_create == false);
+  auto &remote_group_snap_id = remote_group_snap_ns.group_snap_id;
+  if (m_local_group_snaps.find(remote_group_snap_id) != m_local_group_snaps.end() &&
+      m_local_group_snaps[remote_group_snap_id].state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+    dout(20) << "group snapshot: " << remote_group_snap_id << " already exists"
+             << dendl;
+    r = -EEXIST;
+  } else if (m_state == STATE_STARTING) {
+    derr << "group replayer is not ready yet, m_state: " << m_state << dendl;
+    r = -EAGAIN;
+  } else if (m_state != STATE_REPLAYING) {
+    derr << "group replayer is not in replaying state, m_state: "
+         << m_state << dendl;
+    r = -ESTALE;
+  }
 
-  if (m_state != STATE_REPLAYING) {
-    derr << "not in replaying state" << dendl;
+  if (r != 0) {
     locker.unlock();
-    on_finish->complete(-ESTALE);
+    on_finish->complete(r);
     return;
   }
 
-  if (m_remote_group_snap_id.empty()) {
-    ceph_assert(m_create_snap_requests.empty());
-    m_remote_group_snap_id = remote_group_snap_id;
+  auto requests_it = m_create_snap_requests.find(remote_group_snap_id);
 
-    // XXXMG: make the same name as the primary snapshot has
-    m_group_snap = {librbd::util::generate_uuid(m_local_io_ctx),
-                    cls::rbd::MirrorGroupSnapshotNamespace{
-                        cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
-                        {}, m_remote_group_peer.uuid, m_remote_group_snap_id},
-                    calc_ind_mirror_snap_name(
-                        m_remote_group_peer.io_ctx.get_id(), m_remote_group_id,
-                        m_remote_group_snap_id),
-                    cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  if (requests_it == m_create_snap_requests.end()) {
+    ceph_assert(m_local_group_snaps.count(remote_group_snap_id) == 0);
+
+    requests_it = m_create_snap_requests.insert(
+        {remote_group_snap_id, {}}).first;
+
+    auto snap_state =
+        remote_group_snap_ns.state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ?
+          cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY :
+          cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED;
+
+    m_local_group_snaps[remote_group_snap_id] =
+        {remote_group_snap_id,
+         cls::rbd::MirrorGroupSnapshotNamespace{
+             snap_state, {}, m_remote_group_peer.uuid, remote_group_snap_id},
+         {}, cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+
+    librados::ObjectReadOperation op;
+    librbd::cls_client::group_snap_get_by_id_start(&op, remote_group_snap_id);
+    auto ctx = new C_GetRemoteGroupSnap(this, remote_group_snap_id);
+    auto comp = create_rados_callback(ctx);
+
+    r = m_remote_group_peer.io_ctx.aio_operate(
+        librbd::util::group_header_name(m_remote_group_id), comp, &op,
+        &ctx->bl);
+    ceph_assert(r == 0);
+    comp->release();
   }
 
-  ceph_assert(m_create_snap_requests.count(image_replayer) == 0);
-  m_create_snap_requests[image_replayer] = on_finish;
+  ceph_assert(requests_it->second.count(image_replayer) == 0);
+  requests_it->second[image_replayer] = on_finish;
+
+  ceph_assert(m_local_group_snaps.count(remote_group_snap_id) > 0);
+  auto &local_group_snap = m_local_group_snaps[remote_group_snap_id];
+
+  local_group_snap.snaps.emplace_back(image_replayer->get_local_pool_id(),
+                                      image_replayer->get_local_image_id(),
+                                      CEPH_NOSNAP);
+  ceph_assert(!local_group_snap.snaps.back().image_id.empty());
 
   *local_group_pool_id = m_local_io_ctx.get_id();
   *local_group_id = m_local_group_ctx.group_id;
-  *local_group_snap_id = m_group_snap.id;
+  *local_group_snap_id = m_local_group_snaps[remote_group_snap_id].id;
 
-  if (m_remote_group_snap_id != remote_group_snap_id) {
-    dout(15) << "request snap_id " << remote_group_snap_id
-             << " does not match us " << m_remote_group_snap_id
-             << " -- restarting" << dendl;
-    auto create_snap_requests = m_create_snap_requests;
-    m_create_snap_requests.clear();
+  if (m_get_remote_group_snap_ret_vals.count(remote_group_snap_id) == 0) {
+    dout(20) << "getting remote group snap is still in-progress" << dendl;
     locker.unlock();
-    for (auto &[_, on_finish] : create_snap_requests) {
-      on_finish->complete(-EAGAIN);
+    return;
+  }
+
+  maybe_create_mirror_snapshot(locker, remote_group_snap_id);
+}
+
+template <typename I>
+void GroupReplayer<I>::maybe_create_mirror_snapshot(
+    std::unique_lock<ceph::mutex>& locker,
+    const std::string &remote_group_snap_id) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  dout(20) << remote_group_snap_id << dendl;
+
+  auto &remote_group_snap = m_remote_group_snaps[remote_group_snap_id];
+  ceph_assert(!remote_group_snap.id.empty());
+
+  ceph_assert(m_create_snap_requests.count(remote_group_snap_id) > 0);
+  auto &create_snap_requests = m_create_snap_requests[remote_group_snap_id];
+
+  for (auto &s : remote_group_snap.snaps) {
+    auto it = m_image_replayer_index.find({s.pool, s.image_id});
+    if (it == m_image_replayer_index.end()) {
+      continue;
     }
+
+    if (create_snap_requests.count(it->second) == 0) {
+      dout(20) << "waiting for create_mirror_snapshot_start "
+               << remote_group_snap_id << " from " << it->second << dendl;
+      locker.unlock();
+      return;
+    }
+  }
+
+  ceph_assert(m_local_group_snaps.count(remote_group_snap_id) > 0);
+  auto &local_group_snap = m_local_group_snaps[remote_group_snap_id];
+
+  dout(20) << local_group_snap.id << " " << local_group_snap.name << dendl;
+
+  bool inserted = m_pending_snap_create.insert(remote_group_snap_id).second;
+  ceph_assert(inserted);
+
+  ceph_assert(m_get_remote_group_snap_ret_vals.count(remote_group_snap_id) > 0);
+  int r = m_get_remote_group_snap_ret_vals[remote_group_snap_id];
+  m_get_remote_group_snap_ret_vals.erase(remote_group_snap_id);
+  if (r < 0) {
+    locker.unlock();
+    handle_create_mirror_snapshot_start(remote_group_snap_id, r);
     return;
   }
-
-  // XXXMG: m_image_replayers.size() will not always work
-  if (m_create_snap_requests.size() < m_image_replayers.size()) {
-    return;
-  }
-
-  m_pending_snap_create = true;
-
-  for (auto &[io_ctx, image_replayer] : m_image_replayers) {
-    m_group_snap.snaps.emplace_back(io_ctx.get_id(),
-                                    image_replayer->get_local_image_id(),
-                                    CEPH_NOSNAP);
-    ceph_assert(!m_group_snap.snaps.back().image_id.empty());
-  }
-
-  dout(20) << m_group_snap.id << " " << m_group_snap.name << dendl;
 
   librados::ObjectWriteOperation op;
-  librbd::cls_client::group_snap_set(&op, m_group_snap);
-  auto comp = create_rados_callback<
-      GroupReplayer<I>,
-      &GroupReplayer<I>::handle_create_mirror_snapshot_start>(this);
+  librbd::cls_client::group_snap_set(&op, local_group_snap);
+  auto comp = create_rados_callback(
+      new LambdaContext([this, remote_group_snap_id](int r) {
+        handle_create_mirror_snapshot_start(remote_group_snap_id, r);
+      }));
 
-  int r = m_local_io_ctx.aio_operate(
+  r = m_local_io_ctx.aio_operate(
       librbd::util::group_header_name(m_local_group_ctx.group_id), comp, &op);
+  locker.unlock();
   ceph_assert(r == 0);
   comp->release();
 }
 
 template <typename I>
-void GroupReplayer<I>::handle_create_mirror_snapshot_start(int r) {
-  dout(20) << m_remote_group_snap_id << " r=" << r << dendl;
+void GroupReplayer<I>::handle_get_remote_group_snapshot(
+    const std::string &remote_group_snap_id, bufferlist &out_bl, int r) {
+  dout(20) << remote_group_snap_id << " r=" << r << dendl;
+
+  auto &remote_group_snap = m_remote_group_snaps[remote_group_snap_id];
 
   std::unique_lock locker{m_lock};
-  ceph_assert(m_pending_snap_create == true);
+  if (r == 0) {
+    auto iter = out_bl.cbegin();
+    r = librbd::cls_client::group_snap_get_by_id_finish(
+        &iter, &remote_group_snap);
+  }
 
-  auto create_snap_requests = m_create_snap_requests;
-  m_create_snap_requests.clear();
+  if (r < 0) {
+    derr << "failed to get remote group snapshot: " << cpp_strerror(r) << dendl;
+  } else {
+    m_local_group_snaps[remote_group_snap_id].name = remote_group_snap.name;
+  }
+
+  if (m_state == STATE_STOPPING) {
+    dout(20) << "interrupted" << dendl;
+    m_local_group_snaps.erase(remote_group_snap_id);
+    m_remote_group_snaps.erase(remote_group_snap_id);
+    auto create_snap_requests = m_create_snap_requests[remote_group_snap_id];
+    m_create_snap_requests.erase(remote_group_snap_id);
+    bool shut_down_replay = m_pending_snap_create.empty() &&
+                            m_create_snap_requests.empty();
+    locker.unlock();
+    for (auto &[_, on_finish] : create_snap_requests) {
+      on_finish->complete(r);
+    }
+    if (shut_down_replay) {
+      stop_image_replayers();
+    }
+    return;
+  }
+
+  m_get_remote_group_snap_ret_vals[remote_group_snap_id] = r;
+
+  maybe_create_mirror_snapshot(locker, remote_group_snap_id);
+}
+
+template <typename I>
+void GroupReplayer<I>::handle_create_mirror_snapshot_start(
+    const std::string &remote_group_snap_id, int r) {
+  dout(20) << remote_group_snap_id << " r=" << r << dendl;
+
+  std::unique_lock locker{m_lock};
+  ceph_assert(m_pending_snap_create.count(remote_group_snap_id) > 0);
+
+  ceph_assert(m_create_snap_requests.count(remote_group_snap_id) > 0);
+  auto create_snap_requests = m_create_snap_requests[remote_group_snap_id];
+  m_create_snap_requests.erase(remote_group_snap_id);
+
+  bool shut_down_replay = false;
+  if (r == -EEXIST) {
+    dout(20) << "group snapshot: " << remote_group_snap_id << " already exists"
+             << dendl;
+    r = 0;
+  } else if (r < 0) {
+    m_pending_snap_create.erase(remote_group_snap_id);
+    m_remote_group_snaps.erase(remote_group_snap_id);
+    m_local_group_snaps.erase(remote_group_snap_id);
+    shut_down_replay = m_state == STATE_STOPPING && !m_restart_requested &&
+                       m_pending_snap_create.empty() &&
+                       m_create_snap_requests.empty();
+  }
   locker.unlock();
 
   for (auto &[_, on_finish] : create_snap_requests) {
     on_finish->complete(r);
+  }
+  if (shut_down_replay) {
+    stop_image_replayers();
   }
 }
 
@@ -868,36 +1045,44 @@ void GroupReplayer<I>::create_mirror_snapshot_finish(
            << snap_id << dendl;
 
   std::lock_guard locker{m_lock};
-  ceph_assert(m_pending_snap_create == true);
-  ceph_assert(m_state == STATE_REPLAYING || m_state == STATE_STOPPING);
-  ceph_assert(m_remote_group_snap_id == remote_group_snap_id);
-  ceph_assert(m_create_snap_requests.count(image_replayer) == 0);
-
-  m_create_snap_requests[image_replayer] = on_finish;
-
-  auto pool = image_replayer->get_local_pool_id();
-  auto image_id = image_replayer->get_local_image_id();
-  auto it = std::find_if(
-      m_group_snap.snaps.begin(), m_group_snap.snaps.end(),
-      [&pool, &image_id](const cls::rbd::ImageSnapshotSpec &s) {
-        return pool == s.pool && image_id == s.image_id;
-      });
-  ceph_assert(it != m_group_snap.snaps.end());
-  it->snap_id = snap_id;
-
-  if (m_create_snap_requests.size() < m_image_replayers.size()) {
+  if (m_local_group_snaps.find(remote_group_snap_id) != m_local_group_snaps.end() &&
+      m_local_group_snaps[remote_group_snap_id].state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+    on_finish->complete(-EEXIST);
     return;
   }
 
-  m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  ceph_assert(m_pending_snap_create.count(remote_group_snap_id) > 0);
 
-  dout(20) << m_group_snap.id << " " << m_group_snap.name << dendl;
+  auto &create_snap_requests = m_create_snap_requests[remote_group_snap_id];
+
+  ceph_assert(create_snap_requests.count(image_replayer) == 0);
+  create_snap_requests[image_replayer] = on_finish;
+
+  auto pool = image_replayer->get_local_pool_id();
+  auto image_id = image_replayer->get_local_image_id();
+  auto &local_group_snap = m_local_group_snaps[remote_group_snap_id];
+  auto it = std::find_if(
+      local_group_snap.snaps.begin(), local_group_snap.snaps.end(),
+      [&pool, &image_id](const cls::rbd::ImageSnapshotSpec &s) {
+        return pool == s.pool && image_id == s.image_id;
+      });
+  ceph_assert(it != local_group_snap.snaps.end());
+  it->snap_id = snap_id;
+
+  if (create_snap_requests.size() < local_group_snap.snaps.size()) {
+    return;
+  }
+
+  local_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+
+  dout(20) << local_group_snap.id << " " << local_group_snap.name << dendl;
 
   librados::ObjectWriteOperation op;
-  librbd::cls_client::group_snap_set(&op, m_group_snap);
-  auto comp = create_rados_callback<
-      GroupReplayer<I>,
-      &GroupReplayer<I>::handle_create_mirror_snapshot_finish>(this);
+  librbd::cls_client::group_snap_set(&op, local_group_snap);
+  auto comp = create_rados_callback(
+      new LambdaContext([this, remote_group_snap_id](int r) {
+        handle_create_mirror_snapshot_finish(remote_group_snap_id, r);
+      }));
 
   int r = m_local_io_ctx.aio_operate(
       librbd::util::group_header_name(m_local_group_ctx.group_id), comp, &op);
@@ -906,23 +1091,26 @@ void GroupReplayer<I>::create_mirror_snapshot_finish(
 }
 
 template <typename I>
-void GroupReplayer<I>::handle_create_mirror_snapshot_finish(int r) {
-  dout(20) << m_remote_group_snap_id << " r=" << r << dendl;
+void GroupReplayer<I>::handle_create_mirror_snapshot_finish(
+    const std::string &remote_group_snap_id, int r) {
+  dout(20) << remote_group_snap_id << " r=" << r << dendl;
 
   std::unique_lock locker{m_lock};
-  ceph_assert(m_pending_snap_create == true);
-  m_pending_snap_create = false;
-  m_remote_group_snap_id.clear();
-  bool stopping = (m_state == STATE_STOPPING);
-  auto create_snap_requests = m_create_snap_requests;
-  m_create_snap_requests.clear();
+  auto count = m_pending_snap_create.erase(remote_group_snap_id);
+  ceph_assert(count > 0);
+
+  auto create_snap_requests = m_create_snap_requests[remote_group_snap_id];
+  m_create_snap_requests.erase(remote_group_snap_id);
+  bool shut_down_replay = m_state == STATE_STOPPING && !m_restart_requested &&
+                          m_pending_snap_create.empty() &&
+                          m_create_snap_requests.empty();
   locker.unlock();
 
   for (auto &[_, on_finish] : create_snap_requests) {
     on_finish->complete(r);
   }
 
-  if (stopping) {
+  if (shut_down_replay) {
     stop_image_replayers();
   }
 }
