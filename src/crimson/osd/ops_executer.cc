@@ -137,7 +137,7 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 }
 
 static watch_info_t create_watch_info(const OSDOp& osd_op,
-                                      const MOSDOp& msg)
+                                      const OpsExecuter::ExecutableMessage& msg)
 {
   using crimson::common::local_conf;
   const uint32_t timeout =
@@ -161,7 +161,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
     crimson::net::ConnectionRef conn;
     watch_info_t info;
 
-    connect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    connect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name),
         conn(msg.get_connection()),
         info(create_watch_info(osd_op, msg)) {
@@ -219,7 +219,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
     ObjectContext::watch_key_t key;
     bool send_disconnect{ false };
 
-    disconnect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    disconnect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name) {
     }
   };
@@ -320,7 +320,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
     const uint64_t client_gid;
     const epoch_t epoch;
 
-    notify_ctx_t(const MOSDOp& msg)
+    notify_ctx_t(const ExecutableMessage& msg)
       : conn(msg.get_connection()),
         client_gid(msg.get_reqid().name.num()),
         epoch(msg.get_map_epoch()) {
@@ -376,7 +376,8 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
     uint64_t notify_id;
     ceph::bufferlist reply_bl;
 
-    notifyack_ctx_t(const MOSDOp& msg) : entity(msg.get_reqid().name) {
+    notifyack_ctx_t(const ExecutableMessage& msg)
+      : entity(msg.get_reqid().name) {
     }
   };
   return with_effect_on_obc(notifyack_ctx_t{ get_message() },
