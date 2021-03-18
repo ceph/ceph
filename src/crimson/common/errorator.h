@@ -186,7 +186,7 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
     static_assert(std::is_invocable_v<Func, ErrorT>);
     return [
       func = std::forward<Func>(func)
-    ] (stateful_error_t<ErrorT>&& e) mutable -> decltype(auto) {
+    ] (const stateful_error_t<ErrorT>& e) mutable -> decltype(auto) {
       try {
         std::rethrow_exception(e.ep);
       } catch (const ErrorT& obj) {
@@ -719,6 +719,26 @@ private:
     }
   };
 
+  template <typename InterfereFunc, typename ValueT=void>
+  struct interfere_all_t {
+    InterfereFunc func;
+    interfere_all_t(InterfereFunc &&interfere_func)
+      : func(std::forward<InterfereFunc>(interfere_func)) {}
+
+    template <typename ErrorT, EnableIf<ErrorT>...>
+    decltype(auto) operator()(ErrorT&& e) {
+      using decayed_t = std::decay_t<decltype(e)>;
+      auto&& handler =
+        decayed_t::error_t::handle(std::forward<InterfereFunc>(func));
+      static_assert(std::is_invocable_v<decltype(handler), ErrorT>);
+      return std::invoke(
+        std::move(handler), std::as_const(e)
+      ).safe_then([&e] () mutable -> typename errorator<decayed_t>::template future<ValueT> {
+        return std::forward<ErrorT>(e);
+      });
+    }
+  };
+
 public:
   // HACK: `errorated_future_marker` and `_future` is just a hack to
   // specialize `seastar::futurize` for category of class templates:
@@ -775,6 +795,16 @@ public:
   static decltype(auto) all_same_way(ErrorFunc&& error_func) {
     return all_same_way_t<ErrorFunc>{std::forward<ErrorFunc>(error_func)};
   };
+
+  // in contrast to ErrorFunc, InterfereFunc isn't supposed to get
+  // rid of the problem anyhow; it just being run and the error is
+  // passed further
+  template <class InterfereFunc>
+  static decltype(auto) interfere_all(InterfereFunc&& interfere_func) {
+    return interfere_all_t<InterfereFunc>{
+      std::forward<InterfereFunc>(interfere_func)
+    };
+  }
 
   // get a new errorator by extending current one with new errors
   template <class... NewAllowedErrorsT>
