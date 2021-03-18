@@ -118,6 +118,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_lazyio_synchronize(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
