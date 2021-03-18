@@ -136,8 +136,14 @@ private:
    *    |                       v                     | |
    *    |                 GET_REMOTE_IMAGE_STATE      | |
    *    |                       |                     | |
+   *    |                       v (skip if no group)  | |
+   *    |                 CREATE_GROUP_SNAP_START     | |
+   *    |                       |                     | |
    *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
+   *    |                       |                     | |
+   *    |                       v (skip if no group)  | |
+   *    |                 CREATE_GROUP_SNAP_FINISH    | |
    *    |                       |                     | |
    *    |                       v (skip if not needed)| |
    *    |                 UPDATE_MIRROR_IMAGE_STATE   | |
@@ -238,6 +244,10 @@ private:
   uint64_t m_remote_snap_id_end = CEPH_NOSNAP;
   cls::rbd::MirrorSnapshotNamespace m_remote_mirror_snap_ns;
 
+  int64_t m_local_group_pool_id = -1;
+  std::string m_local_group_id;
+  std::string m_local_group_snap_id;
+
   librbd::mirror::snapshot::ImageState m_image_state;
   DeepCopyHandler* m_deep_copy_handler = nullptr;
 
@@ -291,8 +301,14 @@ private:
   void get_local_image_state();
   void handle_get_local_image_state(int r);
 
+  void create_group_snap_start();
+  void handle_create_group_snap_start(int r);
+
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
+
+  void create_group_snap_finish();
+  void handle_create_group_snap_finish(int r);
 
   void update_mirror_image_state();
   void handle_update_mirror_image_state(int r);
