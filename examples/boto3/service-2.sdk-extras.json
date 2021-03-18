@@ -6,12 +6,23 @@
             "name":"DeleteBucketNotificationConfiguration",
             "http":{
                 "method":"DELETE",
-                "requestUri":"/{Bucket}?notification",
+                "requestUri":"/{Bucket}?notification={Notification}",
                 "responseCode":204
             },
             "input":{"shape":"DeleteBucketNotificationConfigurationRequest"},
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#delete-notification",
             "documentation":"<p>Deletes the notification configuration from the bucket.</p>"
+        },
+        "GetBucketNotificationConfiguration":{
+            "name":"GetBucketNotificationConfiguration",
+            "http":{
+                "method":"GET",
+                "requestUri":"/{Bucket}?notification={Notification}",
+                "responseCode":200
+            },
+            "input":{"shape":"GetBucketNotificationConfigurationRequest"},
+            "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#get-notification",
+            "documentation":"<p>Get the notification configuration of the bucket.</p>"
         },
         "GetUsageStats":{
             "name":"GetUsageStats",
@@ -79,8 +90,8 @@
                 "Notification":{
                     "shape":"NotificationId",
                     "documentation":"<p>Id of the specific notification on the bucket for which the configuration should be retrieved.</p>",
-                    "location":"querystring",
-                    "locationName":"notification-id"
+                    "location":"uri",
+                    "locationName":"Notification"
                 }
             }
         },
@@ -97,8 +108,8 @@
                 "Notification":{
                     "shape":"NotificationId",
                     "documentation":"<p>Id of the specific notification on the bucket to be deleted.</p>",
-                    "location":"querystring",
-                    "locationName":"notification-id"
+                    "location":"uri",
+                    "locationName":"Notification"
                 }
             }
         },

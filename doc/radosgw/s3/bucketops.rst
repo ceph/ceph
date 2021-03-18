@@ -607,7 +607,7 @@ Parameters
 +------------------------+-----------+----------------------------------------------------------------------------------------+
 | Name                   | Type      | Description                                                                            |
 +========================+===========+========================================================================================+
-| ``notification-id``    | String    | Name of the notification. If not provided, all notifications on the bucket are deleted |
+| ``notification``       | String    | Name of the notification. If not provided, all notifications on the bucket are deleted |
 +------------------------+-----------+----------------------------------------------------------------------------------------+
 
 HTTP Response
@@ -638,7 +638,7 @@ Parameters
 +------------------------+-----------+----------------------------------------------------------------------------------------+
 | Name                   | Type      | Description                                                                            |
 +========================+===========+========================================================================================+
-| ``notification-id``    | String    | Name of the notification. If not provided, all notifications on the bucket are listed  |
+| ``notification``       | String    | Name of the notification. If not provided, all notifications on the bucket are listed  |
 +------------------------+-----------+----------------------------------------------------------------------------------------+
 
 Response Entities
