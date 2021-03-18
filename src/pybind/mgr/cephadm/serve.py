@@ -554,6 +554,7 @@ class CephadmServe:
             spec=spec,
             hosts=self.mgr._hosts_with_daemon_inventory(),
             daemons=daemons,
+            networks=self.mgr.cache.networks,
             filter_new_host=matches_network if service_type == 'mon'
             else virtual_ip_allowed if service_type == 'ha-rgw' else None,
             allow_colo=svc.allow_colo(),
@@ -587,6 +588,23 @@ class CephadmServe:
 
         for slot in slots_to_add:
             for daemon_type in service_to_daemon_types(service_type):
+                # first remove daemon on conflicting port?
+                if slot.port:
+                    for d in daemons_to_remove:
+                        if d.hostname != slot.hostname or d.ports != [slot.port]:
+                            continue
+                        if d.ip and slot.ip and d.ip != slot.ip:
+                            continue
+                        self.log.info(
+                            f'Removing {d.name()} before deploying to {slot} to avoid a port conflict'
+                        )
+                        # NOTE: we don't check ok-to-stop here to avoid starvation if
+                        # there is only 1 gateway.
+                        self._remove_daemon(d.name(), d.hostname)
+                        daemons_to_remove.remove(d)
+                        break
+
+                # deploy new daemon
                 daemon_id = self.mgr.get_unique_name(
                     daemon_type,
                     slot.hostname,
@@ -600,7 +618,8 @@ class CephadmServe:
 
                 daemon_spec = svc.make_daemon_spec(
                     slot.hostname, daemon_id, slot.network, spec, daemon_type=daemon_type,
-                    ports=[slot.port] if slot.port else None
+                    ports=[slot.port] if slot.port else None,
+                    ip=slot.ip,
                 )
                 self.log.debug('Placing %s.%s on host %s' % (
                     daemon_type, daemon_id, slot.hostname))
@@ -640,8 +659,6 @@ class CephadmServe:
             daemons_to_remove.pop()
         for d in daemons_to_remove:
             r = True
-            # NOTE: we are passing the 'force' flag here, which means
-            # we can delete a mon instances data.
             assert d.hostname is not None
             self._remove_daemon(d.name(), d.hostname)
 
@@ -917,6 +934,8 @@ class CephadmServe:
 
             self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
 
+            # NOTE: we are passing the 'force' flag here, which means
+            # we can delete a mon instances data.
             args = ['--name', name, '--force']
             self.log.info('Removing daemon %s from %s' % (name, host))
             out, err, code = self._run_cephadm(

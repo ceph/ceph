@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import List, Optional, Callable, TypeVar, Tuple, NamedTuple
+from typing import List, Optional, Callable, TypeVar, Tuple, NamedTuple, Dict
 
 import orchestrator
 from ceph.deployment.service_spec import ServiceSpec
@@ -25,10 +25,8 @@ class DaemonPlacement(NamedTuple):
             other.append(f'network={self.network}')
         if self.name:
             other.append(f'name={self.name}')
-        if self.ip:
-            other.append(f'ip={self.ip}')
         if self.port:
-            other.append(f'port={self.port}')
+            other.append(f'{self.ip or "*"}:{self.port}')
         if other:
             res += '(' + ' '.join(other) + ')'
         return res
@@ -48,10 +46,11 @@ class DaemonPlacement(NamedTuple):
         # fixme: how to match against network?
         if self.name and self.name != dd.daemon_id:
             return False
-        if self.ip and self.ip != dd.ip:
-            return False
-        if self.port and [self.port] != dd.ports:
-            return False
+        if self.port:
+            if [self.port] != dd.ports:
+                return False
+            if self.ip != dd.ip:
+                return False
         return True
 
 
@@ -61,6 +60,7 @@ class HostAssignment(object):
                  spec,  # type: ServiceSpec
                  hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
+                 networks: Dict[str, Dict[str, List[str]]] = {},
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  allow_colo: bool = False,
                  ):
@@ -70,6 +70,7 @@ class HostAssignment(object):
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
+        self.networks = networks
         self.allow_colo = allow_colo
         self.port_start = spec.get_port_start()
 
@@ -201,6 +202,13 @@ class HostAssignment(object):
             existing, to_add))
         return existing_slots + to_add, to_add, to_remove
 
+    def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
+        for subnet in subnets:
+            ips = self.networks.get(hostname, {}).get(subnet, [])
+            if ips:
+                return sorted(ips)[0]
+        return None
+
     def get_candidates(self) -> List[DaemonPlacement]:
         if self.spec.placement.hosts:
             ls = [
@@ -229,6 +237,20 @@ class HostAssignment(object):
         else:
             raise OrchestratorValidationError(
                 "placement spec is empty: no hosts, no label, no pattern, no count")
+
+        # allocate an IP?
+        if self.spec.networks:
+            orig = ls.copy()
+            ls = []
+            for p in orig:
+                ip = self.find_ip_on_host(p.hostname, self.spec.networks)
+                if ip:
+                    ls.append(DaemonPlacement(hostname=p.hostname, network=p.network,
+                                              name=p.name, port=p.port, ip=ip))
+                else:
+                    logger.debug(
+                        f'Skipping {p.hostname} with no IP in network(s) {self.spec.networks}'
+                    )
 
         if self.filter_new_host:
             old = ls.copy()
