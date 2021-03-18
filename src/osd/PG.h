@@ -186,10 +186,6 @@ public:
   /// scrubbing state for both Primary & replicas
   bool is_scrub_active() const { return m_scrubber->is_scrub_active(); }
 
-  bool get_reserve_failed() const { return m_scrubber->get_reserve_failed(); }
-  void set_reserve_failed() { m_scrubber->set_reserve_failed(); }
-  void clear_reserve_failed() { m_scrubber->clear_reserve_failed(); }
-
 public:
   // -- members --
   const coll_t coll;
