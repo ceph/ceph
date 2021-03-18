@@ -1,5 +1,5 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
-from nose.tools import assert_raises, assert_equal, assert_greater, with_setup
+from nose.tools import assert_raises, assert_equal, assert_not_equal, assert_greater, with_setup
 import cephfs as libcephfs
 import fcntl
 import os
@@ -538,6 +538,31 @@ def test_futimens():
     assert_equal(stx_post['mtime'], stx_pre['mtime'])
 
     cephfs.close(fd)
+    cephfs.unlink(b'/file-1')
+
+@with_setup(setup_test)
+def test_lchmod():
+    fd = cephfs.open(b'/file-1', 'w', 0o755)
+    cephfs.write(fd, b'0000', 0)
+    cephfs.close(fd)
+
+    cephfs.symlink(b'/file-1', b'/file-2')
+
+    stx_pre_t = cephfs.statx(b'/file-1', libcephfs.CEPH_STATX_MODE, 0)
+    stx_pre_s = cephfs.statx(b'/file-2', libcephfs.CEPH_STATX_MODE, libcephfs.AT_SYMLINK_NOFOLLOW)
+
+    time.sleep(1)
+    cephfs.lchmod(b'/file-2', 0o400)
+
+    stx_post_t = cephfs.statx(b'/file-1', libcephfs.CEPH_STATX_MODE, 0)
+    stx_post_s = cephfs.statx(b'/file-2', libcephfs.CEPH_STATX_MODE, libcephfs.AT_SYMLINK_NOFOLLOW)
+
+    assert_equal(stx_post_t['mode'], stx_pre_t['mode'])
+    assert_not_equal(stx_post_s['mode'], stx_pre_s['mode'])
+    stx_post_s_perm_bits = stx_post_s['mode'] & ~stat.S_IFMT(stx_post_s["mode"])
+    assert_equal(stx_post_s_perm_bits, 0o400)
+
+    cephfs.unlink(b'/file-2')
     cephfs.unlink(b'/file-1')
 
 @with_setup(setup_test)
