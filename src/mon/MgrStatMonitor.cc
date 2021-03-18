@@ -3,6 +3,7 @@
 
 #include "MgrStatMonitor.h"
 #include "mon/OSDMonitor.h"
+#include "mon/MgrMonitor.h"
 #include "mon/PGMap.h"
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
@@ -211,7 +212,14 @@ bool MgrStatMonitor::prepare_update(MonOpRequestRef op)
 
 bool MgrStatMonitor::preprocess_report(MonOpRequestRef op)
 {
+  auto m = op->get_req<MMonMgrReport>();
   mon.no_reply(op);
+  if (m->gid &&
+      m->gid != mon.mgrmon()->get_map().get_active_gid()) {
+    dout(10) << "ignoring report from non-active mgr " << m->gid
+	     << dendl;
+    return true;
+  }
   return false;
 }
 
