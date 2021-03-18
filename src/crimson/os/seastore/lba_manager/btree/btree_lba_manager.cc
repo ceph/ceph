@@ -522,7 +522,11 @@ BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
       out.refcount += delta;
       return out;
     }).safe_then([](auto result) {
-      return ref_update_result_t{result.refcount, result.paddr};
+      return ref_update_result_t{
+	result.refcount,
+	result.paddr,
+	result.len
+       };
     });
 }
 
