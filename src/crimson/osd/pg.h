@@ -734,6 +734,7 @@ private:
   friend class RepRequest;
   friend class BackfillRecovery;
   friend struct PGFacade;
+  friend class InternalClientRequest;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
