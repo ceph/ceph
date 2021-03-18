@@ -582,6 +582,8 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
     auto cache = cache::WriteAroundObjectDispatch<I>::create(
       m_image_ctx, max_dirty, writethrough_until_flush);
     cache->init();
+
+    m_image_ctx->readahead.set_max_readahead_size(0);
   } else if (cache_policy == "writethrough" || cache_policy == "writeback") {
     if (cache_policy == "writethrough") {
       max_dirty = 0;

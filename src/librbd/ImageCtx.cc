@@ -776,8 +776,6 @@ public:
     ASSIGN_OPTION(non_blocking_aio, bool);
     ASSIGN_OPTION(cache, bool);
     ASSIGN_OPTION(sparse_read_threshold_bytes, Option::size_t);
-    ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
-    ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
     ASSIGN_OPTION(clone_copy_on_read, bool);
     ASSIGN_OPTION(enable_alloc_hint, bool);
     ASSIGN_OPTION(mirroring_replay_delay, uint64_t);
@@ -786,6 +784,12 @@ public:
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(discard_granularity_bytes, uint64_t);
     ASSIGN_OPTION(blkin_trace_all, bool);
+
+    auto cache_policy = config.get_val<std::string>("rbd_cache_policy");
+    if (cache_policy == "writethrough" || cache_policy == "writeback") {
+      ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
+      ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
+    }
 
 #undef ASSIGN_OPTION
 
