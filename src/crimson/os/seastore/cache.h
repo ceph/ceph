@@ -110,7 +110,7 @@ public:
   using retire_extent_ertr = base_ertr;
   using retire_extent_ret = retire_extent_ertr::future<>;
   retire_extent_ret retire_extent_if_cached(
-    Transaction &t, paddr_t addr);
+    Transaction &t, paddr_t addr, extent_len_t length);
 
   /**
    * get_root

@@ -90,6 +90,7 @@ public:
   struct ref_update_result_t {
     unsigned refcount = 0;
     paddr_t addr;
+    extent_len_t length = 0;
   };
   using ref_ertr = base_ertr::extend<
     crimson::ct_error::enoent>;
