@@ -83,29 +83,6 @@ class TestProgress(MgrTestCase):
 
     def _osd_in_out_events_count(self, marked='both'):
         """
-        Return the event that deals with OSDs being
-        marked in, out or both
-        """
-
-        marked_in_events = []
-        marked_out_events = []
-
-        events_in_progress = self._events_in_progress()
-        for ev in events_in_progress:
-            if self.is_osd_marked_out(ev):
-                marked_out_events.append(ev)
-            elif self.is_osd_marked_in(ev):
-                marked_in_events.append(ev)
-
-        if marked == 'both':
-            return [marked_in_events] + [marked_out_events]
-        elif marked == 'in':
-            return marked_in_events
-        else:
-            return marked_out_events
-
-    def _osd_in_out_events_count(self, marked='both'):
-        """
         Count the number of on going recovery events that deals with
         OSDs being marked in, out or both.
         """
@@ -350,9 +327,7 @@ class TestProgress(MgrTestCase):
         # Check that no event is created
         time.sleep(self.EVENT_CREATION_PERIOD)
 
-        self.assertEqual(
-            self._osd_in_out_completed_events_count('out'),
-            osd_count - pool_size)
+        self.assertEqual(len(self._all_events()), osd_count - pool_size)
 
     def test_turn_off_module(self):
         """
