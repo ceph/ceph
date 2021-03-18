@@ -70,8 +70,8 @@ int publish(const req_state* s,
         const std::string& etag, 
         EventType event_type,
         rgw::sal::RGWRadosStore* store) {
-    RGWUserPubSub ps_user(store, s->user->get_id());
-    RGWUserPubSub::Bucket ps_bucket(&ps_user, s->bucket);
+    RGWPubSub ps_user(store, s->user->get_id().tenant);
+    RGWPubSub::Bucket ps_bucket(&ps_user, s->bucket);
     rgw_pubsub_bucket_topics bucket_topics;
     auto rc = ps_bucket.get_topics(&bucket_topics);
     if (rc < 0) {
