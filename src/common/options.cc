@@ -8272,7 +8272,7 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_session_max_caps_throttle_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1.1)
-    .set_description("ratio of mds_max_maps_per_client that client must exceed before readdir may be throttled by cap acquisition throttle"),
+    .set_description("ratio of mds_max_caps_per_client that client must exceed before readdir may be throttled by cap acquisition throttle"),
 
     Option("mds_cap_acquisition_throttle_retry_request_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
