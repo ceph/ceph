@@ -68,11 +68,15 @@ class Btree {
     ~Cursor() = default;
 
     bool is_end() const {
-      if (p_cursor) {
-        assert(!p_cursor->is_end());
+      if (p_cursor->is_tracked()) {
         return false;
-      } else {
+      } else if (p_cursor->is_invalid()) {
         return true;
+      } else {
+        // we don't actually store end cursor because it will hold a reference
+        // to an end leaf node and is not kept updated.
+        assert(p_cursor->is_end());
+        ceph_abort("impossible");
       }
     }
 
@@ -111,9 +115,14 @@ class Btree {
 
    private:
     Cursor(Btree* p_tree, Ref<tree_cursor_t> _p_cursor) : p_tree(p_tree) {
-      if (_p_cursor->is_end()) {
-        // no need to hold the leaf node
+      if (_p_cursor->is_invalid()) {
+        // we don't create Cursor from an invalid tree_cursor_t.
+        ceph_abort("impossible");
+      } else if (_p_cursor->is_end()) {
+        // we don't actually store end cursor because it will hold a reference
+        // to an end leaf node and is not kept updated.
       } else {
+        assert(_p_cursor->is_tracked());
         p_cursor = _p_cursor;
       }
     }
@@ -121,16 +130,8 @@ class Btree {
 
     MatchKindCMP compare_to(const Cursor& o) const {
       assert(p_tree == o.p_tree);
-      if (p_cursor && o.p_cursor) {
-        return p_cursor->compare_to(
-            *o.p_cursor, p_tree->value_builder.get_header_magic());
-      } else if (!p_cursor && !o.p_cursor) {
-        return MatchKindCMP::EQ;
-      } else if (!p_cursor) {
-        return MatchKindCMP::GT;
-      } else { // !o.p_cursor
-        return MatchKindCMP::LT;
-      }
+      return p_cursor->compare_to(
+          *o.p_cursor, p_tree->value_builder.get_header_magic());
     }
 
     static Cursor make_end(Btree* p_tree) {
@@ -138,7 +139,7 @@ class Btree {
     }
 
     Btree* p_tree;
-    Ref<tree_cursor_t> p_cursor;
+    Ref<tree_cursor_t> p_cursor = tree_cursor_t::get_invalid();
 
     friend class Btree;
   };

@@ -35,7 +35,7 @@ using node_future = Node::node_future<ValueT>;
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
       : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
-  assert(!is_end());
+  assert(is_tracked());
   ref_leaf_node->do_track_cursor<true>(*this);
 }
 
@@ -44,7 +44,7 @@ tree_cursor_t::tree_cursor_t(
     const key_view_t& key_view, const value_header_t* p_value_header)
       : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
-  assert(!is_end());
+  assert(is_tracked());
   update_cache_same_node(key_view, p_value_header);
   ref_leaf_node->do_track_cursor<true>(*this);
 }
@@ -58,7 +58,7 @@ tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
 
 tree_cursor_t::~tree_cursor_t()
 {
-  if (!is_end()) {
+  if (is_tracked()) {
     ref_leaf_node->do_untrack_cursor(*this);
   }
 }
@@ -66,6 +66,7 @@ tree_cursor_t::~tree_cursor_t()
 tree_cursor_t::future<Ref<tree_cursor_t>>
 tree_cursor_t::get_next(context_t c)
 {
+  assert(is_tracked());
   return ref_leaf_node->get_next_cursor(c, position);
 }
 
@@ -77,7 +78,7 @@ void tree_cursor_t::assert_next_to(
   if (is_end()) {
     assert(ref_leaf_node == prv.ref_leaf_node);
     assert(ref_leaf_node->is_level_tail());
-  } else {
+  } else if (is_tracked()) {
     auto key = get_key_view(magic);
     auto prv_key = prv.get_key_view(magic);
     assert(key.compare_to(prv_key) == MatchKindCMP::GT);
@@ -87,6 +88,9 @@ void tree_cursor_t::assert_next_to(
       assert(!prv.ref_leaf_node->is_level_tail());
       assert(position == search_position_t::begin());
     }
+  } else {
+    assert(is_invalid());
+    ceph_abort("impossible");
   }
 #endif
 }
@@ -94,7 +98,16 @@ void tree_cursor_t::assert_next_to(
 MatchKindCMP tree_cursor_t::compare_to(
     const tree_cursor_t& o, value_magic_t magic) const
 {
-  // singleton
+  if (!is_tracked() && !o.is_tracked()) {
+    return MatchKindCMP::EQ;
+  } else if (!is_tracked()) {
+    return MatchKindCMP::GT;
+  } else if (!o.is_tracked()) {
+    return MatchKindCMP::LT;
+  }
+
+  assert(is_tracked() && o.is_tracked());
+  // all tracked cursors are singletons
   if (this == &o) {
     return MatchKindCMP::EQ;
   }
@@ -114,12 +127,14 @@ MatchKindCMP tree_cursor_t::compare_to(
 tree_cursor_t::future<>
 tree_cursor_t::extend_value(context_t c, value_size_t extend_size)
 {
+  assert(is_tracked());
   return ref_leaf_node->extend_value(c, position, extend_size);
 }
 
 tree_cursor_t::future<>
 tree_cursor_t::trim_value(context_t c, value_size_t trim_size)
 {
+  assert(is_tracked());
   return ref_leaf_node->trim_value(c, position, trim_size);
 }
 
@@ -127,10 +142,11 @@ template <bool VALIDATE>
 void tree_cursor_t::update_track(
     Ref<LeafNode> node, const search_position_t& pos)
 {
-  // the cursor must be already untracked
+  // I must be already untracked
+  assert(is_tracked());
+  assert(!ref_leaf_node->check_is_tracking(*this));
   // track the new node and new pos
   assert(!pos.is_end());
-  assert(!is_end());
   ref_leaf_node = node;
   position = pos;
   // we lazy update the key/value information until user asked
@@ -143,9 +159,17 @@ template void tree_cursor_t::update_track<false>(Ref<LeafNode>, const search_pos
 void tree_cursor_t::update_cache_same_node(const key_view_t& key_view,
                                            const value_header_t* p_value_header) const
 {
-  assert(!is_end());
+  assert(is_tracked());
   cache.update_all(ref_leaf_node->get_version(), key_view, p_value_header);
   cache.validate_is_latest(position);
+}
+
+void tree_cursor_t::invalidate()
+{
+  assert(is_tracked());
+  ref_leaf_node.reset();
+  assert(is_invalid());
+  // I must be removed from LeafNode
 }
 
 /*
@@ -381,7 +405,13 @@ node_future<> Node::upgrade_root(context_t c)
 template <bool VALIDATE>
 void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
 {
+  // I must be already untracked.
   assert(!super);
+#ifndef NDEBUG
+  if (_parent_info.has_value()) {
+    assert(!_parent_info->ptr->check_is_tracking(*this));
+  }
+#endif
   _parent_info = parent_info_t{pos, parent_node};
   parent_info().ptr->do_track_child<VALIDATE>(*this);
 }
@@ -905,8 +935,9 @@ LeafNode::lower_bound_tracked(
   } else {
     cursor = get_or_track_cursor(result.position, index_key, result.p_value);
   }
-  return node_ertr::make_ready_future<search_result_t>(
-      search_result_t{cursor, result.mstat});
+  search_result_t ret{cursor, result.mstat};
+  ret.validate_input_key(key, c.vb.get_header_magic());
+  return node_ertr::make_ready_future<search_result_t>(ret);
 }
 
 node_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats)
@@ -1043,7 +1074,7 @@ void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
 {
 #ifndef NDEBUG
   assert(this == cursor.get_leaf_node().get());
-  assert(!cursor.is_end());
+  assert(cursor.is_tracked());
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
   assert(key.compare_to(cursor.get_key_view(magic)) == MatchKindCMP::EQ);

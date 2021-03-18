@@ -177,8 +177,12 @@ class Value {
   Value& operator=(const Value&) = delete;
   Value& operator=(Value&&) = delete;
 
+  /// Returns whether the Value is still tracked in tree.
+  bool is_tracked() const;
+
   /// Returns the value payload size.
   value_size_t get_payload_size() const {
+    assert(is_tracked());
     return read_value_header()->payload_size;
   }
 
@@ -198,6 +202,7 @@ class Value {
   template <typename PayloadT, typename ValueDeltaRecorderT>
   std::pair<NodeExtentMutable&, ValueDeltaRecorderT*>
   prepare_mutate_payload(Transaction& t) {
+    assert(is_tracked());
     assert(sizeof(PayloadT) <= get_payload_size());
 
     auto value_mutable = do_prepare_mutate_payload(t);
@@ -211,6 +216,7 @@ class Value {
   /// Get the latest payload pointer for read.
   template <typename PayloadT>
   const PayloadT* read_payload() const {
+    assert(is_tracked());
     // see Value documentation
     static_assert(alignof(PayloadT) == 1);
     assert(sizeof(PayloadT) <= get_payload_size());
