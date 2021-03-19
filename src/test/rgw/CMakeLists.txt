@@ -1,3 +1,6 @@
+if(Boost_VERSION VERSION_GREATER_EQUAL 1.74)
+  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
+endif()
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # amqp mock library
