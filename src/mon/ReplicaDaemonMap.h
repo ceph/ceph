@@ -48,6 +48,15 @@ struct ReplicaDaemonInfo {
     this->free_size = free_size;
   }
 
+  bool operator== (const ReplicaDaemonInfo& rhs) const {
+    if (rnic_bind_port == rhs.rnic_bind_port &&
+        rnic_addr == rhs.rnic_addr) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   void print_state(std::ostream& oss) const;
 };
 WRITE_CLASS_ENCODER(ReplicaDaemonInfo)
