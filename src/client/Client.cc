@@ -11013,11 +11013,11 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
   return statfs(0, stbuf, perms);
 }
 
-void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
+void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
 {
   if (!args)
     return;
-  std::scoped_lock l(client_lock);
+
   ldout(cct, 10) << __func__ << " cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
@@ -11047,6 +11047,23 @@ void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
   }
   if (args->umask_cb)
     umask_cb = args->umask_cb;
+}
+
+// This is deprecated, use ll_register_callbacks2() instead.
+void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
+{
+  ceph_assert(!is_mounting() && !is_mounted() && !is_unmounting());
+
+  _ll_register_callbacks(args);
+}
+
+int Client::ll_register_callbacks2(struct ceph_client_callback_args *args)
+{
+  if (is_mounting() || is_mounted() || is_unmounting())
+    return -CEPHFS_EBUSY;
+
+  _ll_register_callbacks(args);
+  return 0;
 }
 
 int Client::test_dentry_handling(bool can_invalidate)
