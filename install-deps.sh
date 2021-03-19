@@ -296,9 +296,6 @@ else
     case "$ID" in
     debian|ubuntu|devuan|elementary)
         echo "Using apt-get to install dependencies"
-        $SUDO apt install -y docker.io
-        $SUDO systemctl start docker
-        $SUDO systemctl enable docker
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         ensure_python3_sphinx_on_ubuntu
@@ -307,6 +304,10 @@ else
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 $with_zbd && install_libzbd_on_ubuntu bionic
+                ;;
+            *Focal*)
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
+                $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -436,7 +437,6 @@ function preload_wheels_for_tox() {
         mv $wip_wheelhouse wheelhouse
         md5sum $require_files $constraint_files > $md5
     fi
-
     popd > /dev/null
 }
 
