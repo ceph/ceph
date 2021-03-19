@@ -294,7 +294,8 @@ class CephadmUpgrade:
             self._save_upgrade_state()
         self.mgr.remote('progress', 'update', self.upgrade_state.progress_id,
                         ev_msg='Upgrade to %s' % self.target_image,
-                        ev_progress=progress)
+                        ev_progress=progress,
+                        add_to_ceph_s=True)
 
     def _save_upgrade_state(self) -> None:
         if not self.upgrade_state:
