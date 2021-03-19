@@ -120,8 +120,8 @@ int RadosCompletions::drain()
   return ret;
 }
 
-int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const string& marker,
-			       const string& end_marker, uint64_t max, bool need_stats,
+int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
+			       const std::string& end_marker, uint64_t max, bool need_stats,
 			       BucketList &buckets, optional_yield y)
 {
   RGWUserBuckets ulist;
@@ -367,7 +367,7 @@ int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp)
   if (ret < 0)
     return ret;
 
-  map<string, RGWBucketEnt>::iterator iter = m.find(info.bucket.name);
+  map<std::string, RGWBucketEnt>::iterator iter = m.find(info.bucket.name);
   if (iter == m.end())
     return -EINVAL;
 
@@ -417,7 +417,7 @@ int RadosBucket::unlink(const DoutPrefixProvider* dpp, User* new_user, optional_
 
 int RadosBucket::chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker)
 {
-  string obj_marker;
+  std::string obj_marker;
 
   if (marker == nullptr)
     marker = &obj_marker;
@@ -684,9 +684,9 @@ int RadosStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::st
 
 int RadosStore::create_bucket(const DoutPrefixProvider* dpp,
 				 User& u, const rgw_bucket& b,
-				 const string& zonegroup_id,
+				 const std::string& zonegroup_id,
 				 rgw_placement_rule& placement_rule,
-				 string& swift_ver_location,
+				 std::string& swift_ver_location,
 				 const RGWQuotaInfo * pquota_info,
 				 const RGWAccessControlPolicy& policy,
 				 Attrs& attrs,
@@ -820,7 +820,7 @@ int RadosStore::forward_request_to_master(User* user, obj_version* objv,
   }
   ldout(ctx(), 0) << "sending request to master zonegroup" << dendl;
   bufferlist response;
-  string uid_str = user->get_id().to_str();
+  std::string uid_str = user->get_id().to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
   int ret = svc()->zone->get_master_conn()->forward(rgw_user(uid_str), info,
                                                     objv, MAX_REST_RESPONSE,
@@ -925,7 +925,7 @@ int RadosStore::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
     return rados->log_usage(usage_info);
 }
 
-int RadosStore::log_op(string& oid, bufferlist& bl)
+int RadosStore::log_op(std::string& oid, bufferlist& bl)
 {
   rgw_raw_obj obj(svc()->zone->get_zone_params().log_pool, oid);
 
@@ -941,8 +941,8 @@ int RadosStore::log_op(string& oid, bufferlist& bl)
   return ret;
 }
 
-int RadosStore::register_to_service_map(const string& daemon_type,
-					   const map<string, string>& meta)
+int RadosStore::register_to_service_map(const std::string& daemon_type,
+					   const map<std::string, std::string>& meta)
 {
   return rados->register_to_service_map(daemon_type, meta);
 }
@@ -953,8 +953,8 @@ void RadosStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
     user_quota = svc()->quota->get_user_quota();
 }
 
-int RadosStore::list_raw_objects(const rgw_pool& pool, const string& prefix_filter,
-				    int max, RGWListRawObjsCtx& ctx, list<string>& oids,
+int RadosStore::list_raw_objects(const rgw_pool& pool, const std::string& prefix_filter,
+				    int max, RGWListRawObjsCtx& ctx, list<std::string>& oids,
 				    bool* is_truncated)
 {
     return rados->list_raw_objects(pool, prefix_filter, max, ctx, oids, is_truncated);
@@ -999,25 +999,25 @@ int RadosStore::trim_all_usage(uint64_t start_epoch, uint64_t end_epoch)
   return rados->trim_usage(uid, bucket_name, start_epoch, end_epoch);
 }
 
-int RadosStore::get_config_key_val(string name, bufferlist* bl)
+int RadosStore::get_config_key_val(std::string name, bufferlist* bl)
 {
   return svc()->config_key->get(name, true, bl);
 }
 
-int RadosStore::put_system_obj(const rgw_pool& pool, const string& oid,
+int RadosStore::put_system_obj(const rgw_pool& pool, const std::string& oid,
 				  bufferlist& data, bool exclusive,
 				  RGWObjVersionTracker* objv_tracker, real_time set_mtime,
-				  optional_yield y, map<string, bufferlist>* pattrs)
+				  optional_yield y, map<std::string, bufferlist>* pattrs)
 {
   auto obj_ctx = svc()->sysobj->init_obj_ctx();
   return rgw_put_system_obj(obj_ctx, pool, oid, data, exclusive, objv_tracker, set_mtime, y, pattrs);
 }
 
 int RadosStore::get_system_obj(const DoutPrefixProvider* dpp,
-				  const rgw_pool& pool, const string& key,
+				  const rgw_pool& pool, const std::string& key,
 				  bufferlist& bl,
 				  RGWObjVersionTracker* objv_tracker, real_time* pmtime,
-				  optional_yield y, map<string, bufferlist>* pattrs,
+				  optional_yield y, map<std::string, bufferlist>* pattrs,
 				  rgw_cache_entry_info* cache_info,
 				  boost::optional<obj_version> refresh_version)
 {
@@ -1025,18 +1025,18 @@ int RadosStore::get_system_obj(const DoutPrefixProvider* dpp,
   return rgw_get_system_obj(obj_ctx, pool, key, bl, objv_tracker, pmtime, y, dpp, pattrs, cache_info, refresh_version);
 }
 
-int RadosStore::delete_system_obj(const rgw_pool& pool, const string& oid,
+int RadosStore::delete_system_obj(const rgw_pool& pool, const std::string& oid,
 				     RGWObjVersionTracker* objv_tracker, optional_yield y)
 {
     return rgw_delete_system_obj(svc()->sysobj, pool, oid, objv_tracker, y);
 }
 
-int RadosStore::meta_list_keys_init(const string& section, const string& marker, void** phandle)
+int RadosStore::meta_list_keys_init(const std::string& section, const std::string& marker, void** phandle)
 {
   return ctl()->meta.mgr->list_keys_init(section, marker, phandle);
 }
 
-int RadosStore::meta_list_keys_next(void* handle, int max, list<string>& keys, bool* truncated)
+int RadosStore::meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated)
 {
   return ctl()->meta.mgr->list_keys_next(handle, max, keys, truncated);
 }
@@ -1051,7 +1051,7 @@ std::string RadosStore::meta_get_marker(void* handle)
   return ctl()->meta.mgr->get_marker(handle);
 }
 
-int RadosStore::meta_remove(const DoutPrefixProvider* dpp, string& metadata_key, optional_yield y)
+int RadosStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y)
 {
   return ctl()->meta.mgr->remove(metadata_key, y, dpp);
 }
@@ -1225,8 +1225,8 @@ void RadosObject::get_raw_obj(rgw_raw_obj* raw_obj)
   store->getRados()->obj_to_raw((bucket->get_info()).placement_rule, get_obj(), raw_obj);
 }
 
-int RadosObject::omap_get_vals(const string& marker, uint64_t count,
-				  std::map<string, bufferlist> *m,
+int RadosObject::omap_get_vals(const std::string& marker, uint64_t count,
+				  std::map<std::string, bufferlist> *m,
 				  bool* pmore, optional_yield y)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
@@ -1237,7 +1237,7 @@ int RadosObject::omap_get_vals(const string& marker, uint64_t count,
   return sysobj.omap().get_vals(marker, count, m, pmore, y);
 }
 
-int RadosObject::omap_get_all(std::map<string, bufferlist> *m,
+int RadosObject::omap_get_all(std::map<std::string, bufferlist> *m,
 				 optional_yield y)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
@@ -1510,9 +1510,9 @@ int RadosObject::copy_object(RGWObjectCtx& obj_ctx,
 				RGWObjCategory category,
 				uint64_t olh_epoch,
 				boost::optional<ceph::real_time> delete_at,
-				string* version_id,
-				string* tag,
-				string* etag,
+				std::string* version_id,
+				std::string* tag,
+				std::string* etag,
 				void (*progress_cb)(off_t, void *),
 				void* progress_data,
 				const DoutPrefixProvider* dpp,
@@ -1666,7 +1666,7 @@ int LCRadosSerializer::try_lock(utime_t dur, optional_yield y)
   return lock.lock_exclusive(ioctx, oid);
 }
 
-int RadosLifecycle::get_entry(const string& oid, const std::string& marker,
+int RadosLifecycle::get_entry(const std::string& oid, const std::string& marker,
 			      LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
@@ -1679,7 +1679,7 @@ int RadosLifecycle::get_entry(const string& oid, const std::string& marker,
   return ret;
 }
 
-int RadosLifecycle::get_next_entry(const string& oid, std::string& marker,
+int RadosLifecycle::get_next_entry(const std::string& oid, std::string& marker,
 				   LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
@@ -1693,7 +1693,7 @@ int RadosLifecycle::get_next_entry(const string& oid, std::string& marker,
   return ret;
 }
 
-int RadosLifecycle::set_entry(const string& oid, const LCEntry& entry)
+int RadosLifecycle::set_entry(const std::string& oid, const LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
 
@@ -1704,7 +1704,7 @@ int RadosLifecycle::set_entry(const string& oid, const LCEntry& entry)
   return cls_rgw_lc_set_entry(*store->getRados()->get_lc_pool_ctx(), oid, cls_entry);
 }
 
-int RadosLifecycle::list_entries(const string& oid, const string& marker,
+int RadosLifecycle::list_entries(const std::string& oid, const std::string& marker,
 				 uint32_t max_entries, vector<LCEntry>& entries)
 {
   entries.clear();
@@ -1722,7 +1722,7 @@ int RadosLifecycle::list_entries(const string& oid, const string& marker,
   return ret;
 }
 
-int RadosLifecycle::rm_entry(const string& oid, const LCEntry& entry)
+int RadosLifecycle::rm_entry(const std::string& oid, const LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
 
@@ -1733,7 +1733,7 @@ int RadosLifecycle::rm_entry(const string& oid, const LCEntry& entry)
   return cls_rgw_lc_rm_entry(*store->getRados()->get_lc_pool_ctx(), oid, cls_entry);
 }
 
-int RadosLifecycle::get_head(const string& oid, LCHead& head)
+int RadosLifecycle::get_head(const std::string& oid, LCHead& head)
 {
   cls_rgw_lc_obj_head cls_head;
   int ret = cls_rgw_lc_get_head(*store->getRados()->get_lc_pool_ctx(), oid, cls_head);
@@ -1744,7 +1744,7 @@ int RadosLifecycle::get_head(const string& oid, LCHead& head)
   return ret;
 }
 
-int RadosLifecycle::put_head(const string& oid, const LCHead& head)
+int RadosLifecycle::put_head(const std::string& oid, const LCHead& head)
 {
   cls_rgw_lc_obj_head cls_head;
 
@@ -1884,7 +1884,7 @@ const RGWZoneGroup& RadosZone::get_zonegroup()
   return store->svc()->zone->get_zonegroup();
 }
 
-int RadosZone::get_zonegroup(const string& id, RGWZoneGroup& zonegroup)
+int RadosZone::get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup)
 {
   return store->svc()->zone->get_zonegroup(id, zonegroup);
 }
@@ -1924,7 +1924,7 @@ bool RadosZone::has_zonegroup_api(const std::string& api) const
   return store->svc()->zone->has_zonegroup_api(api);
 }
 
-const string& RadosZone::get_current_period_id()
+const std::string& RadosZone::get_current_period_id()
 {
   return store->svc()->zone->get_current_period_id();
 }
