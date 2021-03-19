@@ -71,12 +71,16 @@ static void status_format_func(const int i, std::mutex &lock,
                            "daemon_prefix", '\0', "gateway", '\0'));
   } else {
     string prefix = string("gw") + stringify(i % 4);
-    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c%s%c%s%c",
+    string zone = string("z") + stringify(i % 3);
+    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c%s%c%s%c%s%c%s%c%s%c%s%c",
                            "daemon_type", '\0', "portal", '\0',
-                           "daemon_prefix", '\0', prefix.c_str(), '\0'));
+                           "daemon_prefix", '\0', prefix.c_str(), '\0',
+			   "hostname", '\0', prefix.c_str(), '\0',
+			   "zone_id", '\0', zone.c_str(), '\0'
+		));
   }
   string name = string("rbd/image") + stringify(i);
-  ASSERT_EQ(0, rados_service_register(cluster, "iscsi", name.c_str(),
+  ASSERT_EQ(0, rados_service_register(cluster, "foo", name.c_str(),
 		                      metadata_buf));
 
   std::unique_lock<std::mutex> l(lock);
@@ -140,10 +144,10 @@ TEST(LibRadosService, StatusFormat) {
     ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0,
               &outbuf, &outlen, NULL, NULL));
     std::string out(outbuf, outlen);
+    cout << out << std::endl;
     bool success = false;
-    auto r1 = out.find("5 portals active (gw0, gw1, gw2, gw3, rbd/image1)");
-    auto r2 = out.find("2 daemons active (gateway, rbd/image0");
-    if (std::string::npos != r1 && std::string::npos != r2) {
+    auto r1 = out.find("16 portals active (1 hosts, 3 zones)");
+    if (std::string::npos != r1) {
       success = true;
     }
     rados_buffer_free(outbuf);
