@@ -8,6 +8,7 @@
 #include "common/ceph_mutex.h"
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "include/rados/librados.hpp"
 #include "librbd/mirror/snapshot/Types.h"
 #include "tools/rbd_mirror/image_replayer/TimeRollingMean.h"
 #include <boost/accumulators/accumulators.hpp>
@@ -121,7 +122,10 @@ private:
    * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
    *    | (unused non-primary snapshot)                 |
-   *    |\--------------> PRUNE_NON_PRIMARY_SNAPSHOT---/|
+   *    |\--------------> UNLINK_GROUP_SNAPSHOT         |
+   *    |                       | (skip if no group)    |
+   *    |                       v                       |
+   *    |                 PRUNE_NON_PRIMARY_SNAPSHOT---/|
    *    |                                               |
    *    | (interrupted sync)                            |
    *    |\--------------> GET_LOCAL_IMAGE_STATE ------\ |
@@ -257,6 +261,9 @@ private:
 
   PerfCounters *m_perf_counters = nullptr;
 
+  uint64_t m_prune_snap_id = CEPH_NOSNAP;
+  librados::IoCtx m_group_io_ctx;
+
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);
 
@@ -269,7 +276,10 @@ private:
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
-  void prune_non_primary_snapshot(uint64_t snap_id);
+  void unlink_group_snapshot();
+  void handle_unlink_group_snapshot(int r);
+
+  void prune_non_primary_snapshot();
   void handle_prune_non_primary_snapshot(int r);
 
   void copy_snapshots();
