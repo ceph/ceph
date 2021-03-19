@@ -299,7 +299,7 @@ class CephadmService(metaclass=ABCMeta):
         err = f'It is NOT safe to stop {",".join(names)} at this time'
 
         if self.TYPE not in ['mon', 'osd', 'mds']:
-            logger.info(out)
+            logger.debug(out)
             return HandleCommandResult(0, out)
 
         if self.TYPE == 'osd':
@@ -312,11 +312,11 @@ class CephadmService(metaclass=ABCMeta):
 
         if r.retval:
             err = f'{err}: {r.stderr}' if r.stderr else err
-            logger.error(err)
+            logger.debug(err)
             return HandleCommandResult(r.retval, r.stdout, err)
 
         out = f'{out}: {r.stdout}' if r.stdout else out
-        logger.info(out)
+        logger.debug(out)
         return HandleCommandResult(r.retval, out, r.stderr)
 
     def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int, alert: bool = False) -> Tuple[bool, str]:
