@@ -152,7 +152,7 @@ void AssumedRoleUser::dump(Formatter *f) const
 }
 
 int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
-                                              rgw::sal::Store *store,
+                                              rgw::sal::Store* store,
                                               const string& roleId,
                                               const rgw::ARN& roleArn,
                                               const string& roleSessionName)

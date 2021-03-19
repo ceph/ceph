@@ -74,7 +74,7 @@ extern "C" {
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-static rgw::sal::Store *store = NULL;
+static rgw::sal::Store* store = NULL;
 
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {
@@ -1121,9 +1121,9 @@ static void show_reshard_status(
 }
 
 class StoreDestructor {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
 public:
-  explicit StoreDestructor(rgw::sal::RadosStore *_s) : store(_s) {}
+  explicit StoreDestructor(rgw::sal::RadosStore* _s) : store(_s) {}
   ~StoreDestructor() {
     StoreManager::close_storage(store);
     rgw_http_client_cleanup();
@@ -1297,7 +1297,7 @@ void set_quota_info(RGWQuotaInfo& quota, OPT opt_cmd, int64_t max_size, int64_t 
   }
 }
 
-int set_bucket_quota(rgw::sal::Store *store, OPT opt_cmd,
+int set_bucket_quota(rgw::sal::Store* store, OPT opt_cmd,
                      const string& tenant_name, const string& bucket_name,
                      int64_t max_size, int64_t max_objects,
                      bool have_max_size, bool have_max_objects)
@@ -1355,7 +1355,7 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   return 0;
 }
 
-int check_min_obj_stripe_size(rgw::sal::Store *store, rgw::sal::Object* obj, uint64_t min_stripe_size, bool *need_rewrite)
+int check_min_obj_stripe_size(rgw::sal::Store* store, rgw::sal::Object* obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
   RGWObjectCtx obj_ctx(store);
   int ret = obj->get_obj_attrs(&obj_ctx, null_yield, dpp());
@@ -1542,7 +1542,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 }
 
 /// search for a matching zone/zonegroup id and return a connection if found
-static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore *store,
+static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* store,
                                                     const RGWZoneGroup& zonegroup,
                                                     const std::string& remote)
 {
@@ -1562,7 +1562,7 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore *store,
 }
 
 /// search each zonegroup for a connection
-static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore *store,
+static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* store,
                                                     const RGWPeriodMap& period_map,
                                                     const std::string& remote)
 {
@@ -2246,7 +2246,7 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
   return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
 }
 
-static int bucket_source_sync_status(rgw::sal::RadosStore *store, const RGWZone& zone,
+static int bucket_source_sync_status(rgw::sal::RadosStore* store, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
                                      rgw_sync_bucket_pipe pipe,
@@ -2505,7 +2505,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
   return 0;
 }
 
-static int bucket_sync_info(rgw::sal::RadosStore *store, const RGWBucketInfo& info,
+static int bucket_sync_info(rgw::sal::RadosStore* store, const RGWBucketInfo& info,
                               std::ostream& out)
 {
   const RGWRealm& realm = store->get_zone()->get_realm();
@@ -2544,7 +2544,7 @@ static int bucket_sync_info(rgw::sal::RadosStore *store, const RGWBucketInfo& in
   return 0;
 }
 
-static int bucket_sync_status(rgw::sal::RadosStore *store, const RGWBucketInfo& info,
+static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
 			      std::optional<rgw_bucket>& opt_source_bucket,
                               std::ostream& out)
@@ -2676,7 +2676,7 @@ static int check_pool_support_omap(const rgw_pool& pool)
   return 0;
 }
 
-int check_reshard_bucket_params(rgw::sal::RadosStore *store,
+int check_reshard_bucket_params(rgw::sal::RadosStore* store,
 				const string& bucket_name,
 				const string& tenant,
 				const string& bucket_id,
@@ -2796,7 +2796,7 @@ static int trim_sync_error_log(int shard_id, const string& marker, int delay_ms)
   // unreachable
 }
 
-const string& get_tier_type(rgw::sal::RadosStore *store) {
+const string& get_tier_type(rgw::sal::RadosStore* store) {
   return store->svc()->zone->get_zone().tier_type;
 }
 

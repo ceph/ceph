@@ -142,10 +142,10 @@ using RGWMD5Etag = RGWEtag<MD5, CEPH_CRYPTO_MD5_DIGESTSIZE>;
 
 class RGWDataAccess
 {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
 
 public:
-  RGWDataAccess(rgw::sal::Store *_store);
+  RGWDataAccess(rgw::sal::Store* _store);
 
   class Object;
   class Bucket;

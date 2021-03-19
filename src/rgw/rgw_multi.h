@@ -123,7 +123,7 @@ extern int list_multipart_parts(struct req_state *s,
                                 int *next_marker, bool *truncated,
                                 bool assume_unsorted = false);
 
-extern int abort_multipart_upload(const DoutPrefixProvider *dpp, rgw::sal::Store *store,
+extern int abort_multipart_upload(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 				  CephContext *cct, RGWObjectCtx *obj_ctx,
 				  rgw::sal::Bucket* bucket, RGWMPObj& mp_obj);
 
@@ -137,7 +137,7 @@ extern int list_bucket_multiparts(const DoutPrefixProvider *dpp,
 				  map<string, bool> *common_prefixes, bool *is_truncated);
 
 extern int abort_bucket_multiparts(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store *store, CephContext *cct,
+				   rgw::sal::Store* store, CephContext *cct,
 				   rgw::sal::Bucket* bucket,
 				   string& prefix, string& delim);
 #endif

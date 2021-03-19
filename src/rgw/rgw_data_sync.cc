@@ -467,7 +467,7 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   static constexpr uint32_t lock_duration = 30;
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   const rgw_pool& pool;
   const uint32_t num_shards;
 
@@ -589,7 +589,7 @@ public:
 };
 
 RGWRemoteDataLog::RGWRemoteDataLog(const DoutPrefixProvider *dpp,
-                                   rgw::sal::RadosStore *store,
+                                   rgw::sal::RadosStore* store,
                                    RGWAsyncRadosProcessor *async_rados)
   : RGWCoroutinesManager(store->ctx(), store->getRados()->get_cr_registry()),
       dpp(dpp), store(store),
@@ -783,7 +783,7 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
 
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
 
   rgw_data_sync_status *sync_status;
   int num_shards;
@@ -926,7 +926,7 @@ public:
                                                                 sync_marker(_marker),
                                                                 tn(_tn) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
+  RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     sync_marker.pos = index_pos;
     sync_marker.timestamp = timestamp;
@@ -2967,7 +2967,7 @@ int RGWReadBucketPipeSyncStatusCoroutine::operate()
 class RGWReadRecoveringBucketShardsCoroutine : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   
   const int shard_id;
   int max_entries;
@@ -3034,7 +3034,7 @@ int RGWReadRecoveringBucketShardsCoroutine::operate()
 class RGWReadPendingBucketShardsCoroutine : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   
   const int shard_id;
   int max_entries;
@@ -3146,7 +3146,7 @@ RGWCoroutine *RGWRemoteBucketManager::read_sync_status_cr(int num, rgw_bucket_sh
   return new RGWReadBucketPipeSyncStatusCoroutine(&sc, sync_pairs[num], sync_status, nullptr);
 }
 
-RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore *_store,
+RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* _store,
                                                                std::optional<rgw_zone_id> _source_zone,
                                                                std::optional<rgw_bucket> _source_bucket,
                                                                const rgw_bucket& _dest_bucket) : store(_store),
@@ -3355,7 +3355,7 @@ public:
       sync_marker(_marker), tn(std::move(tn)), objv_tracker(objv_tracker)
   {}
 
-  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const real_time& timestamp) override {
+  RGWCoroutine* store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.position = new_marker;
     sync_marker.count = index_pos;
 
@@ -3457,7 +3457,7 @@ public:
       stable_timestamp(stable_timestamp)
   {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
+  RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.position = new_marker;
     sync_marker.timestamp = timestamp;
 
@@ -4953,7 +4953,7 @@ int rgw_read_remote_bilog_info(RGWRESTConn* conn,
 
 class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   static constexpr int max_concurrent_shards = 16;
-  rgw::sal::RadosStore *const store;
+  rgw::sal::RadosStore* const store;
   RGWDataSyncCtx *const sc;
   RGWDataSyncEnv *const env;
   RGWBucketInfo source_bucket_info;
@@ -4969,7 +4969,7 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   Vector::iterator i, end;
 
  public:
-  RGWCollectBucketSyncStatusCR(rgw::sal::RadosStore *store, RGWDataSyncCtx *sc,
+  RGWCollectBucketSyncStatusCR(rgw::sal::RadosStore* store, RGWDataSyncCtx *sc,
                                const RGWBucketInfo& source_bucket_info,
                                const RGWBucketInfo& dest_bucket_info,
                                Vector *status)
@@ -5008,7 +5008,7 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
 };
 
 int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
-                           rgw::sal::RadosStore *store,
+                           rgw::sal::RadosStore* store,
                            const rgw_sync_bucket_pipe& pipe,
                            const RGWBucketInfo& dest_bucket_info,
                            const RGWBucketInfo *psource_bucket_info,

@@ -73,7 +73,7 @@ public:
 
 private:
 
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   RGWBucketInfo bucket_info;
   std::map<string, bufferlist> bucket_attrs;
 
@@ -98,7 +98,7 @@ public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
   // manage
-  RGWBucketReshard(rgw::sal::RadosStore *_store,
+  RGWBucketReshard(rgw::sal::RadosStore* _store,
 		   const RGWBucketInfo& _bucket_info,
                    const std::map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
@@ -194,7 +194,7 @@ public:
     using Clock = ceph::coarse_mono_clock;
 
 private:
-    rgw::sal::RadosStore *store;
+    rgw::sal::RadosStore* store;
     string lock_name;
     rados::cls::lock::Lock instance_lock;
     int num_logshards;

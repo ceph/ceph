@@ -95,7 +95,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* stor
 }
 
 int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store *store,
+				   rgw::sal::Store* store,
 				   rgw::sal::User* user,
 				   map<string, cls_user_bucket_entry>& buckets_usage_map,
 				   optional_yield y)
@@ -1420,7 +1420,7 @@ RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
   init_default();
 }
 
-int RGWUser::init(const DoutPrefixProvider *dpp, rgw::sal::Store *storage,
+int RGWUser::init(const DoutPrefixProvider *dpp, rgw::sal::Store* storage,
 		  RGWUserAdminOpState& op_state, optional_yield y)
 {
   init_default();
@@ -1444,7 +1444,7 @@ void RGWUser::init_default()
   clear_populated();
 }
 
-int RGWUser::init_storage(rgw::sal::Store *storage)
+int RGWUser::init_storage(rgw::sal::Store* storage)
 {
   if (!storage) {
     return -EINVAL;
@@ -2243,7 +2243,7 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
   return 0;
 }
 
-int RGWUserAdminOp_User::list(rgw::sal::Store *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::list(rgw::sal::Store* store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUser user;
@@ -2260,7 +2260,7 @@ int RGWUserAdminOp_User::list(rgw::sal::Store *store, RGWUserAdminOpState& op_st
 }
 
 int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
-			      rgw::sal::Store *store, RGWUserAdminOpState& op_state,
+			      rgw::sal::Store* store, RGWUserAdminOpState& op_state,
 			      RGWFormatterFlusher& flusher,
 			      optional_yield y)
 {
@@ -2312,7 +2312,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
-				rgw::sal::Store *store,
+				rgw::sal::Store* store,
 				RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {
@@ -2346,7 +2346,7 @@ int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_User::modify(const DoutPrefixProvider *dpp,
-				rgw::sal::Store *store,
+				rgw::sal::Store* store,
 				RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {
@@ -2379,7 +2379,7 @@ int RGWUserAdminOp_User::modify(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_User::remove(const DoutPrefixProvider *dpp,
-				rgw::sal::Store *store, RGWUserAdminOpState& op_state,
+				rgw::sal::Store* store, RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
@@ -2397,7 +2397,7 @@ int RGWUserAdminOp_User::remove(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Subuser::create(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store *store,
+				   rgw::sal::Store* store,
 				   RGWUserAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher,
 				   optional_yield y)
@@ -2432,7 +2432,7 @@ int RGWUserAdminOp_Subuser::create(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Subuser::modify(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store *store, RGWUserAdminOpState& op_state,
+				   rgw::sal::Store* store, RGWUserAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
@@ -2465,7 +2465,7 @@ int RGWUserAdminOp_Subuser::modify(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Subuser::remove(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store *store,
+				   rgw::sal::Store* store,
 				   RGWUserAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher,
 				   optional_yield y)
@@ -2488,7 +2488,7 @@ int RGWUserAdminOp_Subuser::remove(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Key::create(const DoutPrefixProvider *dpp,
-			       rgw::sal::Store *store, RGWUserAdminOpState& op_state,
+			       rgw::sal::Store* store, RGWUserAdminOpState& op_state,
 			       RGWFormatterFlusher& flusher,
 			       optional_yield y)
 {
@@ -2529,7 +2529,7 @@ int RGWUserAdminOp_Key::create(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Key::remove(const DoutPrefixProvider *dpp,
-			       rgw::sal::Store *store,
+			       rgw::sal::Store* store,
 			       RGWUserAdminOpState& op_state,
 			       RGWFormatterFlusher& flusher,
 			       optional_yield y)
@@ -2552,7 +2552,7 @@ int RGWUserAdminOp_Key::remove(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Caps::add(const DoutPrefixProvider *dpp,
-			     rgw::sal::Store *store,
+			     rgw::sal::Store* store,
 			     RGWUserAdminOpState& op_state,
 			     RGWFormatterFlusher& flusher, optional_yield y)
 {
@@ -2587,7 +2587,7 @@ int RGWUserAdminOp_Caps::add(const DoutPrefixProvider *dpp,
 
 
 int RGWUserAdminOp_Caps::remove(const DoutPrefixProvider *dpp,
-				rgw::sal::Store *store,
+				rgw::sal::Store* store,
 				RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {

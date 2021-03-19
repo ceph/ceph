@@ -584,7 +584,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 }
 
 static int get_swift_container_settings(req_state * const s,
-                                        rgw::sal::Store * const store,
+                                        rgw::sal::Store*  const store,
                                         RGWAccessControlPolicy * const policy,
                                         bool * const has_policy,
                                         uint32_t * rw_mask,
@@ -1040,8 +1040,8 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
 }
 
 static int get_swift_account_settings(req_state * const s,
-                                      rgw::sal::Store * const store,
-                                      RGWAccessControlPolicy_SWIFTAcct * const policy,
+                                      rgw::sal::Store*  const store,
+                                      RGWAccessControlPolicy_SWIFTAcct*  const policy,
                                       bool * const has_policy)
 {
   *has_policy = false;

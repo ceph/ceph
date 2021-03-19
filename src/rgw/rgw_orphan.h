@@ -123,13 +123,13 @@ struct RGWOrphanSearchState {
 WRITE_CLASS_ENCODER(RGWOrphanSearchState)
 
 class RGWOrphanStore {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   librados::IoCtx ioctx;
 
   string oid;
 
 public:
-  explicit RGWOrphanStore(rgw::sal::Store *_store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
+  explicit RGWOrphanStore(rgw::sal::Store* _store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
@@ -147,7 +147,7 @@ public:
 
 
 class RGWOrphanSearch {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
 
   RGWOrphanStore orphan_store;
 
@@ -185,7 +185,7 @@ class RGWOrphanSearch {
 
   int remove_index(map<int, string>& index);
 public:
-  RGWOrphanSearch(rgw::sal::Store *_store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
+  RGWOrphanSearch(rgw::sal::Store* _store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
 
   int save_state() {
     RGWOrphanSearchState state;

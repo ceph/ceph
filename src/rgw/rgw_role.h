@@ -158,7 +158,7 @@ public:
   static const string& get_info_oid_prefix();
   static const string& get_path_oid_prefix();
   static int get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
-				      rgw::sal::Store *store,
+				      rgw::sal::Store* store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,

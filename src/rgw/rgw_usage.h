@@ -23,11 +23,11 @@ public:
 		  bool show_log_sum,
 		  std::map<std::string, bool> *categories, RGWFormatterFlusher& flusher);
 
-  static int trim(const DoutPrefixProvider *dpp, rgw::sal::Store *store,
+  static int trim(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
 		  uint64_t start_epoch, uint64_t end_epoch);
 
-  static int clear(rgw::sal::Store *store);
+  static int clear(rgw::sal::Store* store);
 };
 
 
