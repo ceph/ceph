@@ -532,9 +532,9 @@ void Replayer<I>::scan_local_mirror_snapshots(
   if (!prune_snap_ids.empty()) {
     locker->unlock();
 
-    auto prune_snap_id = *prune_snap_ids.begin();
-    dout(5) << "pruning unused non-primary snapshot " << prune_snap_id << dendl;
-    prune_non_primary_snapshot(prune_snap_id);
+    m_prune_snap_id = *prune_snap_ids.begin();
+    dout(5) << "pruning unused non-primary snapshot " << m_prune_snap_id << dendl;
+    unlink_group_snapshot();
     return;
   }
 
@@ -767,8 +767,75 @@ void Replayer<I>::scan_remote_mirror_snapshots(
 }
 
 template <typename I>
-void Replayer<I>::prune_non_primary_snapshot(uint64_t snap_id) {
-  dout(10) << "snap_id=" << snap_id << dendl;
+void Replayer<I>::unlink_group_snapshot() {
+  auto local_image_ctx = m_state_builder->local_image_ctx;
+  cls::rbd::SnapshotNamespace snap_namespace;
+  std::string snap_name;
+  int r = 0;
+  {
+    std::shared_lock image_locker{local_image_ctx->image_lock};
+
+    auto snap_info = local_image_ctx->get_snap_info(m_prune_snap_id);
+    if (!snap_info) {
+      r = -ENOENT;
+    } else {
+      snap_namespace = snap_info->snap_namespace;
+      snap_name = snap_info->name;
+    }
+  }
+
+  if (r == -ENOENT) {
+    dout(15) << "failed to locate snapshot " << m_prune_snap_id << dendl;
+    prune_non_primary_snapshot();
+    return;
+  }
+
+  auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(&snap_namespace);
+  if (!info->group_spec.is_valid()) {
+    prune_non_primary_snapshot();
+    return;
+  }
+
+  dout(15) << "image_snap_id=" << m_prune_snap_id << dendl;
+
+  r = librbd::util::create_ioctx(local_image_ctx->md_ctx, "group",
+                                 info->group_spec.pool_id, {}, &m_group_io_ctx);
+  if (r < 0) {
+    prune_non_primary_snapshot();
+    return;
+  }
+
+  librados::ObjectWriteOperation op;
+  cls::rbd::ImageSnapshotSpec image_snap = {local_image_ctx->md_ctx.get_id(),
+                                            local_image_ctx->id,
+                                            m_prune_snap_id};
+  librbd::cls_client::group_snap_unlink(&op, info->group_snap_id, image_snap);
+  auto aio_comp = create_rados_callback<
+      Replayer<I>,
+      &Replayer<I>::handle_unlink_group_snapshot>(this);
+  r = m_group_io_ctx.aio_operate(
+      librbd::util::group_header_name(info->group_spec.group_id), aio_comp, &op);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void Replayer<I>::handle_unlink_group_snapshot(int r) {
+  dout(15) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to unlink group snapshot: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(r, "failed to unlink group snapshot");
+    return;
+  }
+
+  prune_non_primary_snapshot();
+}
+
+template <typename I>
+void Replayer<I>::prune_non_primary_snapshot() {
+  dout(10) << "snap_id=" << m_prune_snap_id << dendl;
 
   auto local_image_ctx = m_state_builder->local_image_ctx;
   bool snap_valid = false;
@@ -777,7 +844,7 @@ void Replayer<I>::prune_non_primary_snapshot(uint64_t snap_id) {
 
   {
     std::shared_lock image_locker{local_image_ctx->image_lock};
-    auto snap_info = local_image_ctx->get_snap_info(snap_id);
+    auto snap_info = local_image_ctx->get_snap_info(m_prune_snap_id);
     if (snap_info != nullptr) {
       snap_valid = true;
       snap_namespace = snap_info->snap_namespace;
