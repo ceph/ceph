@@ -636,10 +636,11 @@ class CephadmUpgrade:
                         (count, daemon_type, short_version, target_version))
 
             # push down configs
-            if image_settings.get(daemon_type) != target_image:
+            daemon_type_section = name_to_config_section(daemon_type)
+            if image_settings.get(daemon_type_section) != target_image:
                 logger.info('Upgrade: Setting container_image for all %s' %
                             daemon_type)
-                self.mgr.set_container_image(name_to_config_section(daemon_type), target_image)
+                self.mgr.set_container_image(daemon_type_section, target_image)
             to_clean = []
             for section in image_settings.keys():
                 if section.startswith(name_to_config_section(daemon_type) + '.'):
