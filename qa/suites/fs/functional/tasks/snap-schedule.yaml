@@ -1,5 +1,10 @@
 overrides:
   ceph:
+    conf:
+      mgr:
+        debug_mgr: 20
+        debug_ms: 1
+        debug_finisher: 20
     log-whitelist:
       - OSD full dropping all updates
       - OSD near full
