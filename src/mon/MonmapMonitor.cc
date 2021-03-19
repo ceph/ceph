@@ -1204,13 +1204,27 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
     dout(10) << " already have " << join->name << dendl;
     return true;
   }
-  if (pending_map.contains(join->addrs) &&
-      pending_map.get_name(join->addrs) == join->name) {
+  string addr_name;
+  if (pending_map.contains(join->addrs)) {
+    addr_name = pending_map.get_name(join->addrs);
+  }
+  if (!addr_name.empty() &&
+      addr_name == join->name) {
     dout(10) << " already have " << join->addrs << dendl;
+    return true;
+  }
+  if (pending_map.stretch_mode_enabled &&
+      (addr_name.empty() ||
+       pending_map.mon_info[addr_name].crush_loc.empty())) {
+    dout(10) << "stretch mode engaged but no source of crush_loc" << dendl;
+    mon->clog->info() << join->name << " attempted to join from " << join->name
+		      << ' ' << join->addrs
+		      << "; but lacks a crush_location for stretch mode";
     return true;
   }
   return false;
 }
+
 bool MonmapMonitor::prepare_join(MonOpRequestRef op)
 {
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
