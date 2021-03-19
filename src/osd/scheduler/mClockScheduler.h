@@ -38,7 +38,6 @@ constexpr uint64_t default_max = 999999;
 
 using client_id_t = uint64_t;
 using profile_id_t = uint64_t;
-using op_type_t = OpSchedulerItem::OpQueueable::op_type_t;
 
 struct client_profile_id_t {
   client_id_t client_id;
@@ -68,11 +67,34 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const uint32_t num_shards;
   bool is_rotational;
   double max_osd_capacity;
-  uint64_t osd_mclock_cost_per_io_msec;
-  std::string mclock_profile = "balanced";
-  std::map<op_scheduler_class, double> client_allocs;
-  std::map<op_type_t, int> client_cost_infos;
-  std::map<op_type_t, int> client_scaled_cost_infos;
+  double osd_mclock_cost_per_io;
+  double osd_mclock_cost_per_byte;
+  std::string mclock_profile = "high_client_ops";
+  struct ClientAllocs {
+    uint64_t res;
+    uint64_t wgt;
+    uint64_t lim;
+
+    ClientAllocs(uint64_t _res, uint64_t _wgt, uint64_t _lim) {
+      update(_res, _wgt, _lim);
+    }
+
+    inline void update(uint64_t _res, uint64_t _wgt, uint64_t _lim) {
+      res = _res;
+      wgt = _wgt;
+      lim = _lim;
+    }
+  };
+  std::array<
+    ClientAllocs,
+    static_cast<size_t>(op_scheduler_class::client) + 1
+  > client_allocs = {
+    // Placeholder, get replaced with configured values
+    ClientAllocs(1, 1, 1), // background_recovery
+    ClientAllocs(1, 1, 1), // background_best_effort
+    ClientAllocs(1, 1, 1), // immediate (not used)
+    ClientAllocs(1, 1, 1)  // client
+  };
   class ClientRegistry {
     std::array<
       crimson::dmclock::ClientInfo,
@@ -115,6 +137,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
 
 public:
   mClockScheduler(CephContext *cct, uint32_t num_shards, bool is_rotational);
+  ~mClockScheduler() override;
 
   // Set the max osd capacity in iops
   void set_max_osd_capacity();
@@ -122,35 +145,35 @@ public:
   // Set the cost per io for the osd
   void set_osd_mclock_cost_per_io();
 
-  // Set the mclock related config params based on the profile
-  void enable_mclock_profile();
+  // Set the cost per byte for the osd
+  void set_osd_mclock_cost_per_byte();
+
+  // Set the mclock profile type to enable
+  void set_mclock_profile();
 
   // Get the active mclock profile
   std::string get_mclock_profile();
 
-  // Set client capacity allocations based on profile
-  void set_client_allocations();
+  // Set "balanced" profile allocations
+  void set_balanced_profile_allocations();
 
-  // Get client allocation
-  double get_client_allocation(op_type_t op_type);
+  // Set "high_recovery_ops" profile allocations
+  void set_high_recovery_ops_profile_allocations();
 
-  // Set "balanced" profile parameters
-  void set_balanced_profile_config();
+  // Set "high_client_ops" profile allocations
+  void set_high_client_ops_profile_allocations();
 
-  // Set "high_recovery_ops" profile parameters
-  void set_high_recovery_ops_profile_config();
+  // Set the mclock related config params based on the profile
+  void enable_mclock_profile_settings();
 
-  // Set "high_client_ops" profile parameters
-  void set_high_client_ops_profile_config();
+  // Set mclock config parameter based on allocations
+  void set_profile_config();
 
   // Set recovery specific Ceph settings for profiles
   void set_global_recovery_options();
 
   // Calculate scale cost per item
-  int calc_scaled_cost(op_type_t op_type, int cost);
-
-  // Update mclock client cost info
-  bool maybe_update_client_cost_info(op_type_t op_type, int new_cost);
+  int calc_scaled_cost(int cost);
 
   // Enqueue op in the back of the regular queue
   void enqueue(OpSchedulerItem &&item) final;
