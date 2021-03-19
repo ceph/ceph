@@ -104,6 +104,20 @@ public:
     return rst;
   }
 
+  void update_req_rst(std::vector<ReplicaDaemonInfo> replicas_reqed) {
+    if (replicas_reqed.empty()) {
+      return;
+    }
+
+    for (auto& replica_reqed: replicas_reqed) {
+      for (auto& replica_check: replicadaemons_state) {
+        if (replica_reqed == replica_check) {
+          replica_check.free_size -= replica_reqed.free_size;
+        }
+      }
+    }
+  }
+
 private:
   epoch_t epoch = 0;
   std::vector<ReplicaDaemonInfo> replicadaemons_state; // Let's change it to be map:

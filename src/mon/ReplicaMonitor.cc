@@ -248,7 +248,10 @@ bool ReplicaMonitor::get_replicadaemon_map(MonOpRequestRef mon_op_req)
   auto reply_msg = make_message<MReplicaDaemonMap>(*replicadaemon_map);
   mon.send_reply(mon_op_req, reply_msg.detach());
 
-  //TODO: 1. update ReplicaDaemonMap 2. go through paxos
+  auto temp_replicadaemon_map = cur_cache_replicadaemon_map;
+  temp_replicadaemon_map.update_req_rst(reply_daemons_info);
+
+  pending_cache_replicadaemon_map = std::move(temp_replicadaemon_map);
 
   return true;
 }
