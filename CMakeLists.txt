@@ -709,4 +709,4 @@ add_tags(ctags
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
 
-set(VERSION 15.2.0)
+set(VERSION 16.1.0)
