@@ -1250,6 +1250,7 @@ void RocksDBStore::close()
     must_close_default_cf = false;
   }
   default_cf = nullptr;
+  db->Close();
   delete db;
   db = nullptr;
 }
