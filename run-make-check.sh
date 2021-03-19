@@ -32,7 +32,11 @@ function run() {
 
     # increase the aio-max-nr, which is by default 65536. we could reach this
     # limit while running seastar tests and bluestore tests.
-    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * 16))
+    local m=16
+    if [ $(nproc) -gt $m ]; then
+        m=$(nproc)
+    fi
+    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * $(nproc)))
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
