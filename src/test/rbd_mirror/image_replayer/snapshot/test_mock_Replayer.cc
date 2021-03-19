@@ -495,6 +495,18 @@ public:
       }));
   }
 
+  void expect_unlink_group_snapshot(librbd::MockTestImageCtx& mock_image_ctx,
+                                    uint64_t snap_id) {
+    EXPECT_CALL(mock_image_ctx, get_snap_info(snap_id))
+      .WillOnce(Invoke([&mock_image_ctx](uint64_t snap_id) -> librbd::SnapInfo* {
+        auto it = mock_image_ctx.snap_info.find(snap_id);
+        if (it == mock_image_ctx.snap_info.end()) {
+          return nullptr;
+        }
+        return &it->second;
+      }));
+  }
+
   void expect_prune_non_primary_snapshot(librbd::MockTestImageCtx& mock_image_ctx,
                                          uint64_t snap_id, int r) {
     EXPECT_CALL(mock_image_ctx, get_snap_info(snap_id))
@@ -912,6 +924,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
          "", CEPH_NOSNAP, true, 0, {}},
        0, {}, 0, 0, {}}}
     }, 0);
+  expect_unlink_group_snapshot(mock_local_image_ctx, 11);
   expect_prune_non_primary_snapshot(mock_local_image_ctx, 11, 0);
 
   // idle
