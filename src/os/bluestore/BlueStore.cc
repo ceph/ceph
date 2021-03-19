@@ -3990,10 +3990,15 @@ void BlueStore::Collection::split_cache(
 {
   ldout(store->cct, 10) << __func__ << " to " << dest << dendl;
 
-  // lock (one or both) cache shards
-  std::lock(cache->lock, dest->cache->lock);
-  std::lock_guard l(cache->lock, std::adopt_lock);
-  std::lock_guard l2(dest->cache->lock, std::adopt_lock);
+  auto *ocache = get_onode_cache();
+  auto *ocache_dest = dest->get_onode_cache();
+
+ // lock cache shards
+  std::lock(ocache->lock, ocache_dest->lock, cache->lock, dest->cache->lock);
+  std::lock_guard l(ocache->lock, std::adopt_lock);
+  std::lock_guard l2(ocache_dest->lock, std::adopt_lock);
+  std::lock_guard l3(cache->lock, std::adopt_lock);
+  std::lock_guard l4(dest->cache->lock, std::adopt_lock);
 
   int destbits = dest->cnode.bits;
   spg_t destpg;
