@@ -202,7 +202,7 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
           return std::invoke(std::forward<Func>(func));
         }
       }
-      ceph_abort_msg("exception type mismatch – impossible!");
+      ceph_abort_msg("exception type mismatch -- impossible!");
     };
   }
 
