@@ -593,7 +593,23 @@ if(WITH_MGR)
   list(APPEND env_vars_for_tox_tests MGR_ORCHESTRATOR_CLI_VIRTUALENV=${MGR_ORCHESTRATOR_CLI_VIRTUALENV})
 endif()
 
-add_ceph_test(run-promtool-unittests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
+find_program(PROMTOOL_EXECUTABLE promtool)
+if(PROMTOOL_EXECUTABLE)
+  execute_process(
+    COMMAND ${PROMTOOL_EXECUTABLE} test rules /dev/null
+    RESULT_VARIABLE rc
+    OUTPUT_QUIET)
+  if(NOT rc)
+    add_ceph_test(run-promtool-unittests
+      ${PROMTOOL_EXECUTABLE} test rules ${CMAKE_SOURCE_DIR}/monitoring/prometheus/alerts/test_alerts.yml)
+  else()
+    message(WARNING "'${PROMTOOL_EXECUTABLE} test rules' does not work, "
+      "please use a newer prometheus")
+  endif()
+else()
+  add_ceph_test(run-promtool-unittests
+    {CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
+endif()
 
 set_property(
   TEST ${tox_tests}
