@@ -462,7 +462,7 @@ esac
 shift
 done
 
-if [ $kill_all -eq 1 ]; then
+if [ $kill_all -eq 1 ] || [ $new -eq 1 ]; then
     $SUDO $INIT_CEPH stop
 fi
 
