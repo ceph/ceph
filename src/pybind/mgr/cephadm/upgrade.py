@@ -260,7 +260,7 @@ class CephadmUpgrade:
             if not r.retval:
                 logger.info(f'Upgrade: {r.stdout}')
                 return True
-            logger.error(f'Upgrade: {r.stderr}')
+            logger.info(f'Upgrade: {r.stderr}')
 
             time.sleep(15)
             tries -= 1
