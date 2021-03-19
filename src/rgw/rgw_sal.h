@@ -43,7 +43,7 @@ namespace rgw {
 }
 
 struct RGWUsageIter {
-  string read_iter;
+  std::string read_iter;
   uint32_t index;
 
   RGWUsageIter() : index(0) {}
@@ -180,12 +180,12 @@ class Store {
     virtual int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) = 0;
 
     virtual int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
-    virtual int log_op(string& oid, bufferlist& bl) = 0;
-    virtual int register_to_service_map(const string& daemon_type,
-					const map<string, string>& meta) = 0;
+    virtual int log_op(std::string& oid, bufferlist& bl) = 0;
+    virtual int register_to_service_map(const std::string& daemon_type,
+					const map<std::string, std::string>& meta) = 0;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) = 0;
-    virtual int list_raw_objects(const rgw_pool& pool, const string& prefix_filter,
-				 int max, RGWListRawObjsCtx& ctx, std::list<string>& oids,
+    virtual int list_raw_objects(const rgw_pool& pool, const std::string& prefix_filter,
+				 int max, RGWListRawObjsCtx& ctx, std::list<std::string>& oids,
 				 bool* is_truncated) = 0;
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled) = 0;
     virtual uint64_t get_new_req_id() = 0;
@@ -196,32 +196,32 @@ class Store {
 					optional_yield y) = 0;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) = 0;
-    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids) = 0;
+    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) = 0;
     virtual int clear_usage() = 0;
     virtual int read_all_usage(uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
 			       RGWUsageIter& usage_iter,
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_all_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
-    virtual int get_config_key_val(string name, bufferlist* bl) = 0;
-    virtual int put_system_obj(const rgw_pool& pool, const string& oid,
+    virtual int get_config_key_val(std::string name, bufferlist* bl) = 0;
+    virtual int put_system_obj(const rgw_pool& pool, const std::string& oid,
 			       bufferlist& data, bool exclusive,
 			       RGWObjVersionTracker* objv_tracker, real_time set_mtime,
-			       optional_yield y, map<string, bufferlist>* pattrs = nullptr) = 0;
+			       optional_yield y, map<std::string, bufferlist>* pattrs = nullptr) = 0;
     virtual int get_system_obj(const DoutPrefixProvider* dpp,
-			       const rgw_pool& pool, const string& key,
+			       const rgw_pool& pool, const std::string& key,
 			       bufferlist& bl,
 			       RGWObjVersionTracker* objv_tracker, real_time* pmtime,
-			       optional_yield y, map<string, bufferlist>* pattrs = nullptr,
+			       optional_yield y, map<std::string, bufferlist>* pattrs = nullptr,
 			       rgw_cache_entry_info* cache_info = nullptr,
 			       boost::optional<obj_version> refresh_version = boost::none) = 0;
-    virtual int delete_system_obj(const rgw_pool& pool, const string& oid,
+    virtual int delete_system_obj(const rgw_pool& pool, const std::string& oid,
 				  RGWObjVersionTracker* objv_tracker, optional_yield y) = 0;
-    virtual int meta_list_keys_init(const string& section, const string& marker, void** phandle) = 0;
-    virtual int meta_list_keys_next(void* handle, int max, list<string>& keys, bool* truncated) = 0;
+    virtual int meta_list_keys_init(const std::string& section, const std::string& marker, void** phandle) = 0;
+    virtual int meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated) = 0;
     virtual void meta_list_keys_complete(void* handle) = 0;
     virtual std::string meta_get_marker(void* handle) = 0;
-    virtual int meta_remove(const DoutPrefixProvider* dpp, string& metadata_key, optional_yield y) = 0;
+    virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) = 0;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() = 0;
     virtual std::string get_host_id() = 0;
 
@@ -549,7 +549,7 @@ class Object {
 	Attrs* rmattrs{nullptr};
 	const bufferlist* data{nullptr};
 	RGWObjManifest* manifest{nullptr};
-	const string* ptag{nullptr};
+	const std::string* ptag{nullptr};
 	std::list<rgw_obj_index_key>* remove_objs{nullptr};
 	ceph::real_time set_mtime;
 	ACLOwner owner;
@@ -560,7 +560,7 @@ class Object {
 	std::optional<uint64_t> olh_epoch;
 	ceph::real_time delete_at;
 	bool canceled{false};
-	const string* user_data{nullptr};
+	const std::string* user_data{nullptr};
 	rgw_zone_set* zones_trace{nullptr};
 	bool modify_tail{false};
 	bool completeMultipart{false};
@@ -581,7 +581,7 @@ class Object {
         ACLOwner obj_owner;
         int versioning_status{0};
         uint64_t olh_epoch{0};
-        string marker_version_id;
+	std::string marker_version_id;
         uint32_t bilog_flags{0};
         list<rgw_obj_index_key>* remove_objs{nullptr};
         ceph::real_time expiration_time;
@@ -595,7 +595,7 @@ class Object {
 
       struct Result {
         bool delete_marker{false};
-        string version_id;
+	std::string version_id;
       } result;
 
       virtual ~DeleteOp() = default;
@@ -655,7 +655,7 @@ class Object {
                AttrsMod attrs_mod, bool copy_if_newer, Attrs& attrs,
                RGWObjCategory category, uint64_t olh_epoch,
 	       boost::optional<ceph::real_time> delete_at,
-               string* version_id, string* tag, string* etag,
+               std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
@@ -729,10 +729,10 @@ class Object {
     virtual std::unique_ptr<StatOp> get_stat_op(RGWObjectCtx*) = 0;
 
     /* OMAP */
-    virtual int omap_get_vals(const string& marker, uint64_t count,
-			      std::map<string, bufferlist>* m,
+    virtual int omap_get_vals(const std::string& marker, uint64_t count,
+			      std::map<std::string, bufferlist>* m,
 			      bool* pmore, optional_yield y) = 0;
-    virtual int omap_get_all(std::map<string, bufferlist>* m,
+    virtual int omap_get_all(std::map<std::string, bufferlist>* m,
 			     optional_yield y) = 0;
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
@@ -816,14 +816,14 @@ public:
   Lifecycle() = default;
   virtual ~Lifecycle() = default;
 
-  virtual int get_entry(const string& oid, const std::string& marker, LCEntry& entry) = 0;
-  virtual int get_next_entry(const string& oid, std::string& marker, LCEntry& entry) = 0;
-  virtual int set_entry(const string& oid, const LCEntry& entry) = 0;
-  virtual int list_entries(const string& oid, const string& marker,
+  virtual int get_entry(const std::string& oid, const std::string& marker, LCEntry& entry) = 0;
+  virtual int get_next_entry(const std::string& oid, std::string& marker, LCEntry& entry) = 0;
+  virtual int set_entry(const std::string& oid, const LCEntry& entry) = 0;
+  virtual int list_entries(const std::string& oid, const std::string& marker,
 			   uint32_t max_entries, vector<LCEntry>& entries) = 0;
-  virtual int rm_entry(const string& oid, const LCEntry& entry) = 0;
-  virtual int get_head(const string& oid, LCHead& head) = 0;
-  virtual int put_head(const string& oid, const LCHead& head) = 0;
+  virtual int rm_entry(const std::string& oid, const LCEntry& entry) = 0;
+  virtual int get_head(const std::string& oid, LCHead& head) = 0;
+  virtual int put_head(const std::string& oid, const LCHead& head) = 0;
 
   virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) = 0;
 };
@@ -901,15 +901,15 @@ class Zone {
     virtual ~Zone() = default;
 
     virtual const RGWZoneGroup& get_zonegroup() = 0;
-    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) = 0;
+    virtual int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) = 0;
     virtual const RGWZoneParams& get_params() = 0;
     virtual const rgw_zone_id& get_id() = 0;
     virtual const RGWRealm& get_realm() = 0;
     virtual const std::string& get_name() const = 0;
     virtual bool is_writeable() = 0;
-    virtual bool get_redirect_endpoint(string* endpoint) = 0;
+    virtual bool get_redirect_endpoint(std::string* endpoint) = 0;
     virtual bool has_zonegroup_api(const std::string& api) const = 0;
-    virtual const string& get_current_period_id() = 0;
+    virtual const std::string& get_current_period_id() = 0;
 };
 
 } } // namespace rgw::sal

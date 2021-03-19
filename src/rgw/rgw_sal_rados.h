@@ -164,7 +164,7 @@ class RadosObject : public Object {
                AttrsMod attrs_mod, bool copy_if_newer, Attrs& attrs,
                RGWObjCategory category, uint64_t olh_epoch,
 	       boost::optional<ceph::real_time> delete_at,
-               string* version_id, string* tag, string* etag,
+               std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
                const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
@@ -215,10 +215,10 @@ class RadosObject : public Object {
     virtual std::unique_ptr<StatOp> get_stat_op(RGWObjectCtx*) override;
 
     /* OMAP */
-    virtual int omap_get_vals(const string& marker, uint64_t count,
-			      std::map<string, bufferlist> *m,
+    virtual int omap_get_vals(const std::string& marker, uint64_t count,
+			      std::map<std::string, bufferlist> *m,
 			      bool* pmore, optional_yield y) override;
-    virtual int omap_get_all(std::map<string, bufferlist> *m,
+    virtual int omap_get_all(std::map<std::string, bufferlist> *m,
 			     optional_yield y) override;
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
@@ -337,15 +337,15 @@ class RadosZone : public Zone {
     ~RadosZone() = default;
 
     virtual const RGWZoneGroup& get_zonegroup() override;
-    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) override;
+    virtual int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) override;
     virtual const RGWZoneParams& get_params() override;
     virtual const rgw_zone_id& get_id() override;
     virtual const RGWRealm& get_realm() override;
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
-    virtual bool get_redirect_endpoint(string* endpoint) override;
+    virtual bool get_redirect_endpoint(std::string* endpoint) override;
     virtual bool has_zonegroup_api(const std::string& api) const override;
-    virtual const string& get_current_period_id() override;
+    virtual const std::string& get_current_period_id() override;
 };
 
 class RadosStore : public Store {
@@ -412,12 +412,12 @@ class RadosStore : public Store {
     virtual int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) override;
 
     virtual int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
-    virtual int log_op(string& oid, bufferlist& bl) override;
-    virtual int register_to_service_map(const string& daemon_type,
-				const map<string, string>& meta) override;
+    virtual int log_op(std::string& oid, bufferlist& bl) override;
+    virtual int register_to_service_map(const std::string& daemon_type,
+				const map<std::string, std::string>& meta) override;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
-    virtual int list_raw_objects(const rgw_pool& pool, const string& prefix_filter,
-				 int max, RGWListRawObjsCtx& ctx, std::list<string>& oids,
+    virtual int list_raw_objects(const rgw_pool& pool, const std::string& prefix_filter,
+				 int max, RGWListRawObjsCtx& ctx, std::list<std::string>& oids,
 				 bool* is_truncated) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled) override;
     virtual uint64_t get_new_req_id() override { return rados->get_new_req_id(); }
@@ -428,33 +428,33 @@ class RadosStore : public Store {
 					optional_yield y) override;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) override { rados->wakeup_meta_sync_shards(shard_ids); }
-    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids) override { rados->wakeup_data_sync_shards(source_zone, shard_ids); }
+    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) override { rados->wakeup_data_sync_shards(source_zone, shard_ids); }
     virtual int clear_usage() override { return rados->clear_usage(); }
     virtual int read_all_usage(uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
 			       RGWUsageIter& usage_iter,
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual int trim_all_usage(uint64_t start_epoch, uint64_t end_epoch) override;
-    virtual int get_config_key_val(string name, bufferlist* bl) override;
-    virtual int put_system_obj(const rgw_pool& pool, const string& oid,
+    virtual int get_config_key_val(std::string name, bufferlist* bl) override;
+    virtual int put_system_obj(const rgw_pool& pool, const std::string& oid,
 			       bufferlist& data, bool exclusive,
 			       RGWObjVersionTracker* objv_tracker, real_time set_mtime,
-			       optional_yield y, map<string, bufferlist> *pattrs = nullptr)
+			       optional_yield y, map<std::string, bufferlist> *pattrs = nullptr)
       override;
     virtual int get_system_obj(const DoutPrefixProvider* dpp,
-			       const rgw_pool& pool, const string& key,
+			       const rgw_pool& pool, const std::string& key,
 			       bufferlist& bl,
 			       RGWObjVersionTracker* objv_tracker, real_time* pmtime,
-			       optional_yield y, map<string, bufferlist> *pattrs = nullptr,
+			       optional_yield y, map<std::string, bufferlist> *pattrs = nullptr,
 			       rgw_cache_entry_info* cache_info = nullptr,
 			       boost::optional<obj_version> refresh_version = boost::none) override;
-    virtual int delete_system_obj(const rgw_pool& pool, const string& oid,
+    virtual int delete_system_obj(const rgw_pool& pool, const std::string& oid,
 				  RGWObjVersionTracker* objv_tracker, optional_yield y) override;
-    virtual int meta_list_keys_init(const string& section, const string& marker, void** phandle) override;
-    virtual int meta_list_keys_next(void* handle, int max, list<string>& keys, bool* truncated) override;
+    virtual int meta_list_keys_init(const std::string& section, const std::string& marker, void** phandle) override;
+    virtual int meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated) override;
     virtual void meta_list_keys_complete(void* handle) override;
     virtual std::string meta_get_marker(void* handle) override;
-    virtual int meta_remove(const DoutPrefixProvider* dpp, string& metadata_key, optional_yield y) override;
+    virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return rados->get_sync_module(); }
     virtual std::string get_host_id() { return rados->host_id; }
 
@@ -519,14 +519,14 @@ class RadosLifecycle : public Lifecycle {
 public:
   RadosLifecycle(RadosStore* _st) : store(_st) {}
 
-  virtual int get_entry(const string& oid, const std::string& marker, LCEntry& entry) override;
-  virtual int get_next_entry(const string& oid, std::string& marker, LCEntry& entry) override;
-  virtual int set_entry(const string& oid, const LCEntry& entry) override;
-  virtual int list_entries(const string& oid, const string& marker,
+  virtual int get_entry(const std::string& oid, const std::string& marker, LCEntry& entry) override;
+  virtual int get_next_entry(const std::string& oid, std::string& marker, LCEntry& entry) override;
+  virtual int set_entry(const std::string& oid, const LCEntry& entry) override;
+  virtual int list_entries(const std::string& oid, const std::string& marker,
 			   uint32_t max_entries, vector<LCEntry>& entries) override;
-  virtual int rm_entry(const string& oid, const LCEntry& entry) override;
-  virtual int get_head(const string& oid, LCHead& head) override;
-  virtual int put_head(const string& oid, const LCHead& head) override;
+  virtual int rm_entry(const std::string& oid, const LCEntry& entry) override;
+  virtual int get_head(const std::string& oid, LCHead& head) override;
+  virtual int put_head(const std::string& oid, const LCHead& head) override;
   virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) override;
 };
 
