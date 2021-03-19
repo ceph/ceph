@@ -1131,7 +1131,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = IscsiServiceSpec(
-            service_id='iscsi',
+            service_id=pool,
             pool=pool,
             api_user=api_user,
             api_password=api_password,
