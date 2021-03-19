@@ -395,6 +395,8 @@ class CephadmUpgrade:
         target_id = self.upgrade_state.target_id
         target_digests = self.upgrade_state.target_digests
         target_version = self.upgrade_state.target_version
+
+        first = False
         if not target_id or not target_version or not target_digests:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
@@ -424,6 +426,8 @@ class CephadmUpgrade:
             self.upgrade_state.target_digests = target_digests
             self._save_upgrade_state()
             target_image = self.target_image
+            first = True
+
         if target_digests is None:
             target_digests = []
         if target_version.startswith('ceph version '):
@@ -432,8 +436,12 @@ class CephadmUpgrade:
             target_version = self.upgrade_state.target_version
         target_major, target_minor, target_patch = target_version.split('.')
         target_major_name = self.mgr.lookup_release_name(int(target_major))
-        logger.info('Upgrade: Target is version %s (%s), container %s digests %s' % (
-            target_version, target_major_name, target_image, target_digests))
+
+        if first:
+            logger.info('Upgrade: Target is version %s (%s)' % (
+                target_version, target_major_name))
+            logger.info('Upgrade: Target container is %s, digests %s' % (
+                target_image, target_digests))
 
         version_error = self._check_target_version(target_version)
         if version_error:
@@ -450,7 +458,7 @@ class CephadmUpgrade:
         daemons = [d for d in self.mgr.cache.get_daemons() if d.daemon_type in CEPH_UPGRADE_ORDER]
         done = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
-            logger.info('Upgrade: Checking %s daemons' % daemon_type)
+            logger.debug('Upgrade: Checking %s daemons' % daemon_type)
 
             need_upgrade_self = False
             need_upgrade = []
@@ -646,8 +654,7 @@ class CephadmUpgrade:
                         'who': section,
                     })
 
-            logger.info('Upgrade: All %s daemons are up to date.' %
-                        daemon_type)
+            logger.debug('Upgrade: All %s daemons are up to date.' % daemon_type)
 
             # complete osd upgrade?
             if daemon_type == 'osd':
