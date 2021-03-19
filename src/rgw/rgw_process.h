@@ -32,7 +32,7 @@ namespace rgw::dmclock {
 }
 
 struct RGWProcessEnv {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;

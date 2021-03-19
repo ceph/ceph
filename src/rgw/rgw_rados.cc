@@ -292,7 +292,7 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
 }
 
 class RGWMetaNotifierManager : public RGWCoroutinesManager {
-  RGWRados *store;
+  RGWRados* store;
   RGWHTTPManager http_manager;
 
 public:
@@ -319,7 +319,7 @@ public:
 };
 
 class RGWDataNotifierManager : public RGWCoroutinesManager {
-  RGWRados *store;
+  RGWRados* store;
   RGWHTTPManager http_manager;
 
 public:
@@ -497,7 +497,7 @@ class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
     sync.stop();
   }
 public:
-  RGWMetaSyncProcessorThread(rgw::sal::RadosStore *_store, RGWAsyncRadosProcessor *async_rados)
+  RGWMetaSyncProcessorThread(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados)
     : RGWSyncProcessorThread(_store->getRados(), "meta-sync"), sync(_store, async_rados) {}
 
   void wakeup_sync_shards(set<int>& shard_ids) {
@@ -540,7 +540,7 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
     sync.stop();
   }
 public:
-  RGWDataSyncProcessorThread(rgw::sal::RadosStore *_store, RGWAsyncRadosProcessor *async_rados,
+  RGWDataSyncProcessorThread(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
                              const RGWZone* source_zone)
     : RGWSyncProcessorThread(_store->getRados(), "data-sync"),
       counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
@@ -579,7 +579,7 @@ public:
 class RGWSyncLogTrimThread : public RGWSyncProcessorThread, DoutPrefixProvider
 {
   RGWCoroutinesManager crs;
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   rgw::BucketTrimManager *bucket_trim;
   RGWHTTPManager http;
   const utime_t trim_interval;
@@ -587,7 +587,7 @@ class RGWSyncLogTrimThread : public RGWSyncProcessorThread, DoutPrefixProvider
   uint64_t interval_msec() override { return 0; }
   void stop_process() override { crs.stop(); }
 public:
-  RGWSyncLogTrimThread(rgw::sal::RadosStore *store, rgw::BucketTrimManager *bucket_trim,
+  RGWSyncLogTrimThread(rgw::sal::RadosStore* store, rgw::BucketTrimManager *bucket_trim,
                        int interval)
     : RGWSyncProcessorThread(store->getRados(), "sync-log-trim"),
       crs(store->ctx(), store->getRados()->get_cr_registry()), store(store),

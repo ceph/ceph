@@ -409,7 +409,7 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
   }
 }
 
-RGWDataAccess::RGWDataAccess(rgw::sal::Store *_store) : store(_store)
+RGWDataAccess::RGWDataAccess(rgw::sal::Store* _store) : store(_store)
 {
 }
 
@@ -466,7 +466,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
                                const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
-  rgw::sal::Store *store = sd->store;
+  rgw::sal::Store* store = sd->store;
   CephContext *cct = store->ctx();
 
   string tag;

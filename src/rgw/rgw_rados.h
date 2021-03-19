@@ -224,20 +224,20 @@ public:
 };
 
 class RGWObjectCtx {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
   void *s{nullptr};
 
   std::map<rgw_obj, RGWObjState> objs_state;
 public:
-  explicit RGWObjectCtx(rgw::sal::Store *_store) : store(_store) {}
-  explicit RGWObjectCtx(rgw::sal::Store *_store, void *_s) : store(_store), s(_s) {}
+  explicit RGWObjectCtx(rgw::sal::Store* _store) : store(_store) {}
+  explicit RGWObjectCtx(rgw::sal::Store* _store, void *_s) : store(_store), s(_s) {}
 
   void *get_private() {
     return s;
   }
 
-  rgw::sal::Store *get_store() {
+  rgw::sal::Store* get_store() {
     return store;
   }
 
@@ -400,7 +400,7 @@ class RGWRados
   ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
   SafeTimer *timer;
 
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   RGWGC *gc;
   RGWLC *lc;
   RGWObjectExpirer *obj_expirer;
@@ -545,7 +545,7 @@ public:
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
-  void set_store(rgw::sal::RadosStore *_store) {
+  void set_store(rgw::sal::RadosStore* _store) {
     store = _store;
   }
 

@@ -88,7 +88,7 @@ string render_log_object_name(const string& format,
 /* usage logger */
 class UsageLogger {
   CephContext *cct;
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
   ceph::mutex lock = ceph::make_mutex("UsageLogger");
   int32_t num_entries;
@@ -111,7 +111,7 @@ class UsageLogger {
   }
 public:
 
-  UsageLogger(CephContext *_cct, rgw::sal::Store *_store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
+  UsageLogger(CephContext *_cct, rgw::sal::Store* _store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
     timer.init();
     std::lock_guard l{timer_lock};
     set_timer();
@@ -171,7 +171,7 @@ public:
 
 static UsageLogger *usage_logger = NULL;
 
-void rgw_log_usage_init(CephContext *cct, rgw::sal::Store *store)
+void rgw_log_usage_init(CephContext *cct, rgw::sal::Store* store)
 {
   usage_logger = new UsageLogger(cct, store);
 }
@@ -328,7 +328,7 @@ void OpsLogSocket::log(struct rgw_log_entry& entry)
   append_output(bl);
 }
 
-int rgw_log_op(rgw::sal::Store *store, RGWREST* const rest, struct req_state *s,
+int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
 	       const string& op_name, OpsLogSocket *olog)
 {
   struct rgw_log_entry entry;

@@ -121,7 +121,7 @@ namespace rgw {
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
-    static int init_from_header(rgw::sal::Store *store,
+    static int init_from_header(rgw::sal::Store* store,
 				struct req_state *s);
   }; /* RGWHandler_Lib */
 

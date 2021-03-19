@@ -241,7 +241,7 @@ static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
   }
 }
 
-void check_bad_user_bucket_mapping(rgw::sal::Store *store, rgw::sal::User* user,
+void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
 				   bool fix,
 				   optional_yield y,
                                    const DoutPrefixProvider *dpp)
@@ -301,7 +301,7 @@ bool rgw_bucket_object_check_filter(const string& oid)
   return rgw_obj_key::oid_to_key_in_ns(oid, &key, ns);
 }
 
-int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store *store, rgw::sal::Bucket* bucket, rgw_obj_key& key)
+int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key)
 {
   RGWObjectCtx rctx(store);
 
@@ -314,7 +314,7 @@ int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store *store, rgw
   return object->delete_object(dpp, &rctx, null_yield);
 }
 
-int rgw_remove_bucket_bypass_gc(rgw::sal::Store *store, rgw::sal::Bucket* bucket,
+int rgw_remove_bucket_bypass_gc(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
                                 int concurrent_max, bool keep_index_consistent,
                                 optional_yield y,
                                 const DoutPrefixProvider *dpp)
@@ -453,7 +453,7 @@ static void set_err_msg(std::string *sink, std::string msg)
     *sink = msg;
 }
 
-int RGWBucket::init(rgw::sal::Store *_store, RGWBucketAdminOpState& op_state,
+int RGWBucket::init(rgw::sal::Store* _store, RGWBucketAdminOpState& op_state,
                     optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
   if (!_store) {
@@ -1031,7 +1031,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolic
 }
 
 
-int RGWBucketAdminOp::get_policy(rgw::sal::Store *store, RGWBucketAdminOpState& op_state,
+int RGWBucketAdminOp::get_policy(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
                   RGWAccessControlPolicy& policy, const DoutPrefixProvider *dpp)
 {
   RGWBucket bucket;
@@ -1050,7 +1050,7 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Store *store, RGWBucketAdminOpState& 
 /* Wrappers to facilitate RESTful interface */
 
 
-int RGWBucketAdminOp::get_policy(rgw::sal::Store *store, RGWBucketAdminOpState& op_state,
+int RGWBucketAdminOp::get_policy(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp)
 {
   RGWAccessControlPolicy policy(store->ctx());
@@ -1072,7 +1072,7 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Store *store, RGWBucketAdminOpState& 
   return 0;
 }
 
-int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Store *store, RGWBucketAdminOpState& op_state,
+int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
                   ostream& os, const DoutPrefixProvider *dpp)
 {
   RGWAccessControlPolicy_S3 policy(store->ctx());
@@ -1086,7 +1086,7 @@ int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Store *store, RGWBucketAdminOpSta
   return 0;
 }
 
-int RGWBucketAdminOp::unlink(rgw::sal::Store *store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp)
+int RGWBucketAdminOp::unlink(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp)
 {
   RGWBucket bucket;
 
@@ -1097,7 +1097,7 @@ int RGWBucketAdminOp::unlink(rgw::sal::Store *store, RGWBucketAdminOpState& op_s
   return bucket.unlink(op_state, null_yield, dpp);
 }
 
-int RGWBucketAdminOp::link(rgw::sal::Store *store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, string *err)
+int RGWBucketAdminOp::link(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, string *err)
 {
   RGWBucket bucket;
   int ret = bucket.init(store, op_state, null_yield, dpp, err);
@@ -1108,7 +1108,7 @@ int RGWBucketAdminOp::link(rgw::sal::Store *store, RGWBucketAdminOpState& op_sta
 
 }
 
-int RGWBucketAdminOp::chown(rgw::sal::Store *store, RGWBucketAdminOpState& op_state, const string& marker, const DoutPrefixProvider *dpp, string *err)
+int RGWBucketAdminOp::chown(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const string& marker, const DoutPrefixProvider *dpp, string *err)
 {
   RGWBucket bucket;
 
@@ -1124,7 +1124,7 @@ int RGWBucketAdminOp::chown(rgw::sal::Store *store, RGWBucketAdminOpState& op_st
 
 }
 
-int RGWBucketAdminOp::check_index(rgw::sal::Store *store, RGWBucketAdminOpState& op_state,
+int RGWBucketAdminOp::check_index(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp)
 {
   int ret;
@@ -1159,7 +1159,7 @@ int RGWBucketAdminOp::check_index(rgw::sal::Store *store, RGWBucketAdminOpState&
   return 0;
 }
 
-int RGWBucketAdminOp::remove_bucket(rgw::sal::Store *store, RGWBucketAdminOpState& op_state,
+int RGWBucketAdminOp::remove_bucket(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
 				    optional_yield y, const DoutPrefixProvider *dpp, 
                                     bool bypass_gc, bool keep_index_consistent)
 {
@@ -1180,7 +1180,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Store *store, RGWBucketAdminOpStat
   return ret;
 }
 
-int RGWBucketAdminOp::remove_object(rgw::sal::Store *store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp)
+int RGWBucketAdminOp::remove_object(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp)
 {
   RGWBucket bucket;
 
@@ -1191,7 +1191,7 @@ int RGWBucketAdminOp::remove_object(rgw::sal::Store *store, RGWBucketAdminOpStat
   return bucket.remove_object(dpp, op_state);
 }
 
-int RGWBucketAdminOp::sync_bucket(rgw::sal::Store *store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, string *err_msg)
+int RGWBucketAdminOp::sync_bucket(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, string *err_msg)
 {
   RGWBucket bucket;
   int ret = bucket.init(store, op_state, null_yield, dpp, err_msg);
@@ -1202,7 +1202,7 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Store *store, RGWBucketAdminOpState&
   return bucket.sync(op_state, dpp, err_msg);
 }
 
-static int bucket_stats(rgw::sal::Store *store,
+static int bucket_stats(rgw::sal::Store* store,
 			const std::string& tenant_name,
 			const std::string& bucket_name,
 			Formatter *formatter,
@@ -1268,7 +1268,7 @@ static int bucket_stats(rgw::sal::Store *store,
   return 0;
 }
 
-int RGWBucketAdminOp::limit_check(rgw::sal::Store *store,
+int RGWBucketAdminOp::limit_check(rgw::sal::Store* store,
 				  RGWBucketAdminOpState& op_state,
 				  const std::list<std::string>& user_ids,
 				  RGWFormatterFlusher& flusher, optional_yield y,
@@ -1380,7 +1380,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Store *store,
   return ret;
 } /* RGWBucketAdminOp::limit_check */
 
-int RGWBucketAdminOp::info(rgw::sal::Store *store,
+int RGWBucketAdminOp::info(rgw::sal::Store* store,
 			   RGWBucketAdminOpState& op_state,
 			   RGWFormatterFlusher& flusher,
 			   optional_yield y,
@@ -1481,7 +1481,7 @@ int RGWBucketAdminOp::info(rgw::sal::Store *store,
   return 0;
 }
 
-int RGWBucketAdminOp::set_quota(rgw::sal::Store *store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp)
+int RGWBucketAdminOp::set_quota(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp)
 {
   RGWBucket bucket;
 
@@ -1491,7 +1491,7 @@ int RGWBucketAdminOp::set_quota(rgw::sal::Store *store, RGWBucketAdminOpState& o
   return bucket.set_quota(op_state, dpp);
 }
 
-static int purge_bucket_instance(rgw::sal::Store *store, const RGWBucketInfo& bucket_info, const DoutPrefixProvider *dpp)
+static int purge_bucket_instance(rgw::sal::Store* store, const RGWBucketInfo& bucket_info, const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = store->get_bucket(nullptr, bucket_info, &bucket);
@@ -1510,7 +1510,7 @@ inline auto split_tenant(const std::string& bucket_name){
 }
 
 using bucket_instance_ls = std::vector<RGWBucketInfo>;
-void get_stale_instances(rgw::sal::Store *store, const std::string& bucket_name,
+void get_stale_instances(rgw::sal::Store* store, const std::string& bucket_name,
                          const vector<std::string>& lst,
                          bucket_instance_ls& stale_instances,
                          const DoutPrefixProvider *dpp)
@@ -1600,7 +1600,7 @@ void get_stale_instances(rgw::sal::Store *store, const std::string& bucket_name,
   return;
 }
 
-static int process_stale_instances(rgw::sal::Store *store, RGWBucketAdminOpState& op_state,
+static int process_stale_instances(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
                                    RGWFormatterFlusher& flusher,
                                    const DoutPrefixProvider *dpp,
                                    std::function<void(const bucket_instance_ls&,
@@ -1654,7 +1654,7 @@ static int process_stale_instances(rgw::sal::Store *store, RGWBucketAdminOpState
   return 0;
 }
 
-int RGWBucketAdminOp::list_stale_instances(rgw::sal::Store *store,
+int RGWBucketAdminOp::list_stale_instances(rgw::sal::Store* store,
                                            RGWBucketAdminOpState& op_state,
                                            RGWFormatterFlusher& flusher,
                                            const DoutPrefixProvider *dpp)
@@ -1669,14 +1669,14 @@ int RGWBucketAdminOp::list_stale_instances(rgw::sal::Store *store,
 }
 
 
-int RGWBucketAdminOp::clear_stale_instances(rgw::sal::Store *store,
+int RGWBucketAdminOp::clear_stale_instances(rgw::sal::Store* store,
                                             RGWBucketAdminOpState& op_state,
                                             RGWFormatterFlusher& flusher,
                                             const DoutPrefixProvider *dpp)
 {
   auto process_f = [dpp](const bucket_instance_ls& lst,
                       Formatter *formatter,
-                      rgw::sal::Store *store){
+                      rgw::sal::Store* store){
                      for (const auto &binfo: lst) {
                        int ret = purge_bucket_instance(store, binfo, dpp);
                        if (ret == 0){
@@ -1693,7 +1693,7 @@ int RGWBucketAdminOp::clear_stale_instances(rgw::sal::Store *store,
   return process_stale_instances(store, op_state, flusher, dpp, process_f);
 }
 
-static int fix_single_bucket_lc(rgw::sal::Store *store,
+static int fix_single_bucket_lc(rgw::sal::Store* store,
                                 const std::string& tenant_name,
                                 const std::string& bucket_name,
                                 const DoutPrefixProvider *dpp)
@@ -1721,7 +1721,7 @@ static void format_lc_status(Formatter* formatter,
   formatter->close_section(); // bucket_entry
 }
 
-static void process_single_lc_entry(rgw::sal::Store *store,
+static void process_single_lc_entry(rgw::sal::Store* store,
 				    Formatter *formatter,
                                     const std::string& tenant_name,
                                     const std::string& bucket_name,
@@ -1731,7 +1731,7 @@ static void process_single_lc_entry(rgw::sal::Store *store,
   format_lc_status(formatter, tenant_name, bucket_name, -ret);
 }
 
-int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Store *store,
+int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Store* store,
                                     RGWBucketAdminOpState& op_state,
                                     RGWFormatterFlusher& flusher,
                                     const DoutPrefixProvider *dpp)
@@ -1783,7 +1783,7 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Store *store,
 }
 
 static bool has_object_expired(const DoutPrefixProvider *dpp,
-			       rgw::sal::Store *store,
+			       rgw::sal::Store* store,
 			       rgw::sal::Bucket* bucket,
 			       const rgw_obj_key& key, utime_t& delete_at)
 {
@@ -1808,7 +1808,7 @@ static bool has_object_expired(const DoutPrefixProvider *dpp,
 }
 
 static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
-				 rgw::sal::Store *store,
+				 rgw::sal::Store* store,
 				 rgw::sal::Bucket* bucket,
 				 RGWFormatterFlusher& flusher, bool dry_run)
 {
@@ -1858,7 +1858,7 @@ static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWBucketAdminOp::fix_obj_expiry(rgw::sal::Store *store,
+int RGWBucketAdminOp::fix_obj_expiry(rgw::sal::Store* store,
 				     RGWBucketAdminOpState& op_state,
 				     RGWFormatterFlusher& flusher,
                                      const DoutPrefixProvider *dpp, bool dry_run)
@@ -3052,7 +3052,7 @@ int RGWBucketCtl::set_acl(ACLOwner& owner, rgw_bucket& bucket,
 }
 
 // TODO: remove RGWRados dependency for bucket listing
-int RGWBucketCtl::chown(rgw::sal::Store *store, rgw::sal::Bucket* bucket,
+int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
                         const rgw_user& user_id, const std::string& display_name,
                         const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp)
 {

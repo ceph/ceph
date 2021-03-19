@@ -593,7 +593,7 @@ class RGWPubSub
 {
   friend class Bucket;
 
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   const std::string tenant;
   RGWSysObjectCtx obj_ctx;
 
@@ -626,7 +626,7 @@ class RGWPubSub
 			RGWObjVersionTracker* objv_tracker, optional_yield y);
 
 public:
-  RGWPubSub(rgw::sal::RadosStore *_store, const std::string& tenant);
+  RGWPubSub(rgw::sal::RadosStore* _store, const std::string& tenant);
 
   class Bucket {
     friend class RGWPubSub;

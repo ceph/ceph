@@ -79,7 +79,7 @@ class HeadObjectProcessor : public ObjectProcessor {
 class ManifestObjectProcessor : public HeadObjectProcessor,
                                 public StripeGenerator {
  protected:
-  rgw::sal::Store *const store;
+  rgw::sal::Store* const store;
   rgw::sal::Bucket* bucket;
   rgw_placement_rule tail_placement_rule;
   rgw_user owner;
@@ -97,7 +97,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   int next(uint64_t offset, uint64_t *stripe_size) override;
 
  public:
-  ManifestObjectProcessor(Aio *aio, rgw::sal::Store *store,
+  ManifestObjectProcessor(Aio *aio, rgw::sal::Store* store,
 			  rgw::sal::Bucket* bucket,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -139,7 +139,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
-  AtomicObjectProcessor(Aio *aio, rgw::sal::Store *store,
+  AtomicObjectProcessor(Aio *aio, rgw::sal::Store* store,
 			rgw::sal::Bucket* bucket,
                         const rgw_placement_rule *ptail_placement_rule,
                         const rgw_user& owner,
@@ -184,7 +184,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // prepare the head stripe and manifest
   int prepare_head();
  public:
-  MultipartObjectProcessor(Aio *aio, rgw::sal::Store *store,
+  MultipartObjectProcessor(Aio *aio, rgw::sal::Store* store,
 			   rgw::sal::Bucket* bucket,
                            const rgw_placement_rule *ptail_placement_rule,
                            const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -227,7 +227,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
 
   public:
-    AppendObjectProcessor(Aio *aio, rgw::sal::Store *store,
+    AppendObjectProcessor(Aio *aio, rgw::sal::Store* store,
 			  rgw::sal::Bucket* bucket,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,

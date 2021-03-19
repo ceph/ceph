@@ -677,7 +677,7 @@ namespace rgw {
     return 0;
   } /* RGWLib::stop() */
 
-  int RGWLibIO::set_uid(rgw::sal::Store *store, const rgw_user& uid)
+  int RGWLibIO::set_uid(rgw::sal::Store* store, const rgw_user& uid)
   {
     const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
     std::unique_ptr<rgw::sal::User> user = store->get_user(uid);

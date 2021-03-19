@@ -32,13 +32,13 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static rgw::sal::Store *store = NULL;
+static rgw::sal::Store* store = NULL;
 
 class StoreDestructor {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
 
 public:
-  explicit StoreDestructor(rgw::sal::Store *_s) : store(_s) {}
+  explicit StoreDestructor(rgw::sal::Store* _s) : store(_s) {}
   ~StoreDestructor() {
     if (store) {
       StoreManager::close_storage(store);

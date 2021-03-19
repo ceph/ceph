@@ -395,7 +395,7 @@ public:
 
   int validate_bucket_name(const string& bucket);
 
-  int init(rgw::sal::Store *store, struct req_state *s, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::Store* store, struct req_state *s, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override;
 
@@ -502,7 +502,7 @@ public:
   RGWRESTMgr_SWIFT() = default;
   ~RGWRESTMgr_SWIFT() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::Store *store,
+  RGWHandler_REST *get_handler(rgw::sal::Store* store,
 			       struct req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
@@ -574,7 +574,7 @@ public:
   RGWRESTMgr_SWIFT_CrossDomain() = default;
   ~RGWRESTMgr_SWIFT_CrossDomain() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::Store *store,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
 			       struct req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
@@ -631,7 +631,7 @@ public:
   RGWRESTMgr_SWIFT_HealthCheck() = default;
   ~RGWRESTMgr_SWIFT_HealthCheck() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::Store *store,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
 			       struct req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
@@ -678,7 +678,7 @@ public:
   RGWRESTMgr_SWIFT_Info() = default;
   ~RGWRESTMgr_SWIFT_Info() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::Store *store,
+  RGWHandler_REST *get_handler(rgw::sal::Store* store,
 			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;

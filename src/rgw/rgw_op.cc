@@ -211,7 +211,7 @@ static int get_user_policy_from_attr(CephContext * const cct,
  */
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
                                        CephContext *cct,
-				       rgw::sal::Store *store,
+				       rgw::sal::Store* store,
 				       RGWBucketInfo& bucket_info,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy *policy,
@@ -238,7 +238,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
 
 static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp, 
                                     CephContext *cct,
-				    rgw::sal::Store *store,
+				    rgw::sal::Store* store,
 				    RGWObjectCtx& obj_ctx,
 				    RGWBucketInfo& bucket_info,
 				    map<string, bufferlist>& bucket_attrs,
@@ -412,7 +412,7 @@ static int get_multipart_info(const DoutPrefixProvider *dpp, struct req_state *s
 }
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
-                              rgw::sal::Store *store,
+                              rgw::sal::Store* store,
                               struct req_state *s,
                               RGWBucketInfo& bucket_info,
                               map<string, bufferlist>& bucket_attrs,
@@ -439,7 +439,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
 }
 
 static int read_obj_policy(const DoutPrefixProvider *dpp, 
-                           rgw::sal::Store *store,
+                           rgw::sal::Store* store,
                            struct req_state *s,
                            RGWBucketInfo& bucket_info,
                            map<string, bufferlist>& bucket_attrs,
@@ -710,7 +710,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store *store,
+int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 			      struct req_state *s, bool prefetch_data, optional_yield y)
 {
   int ret = 0;
@@ -1791,7 +1791,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   boost::optional<Policy>* bucket_policy;
   RGWBucketInfo bucket_info;
   std::unique_ptr<rgw::sal::Bucket> ubucket;
-  rgw::sal::Bucket *pbucket = NULL;
+  rgw::sal::Bucket* pbucket = NULL;
   int r = 0;
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
@@ -7468,7 +7468,7 @@ RGWHandler::~RGWHandler()
 {
 }
 
-int RGWHandler::init(rgw::sal::Store *_store,
+int RGWHandler::init(rgw::sal::Store* _store,
                      struct req_state *_s,
                      rgw::io::BasicClient *cio)
 {

@@ -239,7 +239,7 @@ void *RGWLC::LCWorker::entry() {
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, rgw::sal::Store *_store) {
+void RGWLC::initialize(CephContext *_cct, rgw::sal::Store* _store) {
   cct = _cct;
   store = _store;
   sal_lc = store->get_lifecycle();
@@ -416,7 +416,7 @@ static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj
 }
 
 class LCObjsLister {
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   rgw::sal::Bucket* bucket;
   rgw::sal::Bucket::ListParams list_params;
   rgw::sal::Bucket::ListResults list_results;
@@ -426,7 +426,7 @@ class LCObjsLister {
   int64_t delay_ms;
 
 public:
-  LCObjsLister(rgw::sal::Store *_store, rgw::sal::Bucket* _bucket) :
+  LCObjsLister(rgw::sal::Store* _store, rgw::sal::Bucket* _bucket) :
       store(_store), bucket(_bucket) {
     list_params.list_versions = bucket->versioned();
     list_params.allow_unordered = true;
@@ -508,12 +508,12 @@ struct op_env {
   using LCWorker = RGWLC::LCWorker;
 
   lc_op op;
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   LCWorker* worker;
   rgw::sal::Bucket* bucket;
   LCObjsLister& ol;
 
-  op_env(lc_op& _op, rgw::sal::Store *_store, LCWorker* _worker,
+  op_env(lc_op& _op, rgw::sal::Store* _store, LCWorker* _worker,
 	 rgw::sal::Bucket* _bucket, LCObjsLister& _ol)
     : op(_op), store(_store), worker(_worker), bucket(_bucket),
       ol(_ol) {}
@@ -529,7 +529,7 @@ struct lc_op_ctx {
   boost::optional<std::string> next_key_name;
   ceph::real_time effective_mtime;
 
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   rgw::sal::Bucket* bucket;
   lc_op& op; // ok--refers to expanded env.op
   LCObjsLister& ol;

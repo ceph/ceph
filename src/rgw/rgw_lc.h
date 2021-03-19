@@ -461,7 +461,7 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
-  rgw::sal::Store *store;
+  rgw::sal::Store* store;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
   int max_objs{0};
   string *obj_names{nullptr};
@@ -508,7 +508,7 @@ public:
   RGWLC() : cct(nullptr), store(nullptr) {}
   ~RGWLC();
 
-  void initialize(CephContext *_cct, rgw::sal::Store *_store);
+  void initialize(CephContext *_cct, rgw::sal::Store* _store);
   void finalize();
 
   int process(LCWorker* worker, bool once);
@@ -533,7 +533,7 @@ public:
                            const rgw::sal::Attrs& bucket_attrs);
 
   CephContext *get_cct() const override { return cct; }
-  rgw::sal::Lifecycle *get_lc() const { return sal_lc.get(); }
+  rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 
@@ -546,7 +546,7 @@ public:
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(rgw::sal::Store *store,
+int fix_lc_shard_entry(rgw::sal::Store* store,
 		       rgw::sal::Lifecycle* sal_lc,
 		       rgw::sal::Bucket* bucket);
 

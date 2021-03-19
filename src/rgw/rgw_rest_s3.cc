@@ -926,7 +926,7 @@ struct ReplicationConfiguration {
       }
     };
 
-    set<rgw_zone_id> get_zone_ids_from_names(rgw::sal::Store *store,
+    set<rgw_zone_id> get_zone_ids_from_names(rgw::sal::Store* store,
                                              const vector<string>& zone_names) const {
       set<rgw_zone_id> ids;
 
@@ -940,7 +940,7 @@ struct ReplicationConfiguration {
       return ids;
     }
 
-    vector<string> get_zone_names_from_ids(rgw::sal::Store *store,
+    vector<string> get_zone_names_from_ids(rgw::sal::Store* store,
                                            const set<rgw_zone_id>& zone_ids) const {
       vector<string> names;
 
@@ -1010,7 +1010,7 @@ struct ReplicationConfiguration {
       return true;
     }
 
-    int to_sync_policy_pipe(req_state *s, rgw::sal::Store *store,
+    int to_sync_policy_pipe(req_state *s, rgw::sal::Store* store,
                             rgw_sync_bucket_pipes *pipe,
                             bool *enabled) const {
       if (!is_valid(s->cct)) {
@@ -1061,7 +1061,7 @@ struct ReplicationConfiguration {
       return 0;
     }
 
-    void from_sync_policy_pipe(rgw::sal::Store *store,
+    void from_sync_policy_pipe(rgw::sal::Store* store,
                               const rgw_sync_bucket_pipes& pipe,
                               bool enabled) {
       id = pipe.id;
@@ -1114,7 +1114,7 @@ struct ReplicationConfiguration {
     encode_xml("Rule", rules, f);
   }
 
-  int to_sync_policy_groups(req_state *s, rgw::sal::Store *store,
+  int to_sync_policy_groups(req_state *s, rgw::sal::Store* store,
                             vector<rgw_sync_policy_group> *result) const {
     result->resize(2);
 
@@ -1144,7 +1144,7 @@ struct ReplicationConfiguration {
     return 0;
   }
 
-  void from_sync_policy_group(rgw::sal::Store *store,
+  void from_sync_policy_group(rgw::sal::Store* store,
                               const rgw_sync_policy_group& group) {
 
     bool enabled = (group.status == rgw_sync_policy_group::Status::ENABLED);
@@ -2166,7 +2166,7 @@ void RGWStatBucket_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-static int create_s3_policy(struct req_state *s, rgw::sal::Store *store,
+static int create_s3_policy(struct req_state *s, rgw::sal::Store* store,
 			    RGWAccessControlPolicy_S3& s3policy,
 			    ACLOwner& owner)
 {
@@ -3326,7 +3326,7 @@ int RGWPutACLs_ObjStore_S3::get_params(optional_yield y)
   return ret;
 }
 
-int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::Store *store,
+int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::Store* store,
 						  struct req_state *s,
 						  stringstream& ss)
 {
@@ -4538,7 +4538,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
-int RGWHandler_REST_S3::init_from_header(rgw::sal::Store *store,
+int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
 					 struct req_state* s,
 					 int default_formatter,
 					 bool configurable_format)
@@ -4614,7 +4614,7 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Store *store,
   return 0;
 }
 
-static int verify_mfa(rgw::sal::Store *store, RGWUserInfo *user,
+static int verify_mfa(rgw::sal::Store* store, RGWUserInfo *user,
 		      const string& mfa_str, bool *verified, const DoutPrefixProvider *dpp, optional_yield y)
 {
   vector<string> params;
@@ -4685,7 +4685,7 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
   return 0;
 }
 
-int RGWHandler_REST_S3::init(rgw::sal::Store *store, struct req_state *s,
+int RGWHandler_REST_S3::init(rgw::sal::Store* store, struct req_state *s,
                              rgw::io::BasicClient *cio)
 {
   int ret;
@@ -4817,7 +4817,7 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-int RGWHandler_Auth_S3::init(rgw::sal::Store *store, struct req_state *state,
+int RGWHandler_Auth_S3::init(rgw::sal::Store* store, struct req_state *state,
                              rgw::io::BasicClient *cio)
 {
   int ret = RGWHandler_REST_S3::init_from_header(store, state, RGW_FORMAT_JSON, true);
@@ -4827,7 +4827,7 @@ int RGWHandler_Auth_S3::init(rgw::sal::Store *store, struct req_state *state,
   return RGWHandler_REST::init(store, state, cio);
 }
 
-RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Store *store,
+RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Store* store,
 					    struct req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
@@ -4895,7 +4895,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
   return state->exists;
 }
 
-int RGWHandler_REST_S3Website::init(rgw::sal::Store *store, req_state *s,
+int RGWHandler_REST_S3Website::init(rgw::sal::Store* store, req_state *s,
                                     rgw::io::BasicClient* cio)
 {
   // save the original object name before retarget() replaces it with the

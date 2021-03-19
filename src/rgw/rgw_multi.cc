@@ -196,7 +196,7 @@ int list_multipart_parts(struct req_state *s,
 }
 
 int abort_multipart_upload(const DoutPrefixProvider *dpp,
-			   rgw::sal::Store *store, CephContext *cct,
+			   rgw::sal::Store* store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, rgw::sal::Bucket* bucket,
 			   RGWMPObj& mp_obj)
 {
@@ -312,7 +312,7 @@ int list_bucket_multiparts(const DoutPrefixProvider *dpp,
 }
 
 int abort_bucket_multiparts(const DoutPrefixProvider *dpp,
-			    rgw::sal::Store *store, CephContext *cct,
+			    rgw::sal::Store* store, CephContext *cct,
 			    rgw::sal::Bucket* bucket, string& prefix, string& delim)
 {
   constexpr int max = 1000;

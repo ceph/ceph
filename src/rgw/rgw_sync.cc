@@ -40,7 +40,7 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
-RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RadosStore *_store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
+RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
   for (int i = 0; i < num_shards; i++) {
     oids.push_back(get_shard_oid(oid_prefix, i));
   }
@@ -364,7 +364,7 @@ std::ostream&  RGWMetaSyncStatusManager::gen_prefix(std::ostream& out) const
   return out << "meta sync: ";
 }
 
-void RGWMetaSyncEnv::init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RadosStore *_store, RGWRESTConn *_conn,
+void RGWMetaSyncEnv::init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RadosStore* _store, RGWRESTConn *_conn,
                           RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
                           RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer) {
   dpp = _dpp;
@@ -391,7 +391,7 @@ string RGWMetaSyncEnv::shard_obj_name(int shard_id)
 }
 
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   RGWMetadataLog *mdlog;
   int shard_id;
   int max_entries;
@@ -416,7 +416,7 @@ public:
   list<cls_log_entry> entries;
   bool truncated;
 
-  RGWAsyncReadMDLogEntries(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore *_store,
+  RGWAsyncReadMDLogEntries(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
                            RGWMetadataLog* mdlog, int _shard_id,
                            std::string _marker, int _max_entries)
     : RGWAsyncRadosRequest(caller, cn), store(_store), mdlog(mdlog),
@@ -651,7 +651,7 @@ public:
         set_status("acquiring sync lock");
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-	rgw::sal::RadosStore *store = sync_env->store;
+	rgw::sal::RadosStore* store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                 rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                 lock_name, lock_duration, this));
@@ -668,7 +668,7 @@ public:
       }
       yield {
         set_status("writing sync status");
-	rgw::sal::RadosStore *store = sync_env->store;
+	rgw::sal::RadosStore* store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc()->sysobj,
                                                            rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
@@ -698,7 +698,7 @@ public:
           RGWMetadataLogInfo& info = shards_info[i];
 	  marker.next_step_marker = info.marker;
 	  marker.timestamp = info.last_update;
-	  rgw::sal::RadosStore *store = sync_env->store;
+	  rgw::sal::RadosStore* store = sync_env->store;
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
                                                                 store->svc()->sysobj,
                                                                 rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
@@ -708,7 +708,7 @@ public:
       yield {
         set_status("changing sync state: build full sync maps");
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
-	rgw::sal::RadosStore *store = sync_env->store;
+	rgw::sal::RadosStore* store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc()->sysobj,
                                                            rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
@@ -952,7 +952,7 @@ public:
             tn->log(20, SSTR("list metadata: section=" << *sections_iter << " key=" << *iter));
             string s = *sections_iter + ":" + *iter;
             int shard_id;
-	    rgw::sal::RadosStore *store = sync_env->store;
+	    rgw::sal::RadosStore* store = sync_env->store;
             int ret = store->ctl()->meta.mgr->get_shard_id(*sections_iter, *iter, &shard_id);
             if (ret < 0) {
               tn->log(0, SSTR("ERROR: could not determine shard id for " << *sections_iter << ":" << *iter));
@@ -1080,7 +1080,7 @@ public:
 };
 
 class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   string raw_key;
   bufferlist bl;
   const DoutPrefixProvider *dpp;
@@ -1094,7 +1094,7 @@ protected:
     return 0;
   }
 public:
-  RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore *_store,
+  RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
                        const string& _raw_key,
                        bufferlist& _bl,
                        const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
@@ -1135,7 +1135,7 @@ public:
 };
 
 class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
-  rgw::sal::RadosStore *store;
+  rgw::sal::RadosStore* store;
   string raw_key;
   const DoutPrefixProvider *dpp;
 protected:
@@ -1148,7 +1148,7 @@ protected:
     return 0;
   }
 public:
-  RGWAsyncMetaRemoveEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore *_store,
+  RGWAsyncMetaRemoveEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
                        const string& _raw_key, const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                           raw_key(_raw_key), dpp(dpp) {}
 };
@@ -1235,7 +1235,7 @@ public:
 
     ldpp_dout(sync_env->dpp, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
     tn->log(20, SSTR("new marker=" << new_marker));
-    rgw::sal::RadosStore *store = sync_env->store;
+    rgw::sal::RadosStore* store = sync_env->store;
     return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
                                                            store->svc()->sysobj,
                                                            rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, marker_oid),
@@ -1556,7 +1556,7 @@ public:
       yield {
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-	rgw::sal::RadosStore *store = sync_env->store;
+	rgw::sal::RadosStore* store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                 rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                 lock_name, lock_duration, this));
@@ -1702,7 +1702,7 @@ public:
         yield {
           uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
           string lock_name = "sync_lock";
-	  rgw::sal::RadosStore *store = sync_env->store;
+	  rgw::sal::RadosStore* store = sync_env->store;
           lease_cr.reset( new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                    rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                    lock_name, lock_duration, this));
@@ -1891,7 +1891,7 @@ public:
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
-    rgw::sal::RadosStore *store = sync_env->store;
+    rgw::sal::RadosStore* store = sync_env->store;
     return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store->svc()->sysobj,
                                                           rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                           &sync_marker);
