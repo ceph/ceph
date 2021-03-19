@@ -1,5 +1,5 @@
 pylint==2.6.0
-flake8==3.8.4; python_version >= '3'
+flake8==3.9.0; python_version >= '3'
 flake8-colors==0.1.6; python_version >= '3'
 #TODO: Fix docstring issues: https://tracker.ceph.com/issues/41224
 #flake8-docstrings
