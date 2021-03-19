@@ -21,6 +21,8 @@
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include <fstream>
+#include <fcntl.h>
+#include <sys/file.h>
 #include "kv/KeyValueDB.h"
 
 #include "include/ceph_assert.h"
@@ -42,7 +44,8 @@ class MonitorDBStore
   int dump_fd_binary;
   std::ofstream dump_fd_json;
   ceph::JSONFormatter dump_fmt;
-  
+
+  int lock_fd = -1;
 
   Finisher io_work;
 
@@ -610,7 +613,11 @@ class MonitorDBStore
     ceph_assert(r >= 0);
   }
 
-  void _open(const std::string& kv_type) {
+  int _open(const std::string& kv_type) {
+    int r = _lock();
+    if (r < 0) {
+      return r;
+    }
     int pos = 0;
     for (auto rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
       if (*rit != '/')
@@ -652,10 +659,44 @@ class MonitorDBStore
       db->init(g_conf()->mon_rocksdb_options);
     else
       db->init();
-
-
+    return 0;
   }
 
+  int _lock() {
+    assert(lock_fd < 0);
+    char fn[PATH_MAX];
+    snprintf(fn, sizeof(fn), "%s/kv_backend", path.c_str());
+    lock_fd = ::open(fn, O_RDWR);
+    if (lock_fd < 0) {
+      int r = -errno;
+      generic_derr << __func__ << " unable to open " << fn << " for lock: "
+		   << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    struct flock fl = { F_WRLCK,
+			SEEK_SET };
+    int r = ::fcntl(lock_fd, F_OFD_SETLK, &fl);
+    if (r < 0 && errno == EINVAL) {
+      r = ::flock(lock_fd, LOCK_EX | LOCK_NB);
+    }
+    if (r) {
+      r = -errno;
+      if (r == -EAGAIN || r == -EWOULDBLOCK) {
+	// EAGAIN for fcntl(), and EWOULDBLOCK for flock()
+	generic_derr << __func__ << " unable to lock " << fn
+		     << ": is ceph-mon already running?" << dendl;
+      }
+    }
+    return r;
+  }
+
+  void _unlock() {
+    assert(lock_fd >= 0);
+    ::close(lock_fd);
+    lock_fd = -1;
+  }
+  
   int open(std::ostream &out) {
     std::string kv_type;
     int r = read_meta("kv_backend", &kv_type);
@@ -666,7 +707,9 @@ class MonitorDBStore
       if (r < 0)
 	return r;
     }
-    _open(kv_type);
+    r = _open(kv_type);
+    if (r < 0)
+      return r;
     r = db->open(out);
     if (r < 0)
       return r;
@@ -695,7 +738,9 @@ class MonitorDBStore
       if (r < 0)
 	return r;
     }
-    _open(kv_type);
+    r = _open(kv_type);
+    if (r < 0)
+      return r;
     r = db->create_and_open(out);
     if (r < 0)
       return r;
@@ -709,6 +754,7 @@ class MonitorDBStore
     io_work.stop();
     is_open = false;
     db.reset(NULL);
+    _unlock();
   }
 
   void compact() {
