@@ -1813,9 +1813,6 @@ void RGWPeriodMap::decode(bufferlist::const_iterator& bl) {
        iter != zonegroups.end(); ++iter) {
     RGWZoneGroup& zonegroup = iter->second;
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
-
-    const auto& zgid = zonegroup.get_id();
-
     if (zonegroup.is_master_zonegroup()) {
       master_zonegroup = zonegroup.get_id();
     }
