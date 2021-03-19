@@ -121,7 +121,7 @@ function configure() {
 
 function build() {
     local targets="$@"
-    if test -n $targets; then
+    if test -n "$targets"; then
         targets="--target $targets"
     fi
     $DRY_RUN cd build
