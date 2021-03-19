@@ -987,7 +987,8 @@ void Replayer<I>::create_non_primary_snapshot() {
   auto req = librbd::mirror::snapshot::CreateNonPrimaryRequest<I>::create(
     local_image_ctx, m_remote_mirror_snap_ns.is_demoted(),
     m_state_builder->remote_mirror_uuid, m_remote_snap_id_end,
-    m_local_mirror_snap_ns.snap_seqs, m_image_state, &m_local_snap_id_end, ctx);
+    m_local_mirror_snap_ns.snap_seqs, -1, {}, {}, m_image_state,
+    &m_local_snap_id_end, ctx);
   req->send();
 }
 

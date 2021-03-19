@@ -60,7 +60,7 @@ void PromoteRequest<I>::create_orphan_snapshot() {
     &PromoteRequest<I>::handle_create_orphan_snapshot>(this);
 
   auto req = CreateNonPrimaryRequest<I>::create(
-    m_image_ctx, false, "", CEPH_NOSNAP, {}, {}, nullptr, ctx);
+    m_image_ctx, false, "", CEPH_NOSNAP, {}, -1, {}, {}, {}, nullptr, ctx);
   req->send();
 }
 
