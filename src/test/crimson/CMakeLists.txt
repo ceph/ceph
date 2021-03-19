@@ -16,7 +16,7 @@ target_link_libraries(unittest-seastar-buffer crimson)
 
 add_executable(unittest-seastar-denc
   test_denc.cc)
-add_ceph_unittest(unittest-seastar-denc)
+add_ceph_unittest(unittest-seastar-denc --memory 256M --smp 1)
 target_link_libraries(unittest-seastar-denc crimson GTest::Main)
 
 add_executable(unittest-seastar-socket test_socket.cc)

@@ -22,7 +22,7 @@ target_link_libraries(
 add_executable(unittest-seastore-journal
   test_seastore_journal.cc)
 add_ceph_test(unittest-seastore-journal
-  unittest-seastore-journal)
+  unittest-seastore-journal --memory 256M --smp 1)
 target_link_libraries(
   unittest-seastore-journal
   crimson::gtest
@@ -32,7 +32,7 @@ add_executable(unittest-seastore-cache
   test_block.cc
   test_seastore_cache.cc)
 add_ceph_test(unittest-seastore-cache
-  unittest-seastore-cache)
+  unittest-seastore-cache --memory 256M --smp 1)
 target_link_libraries(
   unittest-seastore-cache
   crimson::gtest
