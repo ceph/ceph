@@ -16,11 +16,11 @@ from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
 from ..tools import prepare_url_prefix
-from . import BaseController, Controller, Endpoint, allow_empty_body, set_cookies
+from . import BaseController, Controller, ControllerAuthMixin, Endpoint, allow_empty_body
 
 
 @Controller('/auth/saml2', secure=False)
-class Saml2(BaseController):
+class Saml2(BaseController, ControllerAuthMixin):
 
     @staticmethod
     def _build_req(request, post_data):
@@ -71,7 +71,7 @@ class Saml2(BaseController):
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
             token = token.decode('utf-8')
-            set_cookies(url_prefix, token)
+            self._set_token_cookie(url_prefix, token)
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
 
         return {
@@ -105,6 +105,7 @@ class Saml2(BaseController):
         # pylint: disable=unused-argument
         Saml2._check_python_saml()
         JwtManager.reset_user()
-        cherrypy.response.cookie['token'] = {'expires': 0, 'max-age': 0}
+        token = JwtManager.get_token_from_header()
+        self._delete_token_cookie(token)
         url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         raise cherrypy.HTTPRedirect("{}/#/login".format(url_prefix))
