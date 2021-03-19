@@ -373,6 +373,7 @@ def ceph_bootstrap(ctx, config):
             ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
             '-v',
+            '--logrotate-dir', '/tmp',  # we don't want logrotate to rotate our logs!
             'bootstrap',
             '--fsid', fsid,
             '--config', '{}/seed.{}.conf'.format(testdir, cluster_name),
