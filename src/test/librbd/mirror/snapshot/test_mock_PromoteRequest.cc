@@ -95,6 +95,9 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
                                          SnapSeqs snap_seqs,
+                                         int64_t group_pool_id,
+                                         const std::string &group_id,
+                                         const std::string &group_snap_id,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
