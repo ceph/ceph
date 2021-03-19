@@ -1,0 +1,6 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph orch apply rbd-mirror "--placement=*"
+      - ceph orch apply cephfs-mirror "--placement=*"
+      - sleep 120
