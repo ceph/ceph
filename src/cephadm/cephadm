@@ -3626,7 +3626,7 @@ def prepare_ssh(
 
         with open(ctx.output_pub_ssh_key, 'w') as f:
             f.write(ssh_pub)
-        logger.info('Wrote public SSH key to to %s' % ctx.output_pub_ssh_key)
+        logger.info('Wrote public SSH key to %s' % ctx.output_pub_ssh_key)
 
         logger.info('Adding key to %s@localhost authorized_keys...' % ctx.ssh_user)
         try:
