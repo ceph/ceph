@@ -68,7 +68,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
     }
     bitmap[i] = true;
   }
-  return update_usage(block_size);
+  return update_usage(len);
 }
 
 int64_t SpaceTrackerDetailed::SegmentMap::release(
@@ -100,7 +100,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
     }
     bitmap[i] = false;
   }
-  return update_usage(-(int64_t)block_size);
+  return update_usage(-(int64_t)len);
 }
 
 bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
