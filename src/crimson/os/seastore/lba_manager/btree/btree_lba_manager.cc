@@ -346,9 +346,17 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   CachedExtentRef extent)
 {
   if (extent->has_been_invalidated()) {
-    logger().debug("BTreeLBAManager::rewrite_extent: {} is invalid, returning eagain");
+    logger().debug(
+      "BTreeLBAManager::rewrite_extent: {} is invalid, returning eagain",
+      *extent
+    );
     return crimson::ct_error::eagain::make();
   }
+
+  logger().debug(
+    "{}: rewriting {}", 
+    __func__,
+    *extent);
 
   if (extent->is_logical()) {
     auto lextent = extent->cast<LogicalCachedExtent>();

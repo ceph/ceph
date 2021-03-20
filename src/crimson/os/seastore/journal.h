@@ -91,6 +91,7 @@ struct extent_info_t {
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
 
 /**
  * Callback interface for managing available segments

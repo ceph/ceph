@@ -305,6 +305,9 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       std::move(_extents),
       [this](auto &extents) {
 	return repeat_eagain([this, &extents]() mutable {
+	  logger().debug(
+	    "SegmentCleaner::gc_reclaim_space: processing {} extents",
+	    extents.size());
 	  return seastar::do_with(
 	    make_transaction(),
 	    [this, &extents](auto &t) mutable {
