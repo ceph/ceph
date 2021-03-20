@@ -28,6 +28,16 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 	     << ")";
 }
 
+
+std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
+{
+  return out << "extent_info_t("
+	     << " type: " << info.type
+	     << " addr: " << info.addr
+	     << " len: " << info.len
+	     << ")";
+}
+
 segment_nonce_t generate_nonce(
   segment_seq_t seq,
   const seastore_meta_t &meta)

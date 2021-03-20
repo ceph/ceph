@@ -290,6 +290,13 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
   laddr_t laddr,
   segment_off_t len)
 {
+  logger().debug(
+    "TransactionManager::get_extent_if_live:"
+    " type {}, addr {}, laddr {}, len {}",
+    type,
+    addr,
+    laddr,
+    len);
   CachedExtentRef ret;
   auto status = cache->get_extent_if_cached(t, addr, &ret);
   if (status != Transaction::get_extent_ret::ABSENT) {
