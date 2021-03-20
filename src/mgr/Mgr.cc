@@ -538,6 +538,7 @@ void Mgr::handle_log(ref_t<MLog> m)
 void Mgr::handle_service_map(ref_t<MServiceMap> m)
 {
   dout(10) << "e" << m->service_map.epoch << dendl;
+  monc->sub_got("servicemap", m->service_map.epoch);
   cluster_state.set_service_map(m->service_map);
   server.got_service_map();
 }
@@ -648,8 +649,9 @@ void Mgr::handle_fs_map(ref_t<MFSMap> m)
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   std::set<std::string> names_exist;
-  
   const FSMap &new_fsmap = m->get_fsmap();
+
+  monc->sub_got("fsmap", m->epoch);
 
   fs_map_cond.notify_all();
 
