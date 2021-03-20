@@ -78,60 +78,48 @@ std::string ServiceMap::Service::get_summary() const
     return "no daemons active";
   }
 
-  std::ostringstream ss;
-
-  // The format two pairs in metadata:
-  //   "daemon_type"   : "${TYPE}"
-  //   "daemon_prefix" : "${PREFIX}"
+  // If "daemon_type" is present, this will be used in place of "daemon" when
+  // reporting the count (e.g., "${N} daemons").
   //
-  // TYPE: will be used to replace the default "daemon(s)"
-  // showed in `ceph -s`. If absent, the "daemon" will be used.
-  // PREFIX: if present the active members will be classified
-  // by the prefix instead of "daemon_name".
+  // We will additional break down the count by various groupings, based
+  // on the following keys:
   //
-  // For exmaple for iscsi gateways, it will be something likes:
-  //   "daemon_type"   : "portal"
-  //   "daemon_prefix" : "gateway${N}"
+  //   "hostname" -> host(s)
+  //   "zone_id" -> zone(s)
+  //
   // The `ceph -s` will be something likes:
-  //    iscsi: 3 portals active (gateway0, gateway1, gateway2)
+  //    iscsi: 3 portals active (3 hosts)
+  //      rgw: 3 gateways active (3 hosts, 1 zone)
 
-  std::map<std::string, std::set<std::string>> prefs;
+  std::map<std::string, std::set<std::string>> groupings;
+  std::string type("daemon");
+  int num = 0;
   for (auto& d : daemons) {
-    // In case the "daemon_type" is absent, use the
-    // default "daemon" type
-    std::string type("daemon");
-    std::string prefix;
-
-    auto t = d.second.metadata.find("daemon_type");
-    if (t != d.second.metadata.end()) {
-      type = d.second.metadata.at("daemon_type");
+    ++num;
+    if (auto p = d.second.metadata.find("daemon_type");
+	p != d.second.metadata.end()) {
+      type = p->second;
     }
-    auto p = d.second.metadata.find("daemon_prefix");
-    if (p != d.second.metadata.end()) {
-      prefix = d.second.metadata.at("daemon_prefix");
-    } else {
-      // In case the "daemon_prefix" is absent, show
-      // the daemon_name instead.
-      prefix = d.first;
+    for (auto k : {make_pair("zone", "zone_id"),
+	  make_pair("host", "hostname")}) {
+      auto p = d.second.metadata.find(k.second);
+      if (p != d.second.metadata.end()) {
+	groupings[k.first].insert(p->second);
+      }
     }
-    auto& pref = prefs[type];
-    pref.insert(prefix);
   }
 
-  for (auto &pr : prefs) {
-    if (!ss.str().empty())
-      ss << ", ";
-
-    ss << pr.second.size() << " " << pr.first
-       << (pr.second.size() > 1 ? "s" : "")
-       << " active";
-
-    if (pr.second.size()) {
-      ss << " (";
-      std::copy(std::begin(pr.second), std::end(pr.second),
-                std::experimental::make_ostream_joiner(ss, ", "));
-      ss << ")";
+  std::ostringstream ss;
+  ss << num << " " << type << (num > 1 ? "s" : "") << " active";
+  if (groupings.size()) {
+    ss << " (";
+    for (auto i = groupings.begin(); i != groupings.end(); ++i) {
+      if (i != groupings.begin()) {
+	ss << ", ";
+      }
+      ss << i->second.size() << " " << i->first << (i->second.size() ? "s" : "");
     }
+    ss << ")";
   }
 
   return ss.str();

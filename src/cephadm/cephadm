@@ -2374,7 +2374,7 @@ def get_container(ctx: CephadmContext,
         name = 'client.rgw.%s' % daemon_id
     elif daemon_type == 'rbd-mirror':
         entrypoint = '/usr/bin/rbd-mirror'
-        name = 'client.cephfs-mirror.%s' % daemon_id
+        name = 'client.rbd-mirror.%s' % daemon_id
     elif daemon_type == 'cephfs-mirror':
         entrypoint = '/usr/bin/cephfs-mirror'
         name = 'client.cephfs-mirror.%s' % daemon_id
