@@ -1126,17 +1126,21 @@ int RGWRados::init_rados()
 
 int RGWRados::register_to_service_map(const string& daemon_type, const map<string, string>& meta)
 {
+  string name = cct->_conf->name.get_id();
+  if (name.compare(0, 4, "rgw.") == 0) {
+    name = name.substr(4);
+  }
   map<string,string> metadata = meta;
   metadata["num_handles"] = "1"s;
   metadata["zonegroup_id"] = svc.zone->get_zonegroup().get_id();
   metadata["zonegroup_name"] = svc.zone->get_zonegroup().get_name();
   metadata["zone_name"] = svc.zone->zone_name();
   metadata["zone_id"] = svc.zone->zone_id().id;
-  string name = cct->_conf->name.get_id();
-  if (name.compare(0, 4, "rgw.") == 0) {
-    name = name.substr(4);
-  }
-  int ret = rados.service_daemon_register(daemon_type, name, metadata);
+  metadata["id"] = name;
+  int ret = rados.service_daemon_register(
+    daemon_type,
+    stringify(rados.get_instance_id()),
+    metadata);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: service_daemon_register() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
