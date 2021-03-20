@@ -31,6 +31,7 @@ import os
 import re
 import sys
 import requests
+import time
 
 from git import Repo
 
@@ -154,7 +155,22 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
             print ("Ignoring low-numbered PR, probably picked up from"
                    " ceph/ceph-qa-suite.git")
             continue
-        pr = gh.repos("ceph")("ceph").pulls(number).get()
+
+        attempts = 0
+        retries = 30
+        while attempts < retries:
+            try:
+                pr = gh.repos("ceph")("ceph").pulls(number).get()
+                break
+            except Exception:
+                if attempts < retries:
+                    attempts += 1
+                    sleep_time = 2 * attempts
+                    print(f"Failed to fetch PR {number}, sleeping for {sleep_time} seconds")
+                    time.sleep(sleep_time)
+                else:
+                    print(f"Could not fetch PR {number} in {retries} tries.")
+                    raise
         (title, message) = _title_message(commit, pr, strict)
         issues = []
         if pr['body']:
