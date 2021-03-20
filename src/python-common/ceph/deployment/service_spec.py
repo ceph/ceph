@@ -613,6 +613,9 @@ class ServiceSpec(object):
         if self.service_type in self.REQUIRES_SERVICE_ID:
             if not self.service_id:
                 raise ServiceSpecValidationError('Cannot add Service: id required')
+            if not re.match('^[a-zA-Z0-9_.-]+$', self.service_id):
+                raise ServiceSpecValidationError('Service id contains invalid characters, '
+                                                 'only [a-zA-Z0-9_.-] allowed')
         elif self.service_id:
             raise ServiceSpecValidationError(
                     f'Service of type \'{self.service_type}\' should not contain a service id')

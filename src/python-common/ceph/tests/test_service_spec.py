@@ -319,3 +319,18 @@ def test_service_name(s_type, s_id, s_name):
     spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
     spec.validate()
     assert spec.service_name() == s_name
+
+@pytest.mark.parametrize(
+    's_type,s_id',
+    [
+        ('mds', 's:id'),
+        ('rgw', '*s_id'),
+        ('nfs', 's/id'),
+        ('iscsi', 's@id'),
+        ('osd', 's;id'),
+    ])
+
+def test_service_id_raises_invalid_char(s_type, s_id):
+    with pytest.raises(ServiceSpecValidationError):
+        spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
+        spec.validate()
