@@ -627,8 +627,11 @@ public:
       segment_manager::block::BlockSegmentManager
       >();
     logger().debug("mkfs");
-    return segment_manager->mkfs(
-      { *config.path, config.segment_size, config.total_device_size }
+    BlockSegmentManager::mkfs_config_t block_config{
+      *config.path, config.segment_size, config.total_device_size
+    };
+    block_config.meta.seastore_id.generate_random();
+    return segment_manager->mkfs(std::move(block_config)
     ).safe_then([this] {
       logger().debug("");
       return segment_manager->mount({ *config.path });
