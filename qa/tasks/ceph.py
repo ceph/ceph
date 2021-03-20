@@ -262,6 +262,12 @@ def ceph_log(ctx, config):
             run.wait(
                 ctx.cluster.run(
                     args=[
+                        'sudo', 'find', '/var/log/ceph', '-ls',
+                        run.Raw('&&'),
+                        'sudo', 'find', '/etc/logrotate.d', '-ls',
+                        run.Raw('&&'),
+                        'sudo', 'ps', 'axf',
+                        run.Raw('&&'),
                         'sudo',
                         'find',
                         '/var/log/ceph',
