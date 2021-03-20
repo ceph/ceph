@@ -18,10 +18,4 @@ struct osd_op_params_t {
   ObjectCleanRegions clean_regions;
 
   osd_op_params_t() = default;
-  osd_op_params_t(Ref<MOSDOp>&& req) : req(req) {}
-  osd_op_params_t(Ref<MOSDOp>&& req, eversion_t at_version, eversion_t pg_trim_to,
-      eversion_t mlcod, eversion_t lc, version_t user_at_version) :
-    req(req), at_version(at_version), pg_trim_to(pg_trim_to),
-    min_last_complete_ondisk(mlcod), last_complete(lc),
-    user_at_version(user_at_version) {}
 };
