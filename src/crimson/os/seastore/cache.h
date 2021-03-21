@@ -182,21 +182,19 @@ public:
    *
    * Returns extent at offset if in cache
    */
-  Transaction::get_extent_ret get_extent_if_cached(
+  seastar::future<CachedExtentRef> get_extent_if_cached(
     Transaction &t,
-    paddr_t offset,
-    CachedExtentRef *out) {
-    auto result = t.get_extent(offset, out);
-    if (result != Transaction::get_extent_ret::ABSENT) {
-      return result;
-    } else if (auto iter = extents.find_offset(offset);
-	       iter != extents.end()) {
-      if (out)
-	*out = &*iter;
-      return Transaction::get_extent_ret::PRESENT;
-    } else {
-      return Transaction::get_extent_ret::ABSENT;
-    }
+    paddr_t offset) {
+    return seastar::do_with(
+      CachedExtentRef(),
+      [this, &t, offset](auto &ret) {
+	auto status = query_cache_for_extent(t, offset, &ret);
+	auto wait = seastar::now();
+	if (status == Transaction::get_extent_ret::PRESENT) {
+	  wait = ret->wait_io();
+	}
+	return wait.then([ret] { return std::move(ret); });
+      });
   }
 
   /**
@@ -251,7 +249,7 @@ public:
     laddr_t laddr,
     segment_off_t length) {
     CachedExtentRef ret;
-    auto status = get_extent_if_cached(t, offset, &ret);
+    auto status = query_cache_for_extent(t, offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     } else if (status == Transaction::get_extent_ret::PRESENT) {
@@ -535,6 +533,24 @@ private:
 
   /// Replace prev with next
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
+
+  Transaction::get_extent_ret query_cache_for_extent(
+    Transaction &t,
+    paddr_t offset,
+    CachedExtentRef *out) {
+    auto result = t.get_extent(offset, out);
+    if (result != Transaction::get_extent_ret::ABSENT) {
+      return result;
+    } else if (auto iter = extents.find_offset(offset);
+	       iter != extents.end()) {
+      if (out)
+	*out = &*iter;
+      return Transaction::get_extent_ret::PRESENT;
+    } else {
+      return Transaction::get_extent_ret::ABSENT;
+    }
+  }
+
 };
 using CacheRef = std::unique_ptr<Cache>;
 

@@ -337,6 +337,7 @@ private:
     io_wait_promise->set_value();
     io_wait_promise = std::nullopt;
   }
+
   seastar::future<> wait_io() {
     if (!io_wait_promise) {
       return seastar::now();
