@@ -27,7 +27,7 @@
 #include "common/ceph_time.h"
 #include "common/perf_counters.h"
 
-class SimpleRADOSStriper
+class [[gnu::visibility("default")]] SimpleRADOSStriper
 {
 public:
   using aiocompletionptr = std::unique_ptr<librados::AioCompletion>;

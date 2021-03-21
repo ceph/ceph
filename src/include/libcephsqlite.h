@@ -27,9 +27,12 @@
 #ifdef _WIN32
 #  define LIBCEPHSQLITE_API __declspec(dllexport)
 #else
-#  define LIBCEPHSQLITE_API extern "C"
+#  define LIBCEPHSQLITE_API [[gnu::visibility("default")]]
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 /* This is the SQLite entry point when loaded as a dynamic library. You also
  * need to ensure SQLite calls this method when using libcephsqlite as a static
  * library or a dynamic library linked at compile time. For the latter case,
@@ -63,5 +66,8 @@ LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sql
  */
 
 LIBCEPHSQLITE_API int cephsqlite_setcct(class CephContext* cct, char** ident);
+#ifdef __cplusplus
+}
+#endif
 
 #endif
