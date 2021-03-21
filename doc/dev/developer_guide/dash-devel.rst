@@ -2136,7 +2136,7 @@ REST API documentation
 ~~~~~~~~~~~~~~~~~~~~~~
 Ceph-Dashboard provides two types of documentation for the **Ceph RESTful API**:
 
-* **Static documentation**: available at :ref:`mgr-ceph-api`. This comes from a versioned specification located at ``src/pybind/mgr/dashboard/openapi.yaml``.
+* **Static documentation**: available at :ref:`mgr ceph api`. This comes from a versioned specification located at ``src/pybind/mgr/dashboard/openapi.yaml``.
 * **Interactive documentation**: available from a running Ceph-Dashboard instance (top-right ``?`` icon > API Docs).
 
 If changes are made to the ``controllers/`` directory, it's very likely that
