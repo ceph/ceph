@@ -314,14 +314,13 @@ def nuke_helper(ctx, should_unlock, keep_logs, should_reboot):
         # we want to be able to nuke a downed node
         check_lock.check_lock(ctx, None, check_up=False)
     status = get_status(host)
-    if should_reboot:
-        if status['machine_type'] in provision.fog.get_types():
-            remote = Remote(host)
-            remote.console.power_off()
-            return
-        elif status['machine_type'] in provision.pelagos.get_types():
-            provision.pelagos.park_node(host)
-            return
+    if status['machine_type'] in provision.fog.get_types():
+        remote = Remote(host)
+        remote.console.power_off()
+        return
+    elif status['machine_type'] in provision.pelagos.get_types():
+        provision.pelagos.park_node(host)
+        return
 
     if (not ctx.noipmi and 'ipmi_user' in config and
             'vpm' not in shortname):
