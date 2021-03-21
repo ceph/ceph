@@ -35,6 +35,10 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   extraopts += -DBOOST_J=$(NUMJOBS)
 endif
+ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
+  extraopts += -DWITH_SYSTEM_BOOST=ON
+  extraopts += -DWITH_SYSTEM_PMDK=ON
+endif
 
 %:
 	dh $@ --buildsystem=cmake --with javahelper,python3,systemd --parallel
