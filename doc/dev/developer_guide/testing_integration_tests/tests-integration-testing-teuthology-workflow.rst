@@ -131,16 +131,16 @@ Your branch with the qa changes can be tested by passing two extra arguments to 
 
 For example, if you want to make changes in ``qa/`` after testing ``branch-x``
 (for which the ceph-ci branch is ``wip-username-branch-x``), run the following
-command::
+command
 
 .. prompt:: bash $
 
    teuthology-suite -v \
-   -m smithi \
-   -c wip-username-branch-x \
-   -s fs \
-   -p 50
-   --filter cephfs-shell
+    -m smithi \
+    -c wip-username-branch-x \
+    -s fs \
+    -p 50 \
+    --filter cephfs-shell
 
 Then make modifications locally, update the PR branch, and trigger tests from
 your PR branch as follows:
@@ -148,12 +148,12 @@ your PR branch as follows:
 .. prompt:: bash $
 
    teuthology-suite -v \
-   -m smithi \
-   -c wip-username-branch-x \
-   -s fs -p 50 \
-   --filter cephfs-shell \
-   --suite-repo https://github.com/$username/ceph \
-   --suite-branch branch-x
+    -m smithi \
+    -c wip-username-branch-x \
+    -s fs -p 50 \
+    --filter cephfs-shell \
+    --suite-repo https://github.com/$username/ceph \
+    --suite-branch branch-x
 
 You can verify that the tests were run using this branch by looking at the
 values for the keys ``suite_branch``, ``suite_repo`` and ``suite_sha1`` in the
