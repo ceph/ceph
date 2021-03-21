@@ -227,7 +227,6 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ceph-mgr-modules-core (= ${binary:Version}),
-         libsqlite3-mod-ceph,
          python3-bcrypt,
          python3-cherrypy3,
          python3-distutils,
