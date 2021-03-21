@@ -3589,14 +3589,7 @@ def prepare_ssh(
     cli: Callable, wait_for_mgr_restart: Callable
 ) -> None:
 
-    cli(['config-key', 'set', 'mgr/cephadm/ssh_user', ctx.ssh_user])
-
-    logger.info('Enabling cephadm module...')
-    cli(['mgr', 'module', 'enable', 'cephadm'])
-    wait_for_mgr_restart()
-
-    logger.info('Setting orchestrator backend to cephadm...')
-    cli(['orch', 'set', 'backend', 'cephadm'])
+    cli(['cephadm', 'set-user', ctx.ssh_user])
 
     if ctx.ssh_config:
         logger.info('Using provided ssh config...')
@@ -3677,6 +3670,17 @@ def prepare_ssh(
         for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
+
+
+def enable_cephadm_mgr_module(
+    cli: Callable, wait_for_mgr_restart: Callable
+) -> None:
+
+    logger.info('Enabling cephadm module...')
+    cli(['mgr', 'module', 'enable', 'cephadm'])
+    wait_for_mgr_restart()
+    logger.info('Setting orchestrator backend to cephadm...')
+    cli(['orch', 'set', 'backend', 'cephadm'])
 
 
 def prepare_dashboard(
@@ -3946,6 +3950,8 @@ def command_bootstrap(ctx):
                 logger.debug('tell mgr mgr_status failed: %s' % e)
                 return False
         is_available(ctx, 'mgr epoch %d' % epoch, mgr_has_latest_epoch)
+
+    enable_cephadm_mgr_module(cli, wait_for_mgr_restart)
 
     # ssh
     host = None
