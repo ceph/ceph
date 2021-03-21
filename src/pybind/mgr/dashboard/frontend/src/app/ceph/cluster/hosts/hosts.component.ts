@@ -25,7 +25,6 @@ import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
 import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
-import { JoinPipe } from '~/app/shared/pipes/join.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -81,7 +80,6 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private hostService: HostService,
     private cephShortVersionPipe: CephShortVersionPipe,
-    private joinPipe: JoinPipe,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
@@ -150,7 +148,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         name: $localize`Labels`,
         prop: 'labels',
         flexGrow: 1,
-        pipe: this.joinPipe
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          class: 'badge-dark'
+        }
       },
       {
         name: $localize`Status`,
