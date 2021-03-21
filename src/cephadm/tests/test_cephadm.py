@@ -489,6 +489,7 @@ class TestCustomContainer(unittest.TestCase):
     def test_get_container_mounts(self):
         result = self.cc.get_container_mounts('/xyz')
         self.assertDictEqual(result, {
+            '/etc/localtime': '/etc/localtime:ro',
             '/CONFIG_DIR': '/foo/conf',
             '/xyz/bar/config': '/bar:ro'
         })

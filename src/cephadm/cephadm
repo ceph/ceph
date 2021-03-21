@@ -866,6 +866,7 @@ class CustomContainer(object):
         }
         """
         mounts = {}
+        mounts['/etc/localtime'] = '/etc/localtime:ro'
         for source, destination in self.volume_mounts.items():
             source = os.path.join(data_dir, source)
             mounts[source] = destination
@@ -2250,6 +2251,8 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
                          no_config=False):
     # type: (CephadmContext, str, str, Union[int, str, None], Optional[bool]) -> Dict[str, str]
     mounts = dict()
+
+    mounts['/etc/localtime'] = '/etc/localtime:ro'
 
     if daemon_type in Ceph.daemons:
         if fsid:

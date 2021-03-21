@@ -389,6 +389,8 @@ $CEPHADM shell --fsid $FSID -- test -d /var/log/ceph
 expect_false $CEPHADM --timeout 10 shell --fsid $FSID -- sleep 60
 $CEPHADM --timeout 60 shell --fsid $FSID -- sleep 10
 $CEPHADM shell --fsid $FSID --mount $TMPDIR $TMPDIR_TEST_MULTIPLE_MOUNTS -- stat /mnt/$(basename $TMPDIR)
+sync_timezone=$($CEPHADM shell -- date)
+[[ "$sync_timezone" != *"UTC"* ]] && echo "synchronized timezone in container"
 
 ## enter
 expect_false $CEPHADM enter
