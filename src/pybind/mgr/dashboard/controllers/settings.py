@@ -72,11 +72,11 @@ class Settings(RESTController):
 
     def _get(self, name):
         with self._attribute_handler(name) as sname:
-            default, data_type = getattr(Options, sname)
+            setting = getattr(Options, sname)
         return {
             'name': sname,
-            'default': default,
-            'type': data_type.__name__,
+            'default': setting.default_value,
+            'type': setting.types_as_str(),
             'value': getattr(SettingsModule, sname)
         }
 
