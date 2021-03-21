@@ -33,7 +33,9 @@ markup supported by Breathe_.
 .. _Doxygen: http://www.doxygen.nl/
 .. _Breathe: https://github.com/michaeljones/breathe
 
-The general format for function documentation is::
+The general format for function documentation is
+
+.. code-block:: c
 
   /**
    * Short description
@@ -55,7 +57,7 @@ To generate the doxygen documentation in HTML format use:
 
 ::
 
-   # make doxygen
+   # cmake --build . --target doxygen
 
 HTML output will be under: ``build-doc/doxygen/html`` 
 

@@ -134,7 +134,7 @@ html.writer-html5 .rst-content table.docutils th,
 
 /* lists */
 .rst-content .section dl:not(.docutils) dt {
-  display: table-cell;
+  display: inline-block;
 }
 
 .rst-content table.docutils ul + ul {
