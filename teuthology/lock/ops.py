@@ -1,6 +1,7 @@
 import logging
 import json
 import os
+import random
 import time
 import yaml
 
@@ -175,16 +176,19 @@ def unlock_many(names, user):
         locked_by=user,
         names=names,
     )
-    response = requests.post(
-        uri,
-        data=json.dumps(data),
-        headers={'content-type': 'application/json'},
-    )
-    if response.ok:
-        log.debug("Unlocked: %s", ', '.join(names))
-    else:
-        log.error("Failed to unlock: %s", ', '.join(names))
-    return response.ok
+    with safe_while(
+            sleep=1, increment=0.5, action=f'unlock_many {names}') as proceed:
+        while proceed():
+            response = requests.post(
+                uri,
+                data=json.dumps(data),
+                headers={'content-type': 'application/json'},
+            )
+            if response.ok:
+                log.debug("Unlocked: %s", ', '.join(names))
+                return True
+    log.error("Failed to unlock: %s", ', '.join(names))
+    return False
 
 
 def unlock_one(ctx, name, user, description=None):
@@ -229,9 +233,15 @@ def update_lock(name, description=None, status=None, ssh_pub_key=None):
 
     if updated:
         uri = os.path.join(config.lock_server, 'nodes', name, '')
-        response = requests.put(
-            uri,
-            json.dumps(updated))
+        inc = random.uniform(0, 1)
+        with safe_while(
+                sleep=1, increment=inc, action=f'update lock {name}') as proceed:
+            while proceed():
+                response = requests.put(
+                    uri,
+                    json.dumps(updated))
+                if response.ok:
+                    return True
         return response.ok
     return True
 
@@ -248,24 +258,25 @@ def update_inventory(node_dict):
         return
     uri = os.path.join(config.lock_server, 'nodes', name, '')
     log.info("Updating %s on lock server", name)
-    response = requests.put(
-        uri,
-        json.dumps(node_dict),
-        headers={'content-type': 'application/json'},
-        )
-    if response.status_code == 404:
-        log.info("Creating new node %s on lock server", name)
-        uri = os.path.join(config.lock_server, 'nodes', '')
-        response = requests.post(
-            uri,
-            json.dumps(node_dict),
-            headers={'content-type': 'application/json'},
-        )
-    if not response.ok:
-        log.error("Node update/creation failed for %s: %s",
-                  name, response.text)
-    return response.ok
-
+    inc = random.uniform(0, 1)
+    with safe_while(
+            sleep=1, increment=inc, action=f'update inventory {name}') as proceed:
+        while proceed():
+            response = requests.put(
+                uri,
+                json.dumps(node_dict),
+                headers={'content-type': 'application/json'},
+            )
+            if response.status_code == 404:
+                log.info("Creating new node %s on lock server", name)
+                uri = os.path.join(config.lock_server, 'nodes', '')
+                response = requests.post(
+                    uri,
+                    json.dumps(node_dict),
+                    headers={'content-type': 'application/json'},
+                )
+            if response.ok:
+                return
 
 def do_update_keys(machines, all_=False, _raise=True):
     reference = query.list_locks(keyed_by_name=True)
