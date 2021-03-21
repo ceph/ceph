@@ -236,7 +236,9 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     delete on_finishes[i];
     if (r < 0) {
       ictxs[i] = nullptr;
-      ret_code = r;
+      if (r != -ENOENT) {
+        ret_code = r;
+      }
     }
   }
   if (ret_code != 0) {
@@ -249,6 +251,11 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   for (int i = 0; i < snap_count; ++i) {
     ImageCtx *ictx = ictxs[i];
     on_finishes[i] = new C_SaferCond;
+
+    if (ictx == nullptr) {
+      on_finishes[i]->complete(0);
+      continue;
+    }
 
     std::string snap_name;
     ictx->image_lock.lock_shared();
