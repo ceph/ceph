@@ -2002,7 +2002,7 @@ void PeeringState::calc_replicated_acting_stretch(
       osd,
       pool.info.peering_crush_bucket_barrier,
       pool.info.crush_rule);
-    return ancestors[ancestor];
+    return &ancestors[ancestor];
   };
 
   unsigned bucket_max = pool.info.size / pool.info.peering_crush_bucket_target;
@@ -2019,7 +2019,7 @@ void PeeringState::calc_replicated_acting_stretch(
       want->push_back(osd);
       acting_backfill->insert(
 	pg_shard_t(osd, shard_id_t::NO_SHARD));
-      get_ancestor(osd).inc_selected();
+      get_ancestor(osd)->inc_selected();
     }
   };
   add_required(primary->first.osd);
@@ -2038,7 +2038,7 @@ void PeeringState::calc_replicated_acting_stretch(
     }
   }
 
-  if (want->size() >= pool.info.size) {
+  if (want->size() >= pool.info.size) { // non-failed CRUSH mappings are valid
     ss << " up set sufficient" << std::endl;
     return;
   }
@@ -2067,7 +2067,9 @@ void PeeringState::calc_replicated_acting_stretch(
     }
     if (!restrict_to_up_acting) {
       for (auto &[cand, info] : all_info) {
-	if (!used(cand.osd) && usable_info(info)) {
+	if (!used(cand.osd) && usable_info(info) &&
+	    (std::find(acting.begin(), acting.end(), cand.osd)
+	     == acting.end())) {
 	  ss << " other candidate " << cand << " " << info << std::endl;
 	  candidates.push_back(
 	    std::make_pair(get_osd_ord(false, info), cand.osd));
@@ -2078,7 +2080,7 @@ void PeeringState::calc_replicated_acting_stretch(
 
     // We then filter these candidates by ancestor
     std::for_each(candidates.begin(), candidates.end(), [&](auto cand) {
-      get_ancestor(cand.second).add_osd(cand.first, cand.second);
+      get_ancestor(cand.second)->add_osd(cand.first, cand.second);
     });
   }
 
@@ -2107,7 +2109,7 @@ void PeeringState::calc_replicated_acting_stretch(
   if (pool.info.peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
     auto aiter = ancestors.find(pool.info.peering_crush_mandatory_member);
     if (aiter != ancestors.end() &&
-	aiter->second.get_num_selected()) {
+	!aiter->second.get_num_selected()) {
       ss << " adding required ancestor " << aiter->first << std::endl;
       ceph_assert(!aiter->second.is_empty()); // wouldn't exist otherwise
       pop_ancestor(aiter->second);
@@ -2121,7 +2123,13 @@ void PeeringState::calc_replicated_acting_stretch(
     aheap.push_if_nonempty(anc.second);
   });
 
-  /* and pull from this heap until it's empty or we have enough. */
+  /* and pull from this heap until it's empty or we have enough.
+   * "We have enough" is a sufficient check here for
+   * stretch_set_can_peer() because our heap sorting always
+   * pulls from ancestors with the least number of included OSDs,
+   * so if it is possible to satisfy the bucket_count constraints we
+   * will do so.
+   */
   while (!aheap.is_empty() && want->size() < pool.info.size) {
     auto next = aheap.pop();
     pop_ancestor(next.get());
@@ -2301,13 +2309,18 @@ void PeeringState::choose_async_recovery_replicated(
     vector<int> candidate_want(*want);
     for (auto it = candidate_want.begin(); it != candidate_want.end(); ++it) {
       if (*it == cur_shard.osd) {
-        candidate_want.erase(it);
-	want->swap(candidate_want);
-	async_recovery->insert(cur_shard);
-        break;
+	candidate_want.erase(it);
+	if (pool.info.stretch_set_can_peer(candidate_want, *osdmap, NULL)) {
+	  // if we're in stretch mode, we can only remove the osd if it doesn't
+	  // break peering limits.
+	  want->swap(candidate_want);
+	  async_recovery->insert(cur_shard);
+	}
+	break;
       }
     }
   }
+
   psdout(20) << __func__ << " result want=" << *want
 	     << " async_recovery=" << *async_recovery << dendl;
 }
@@ -2464,16 +2477,6 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 	pl->queue_want_pg_temp(want);
     }
     return false;
-  }
-  // make sure we respect the stretch cluster rules -- and
-  // didn't break them with earlier choices!
-  const pg_pool_t& pg_pool = pool.info;
-  if (pg_pool.is_stretch_pool()) {
-    stringstream ss;
-    if (!pg_pool.stretch_set_can_peer(want, *get_osdmap(), &ss)) {
-      psdout(5) << "peering blocked by stretch_can_peer: " << ss.str() << dendl;
-      return false;
-    }
   }
 
   if (request_pg_temp_change_only)
@@ -2685,7 +2688,7 @@ void PeeringState::activate(
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size) {
+    if (acting_set_writeable()) {
       ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
@@ -2987,7 +2990,7 @@ void PeeringState::activate(
     state_set(PG_STATE_ACTIVATING);
     pl->on_activate(std::move(to_trim));
   }
-  if (acting.size() >= pool.info.min_size) {
+  if (acting_set_writeable()) {
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
     pg_log.roll_forward(rollbacker.get());
   }
@@ -6253,7 +6256,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
 	pl->set_not_ready_to_merge_source(pgid);
       }
     }
-  } else if (ps->acting.size() < ps->pool.info.min_size) {
+  } else if (!ps->acting_set_writeable()) {
     ps->state_set(PG_STATE_PEERED);
   } else {
     ps->state_set(PG_STATE_ACTIVE);
@@ -6412,7 +6415,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     {}, /* lease */
     ps->get_lease_ack());
 
-  if (ps->acting.size() >= ps->pool.info.min_size) {
+  if (ps->acting_set_writeable()) {
     ps->state_set(PG_STATE_ACTIVE);
   } else {
     ps->state_set(PG_STATE_PEERED);
