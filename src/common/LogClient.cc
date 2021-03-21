@@ -133,6 +133,14 @@ LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 {
 }
 
+void LogChannel::set_log_to_monitors(bool v)
+{
+  if (log_to_monitors != v) {
+    parent->reset();
+    log_to_monitors = v;
+  }
+}
+
 void LogChannel::update_config(map<string,string> &log_to_monitors,
 			       map<string,string> &log_to_syslog,
 			       map<string,string> &log_channels,
@@ -326,6 +334,15 @@ version_t LogClient::queue(LogEntry &entry)
   }
 
   return entry.seq;
+}
+
+void LogClient::reset()
+{
+  std::lock_guard l(log_lock);
+  if (log_queue.size()) {
+    log_queue.clear();
+  }
+  last_log_sent = last_log;
 }
 
 uint64_t LogClient::get_next_seq()
