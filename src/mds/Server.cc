@@ -3391,7 +3391,9 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
     if (!no_want_auth)
       want_auth = true;
   } else {
-    if (!no_want_auth && forward_all_requests_to_auth)
+    if (!no_want_auth && forward_all_requests_to_auth &&
+	mdr->client_request &&
+	mdr->client_request->get_num_fwd() <= 32)
       want_auth = true;
     flags |= MDS_TRAVERSE_RDLOCK_PATH | MDS_TRAVERSE_RDLOCK_SNAP;
   }
