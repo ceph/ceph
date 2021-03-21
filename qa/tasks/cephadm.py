@@ -8,6 +8,7 @@ import logging
 import os
 import json
 import re
+import time
 import uuid
 import yaml
 
@@ -463,10 +464,7 @@ def ceph_bootstrap(ctx, config):
             '{}/{}.pub'.format(testdir, cluster_name),
         ])
 
-        log.info('Stopping all daemons...')
-
-        # this doesn't block until they are all stopped...
-        #ctx.cluster.run(args=['sudo', 'systemctl', 'stop', 'ceph.target'])
+        log.info('Stopping all known daemons/roles...')
 
         # so, stop them individually
         for role in ctx.daemons.resolve_role_list(None, CEPH_ROLE_TYPES, True):
@@ -477,7 +475,17 @@ def ceph_bootstrap(ctx, config):
                 log.exception(f'Failed to stop "{role}"')
                 raise
 
+        # stop the catch-all, too, so that we also stop daemons/roles we
+        # don't know about  Note that doesn't block until they are all stopped, so
+        # wait a moment
+        log.info(f'Stopping ceph-{fsid}.target...')
+        ctx.cluster.run(args=['sudo', 'systemctl', 'stop', f'ceph-{fsid}.target'])
+
+        log.info('Waiting a few moments for containers to stop...')
+        time.sleep(10)
+
         # clean up /etc/ceph
+        log.info('Cleaning up /etc/ceph...')
         ctx.cluster.run(args=[
             'sudo', 'rm', '-f',
             '/etc/ceph/{}.conf'.format(cluster_name),
