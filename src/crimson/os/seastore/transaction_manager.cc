@@ -297,69 +297,73 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
     addr,
     laddr,
     len);
-  CachedExtentRef ret;
-  auto status = cache->get_extent_if_cached(t, addr, &ret);
-  if (status != Transaction::get_extent_ret::ABSENT) {
-    return get_extent_if_live_ret(
-      get_extent_if_live_ertr::ready_future_marker{},
-      ret);
-  }
 
-  if (is_logical_type(type)) {
-    return lba_manager->get_mapping(
-      t,
-      laddr,
-      len).safe_then([=, &t](lba_pin_list_t pins) {
-	ceph_assert(pins.size() <= 1);
-	if (pins.empty()) {
-	  return get_extent_if_live_ret(
-	    get_extent_if_live_ertr::ready_future_marker{},
-	    CachedExtentRef());
-	}
+  return cache->get_extent_if_cached(t, addr
+  ).then([this, &t, type, addr, laddr, len](auto extent)
+	 -> get_extent_if_live_ret {
+    if (extent) {
+      return get_extent_if_live_ret(
+	get_extent_if_live_ertr::ready_future_marker{},
+	extent);
+    }
 
-	auto pin = std::move(pins.front());
-	pins.pop_front();
-	ceph_assert(pin->get_laddr() == laddr);
-	ceph_assert(pin->get_length() == (extent_len_t)len);
-	if (pin->get_paddr() == addr) {
-	  return cache->get_extent_by_type(
-	    t,
-	    type,
-	    addr,
-	    laddr,
-	    len).safe_then(
-	      [this, pin=std::move(pin)](CachedExtentRef ret) mutable
-	      -> get_extent_if_live_ret {
-		auto lref = ret->cast<LogicalCachedExtent>();
-		if (!lref->has_pin()) {
-		  if (pin->has_been_invalidated() || lref->has_been_invalidated()) {
-		    return crimson::ct_error::eagain::make();
-		  } else {
-		    lref->set_pin(std::move(pin));
-		    lba_manager->add_pin(lref->get_pin());
+    if (is_logical_type(type)) {
+      return lba_manager->get_mapping(
+	t,
+	laddr,
+	len).safe_then([=, &t](lba_pin_list_t pins) {
+	  ceph_assert(pins.size() <= 1);
+	  if (pins.empty()) {
+	    return get_extent_if_live_ret(
+	      get_extent_if_live_ertr::ready_future_marker{},
+	      CachedExtentRef());
+	  }
+
+	  auto pin = std::move(pins.front());
+	  pins.pop_front();
+	  ceph_assert(pin->get_laddr() == laddr);
+	  ceph_assert(pin->get_length() == (extent_len_t)len);
+	  if (pin->get_paddr() == addr) {
+	    return cache->get_extent_by_type(
+	      t,
+	      type,
+	      addr,
+	      laddr,
+	      len).safe_then(
+		[this, pin=std::move(pin)](CachedExtentRef ret) mutable
+		-> get_extent_if_live_ret {
+		  auto lref = ret->cast<LogicalCachedExtent>();
+		  if (!lref->has_pin()) {
+		    if (pin->has_been_invalidated() ||
+			lref->has_been_invalidated()) {
+		      return crimson::ct_error::eagain::make();
+		    } else {
+		      lref->set_pin(std::move(pin));
+		      lba_manager->add_pin(lref->get_pin());
+		    }
 		  }
-		}
-		return get_extent_if_live_ret(
-		  get_extent_if_live_ertr::ready_future_marker{},
-		  ret);
-	      });
-	} else {
-	  return get_extent_if_live_ret(
-	    get_extent_if_live_ertr::ready_future_marker{},
-	    CachedExtentRef());
-	}
-      });
-  } else {
-    logger().debug(
-      "TransactionManager::get_extent_if_live: non-logical extent {}",
-      addr);
-    return lba_manager->get_physical_extent_if_live(
-      t,
-      type,
-      addr,
-      laddr,
-      len);
-  }
+		  return get_extent_if_live_ret(
+		    get_extent_if_live_ertr::ready_future_marker{},
+		    ret);
+		});
+	  } else {
+	    return get_extent_if_live_ret(
+	      get_extent_if_live_ertr::ready_future_marker{},
+	      CachedExtentRef());
+	  }
+	});
+    } else {
+      logger().debug(
+	"TransactionManager::get_extent_if_live: non-logical extent {}",
+	addr);
+      return lba_manager->get_physical_extent_if_live(
+	t,
+	type,
+	addr,
+	laddr,
+	len);
+    }
+  });
 }
 
 TransactionManager::~TransactionManager() {}
