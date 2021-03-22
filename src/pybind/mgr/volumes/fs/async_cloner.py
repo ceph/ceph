@@ -276,7 +276,7 @@ class Cloner(AsyncJobs):
         super(Cloner, self).__init__(volume_client, "cloner", tp_size)
 
     def reconfigure_max_concurrent_clones(self, tp_size):
-        super(Cloner, self).reconfigure_max_concurrent_clones("cloner", tp_size)
+        return super(Cloner, self).reconfigure_max_async_threads(tp_size)
 
     def is_clone_cancelable(self, clone_state):
         return not (SubvolumeOpSm.is_complete_state(clone_state) or SubvolumeOpSm.is_failed_state(clone_state))
