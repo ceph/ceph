@@ -6,6 +6,7 @@ import logging
 from contextlib import contextmanager
 
 import cephfs
+from mgr_util import lock_timeout_log
 
 from .async_job import AsyncJobs
 from .exception import IndexException, MetadataMgrException, OpSmException, VolumeException
@@ -329,7 +330,7 @@ class Cloner(AsyncJobs):
             # to persist the new state, async cloner accesses the volume in exclusive mode.
             # accessing the volume in exclusive mode here would lead to deadlock.
             assert track_idx is not None
-            with self.lock:
+            with lock_timeout_log(self.lock):
                 with open_volume_lockless(self.vc, volname) as fs_handle:
                     with open_group(fs_handle, self.vc.volspec, groupname) as group:
                         with open_subvol(self.vc.mgr, fs_handle, self.vc.volspec, group, clonename, SubvolumeOpType.CLONE_CANCEL) as clone_subvolume:
