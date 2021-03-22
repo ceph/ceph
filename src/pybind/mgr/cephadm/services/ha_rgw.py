@@ -13,9 +13,10 @@ class HA_RGWService(CephService):
     TYPE = 'ha-rgw'
 
     class rgw_server():
-        def __init__(self, hostname: str, address: str):
+        def __init__(self, hostname: str, address: str, port: int):
             self.name = hostname
             self.ip = address
+            self.port = port
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert daemon_spec.daemon_type == 'haproxy' or daemon_spec.daemon_type == 'keepalived'
@@ -68,7 +69,10 @@ class HA_RGWService(CephService):
         for daemon in rgw_daemons:
             assert daemon.hostname is not None
             rgw_servers.append(self.rgw_server(
-                daemon.name(), resolve_ip(daemon.hostname)))
+                daemon.name(),
+                resolve_ip(daemon.hostname),
+                daemon.ports[0] if daemon.ports else 80
+            ))
 
         # virtual ip address cannot have netmask attached when passed to haproxy config
         # since the port is added to the end and something like 123.123.123.10/24:8080 is invalid
