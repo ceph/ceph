@@ -64,6 +64,16 @@ typedef int64_t signed_rep;
 // differences between now and a time point in the past.
 typedef std::chrono::duration<signed_rep, std::nano> signedspan;
 
+template<typename Duration>
+struct timeval to_timeval(Duration d) {
+  struct timeval tv;
+  auto sec = std::chrono::duration_cast<std::chrono::seconds>(d);
+  tv.tv_sec = sec.count();
+  auto usec = std::chrono::duration_cast<std::chrono::microseconds>(d-sec);
+  tv.tv_usec = usec.count();
+  return tv;
+}
+
 // We define our own clocks so we can have our choice of all time
 // sources supported by the operating system. With the standard
 // library the resolution and cost are unspecified. (For example,

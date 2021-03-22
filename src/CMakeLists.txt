@@ -807,6 +807,13 @@ if(WITH_LIBCEPHFS)
   endif()
 endif(WITH_LIBCEPHFS)
 
+if(WITH_LIBCEPHSQLITE)
+  set(cephsqlite_srcs libcephsqlite.cc SimpleRADOSStriper.cc)
+  add_library(cephsqlite ${CEPH_SHARED} ${cephsqlite_srcs})
+  target_link_libraries(cephsqlite PRIVATE cls_lock_client librados ceph-common SQLite3::SQLite3 ${EXTRALIBS})
+  install(TARGETS cephsqlite DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif(WITH_LIBCEPHSQLITE)
+
 if(WITH_FUSE)
   set(ceph_fuse_srcs
     ceph_fuse.cc

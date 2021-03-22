@@ -157,14 +157,14 @@ class Schedule(object):
         return json.dumps({'path': self.path, 'schedule': self.schedule,
                            'retention': dump_retention(self.retention)})
 
-    CREATE_TABLES = '''CREATE TABLE schedules(
+    CREATE_TABLES = '''CREATE TABLE IF NOT EXISTS schedules(
         id INTEGER PRIMARY KEY ASC,
         path TEXT NOT NULL UNIQUE,
         subvol TEXT,
         retention TEXT DEFAULT '{}',
         rel_path TEXT NOT NULL
     );
-    CREATE TABLE schedules_meta(
+    CREATE TABLE IF NOT EXISTS schedules_meta(
         id INTEGER PRIMARY KEY ASC,
         schedule_id INT,
         start TEXT NOT NULL,
