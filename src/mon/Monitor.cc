@@ -1999,6 +1999,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 	       << ", mine was " << monmap->get_epoch() << dendl;
       delete newmap;
       monmap->decode(m->monmap_bl);
+      notify_new_monmap(false);
 
       bootstrap();
       return;
@@ -6484,7 +6485,7 @@ int Monitor::ms_handle_authentication(Connection *con)
   return ret;
 }
 
-void Monitor::notify_new_monmap()
+void Monitor::notify_new_monmap(bool can_change_external_state)
 {
   elector.notify_strategy_maybe_changed(monmap->strategy);
   dout(30) << __func__ << "we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
@@ -6504,7 +6505,7 @@ void Monitor::notify_new_monmap()
       set_degraded_stretch_mode();
     }
   }
-  set_elector_disallowed_leaders(true);
+  set_elector_disallowed_leaders(can_change_external_state);
 }
 
 void Monitor::set_elector_disallowed_leaders(bool allow_election)
