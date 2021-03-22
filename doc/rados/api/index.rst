@@ -21,4 +21,5 @@ Ceph, your own interface to Ceph, etc.).
    librados (C) <librados>
    librados (C++) <libradospp>
    librados (Python) <python>
+   libcephsqlite (SQLite) <libcephsqlite>
    object class <objclass-sdk>
