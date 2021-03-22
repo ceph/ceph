@@ -123,6 +123,8 @@ Then provide the zone placement info for that target:
         --index-pool default.rgw.temporary.index \
         --data-extra-pool default.rgw.temporary.non-ec
 
+.. _adding_a_storage_class:
+
 Adding a Storage Class
 ----------------------
 

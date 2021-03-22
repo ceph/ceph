@@ -2081,7 +2081,7 @@ void RGWZoneGroupMap::decode(bufferlist::const_iterator& bl) {
   }
 }
 
-static int conf_to_uint64(const JSONFormattable& config, const string& key, uint64_t *pval)
+static inline int conf_to_uint64(const JSONFormattable& config, const string& key, uint64_t *pval)
 {
   string sval;
   if (config.find(key, &sval)) {
@@ -2124,6 +2124,9 @@ int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
   }
   if (config.exists("target_path")) {
     target_path = config["target_path"];
+  }
+  if (config.exists("region")) {
+    region = config["region"];
   }
   if (config.exists("host_style")) {
     string s;
@@ -2197,6 +2200,9 @@ int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
   }
   if (config.exists("target_path")) {
     target_path.clear();
+  }
+  if (config.exists("region")) {
+    region.clear();
   }
   if (config.exists("host_style")) {
     /* default */
