@@ -224,11 +224,9 @@ void Capability::set_wanted(int w) {
   CInode *in = get_inode();
   if (in) {
     if (!is_wanted_notable(_wanted) && is_wanted_notable(w)) {
-      in->adjust_num_caps_notable(1);
       if (!is_notable())
 	mark_notable();
     } else if (is_wanted_notable(_wanted) && !is_wanted_notable(w)) {
-      in->adjust_num_caps_notable(-1);
       maybe_clear_notable();
     }
     _wanted = w;

@@ -2867,7 +2867,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   // newer log segments.
   LogEvent *le;
   EMetaBlob *metablob;
-  if (in->is_any_caps_wanted() && in->last == CEPH_NOSNAP) {   
+  if (in->last == CEPH_NOSNAP && in->is_any_wr_caps_wanted()) {
     EOpen *eo = new EOpen(mds->mdlog);
     eo->add_ino(in->ino());
     metablob = &eo->metablob;
@@ -2985,7 +2985,8 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
       mds->mdcache->recovery_queue.prioritize(cur);
     }
 
-    if (mdcache->open_file_table.should_log_open(cur)) {
+    if ((cap->wanted() & CEPH_CAP_ANY_WR) &&
+	mdcache->open_file_table.should_log_open(cur)) {
       ceph_assert(cur->last == CEPH_NOSNAP);
       EOpen *le = new EOpen(mds->mdlog);
       mds->mdlog->start_entry(le);

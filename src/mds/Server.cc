@@ -4247,10 +4247,11 @@ void Server::handle_client_open(MDRequestRef& mdr)
   utime_t now = ceph_clock_now();
   mdr->set_mds_stamp(now);
 
+  Capability *cap = nullptr;
   if (cur->is_file() || cur->is_dir()) {
     if (mdr->snapid == CEPH_NOSNAP) {
       // register new cap
-      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr, nullptr);
+      cap = mds->locker->issue_new_caps(cur, cmode, mdr, nullptr);
       if (cap)
 	dout(12) << "open issued caps " << ccap_string(cap->pending())
 		 << " for " << req->get_source()
@@ -4270,7 +4271,8 @@ void Server::handle_client_open(MDRequestRef& mdr)
     mds->locker->check_inode_max_size(cur);
 
   // make sure this inode gets into the journal
-  if (cur->is_auth() && cur->last == CEPH_NOSNAP &&
+  if (cur->is_auth() &&
+      (cap && (cap->wanted() & CEPH_CAP_ANY_WR)) &&
       mdcache->open_file_table.should_log_open(cur)) {
     EOpen *le = new EOpen(mds->mdlog);
     mdlog->start_entry(le);

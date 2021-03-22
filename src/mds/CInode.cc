@@ -3324,32 +3324,6 @@ bool CInode::multiple_nonstale_caps()
   return false;
 }
 
-void CInode::set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m)
-{
-  bool old_empty = mds_caps_wanted.empty();
-  mds_caps_wanted.swap(m);
-  if (old_empty != (bool)mds_caps_wanted.empty()) {
-    if (old_empty)
-      adjust_num_caps_notable(1);
-    else
-      adjust_num_caps_notable(-1);
-  }
-}
-
-void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
-{
-  bool old_empty = mds_caps_wanted.empty();
-  if (wanted) {
-    mds_caps_wanted[mds] = wanted;
-    if (old_empty)
-      adjust_num_caps_notable(1);
-  } else if (!old_empty) {
-    mds_caps_wanted.erase(mds);
-    if (mds_caps_wanted.empty())
-      adjust_num_caps_notable(-1);
-  }
-}
-
 Capability *CInode::add_client_cap(client_t client, Session *session,
 				   SnapRealm *conrealm, bool new_inode)
 {
@@ -3394,9 +3368,6 @@ void CInode::remove_client_cap(client_t client)
   
   if (client == loner_cap)
     loner_cap = -1;
-
-  if (cap->is_wanted_notable())
-    adjust_num_caps_notable(-1);
 
   client_caps.erase(it);
   if (client_caps.empty()) {
@@ -3637,12 +3608,12 @@ void CInode::get_caps_issued(SimpleLock *lock, int *ploner, int *pother, int *px
   }
 }
 
-bool CInode::is_any_caps_wanted() const
+bool CInode::is_any_wr_caps_wanted() const
 {
   for (auto& p : client_caps_by_state) {
     if (p.second.empty())
       continue;
-    if ((p.first >> 24) & 0xffffff)
+    if ((p.first >> 24) & CEPH_CAP_ANY_WR)
       return true;
   }
   return false;
@@ -3730,26 +3701,12 @@ bool CInode::issued_caps_need_gather(SimpleLock *lock)
   return false;
 }
 
-void CInode::adjust_num_caps_notable(int d)
-{
-  if (!is_clientwriteable()) {
-    if (!num_caps_notable && d > 0)
-      mdcache->open_file_table.add_inode(this);
-    else if (num_caps_notable > 0 && num_caps_notable == -d)
-      mdcache->open_file_table.remove_inode(this);
-  }
-
-  num_caps_notable +=d;
-  ceph_assert(num_caps_notable >= 0);
-}
-
 void CInode::mark_clientwriteable()
 {
   if (last != CEPH_NOSNAP)
     return;
   if (!state_test(STATE_CLIENTWRITEABLE)) {
-    if (num_caps_notable == 0)
-      mdcache->open_file_table.add_inode(this);
+    mdcache->open_file_table.add_inode(this);
     state_set(STATE_CLIENTWRITEABLE);
   }
 }
@@ -3757,8 +3714,7 @@ void CInode::mark_clientwriteable()
 void CInode::clear_clientwriteable()
 {
   if (state_test(STATE_CLIENTWRITEABLE)) {
-    if (num_caps_notable == 0)
-      mdcache->open_file_table.remove_inode(this);
+    mdcache->open_file_table.remove_inode(this);
     state_clear(STATE_CLIENTWRITEABLE);
   }
 }

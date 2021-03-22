@@ -5719,6 +5719,7 @@ void MDCache::clean_open_file_lists()
 void MDCache::dump_openfiles(Formatter *f)
 {
   f->open_array_section("openfiles");
+  // FIXME: dump open_file_table
   for (auto p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        ++p) {
@@ -5728,8 +5729,7 @@ void MDCache::dump_openfiles(Formatter *f)
     while (!q.end()) {
       CInode *in = *q;
       ++q;
-      if ((in->last == CEPH_NOSNAP && !in->is_any_caps_wanted())
-          || (in->last != CEPH_NOSNAP && in->client_snap_caps.empty())) 
+      if (in->last != CEPH_NOSNAP && in->client_snap_caps.empty())
         continue;
       f->open_object_section("file");
       in->dump(f, CInode::DUMP_PATH | CInode::DUMP_INODE_STORE_BASE | CInode::DUMP_CAPS);
