@@ -47,6 +47,7 @@ from urllib.request import urlopen
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
 DEFAULT_IMAGE_IS_MASTER = True
+DEFAULT_IMAGE_RELEASE = 'quincy'
 DEFAULT_PROMETHEUS_IMAGE = 'docker.io/prom/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'docker.io/prom/node-exporter:v0.18.1'
 DEFAULT_GRAFANA_IMAGE = 'docker.io/ceph/ceph-grafana:6.7.4'
@@ -3757,9 +3758,6 @@ def prepare_bootstrap_config(
     if ctx.registry_json or ctx.registry_url:
         command_registry_login(ctx)
 
-    if not ctx.skip_pull:
-        _pull_image(ctx, image)
-
     return config
 
 
@@ -3868,6 +3866,20 @@ def command_bootstrap(ctx):
     cluster_network, ipv6_cluster_network = prepare_cluster_network(ctx)
 
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
+
+    if not ctx.skip_pull:
+        _pull_image(ctx, ctx.image)
+
+    image_ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
+    logger.info(f'Ceph version: {image_ver}')
+    image_release = image_ver.split()[4]
+    if (
+        not ctx.allow_mismatched_release
+        and image_release not in [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]
+    ):
+        raise Error(
+            f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE}; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+        )
 
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid(ctx)
@@ -7564,6 +7576,10 @@ def _get_parser():
         '--allow-fqdn-hostname',
         action='store_true',
         help='allow hostname that is fully-qualified (contains ".")')
+    parser_bootstrap.add_argument(
+        '--allow-mismatched-release',
+        action='store_true',
+        help="allow bootstrap of ceph that doesn't match this version of cephadm")
     parser_bootstrap.add_argument(
         '--skip-prepare-host',
         action='store_true',
