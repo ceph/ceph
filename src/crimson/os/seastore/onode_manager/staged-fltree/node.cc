@@ -207,26 +207,29 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
 
 void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version)
 {
+  assert(!needs_update_all);
   assert(version.layout == current_version.layout);
-  if (!version.is_duplicate && current_version.is_duplicate) {
+  if (version.state == current_version.state) {
+    // cache is already latest.
+  } else if (version.state < current_version.state) {
+    // the extent has been copied but the layout has not been changed.
     assert(p_node_base != nullptr);
     assert(key_view.has_value());
     assert(p_value_header != nullptr);
-    assert(!value_payload_mut);
-    assert(p_value_recorder == nullptr);
 
     auto current_p_node_base = ref_leaf_node->read();
     assert(current_p_node_base != p_node_base);
 
-    version.is_duplicate = true;
+    version.state = current_version.state;
     reset_ptr(p_value_header, p_node_base, current_p_node_base);
     key_view->reset_to(p_node_base, current_p_node_base);
+    value_payload_mut.reset();
+    p_value_recorder = nullptr;
 
     p_node_base = current_p_node_base;
   } else {
-    // cache must be latest.
-    // node cannot change is_duplicate from true to false.
-    assert(!(version.is_duplicate && !current_version.is_duplicate));
+    // It is impossible to change state backwards, see node_types.h.
+    ceph_abort("impossible");
   }
 }
 
@@ -856,7 +859,7 @@ bool LeafNode::is_level_tail() const
 
 node_version_t LeafNode::get_version() const
 {
-  return {layout_version, impl->is_duplicate()};
+  return {layout_version, impl->get_extent_state()};
 }
 
 const char* LeafNode::read() const
