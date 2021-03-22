@@ -1,6 +1,7 @@
 import errno
 import json
 import logging
+import subprocess
 from typing import List, cast, Optional
 from ipaddress import ip_address, IPv6Address
 
@@ -142,3 +143,56 @@ class IscsiService(CephService):
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         warn_message = f'It is presumed safe to stop {names}'
         return HandleCommandResult(0, warn_message, '')
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called after the daemon is removed.
+        """
+        logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
+
+        # remove config for dashboard iscsi gateways
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'dashboard iscsi-gateway-rm',
+            'name': daemon.hostname,
+        })
+        logger.info(f'{daemon.hostname} removed from iscsi gateways dashboard config')
+
+        # needed to know if we have ssl stuff for iscsi in ceph config
+        iscsi_config_dict = {}
+        ret, iscsi_config, err = self.mgr.check_mon_command({
+            'prefix': 'config-key dump',
+            'key': 'iscsi',
+        })
+        if iscsi_config:
+            iscsi_config_dict = json.loads(iscsi_config)
+
+        # remove iscsi cert and key from ceph config
+        for iscsi_key, value in iscsi_config_dict.items():
+            if f'iscsi/client.{daemon.name()}/' in iscsi_key:
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'config-key rm',
+                    'key': iscsi_key,
+                })
+                logger.info(f'{iscsi_key} removed from ceph config')
+
+    def purge(self, service_name: str) -> None:
+        """Removes configuration
+        """
+        spec = cast(IscsiServiceSpec, self.mgr.spec_store[service_name].spec)
+        try:
+            # remove service configuration from the pool
+            try:
+                subprocess.run(['rados',
+                                '-k', str(self.mgr.get_ceph_option('keyring')),
+                                '-n', f'mgr.{self.mgr.get_mgr_id()}',
+                                '-p', cast(str, spec.pool),
+                                'rm',
+                                'gateway.conf'])
+                logger.info(f'<gateway.conf> removed from {spec.pool}')
+            except subprocess.CalledProcessError as ex:
+                logger.error(f'Error executing <<{ex.cmd}>>: {ex.output}')
+            except subprocess.TimeoutExpired:
+                logger.error(f'timeout (5s) trying to remove <gateway.conf> from {spec.pool}')
+
+        except Exception:
+            logger.exception(f'failed to purge {service_name}')
