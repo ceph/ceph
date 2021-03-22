@@ -3,6 +3,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "include/rados.h"
 #include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -3990,7 +3991,7 @@ int reweight::by_utilization(
   // but aggressively adjust weights up whenever possible.
   const double underload_util = average_util;
 
-  const unsigned max_change = (unsigned)(max_changef * (double)0x10000);
+  const unsigned max_change = (unsigned)(max_changef * (double)CEPH_OSD_IN);
 
   ostringstream oss;
   if (f) {
@@ -4067,13 +4068,13 @@ int reweight::by_utilization(
       if (f) {
 	f->open_object_section("osd");
 	f->dump_int("osd", p.first);
-	f->dump_float("weight", (float)weight / (float)0x10000);
-	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
+	f->dump_float("weight", (float)weight / (float)CEPH_OSD_IN);
+	f->dump_float("new_weight", (float)new_weight / (float)CEPH_OSD_IN);
 	f->close_section();
       } else {
         oss << "osd." << p.first << " weight "
-            << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000 << "\n";
+            << (float)weight / (float)CEPH_OSD_IN << " -> "
+            << (float)new_weight / (float)CEPH_OSD_IN << "\n";
       }
       if (++num_changed >= max_osds)
 	break;
@@ -4082,13 +4083,13 @@ int reweight::by_utilization(
       // assign a higher weight.. if we can.
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       new_weight = std::min(new_weight, weight + max_change);
-      if (new_weight > 0x10000)
-	new_weight = 0x10000;
+      if (new_weight > CEPH_OSD_IN)
+	new_weight = CEPH_OSD_IN;
       if (new_weight > weight) {
 	new_weights->insert({p.first, new_weight});
         oss << "osd." << p.first << " weight "
-            << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000 << "\n";
+            << (float)weight / (float)CEPH_OSD_IN << " -> "
+            << (float)new_weight / (float)CEPH_OSD_IN << "\n";
 	if (++num_changed >= max_osds)
 	  break;
       }
