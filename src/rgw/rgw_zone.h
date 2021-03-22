@@ -695,16 +695,21 @@ struct RGWTierACLMapping {
   void init(const JSONFormattable& config) {
     const string& t = config["type"];
 
-    type = get_acl_type(t);
+    if (t == "email") {
+      type = ACL_TYPE_EMAIL_USER;
+    } else if (t == "uri") {
+      type = ACL_TYPE_GROUP;
+    } else {
+      type = ACL_TYPE_CANON_USER;
+    }
+
     source_id = config["source_id"];
     dest_id = config["dest_id"];
   }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-
-    string s = get_acl_type_str(type);
-    encode(s, bl);
+    encode((uint32_t)type, bl);
     encode(source_id, bl);
     encode(dest_id, bl);
     ENCODE_FINISH(bl);
@@ -712,10 +717,9 @@ struct RGWTierACLMapping {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    string s;
-    decode(s, bl);
-
-    type = get_acl_type(s);
+    uint32_t it;
+    decode(it, bl);
+    type = (ACLGranteeTypeEnum)it;
     decode(source_id, bl);
     decode(dest_id, bl);
     DECODE_FINISH(bl);
@@ -729,6 +733,7 @@ struct RGWZoneGroupPlacementTierS3 {
 #define DEFAULT_MULTIPART_SYNC_PART_SIZE (32 * 1024 * 1024)
   std::string endpoint;
   RGWAccessKey key;
+  std::string region;
   HostStyle host_style{PathStyle};
   string target_storage_class;
 
@@ -746,8 +751,8 @@ struct RGWZoneGroupPlacementTierS3 {
     ENCODE_START(1, 1, bl);
     encode(endpoint, bl);
     encode(key, bl);
-    string s = (host_style == PathStyle ? "path" : "virtual");
-    encode(s, bl);
+    encode(region, bl);
+    encode((uint32_t)host_style, bl);
     encode(target_storage_class, bl);
     encode(target_path, bl);
     encode(acl_mappings, bl);
@@ -760,13 +765,12 @@ struct RGWZoneGroupPlacementTierS3 {
     DECODE_START(1, bl);
     decode(endpoint, bl);
     decode(key, bl);
-    string s;
-    decode(s, bl);
-    if (s != "virtual") {
-      host_style = PathStyle;
-    } else {
-      host_style = VirtualStyle;
-    }
+    decode(region, bl);
+
+    uint32_t it;
+    decode(it, bl);
+    host_style = (HostStyle)it;
+
     decode(target_storage_class, bl);
     decode(target_path, bl);
     decode(acl_mappings, bl);

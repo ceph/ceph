@@ -684,8 +684,18 @@ public:
   static constexpr uint32_t FLAG_EWAIT_SYNC =  0x0001;
   static constexpr uint32_t FLAG_DWAIT_SYNC =  0x0002;
   static constexpr uint32_t FLAG_EDRAIN_SYNC = 0x0004;
+  static constexpr uint32_t FLAG_HTTP_MGR = 0x0008;
 
 private:
+  class C_WorkQTimerCtx: public Context {
+    WorkQ* wq;
+    public:
+      C_WorkQTimerCtx(WorkQ* _wq): wq(_wq) {}
+      void finish(int r) override {
+        wq->stop_http_manager();
+      }
+  };
+
   const work_f bsf = [](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {};
   RGWLC::LCWorker* wk;
   uint32_t qmax;
@@ -695,13 +705,27 @@ private:
   uint32_t flags;
   vector<WorkItem> items;
   work_f f;
+  std::unique_ptr<RGWCoroutinesManager> crs;
+  std::unique_ptr<RGWHTTPManager> http_manager;
+  bool is_http_mgr_started{false};
+  ceph::mutex timer_mtx;
+  SafeTimer timer;
+  int timer_wait_sec = 200; //seconds
+  C_WorkQTimerCtx* timer_ctx = nullptr;
 
 public:
   WorkQ(RGWLC::LCWorker* wk, uint32_t ix, uint32_t qmax)
-    : wk(wk), qmax(qmax), ix(ix), flags(FLAG_NONE), f(bsf)
+    : wk(wk), qmax(qmax), ix(ix), flags(FLAG_NONE), f(bsf),
+      timer_mtx(ceph::make_mutex("WorkQTimerMutex")),
+      timer((CephContext*)(wk->cct), timer_mtx)
     {
       create(thr_name().c_str());
+      timer.init();
     }
+
+  ~WorkQ() {
+    timer.shutdown();
+  }
 
   std::string thr_name() {
     return std::string{"wp_thrd: "}
@@ -712,12 +736,61 @@ public:
     f = _f;
   }
 
+  RGWCoroutinesManager* get_crs() { return crs.get(); }
+  RGWHTTPManager* get_http_manager() { return http_manager.get(); }
+
+  int start_http_manager(rgw::sal::Store* store) {
+    int ret = 0;
+
+    if (is_http_mgr_started)
+      return 0;
+
+    /* http_mngr */
+    if(!crs) {
+      crs.reset(new RGWCoroutinesManager(store->ctx(), store->get_cr_registry()));
+    }
+    if (!http_manager) {
+      http_manager.reset(new RGWHTTPManager(store->ctx(), crs.get()->get_completion_mgr()));
+    }      
+
+    ret = http_manager->start();
+    if (ret < 0) {
+      dout(5) << "RGWLC:: http_manager->start() failed ret = "
+	          << ret << dendl;
+      return ret;
+    }
+
+    is_http_mgr_started = true;
+    flags |= FLAG_HTTP_MGR;
+
+    return ret;
+  }
+
+  int stop_http_manager() {
+    if (!is_http_mgr_started) {
+      return 0;
+    }
+
+    http_manager.reset();
+    crs.reset();
+  
+    is_http_mgr_started = false;
+	flags &= ~FLAG_HTTP_MGR;
+    timer.cancel_all_events();
+    timer_ctx = nullptr;
+    return 0;
+  }
+
   void enqueue(WorkItem&& item) {
     unique_lock uniq(mtx);
     while ((!wk->get_lc()->going_down()) &&
 	   (items.size() > qmax)) {
       flags |= FLAG_EWAIT_SYNC;
       cv.wait_for(uniq, 200ms);
+    }
+    if (timer_ctx && (flags & FLAG_HTTP_MGR)) {
+      timer.cancel_all_events();
+      timer_ctx = nullptr;
     }
     items.push_back(item);
     if (flags & FLAG_DWAIT_SYNC) {
@@ -742,6 +815,10 @@ private:
       /* clear drain state, as we are NOT doing work and qlen==0 */
       if (flags & FLAG_EDRAIN_SYNC) {
 	flags &= ~FLAG_EDRAIN_SYNC;
+      }
+      if ((flags & FLAG_HTTP_MGR) && !timer_ctx) {
+        timer_ctx = new C_WorkQTimerCtx(this);
+        timer.add_event_after(timer_wait_sec, timer_ctx);
       }
       flags |= FLAG_DWAIT_SYNC;
       cv.wait_for(uniq, 200ms);
@@ -1280,10 +1357,10 @@ public:
      */
     if (oc.bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
         ret = remove_expired_obj(oc.dpp, oc, false);
-        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << "s versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << " versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
     } else {
         ret = remove_expired_obj(oc.dpp, oc, true);
-        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "s versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
     }
     return ret;
   }
@@ -1295,7 +1372,7 @@ public:
 
     real_time read_mtime;
 
-    std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op(oc.obj->get_read_op(&oc.rctx));
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(oc.obj->get_read_op(&oc.rctx));
 
     read_op->params.lastmod = &read_mtime;
 
@@ -1313,7 +1390,7 @@ public:
     (*tier_ctx.obj)->set_atomic(&tier_ctx.rctx);
     
     RGWObjState *s = tier_ctx.rctx.get_state((*tier_ctx.obj)->get_obj());
-    std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op(oc.obj->get_write_op(&oc.rctx));
+    std::unique_ptr<rgw::sal::Object::WriteOp> obj_op(oc.obj->get_write_op(&oc.rctx));
 
     obj_op->params.modify_tail = true;
     obj_op->params.flags = PUT_OBJ_CREATE;
@@ -1337,7 +1414,7 @@ public:
     tier_config.tier_placement = oc.tier;
     tier_config.is_multipart_upload = tier_ctx.is_multipart_upload;
 
-    pmanifest->set_tier_type("cloud");
+    pmanifest->set_tier_type("cloud-s3");
     pmanifest->set_tier_config(tier_config);
 
     /* check if its necessary */
@@ -1355,7 +1432,6 @@ public:
      * obj_size remains the same even when object is moved to other
      * storage class. So maybe better to keep it the same way.
      */
-    //pmanifest->set_obj_size(0);
 
     obj_op->params.manifest = pmanifest;
 
@@ -1370,6 +1446,10 @@ public:
     obj_op->params.attrs = &attrs;
 
     r = obj_op->prepare(null_yield);
+    if (r < 0) {
+      return r;
+    }
+
 
     r = obj_op->write_meta(oc.dpp, tier_ctx.o.meta.size, 0, null_yield);
     if (r < 0) {
@@ -1384,8 +1464,9 @@ public:
 
     /* init */
     string id = "cloudid";
-    string endpoint=oc.tier.t.s3.endpoint; 
+    string endpoint = oc.tier.t.s3.endpoint;
     RGWAccessKey key = oc.tier.t.s3.key;
+    string region = oc.tier.t.s3.region;
     HostStyle host_style = oc.tier.t.s3.host_style;
     string bucket_name = oc.tier.t.s3.target_path;
     const RGWZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
@@ -1401,21 +1482,26 @@ public:
       boost::algorithm::to_lower(bucket_name);
     }
 
-    conn.reset(new S3RESTConn(oc.cct, oc.store, id, { endpoint }, key, host_style));
+    conn.reset(new S3RESTConn(oc.cct, oc.store, id, { endpoint }, key, region, host_style));
 
-    /* http_mngr */
-    RGWCoroutinesManager crs(oc.store->ctx(), oc.store->get_cr_registry());
-    RGWHTTPManager http_manager(oc.store->ctx(), crs.get_completion_mgr());
-
-    int ret = http_manager.start();
+    int ret = oc.wq->start_http_manager(oc.store);
     if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+      ldpp_dout(oc.dpp, 0) << "failed in start_http_manager() ret=" << ret << dendl;
       return ret;
+    }
+
+    RGWCoroutinesManager* crs = oc.wq->get_crs();
+    RGWHTTPManager* http_manager = oc.wq->get_http_manager();
+
+    if (!crs || !http_manager) {
+      /* maybe race..return and retry */
+      ldpp_dout(oc.dpp, 0) << " http_manager and crs not initialized" << dendl;
+      return -1;
     }
 
     RGWLCCloudTierCtx tier_ctx(oc.cct, oc.dpp, oc.o, oc.store, oc.bucket->get_info(),
                         &oc.obj, oc.rctx, conn, bucket_name,
-                        oc.tier.t.s3.target_storage_class, &http_manager);
+                        oc.tier.t.s3.target_storage_class, http_manager);
     tier_ctx.acl_mappings = oc.tier.t.s3.acl_mappings;
     tier_ctx.multipart_min_part_size = oc.tier.t.s3.multipart_min_part_size;
     tier_ctx.multipart_sync_threshold = oc.tier.t.s3.multipart_sync_threshold;
@@ -1427,7 +1513,7 @@ public:
      * verify if the object is already transitioned. And since its just a best
      * effort, do not bail out in case of any errors.
      */
-    ret = crs.run(new RGWLCCloudCheckCR(tier_ctx, &al_tiered));
+    ret = crs->run(oc.dpp, new RGWLCCloudCheckCR(tier_ctx, &al_tiered));
     
     if (ret < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudCheckCR() ret=" << ret << dendl;
@@ -1435,14 +1521,14 @@ public:
 
     if (al_tiered) {
       ldout(tier_ctx.cct, 20) << "Object (" << oc.o.key << ") is already tiered" << dendl;
-      http_manager.stop();
       return 0;
     } else {
-	  ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
+	  ret = crs->run(oc.dpp, new RGWLCCloudTierCR(tier_ctx));
     }
          
     if (ret < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudTierCR() ret=" << ret << dendl;
+      return ret;
     }
 
     if (delete_object) {
@@ -1458,7 +1544,6 @@ public:
         return ret;
       }
     }
-    http_manager.stop();
 
     return 0;
   }
@@ -1488,6 +1573,14 @@ public:
         /* Skip objects which has object lock enabled. */
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return 0;
+      }
+
+      /* Allow transition for only RadosStore */
+      rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
+
+      if (!rados) {
+        ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is not on RadosStore. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
+        return -1;
       }
 
       r = transition_obj_to_cloud(oc);
@@ -1823,6 +1916,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       sleep(5);
       continue;
     }
+
     if (ret < 0)
       return 0;
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() lock " << obj_names[index]

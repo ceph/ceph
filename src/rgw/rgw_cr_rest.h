@@ -9,8 +9,7 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"
-#include "rgw_rados.h"
-
+#include "rgw_sal.h"
 
 struct rgw_rest_obj {
   rgw_obj_key key;
@@ -592,13 +591,13 @@ public:
 
 class RGWStreamReadCRF {
 public:
-  std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op;
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op;
   off_t ofs;
   off_t end;
   rgw_rest_obj rest_obj;
-  std::unique_ptr<rgw::sal::RGWObject>* obj;
+  std::unique_ptr<rgw::sal::Object>* obj;
 
-  RGWStreamReadCRF(std::unique_ptr<rgw::sal::RGWObject>* obj, RGWObjectCtx& obj_ctx);
+  RGWStreamReadCRF(std::unique_ptr<rgw::sal::Object>* obj, RGWObjectCtx& obj_ctx);
   virtual ~RGWStreamReadCRF();
 
   virtual int init() {return 0; }
@@ -637,11 +636,16 @@ class RGWStreamWriteCR : public RGWCoroutine {
   bool sent_attrs{false};
   uint64_t total_read{0};
   int ret{0};
+  off_t ofs;
+  off_t end;
+  uint64_t read_len = 0;
+  rgw_rest_obj rest_obj;
+
 public:
   RGWStreamWriteCR(CephContext *_cct, RGWHTTPManager *_mgr,
                     std::shared_ptr<RGWStreamReadCRF>& _in_crf,
                     std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
   ~RGWStreamWriteCR();
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };

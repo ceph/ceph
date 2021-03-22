@@ -1465,6 +1465,7 @@ void RGWZoneGroupPlacementTierS3::dump(Formatter *f) const
   encode_json("endpoint", endpoint, f);
   encode_json("access_key", key.id, f);
   encode_json("secret", key.key, f);
+  encode_json("region", region, f);
   string s = (host_style == PathStyle ? "path" : "virtual");
   encode_json("host_style", s, f);
   encode_json("target_storage_class", target_storage_class, f);
@@ -1490,6 +1491,7 @@ void RGWZoneGroupPlacementTierS3::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("endpoint", endpoint, obj);
   JSONDecoder::decode_json("access_key", key.id, obj);
   JSONDecoder::decode_json("secret", key.key, obj);
+  JSONDecoder::decode_json("region", region, obj);
   string s;
   JSONDecoder::decode_json("host_style", s, obj);
   if (s != "virtual") {

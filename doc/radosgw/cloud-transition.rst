@@ -2,9 +2,9 @@
 Cloud Transition
 ================
 
-This feature enables data transition to a remote cloud service as part of `Lifecycle Configuration <https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html>`__ via `Storage Classes <https://docs.ceph.com/en/latest/radosgw/placement/#storage-classes>`__. The transition is unidirectional; data cannot be transitioned back from the remote zone. The goal of this feature is to enable data transition to multiple cloud providers. The currently supported cloud providers are those that are compatible with AWS (S3).
+This feature enables data transition to a remote cloud service as part of `Lifecycle Configuration <https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html>`__ via :ref:`storage_classes`. The transition is unidirectional; data cannot be transitioned back from the remote zone. The goal of this feature is to enable data transition to multiple cloud providers. The currently supported cloud providers are those that are compatible with AWS (S3).
 
-Special storage class of tier type ``cloud-s3`` is used to configure the remote cloud S3 object store service to which the data needs to be transitioned to. These are defined in terms of zonegroup placement targets and unlike regular storage classes, do not need a data pool. Any additions or modifications need period commit to get reflected.
+Special storage class of tier type ``cloud-s3`` is used to configure the remote cloud S3 object store service to which the data needs to be transitioned. These are defined in terms of zonegroup placement targets and unlike regular storage classes, do not need a data pool.
 
 User credentials for the remote cloud object store service need to be configured. Note that source ACLs will not
 be preserved. It is possible to map permissions of specific source users to specific destination users.
@@ -19,6 +19,7 @@ Cloud Storage Class Configuration
       "access_key": <access>,
       "secret": <secret>,
       "endpoint": <endpoint>,
+      "region": <region>,
       "host_style": <path | virtual>,
       "acls": [ { "type": <id | email | uri>,
                   "source_id": <source_id>,
@@ -45,6 +46,10 @@ The secret key for the remote cloud S3 service.
 * ``endpoint`` (string)
 
 URL of remote cloud S3 service endpoint.
+
+* ``region`` (string)
+
+The remote cloud S3 service region name.
 
 * ``host_style`` (path | virtual)
 
@@ -115,9 +120,14 @@ Minimum parts size to use when transitioning objects using multipart upload.
 How to Configure
 ~~~~~~~~~~~~~~~~
 
-See `Adding a Storage Class <https://docs.ceph.com/en/latest/radosgw/placement/#adding-a-storage-class>`__ for how to configure storage-class for a zonegroup. The cloud transition requires a creation of a special storage class with tier type defined as ``cloud-s3``
+See :ref:`adding_a_storage_class` for how to configure storage-class for a zonegroup. The cloud transition requires a creation of a special storage class with tier type defined as ``cloud-s3``
 
-Note: Once a storage class is created of ``--tier-type=cloud-s3``, it cannot be later modified to any other storage class type.
+.. note:: If you have not done any previous `Multisite Configuration`_,
+          a ``default`` zone and zonegroup are created for you, and changes
+          to the zone/zonegroup will not take effect until the Ceph Object
+          Gateways are restarted. If you have created a realm for multisite,
+          the zone/zonegroup changes will take effect once the changes are
+          committed with ``radosgw-admin period update --commit``.
 
 ::
 
@@ -168,6 +178,8 @@ For example:
         }
     ]
 
+
+.. note:: Once a storage class is created of ``--tier-type=cloud-s3``, it cannot be later modified to any other storage class type.
 
 The tier configuration can be then done using the following command
 
@@ -340,3 +352,5 @@ Future Work
 * Federation between RGW and Cloud services.
 
 * Support transition to other cloud provideres (like Azure).
+
+.. _`Multisite Configuration`: ../multisite

@@ -46,9 +46,6 @@ enum ACLGroupTypeEnum {
   ACL_GROUP_AUTHENTICATED_USERS = 2,
 };
 
-string get_acl_type_str (const ACLGranteeTypeEnum& type);
-ACLGranteeTypeEnum get_acl_type (const string& t);
-
 class ACLPermission
 {
 protected:
