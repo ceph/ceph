@@ -336,9 +336,9 @@ public:
   int64_t last_rsize = 0;
 
   xlist<Capability*>::item item_session_caps;
-  xlist<Capability*>::item item_snaprealm_caps;
-  xlist<Capability*>::item item_revoking_caps;
-  xlist<Capability*>::item item_client_revoking_caps;
+  elist<Capability*>::item item_snaprealm_caps;
+  elist<Capability*>::item item_revoking_caps;
+  elist<Capability*>::item item_client_revoking_caps;
 
   elist<MDLockCache*> lock_caches;
   int get_lock_cache_allowed() const { return lock_cache_allowed; }
