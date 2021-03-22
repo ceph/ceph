@@ -20,7 +20,7 @@ class Line(object):
         sorted_values = sorted(metric_values.items())
         sorted_values = [(k, v) for k, v in sorted_values if v is not None]
 
-        return u','.join(u'{0}={1}'.format(format_string(k), format_value(v)) for k, v in sorted_values)
+        return ','.join('{0}={1}'.format(format_string(k), format_value(v)) for k, v in sorted_values)
 
     def get_output_tags(self):
         if not self.tags:
@@ -28,7 +28,7 @@ class Line(object):
 
         sorted_tags = sorted(self.tags.items())
 
-        return u','.join(u'{0}={1}'.format(format_string(k), format_string(v)) for k, v in sorted_tags)
+        return ','.join('{0}={1}'.format(format_string(k), format_string(v)) for k, v in sorted_tags)
 
     def get_output_timestamp(self):
         return ' {0}'.format(self.timestamp) if self.timestamp else ''
@@ -36,7 +36,7 @@ class Line(object):
     def to_line_protocol(self):
         tags = self.get_output_tags()
 
-        return u'{0}{1} {2}{3}'.format(
+        return '{0}{1} {2}{3}'.format(
             self.get_output_measurement(),
             "," + tags if tags else '',
             self.get_output_values(),
