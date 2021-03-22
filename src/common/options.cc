@@ -2361,7 +2361,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("auth_mon_ticket_ttl", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(12_hr)
+    .set_default(72_hr)
     .set_description(""),
 
     Option("auth_service_ticket_ttl", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
