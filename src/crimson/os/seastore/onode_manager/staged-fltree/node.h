@@ -50,10 +50,10 @@ class InternalNode;
 using layout_version_t = uint32_t;
 struct node_version_t {
   layout_version_t layout;
-  bool is_duplicate;
+  nextent_state_t state;
 
   bool operator==(const node_version_t& rhs) const {
-    return (layout == rhs.layout && is_duplicate == rhs.is_duplicate);
+    return (layout == rhs.layout && state == rhs.state);
   }
   bool operator!=(const node_version_t& rhs) const {
     return !(*this == rhs);
