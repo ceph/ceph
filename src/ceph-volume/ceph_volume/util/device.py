@@ -9,7 +9,7 @@ from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 
 report_template = """
-{dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
+{dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model:<20} {available_lvm!s:<13} {available_raw!s:<13}"""
 
 
 def encryption_status(abspath):
@@ -43,6 +43,8 @@ class Devices(object):
                 rot='rotates',
                 model='Model name',
                 available='available',
+                available_lvm='available_lvm',
+                available_raw='available_raw',
             )]
         for device in sorted(self.devices):
             output.append(device.report())
@@ -62,7 +64,11 @@ class Device(object):
 
     report_fields = [
         'rejected_reasons',
+        'rejected_reasons_lvm',
+        'rejected_reasons_raw',
         'available',
+        'available_lvm',
+        'available_raw',
         'path',
         'sys_api',
         'device_id',
@@ -100,11 +106,15 @@ class Device(object):
         self._parse()
         self.lsm_data = self.fetch_lsm(with_lsm)
 
+        self.available_lvm_compat, self.rejected_reasons_lvm_compat = self._check_lvm_reject_reasons_compat()
+        self.available_raw_compat, self.rejected_reasons_raw_compat = self._check_raw_reject_reasons_compat()
+        self.available = self.available_lvm_compat and self.available_raw_compat
+        self.rejected_reasons = list(set(self.rejected_reasons_lvm_compat +
+                                         self.rejected_reasons_raw_compat))
+
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()
         self.available_raw, self.rejected_reasons_raw = self._check_raw_reject_reasons()
-        self.available = self.available_lvm and self.available_raw
-        self.rejected_reasons = list(set(self.rejected_reasons_lvm +
-                                         self.rejected_reasons_raw))
+
 
         self.device_id = self._get_device_id()
 
@@ -223,6 +233,8 @@ class Device(object):
             size=self.size_human,
             rot=self.rotational,
             available=self.available,
+            available_lvm=self.available_lvm,
+            available_raw=self.available_raw,
             model=self.model,
         )
 
@@ -386,8 +398,32 @@ class Device(object):
         return False
 
     @property
-    def is_acceptable_device(self):
+    def is_acceptable_device_compat(self):
         return self.is_device or self.is_partition
+
+    @property
+    def is_mpath(self):
+        if self.disk_api:
+            return self.disk_api['TYPE'] == 'mpath'
+        elif self.blkid_api:
+            return self.blkid_api['TYPE'] == 'mpath'
+        return False
+
+    @property
+    def is_crypt(self):
+        if self.disk_api:
+            return self.disk_api['TYPE'] == 'crypt'
+        elif self.blkid_api:
+            return self.blkid_api['TYPE'] == 'crypt'
+        return False
+
+    @property
+    def is_acceptable_device_lvm(self):
+        return self.is_device or self.is_partition or self.is_mpath
+
+    @property
+    def is_acceptable_device_raw(self):
+        return self.is_device or self.is_partition or self.is_mpath or self.is_crypt
 
     @property
     def is_encrypted(self):
@@ -460,7 +496,7 @@ class Device(object):
                 vg_free -= extent_size
             return [vg_free]
 
-    def _check_generic_reject_reasons(self):
+    def _check_generic_reject_reasons_compat(self):
         reasons = [
             ('removable', 1, 'removable'),
             ('ro', 1, 'read-only'),
@@ -468,7 +504,7 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
-        if self.is_acceptable_device:
+        if self.is_acceptable_device_compat:
             # reject disks smaller than 5GB
             if int(self.sys_api.get('size', 0)) < 5368709120:
                 rejected.append('Insufficient space (<5GB)')
@@ -478,6 +514,45 @@ class Device(object):
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
             rejected.append('Has BlueStore device label')
+
+        return rejected
+
+    def _check_lvm_reject_reasons_compat(self):
+        rejected = []
+        if self.vgs:
+            available_vgs = [vg for vg in self.vgs if int(vg.vg_free_count) > 10]
+            if not available_vgs:
+                rejected.append('Insufficient space (<10 extents) on vgs')
+        else:
+            # only check generic if no vgs are present. Vgs might hold lvs and
+            # that might cause 'locked' to trigger
+            rejected.extend(self._check_generic_reject_reasons_compat())
+
+        return len(rejected) == 0, rejected
+
+    def _check_raw_reject_reasons_compat(self):
+        rejected = self._check_generic_reject_reasons_compat()
+        if len(self.vgs) > 0:
+            rejected.append('LVM detected')
+
+        return len(rejected) == 0, rejected
+
+    def _check_generic_reject_reasons(self):
+        reasons = [
+            ('removable', 1, 'removable'),
+            ('ro', 1, 'read-only'),
+            ('locked', 1, 'locked'),
+        ]
+        rejected = [reason for (k, v, reason) in reasons if
+                    self.sys_api.get(k, '') == v]
+        # reject disks smaller than 5GB
+        if int(self.sys_api.get('size', 0)) < 5368709120:
+            rejected.append('Insufficient space (<5GB)')
+        if self.is_ceph_disk_member:
+            rejected.append("Used by ceph-disk")
+        if self.has_bluestore_label:
+            rejected.append('Has BlueStore device label')
+
         return rejected
 
     def _check_lvm_reject_reasons(self):
@@ -490,6 +565,8 @@ class Device(object):
             # only check generic if no vgs are present. Vgs might hold lvs and
             # that might cause 'locked' to trigger
             rejected.extend(self._check_generic_reject_reasons())
+        if not self.is_acceptable_device_lvm:
+            rejected.append("Device type is not acceptable. It should be raw device, partition, or mpath")
 
         return len(rejected) == 0, rejected
 
@@ -497,6 +574,8 @@ class Device(object):
         rejected = self._check_generic_reject_reasons()
         if len(self.vgs) > 0:
             rejected.append('LVM detected')
+        if not self.is_acceptable_device_raw:
+            rejected.append("Device type is not acceptable. It should be raw device, partition, mpath, or crypt")
 
         return len(rejected) == 0, rejected
 

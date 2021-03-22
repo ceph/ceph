@@ -113,8 +113,12 @@ class TestInventory(object):
     expected_keys = [
         'path',
         'rejected_reasons',
+        'rejected_reasons_lvm',
+        'rejected_reasons_raw',
         'sys_api',
         'available',
+        'available_lvm',
+        'available_raw',
         'lvs',
         'device_id',
         'lsm_data',

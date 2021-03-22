@@ -211,11 +211,40 @@ class TestDevice(object):
         assert disk.available
 
     def test_reject_not_acceptable_device(self, device_info):
-        data = {"/dev/dm-0": {"foo": "bar"}}
+        data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
+        lsblk = {"TYPE": "INVALID"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/sdb")
+        assert not disk.available
+        assert not disk.available_lvm
+        assert not disk.available_raw
+
+    def test_judge_device_type_device(self, device_info):
+        data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
+        lsblk = {"TYPE": "device"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/sdb")
+        assert disk.available
+        assert disk.available_lvm
+        assert disk.available_raw
+
+    def test_judge_mpath_type_device(self, device_info):
+        data = {"/dev/dm-0": {"removable": 0, "size": 5368709120}}
         lsblk = {"TYPE": "mpath"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/dm-0")
         assert not disk.available
+        assert disk.available_lvm
+        assert disk.available_raw
+
+    def test_judge_crypt_type_device(self, device_info):
+        data = {"/dev/dm-0": {"removable": 0, "size": 5368709120}}
+        lsblk = {"TYPE": "crypt"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/dm-0")
+        assert not disk.available
+        assert not disk.available_lvm
+        assert disk.available_raw
 
     def test_reject_readonly_device(self, device_info):
         data = {"/dev/cdrom": {"ro": 1}}
