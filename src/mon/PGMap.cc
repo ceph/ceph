@@ -2552,11 +2552,11 @@ void PGMap::get_health_checks(
             ss << " for " << utimespan_str(dur);
           }
           ss << ", current state " << pg_state_string(pg_info.state)
-             << ", last acting " << pg_info.acting;
+             << ", last acting " << pg_vector_string(pg_info.acting);
         } else {
           ss << "pg " << pg_id << " is "
              << pg_state_string(pg_info.state);
-          ss << ", acting " << pg_info.acting;
+          ss << ", acting " << pg_vector_string(pg_info.acting);
           if (pg_info.stats.sum.num_objects_unfound) {
             ss << ", " << pg_info.stats.sum.num_objects_unfound
                << " unfound";
