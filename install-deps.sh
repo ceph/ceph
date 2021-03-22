@@ -344,10 +344,7 @@ else
 	fi
         case "$ID" in
             fedora)
-                $SUDO $yumdnf install -y $yumdnf-utils
-                $SUDO $yumdnf install -y docker-ce docker-ce-cli containerd.io
-                $SUDO systemctl start docker
-                $SUDO systemctl enable docker
+                $SUDO $yumdnf install -y dnf-utils
                 ;;
             centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
