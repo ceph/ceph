@@ -21,13 +21,13 @@ describe('CRUSH map page', () => {
       crushmap.getPageTitle().should('equal', 'CRUSH map viewer');
 
       // Check that title appears once OSD is clicked
-      crushmap.getCrushNode(1).click();
+      crushmap.getCrushNode(0).click();
 
       crushmap
         .getLegends()
         .invoke('text')
         .then((legend) => {
-          crushmap.getCrushNode(1).should('have.text', legend);
+          crushmap.getCrushNode(0).should('have.text', legend);
         });
 
       // Check that table appears once OSD is clicked
