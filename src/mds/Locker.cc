@@ -72,7 +72,9 @@ public:
 };
 
 Locker::Locker(MDSRank *m, MDCache *c) :
-  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
+  revoking_caps(member_offset(Capability, item_revoking_caps)),
+  need_snapflush_inodes(member_offset(CInode, item_caps)),
+  mds(m), mdcache(c) {}
 
 
 void Locker::dispatch(const cref_t<Message> &m)
@@ -2398,9 +2400,11 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
 
       int op = (before & ~after) ? CEPH_CAP_OP_REVOKE : CEPH_CAP_OP_GRANT;
       if (op == CEPH_CAP_OP_REVOKE) {
-        if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_revoke);
+	if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_revoke);
 	revoking_caps.push_back(&cap->item_revoking_caps);
-	revoking_caps_by_client[cap->get_client()].push_back(&cap->item_client_revoking_caps);
+	auto em = revoking_caps_by_client.emplace(cap->get_client(),
+						  member_offset(Capability, item_client_revoking_caps));
+	em.first->second.push_back(&cap->item_client_revoking_caps);
 	cap->set_last_revoke_stamp(ceph_clock_now());
 	cap->reset_num_revoke_warnings();
       } else {
@@ -4058,42 +4062,33 @@ void Locker::remove_client_cap(CInode *in, Capability *cap, bool kill)
   try_eval(in, CEPH_CAP_LOCKS);
 }
 
-
-/**
- * Return true if any currently revoking caps exceed the
- * session_timeout threshold.
- */
-bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking,
-                                    double timeout) const
+std::set<client_t> Locker::get_late_revoking_clients(double timeout)
 {
-    xlist<Capability*>::const_iterator p = revoking.begin();
-    if (p.end()) {
+  auto any_late_revoking = [timeout](elist<Capability*> &revoking) {
+    auto p = revoking.begin();
+    if (p.end())
       // No revoking caps at the moment
       return false;
-    } else {
-      utime_t now = ceph_clock_now();
-      utime_t age = now - (*p)->get_last_revoke_stamp();
-      if (age <= timeout) {
-          return false;
-      } else {
-          return true;
-      }
-    }
-}
 
-std::set<client_t> Locker::get_late_revoking_clients(double timeout) const
-{
+    utime_t now = ceph_clock_now();
+    return now - (*p)->get_last_revoke_stamp() > timeout;
+  };
+
   std::set<client_t> result;
-
-  if (any_late_revoking_caps(revoking_caps, timeout)) {
-    // Slow path: execute in O(N_clients)
-    for (auto &p : revoking_caps_by_client) {
-      if (any_late_revoking_caps(p.second, timeout)) {
-        result.insert(p.first);
-      }
-    }
-  } else {
+  if (!any_late_revoking(revoking_caps)) {
     // Fast path: no misbehaving clients, execute in O(1)
+  } else {
+    // Slow path: execute in O(N_clients)
+    for (auto it = revoking_caps_by_client.begin();
+	 it != revoking_caps_by_client.end(); ) {
+      if (it->second.empty()) {
+	revoking_caps_by_client.erase(it++);
+	continue;
+      }
+      if (any_late_revoking(it->second))
+	result.insert(it->first);
+      ++it;
+    }
   }
   return result;
 }
@@ -4125,11 +4120,10 @@ void Locker::caps_tick()
     }
   }
 
-  dout(20) << __func__ << " " << revoking_caps.size() << " revoking caps" << dendl;
 
   now = ceph_clock_now();
   int n = 0;
-  for (xlist<Capability*>::iterator p = revoking_caps.begin(); !p.end(); ++p) {
+  for (auto p = revoking_caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
 
     utime_t age = now - cap->get_last_revoke_stamp();

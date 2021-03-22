@@ -5653,7 +5653,7 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
     split_realms.push_back((*p)->inode->ino());
 
   for (const auto& p : realm->client_caps) {
-    ceph_assert(!p.second->empty());
+    ceph_assert(!p.second.empty());
     auto em = splits.emplace(std::piecewise_construct, std::forward_as_tuple(p.first), std::forward_as_tuple());
     if (em.second) {
       auto update = make_message<MClientSnap>(CEPH_SNAP_OP_SPLIT);
@@ -9767,7 +9767,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
       for (const auto& p : realm->client_caps) {
         const auto& client = p.first;
         const auto& caps = p.second;
-	ceph_assert(!caps->empty());
+	ceph_assert(!caps.empty());
 
         auto em = updates.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple());
         if (em.second) {

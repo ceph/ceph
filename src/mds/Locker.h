@@ -146,7 +146,7 @@ public:
 
   void remove_client_cap(CInode *in, Capability *cap, bool kill=false);
 
-  std::set<client_t> get_late_revoking_clients(double timeout) const;
+  std::set<client_t> get_late_revoking_clients(double timeout);
 
   void snapflush_nudge(CInode *in);
   void mark_need_snapflush_inode(CInode *in);
@@ -242,9 +242,9 @@ protected:
   xlist<ScatterLock*> updated_scatterlocks;
 
   // Maintain a global list to quickly find if any caps are late revoking
-  xlist<Capability*> revoking_caps;
+  elist<Capability*> revoking_caps;
   // Maintain a per-client list to find clients responsible for late ones quickly
-  std::map<client_t, xlist<Capability*> > revoking_caps_by_client;
+  std::map<client_t, elist<Capability*> > revoking_caps_by_client;
 
   elist<CInode*> need_snapflush_inodes;
 
@@ -258,7 +258,6 @@ private:
   friend class LockerContext;
   friend class LockerLogContext;
 
-  bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
   uint64_t calc_new_max_size(const CInode::inode_const_ptr& pi, uint64_t size);
 
   MDSRank *mds;
