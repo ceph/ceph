@@ -7,31 +7,13 @@ from threading import Event
 
 from telegraf.basesocket import BaseSocket
 from telegraf.protocol import Line
-from mgr_module import MgrModule, Option, PG_STATES
+from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, PG_STATES
 
+from typing import Tuple
 from urllib.parse import urlparse
 
 
 class Module(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "telegraf config-set name=key,type=CephString "
-                   "name=value,type=CephString",
-            "desc": "Set a configuration value",
-            "perm": "rw"
-        },
-        {
-            "cmd": "telegraf config-show",
-            "desc": "Show current configuration",
-            "perm": "r"
-        },
-        {
-            "cmd": "telegraf send",
-            "desc": "Force sending data to Telegraf",
-            "perm": "rw"
-        },
-    ]
-
     MODULE_OPTIONS = [
         Option(name='address',
                default='unixgram:///tmp/telegraf.sock'),
@@ -250,25 +232,32 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def handle_command(self, inbuf, cmd):
-        if cmd['prefix'] == 'telegraf config-show':
-            return 0, json.dumps(self.config), ''
-        elif cmd['prefix'] == 'telegraf config-set':
-            key = cmd['key']
-            value = cmd['value']
-            if not value:
-                return -errno.EINVAL, '', 'Value should not be empty or None'
+    @CLIReadCommand('telegraf config-show')
+    def config_show(self) -> Tuple[int, str, str]:
+        """
+        Show current configuration
+        """
+        return 0, json.dumps(self.config), ''
 
-            self.log.debug('Setting configuration option %s to %s', key, value)
-            self.set_config_option(key, value)
-            self.set_module_option(key, value)
-            return 0, 'Configuration option {0} updated'.format(key), ''
-        elif cmd['prefix'] == 'telegraf send':
-            self.send_to_telegraf()
-            return 0, 'Sending data to Telegraf', ''
+    @CLICommand('telegraf config-set')
+    def config_set(self, key: str, value: str) -> Tuple[int, str, str]:
+        """
+        Set a configuration value
+        """
+        if not value:
+            return -errno.EINVAL, '', 'Value should not be empty or None'
+        self.log.debug('Setting configuration option %s to %s', key, value)
+        self.set_config_option(key, value)
+        self.set_module_option(key, value)
+        return 0, 'Configuration option {0} updated'.format(key), ''
 
-        return (-errno.EINVAL, '',
-                "Command not found '{0}'".format(cmd['prefix']))
+    @CLICommand('telegraf send')
+    def send(self) -> Tuple[int, str, str]:
+        """
+        Force sending data to Telegraf
+        """
+        self.send_to_telegraf()
+        return 0, 'Sending data to Telegraf', ''
 
     def self_test(self):
         measurements = list(self.gather_measurements())
