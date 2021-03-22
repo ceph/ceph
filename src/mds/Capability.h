@@ -148,6 +148,7 @@ public:
     if (reval)
       revalidate();
 
+    int was_revoking = (_issued & ~_pending);
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
       _revokes.emplace_back(_pending, last_sent, last_issue);
@@ -160,8 +161,7 @@ public:
       _pending |= c;
       _issued |= c;
       // drop old _revokes with no bits we don't have
-      while (!_revokes.empty() &&
-	     (_revokes.back().before & ~_pending) == 0)
+      while (!_revokes.empty() && !(_revokes.back().before & ~_pending))
 	_revokes.pop_back();
     } else {
       // no change.
@@ -169,17 +169,23 @@ public:
     }
     //last_issue = 
     inc_last_seq();
+    post_update(was_revoking);
     return last_sent;
   }
   ceph_seq_t issue_norevoke(unsigned c, bool reval=false) {
     if (reval)
       revalidate();
 
+    int was_revoking = (_issued & ~_pending);
     _pending |= c;
     _issued |= c;
     clear_new();
+    // drop old _revokes with no bits we don't have
+    while (!_revokes.empty() && !(_revokes.back().before & ~_pending))
+      _revokes.pop_back();
 
     inc_last_seq();
+    post_update(was_revoking);
     return last_sent;
   }
   int confirm_receipt(ceph_seq_t seq, unsigned caps) {
@@ -202,12 +208,7 @@ public:
 	_issued = caps | _pending;
       }
     }
-
-    if (was_revoking && _issued == _pending) {
-      item_revoking_caps.remove_myself();
-      item_client_revoking_caps.remove_myself();
-      maybe_clear_notable();
-    }
+    post_update(was_revoking);
     return was_revoking & ~_issued; // return revoked
   }
   // we may get a release racing with revocations, which means our revokes will be ignored
@@ -219,13 +220,9 @@ public:
       changed = true;
     }
     if (changed) {
-      bool was_revoking = (_issued & ~_pending);
+      int was_revoking = (_issued & ~_pending);
       calc_issued();
-      if (was_revoking && _issued == _pending) {
-	item_revoking_caps.remove_myself();
-	item_client_revoking_caps.remove_myself();
-	maybe_clear_notable();
-      }
+      post_update(was_revoking);
     }
   }
   ceph_seq_t get_mseq() const { return mseq; }
@@ -363,6 +360,7 @@ public:
   int64_t last_rsize = 0;
 
   xlist<Capability*>::item item_session_caps;
+  elist<Capability*>::item item_inode_caps;
   elist<Capability*>::item item_snaprealm_caps;
   elist<Capability*>::item item_revoking_caps;
   elist<Capability*>::item item_client_revoking_caps;
@@ -380,6 +378,7 @@ private:
     }
   }
 
+  void post_update(int was_revoking=0);
   void revalidate();
 
   void mark_notable();

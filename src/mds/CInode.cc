@@ -3311,16 +3311,6 @@ void CInode::choose_lock_states(int dirty_caps)
   choose_lock_state(&linklock, issued);
 }
 
-int CInode::count_nonstale_caps()
-{
-  int n = 0;
-  for (const auto &p : client_caps) {
-    if (!p.second.is_stale())
-      n++;
-  }
-  return n;
-}
-
 bool CInode::multiple_nonstale_caps()
 {
   int n = 0;
@@ -3397,6 +3387,7 @@ void CInode::remove_client_cap(client_t client)
   Capability *cap = &it->second;
   
   cap->item_session_caps.remove_myself();
+  cap->item_inode_caps.remove_myself();
   cap->item_revoking_caps.remove_myself();
   cap->item_client_revoking_caps.remove_myself();
   containing_realm->remove_cap(client, cap);
@@ -3570,70 +3561,168 @@ int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
 }
 
 // caps issued, wanted
-int CInode::get_caps_issued(int *ploner, int *pother, int *pxlocker,
-			    int shift, int mask)
+int CInode::get_caps_issued()
 {
-  int c = 0;
+  int all = 0;
+  for (auto p = client_caps_by_state.begin();
+       p != client_caps_by_state.end(); ) {
+    if (p->second.empty()) {
+      client_caps_by_state.erase(p++);
+      continue;
+    }
+    int issued = p->first & 0xffffff;
+    if ((all & issued) == issued) {
+      ++p;
+      continue;
+    }
+    Capability *cap = p->second.front();
+    ceph_assert(issued == cap->issued());
+    all |= issued;
+    ++p;
+  }
+  return all;
+}
+
+void CInode::get_caps_issued(SimpleLock *lock, int *ploner, int *pother, int *pxlocker)
+{
+  client_t xlock_by_client = lock->get_xlock_by_client();
+  int shift = lock->get_cap_shift();
+  int mask = lock->get_cap_mask() << shift;
   int loner = 0, other = 0, xlocker = 0;
-  if (!is_auth()) {
-    loner_cap = -1;
+
+  if (pother) {
+    for (auto p = client_caps_by_state.begin();
+	 p != client_caps_by_state.end(); ) {
+      if (p->second.empty()) {
+	client_caps_by_state.erase(p++);
+	continue;
+      }
+      int issued = p->first & mask;
+      if ((other & issued) == issued) {
+	++p;
+	continue;
+      }
+      Capability *cap = p->second.front();
+      client_t client = cap->get_client();
+      if (client == xlock_by_client)
+	xlocker = cap->issued();
+      if (client == loner_cap)
+	loner = cap->issued();
+      else
+	other |= issued;
+      ++p;
+    }
+    *pother = other >> shift;;
   }
 
-  for (const auto &p : client_caps) {
-    int i = p.second.issued();
-    c |= i;
-    if (p.first == loner_cap)
-      loner |= i;
-    else
-      other |= i;
-    xlocker |= get_xlocker_mask(p.first) & i;
+  if (ploner) {
+    if (!loner && loner_cap >= 0) {
+      auto it = client_caps.find(loner_cap);
+      if (it != client_caps.end()) {
+	loner = it->second.issued();
+	if (xlock_by_client == loner_cap)
+	  xlocker = loner;
+      }
+    }
+    *ploner = (loner & mask) >> shift;
   }
-  if (ploner) *ploner = (loner >> shift) & mask;
-  if (pother) *pother = (other >> shift) & mask;
-  if (pxlocker) *pxlocker = (xlocker >> shift) & mask;
-  return (c >> shift) & mask;
+
+  if (pxlocker) {
+    if (!xlocker && xlock_by_client >= 0) {
+      auto it = client_caps.find(xlock_by_client);
+      if (it != client_caps.end())
+	xlocker = it->second.issued();
+    }
+    *pxlocker = (xlocker & mask) >> shift;
+  }
 }
 
 bool CInode::is_any_caps_wanted() const
 {
-  for (const auto &p : client_caps) {
-    if (p.second.wanted())
+  for (auto& p : client_caps_by_state) {
+    if (p.second.empty())
+      continue;
+    if ((p.first >> 24) & 0xffffff)
       return true;
   }
   return false;
 }
 
-int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask) const
+int CInode::get_caps_wanted()
 {
-  int w = 0;
-  int loner = 0, other = 0;
-  for (const auto &p : client_caps) {
-    if (!p.second.is_stale()) {
-      int t = p.second.wanted();
-      w |= t;
-      if (p.first == loner_cap)
-	loner |= t;
-      else
-	other |= t;	
+  int all = 0;
+  for (auto p = client_caps_by_state.begin();
+       p != client_caps_by_state.end(); ) {
+    if (p->second.empty()) {
+      client_caps_by_state.erase(p++);
+      continue;
     }
-    //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
+    int wanted = (p->first >> 24) & 0xffffff;
+    if ((wanted & all) == wanted) {
+      ++p;
+      continue;
+    }
+    for (auto q = p->second.begin(); !q.end(); ++q) {
+      Capability *cap = *q;
+      ceph_assert(cap->wanted() == wanted);
+      if (!cap->is_stale()) {
+	all |= wanted;
+	break;
+      }
+    }
+    ++p;
   }
-  if (is_auth())
-    for (const auto &p : mds_caps_wanted) {
-      w |= p.second;
-      other |= p.second;
-      //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
+  return all;
+}
+
+void CInode::get_caps_wanted(SimpleLock *lock, int *ploner, int *pother)
+{
+  int shift = lock->get_cap_shift();
+  int mask = lock->get_cap_mask() << shift;
+  int loner = 0, other = 0;
+
+  if (pother) {
+    for (auto p = client_caps_by_state.begin();
+	p != client_caps_by_state.end(); ) {
+      if (p->second.empty()) {
+	client_caps_by_state.erase(p++);
+	continue;
+      }
+      int wanted = (p->first >> 24) & mask;
+      if ((other & wanted) == wanted) {
+	++p;
+	continue;
+      }
+      for (auto q = p->second.begin(); !q.end(); ++q) {
+	Capability *cap = *q;
+	if (!cap->is_stale()) {
+	  if (cap->get_client() == loner_cap) {
+	    loner = cap->wanted();
+	  } else {
+	    other |= wanted;
+	    break;
+	  }
+	}
+      }
+      ++p;
     }
-  if (ploner) *ploner = (loner >> shift) & mask;
-  if (pother) *pother = (other >> shift) & mask;
-  return (w >> shift) & mask;
+    *pother = other >> shift;
+  }
+
+  if (ploner) {
+    if (!loner && loner_cap >= 0) {
+      auto it = client_caps.find(loner_cap);
+      if (it != client_caps.end())
+	loner = it->second.wanted();
+    }
+    *ploner = (loner & mask) >> shift;
+  }
 }
 
 bool CInode::issued_caps_need_gather(SimpleLock *lock)
 {
   int loner_issued, other_issued, xlocker_issued;
-  get_caps_issued(&loner_issued, &other_issued, &xlocker_issued,
-		  lock->get_cap_shift(), lock->get_cap_mask());
+  get_caps_issued(lock, &loner_issued, &other_issued, &xlocker_issued);
   if ((loner_issued & ~lock->gcaps_allowed(CAP_LONER)) ||
       (other_issued & ~lock->gcaps_allowed(CAP_ANY)) ||
       (xlocker_issued & ~lock->gcaps_allowed(CAP_XLOCKER)))

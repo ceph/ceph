@@ -1082,8 +1082,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSCon
   int loner_issued = 0, other_issued = 0, xlocker_issued = 0;
   ceph_assert(!caps || in != NULL);
   if (caps && in->is_head()) {
-    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued,
-			lock->get_cap_shift(), lock->get_cap_mask());
+    in->get_caps_issued(lock, &loner_issued, &other_issued, &xlocker_issued);
     dout(10) << " next state is " << lock->get_state_name(next) 
 	     << " issued/allows loner " << gcap_string(loner_issued)
 	     << "/" << gcap_string(lock->gcaps_allowed(CAP_LONER, next))
@@ -4566,7 +4565,7 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   int wanted = 0;
   if (lock->get_cap_shift()) {
     in = static_cast<CInode*>(lock->get_parent());
-    in->get_caps_wanted(&wanted, NULL, lock->get_cap_shift());
+    in->get_caps_wanted(lock, &wanted, nullptr);
   }
   
   // -> excl?
@@ -5362,7 +5361,8 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 {
   CInode *in = static_cast<CInode*>(lock->get_parent());
   int loner_wanted, other_wanted;
-  int wanted = in->get_caps_wanted(&loner_wanted, &other_wanted, CEPH_CAP_SFILE);
+  in->get_caps_wanted(lock, &loner_wanted, &other_wanted);
+  int wanted = loner_wanted | other_wanted;
   dout(7) << "file_eval wanted=" << gcap_string(wanted)
 	  << " loner_wanted=" << gcap_string(loner_wanted)
 	  << " other_wanted=" << gcap_string(other_wanted)
@@ -5387,7 +5387,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   if (lock->get_state() == LOCK_EXCL) {
     dout(20) << " is excl" << dendl;
     int loner_issued, other_issued, xlocker_issued;
-    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, CEPH_CAP_SFILE);
+    in->get_caps_issued(lock, &loner_issued, &other_issued, &xlocker_issued);
     dout(7) << "file_eval loner_issued=" << gcap_string(loner_issued)
             << " other_issued=" << gcap_string(other_issued)
 	    << " xlocker_issued=" << gcap_string(xlocker_issued)

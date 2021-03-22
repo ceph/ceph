@@ -861,11 +861,16 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void choose_lock_state(SimpleLock *lock, int allissued);
   void choose_lock_states(int dirty_caps);
 
-  int count_nonstale_caps();
   bool multiple_nonstale_caps();
 
   bool is_any_caps() { return !client_caps.empty(); }
-  bool is_any_nonstale_caps() { return count_nonstale_caps(); }
+  bool is_any_nonstale_caps() {
+    for (const auto &p : client_caps) {
+      if (!p.second.is_stale())
+	return true;
+    }
+    return false;
+  }
 
   const mempool::mds_co::compact_map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
   void set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m);
@@ -893,6 +898,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   Capability *add_client_cap(client_t client, Session *session,
 			     SnapRealm *conrealm=nullptr, bool new_inode=false);
   void remove_client_cap(client_t client);
+  void update_client_cap(Capability *cap) {
+    cap->item_inode_caps.remove_myself();
+    uint64_t idx =(uint64_t)cap->issued() | ((uint64_t)cap->wanted() << 24);
+    auto em = client_caps_by_state.emplace(idx, member_offset(Capability, item_inode_caps));
+    em.first->second.push_back(&cap->item_inode_caps);
+  }
   void move_to_realm(SnapRealm *realm);
 
   Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
@@ -909,10 +920,11 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 				  const mempool_inode *file_i) const;
 
   // caps issued, wanted
-  int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
-		      int shift = 0, int mask = -1);
+  int get_caps_issued();
+  void get_caps_issued(SimpleLock *lock, int *ploner, int *pother, int *pxlocker);
   bool is_any_caps_wanted() const;
-  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1) const;
+  int get_caps_wanted();
+  void get_caps_wanted(SimpleLock *lock, int *ploner, int *pother=nullptr);
   bool issued_caps_need_gather(SimpleLock *lock);
 
   // client writeable
@@ -1183,6 +1195,7 @@ protected:
   // -- distributed state --
   // file capabilities
   mempool_cap_map client_caps; // client -> caps
+  mempool::mds_co::map<uint64_t, elist<Capability*> > client_caps_by_state;
   mempool::mds_co::compact_map<int32_t, int32_t> mds_caps_wanted;     // [auth] mds -> caps wanted
   int replica_caps_wanted = 0; // [replica] what i've requested from auth
   int num_caps_notable = 0;
