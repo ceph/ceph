@@ -7,7 +7,7 @@ from threading import Event
 
 from telegraf.basesocket import BaseSocket
 from telegraf.protocol import Line
-from mgr_module import MgrModule, PG_STATES
+from mgr_module import MgrModule, Option, PG_STATES
 
 from urllib.parse import urlparse
 
@@ -33,16 +33,11 @@ class Module(MgrModule):
     ]
 
     MODULE_OPTIONS = [
-        {
-            'name': 'address',
-            'default': 'unixgram:///tmp/telegraf.sock',
-        },
-        {
-            'name': 'interval',
-            'type': 'secs',
-            'default': 15
-        }
-    ]
+        Option(name='address',
+               default='unixgram:///tmp/telegraf.sock'),
+        Option(name='interval',
+               type='secs',
+               default=15)]
 
     ceph_health_mapping = {'HEALTH_OK': 0, 'HEALTH_WARN': 1, 'HEALTH_ERR': 2}
 
