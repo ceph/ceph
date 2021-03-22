@@ -848,7 +848,10 @@ public:
   void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_mon_message(Message *m, int rank);
-  void notify_new_monmap();
+  /** can_change_external_state if we can do things like
+   *  call elections as a result of the new map.
+   */
+  void notify_new_monmap(bool can_change_external_state=false);
 
 public:
   struct C_Command : public C_MonOp {

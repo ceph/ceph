@@ -368,6 +368,8 @@ class Elector : public ElectionOwner, RankProvider {
   void notify_rank_changed(int new_rank);
   /**
    * A peer has been removed so we should clean up state related to it.
+   * This is safe to call even if we haven't joined or are currently
+   * in a quorum.
    */
   void notify_rank_removed(int rank_removed);
   void notify_strategy_maybe_changed(int strategy);

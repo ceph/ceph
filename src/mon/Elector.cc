@@ -607,6 +607,7 @@ void Elector::dispatch(MonOpRequestRef op)
         mon->store->apply_transaction(t);
 	//mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
 	cancel_timer();
+	mon->notify_new_monmap(false);
 	mon->bootstrap();
 	return;
       }
