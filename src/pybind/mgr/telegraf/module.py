@@ -9,10 +9,7 @@ from telegraf.basesocket import BaseSocket
 from telegraf.protocol import Line
 from mgr_module import MgrModule, PG_STATES
 
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse
+from urllib.parse import urlparse
 
 
 class Module(MgrModule):
