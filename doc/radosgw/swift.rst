@@ -1,3 +1,5 @@
+.. _radosgw swift:
+
 ===============================
  Ceph Object Gateway Swift API
 ===============================

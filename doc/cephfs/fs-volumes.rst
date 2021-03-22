@@ -65,8 +65,7 @@ cluster):
 
     "4 host1,host2"
 
-For more details on placement specification refer to the `orchestrator doc
-<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_
+For more details on placement specification refer to the :ref:`orchestrator-cli-service-spec`,
 but keep in mind that specifying the placement via a YAML file is not supported.
 
 Remove a volume using::
