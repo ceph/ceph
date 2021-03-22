@@ -1,3 +1,5 @@
+.. _radosgw admin ops:
+
 ==================
  Admin Operations
 ==================
