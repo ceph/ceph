@@ -6,11 +6,11 @@ import curses
 import errno
 import json
 import signal
-import time
 
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum, unique
+from threading import Event
 
 import rados
 
@@ -96,15 +96,15 @@ def wrap(s, sl):
 class FSTop(object):
     def __init__(self, args):
         self.rados = None
-        self.stop = False
         self.stdscr = None  # curses instance
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
         self.refresh_interval_secs = args.delay
+        self.exit_ev = Event()
 
     def handle_signal(self, signum, _):
-        self.stop = True
+        self.exit_ev.set()
 
     def init(self):
         try:
@@ -275,7 +275,7 @@ class FSTop(object):
     def display(self, _):
         x_coord_map = self.refresh_top_line_and_build_coord()
         self.topl.refresh()
-        while not self.stop:
+        while not self.exit_ev.is_set():
             stats_json = self.perf_stats_query()
             self.header.clear()
             self.mainw.clear()
@@ -283,7 +283,7 @@ class FSTop(object):
                 self.refresh_main_window(x_coord_map, stats_json)
             self.header.refresh()
             self.mainw.refresh()
-            time.sleep(self.refresh_interval_secs)
+            self.exit_ev.wait(timeout=self.refresh_interval_secs)
 
 
 if __name__ == '__main__':
