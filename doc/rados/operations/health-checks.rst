@@ -511,6 +511,25 @@ This warning can be disabled with::
 
   ceph config set global bluestore_warn_on_no_per_pool_omap false
 
+BLUESTORE_NO_PER_PG_OMAP
+__________________________
+
+Starting with the Pacific release, BlueStore tracks omap space utilization
+by PG, and one or more OSDs have volumes that were created prior to
+Pacific.  Per-PG omap enables faster PG removal when PGs migrate.
+
+The older OSDs can be updated to track by PG by stopping each OSD,
+running a repair operation, and the restarting it.  For example, if
+``osd.123`` needed to be updated,::
+
+  systemctl stop ceph-osd@123
+  ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
+  systemctl start ceph-osd@123
+
+This warning can be disabled with::
+
+  ceph config set global bluestore_warn_on_no_per_pg_omap false
+
 
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________

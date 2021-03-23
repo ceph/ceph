@@ -3052,6 +3052,7 @@ private:
   std::set<std::string> failed_compressors;
   std::string spillover_alert;
   std::string legacy_statfs_alert;
+  std::string no_per_pool_omap_alert;
   std::string no_per_pg_omap_alert;
   std::string disk_size_mismatch_alert;
   std::string spurious_read_errors_alert;
@@ -3082,7 +3083,7 @@ private:
   }
 
   void _check_legacy_statfs_alert();
-  void _check_no_per_pg_omap_alert();
+  void _check_no_per_pg_or_pool_omap_alert();
   void _set_disk_size_mismatch_alert(const std::string& s) {
     std::lock_guard l(qlock);
     disk_size_mismatch_alert = s;
