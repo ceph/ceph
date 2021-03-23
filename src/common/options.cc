@@ -4200,8 +4200,9 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_see_also("osd_memory_target")
     .set_description("Enabled buffered IO for bluefs reads.")
-    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold blocks from the compressed SST files itself, they can be read from page cache instead of from the disk."),
+    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold all blocks during OMAP iteration, it may be possible to read them from page cache instead of from the disk.  This can dramatically improve performance when the osd_memory_target is too small to hold all entries in block cache but it does come with downsides.  It has been reported to occasionally cause excessive kernel swapping (and associated stalls) in rare scenarios.  On the balance right now it appears to be better to leave this enabled, however in cases where the osd_memory_target is very high it may not always be a clear win and may need to be set based on the rest of the environment."),
 
     Option("bluefs_sync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
