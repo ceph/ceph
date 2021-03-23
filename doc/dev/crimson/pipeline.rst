@@ -24,19 +24,21 @@ There are a few cases when the blocking of a client request can happen.
   ``ClientRequest::PGPipeline::await_map``
     wait on a PG being advanced to particular epoch
   ``ClientRequest::PGPipeline::wait_for_active``
-    wait on a PG becomes ``is_active()``
+    wait for a PG to become *active* (i.e. have ``is_active()`` asserted)
   ``ClientRequest::PGPipeline::recover_missing``
-    wait on an object has been recovered
+    wait on an object to be recovered (i.e. leaving the ``missing`` set)
   ``ClientRequest::PGPipeline::get_obc``
-    wait on an object context becomes locked
+    wait on an object to be available for locking. The ``obc`` will be locked
+    before this operation is allowed to continue
   ``ClientRequest::PGPipeline::process``
     wait if any other ``MOSDOp`` message is handled against this PG
 
 At any moment, a ``ClientRequest`` being served should be in one and only one
-of these  phases. Similarly, an object denoting particular phase can host not
-more than a single ``ClientRequest`` the same time. At low-level this is achieved
-with a combination of a barrier and an exclusive lock. They implement the
-semantic of a semaphore with a single slot for these exclusive phases.
+of the phases described above. Similarly, an object denoting particular phase
+can host not more than a single ``ClientRequest`` the same time. At low-level
+this is achieved with a combination of a barrier and an exclusive lock.
+They implement the semantic of a semaphore with a single slot for these exclusive
+phases.
 
 As the execution advances, request enters next phase and leaves the current one
 freeing it for another ``ClientRequest`` instance. All these phases form a pipeline
