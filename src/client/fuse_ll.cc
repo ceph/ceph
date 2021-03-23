@@ -679,6 +679,9 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     size_t len;
     struct fuse_bufvec *bufv;
 
+    if (bl.get_num_buffers() > IOV_MAX)
+      bl.rebuild();
+
     bl.prepare_iov(&iov);
     len = sizeof(struct fuse_bufvec) + sizeof(struct fuse_buf) * (iov.size() - 1);
     bufv = (struct fuse_bufvec *)calloc(1, len);
