@@ -38,7 +38,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   return journal->open_for_write().safe_then([this](auto addr) {
     logger().debug("TransactionManager::mkfs: about to do_with");
-    segment_cleaner->set_journal_head(addr);
+    segment_cleaner->init_mkfs(addr);
     return seastar::do_with(
       create_transaction(),
       [this](auto &transaction) {
