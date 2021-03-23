@@ -5632,6 +5632,9 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_STARTUP)
     .set_description("The number of threads for serving alienized ObjectStore"),
 
+    Option("crimson_alien_thread_cpu_cores", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("Cpu cores on which alienstore threads will run"),
+
     // ----------------------------
     // blk specific options
     Option("bdev_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
