@@ -2072,7 +2072,7 @@ static void shutdown_racer_func()
 // See tracker #20988
 TEST(LibCephFS, ShutdownRace)
 {
-  const int nthreads = 128;
+  const int nthreads = 32;
   std::thread threads[nthreads];
 
   // Need a bunch of fd's for this test
