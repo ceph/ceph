@@ -833,7 +833,7 @@ class LocalCephManager(CephManager):
         if stdout is None:
             stdout = StringIO()
 
-        args=[CEPH_CMD, "daemon", f'{daemon_type}', f'{daemon_id}'] + command
+        args=[CEPH_CMD, "daemon", f"{daemon_type}.{daemon_id}"] + command
         return self.controller.run(args=args, check_status=check_status,
                                    timeout=timeout, stdout=stdout)
 
