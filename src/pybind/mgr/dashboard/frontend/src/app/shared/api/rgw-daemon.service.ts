@@ -1,8 +1,9 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, ReplaySubject } from 'rxjs';
-import { mergeMap, take, tap } from 'rxjs/operators';
+import _ from 'lodash';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { mergeMap, retryWhen, take, tap } from 'rxjs/operators';
 
 import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
@@ -13,9 +14,9 @@ import { cdEncode } from '~/app/shared/decorators/cd-encode';
 })
 export class RgwDaemonService {
   private url = 'api/rgw/daemon';
-  private daemons = new ReplaySubject<RgwDaemon[]>(1);
+  private daemons = new BehaviorSubject<RgwDaemon[]>([]);
   daemons$ = this.daemons.asObservable();
-  private selectedDaemon = new ReplaySubject<RgwDaemon>(1);
+  private selectedDaemon = new BehaviorSubject<RgwDaemon>(null);
   selectedDaemon$ = this.selectedDaemon.asObservable();
 
   constructor(private http: HttpClient) {}
@@ -24,6 +25,9 @@ export class RgwDaemonService {
     return this.http.get<RgwDaemon[]>(this.url).pipe(
       tap((daemons: RgwDaemon[]) => {
         this.daemons.next(daemons);
+        if (_.isEmpty(this.selectedDaemon.getValue())) {
+          this.selectDefaultDaemon(daemons);
+        }
       })
     );
   }
@@ -36,7 +40,11 @@ export class RgwDaemonService {
     this.selectedDaemon.next(daemon);
   }
 
-  selectDefaultDaemon(daemons: RgwDaemon[]): RgwDaemon {
+  private selectDefaultDaemon(daemons: RgwDaemon[]): RgwDaemon {
+    if (daemons.length === 0) {
+      return null;
+    }
+
     for (const daemon of daemons) {
       if (daemon.default) {
         this.selectDaemon(daemon);
@@ -44,11 +52,24 @@ export class RgwDaemonService {
       }
     }
 
-    throw new Error('No default RGW daemon found.');
+    this.selectDaemon(daemons[0]);
+    return daemons[0];
   }
 
   request(next: (params: HttpParams) => Observable<any>) {
     return this.selectedDaemon.pipe(
+      mergeMap((daemon: RgwDaemon) =>
+        // If there is no selected daemon, retrieve daemon list (default daemon will be selected)
+        // and try again if daemon list is not empty.
+        _.isEmpty(daemon)
+          ? this.list().pipe(mergeMap((daemons) => throwError(!_.isEmpty(daemons))))
+          : of(daemon)
+      ),
+      retryWhen((error) =>
+        error.pipe(
+          mergeMap((hasToRetry) => (hasToRetry ? error : throwError('No RGW daemons found!')))
+        )
+      ),
       take(1),
       mergeMap((daemon: RgwDaemon) => {
         let params = new HttpParams();
