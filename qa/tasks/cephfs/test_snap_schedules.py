@@ -106,7 +106,8 @@ class TestSnapSchedules(CephFSTestCase):
         self.remove_cbks.remove(cbk)
 
     def assert_if_not_verified(self):
-        self.assertTrue(len(self.create_cbks) == 0 and len(self.remove_cbks) == 0)
+        self.assertListEqual(self.create_cbks, [])
+        self.assertListEqual(self.remove_cbks, [])
 
     def verify(self, dir_path, max_trials):
         trials = 0
