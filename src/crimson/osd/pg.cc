@@ -702,7 +702,6 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
   OpsExecuter&& ox,
   std::vector<OSDOp> ops,
   Ref<MOSDOp> m,
-  ObjectContextRef obc,
   const OpInfo &op_info,
   SuccessFunc&& success_func,
   FailureFunc&& failure_func)
@@ -743,12 +742,12 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
   }).safe_then_interruptible_tuple([success_func=std::move(success_func)] {
     return std::move(success_func)();
   }, crimson::ct_error::object_corrupted::handle(
-    [obc, rollbacker, this] (const std::error_code& e) mutable {
+    [rollbacker, this] (const std::error_code& e) mutable {
     // this is a path for EIO. it's special because we want to fix the obejct
     // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
     // restart the execution.
     return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [obc, this] {
+      [obc=rollbacker.get_obc(), this] {
       return repair_object(obc->obs.oi.soid,
                            obc->obs.oi.version).then_interruptible([] {
         return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
@@ -774,10 +773,10 @@ PG::do_osd_ops(
     throw crimson::common::system_shutdown_exception();
   }
   auto ox = std::make_unique<OpsExecuter>(
-    obc, op_info, get_pool().info, get_backend(), *m);
+    std::move(obc), op_info, get_pool().info, get_backend(), *m);
   return do_osd_ops_execute<Ref<MOSDOpReply>>(
-    std::move(*ox), m->ops, m, obc, op_info,
-    [this, m, obc, rvec = op_info.allows_returnvec()] {
+    std::move(*ox), m->ops, m, op_info,
+    [this, m, rvec = op_info.allows_returnvec()] {
       // TODO: should stop at the first op which returns a negative retval,
       //       cmpext uses it for returning the index of first unmatched byte
       int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
@@ -793,7 +792,7 @@ PG::do_osd_ops(
       logger().debug(
         "do_osd_ops: {} - object {} sending reply",
         *m,
-        obc->obs.oi.soid);
+        m->get_hobj());
       return do_osd_ops_iertr::make_ready_future<Ref<MOSDOpReply>>(
         std::move(reply));
     },

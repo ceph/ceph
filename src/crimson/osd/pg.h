@@ -583,7 +583,6 @@ private:
     OpsExecuter&& ox,
     std::vector<OSDOp> ops,
     Ref<MOSDOp> m,
-    ObjectContextRef obc,
     const OpInfo &op_info,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
