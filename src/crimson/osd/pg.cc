@@ -743,9 +743,18 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
     });
   }).safe_then_interruptible_tuple([success_func=std::move(success_func)] {
     return std::move(success_func)();
-  }, crimson::ct_error::object_corrupted::handle([m, obc, this] {
-    return repair_object(m, obc->obs.oi.soid, obc->obs.oi.version).then_interruptible([] {
-      return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
+  }, crimson::ct_error::object_corrupted::handle(
+    [m, obc, rollbacker, this] (const std::error_code& e) mutable {
+    // this is a path for EIO. it's special because we want to fix the obejct
+    // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
+    // restart the execution.
+    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+      [m, obc, this] {
+      return repair_object(m,
+                           obc->obs.oi.soid,
+                           obc->obs.oi.version).then_interruptible([] {
+        return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
+      });
     });
   }), OpsExecuter::osd_op_errorator::all_same_way(
     [rollbacker, failure_func=std::move(failure_func), m]
