@@ -388,10 +388,20 @@ public:
     journal_tail_target = journal_tail_committed = tail;
   }
 
+  void init_mkfs(journal_seq_t head) {
+    journal_tail_target = head;
+    journal_tail_committed = head;
+    journal_head = head;
+  }
+
   void set_journal_head(journal_seq_t head) {
     assert(journal_head == journal_seq_t() || head >= journal_head);
     journal_head = head;
     gc_process.maybe_wake_on_space_used();
+  }
+
+  journal_seq_t get_journal_head() const {
+    return journal_head;
   }
 
   void init_mark_segment_closed(segment_id_t segment, segment_seq_t seq) final {
@@ -623,7 +633,6 @@ private:
   gc_reclaim_space_ret gc_reclaim_space();
 
   size_t get_bytes_used_current_segment() const {
-    assert(journal_head != journal_seq_t());
     return journal_head.offset.offset;
   }
 
@@ -663,9 +672,25 @@ private:
     return used_bytes;
   }
 
-  /// Returns the number of bytes in unavailable segments that are not live
+  /// Return bytes contained in segments in journal
+  size_t get_journal_segment_bytes() const {
+    assert(journal_head >= journal_tail_committed);
+    return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
+      config.segment_size;
+  }
+
+  /**
+   * get_reclaimable_bytes
+   *
+   * Returns the number of bytes in unavailable segments that can be
+   * reclaimed.
+   */
   size_t get_reclaimable_bytes() const {
-    return get_unavailable_bytes() - get_used_bytes();
+    auto ret = get_unavailable_bytes() - get_used_bytes();
+    if (ret > get_journal_segment_bytes())
+      return ret - get_journal_segment_bytes();
+    else
+      return 0;
   }
 
   /**
