@@ -454,6 +454,8 @@ private:
 
   bool forward_all_requests_to_auth = false;
   bool replay_unsafe_with_closed_session = false;
+  bool early_reply_enabled = false;
+  bool client_async_dirop = false;
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;
   unsigned delegate_inos_pct = 0;

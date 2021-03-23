@@ -253,6 +253,8 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
 {
   forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
+  early_reply_enabled = g_conf().get_val<bool>("mds_early_reply");
+  client_async_dirop = g_conf().get_val<bool>("mds_client_async_dirop");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
   delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
@@ -1217,6 +1219,12 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   if (changed.count("mds_forward_all_requests_to_auth")){
     forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
   }
+  if (changed.count("mds_early_reply")) {
+    early_reply_enabled = g_conf().get_val<bool>("mds_early_reply");
+  }
+  if (changed.count("mds_client_async_dirop")) {
+    client_async_dirop = g_conf().get_val<bool>("mds_client_async_dirop");
+  }
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
@@ -2017,7 +2025,7 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
 
 void Server::early_reply(MDRequestRef& mdr, EMetaBlob *blob, CInode *tracei, CDentry *tracedn)
 {
-  if (!g_conf()->mds_early_reply)
+  if (!early_reply_enabled)
     return;
 
   if (mdr->no_early_reply) {
@@ -2055,6 +2063,8 @@ void Server::early_reply(MDRequestRef& mdr, EMetaBlob *blob, CInode *tracei, CDe
 	return;
       }
     }
+    if (client_async_dirop && mdr->lock_cache)
+      mdr->lock_cache->update_caps_allowed(mdr->ls);
   }
 
   auto reply = make_message<MClientReply>(*req, 0);
@@ -2076,7 +2086,6 @@ void Server::early_reply(MDRequestRef& mdr, EMetaBlob *blob, CInode *tracei, CDe
       mdr->cap_releases.erase(tracei->vino());
     if (tracedn)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
-
     set_trace_dist(reply, tracei, tracedn, mdr);
   }
 
@@ -2107,9 +2116,9 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   ceph_assert(mdr.get());
   const cref_t<MClientRequest> &req = mdr->client_request;
   
-  dout(7) << "reply_client_request " << reply->get_result()
-	   << " (" << cpp_strerror(reply->get_result())
-	   << ") " << *req << dendl;
+  int r = reply->get_result();
+  dout(7) << "reply_client_request " << r << " (" << cpp_strerror(r) << ") "
+	  << *req << dendl;
 
   mdr->mark_event("replying");
 
@@ -2122,7 +2131,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   // setfilelock request, it means that client did not receive corresponding
   // setfilelock reply.  So MDS should re-execute the setfilelock request.
   if (req->may_write() && req->get_op() != CEPH_MDS_OP_SETFILELOCK &&
-      reply->get_result() == 0 && session) {
+      r >= 0 && session) {
     inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
     session->add_completed_request(mdr->reqid.tid, created);
     if (mdr->ls) {
@@ -2163,15 +2172,18 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
 
   // reply at all?
   if (session && !client_inst.name.is_mds()) {
-    // send reply.
-    if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
-	(tracei || tracedn)) {
-      if (is_replay) {
-	if (tracei)
-	  mdcache->try_reconnect_cap(tracei, session);
-      } else {
-	// include metadata in reply
-	set_trace_dist(reply, tracei, tracedn, mdr);
+    // don't issue caps/leases if we sent an earlier reply already
+    if (!did_early_reply) {
+      if (r >= 0 && client_async_dirop && mdr->lock_cache)
+	mdr->lock_cache->update_caps_allowed(mdr->ls);
+      if (tracei || tracedn) {
+	if (is_replay) {
+	  if (tracei)
+	    mdcache->try_reconnect_cap(tracei, session);
+	} else {
+	  // include metadata in reply
+	  set_trace_dist(reply, tracei, tracedn, mdr);
+	}
       }
     }
 
@@ -2184,9 +2196,8 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   }
 
   if (req->is_queued_for_replay() &&
-      (mdr->has_completed || reply->get_result() < 0)) {
-    if (reply->get_result() < 0) {
-      int r = reply->get_result();
+      (mdr->has_completed || r < 0)) {
+    if (r < 0) {
       derr << "reply_client_request: failed to replay " << *req
 	   << " error " << r << " (" << cpp_strerror(r)  << ")" << dendl;
       mds->clog->warn() << "failed to replay " << req->get_reqid() << " error " << r;
@@ -3064,7 +3075,6 @@ void Server::handle_peer_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRe
   mds_rank_t from = mds_rank_t(ack->get_source().num());
 
   if (ack->is_req_blocked()) {
-    mdr->disable_lock_cache();
     // peer auth pin is blocked, drop locks to avoid deadlock
     mds->locker->drop_locks(mdr.get(), nullptr);
     return;
@@ -3470,7 +3480,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
   int flags = MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_PATH |
 	      MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_XLOCK_DENTRY |
 	      MDS_TRAVERSE_WANT_AUTH;
-  if (refpath.depth() == 1 && !mdr->lock_cache_disabled)
+  if (refpath.depth() == 1 && mdr->lock_cache_enabled)
     flags |= MDS_TRAVERSE_CHECK_LOCKCACHE;
   if (create)
     flags |= MDS_TRAVERSE_RDLOCK_AUTHLOCK;
@@ -4292,6 +4302,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   bool excl = req->head.args.open.flags & CEPH_O_EXCL;
+  mdr->enable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, !excl, true);
   if (!dn)
     return;
@@ -4434,7 +4445,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     dout(10) << "adding created_ino and delegated_inos" << dendl;
     ocresp.created_ino = _inode->ino;
 
-    if (delegate_inos_pct && !req->is_queued_for_replay()) {
+    if (client_async_dirop && delegate_inos_pct &&
+	!req->is_queued_for_replay()) {
       // Try to delegate some prealloc_inos to the client, if it's down to half the max
       unsigned frac = 100 / delegate_inos_pct;
       if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
@@ -6240,7 +6252,6 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if ((mode & S_IFMT) == 0)
     mode |= S_IFREG;
 
-  mdr->disable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, false, S_ISREG(mode));
   if (!dn)
     return;
@@ -6336,7 +6347,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
 
-  mdr->disable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
   if (!dn)
     return;
@@ -6429,7 +6439,6 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
 {
   const auto& req = mdr->client_request;
 
-  mdr->disable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
   if (!dn)
     return;
@@ -6491,10 +6500,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   dout(7) << "handle_client_link " << req->get_filepath()
-	  << " to " << req->get_filepath2()
-	  << dendl;
-
-  mdr->disable_lock_cache();
+	  << " to " << req->get_filepath2() << dendl;
 
   CDentry *destdn;
   CInode *targeti;
@@ -7192,9 +7198,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   // rmdir or unlink?
   bool rmdir = (req->get_op() == CEPH_MDS_OP_RMDIR);
-
-  if (rmdir)
-    mdr->disable_lock_cache();
+  if (!rmdir)
+    mdr->enable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, true);
   if (!dn)
     return;

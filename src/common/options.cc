@@ -8316,6 +8316,10 @@ std::vector<Option> get_mds_options() {
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("percentage of preallocated inos to delegate to client"),
 
+    Option("mds_client_async_dirop", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("allow clients do file creation/unlink asynchronously"),
+
     Option("mds_early_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("additional reply to clients that metadata requests are complete but not yet durable"),

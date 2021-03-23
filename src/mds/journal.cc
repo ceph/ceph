@@ -196,6 +196,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 	}
 	le->add_clean_inode(in);
 	ls->open_files.push_back(&in->item_open_file);
+      } else if (in->is_auth() && in->is_dir() &&
+		 mds->locker->revoke_async_dirop_caps(in, gather_bld)) {
+	dout(20) << "try_to_expire invalidating caps for dir ops " << *in << dendl;
       } else {
 	// open files are tracked by open file table, no need to journal them again
 	in->item_open_file.remove_myself();

@@ -16,6 +16,7 @@
 #include "ScatterLock.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "LogSegment.h"
 
 // MutationImpl
 
@@ -620,4 +621,16 @@ void MDLockCache::detach_dirfrags()
     ++i;
   }
   items_dir.reset();
+}
+
+void MDLockCache::update_caps_allowed(LogSegment *ls)
+{
+  if (invalidating)
+    return;
+
+  client_t loner = diri->get_loner();
+  if (loner >= 0 && loner == client_cap->get_client()) {
+    client_cap->set_lock_cache_allowed(get_cap_bit());
+    ls->open_files.push_back(&diri->item_open_file);
+  }
 }

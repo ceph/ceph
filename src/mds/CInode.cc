@@ -3287,12 +3287,13 @@ bool CInode::try_drop_loner()
 
   int other_allowed = get_caps_allowed_by_type(CAP_ANY);
   Capability *cap = get_client_cap(loner_cap);
-  if (!cap ||
-      (cap->issued() & ~other_allowed) == 0) {
-    set_loner_cap(-1);
-    return true;
-  }
-  return false;
+  if (cap && (cap->issued() & ~other_allowed))
+    return false;
+
+  if (cap)
+    cap->clear_lock_cache_allowed(-1);
+  set_loner_cap(-1);
+  return true;
 }
 
 
@@ -3559,12 +3560,15 @@ int CInode::get_caps_allowed_ever() const
 
 int CInode::get_caps_allowed_by_type(int type) const
 {
-  return 
+  int allowed =
     CEPH_CAP_PIN |
     (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
     (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
     (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
     (linklock.gcaps_allowed(type) << linklock.get_cap_shift());
+  if (is_dir() && !(allowed & CEPH_CAP_FILE_EXCL))
+    allowed &= ~CEPH_CAP_ANY_DIR_OPS;
+  return allowed;
 }
 
 int CInode::get_caps_careful() const

@@ -415,7 +415,6 @@ OPTION(mds_tick_interval, OPT_FLOAT)
 OPTION(mds_dirstat_min_interval, OPT_FLOAT)    // try to avoid propagating more often than this
 OPTION(mds_scatter_nudge_interval, OPT_FLOAT)  // how quickly dirstat changes propagate up the hierarchy
 OPTION(mds_client_prealloc_inos, OPT_INT)
-OPTION(mds_early_reply, OPT_BOOL)
 OPTION(mds_default_dir_hash, OPT_INT)
 OPTION(mds_log_pause, OPT_BOOL)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL)
