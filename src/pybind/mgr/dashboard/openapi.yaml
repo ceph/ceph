@@ -7940,6 +7940,11 @@ paths:
         name: daemon_name
         schema:
           type: string
+      - default: true
+        in: query
+        name: stats
+        schema:
+          type: boolean
       responses:
         '200':
           content:
