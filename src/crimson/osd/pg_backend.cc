@@ -138,13 +138,12 @@ PGBackend::mutate_object(
     obc->obs.oi.prior_version = ctx->obs->oi.version;
 #endif
 
-    auto& m = osd_op_p.req;
     obc->obs.oi.prior_version = obc->obs.oi.version;
     obc->obs.oi.version = osd_op_p.at_version;
     if (osd_op_p.user_at_version > obc->obs.oi.user_version)
       obc->obs.oi.user_version = osd_op_p.user_at_version;
-    obc->obs.oi.last_reqid = m->get_reqid();
-    obc->obs.oi.mtime = m->get_mtime();
+    obc->obs.oi.last_reqid = osd_op_p.req_id;
+    obc->obs.oi.mtime = osd_op_p.mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
 
     // object_info_t

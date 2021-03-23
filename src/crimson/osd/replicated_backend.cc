@@ -55,7 +55,6 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   }
 
   const ceph_tid_t tid = next_txn_id++;
-  auto req_id = osd_op_p.req->get_reqid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   bufferlist encoded_txn;
@@ -67,7 +66,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       if (pg_shard == whoami) {
         return shard_services.get_store().do_transaction(coll,std::move(txn));
       } else {
-        auto m = make_message<MOSDRepOp>(req_id, whoami,
+        auto m = make_message<MOSDRepOp>(osd_op_p.req_id, whoami,
                                          spg_t{pgid, pg_shard.shard}, hoid,
                                          CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
                                          map_epoch, min_epoch,
