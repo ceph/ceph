@@ -587,10 +587,12 @@ private:
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
   interruptible_future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
-  interruptible_future<> submit_transaction(const OpInfo& op_info,
-				       ObjectContextRef&& obc,
-				       ceph::os::Transaction&& txn,
-				       osd_op_params_t&& oop);
+  interruptible_future<> submit_transaction(
+    const OpInfo& op_info,
+    const std::vector<OSDOp>& ops,
+    ObjectContextRef&& obc,
+    ceph::os::Transaction&& txn,
+    osd_op_params_t&& oop);
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
