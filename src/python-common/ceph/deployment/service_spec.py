@@ -576,10 +576,10 @@ class ServiceSpec(object):
             n += '.' + self.service_id
         return n
 
-    def get_port_start(self) -> Optional[int]:
+    def get_port_start(self) -> List[int]:
         # If defined, we will allocate and number ports starting at this
         # point.
-        return None
+        return []
 
     def to_json(self):
         # type: () -> OrderedDict[str, Any]
@@ -749,8 +749,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_type = rgw_frontend_type
         self.ssl = ssl
 
-    def get_port_start(self) -> Optional[int]:
-        return self.get_port()
+    def get_port_start(self) -> List[int]:
+        return [self.get_port()]
 
     def get_port(self) -> int:
         if self.rgw_frontend_port:
