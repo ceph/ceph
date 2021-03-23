@@ -329,6 +329,8 @@ OpsExecuter::flush_changes_n_do_ops_effects(Ref<PG> pg, MutFunc&& mut_func) &&
   assert(obc);
   auto maybe_mutated = interruptor::make_interruptible(osd_op_errorator::now());
   if (want_mutate) {
+    osd_op_params->req_id = msg->get_reqid();
+    //osd_op_params->mtime = msg->get_mtime();
     maybe_mutated = std::forward<MutFunc>(mut_func)(std::move(txn),
                                                     std::move(obc),
                                                     std::move(*osd_op_params),
