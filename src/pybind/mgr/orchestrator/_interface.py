@@ -862,9 +862,7 @@ class DaemonDescription(object):
     def get_port_summary(self) -> str:
         if not self.ports:
             return ''
-        return ' '.join([
-            f"{self.ip or '*'}:{p}" for p in self.ports
-        ])
+        return f"{self.ip or '*'}:{','.join(map(str, self.ports or []))}"
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
