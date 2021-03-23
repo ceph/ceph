@@ -566,10 +566,12 @@ seastar::future<> PG::WaitForActiveBlocker::stop()
   return seastar::now();
 }
 
-PG::interruptible_future<> PG::submit_transaction(const OpInfo& op_info,
-					 ObjectContextRef&& obc,
-					 ceph::os::Transaction&& txn,
-					 osd_op_params_t&& osd_op_p)
+PG::interruptible_future<> PG::submit_transaction(
+  const OpInfo& op_info,
+  const std::vector<OSDOp>& ops,
+  ObjectContextRef&& obc,
+  ceph::os::Transaction&& txn,
+  osd_op_params_t&& osd_op_p)
 {
   if (__builtin_expect(stopping, false)) {
     return seastar::make_exception_future<>(
@@ -583,7 +585,6 @@ PG::interruptible_future<> PG::submit_transaction(const OpInfo& op_info,
   }
 
   std::vector<pg_log_entry_t> log_entries;
-  const auto& ops = osd_op_p.req->ops;
   log_entries.emplace_back(obc->obs.exists ?
 		      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
 		    obc->obs.oi.soid, osd_op_p.at_version, obc->obs.oi.version,
@@ -724,10 +725,10 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
       ox.get_target());
     return std::move(ox).flush_changes_n_do_ops_effects(
       Ref<PG>{this},
-      [this, m, &op_info] (auto&& txn,
-			   auto&& obc,
-			   auto&& osd_op_p,
-                           bool user_modify) {
+      [this, m, &op_info, &ops] (auto&& txn,
+                                 auto&& obc,
+                                 auto&& osd_op_p,
+                                 bool user_modify) {
 	logger().debug(
 	  "do_osd_ops_execute: {} - object {} submitting txn",
 	  *m,
@@ -735,6 +736,7 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
         fill_op_params_bump_pg_version(osd_op_p, std::move(m), user_modify);
 	return submit_transaction(
           op_info,
+          ops,
           std::move(obc),
           std::move(txn),
           std::move(osd_op_p));
