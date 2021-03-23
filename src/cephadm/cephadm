@@ -289,14 +289,14 @@ class Monitoring(object):
                 _, err, code = call(ctx, [
                     ctx.container_path, 'exec', container_id, cmd,
                     '--version'
-                ], verbosity=CallVerbosity.SILENT)
+                ], verbosity=CallVerbosity.DEBUG)
                 if code == 0:
                     break
             cmd = 'alertmanager'  # reset cmd for version extraction
         else:
             _, err, code = call(ctx, [
                 ctx.container_path, 'exec', container_id, cmd, '--version'
-            ])
+            ], verbosity=CallVerbosity.DEBUG)
         if code == 0 and \
                 err.startswith('%s, version ' % cmd):
             version = err.split(' ')[2]
@@ -386,7 +386,8 @@ class NFSGanesha(object):
         version = None
         out, err, code = call(ctx,
                               [ctx.container_path, 'exec', container_id,
-                               NFSGanesha.entrypoint, '-v'])
+                               NFSGanesha.entrypoint, '-v'],
+                              verbosity=CallVerbosity.DEBUG)
         if code == 0:
             match = re.search(r'NFS-Ganesha Release\s*=\s*[V]*([\d.]+)', out)
             if match:
@@ -547,7 +548,8 @@ class CephIscsi(object):
         version = None
         out, err, code = call(ctx,
                               [ctx.container_path, 'exec', container_id,
-                               '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"])
+                               '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"],
+                              verbosity=CallVerbosity.DEBUG)
         if code == 0:
             version = out.strip()
         return version
@@ -2549,7 +2551,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         else:
             if c:
                 deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id,
-                                    c, osd_fsid=osd_fsid)
+                                    c, osd_fsid=osd_fsid, ports=ports)
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
 
@@ -2613,6 +2615,7 @@ def deploy_daemon_units(
     enable: bool = True,
     start: bool = True,
     osd_fsid: Optional[str] = None,
+    ports: Optional[List[int]] = None,
 ) -> None:
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
@@ -2674,6 +2677,8 @@ def deploy_daemon_units(
             'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
             'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
         })
+        if not meta.get('ports'):
+            meta['ports'] = ports
         metaf.write(json.dumps(meta, indent=4) + '\n')
 
         os.fchmod(f.fileno(), 0o600)
@@ -3617,7 +3622,7 @@ def prepare_ssh(
 
         with open(ctx.output_pub_ssh_key, 'w') as f:
             f.write(ssh_pub)
-        logger.info('Wrote public SSH key to to %s' % ctx.output_pub_ssh_key)
+        logger.info('Wrote public SSH key to %s' % ctx.output_pub_ssh_key)
 
         logger.info('Adding key to %s@localhost authorized_keys...' % ctx.ssh_user)
         try:
@@ -4593,7 +4598,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             check_unit(ctx, legacy_unit_name)
                         if not host_version:
                             try:
-                                out, err, code = call(ctx, ['ceph', '-v'])
+                                out, err, code = call(ctx,
+                                                      ['ceph', '-v'],
+                                                      verbosity=CallVerbosity.DEBUG)
                                 if not code and out.startswith('ceph version '):
                                     host_version = out.split(' ')[2]
                             except Exception:
@@ -4666,7 +4673,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 if daemon_type in Ceph.daemons:
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           'ceph', '-v'])
+                                                           'ceph', '-v'],
+                                                          verbosity=CallVerbosity.DEBUG)
                                     if not code and \
                                        out.startswith('ceph version '):
                                         version = out.split(' ')[2]
@@ -4674,7 +4682,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 elif daemon_type == 'grafana':
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           'grafana-server', '-v'])
+                                                           'grafana-server', '-v'],
+                                                          verbosity=CallVerbosity.DEBUG)
                                     if not code and \
                                        out.startswith('Version '):
                                         version = out.split(' ')[1]
@@ -4687,7 +4696,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 elif daemon_type == 'haproxy':
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           'haproxy', '-v'])
+                                                           'haproxy', '-v'],
+                                                          verbosity=CallVerbosity.DEBUG)
                                     if not code and \
                                        out.startswith('HA-Proxy version '):
                                         version = out.split(' ')[2]
@@ -4695,7 +4705,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 elif daemon_type == 'keepalived':
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
-                                                           'keepalived', '--version'])
+                                                           'keepalived', '--version'],
+                                                          verbosity=CallVerbosity.DEBUG)
                                     if not code and \
                                        err.startswith('Keepalived '):
                                         version = err.split(' ')[1]

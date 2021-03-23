@@ -2,13 +2,14 @@
 
 # fmt: off
 
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Dict
 import pytest
 
 from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
 
 from cephadm.module import HostAssignment
+from cephadm.schedule import DaemonPlacement
 from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError
 
 
@@ -186,6 +187,29 @@ test_explicit_scheduler_results = [
 ]
 
 
+@pytest.mark.parametrize(
+    'dp,dd,result',
+    [
+        (
+            DaemonPlacement(hostname='host1'),
+            DaemonDescription('mgr', 'a', 'host1'),
+            True
+        ),
+        (
+            DaemonPlacement(hostname='host1', name='a'),
+            DaemonDescription('mgr', 'a', 'host1'),
+            True
+        ),
+        (
+            DaemonPlacement(hostname='host1', name='a'),
+            DaemonDescription('mgr', 'b', 'host1'),
+            False
+        ),
+    ])
+def test_daemon_placement_match(dp, dd, result):
+    assert dp.matches_daemon(dd) == result
+
+
 @pytest.mark.parametrize("spec_section_key,spec_section",
     [   # noqa: E128
         ('h', 'hosts'),
@@ -337,7 +361,7 @@ class NodeAssignmentTest(NamedTuple):
         # just hosts
         NodeAssignmentTest(
             'mgr',
-            PlacementSpec(hosts=['smithi060:[v2:172.21.15.60:3301,v1:172.21.15.60:6790]=c']),
+            PlacementSpec(hosts=['smithi060']),
             ['smithi060'],
             [],
             ['smithi060'], ['smithi060'], []
@@ -504,6 +528,46 @@ class NodeAssignmentTest(NamedTuple):
             ['mdshost1', 'mdshost2', 'mdshost1', 'mdshost2', 'mdshost1', 'mdshost2'],
             []
         ),
+        # label + count_per_host + ports
+        NodeAssignmentTest(
+            'rgw',
+            PlacementSpec(count=6, label='foo'),
+            'host1 host2 host3'.split(),
+            [],
+            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
+             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
+            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
+             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
+            []
+        ),
+        # label + count_per_host + ports (+ xisting)
+        NodeAssignmentTest(
+            'rgw',
+            PlacementSpec(count=6, label='foo'),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('rgw', 'a', 'host1', ports=[81]),
+                DaemonDescription('rgw', 'b', 'host2', ports=[80]),
+                DaemonDescription('rgw', 'c', 'host1', ports=[82]),
+            ],
+            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
+             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
+            ['host1(*:80)', 'host3(*:80)',
+             'host2(*:81)', 'host3(*:81)'],
+            ['rgw.c']
+        ),
+        # cephadm.py teuth case
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(count=3, hosts=['host1=y', 'host2=x']),
+            'host1 host2'.split(),
+            [
+                DaemonDescription('mgr', 'y', 'host1'),
+                DaemonDescription('mgr', 'x', 'host2'),
+            ],
+            ['host1(name=y)', 'host2(name=x)'],
+            [], []
+        ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons,
                          expected, expected_add, expected_remove):
@@ -511,6 +575,7 @@ def test_node_assignment(service_type, placement, hosts, daemons,
     allow_colo = False
     if service_type == 'rgw':
         service_id = 'realm.zone'
+        allow_colo = True
     elif service_type == 'mds':
         service_id = 'myfs'
         allow_colo = True
@@ -523,24 +588,26 @@ def test_node_assignment(service_type, placement, hosts, daemons,
         spec=spec,
         hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         daemons=daemons,
-        allow_colo=allow_colo
+        allow_colo=allow_colo,
     ).place()
 
-    got = [hs.hostname for hs in all_slots]
+    got = [str(p) for p in all_slots]
     num_wildcard = 0
     for i in expected:
         if i == '*':
             num_wildcard += 1
         else:
+            assert i in got
             got.remove(i)
     assert num_wildcard == len(got)
 
-    got = [hs.hostname for hs in to_add]
+    got = [str(p) for p in to_add]
     num_wildcard = 0
     for i in expected_add:
         if i == '*':
             num_wildcard += 1
         else:
+            assert i in got
             got.remove(i)
     assert num_wildcard == len(got)
 
@@ -660,6 +727,72 @@ def test_node_assignment3(service_type, placement, hosts,
     assert len(hosts) == expected_len
     for h in must_have:
         assert h in [h.hostname for h in hosts]
+
+
+class NodeAssignmentTest4(NamedTuple):
+    spec: ServiceSpec
+    networks: Dict[str, Dict[str, List[str]]]
+    daemons: List[DaemonDescription]
+    expected: List[str]
+    expected_add: List[str]
+    expected_remove: List[DaemonDescription]
+
+
+@pytest.mark.parametrize("spec,networks,daemons,expected,expected_add,expected_remove",
+    [   # noqa: E128
+        NodeAssignmentTest4(
+            ServiceSpec(
+                service_type='rgw',
+                service_id='foo',
+                placement=PlacementSpec(count=6, label='foo'),
+                networks=['10.0.0.0/8'],
+            ),
+            {
+                'host1': {'10.0.0.0/8': ['10.0.0.1']},
+                'host2': {'10.0.0.0/8': ['10.0.0.2']},
+                'host3': {'192.168.0.0/16': ['192.168.0.1']},
+            },
+            [],
+            ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
+             'host1(10.0.0.1:81)', 'host2(10.0.0.2:81)',
+             'host1(10.0.0.1:82)', 'host2(10.0.0.2:82)'],
+            ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
+             'host1(10.0.0.1:81)', 'host2(10.0.0.2:81)',
+             'host1(10.0.0.1:82)', 'host2(10.0.0.2:82)'],
+            []
+        ),
+    ])
+def test_node_assignment4(spec, networks, daemons,
+                          expected, expected_add, expected_remove):
+    all_slots, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=[HostSpec(h, labels=['foo']) for h in networks.keys()],
+        daemons=daemons,
+        allow_colo=True,
+        networks=networks,
+    ).place()
+
+    got = [str(p) for p in all_slots]
+    num_wildcard = 0
+    for i in expected:
+        if i == '*':
+            num_wildcard += 1
+        else:
+            assert i in got
+            got.remove(i)
+    assert num_wildcard == len(got)
+
+    got = [str(p) for p in to_add]
+    num_wildcard = 0
+    for i in expected_add:
+        if i == '*':
+            num_wildcard += 1
+        else:
+            assert i in got
+            got.remove(i)
+    assert num_wildcard == len(got)
+
+    assert sorted([d.name() for d in to_remove]) == sorted(expected_remove)
 
 
 @pytest.mark.parametrize("placement",

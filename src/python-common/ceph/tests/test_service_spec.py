@@ -200,7 +200,11 @@ service_name: rgw.default-rgw-realm.eu-central-1.1
 placement:
   hosts:
   - ceph-001
+networks:
+- 10.0.0.0/8
+- 192.168.0.0/16
 spec:
+  rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
 ---
@@ -305,3 +309,18 @@ def test_service_name(s_type, s_id, s_name):
     spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
     spec.validate()
     assert spec.service_name() == s_name
+
+@pytest.mark.parametrize(
+    's_type,s_id',
+    [
+        ('mds', 's:id'),
+        ('rgw', '*s_id'),
+        ('nfs', 's/id'),
+        ('iscsi', 's@id'),
+        ('osd', 's;id'),
+    ])
+
+def test_service_id_raises_invalid_char(s_type, s_id):
+    with pytest.raises(ServiceSpecValidationError):
+        spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
+        spec.validate()

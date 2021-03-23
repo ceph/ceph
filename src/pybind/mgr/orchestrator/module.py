@@ -626,7 +626,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             now = datetime_now()
             table = PrettyTable(
-                ['NAME', 'HOST', 'STATUS', 'REFRESHED', 'AGE',
+                ['NAME', 'HOST', 'STATUS', 'REFRESHED', 'AGE', 'PORTS',
                  'VERSION', 'IMAGE NAME', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
@@ -651,6 +651,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     status,
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
+                    s.get_port_summary() or '-',
                     ukn(s.version),
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
@@ -1130,7 +1131,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = IscsiServiceSpec(
-            service_id='iscsi',
+            service_id=pool,
             pool=pool,
             api_user=api_user,
             api_password=api_password,
@@ -1298,6 +1299,7 @@ Usage:
             'target_image': status.target_image,
             'in_progress': status.in_progress,
             'services_complete': status.services_complete,
+            'progress': status.progress,
             'message': status.message,
         }
         out = json.dumps(r, indent=4)

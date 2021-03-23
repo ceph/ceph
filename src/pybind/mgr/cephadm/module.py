@@ -1685,29 +1685,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             for dd in dds
         ]
 
-    def _daemon_action(self, daemon_type: str, daemon_id: str, host: str, action: str, image: Optional[str] = None) -> str:
-        dd = DaemonDescription(
-            hostname=host,
-            daemon_type=daemon_type,
-            daemon_id=daemon_id
-        )
-        daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
-            host=host,
-            daemon_id=daemon_id,
-            daemon_type=daemon_type,
-            service_name=dd.service_name(),
-        )
+    def _daemon_action(self,
+                       daemon_spec: CephadmDaemonDeploySpec,
+                       action: str,
+                       image: Optional[str] = None) -> str:
+        self._daemon_action_set_image(action, image, daemon_spec.daemon_type,
+                                      daemon_spec.daemon_id)
 
-        self._daemon_action_set_image(action, image, daemon_type, daemon_id)
-
-        if action == 'redeploy' and self.daemon_is_self(daemon_type, daemon_id):
+        if action == 'redeploy' and self.daemon_is_self(daemon_spec.daemon_type,
+                                                        daemon_spec.daemon_id):
             self.mgr_service.fail_over()
             return ''  # unreachable
 
         if action == 'redeploy' or action == 'reconfig':
-            if daemon_type != 'osd':
+            if daemon_spec.daemon_type != 'osd':
                 daemon_spec = self.cephadm_services[daemon_type_to_service(
-                    daemon_type)].prepare_create(daemon_spec)
+                    daemon_spec.daemon_type)].prepare_create(daemon_spec)
             return CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'))
 
         actions = {
@@ -1719,10 +1712,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         for a in actions[action]:
             try:
                 out, err, code = CephadmServe(self)._run_cephadm(
-                    host, name, 'unit',
+                    daemon_spec.host, name, 'unit',
                     ['--name', name, a])
             except Exception:
-                self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
+                self.log.exception(f'`{daemon_spec.host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(daemon_spec.host)
         msg = "{} {} from host '{}'".format(action, name, daemon_spec.host)
         self.events.for_daemon(name, 'INFO', msg)
@@ -1788,7 +1781,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     args.append((name, host))
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
-        self.log.info('Remove daemons %s' % [a[0] for a in args])
+        self.log.info('Remove daemons %s' % ' '.join([a[0] for a in args]))
         return self._remove_daemons(args)
 
     @handle_orch_error
@@ -2034,8 +2027,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 self.cephadm_services[service_type].config(spec, daemon_id)
                 did_config = True
 
+            port = spec.get_port_start()
             daemon_spec = self.cephadm_services[service_type].make_daemon_spec(
-                host, daemon_id, network, spec)
+                host, daemon_id, network, spec,
+                # NOTE: this does not consider port conflicts!
+                ports=[port] if port else None)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
             args.append(daemon_spec)
@@ -2086,6 +2082,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ha = HostAssignment(
             spec=spec,
             hosts=self._hosts_with_daemon_inventory(),
+            networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
         )
@@ -2142,6 +2139,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         HostAssignment(
             spec=spec,
             hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh
+            networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
         ).validate()

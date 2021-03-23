@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec, HostPlacementSpec
+    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -734,6 +734,7 @@ class UpgradeStatusSpec(object):
         self.in_progress = False  # Is an upgrade underway?
         self.target_image: Optional[str] = None
         self.services_complete: List[str] = []  # Which daemon types are fully updated?
+        self.progress: Optional[str] = None  # How many of the daemons have we upgraded
         self.message = ""  # Freeform description
 
 
@@ -790,6 +791,8 @@ class DaemonDescription(object):
                  memory_request: Optional[int] = None,
                  memory_limit: Optional[int] = None,
                  service_name: Optional[str] = None,
+                 ports: Optional[List[int]] = None,
+                 ip: Optional[str] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -842,7 +845,17 @@ class DaemonDescription(object):
         self.memory_request: Optional[int] = memory_request
         self.memory_limit: Optional[int] = memory_limit
 
+        self.ports: Optional[List[int]] = ports
+        self.ip: Optional[str] = ip
+
         self.is_active = is_active
+
+    def get_port_summary(self) -> str:
+        if not self.ports:
+            return ''
+        return ' '.join([
+            f"{self.ip or '*'}:{p}" for p in self.ports
+        ])
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -920,14 +933,6 @@ class DaemonDescription(object):
             return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
         return daemon_type_to_service(self.daemon_type)
 
-    def get_host_placement(self) -> HostPlacementSpec:
-        return HostPlacementSpec(
-            hostname=self.hostname or '',
-            # FIXME: include the ip:port here?
-            network='',
-            name='',
-        )
-
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
@@ -950,6 +955,8 @@ class DaemonDescription(object):
         if self.daemon_type == 'osd':
             out['osdspec_affinity'] = self.osdspec_affinity
         out['is_active'] = self.is_active
+        out['ports'] = self.ports
+        out['ip'] = self.ip
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
