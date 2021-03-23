@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 #pragma once
 
 #include <atomic>
@@ -72,21 +72,55 @@ struct SubmitQueue {
   }
 };
 
-/// an engine for scheduling non-seastar tasks from seastar fibers
-class ThreadPool {
-  std::atomic<bool> stopping = false;
+struct ShardedWorkQueue {
+public:
+  WorkItem* pop_front(std::chrono::milliseconds& queue_max_wait) {
+    WorkItem* work_item = nullptr;
+    std::unique_lock lock{mutex};
+    cond.wait_for(lock, queue_max_wait,
+		  [this, &work_item] {
+      bool empty = true;
+      if (!pending.empty()) {
+        empty = false;
+        work_item = pending.front();
+        pending.pop_front();
+      }
+      return !empty || is_stopping();
+    });
+    return work_item;
+  }
+  void stop() {
+    stopping = true;
+    cond.notify_all();
+  }
+  void push_back(WorkItem* work_item) {
+    pending.push_back(work_item);
+    cond.notify_one();
+  }
+private:
+  bool is_stopping() const {
+    return stopping;
+  }
+  bool stopping = false;
   std::mutex mutex;
   std::condition_variable cond;
+  std::deque<WorkItem*> pending;
+};
+
+/// an engine for scheduling non-seastar tasks from seastar fibers
+class ThreadPool {
+  size_t n_threads;
+  std::atomic<bool> stopping = false;
   std::vector<std::thread> threads;
   seastar::sharded<SubmitQueue> submit_queue;
   const size_t queue_size;
-  boost::lockfree::queue<WorkItem*> pending;
+  std::vector<ShardedWorkQueue> pending_queues;
 
-  void loop(std::chrono::milliseconds queue_max_wait);
+  void loop(std::chrono::milliseconds queue_max_wait, size_t shard);
   bool is_stopping() const {
     return stopping.load(std::memory_order_relaxed);
   }
-  static void pin(unsigned cpu_id);
+  static void pin(const std::vector<uint64_t>& cpus);
   seastar::semaphore& local_free_slots() {
     return submit_queue.local().free_slots;
   }
@@ -102,30 +136,38 @@ public:
    * @note each @c Task has its own crimson::thread::Condition, which possesses
    * an fd, so we should keep the size of queue under a reasonable limit.
    */
-  ThreadPool(size_t n_threads, size_t queue_sz, long cpu);
+  ThreadPool(size_t n_threads, size_t queue_sz, std::vector<uint64_t> cpus);
   ~ThreadPool();
   seastar::future<> start();
   seastar::future<> stop();
+  size_t size() {
+    return n_threads;
+  }
   template<typename Func, typename...Args>
-  auto submit(Func&& func, Args&&... args) {
+  auto submit(int shard, Func&& func, Args&&... args) {
     auto packaged = [func=std::move(func),
                      args=std::forward_as_tuple(args...)] {
       return std::apply(std::move(func), std::move(args));
     };
     return seastar::with_gate(submit_queue.local().pending_tasks,
-      [packaged=std::move(packaged), this] {
+      [packaged=std::move(packaged), shard, this] {
         return local_free_slots().wait()
-          .then([packaged=std::move(packaged), this] {
+          .then([packaged=std::move(packaged), shard, this] {
             auto task = new Task{std::move(packaged)};
             auto fut = task->get_future();
-            pending.push(task);
-            cond.notify_one();
+	    pending_queues[shard].push_back(task);
             return fut.finally([task, this] {
               local_free_slots().signal();
               delete task;
             });
           });
         });
+  }
+
+  template<typename Func>
+  auto submit(Func&& func) {
+    return submit(::rand() % n_threads,
+		  std::forward<Func>(func));
   }
 };
 
