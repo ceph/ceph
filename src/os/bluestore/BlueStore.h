@@ -1289,7 +1289,7 @@ public:
 
   private:
     /// forward lookups
-    mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_meta::map<ghobject_t,OnodeRef> onode_map;
 
     friend struct Collection; // for split_cache()
     friend struct Onode; // for put()
