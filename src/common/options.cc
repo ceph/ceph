@@ -7220,6 +7220,40 @@ std::vector<Option> get_rgw_options() {
     .add_see_also("rgw_dynamic_resharding")
     .add_see_also("rgw_max_objs_per_shard"),
 
+    Option("rgw_dynamic_resharding_static_shards", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("The target number of shards for any dynamically resharded bucket")
+    .set_long_description(
+        "Dynamic resharding takes linear time to reshard buckets relative the "
+        "number of index entries in that bucket's index. For clusters with an "
+        "exponentially distributed number of entries per bucket and a small "
+        "number of very large buckets, it may be advantageous to focus on "
+        "aggressively resharding buckets once they reach a certain size. This "
+        "helps avoid longer dynamic resharding jobs for large buckets which "
+        "limit bucket availability. Must be used in conjunction with "
+        "rgw_dynamic_resharding_min_object_count and "
+        "rgw_dynamic_resharding_max_object_count to determine a size range for "
+        "resharding.")
+    .add_see_also("rgw_dynamic_resharding")
+    .add_see_also("rgw_dynamic_resharding_min_object_count")
+    .add_see_also("rgw_dynamic_resharding_max_object_count"),
+
+    Option("rgw_dynamic_resharding_min_object_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Minimum number of objects for a dynamic resharding candidate bucket")
+    .set_long_description(
+        "If greater than zero, a bucket must have at least this many objects "
+        "for dynamic resharding to proceed")
+    .add_see_also("rgw_dynamic_resharding_static_shards"),
+
+    Option("rgw_dynamic_resharding_max_object_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Maximum number of objects for a dynamic resharding candidate bucket")
+    .set_long_description(
+        "If greater than zero, a bucket must have less than this number of "
+        "objects for dynamic resharding to proceed")
+    .add_see_also("rgw_dynamic_resharding_static_shards"),
+
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
     .set_min(10)

@@ -9049,9 +9049,22 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
   uint32_t suggested_num_shards = 0;
   const uint64_t max_objs_per_shard =
     cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
+  const uint64_t static_shards =
+    cct->_conf.get_val<uint64_t>("rgw_dynamic_resharding_static_shards");
+  const uint64_t min_object_count =
+    cct->_conf.get_val<uint64_t>("rgw_dynamic_resharding_min_object_count");
+  const uint64_t max_object_count =
+    cct->_conf.get_val<uint64_t>("rgw_dynamic_resharding_max_object_count");
 
-  quota_handler->check_bucket_shards(max_objs_per_shard, num_source_shards,
-				     num_objs, need_resharding, &suggested_num_shards);
+  if (static_shards > 0 &&
+    min_object_count > 0 &&
+    max_object_count >= min_object_count) {
+    quota_handler->check_bucket_shards_static(min_object_count, max_object_count, num_source_shards,
+                                       num_objs, need_resharding, static_shards);
+    suggested_num_shards = static_shards;
+  } else {
+    quota_handler->check_bucket_shards(max_objs_per_shard, num_source_shards,
+                                       num_objs, need_resharding, &suggested_num_shards);
   if (! need_resharding) {
     return 0;
   }

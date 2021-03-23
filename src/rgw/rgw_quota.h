@@ -113,6 +113,9 @@ public:
   virtual void check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
 				   uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) = 0;
 
+  virtual void check_bucket_shards_static(uint64_t min_bucket_objs, uint64_t max_bucket_objs, uint64_t num_shards,
+                                          uint64_t num_objs, bool& need_resharding, uint64_t configured_shards) = 0;
+
   virtual void update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 
   static RGWQuotaHandler *generate_handler(rgw::sal::RGWStore *store, bool quota_threads);
