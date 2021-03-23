@@ -48,7 +48,11 @@ need to be enabled.::
         rbd plugins = pwl_cache
 
 Value of {cache-mode} can be ``rwl`` or ``ssd``. By default it is
-``disabled``
+``disabled``.
+
+The ``pwl_cache`` plugin depends on libpmem. This is only available on
+the x86_64 architecture on RHEL 8 and x86_64 and ppc64le on Fedora. It is not
+available on s390x.
 
 Here are some cache configuration settings:
 
