@@ -520,6 +520,7 @@ public:
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, const UserPerm& perms);
   int ll_lookup_inode(struct inodeno_t ino, const UserPerm& perms, Inode **inode);
+  int ll_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode);
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
 			const UserPerm& perms);
@@ -1371,7 +1372,7 @@ private:
   int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
   int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
   int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
-  int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
+  int _lookup_vino(vinodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, uint64_t count);
 
   void collect_and_send_metrics();
