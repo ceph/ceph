@@ -388,15 +388,24 @@ export class IscsiHelper {
 }
 
 export class RgwHelper {
-  static readonly DAEMON_NAME = 'daemon1';
-  static readonly DAEMON_QUERY_PARAM = `daemon_name=${RgwHelper.DAEMON_NAME}`;
+  static readonly daemons = RgwHelper.getDaemonList();
+  static readonly DAEMON_QUERY_PARAM = `daemon_name=${RgwHelper.daemons[0].id}`;
 
-  static getCurrentDaemon() {
-    const rgwDaemon = new RgwDaemon();
-    rgwDaemon.id = this.DAEMON_NAME;
-    rgwDaemon.default = true;
+  static getDaemonList() {
+    const daemonList: RgwDaemon[] = [];
+    for (let daemonIndex = 1; daemonIndex <= 3; daemonIndex++) {
+      const rgwDaemon = new RgwDaemon();
+      rgwDaemon.id = `daemon${daemonIndex}`;
+      rgwDaemon.default = daemonIndex === 2;
+      rgwDaemon.zonegroup_name = `zonegroup${daemonIndex}`;
+      daemonList.push(rgwDaemon);
+    }
+    return daemonList;
+  }
+
+  static selectDaemon() {
     const service = TestBed.inject(RgwDaemonService);
-    service.selectDaemon(rgwDaemon);
+    service.selectDaemon(this.daemons[0]);
   }
 }
 

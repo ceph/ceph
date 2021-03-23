@@ -6,6 +6,7 @@ import json
 import logging
 import threading
 import time
+from unittest.mock import Mock
 
 import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
@@ -278,3 +279,47 @@ class ControllerTestCase(helper.CPWebCase):
             if msg is None:
                 msg = 'expected %r to be in %r' % (data, json_body)
             self._handlewebError(msg)
+
+
+class Stub:
+    """Test class for returning predefined values"""
+
+    @classmethod
+    def get_mgr_no_services(cls):
+        mgr.get = Mock(return_value={})
+
+
+class RgwStub(Stub):
+
+    @classmethod
+    def get_daemons(cls):
+        mgr.get = Mock(return_value={'services': {'rgw': {'daemons': {
+            '5297': {
+                'addr': '192.168.178.3:49774/1534999298',
+                'metadata': {
+                    'frontend_config#0': 'beast port=8000',
+                    'id': 'daemon1',
+                    'zonegroup_name': 'zonegroup1',
+                    'zone_name': 'zone1'
+                }
+            },
+            '5398': {
+                'addr': '[2001:db8:85a3::8a2e:370:7334]:49774/1534999298',
+                'metadata': {
+                    'frontend_config#0': 'civetweb port=8002',
+                    'id': 'daemon2',
+                    'zonegroup_name': 'zonegroup2',
+                    'zone_name': 'zone2'
+                }
+            }
+        }}}})
+
+    @classmethod
+    def get_settings(cls):
+        settings = {
+            'RGW_API_HOST': '',
+            'RGW_API_PORT': 0,
+            'RGW_API_ACCESS_KEY': 'fake-access-key',
+            'RGW_API_SECRET_KEY': 'fake-secret-key',
+        }
+        mgr.get_module_option = Mock(side_effect=settings.get)
