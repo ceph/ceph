@@ -708,6 +708,10 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
   SuccessFunc&& success_func,
   FailureFunc&& failure_func)
 {
+  auto rollbacker = ox.create_rollbacker([this] (auto& obc) {
+    return reload_obc(obc).handle_error_interruptible(
+      load_obc_ertr::assert_all{"can't live with object state messed up"});
+  });
   return interruptor::do_for_each(ops, [m, &ox](OSDOp& osd_op) {
     logger().debug(
       "do_osd_ops_execute: {} - object {} - handling op {}",
@@ -744,21 +748,12 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
       return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
     });
   }), OpsExecuter::osd_op_errorator::all_same_way(
-    [&ox, m, obc, failure_func=std::move(failure_func), this] (const std::error_code& e) mutable {
-    const bool need_reload_obc = ox.has_seen_write();
-    logger().debug(
-      "do_osd_ops_execute: {} - object {} got error {}, {}; need_reload_obc {}",
-      m,
-      obc->obs.oi.soid,
-      e.value(),
-      e.message(),
-      need_reload_obc);
-    return (
-      need_reload_obc ? reload_obc(*obc)
-                      : interruptor::make_interruptible(load_obc_ertr::now())
-    ).safe_then_interruptible([&e, failure_func=std::move(failure_func)] {
+    [rollbacker, failure_func=std::move(failure_func), m, this]
+    (const std::error_code& e) mutable {
+    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+      [&e, failure_func=std::move(failure_func)] {
       return std::move(failure_func)(e);
-    }, load_obc_ertr::assert_all{ "can't live with object state messed up" });
+    });
   }));
 }
 
