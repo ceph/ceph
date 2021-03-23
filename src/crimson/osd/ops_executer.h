@@ -241,6 +241,9 @@ public:
   template <class Func>
   struct RollbackHelper {
     interruptible_future<> rollback_obc_if_modified(const std::error_code& e);
+    ObjectContextRef get_obc() const {
+      return ox.obc;
+    }
     OpsExecuter& ox;
     Func func;
   };
