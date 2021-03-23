@@ -238,6 +238,18 @@ public:
       msg(std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{}, &msg) {
   }
 
+  template <class Func>
+  struct RollbackHelper {
+    interruptible_future<> rollback_obc_if_modified(const std::error_code& e);
+    OpsExecuter& ox;
+    Func func;
+  };
+
+  template <class Func>
+  RollbackHelper<Func> create_rollbacker(Func&& func) {
+    return {*this, std::forward<Func>(func)};
+  }
+
   interruptible_errorated_future<osd_op_errorator>
   execute_op(class OSDOp& osd_op);
 
@@ -331,6 +343,40 @@ OpsExecuter::flush_changes_n_do_ops_effects(Ref<PG> pg, MutFunc&& mut_func) &&
       });
     });
   }
+}
+
+template <class Func>
+OpsExecuter::interruptible_future<>
+OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
+  const std::error_code& e)
+{
+  // Oops, an operation had failed. do_osd_ops() altogether with
+  // OpsExecuter already dropped the ObjectStore::Transaction if
+  // there was any. However, this is not enough to completely
+  // rollback as we gave OpsExecuter the very single copy of `obc`
+  // we maintain and we did it for both reading and writing.
+  // Now all modifications must be reverted.
+  //
+  // Let's just reload from the store. Evicting from the shared
+  // LRU would be tricky as next MOSDOp (the one at `get_obc`
+  // phase) could actually already finished the lookup. Fortunately,
+  // this is supposed to live on cold  paths, so performance is not
+  // a concern -- simplicity wins.
+  //
+  // The conditional's purpose is to efficiently handle hot errors
+  // which may appear as a result of e.g. CEPH_OSD_OP_CMPXATTR or
+  // CEPH_OSD_OP_OMAP_CMP. These are read-like ops and clients
+  // typically append them before any write. If OpsExecuter hasn't
+  // seen any modifying operation, `obc` is supposed to be kept
+  // unchanged.
+  const auto need_rollback = ox.has_seen_write();
+  crimson::get_logger(ceph_subsys_osd).debug(
+    "{}: object {} got error {}, need_rollback={}",
+    __func__,
+    ox.obc->get_oid(),
+    e,
+    need_rollback);
+  return need_rollback ? func(*ox.obc) : interruptor::now();
 }
 
 // PgOpsExecuter -- a class for executing ops targeting a certain PG.
