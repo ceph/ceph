@@ -529,7 +529,6 @@ class HostCache():
     def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
         assert not service_name.startswith('keepalived.')
-        assert not service_name.startswith('haproxy.')
 
         result = []   # type: List[orchestrator.DaemonDescription]
         for host, dm in self.daemons.items():

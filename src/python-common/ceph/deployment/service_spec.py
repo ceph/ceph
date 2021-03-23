@@ -428,8 +428,9 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container cephadm-exporter ha-rgw cephfs-mirror'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw '.split()
+                          'container cephadm-exporter ha-rgw cephfs-mirror ' \
+                          'haproxy'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw haproxy '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -444,6 +445,7 @@ class ServiceSpec(object):
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
             'alertmanager': AlertManagerSpec,
+            'haproxy': HaproxySpec,
             'ha-rgw': HA_RGWSpec,
             'container': CustomContainerSpec,
         }.get(service_type, cls)
@@ -853,6 +855,60 @@ class AlertManagerSpec(ServiceSpec):
 
 
 yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
+
+
+class HaproxySpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'haproxy',
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 backend_service: Optional[str] = None,
+                 frontend_port: Optional[int] = None,
+                 ssl_cert: Optional[str] = None,
+                 ssl_dh_param: Optional[str] = None,
+                 ssl_ciphers: Optional[List[str]] = None,
+                 ssl_options: Optional[List[str]] = None,
+                 monitor_port: Optional[int] = None,
+                 monitor_user: Optional[str] = None,
+                 monitor_password: Optional[str] = None,
+                 enable_stats: Optional[bool] = None,
+                 image: Optional[str] = None,
+                 ):
+        assert service_type == 'haproxy'
+        super(HaproxySpec, self).__init__(
+            'haproxy', service_id=service_id,
+            placement=placement, config=config,
+            networks=networks
+        )
+        self.backend_service = backend_service
+        self.frontend_port = frontend_port
+        self.ssl_cert = ssl_cert
+        self.ssl_dh_param = ssl_dh_param
+        self.ssl_ciphers = ssl_ciphers
+        self.ssl_options = ssl_options
+        self.monitor_port = monitor_port
+        self.monitor_user = monitor_user
+        self.monitor_password = monitor_password
+        self.image = image
+
+    def get_port_start(self) -> List[int]:
+        return [cast(int, self.frontend_port),
+                cast(int, self.monitor_port)]
+
+    def validate(self) -> None:
+        super(HaproxySpec, self).validate()
+
+        if not self.backend_service:
+            raise ServiceSpecValidationError(
+                'Cannot add haproxy: No backend_service specified')
+        if not self.frontend_port:
+            raise ServiceSpecValidationError(
+                'Cannot add haproxy: No frontend_port specified')
+        if not self.monitor_port:
+            raise ServiceSpecValidationError(
+                'Cannot add haproxy: No monitor_port specified')
 
 
 class HA_RGWSpec(ServiceSpec):

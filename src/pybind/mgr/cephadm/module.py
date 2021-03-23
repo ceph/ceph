@@ -50,6 +50,7 @@ from .services.cephadmservice import MonService, MgrService, MdsService, RgwServ
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.ha_rgw import HA_RGWService
+from .services.haproxy import HaproxyService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -414,7 +415,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, CrashService, IscsiService,
-            HA_RGWService, CustomContainerService, CephadmExporter, CephfsMirrorService
+            HA_RGWService, CustomContainerService, CephadmExporter, CephfsMirrorService,
+            HaproxyService,
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -1624,9 +1626,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     sm[n].container_image_id = 'mix'
                 if sm[n].container_image_name != dd.container_image_name:
                     sm[n].container_image_name = 'mix'
-                if dd.daemon_type == 'haproxy' or dd.daemon_type == 'keepalived':
-                    # ha-rgw has 2 daemons running per host
-                    sm[n].size = sm[n].size * 2
         for n, spec in self.spec_store.all_specs.items():
             if n in sm:
                 continue
@@ -2121,6 +2120,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'mds': PlacementSpec(count=2),
                 'rgw': PlacementSpec(count=2),
                 'ha-rgw': PlacementSpec(count=2),
+                'haproxy': PlacementSpec(count=2),
                 'iscsi': PlacementSpec(count=1),
                 'rbd-mirror': PlacementSpec(count=2),
                 'cephfs-mirror': PlacementSpec(count=1),
@@ -2175,6 +2175,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @handle_orch_error
     def apply_ha_rgw(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_haproxy(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

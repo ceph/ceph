@@ -6,7 +6,7 @@ from typing import NamedTuple, List, Dict
 import pytest
 
 from ceph.deployment.hostspec import HostSpec
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError, HaproxySpec
 
 from cephadm.module import HostAssignment
 from cephadm.schedule import DaemonPlacement
@@ -759,6 +759,28 @@ class NodeAssignmentTest4(NamedTuple):
             ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
              'host1(10.0.0.1:81)', 'host2(10.0.0.2:81)',
              'host1(10.0.0.1:82)', 'host2(10.0.0.2:82)'],
+            []
+        ),
+        NodeAssignmentTest4(
+            HaproxySpec(
+                service_type='haproxy',
+                service_id='foo',
+                frontend_port=443,
+                monitor_port=8888,
+                backend_service='foo.bar',
+                placement=PlacementSpec(count=4, label='foo'),
+                networks=['10.0.0.0/8'],
+            ),
+            {
+                'host1': {'10.0.0.0/8': ['10.0.0.1']},
+                'host2': {'10.0.0.0/8': ['10.0.0.2']},
+                'host3': {'192.168.0.0/16': ['192.168.0.1']},
+            },
+            [],
+            ['host1(10.0.0.1:443,8888)', 'host2(10.0.0.2:443,8888)',
+             'host1(10.0.0.1:444,8889)', 'host2(10.0.0.2:444,8889)'],
+            ['host1(10.0.0.1:443,8888)', 'host2(10.0.0.2:443,8888)',
+             'host1(10.0.0.1:444,8889)', 'host2(10.0.0.2:444,8889)'],
             []
         ),
     ])

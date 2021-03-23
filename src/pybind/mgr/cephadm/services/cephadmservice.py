@@ -394,7 +394,8 @@ class CephService(CephadmService):
         """
         # despite this mapping entity names to daemons, self.TYPE within
         # the CephService class refers to service types, not daemon types
-        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ha-rgw']:
+        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ha-rgw',
+                         'haproxy']:
             return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE == 'crash':
             if host == "":

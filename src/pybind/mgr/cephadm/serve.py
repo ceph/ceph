@@ -14,7 +14,8 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, HA_RGWSpec, CustomContainerSpec
+from ceph.deployment.service_spec import ServiceSpec, HA_RGWSpec, CustomContainerSpec, \
+    HaproxySpec
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
@@ -841,9 +842,9 @@ class CephadmServe:
                         self._deploy_cephadm_binary(daemon_spec.host)
 
                 if daemon_spec.daemon_type == 'haproxy':
-                    haspec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-                    if haspec.haproxy_container_image:
-                        image = haspec.haproxy_container_image
+                    proxyspec = cast(HaproxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+                    if proxyspec.image:
+                        image = proxyspec.image
 
                 if daemon_spec.daemon_type == 'keepalived':
                     haspec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
