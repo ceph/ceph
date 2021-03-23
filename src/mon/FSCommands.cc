@@ -1171,6 +1171,11 @@ public:
       ss << "peer already exists";
       return true;
     }
+    if (fs->mirror_info.has_peer((*remote_conf).first, (*remote_conf).second,
+                                 remote_fs_name)) {
+      ss << "peer already exists";
+      return true;
+    }
 
     auto f = [peer_uuid, remote_conf, remote_fs_name](auto &&fs) {
                fs->mirror_info.peer_add(peer_uuid, (*remote_conf).first,
