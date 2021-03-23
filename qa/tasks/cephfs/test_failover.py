@@ -460,6 +460,7 @@ class TestFailover(CephFSTestCase):
         self.fs.rank_freeze(False, rank=0)
 
 class TestStandbyReplay(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 4
 
     def _confirm_no_replay(self):
@@ -516,6 +517,18 @@ class TestStandbyReplay(CephFSTestCase):
         self.fs.set_allow_standby_replay(True)
         time.sleep(30)
         self._confirm_single_replay()
+
+    def test_standby_replay_disable(self):
+        """
+        That turning off allow_standby_replay fails all standby-replay daemons.
+        """
+
+        self._confirm_no_replay()
+        self.fs.set_allow_standby_replay(True)
+        time.sleep(30)
+        self._confirm_single_replay()
+        self.fs.set_allow_standby_replay(False)
+        self._confirm_no_replay()
 
     def test_standby_replay_singleton_fail(self):
         """

@@ -607,6 +607,27 @@ public:
         return r;
       }
 
+      if (!allow) {
+        if (!mon->osdmon()->is_writeable()) {
+          // not allowed to write yet, so retry when we can
+          mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+          return -EAGAIN;
+        }
+        std::vector<mds_gid_t> to_fail;
+        for (const auto& [gid, info]: fs->mds_map.get_mds_info()) {
+          if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
+            to_fail.push_back(gid);
+          }
+        }
+
+        for (const auto& gid : to_fail) {
+          mon->mdsmon()->fail_mds_gid(fsmap, gid);
+        }
+        if (!to_fail.empty()) {
+          mon->osdmon()->propose_pending();
+        }
+      }
+
       auto f = [allow](auto& fs) {
         if (allow) {
           fs->mds_map.set_standby_replay_allowed();
