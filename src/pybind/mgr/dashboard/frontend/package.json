@@ -13,7 +13,7 @@
     "postbuild:localize": "node cd --res",
     "env_build": "node cd --env",
     "i18n": "npm run i18n:extract && npm run i18n:push && npm run i18n:pull && npm run i18n:merge",
-    "i18n:extract": "ng xi18n --output-path src/locale --ivy",
+    "i18n:extract": "ng xi18n --output-path src/locale --ivy --progress=false",
     "i18n:push": "npx i18ntool push -c i18n.config.json",
     "i18n:pull": "npx i18ntool pull -c i18n.config.json",
     "i18n:merge": "npx i18ntool merge -c i18n.config.json",
