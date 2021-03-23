@@ -269,10 +269,12 @@ class CephFS(RESTController):
                 client['type'] = "userspace"
                 client['version'] = client['client_metadata']['ceph_version']
                 client['hostname'] = client['client_metadata']['hostname']
+                client['root'] = client['client_metadata']['root']
             elif "kernel_version" in client['client_metadata']:
                 client['type'] = "kernel"
                 client['version'] = client['client_metadata']['kernel_version']
                 client['hostname'] = client['client_metadata']['hostname']
+                client['root'] = client['client_metadata']['root']
             else:
                 client['type'] = "unknown"
                 client['version'] = ""
