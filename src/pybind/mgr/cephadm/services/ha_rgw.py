@@ -80,7 +80,7 @@ class HA_RGWService(CephService):
         ha_context = {'spec': spec, 'rgw_servers': rgw_servers,
                       'virtual_ip_address': virtual_ip_address}
 
-        haproxy_conf = self.mgr.template.render('services/haproxy/haproxy.cfg.j2', ha_context)
+        haproxy_conf = self.mgr.template.render('services/ha-rgw/haproxy.cfg.j2', ha_context)
 
         config_files = {
             'files': {
@@ -117,7 +117,7 @@ class HA_RGWService(CephService):
                       'host_ip': resolve_ip(host)}
 
         keepalived_conf = self.mgr.template.render(
-            'services/keepalived/keepalived.conf.j2', ka_context)
+            'services/ha-rgw/keepalived.conf.j2', ka_context)
 
         config_file = {
             'files': {
