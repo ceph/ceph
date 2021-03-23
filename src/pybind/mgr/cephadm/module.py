@@ -25,7 +25,7 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
-    HostPlacementSpec
+    HostPlacementSpec, HaproxySpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -1966,16 +1966,29 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             previews_for_specs.update({host: osd_reports})
         return previews_for_specs
 
-    def _calc_daemon_deps(self, daemon_type: str, daemon_id: str) -> List[str]:
-        need = {
-            'prometheus': ['mgr', 'alertmanager', 'node-exporter'],
-            'grafana': ['prometheus'],
-            'alertmanager': ['mgr', 'alertmanager'],
-        }
+    def _calc_daemon_deps(self,
+                          spec: Optional[ServiceSpec],
+                          daemon_type: str,
+                          daemon_id: str) -> List[str]:
         deps = []
-        for dep_type in need.get(daemon_type, []):
-            for dd in self.cache.get_daemons_by_service(dep_type):
-                deps.append(dd.name())
+        if daemon_type == 'haproxy':
+            # because cephadm creates new daemon instances whenever
+            # port or ip changes, identifying daemons by name is
+            # sufficient to detect changes.
+            assert spec
+            haproxy_spec = cast(HaproxySpec, spec)
+            assert haproxy_spec.backend_service
+            daemons = self.cache.get_daemons_by_service(haproxy_spec.backend_service)
+            deps = [d.name() for d in daemons]
+        else:
+            need = {
+                'prometheus': ['mgr', 'alertmanager', 'node-exporter'],
+                'grafana': ['prometheus'],
+                'alertmanager': ['mgr', 'alertmanager'],
+            }
+            for dep_type in need.get(daemon_type, []):
+                for dd in self.cache.get_daemons_by_service(dep_type):
+                    deps.append(dd.name())
         return sorted(deps)
 
     @forall_hosts

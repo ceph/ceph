@@ -38,6 +38,7 @@ class HaproxyService(CephService):
         spec = cast(HaproxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         assert spec.backend_service
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
+        deps = [d.name() for d in daemons]
 
         # generate password?
         pw_key = f'{spec.service_name()}/monitor_password'
@@ -78,4 +79,4 @@ class HaproxyService(CephService):
                 ssl_cert = '\n'.join(ssl_cert)
             config_files['files']['haproxy.pem'] = ssl_cert
 
-        return config_files, []
+        return config_files, sorted(deps)

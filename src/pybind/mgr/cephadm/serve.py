@@ -703,7 +703,7 @@ class CephadmServe:
             else:
                 dd.is_active = False
 
-            deps = self.mgr._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
+            deps = self.mgr._calc_daemon_deps(spec, dd.daemon_type, dd.daemon_id)
             last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
                 dd.hostname, dd.name())
             if last_deps is None:
