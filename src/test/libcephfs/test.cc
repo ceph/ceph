@@ -540,6 +540,9 @@ TEST(LibCephFS, Xattrs) {
   int fd = ceph_open(cmount, test_xattr_file, O_CREAT, 0666);
   ASSERT_GT(fd, 0);
 
+  // test removing non-existent xattr
+  ASSERT_EQ(-ENODATA, ceph_removexattr(cmount, test_xattr_file, "user.nosuchxattr"));
+
   char i = 'a';
   char xattrk[128];
   char xattrv[128];
