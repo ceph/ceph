@@ -37,6 +37,9 @@ FS_TOP_SUPPORTED_VER = 1
 
 ITEMS_PAD_LEN = 1
 ITEMS_PAD = "  " * ITEMS_PAD_LEN
+DEFAULT_REFRESH_INTERVAL = 1
+# min refresh interval allowed
+MIN_REFRESH_INTERVAL = 0.5
 
 # metadata provided by mgr/stats
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "CLIENT_ID"
@@ -98,6 +101,7 @@ class FSTop(object):
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
+        self.refresh_interval_secs = args.delay
 
     def handle_signal(self, signum, _):
         self.stop = True
@@ -279,10 +283,17 @@ class FSTop(object):
                 self.refresh_main_window(x_coord_map, stats_json)
             self.header.refresh()
             self.mainw.refresh()
-            time.sleep(1)
+            time.sleep(self.refresh_interval_secs)
 
 
 if __name__ == '__main__':
+    def float_greater_than(x):
+        value = float(x)
+        if value < MIN_REFRESH_INTERVAL:
+            raise argparse.ArgumentTypeError(f'{value} should be greater than '
+                                             f'{MIN_REFRESH_INTERVAL}')
+        return value
+
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
     parser.add_argument('--cluster', nargs='?', const='ceph', default='ceph',
                         help='Ceph cluster to connect (defualt: ceph)')
@@ -292,6 +303,10 @@ if __name__ == '__main__':
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
                         help='run in selftest mode')
+    parser.add_argument('-d', '--delay', nargs='?', default=DEFAULT_REFRESH_INTERVAL,
+                        type=float_greater_than, help='Interval to refresh data '
+                        f'(default: {DEFAULT_REFRESH_INTERVAL})')
+
     args = parser.parse_args()
     err = False
     ft = FSTop(args)
