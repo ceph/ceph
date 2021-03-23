@@ -1855,7 +1855,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
   {
     std::lock_guard l(cache->lock);
-    ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
+    auto p = onode_map.find(oid);
     if (p == onode_map.end()) {
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
     } else {
@@ -1906,9 +1906,8 @@ void BlueStore::OnodeSpace::rename(
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
 			<< dendl;
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
-  po = onode_map.find(old_oid);
-  pn = onode_map.find(new_oid);
+  auto po = onode_map.find(old_oid);
+  auto pn = onode_map.find(new_oid);
   ceph_assert(po != pn);
 
   ceph_assert(po != onode_map.end());
