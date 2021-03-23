@@ -8,6 +8,9 @@ then deploying the needed services.
 
 .. highlight:: console
 
+
+.. _cephadm-host-requirements:
+
 Requirements
 ============
 
