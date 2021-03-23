@@ -60,7 +60,27 @@ void mon_info_t::encode(bufferlist& bl, uint64_t features) const
     encode(public_addrs, bl, features);
   }
   encode(priority, bl);
-  uint16_t weight = 0; // default weight, for compatibility in backport
+  uint16_t weight = 10; /**
+			 * This bit's a mess.
+			 * Backporting the crush_loc stuff jumped over the
+			 * addition of mon weights, so we include a dummy value
+			 * here to prevent incompatibility with newer releases.
+			 * But there was an error on the initial backport: the 
+			 * default value was set to 10 (as in the initial PR
+			 * adding mon weights), even though all released
+			 * versions of Ceph had a default weight of 0.
+			 * This would be fine since we toss the value out,
+			 * except that initial backport *also* asserted the
+			 * value is as-expected (to make sure we weren't
+			 * throwing away real data), and mon_info_t is looked
+			 * at by everybody, including clients. Which means
+			 * when we're running with that older code, advertising
+			 * a weight != 10 causes it to assert.
+			 *
+			 * So now we have to advertise a fake and mostly-ignored
+			 * weight of 10, and fix it up eventually on upgrade to
+			 * a version of the code that actually uses weight.
+			 */
   encode(weight, bl);
   encode(crush_loc, bl);
   ENCODE_FINISH(bl);
