@@ -2032,11 +2032,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 self.cephadm_services[service_type].config(spec, daemon_id)
                 did_config = True
 
-            port = spec.get_port_start()
             daemon_spec = self.cephadm_services[service_type].make_daemon_spec(
                 host, daemon_id, network, spec,
                 # NOTE: this does not consider port conflicts!
-                ports=[port] if port else None)
+                ports=spec.get_port_start())
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
             args.append(daemon_spec)

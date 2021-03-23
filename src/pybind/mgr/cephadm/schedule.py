@@ -16,7 +16,7 @@ class DaemonPlacement(NamedTuple):
     network: str = ''   # for mons only
     name: str = ''
     ip: Optional[str] = None
-    port: Optional[int] = None
+    ports: List[int] = []
 
     def __str__(self) -> str:
         res = self.hostname
@@ -25,19 +25,19 @@ class DaemonPlacement(NamedTuple):
             other.append(f'network={self.network}')
         if self.name:
             other.append(f'name={self.name}')
-        if self.port:
-            other.append(f'{self.ip or "*"}:{self.port}')
+        if self.ports:
+            other.append(f'{self.ip or "*"}:{self.ports[0] if len(self.ports) == 1 else ",".join(map(str, self.ports))}')
         if other:
             res += '(' + ' '.join(other) + ')'
         return res
 
-    def renumber_port(self, n: int) -> 'DaemonPlacement':
+    def renumber_ports(self, n: int) -> 'DaemonPlacement':
         return DaemonPlacement(
             self.hostname,
             self.network,
             self.name,
             self.ip,
-            (self.port + n) if self.port is not None else None
+            [p + n for p in self.ports],
         )
 
     def matches_daemon(self, dd: DaemonDescription) -> bool:
@@ -46,8 +46,8 @@ class DaemonPlacement(NamedTuple):
         # fixme: how to match against network?
         if self.name and self.name != dd.daemon_id:
             return False
-        if self.port:
-            if [self.port] != dd.ports:
+        if self.ports:
+            if self.ports != dd.ports:
                 return False
             if self.ip != dd.ip:
                 return False
@@ -72,7 +72,7 @@ class HostAssignment(object):
         self.daemons = daemons
         self.networks = networks
         self.allow_colo = allow_colo
-        self.port_start = spec.get_port_start()
+        self.ports_start = spec.get_port_start()
 
     def hosts_by_label(self, label: str) -> List[orchestrator.HostSpec]:
         return [h for h in self.hosts if label in h.labels]
@@ -137,7 +137,7 @@ class HostAssignment(object):
         def expand_candidates(ls: List[DaemonPlacement], num: int) -> List[DaemonPlacement]:
             r = []
             for offset in range(num):
-                r.extend([dp.renumber_port(offset) for dp in ls])
+                r.extend([dp.renumber_ports(offset) for dp in ls])
             return r
 
         # consider enough slots to fulfill target count-per-host or count
@@ -213,17 +213,17 @@ class HostAssignment(object):
         if self.spec.placement.hosts:
             ls = [
                 DaemonPlacement(hostname=h.hostname, network=h.network, name=h.name,
-                                port=self.port_start)
+                                ports=self.ports_start)
                 for h in self.spec.placement.hosts
             ]
         elif self.spec.placement.label:
             ls = [
-                DaemonPlacement(hostname=x.hostname, port=self.port_start)
+                DaemonPlacement(hostname=x.hostname, ports=self.ports_start)
                 for x in self.hosts_by_label(self.spec.placement.label)
             ]
         elif self.spec.placement.host_pattern:
             ls = [
-                DaemonPlacement(hostname=x, port=self.port_start)
+                DaemonPlacement(hostname=x, ports=self.ports_start)
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
             ]
         elif (
@@ -231,7 +231,7 @@ class HostAssignment(object):
                 or self.spec.placement.count_per_host is not None
         ):
             ls = [
-                DaemonPlacement(hostname=x.hostname, port=self.port_start)
+                DaemonPlacement(hostname=x.hostname, ports=self.ports_start)
                 for x in self.hosts
             ]
         else:
@@ -246,7 +246,7 @@ class HostAssignment(object):
                 ip = self.find_ip_on_host(p.hostname, self.spec.networks)
                 if ip:
                     ls.append(DaemonPlacement(hostname=p.hostname, network=p.network,
-                                              name=p.name, port=p.port, ip=ip))
+                                              name=p.name, ports=p.ports, ip=ip))
                 else:
                     logger.debug(
                         f'Skipping {p.hostname} with no IP in network(s) {self.spec.networks}'
@@ -254,10 +254,14 @@ class HostAssignment(object):
 
         if self.filter_new_host:
             old = ls.copy()
-            ls = [h for h in ls if self.filter_new_host(h.hostname)]
-            for h in list(set(old) - set(ls)):
-                logger.info(
-                    f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
+            ls = []
+            for h in old:
+                if self.filter_new_host(h.hostname):
+                    ls.append(h)
+                else:
+                    logger.info(
+                        f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
+            if len(old) > len(ls):
                 logger.debug('Filtered %s down to %s' % (old, ls))
 
         # shuffle for pseudo random selection

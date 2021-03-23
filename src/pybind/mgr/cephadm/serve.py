@@ -593,9 +593,11 @@ class CephadmServe:
         for slot in slots_to_add:
             for daemon_type in service_to_daemon_types(service_type):
                 # first remove daemon on conflicting port?
-                if slot.port:
+                if slot.ports:
                     for d in daemons_to_remove:
-                        if d.hostname != slot.hostname or d.ports != [slot.port]:
+                        if d.hostname != slot.hostname:
+                            continue
+                        if not (set(d.ports or []) & set(slot.ports)):
                             continue
                         if d.ip and slot.ip and d.ip != slot.ip:
                             continue
@@ -622,7 +624,7 @@ class CephadmServe:
 
                 daemon_spec = svc.make_daemon_spec(
                     slot.hostname, daemon_id, slot.network, spec, daemon_type=daemon_type,
-                    ports=[slot.port] if slot.port else None,
+                    ports=slot.ports,
                     ip=slot.ip,
                 )
                 self.log.debug('Placing %s.%s on host %s' % (
