@@ -592,9 +592,9 @@ private:
 				       ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
 				       osd_op_params_t&& oop);
-  interruptible_future<> repair_object(Ref<MOSDOp> m,
-               const hobject_t& oid,
-               eversion_t& v);
+  interruptible_future<> repair_object(
+    const hobject_t& oid,
+    eversion_t& v);
 
 private:
   OSDMapGate osdmap_gate;
