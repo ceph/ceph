@@ -731,7 +731,7 @@ def test_node_assignment3(service_type, placement, hosts,
 
 class NodeAssignmentTest4(NamedTuple):
     spec: ServiceSpec
-    networks: Dict[str, Dict[str, List[str]]]
+    networks: Dict[str, Dict[str, Dict[str, List[str]]]]
     daemons: List[DaemonDescription]
     expected: List[str]
     expected_add: List[str]
@@ -748,9 +748,9 @@ class NodeAssignmentTest4(NamedTuple):
                 networks=['10.0.0.0/8'],
             ),
             {
-                'host1': {'10.0.0.0/8': ['10.0.0.1']},
-                'host2': {'10.0.0.0/8': ['10.0.0.2']},
-                'host3': {'192.168.0.0/16': ['192.168.0.1']},
+                'host1': {'10.0.0.0/8': {'eth0': ['10.0.0.1']}},
+                'host2': {'10.0.0.0/8': {'eth0': ['10.0.0.2']}},
+                'host3': {'192.168.0.0/16': {'eth0': ['192.168.0.1']}},
             },
             [],
             ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
@@ -772,9 +772,9 @@ class NodeAssignmentTest4(NamedTuple):
                 networks=['10.0.0.0/8'],
             ),
             {
-                'host1': {'10.0.0.0/8': ['10.0.0.1']},
-                'host2': {'10.0.0.0/8': ['10.0.0.2']},
-                'host3': {'192.168.0.0/16': ['192.168.0.1']},
+                'host1': {'10.0.0.0/8': {'eth0': ['10.0.0.1']}},
+                'host2': {'10.0.0.0/8': {'eth0': ['10.0.0.2']}},
+                'host3': {'192.168.0.0/16': {'eth0': ['192.168.0.1']}},
             },
             [],
             ['host1(10.0.0.1:443,8888)', 'host2(10.0.0.2:443,8888)',

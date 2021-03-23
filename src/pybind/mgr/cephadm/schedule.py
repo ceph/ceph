@@ -60,7 +60,7 @@ class HostAssignment(object):
                  spec,  # type: ServiceSpec
                  hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
-                 networks: Dict[str, Dict[str, List[str]]] = {},
+                 networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  allow_colo: bool = False,
                  ):
@@ -204,7 +204,9 @@ class HostAssignment(object):
 
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
         for subnet in subnets:
-            ips = self.networks.get(hostname, {}).get(subnet, [])
+            ips: List[str] = []
+            for iface, ips in self.networks.get(hostname, {}).get(subnet, {}).items():
+                ips.extend(ips)
             if ips:
                 return sorted(ips)[0]
         return None
