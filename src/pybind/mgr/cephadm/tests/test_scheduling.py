@@ -187,6 +187,28 @@ test_explicit_scheduler_results = [
 ]
 
 
+@pytest.mark.parametrize("dp,n,result",
+    [   # noqa: E128
+        (
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80]),
+            0,
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80]),
+        ),
+        (
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80]),
+            2,
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[82]),
+        ),
+        (
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80, 90]),
+            2,
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[82, 92]),
+        ),
+    ])
+def test_daemon_placement_renumber(dp, n, result):
+    assert dp.renumber_ports(n) == result
+
+
 @pytest.mark.parametrize(
     'dp,dd,result',
     [
