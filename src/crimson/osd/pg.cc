@@ -683,7 +683,6 @@ PG::interruptible_future<Ref<MOSDOpReply>> PG::handle_failed_op(
 }
 
 PG::interruptible_future<> PG::repair_object(
-  Ref<MOSDOp> m,
   const hobject_t& oid,
   eversion_t& v) 
 {
@@ -693,8 +692,8 @@ PG::interruptible_future<> PG::repair_object(
   // Add object to PG's missing set if it isn't there already
   assert(!get_local_missing().is_missing(oid));
   peering_state.force_object_missing(pg_whoami, oid, v);
-  auto [op, fut] = get_shard_services().start_operation<crimson::osd::UrgentRecovery>(
-		oid, v, this, get_shard_services(), m->get_min_epoch());
+  auto [op, fut] = get_shard_services().start_operation<UrgentRecovery>(
+    oid, v, this, get_shard_services(), get_osdmap_epoch());
   return std::move(fut);
 }
 
@@ -744,14 +743,13 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
   }).safe_then_interruptible_tuple([success_func=std::move(success_func)] {
     return std::move(success_func)();
   }, crimson::ct_error::object_corrupted::handle(
-    [m, obc, rollbacker, this] (const std::error_code& e) mutable {
+    [obc, rollbacker, this] (const std::error_code& e) mutable {
     // this is a path for EIO. it's special because we want to fix the obejct
     // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
     // restart the execution.
     return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [m, obc, this] {
-      return repair_object(m,
-                           obc->obs.oi.soid,
+      [obc, this] {
+      return repair_object(obc->obs.oi.soid,
                            obc->obs.oi.version).then_interruptible([] {
         return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
       });
