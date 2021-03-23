@@ -561,7 +561,6 @@ private:
     PeeringCtx &rctx);
   void fill_op_params_bump_pg_version(
     osd_op_params_t& osd_op_p,
-    Ref<MOSDOp> m,
     const bool user_modify);
   interruptible_future<Ref<MOSDOpReply>> handle_failed_op(
     const std::error_code& e,
@@ -582,7 +581,6 @@ private:
   do_osd_ops_iertr::future<Ret> do_osd_ops_execute(
     OpsExecuter&& ox,
     std::vector<OSDOp> ops,
-    Ref<MOSDOp> m,
     const OpInfo &op_info,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
