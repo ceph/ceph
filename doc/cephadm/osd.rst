@@ -6,10 +6,12 @@ OSD Service
 
 List Devices
 ============
-Periodically, each host in the cluster is scanned using ``ceph-volume`` to determine
-the devices present and their eliigibility for use as an OSD.
-To print a list of discovered devices, grouped by host and optionally
-filtered to a particular host:
+
+``ceph-volume`` scans each cluster in the host from time to time in order
+to determine which devices are present and whether they are eligible to be
+used as OSDs.
+
+To print a list of devices discovered by ``cephadm``, run this command:
 
 .. prompt:: bash #
 
@@ -31,28 +33,31 @@ Example
   srv-03    /dev/sdc  hdd   15R0A0P7FRD6         300G  Unknown  N/A    N/A    No
   srv-03    /dev/sdd  hdd   15R0A0O7FRD6         300G  Unknown  N/A    N/A    No
 
-Using the ``--wide`` option provides all details relating to the device including any
-reasons for the device not being eligible for use as an OSD.
+Using the ``--wide`` option provides all details relating to the device,
+including any reasons that the device might not be eligible for use as an OSD.
 
-In the above example you can see the fields; Health, Ident and Fault. This information
-is provided by integration with `libstoragemgmt`_. By default, this integration is disabled
-since it may not be 100% compatible with your hardware. If you would like cephadm to
-include these fields you need to enable cephadm's "enhanced device scan" option as follows;
+In the above example you can see fields named "Health", "Ident", and "Fault".
+This information is provided by integration with `libstoragemgmt`_. By default,
+this integration is disabled (because `libstoragemgmt`_ may not be 100%
+compatible with your hardware).  To make ``cephadm`` include these fields,
+enable cephadm's "enhanced device scan" option as follows;
 
 .. prompt:: bash #
 
     ceph config set mgr mgr/cephadm/device_enhanced_scan true
 
 .. warning::
-    Although the libstoragemgmt library performs standard SCSI inquiry calls, there is no
-    guarantee that your firmware fully implements these standards which can lead to erratic
-    behaviour and even bus resets on some older hardware. It is therefore recommended that
-    before enabling this feature you test compatibility with libstoragemgmt first to avoid
-    any potenial unplanned interruptions to services.
+    Although the libstoragemgmt library performs standard SCSI inquiry calls,
+    there is no guarantee that your firmware fully implements these standards.
+    This can lead to erratic behaviour and even bus resets on some older
+    hardware. It is therefore recommended that, before enabling this feature,
+    you test your hardware's compatibility with libstoragemgmt first to avoid
+    unplanned interruptions to services.
 
-    There are a number of ways to test compatibility, but the simplist may be to use the
-    cephadm shell to call libstoragemgmt directly - ``cephadm shell lsmcli ldl``. If your
-    hardware is supported you should see something like this -
+    There are a number of ways to test compatibility, but the simplest may be
+    to use the cephadm shell to call libstoragemgmt directly - ``cephadm shell
+    lsmcli ldl``. If your hardware is supported you should see something like
+    this: 
 
     ::
 
@@ -62,7 +67,8 @@ include these fields you need to enable cephadm's "enhanced device scan" option 
       /dev/sdb | 50000396082bbbf9 | SAS       | 15P0A0YFFRD6       | Good
 
 
-Once you have enabled libstoragemgmt support, the output will look something like this;
+After you have enabled libstoragemgmt support, the output will look something
+like this:
 
 ::
 
@@ -74,7 +80,7 @@ Once you have enabled libstoragemgmt support, the output will look something lik
 
 In this example, libstoragemgmt has confirmed the health of the drives and the ability to
 interact with the Identification and Fault LEDs on the drive enclosures. For further
-information about interacting with these LEDs, refer to `device management`_
+information about interacting with these LEDs, refer to `device management`_.
 
 .. note::
     The current release of `libstoragemgmt`_ (1.8.8) supports SCSI, SAS, and SATA based
