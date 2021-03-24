@@ -68,6 +68,14 @@
   is enabled. This helps with the monitor logs on larger clusters, that may get
   many 'osd.X reported immediately failed by osd.Y' messages, and confuse tools.
 
+* The mclock scheduler has been refined. A set of built-in profiles are now available that
+  provide QoS between the internal and external clients of Ceph. To enable the mclock
+  scheduler, set the config option "osd_op_queue" to "mclock_scheduler". The
+  "high_client_ops" profile is enabled by default, and allocates more OSD bandwidth to
+  external client operations than to internal client operations (such as background recovery
+  and scrubs). Other built-in profiles include "high_recovery_ops" and "balanced". These
+  built-in profiles optimize the QoS provided to clients of mclock scheduler.
+
 >=15.0.0
 --------
 
