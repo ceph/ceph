@@ -70,9 +70,6 @@ Notable Changes
   to property reflect the upper cache utilization before space is reclaimed. The default ``immutable_object_cache_watermark``
   now is ``0.9``. If the capacity reaches 90% the daemon will delete cold cache.
 
-* Scrubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
-  It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.
-
 * OSD: the option ``osd_fast_shutdown_notify_mon`` has been introduced to allow
   the OSD to notify the monitor it is shutting down even if ``osd_fast_shutdown``
   is enabled. This helps with the monitor logs on larger clusters, that may get
