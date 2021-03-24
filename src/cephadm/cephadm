@@ -4714,6 +4714,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     if not code and \
                                        err.startswith('Keepalived '):
                                         version = err.split(' ')[1]
+                                        if version[0] == 'v':
+                                            version = version[1:]
                                         seen_versions[image_id] = version
                                 elif daemon_type == CustomContainer.daemon_type:
                                     # Because a custom container can contain
