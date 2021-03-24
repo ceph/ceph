@@ -768,7 +768,7 @@ class Keepalived(object):
         envs = [
             'KEEPALIVED_AUTOCONF=false',
             'KEEPALIVED_CONF=/etc/keepalived/keepalived.conf',
-            'KEEPALIVED_CMD="/usr/sbin/keepalived -n -l -f /etc/keepalived/keepalived.conf"',
+            'KEEPALIVED_CMD=/usr/sbin/keepalived -n -l -f /etc/keepalived/keepalived.conf',
             'KEEPALIVED_DEBUG=false'
         ]
         return envs
