@@ -274,11 +274,13 @@ class CephadmUpgrade:
 
     def _fail_upgrade(self, alert_id: str, alert: dict) -> None:
         assert alert_id in self.UPGRADE_ERRORS
+        if not self.upgrade_state:
+            # this could happen if the user canceled the upgrade while we
+            # were doing something
+            return
+
         logger.error('Upgrade: Paused due to %s: %s' % (alert_id,
                                                         alert['summary']))
-        if not self.upgrade_state:
-            assert False, 'No upgrade in progress'
-
         self.upgrade_state.error = alert_id + ': ' + alert['summary']
         self.upgrade_state.paused = True
         self._save_upgrade_state()
