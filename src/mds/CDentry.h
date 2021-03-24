@@ -34,12 +34,29 @@
 #include "ScrubHeader.h"
 
 class CInode;
+class CDentry;
 class CDir;
 class Locker;
 class CDentry;
 class LogSegment;
-
 class Session;
+
+struct ClientLease {
+  ClientLease(CDentry *p, Session *s) :
+    parent(p), session(s),
+    item_session_lease(this),
+    item_lease(this) { }
+  ClientLease() = delete;
+  client_t get_client() const;
+
+  CDentry *parent;
+  Session *session;
+
+  ceph_seq_t seq = 0;
+  utime_t ttl;
+  xlist<ClientLease*>::item item_session_lease; // per-session list
+  xlist<ClientLease*>::item item_lease;         // global list
+};
 
 // define an ordering
 bool operator<(const CDentry& l, const CDentry& r);
@@ -318,27 +335,25 @@ public:
   // replicas (on clients)
 
   bool is_any_leases() const {
-    return !client_lease_map.empty();
+    return !client_leases.empty();
   }
   const ClientLease *get_client_lease(client_t c) const {
-    if (client_lease_map.count(c))
-      return client_lease_map.find(c)->second;
-    return 0;
+    auto it = client_leases.find(c);
+    if (it != client_leases.end())
+      return &it->second;
+    return nullptr;
   }
   ClientLease *get_client_lease(client_t c) {
-    if (client_lease_map.count(c))
-      return client_lease_map.find(c)->second;
-    return 0;
+    auto it = client_leases.find(c);
+    if (it != client_leases.end())
+      return &it->second;
+    return nullptr;
   }
   bool have_client_lease(client_t c) const {
-    const ClientLease *l = get_client_lease(c);
-    if (l) 
-      return true;
-    else
-      return false;
+    return client_leases.count(c);
   }
 
-  ClientLease *add_client_lease(client_t c, Session *session);
+  ClientLease *add_client_lease(Session *session);
   void remove_client_lease(ClientLease *r, Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   void remove_client_leases(Locker *locker);
 
@@ -366,7 +381,7 @@ public:
   SimpleLock lock; // FIXME referenced containers not in mempool
   LocalLockC versionlock; // FIXME referenced containers not in mempool
 
-  mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
+  mempool::mds_co::map<client_t, ClientLease> client_leases;
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
 

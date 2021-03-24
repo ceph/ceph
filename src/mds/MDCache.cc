@@ -7665,7 +7665,7 @@ void MDCache::trim_client_leases()
       ClientLease *r = list.front();
       if (r->ttl > now) break;
       CDentry *dn = static_cast<CDentry*>(r->parent);
-      dout(10) << " expiring client." << r->client << " lease of " << *dn << dendl;
+      dout(10) << " expiring client." << r->get_client() << " lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
     auto after = list.size();

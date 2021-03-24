@@ -480,22 +480,26 @@ void CDentry::decode_lock_state(int type, const bufferlist& bl)
 }
 
 
-ClientLease *CDentry::add_client_lease(client_t c, Session *session) 
+client_t ClientLease::get_client() const
 {
-  ClientLease *l;
-  if (client_lease_map.count(c))
-    l = client_lease_map[c];
-  else {
-    dout(20) << __func__ << " client." << c << " on " << lock << dendl;
-    if (client_lease_map.empty()) {
+  return session->get_client();
+}
+
+ClientLease *CDentry::add_client_lease(Session *session)
+{
+  client_t client = session->get_client();
+  auto em = client_leases.emplace(std::piecewise_construct,
+				  std::forward_as_tuple(client),
+				  std::forward_as_tuple(this, session));
+  ClientLease *l = &em.first->second;
+  if (em.second) {
+    dout(20) << __func__ << " client." << client << " on " << lock << dendl;
+    if (client_leases.size() == 1) {
       get(PIN_CLIENTLEASE);
       lock.get_client_lease();
     }
-    l = client_lease_map[c] = new ClientLease(c, this);
     l->seq = ++session->lease_seq;
-  
   }
-  
   return l;
 }
 
@@ -504,15 +508,14 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
   ceph_assert(l->parent == this);
 
   bool gather = false;
+  client_t client = l->get_client();
+  dout(20) << __func__ << " client." << client << " on " << lock << dendl;
 
-  dout(20) << __func__ << " client." << l->client << " on " << lock << dendl;
-
-  client_lease_map.erase(l->client);
   l->item_lease.remove_myself();
   l->item_session_lease.remove_myself();
-  delete l;
+  client_leases.erase(client);
 
-  if (client_lease_map.empty()) {
+  if (client_leases.empty()) {
     gather = !lock.is_stable();
     lock.put_client_lease();
     put(PIN_CLIENTLEASE);
@@ -524,8 +527,8 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
 
 void CDentry::remove_client_leases(Locker *locker)
 {
-  while (!client_lease_map.empty())
-    remove_client_lease(client_lease_map.begin()->second, locker);
+  while (!client_leases.empty())
+    remove_client_lease(&client_leases.begin()->second, locker);
 }
 
 void CDentry::_put()
