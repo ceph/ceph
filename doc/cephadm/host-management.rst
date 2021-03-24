@@ -15,6 +15,9 @@ To list hosts associated with the cluster:
 Adding Hosts
 ============
 
+Hosts must have these :ref:`cephadm-host-requirements` installed.
+Hosts without all the necessary requirements will fail to be added to the cluster.
+
 To add each new host to the cluster, perform two steps:
 
 #. Install the cluster's public SSH key in the new host's root user's ``authorized_keys`` file:
