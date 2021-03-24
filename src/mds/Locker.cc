@@ -2672,7 +2672,7 @@ void Locker::issue_truncate(CInode *in)
                                        cap->get_mseq(),
                                        mds->get_osd_epoch_barrier());
     in->encode_cap_message(m, cap);			     
-    mds->send_message_client_counted(m, p.first);
+    mds->send_message_client_counted(m, cap->get_session());
   }
 
   // should we increase max_size?
@@ -3162,7 +3162,7 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
                                          cap->get_mseq(),
                                          mds->get_osd_epoch_barrier());
       in->encode_cap_message(m, cap);
-      mds->send_message_client_counted(m, client);
+      mds->send_message_client_counted(m, cap->get_session());
     }
     if (only_cap)
       break;
