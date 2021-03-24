@@ -60,6 +60,29 @@
 * librbd: The shared, read-only parent cache's config option ``immutable_object_cache_watermark`` now has been updated
   to property reflect the upper cache utilization before space is reclaimed. The default ``immutable_object_cache_watermark``
   now is ``0.9``. If the capacity reaches 90% the daemon will delete cold cache.
+* The ceph_volume_client.py library used for manipulating legacy "volumes" in
+  CephFS is removed. All remaining users should use the "fs volume" interface
+  exposed by the ceph-mgr:
+  https://docs.ceph.com/en/latest/cephfs/fs-volumes/
+
+* An AWS-compliant API: "GetTopicAttributes" was added to replace the existing 
+  "GetTopic" API. The new API should be used to fetch information about topics 
+  used for bucket notifications.
+
+* librbd: The shared, read-only parent cache's config option 
+  ``immutable_object_cache_watermark`` has now been updated to properly reflect 
+  the upper cache utilization before space is reclaimed. The default 
+  ``immutable_object_cache_watermark`` is now ``0.9``. If the capacity reaches 
+  90% the daemon will delete cold cache.
+
+* OSD: the option ``osd_fast_shutdown_notify_mon`` has been introduced to allow
+  the OSD to notify the monitor it is shutting down even if ``osd_fast_shutdown``
+  is enabled. This helps with the monitor logs on larger clusters, that may get
+  many 'osd.X reported immediately failed by osd.Y' messages, and confuse tools.
+* rgw/kms/vault: the transit logic has been revamped to better use
+  the transit engine in vault.  To take advantage of this new
+  functionality configuration changes are required.  See the current
+  documentation (radosgw/vault) for more details.
 
 * Scubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
   It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.
