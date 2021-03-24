@@ -171,21 +171,43 @@ For example:
 Declarative State
 -----------------
 
-Note that the effect of ``ceph orch apply`` is persistent; that is, drives which are added to the system
-or become available (say, by zapping) after the command is complete will be automatically found and added to the cluster.
+The effect of ``ceph orch apply`` is persistent. This means that drives that
+are added to the system after the ``ceph orch apply`` command completes will be
+automatically found and added to the cluster.  It also means that drives that
+become available (by zapping, for example) after the ``ceph orch apply``
+command completes will be automatically found and added to the cluster.
 
-That is, after using::
+We will examine the effects of the following command:
 
-    ceph orch apply osd --all-available-devices
+   .. prompt:: bash #
 
-* If you add new disks to the cluster they will automatically be used to create new OSDs.
-* A new OSD will be created automatically if you remove an OSD and clean the LVM physical volume.
+     ceph orch apply osd --all-available-devices
+
+After running the above command: 
+
+* If you add new disks to the cluster, they will automatically be used to
+  create new OSDs.
+* If you remove an OSD and clean the LVM physical volume, a new OSD will be
+  created automatically.
+
+To disable the automatic creation of OSD on available devices, use the
+``unmanaged`` parameter:
 
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
 
 .. prompt:: bash #
 
    ceph orch apply osd --all-available-devices --unmanaged=true
+
+.. note::
+
+  Keep these three facts in mind:
+
+  - The default behavior of ``ceph orch apply`` causes cephadm constantly to reconcile. This means that cephadm creates OSDs as soon as new drives are detected.
+
+  - Setting ``unmanaged: True`` disables the creation of OSDs. If ``unmanaged: True`` is set, nothing will happen even if you apply a new OSD service.
+
+  - ``ceph orch daemon add`` creates OSDs, but does not add an OSD service.
 
 * For cephadm, see also :ref:`cephadm-spec-unmanaged`.
 
