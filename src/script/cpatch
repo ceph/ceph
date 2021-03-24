@@ -4,7 +4,7 @@ SCRIPT=$(readlink -f "$0")
 SCRIPTPATH=$(dirname "$SCRIPT")
 BUILDPATH=$(pwd)
 
-if [ ! -e Makefile ] || [ ! -e ../do_cmake.sh ]; then
+if [ ! -e Makefile ] && [ ! -e build.ninja ] || [ ! -e ../do_cmake.sh ]; then
     echo "must run from cmake build dir"
     exit 1
 fi
