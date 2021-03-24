@@ -731,6 +731,11 @@ class CephadmServe:
                     action = 'redeploy'
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
+                    if (action == 'reconfig' and self.mgr.get_active_mgr_digests()
+                            and (not dd.deployed_by or not any(d in dd.deployed_by for d in (self.mgr.get_active_mgr_digests() or [])))):
+                        self.log.info(
+                            "Delaying reconfiguration of %s daemon until it has been deployed by mgr with correct version", dd.name())
+                        continue
                     self.mgr._daemon_action(daemon_spec, action=action)
                     self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name())
                 except OrchestratorError as e:
