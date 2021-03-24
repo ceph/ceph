@@ -15,7 +15,7 @@ seastar::future<> test_accumulate(ThreadPool& tp) {
   static constexpr auto N = 5;
   static constexpr auto M = 1;
   auto slow_plus = [&tp](int i) {
-    return tp.submit([=] {
+    return tp.submit(::rand() % 2, [=] {
       std::this_thread::sleep_for(10ns);
       return i + M;
     });
@@ -30,7 +30,7 @@ seastar::future<> test_accumulate(ThreadPool& tp) {
 }
 
 seastar::future<> test_void_return(ThreadPool& tp) {
-  return tp.submit([=] {
+  return tp.submit(::rand() % 2, [=] {
     std::this_thread::sleep_for(10ns);
   });
 }
@@ -50,7 +50,7 @@ int main(int argc, char** argv)
     .then([conf_file_list] {
       return local_conf().parse_config_files(conf_file_list);
     }).then([] {
-      return seastar::do_with(std::make_unique<crimson::os::ThreadPool>(2, 128, 0),
+      return seastar::do_with(std::make_unique<crimson::os::ThreadPool>(2, 128, (std::vector<uint64_t>){0}),
                               [](auto& tp) {
         return tp->start().then([&tp] {
           return test_accumulate(*tp);

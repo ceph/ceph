@@ -255,18 +255,21 @@
 </ng-template>
 
 <ng-template #executingTpl
+             let-column="column"
              let-row="row"
              let-value="value">
   <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
-  {{ value }}
+  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+    {{ value }}
+  </span>
   <span *ngIf="row.cdExecuting"
-        class="text-muted italic">({{ row.cdExecuting }})</span>
+        [ngClass]="column?.customTemplateConfig?.executingClass ? column.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
 </ng-template>
 
 <ng-template #classAddingTpl
              let-value="value">
-  <span class="{{useCustomClass(value)}}">{{ value }}</span>
+  <span class="{{ value | pipeFunction:useCustomClass:this }}">{{ value }}</span>
 </ng-template>
 
 <ng-template #badgeTpl
@@ -305,6 +308,6 @@
      class="expand-collapse-icon tc_expand-collapse"
      title="Expand/Collapse Row"
      i18n-title
-     (click)="toggleExpandRow(row, isExpanded)">
+     (click)="toggleExpandRow(row, isExpanded, $event)">
   </a>
 </ng-template>

@@ -9,6 +9,7 @@ from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.exceptions import ConfigError
+from tasks.ceph_manager import get_valgrind_args
 from tasks.util import get_remote_for_role
 from tasks.util.rgw import rgwadmin, wait_for_radosgw
 from tasks.util.rados import (create_ec_pool,
@@ -112,6 +113,7 @@ def start_rgw(ctx, config, clients):
 
         vault_role = client_config.get('use-vault-role', None)
         barbican_role = client_config.get('use-barbican-role', None)
+        pykmip_role = client_config.get('use-pykmip-role', None)
 
         token_path = teuthology.get_testdir(ctx) + '/vault-token'
         if barbican_role is not None:
@@ -131,6 +133,7 @@ def start_rgw(ctx, config, clients):
             if not ctx.vault.root_token:
                 raise ConfigError('vault: no "root_token" specified')
             # create token on file
+            ctx.rgw.vault_role = vault_role
             ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
@@ -141,6 +144,13 @@ def start_rgw(ctx, config, clients):
             rgw_cmd.extend([
                 '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
                 '--rgw_crypt_vault_token_file', token_path
+            ])
+        elif pykmip_role is not None:
+            if not hasattr(ctx, 'pykmip'):
+                raise ConfigError('rgw must run after the pykmip task')
+            ctx.rgw.pykmip_role = pykmip_role
+            rgw_cmd.extend([
+                '--rgw_crypt_kmip_addr', "{}:{}".format(*ctx.pykmip.endpoints[pykmip_role]),
             ])
 
         rgw_cmd.extend([
@@ -153,11 +163,13 @@ def start_rgw(ctx, config, clients):
             ])
 
         if client_config.get('valgrind'):
-            cmd_prefix = teuthology.get_valgrind_args(
+            cmd_prefix = get_valgrind_args(
                 testdir,
                 client_with_cluster,
                 cmd_prefix,
-                client_config.get('valgrind')
+                client_config.get('valgrind'),
+                # see https://github.com/ceph/teuthology/pull/1600
+                exit_on_first_error=False
                 )
 
         run_cmd = list(cmd_prefix)
@@ -166,6 +178,7 @@ def start_rgw(ctx, config, clients):
         ctx.daemons.add_daemon(
             remote, 'rgw', client_with_id,
             cluster=cluster_name,
+            fsid=ctx.ceph[cluster_name].fsid,
             args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,

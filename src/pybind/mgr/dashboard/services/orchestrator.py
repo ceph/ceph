@@ -6,8 +6,8 @@ from functools import wraps
 from typing import Any, Dict, List, Optional
 
 from ceph.deployment.service_spec import ServiceSpec
-from orchestrator import Completion, DaemonDescription, DeviceLightLoc, \
-    HostSpec, InventoryFilter, OrchestratorClientMixin, OrchestratorError, \
+from orchestrator import DaemonDescription, DeviceLightLoc, HostSpec, \
+    InventoryFilter, OrchestratorClientMixin, OrchestratorError, OrchResult, \
     ServiceDescription, raise_if_exception
 
 from .. import mgr
@@ -23,23 +23,19 @@ class OrchestratorAPI(OrchestratorClientMixin):
 
     def status(self):
         try:
-            status, desc = super(OrchestratorAPI, self).available()
-            logger.info("is orchestrator available: %s, %s", status, desc)
-            return dict(available=status, description=desc)
-        except (RuntimeError, OrchestratorError, ImportError):
+            status, message, _module_details = super().available()
+            logger.info("is orchestrator available: %s, %s", status, message)
+            return dict(available=status, message=message)
+        except (RuntimeError, OrchestratorError, ImportError) as e:
             return dict(
                 available=False,
-                description='Orchestrator is unavailable for unknown reason')
-
-    def orchestrator_wait(self, completions):
-        return self._orchestrator_wait(completions)
+                message='Orchestrator is unavailable: {}'.format(str(e)))
 
 
 def wait_api_result(method):
     @wraps(method)
     def inner(self, *args, **kwargs):
         completion = method(self, *args, **kwargs)
-        self.api.orchestrator_wait([completion])
         raise_if_exception(completion)
         return completion.result
     return inner
@@ -55,6 +51,14 @@ class HostManger(ResourceManager):
     def list(self) -> List[HostSpec]:
         return self.api.get_hosts()
 
+    @wait_api_result
+    def enter_maintenance(self, hostname: str, force: bool = False):
+        return self.api.enter_host_maintenance(hostname, force)
+
+    @wait_api_result
+    def exit_maintenance(self, hostname: str):
+        return self.api.exit_host_maintenance(hostname)
+
     def get(self, hostname: str) -> Optional[HostSpec]:
         hosts = [host for host in self.list() if host.hostname == hostname]
         return hosts[0] if hosts else None
@@ -68,11 +72,11 @@ class HostManger(ResourceManager):
         return self.api.remove_host(hostname)
 
     @wait_api_result
-    def add_label(self, host: str, label: str) -> Completion:
+    def add_label(self, host: str, label: str) -> OrchResult[str]:
         return self.api.add_host_label(host, label)
 
     @wait_api_result
-    def remove_label(self, host: str, label: str) -> Completion:
+    def remove_label(self, host: str, label: str) -> OrchResult[str]:
         return self.api.remove_host_label(host, label)
 
 
@@ -117,7 +121,7 @@ class ServiceManager(ResourceManager):
             raise_if_exception(c)
 
     @wait_api_result
-    def apply(self, service_spec: Dict) -> Completion:
+    def apply(self, service_spec: Dict) -> OrchResult[List[str]]:
         spec = ServiceSpec.from_json(service_spec)
         return self.api.apply([spec])
 
@@ -178,7 +182,7 @@ class OrchClient(object):
 
     @wait_api_result
     def blink_device_light(self, hostname, device, ident_fault, on):
-        # type: (str, str, str, bool) -> Completion
+        # type: (str, str, str, bool) -> OrchResult[List[str]]
         return self.api.blink_device_light(
             ident_fault, on, [DeviceLightLoc(hostname, device, device)])
 
@@ -189,6 +193,8 @@ class OrchFeature(object):
     HOST_DELETE = 'remove_host'
     HOST_LABEL_ADD = 'add_host_label'
     HOST_LABEL_REMOVE = 'remove_host_label'
+    HOST_MAINTENANCE_ENTER = 'enter_host_maintenance'
+    HOST_MAINTENANCE_EXIT = 'exit_host_maintenance'
 
     SERVICE_LIST = 'describe_service'
     SERVICE_CREATE = 'apply'

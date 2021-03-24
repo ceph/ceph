@@ -23,6 +23,17 @@ def gen_pool_names(volname):
     """
     return "cephfs.{}.meta".format(volname), "cephfs.{}.data".format(volname)
 
+def get_mds_map(mgr, volname):
+    """
+    return mdsmap for a volname
+    """
+    mds_map = None
+    fs_map = mgr.get("fs_map")
+    for f in fs_map['filesystems']:
+        if volname == f['mdsmap']['fs_name']:
+            return f['mdsmap']
+    return mds_map
+
 def get_pool_names(mgr, volname):
     """
     return metadata and data pools (list) names of volume as a tuple
@@ -65,7 +76,8 @@ def create_volume(mgr, volname, placement):
         #cleanup
         remove_pool(mgr, data_pool)
         remove_pool(mgr, metadata_pool)
-    return r, outb, outs
+        return r, outb, outs
+    return create_mds(mgr, volname, placement)
 
 
 def delete_volume(mgr, volname, metadata_pool, data_pools):
@@ -75,7 +87,6 @@ def delete_volume(mgr, volname, metadata_pool, data_pools):
     # Tear down MDS daemons
     try:
         completion = mgr.remove_service('mds.' + volname)
-        mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
     except (ImportError, orchestrator.OrchestratorError):
         log.warning("OrchestratorError, not tearing down MDS daemons")

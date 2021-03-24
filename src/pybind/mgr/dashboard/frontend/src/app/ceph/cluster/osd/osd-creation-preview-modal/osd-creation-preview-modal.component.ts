@@ -3,12 +3,12 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { OsdService } from '../../../../shared/api/osd.service';
-import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
-import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { FinishedTask } from '../../../../shared/models/finished-task';
-import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-osd-creation-preview-modal',

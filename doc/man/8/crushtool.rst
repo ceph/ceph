@@ -264,7 +264,7 @@ Reclassify
 The *reclassify* function allows users to transition from older maps that
 maintain parallel hierarchies for OSDs of different types to a modern CRUSH
 map that makes use of the *device class* feature.  For more information,
-see http://docs.ceph.com/docs/master/rados/operations/crush-map-edits/#migrating-from-a-legacy-ssd-rule-to-device-classes.
+see https://docs.ceph.com/en/latest/rados/operations/crush-map-edits/#migrating-from-a-legacy-ssd-rule-to-device-classes.
 
 Example output from --test
 ==========================
@@ -276,7 +276,7 @@ Availability
 ============
 
 **crushtool** is part of Ceph, a massively scalable, open-source, distributed storage system. Please
-refer to the Ceph documentation at http://ceph.com/docs for more
+refer to the Ceph documentation at https://docs.ceph.com for more
 information.
 
 

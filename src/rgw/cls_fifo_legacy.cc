@@ -39,7 +39,7 @@
 #include "cls_fifo_legacy.h"
 
 namespace rgw::cls::fifo {
-static constexpr auto dout_subsys = ceph_subsys_rgw;
+static constexpr auto dout_subsys = ceph_subsys_objclass;
 namespace cb = ceph::buffer;
 namespace fifo = rados::cls::fifo;
 
@@ -73,8 +73,8 @@ int get_meta(lr::IoCtx& ioctx, const std::string& oid,
 	     std::optional<fifo::objv> objv, fifo::info* info,
 	     std::uint32_t* part_header_size,
 	     std::uint32_t* part_entry_overhead,
-	     uint64_t tid,
-	     optional_yield y)
+	     uint64_t tid, optional_yield y,
+	     bool probe)
 {
   lr::ObjectReadOperation op;
   fifo::op::get_meta gm;
@@ -100,7 +100,7 @@ int get_meta(lr::IoCtx& ioctx, const std::string& oid,
 	<< " decode failed: " << err.what()
 	<< " tid=" << tid << dendl;
       r = from_error_code(err.code());
-    } else {
+    } else if (!(probe && (r == -ENOENT || r == -ENODATA))) {
     lderr(static_cast<CephContext*>(ioctx.cct()))
       << __PRETTY_FUNCTION__ << ":" << __LINE__
       << " fifo::op::GET_META failed r=" << r << " tid=" << tid
@@ -867,7 +867,8 @@ int FIFO::trim_part(int64_t part_num, uint64_t ofs,
 }
 
 int FIFO::open(lr::IoCtx ioctx, std::string oid, std::unique_ptr<FIFO>* fifo,
-	       optional_yield y, std::optional<fifo::objv> objv)
+	       optional_yield y, std::optional<fifo::objv> objv,
+	       bool probe)
 {
   auto cct = static_cast<CephContext*>(ioctx.cct());
   ldout(cct, 20)
@@ -876,10 +877,13 @@ int FIFO::open(lr::IoCtx ioctx, std::string oid, std::unique_ptr<FIFO>* fifo,
   fifo::info info;
   std::uint32_t size;
   std::uint32_t over;
-  int r = get_meta(ioctx, std::move(oid), objv, &info, &size, &over, 0, y);
+  int r = get_meta(ioctx, std::move(oid), objv, &info, &size, &over, 0, y,
+		   probe);
   if (r < 0) {
-    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-	       << " get_meta failed: r=" << r << dendl;
+    if (!(probe && (r == -ENOENT || r == -ENODATA))) {
+      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		 << " get_meta failed: r=" << r << dendl;
+    }
     return r;
   }
   std::unique_ptr<FIFO> f(new FIFO(std::move(ioctx), oid));

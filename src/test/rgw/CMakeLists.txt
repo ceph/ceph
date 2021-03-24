@@ -1,4 +1,3 @@
-
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # amqp mock library
   set(amqp_mock_src
@@ -11,6 +10,10 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   set(kafka_stub_src
     kafka_stub.cc)
   add_library(kafka_stub STATIC ${kafka_stub_src})
+endif()
+
+if(WITH_RADOSGW_LUA_PACKAGES)
+  list(APPEND rgw_libs Boost::filesystem)
 endif()
 
 #unittest_rgw_bencode

@@ -404,9 +404,7 @@ void MgrClient::_send_report()
 			    &last_config_bl_version);
 
   if (get_perf_report_cb) {
-    MetricPayload payload = get_perf_report_cb();
-    MetricReportMessage message(payload);
-    report->metric_report_message = message;
+    report->metric_report_message = MetricReportMessage(get_perf_report_cb());
   }
 
   session->con->send_message2(report);

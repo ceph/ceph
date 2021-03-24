@@ -36,6 +36,9 @@ function munge_ceph_spec_in {
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
+    if $with_jaeger; then
+        sed -i -e 's/%bcond_with jaeger/%bcond_without jaeger/g' $OUTFILE
+    fi
     if $with_zbd; then
         sed -i -e 's/%bcond_with zbd/%bcond_without zbd/g' $OUTFILE
     fi
@@ -61,6 +64,10 @@ function munge_debian_control {
     if $with_seastar; then
 	sed -i -e 's/^# Crimson[[:space:]]//g' $control
     fi
+    if $with_jaeger; then
+	sed -i -e 's/^# Jaeger[[:space:]]//g' $control
+	sed -i -e 's/^# Crimson      libyaml-cpp-dev,/d' $control
+    fi
     if $for_make_check; then
         sed -i 's/^# Make-Check[[:space:]]/             /g' $control
     fi
@@ -81,7 +88,6 @@ function ensure_decent_gcc_on_ubuntu {
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
 deb [arch=amd64 lang=none] http://mirror.nullivex.com/ppa/ubuntu-toolchain-r-test $codename main
-deb [arch=amd64 lang=none] http://deb.rug.nl/ppa/mirror/ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
 EOF
 	# import PPA's signing key into APT's keyring
 	cat << ENDOFKEY | $SUDO apt-key add -
@@ -168,13 +174,21 @@ function install_pkg_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
-    local codename=$1
-    if apt -qq list ceph-libboost1.72-dev 2>/dev/null | grep -q installed; then
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.72.*'
-	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.72.list
-    fi
-    local project=libboost
     local ver=1.73
+    local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
+                              grep -e 'libboost[0-9].[0-9]\+-dev' |
+                              cut -d' ' -f2 |
+                              cut -d'.' -f1,2)
+    if test -n "$installed_ver"; then
+        if echo "$installed_ver" | grep -q "^$ver"; then
+            return
+        else
+            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
+            $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost${installed_ver}.list
+        fi
+    fi
+    local codename=$1
+    local project=libboost
     local sha1=7aba8a1882670522ee1d1ee1bba0ea170b292dec
     install_pkg_on_ubuntu \
 	$project \
@@ -199,6 +213,18 @@ function install_boost_on_ubuntu {
 	ceph-libboost-timer$ver-dev
 }
 
+function install_libzbd_on_ubuntu {
+    local codename=$1
+    local project=libzbd
+    local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
+    install_pkg_on_ubuntu \
+        $project \
+        $sha1 \
+        $codename \
+        check \
+        libzbd-dev
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -221,7 +247,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/gperf \
         devel/gmake \
         devel/cmake \
-        devel/yasm \
+        devel/nasm \
         devel/boost-all \
         devel/boost-python-libs \
         devel/valgrind \
@@ -272,6 +298,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
+    [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     source /etc/os-release
     case "$ID" in
@@ -284,9 +311,11 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
+                $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
-            *Disco*)
-                [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.67-all-dev
+            *Focal*)
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
+                $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -328,7 +357,8 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
 		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
-                    $SUDO dnf config-manager --set-enabled PowerTools
+                    # Enable 'powertools' or 'PowerTools' repo
+                    $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
@@ -337,7 +367,6 @@ else
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                 fi
-                $SUDO dnf copr enable -y tchaikov/gcc-toolset-9 centos-stream-x86_64
                 ;;
         esac
         munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec

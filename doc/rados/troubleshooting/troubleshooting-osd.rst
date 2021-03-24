@@ -12,8 +12,6 @@ are running properly, because networks may have a significant impact on OSD
 operation and performance. Look for dropped packets on the host side
 and CRC errors on the switch side.
 
-
-
 Obtaining Data About OSDs
 =========================
 
@@ -60,7 +58,6 @@ The admin socket, among other things, allows you to:
 - Dump operations in flight
 - Dump perfcounters
 
-
 Display Freespace
 -----------------
 
@@ -71,14 +68,12 @@ Filesystem issues may arise. To display your file system's free space, execute
 
 Execute ``df --help`` for additional usage.
 
-
 I/O Statistics
 --------------
 
 Use `iostat`_ to identify I/O-related issues. ::
 
 	iostat -x
-
 
 Diagnostic Messages
 -------------------
@@ -87,7 +82,6 @@ To retrieve diagnostic messages from the kernel, use ``dmesg`` with ``less``, ``
 or ``tail``.  For example::
 
 	dmesg | grep scsi
-
 
 Stopping w/out Rebalancing
 ==========================
@@ -110,24 +104,28 @@ Or an entire CRUSH bucket at a time.  Say you're going to take down
 
 	ceph osd set-group noout prod-ceph-data1701
 
-Once the flag is set you can begin stopping the OSDs within the
-failure domain that requires maintenance work. ::
+Once the flag is set you can stop the OSDs and any other colocated Ceph
+services within the failure domain that requires maintenance work. ::
 
-	stop ceph-osd id={num}
+	systemctl stop ceph\*.service ceph\*.target
 
 .. note:: Placement groups within the OSDs you stop will become ``degraded``
    while you are addressing issues with within the failure domain.
 
-Once you have completed your maintenance, restart the OSDs. ::
+Once you have completed your maintenance, restart the OSDs and any other
+daemons.  If you rebooted the host as part of the maintenance, these should
+come back on their own without intervention. ::
 
-	start ceph-osd id={num}
+	sudo systemctl start ceph.target
 
-Finally, you must unset the cluster from ``noout``. ::
+Finally, you must unset the cluster-wide``noout`` flag::
 
 	ceph osd unset noout
 	ceph osd unset-group noout prod-ceph-data1701
 
-
+Note that most Linux distributions that Ceph supports today employ ``systemd``
+for service management.  For other or older operating systems you may need
+to issue equivalent ``service`` or ``start``/``stop`` commands.
 
 .. _osd-not-running:
 
@@ -184,7 +182,6 @@ If you start your cluster and an OSD won't start, check the following:
   may activate connection tracking anyway, so a "set and forget" strategy for
   the tunables is advised.  On modern systems this will not consume appreciable
   resources.
-  
 
 - **Kernel Version:** Identify the kernel version and distribution you
   are using. Ceph uses some third party tools by default, which may be
@@ -201,7 +198,6 @@ If you start your cluster and an OSD won't start, check the following:
   failure, post to the ``dev`` email list and provide the specific Ceph
   release being run, ``ceph.conf`` (with secrets XXX'd out),
   your monitor status output and excerpts from your log file(s).
-
 
 An OSD Failed
 -------------
@@ -224,7 +220,6 @@ or ::
 
 	ceph osd tree down
 
-
 If there is a drive
 failure or other fault preventing ``ceph-osd`` from functioning or
 restarting, an error message should be present in its log file under
@@ -241,6 +236,7 @@ unexpected error), search the archives and tracker as above, and
 report it to the `ceph-devel`_ email list if there's no clear fix or
 existing bug.
 
+.. _no-free-drive-space:
 
 No Free Drive Space
 -------------------
@@ -317,11 +313,10 @@ some space deleting a few placement group directories in the full OSD.
 
 See `Monitor Config Reference`_ for additional details.
 
-
 OSDs are Slow/Unresponsive
 ==========================
 
-A commonly recurring issue involves slow or unresponsive OSDs. Ensure that you
+A common issue involves slow or unresponsive OSDs. Ensure that you
 have eliminated other troubleshooting possibilities before delving into OSD
 performance issues. For example, ensure that your network(s) is working properly
 and your OSDs are running. Check to see if OSDs are throttling recovery traffic.
@@ -329,7 +324,6 @@ and your OSDs are running. Check to see if OSDs are throttling recovery traffic.
 .. tip:: Newer versions of Ceph provide better recovery handling by preventing
    recovering OSDs from using up system resources so that ``up`` and ``in``
    OSDs are not available or are otherwise slow.
-
 
 Networking Issues
 -----------------
@@ -350,7 +344,6 @@ Check network statistics. ::
 
 	netstat -s
 
-
 Drive Configuration
 -------------------
 
@@ -370,14 +363,12 @@ we recommend against using ``Btrfs`` for production deployments.)
    sequential read/write limits. Running a journal in a separate partition
    may help, but you should prefer a separate physical drive.
 
-
 Bad Sectors / Fragmented Disk
 -----------------------------
 
 Check your drives for bad blocks, fragmentation, and other errors that can cause
 performance to drop substantially.  Invaluable tools include ``dmesg``, ``syslog``
 logs, and ``smartctl`` (from the ``smartmontools`` package).
-
 
 Co-resident Monitors/OSDs
 -------------------------
@@ -394,7 +385,6 @@ OSDs, you may incur performance issues related to:
 In these cases, multiple OSDs running on the same host can drag each other down
 by doing lots of commits. That often leads to the bursty writes.
 
-
 Co-resident Processes
 ---------------------
 
@@ -405,7 +395,6 @@ recommend optimizing hosts for use with Ceph and using other hosts for other
 processes. The practice of separating Ceph operations from other applications
 may help improve performance and may streamline troubleshooting and maintenance.
 
-
 Logging Levels
 --------------
 
@@ -414,7 +403,6 @@ logging levels back down, the OSD may be putting a lot of logs onto the disk. If
 you intend to keep logging levels high, you may consider mounting a drive to the
 default path for logging (i.e., ``/var/log/ceph/$cluster-$name.log``).
 
-
 Recovery Throttling
 -------------------
 
@@ -422,20 +410,17 @@ Depending upon your configuration, Ceph may reduce recovery rates to maintain
 performance or it may increase recovery rates to the point that recovery
 impacts OSD performance. Check to see if the OSD is recovering.
 
-
 Kernel Version
 --------------
 
 Check the kernel version you are running. Older kernels may not receive
 new backports that Ceph depends upon for better performance.
 
-
 Kernel Issues with SyncFS
 -------------------------
 
 Try running one OSD per host to see if performance improves. Old kernels
 might not have a recent enough version of ``glibc`` to support ``syncfs(2)``.
-
 
 Filesystem Issues
 -----------------
@@ -454,7 +439,6 @@ For more information, see `Filesystem Recommendations`_.
 
 .. _Filesystem Recommendations: ../configuration/filesystem-recommendations
 
-
 Insufficient RAM
 ----------------
 
@@ -466,7 +450,6 @@ applications or to skimp on each node's memory capacity.  However,
 when OSDs experience recovery their memory utilization spikes. If
 there is insufficient RAM available, OSD performance will slow considerably
 and the daemons may even crash or be killed by the Linux ``OOM Killer``.
-
 
 Blocked Requests or Slow Requests
 ---------------------------------
@@ -484,7 +467,6 @@ New versions of Ceph complain about ``slow requests``::
 
 	{date} {osd.num} [WRN] 1 slow requests, 1 included below; oldest blocked for > 30.005692 secs
 	{date} {osd.num}  [WRN] slow request 30.005692 seconds old, received at {date-time}: osd_op(client.4240.0:8 benchmark_data_ceph-1_39426_object7 [write 0~4194304] 0.69848840) v4 currently waiting for subops from [610]
-
 
 Possible causes include:
 

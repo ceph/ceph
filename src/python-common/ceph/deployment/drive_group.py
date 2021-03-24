@@ -98,7 +98,7 @@ class DeviceSelection(object):
             ret['vendor'] = self.vendor
         if self.size:
             ret['size'] = self.size
-        if self.rotational:
+        if self.rotational is not None:
             ret['rotational'] = self.rotational
         if self.limit:
             ret['limit'] = self.limit
@@ -107,7 +107,7 @@ class DeviceSelection(object):
 
         return ret
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         keys = [
             key for key in self._supported_filters + ['limit'] if getattr(self, key) is not None
         ]
@@ -117,7 +117,7 @@ class DeviceSelection(object):
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return repr(self) == repr(other)
 
 
@@ -127,7 +127,7 @@ class DriveGroupValidationError(ServiceSpecValidationError):
     if it was raised in a different mgr module.
     """
 
-    def __init__(self, msg):
+    def __init__(self, msg: str):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
 
 
@@ -147,7 +147,7 @@ class DriveGroupSpec(ServiceSpec):
 
     def __init__(self,
                  placement=None,  # type: Optional[PlacementSpec]
-                 service_id=None,  # type: str
+                 service_id=None,  # type: Optional[str]
                  data_devices=None,  # type: Optional[DeviceSelection]
                  db_devices=None,  # type: Optional[DeviceSelection]
                  wal_devices=None,  # type: Optional[DeviceSelection]
@@ -233,7 +233,7 @@ class DriveGroupSpec(ServiceSpec):
         :param json_drive_group: A valid json string with a Drive Group
                specification
         """
-        args = {}
+        args: Dict[str, Any] = {}
         # legacy json (pre Octopus)
         if 'host_pattern' in json_drive_group and 'placement' not in json_drive_group:
             json_drive_group['placement'] = {'host_pattern': json_drive_group['host_pattern']}
@@ -254,6 +254,8 @@ class DriveGroupSpec(ServiceSpec):
             args.update(cls._drive_group_spec_from_json(json_drive_group.pop('spec')))
         else:
             args.update(cls._drive_group_spec_from_json(json_drive_group))
+
+        args['unmanaged'] = json_drive_group.pop('unmanaged', False)
 
         return cls(**args)
 
@@ -284,12 +286,13 @@ class DriveGroupSpec(ServiceSpec):
                 self.placement.host_pattern is not None:
             raise DriveGroupValidationError('host_pattern must be of type string')
 
+        if self.data_devices is None:
+            raise DriveGroupValidationError("`data_devices` element is required.")
+
         specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
         for s in filter(None, specs):
             s.validate()
         for s in filter(None, [self.db_devices, self.wal_devices, self.journal_devices]):
-            if s.paths:
-                raise DriveGroupValidationError("`paths` is only allowed for data_devices")
             if s.all:
                 raise DriveGroupValidationError("`all` is only allowed for data_devices")
 
@@ -307,7 +310,7 @@ class DriveGroupSpec(ServiceSpec):
         if self.filter_logic not in ['AND', 'OR']:
             raise DriveGroupValidationError('filter_logic must be either <AND> or <OR>')
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         keys = [
             key for key in self._supported_features if getattr(self, key) is not None
         ]
@@ -320,7 +323,7 @@ class DriveGroupSpec(ServiceSpec):
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return repr(self) == repr(other)
 
 

@@ -90,6 +90,7 @@ public:
   uint64_t lease_gen = 0;
   ceph_seq_t lease_seq = 0;
   int cap_shared_gen = 0;
+  std::string alternate_name;
 
 private:
   xlist<Dentry *>::item inode_xlist_link;

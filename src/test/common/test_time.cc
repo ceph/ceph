@@ -51,7 +51,7 @@ static constexpr uint32_t bns = 123456789;
 static constexpr uint32_t bus = 123456;
 static constexpr time_t btt = bs;
 static constexpr struct timespec bts = { bs, bns };
-static struct ceph_timespec bcts = { init_le32(bs), init_le32(bns) };
+static struct ceph_timespec bcts = { ceph_le32(bs), ceph_le32(bns) };
 static constexpr struct timeval btv = { bs, bus };
 static constexpr double bd = bs + ((double)bns / 1000000000.);
 
@@ -191,4 +191,44 @@ TEST(TimePoints, stringify) {
   ASSERT_EQ(s.size(), strlen("2019-04-24T11:06:53.399000-0500"));
   ASSERT_TRUE(s[26] == '-' || s[26] == '+');
   ASSERT_EQ(s.substr(0, 9), "2019-04-2");
+}
+
+namespace {
+  template<typename Rep, typename Period>
+  std::string to_string(const chrono::duration<Rep, Period>& t)
+  {
+    std::ostringstream ss;
+    ss << t;
+    return ss.str();
+  }
+
+  void float_format_eq(string_view lhs,
+                       string_view rhs,
+                       unsigned precision)
+  {
+    const float TOLERANCE = 10.0F / pow(10.0F, static_cast<float>(precision));
+    ASSERT_FALSE(lhs.empty());
+    ASSERT_EQ(lhs.back(), 's');
+    float lhs_v = std::stof(string{lhs, 0, lhs.find('s')});
+    ASSERT_NE(lhs.npos, lhs.find('.'));
+    ASSERT_EQ(precision, lhs.find('s') - lhs.find('.') - 1);
+
+    ASSERT_FALSE(rhs.empty());
+    ASSERT_EQ(rhs.back(), 's');
+    float rhs_v = std::stof(string{rhs, 0, rhs.find('s')});
+    EXPECT_NEAR(lhs_v, rhs_v, TOLERANCE);
+    ASSERT_NE(rhs.npos, rhs.find('.'));
+    EXPECT_EQ(precision, rhs.find('s') - rhs.find('.') - 1);
+  }
+}
+
+TEST(TimeDurations, print) {
+  float_format_eq("0.123456700s",
+                  to_string(std::chrono::duration_cast<ceph::timespan>(0.1234567s)),
+                  9);
+  float_format_eq("-0.123456700s",
+                  to_string(std::chrono::duration_cast<ceph::signedspan>(-0.1234567s)),
+                  9);
+  EXPECT_EQ("42s", to_string(42s));
+  float_format_eq("0.123000000s", to_string(123ms), 9);
 }

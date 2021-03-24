@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 
-import { OrchestratorFeature } from '../../models/orchestrator.enum';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 
 @Component({
   selector: 'cd-orchestrator-doc-panel',

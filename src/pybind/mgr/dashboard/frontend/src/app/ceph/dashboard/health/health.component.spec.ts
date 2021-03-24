@@ -6,14 +6,14 @@ import { By } from '@angular/platform-browser';
 import _ from 'lodash';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { HealthService } from '../../../shared/api/health.service';
-import { Permissions } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { FeatureTogglesService } from '../../../shared/services/feature-toggles.service';
-import { RefreshIntervalService } from '../../../shared/services/refresh-interval.service';
-import { SharedModule } from '../../../shared/shared.module';
-import { PgCategoryService } from '../../shared/pg-category.service';
+import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
+import { HealthService } from '~/app/shared/api/health.service';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { HealthPieComponent } from '../health-pie/health-pie.component';
 import { MdsSummaryPipe } from '../mds-summary.pipe';
 import { MgrSummaryPipe } from '../mgr-summary.pipe';
@@ -218,15 +218,16 @@ describe('HealthComponent', () => {
   });
 
   it('event binding "prepareReadWriteRatio" is called', () => {
-    const prepareReadWriteRatio = spyOn(component, 'prepareReadWriteRatio');
+    const prepareReadWriteRatio = spyOn(component, 'prepareReadWriteRatio').and.callThrough();
 
     const payload = _.cloneDeep(healthPayload);
     payload.client_perf['read_op_per_sec'] = 1;
-    payload.client_perf['write_op_per_sec'] = 1;
+    payload.client_perf['write_op_per_sec'] = 3;
     getHealthSpy.and.returnValue(of(payload));
     fixture.detectChanges();
 
     expect(prepareReadWriteRatio).toHaveBeenCalled();
+    expect(prepareReadWriteRatio.calls.mostRecent().args[0].dataset[0].data).toEqual([25, 75]);
   });
 
   it('event binding "prepareRawUsage" is called', () => {

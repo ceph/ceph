@@ -5,6 +5,7 @@ if(WITH_MGR)
   set(mgr_srcs
     ${CMAKE_SOURCE_DIR}/src/ceph_mgr.cc
     ${CMAKE_SOURCE_DIR}/src/mon/PGMap.cc
+    ${CMAKE_SOURCE_DIR}/src/mon/ConfigMap.cc
     ActivePyModule.cc
     ActivePyModules.cc
     BaseMgrModule.cc
@@ -32,6 +33,9 @@ if(WITH_MGR)
     mgr_commands.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)
   add_executable(ceph-mgr ${mgr_srcs})
+  if(WITH_LIBCEPHSQLITE)
+    target_link_libraries(ceph-mgr cephsqlite SQLite3::SQLite3)
+  endif()
   target_link_libraries(ceph-mgr
     osdc client heap_profiler
     global-static ceph-common

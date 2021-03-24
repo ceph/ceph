@@ -21,71 +21,9 @@ namespace librbd {
 namespace io {
 
 template <typename I>
-struct ObjectDispatcher<I>::C_LayerIterator : public Context {
-  ObjectDispatcher* object_dispatcher;
-  Context* on_finish;
-
-  ObjectDispatchLayer object_dispatch_layer = OBJECT_DISPATCH_LAYER_NONE;
-
-  C_LayerIterator(ObjectDispatcher* object_dispatcher,
-                Context* on_finish)
-    : object_dispatcher(object_dispatcher), on_finish(on_finish) {
-  }
-
-  void complete(int r) override {
-    while (true) {
-      object_dispatcher->m_lock.lock_shared();
-      auto it = object_dispatcher->m_dispatches.upper_bound(
-        object_dispatch_layer);
-      if (it == object_dispatcher->m_dispatches.end()) {
-        object_dispatcher->m_lock.unlock_shared();
-        Context::complete(r);
-        return;
-      }
-
-      auto& object_dispatch_meta = it->second;
-      auto object_dispatch = object_dispatch_meta.dispatch;
-
-      // prevent recursive locking back into the dispatcher while handling IO
-      object_dispatch_meta.async_op_tracker->start_op();
-      object_dispatcher->m_lock.unlock_shared();
-
-      // next loop should start after current layer
-      object_dispatch_layer = object_dispatch->get_dispatch_layer();
-
-      auto handled = execute(object_dispatch, this);
-      object_dispatch_meta.async_op_tracker->finish_op();
-
-      if (handled) {
-        break;
-      }
-    }
-  }
-
-  void finish(int r) override {
-    on_finish->complete(0);
-  }
-
-  virtual bool execute(ObjectDispatchInterface* object_dispatch,
-                       Context* on_finish) = 0;
-};
-
-template <typename I>
-struct ObjectDispatcher<I>::C_InvalidateCache : public C_LayerIterator {
-  C_InvalidateCache(ObjectDispatcher* object_dispatcher, Context* on_finish)
-    : C_LayerIterator(object_dispatcher, on_finish) {
-  }
-
-  bool execute(ObjectDispatchInterface* object_dispatch,
-               Context* on_finish) override {
-    return object_dispatch->invalidate_cache(on_finish);
-  }
-};
-
-template <typename I>
 struct ObjectDispatcher<I>::C_ResetExistenceCache : public C_LayerIterator {
   C_ResetExistenceCache(ObjectDispatcher* object_dispatcher, Context* on_finish)
-    : C_LayerIterator(object_dispatcher, on_finish) {
+    : C_LayerIterator(object_dispatcher, OBJECT_DISPATCH_LAYER_NONE, on_finish) {
   }
 
   bool execute(ObjectDispatchInterface* object_dispatch,
@@ -201,7 +139,8 @@ void ObjectDispatcher<I>::invalidate_cache(Context* on_finish) {
   ldout(cct, 5) << dendl;
 
   on_finish = util::create_async_context_callback(*image_ctx, on_finish);
-  auto ctx = new C_InvalidateCache(this, on_finish);
+  auto ctx = new C_InvalidateCache(
+    this, OBJECT_DISPATCH_LAYER_NONE, on_finish);
   ctx->complete(0);
 }
 
@@ -234,7 +173,7 @@ void ObjectDispatcher<I>::extent_overwritten(
 }
 
 template <typename I>
-void ObjectDispatcher<I>::prepare_copyup(
+int ObjectDispatcher<I>::prepare_copyup(
     uint64_t object_no,
     SnapshotSparseBufferlist* snapshot_sparse_bufferlist) {
   auto cct = this->m_image_ctx->cct;
@@ -244,8 +183,14 @@ void ObjectDispatcher<I>::prepare_copyup(
   for (auto it : this->m_dispatches) {
     auto& object_dispatch_meta = it.second;
     auto object_dispatch = object_dispatch_meta.dispatch;
-    object_dispatch->prepare_copyup(object_no, snapshot_sparse_bufferlist);
+    auto r = object_dispatch->prepare_copyup(
+            object_no, snapshot_sparse_bufferlist);
+    if (r < 0) {
+      return r;
+    }
   }
+
+  return 0;
 }
 
 template <typename I>

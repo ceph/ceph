@@ -7,16 +7,15 @@
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::pwl::LogOperation: " << this << " " \
-                           <<  __func__ << ": "
+#define dout_prefix *_dout << "librbd::cache::pwl::LogOperation: " << this \
+                           << " " <<  __func__ << ": "
 
 namespace librbd {
-
 namespace cache {
-
 namespace pwl {
 
-GenericLogOperation::GenericLogOperation(const utime_t dispatch_time, PerfCounters *perfcounter)
+GenericLogOperation::GenericLogOperation(utime_t dispatch_time,
+                                         PerfCounters *perfcounter)
   : m_perfcounter(perfcounter), dispatch_time(dispatch_time) {
 }
 
@@ -36,10 +35,11 @@ std::ostream &operator<<(std::ostream &os,
 
 SyncPointLogOperation::SyncPointLogOperation(ceph::mutex &lock,
                                              std::shared_ptr<SyncPoint> sync_point,
-                                             const utime_t dispatch_time,
+                                             utime_t dispatch_time,
                                              PerfCounters *perfcounter,
                                              CephContext *cct)
-  : GenericLogOperation(dispatch_time, perfcounter), m_cct(cct), m_lock(lock), sync_point(sync_point) {
+  : GenericLogOperation(dispatch_time, perfcounter), m_cct(cct), m_lock(lock),
+    sync_point(sync_point) {
 }
 
 SyncPointLogOperation::~SyncPointLogOperation() { }
@@ -110,11 +110,11 @@ void SyncPointLogOperation::complete(int result) {
 }
 
 GenericWriteLogOperation::GenericWriteLogOperation(std::shared_ptr<SyncPoint> sync_point,
-                                                   const utime_t dispatch_time,
+                                                   utime_t dispatch_time,
                                                    PerfCounters *perfcounter,
                                                    CephContext *cct)
   : GenericLogOperation(dispatch_time, perfcounter),
-  m_lock(ceph::make_mutex(util::unique_lock_name(
+  m_lock(ceph::make_mutex(pwl::unique_lock_name(
     "librbd::cache::pwl::GenericWriteLogOperation::m_lock", this))),
   m_cct(cct),
   sync_point(sync_point) {
@@ -158,35 +158,54 @@ void GenericWriteLogOperation::complete(int result) {
     on_write_persist = nullptr;
   }
   if (on_persist) {
-    ldout(m_cct, 20) << __func__ << " " << this << " on_persist=" << on_persist << dendl;
+    ldout(m_cct, 20) << __func__ << " " << this << " on_persist=" << on_persist
+                     << dendl;
     on_persist->complete(result);
   }
 }
 
-WriteLogOperation::WriteLogOperation(WriteLogOperationSet &set,
-                                     uint64_t image_offset_bytes, uint64_t write_bytes,
-                                     CephContext *cct)
-  : GenericWriteLogOperation(set.sync_point, set.dispatch_time, set.perfcounter, cct),
-    log_entry(std::make_shared<WriteLogEntry>(set.sync_point->log_entry, image_offset_bytes, write_bytes)) {
+WriteLogOperation::WriteLogOperation(
+    WriteLogOperationSet &set, uint64_t image_offset_bytes,
+    uint64_t write_bytes, CephContext *cct,
+    std::shared_ptr<WriteLogEntry> write_log_entry)
+  : GenericWriteLogOperation(set.sync_point, set.dispatch_time,
+                             set.perfcounter, cct),
+    log_entry(write_log_entry) {
   on_write_append = set.extent_ops_appending->new_sub();
   on_write_persist = set.extent_ops_persist->new_sub();
   log_entry->sync_point_entry->writes++;
   log_entry->sync_point_entry->bytes += write_bytes;
 }
 
+WriteLogOperation::WriteLogOperation(WriteLogOperationSet &set,
+                                     uint64_t image_offset_bytes,
+                                     uint64_t write_bytes,
+                                     uint32_t data_len,
+                                     CephContext *cct,
+                                     std::shared_ptr<WriteLogEntry> writesame_log_entry)
+  : WriteLogOperation(set, image_offset_bytes, write_bytes, cct,
+                      writesame_log_entry) {
+  is_writesame = true;
+}
+
 WriteLogOperation::~WriteLogOperation() { }
 
-void WriteLogOperation::init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation, uint64_t current_sync_gen,
-                             uint64_t last_op_sequence_num, bufferlist &write_req_bl, uint64_t buffer_offset,
+void WriteLogOperation::init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
+                             uint64_t current_sync_gen,
+                             uint64_t last_op_sequence_num,
+                             bufferlist &write_req_bl, uint64_t buffer_offset,
                              bool persist_on_flush) {
-  log_entry->init(has_data, allocation, current_sync_gen, last_op_sequence_num, persist_on_flush);
+  log_entry->init(has_data, current_sync_gen, last_op_sequence_num,
+                  persist_on_flush);
   buffer_alloc = &(*allocation);
-  bl.substr_of(write_req_bl, buffer_offset,
-               log_entry->write_bytes());
+  bl.substr_of(write_req_bl, buffer_offset, log_entry->write_bytes());
+  log_entry->init_cache_bl(write_req_bl, buffer_offset,
+                           log_entry->write_bytes());
 }
 
 std::ostream &WriteLogOperation::format(std::ostream &os) const {
-  os << "(Write) ";
+  string op_name = is_writesame ? "(Write Same) " : "(Write) ";
+  os << op_name;
   GenericWriteLogOperation::format(os);
   os << ", ";
   if (log_entry) {
@@ -213,19 +232,6 @@ void WriteLogOperation::complete(int result) {
   m_perfcounter->hinc(l_librbd_pwl_log_op_buf_to_bufc_t_hist, buf_lat.to_nsec(),
                       log_entry->ram_entry.write_bytes);
   m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_app_t, log_append_time - buf_persist_time);
-}
-
-void WriteLogOperation::copy_bl_to_pmem_buffer() {
-  /* operation is a shared_ptr, so write_op is only good as long as operation is in scope */
-  bufferlist::iterator i(&bl);
-  m_perfcounter->inc(l_librbd_pwl_log_op_bytes, log_entry->write_bytes());
-  ldout(m_cct, 20) << bl << dendl;
-  i.copy((unsigned)log_entry->write_bytes(), (char*)log_entry->pmem_buffer);
-}
-
-void WriteLogOperation::flush_pmem_buf_to_cache(PMEMobjpool *log_pool) {
-  buf_persist_time = ceph_clock_now();
-  pmemobj_flush(log_pool, log_entry->pmem_buffer, log_entry->write_bytes());
 }
 
 WriteLogOperationSet::WriteLogOperationSet(utime_t dispatched, PerfCounters *perfcounter, std::shared_ptr<SyncPoint> sync_point,
@@ -267,10 +273,10 @@ std::ostream &operator<<(std::ostream &os,
 }
 
 DiscardLogOperation::DiscardLogOperation(std::shared_ptr<SyncPoint> sync_point,
-                                         const uint64_t image_offset_bytes,
-                                         const uint64_t write_bytes,
+                                         uint64_t image_offset_bytes,
+                                         uint64_t write_bytes,
                                          uint32_t discard_granularity_bytes,
-                                         const utime_t dispatch_time,
+                                         utime_t dispatch_time,
                                          PerfCounters *perfcounter,
                                          CephContext *cct)
   : GenericWriteLogOperation(sync_point, dispatch_time, perfcounter, cct),
@@ -278,19 +284,12 @@ DiscardLogOperation::DiscardLogOperation(std::shared_ptr<SyncPoint> sync_point,
                                                 image_offset_bytes,
                                                 write_bytes,
                                                 discard_granularity_bytes)) {
-  on_write_append = sync_point->prior_persisted_gather_new_sub();
   on_write_persist = nullptr;
   log_entry->sync_point_entry->writes++;
   log_entry->sync_point_entry->bytes += write_bytes;
 }
 
 DiscardLogOperation::~DiscardLogOperation() { }
-
-void DiscardLogOperation::init(uint64_t current_sync_gen, bool persist_on_flush,
-                               uint64_t last_op_sequence_num, Context *write_persist) {
-  log_entry->init(current_sync_gen, persist_on_flush, last_op_sequence_num);
-  this->on_write_persist = write_persist;
-}
 
 std::ostream &DiscardLogOperation::format(std::ostream &os) const {
   os << "(Discard) ";
@@ -306,30 +305,6 @@ std::ostream &DiscardLogOperation::format(std::ostream &os) const {
 
 std::ostream &operator<<(std::ostream &os,
                          const DiscardLogOperation &op) {
-  return op.format(os);
-}
-
-WriteSameLogOperation::WriteSameLogOperation(WriteLogOperationSet &set,
-                                             uint64_t image_offset_bytes,
-                                             uint64_t write_bytes,
-                                             uint32_t data_len,
-                                             CephContext *cct)
-  : WriteLogOperation(set, image_offset_bytes, write_bytes, cct) {
-  log_entry =
-    std::make_shared<WriteSameLogEntry>(set.sync_point->log_entry, image_offset_bytes, write_bytes, data_len);
-  ldout(m_cct, 20) << __func__ << " " << this << dendl;
-}
-
-WriteSameLogOperation::~WriteSameLogOperation() { }
-
-std::ostream &WriteSameLogOperation::format(std::ostream &os) const {
-  os << "(Write Same) ";
-  WriteLogOperation::format(os);
-  return os;
-}
-
-std::ostream &operator<<(std::ostream &os,
-                         const WriteSameLogOperation &op) {
   return op.format(os);
 }
 

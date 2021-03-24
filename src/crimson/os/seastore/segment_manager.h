@@ -21,10 +21,11 @@ class Segment : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>{
 public:
 
-  enum class segment_state_t {
-    EMPTY,
-    OPEN,
-    CLOSED
+  enum class segment_state_t : uint8_t {
+    EMPTY = 0,
+    OPEN = 1,
+    CLOSED = 2,
+    RELEASING = 3
   };
 
   /**
@@ -79,12 +80,6 @@ constexpr size_t PADDR_SIZE = sizeof(paddr_t);
 
 class SegmentManager {
 public:
-  using init_ertr = crimson::errorator<
-    crimson::ct_error::enospc,
-    crimson::ct_error::invarg,
-    crimson::ct_error::erange>;
-  virtual init_ertr::future<> init() = 0;
-
   using open_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
@@ -109,7 +104,8 @@ public:
   read_ertr::future<ceph::bufferptr> read(
     paddr_t addr,
     size_t len) {
-    auto ptrref = std::make_unique<ceph::bufferptr>(len);
+    auto ptrref = std::make_unique<ceph::bufferptr>(
+      buffer::create_page_aligned(len));
     return read(addr, len, *ptrref).safe_then(
       [ptrref=std::move(ptrref)]() mutable {
 	return read_ertr::make_ready_future<bufferptr>(std::move(*ptrref));
@@ -124,28 +120,10 @@ public:
     ceph_assert(get_size() % get_segment_size() == 0);
     return ((segment_id_t)(get_size() / get_segment_size()));
   }
-
+  virtual const seastore_meta_t &get_meta() const = 0;
 
   virtual ~SegmentManager() {}
 };
 using SegmentManagerRef = std::unique_ptr<SegmentManager>;
-
-namespace segment_manager {
-
-struct ephemeral_config_t {
-  size_t size;
-  size_t block_size;
-  size_t segment_size;
-};
-constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
-  1 << 30,
-  4 << 10,
-  8 << 20
-};
-
-std::ostream &operator<<(std::ostream &, const ephemeral_config_t &);
-SegmentManagerRef create_ephemeral(ephemeral_config_t config);
-
-}
 
 }

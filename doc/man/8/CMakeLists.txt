@@ -13,6 +13,7 @@ set(server_srcs
   crushtool.rst
   ceph-run.rst
   mount.ceph.rst
+  mount.fuse.ceph.rst
   ceph-create-keys.rst)
 if(WITH_TESTS)
 list(APPEND server_srcs
@@ -37,8 +38,10 @@ list(APPEND man_srcs
   ${osd_srcs}
   ${mon_srcs}
   ceph-mds.rst
+  cephfs-top.rst
   librados-config.rst
-  cephadm.rst)
+  cephadm.rst
+  cephfs-mirror.rst)
 
 if(HAVE_LIBFUSE)
   list(APPEND man_srcs

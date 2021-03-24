@@ -18,13 +18,11 @@
 
 #include "msg/Policy.h"
 #include "crimson/common/throttle.h"
-#include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Socket.h"
 
 namespace crimson::net {
 
-class Dispatcher;
 class Protocol;
 class SocketMessenger;
 class SocketConnection;
@@ -55,8 +53,7 @@ class SocketConnection : public Connection {
 
  public:
   SocketConnection(SocketMessenger& messenger,
-                   ChainedDispatchersRef& dispatcher,
-                   bool is_msgr2);
+                   ChainedDispatchers& dispatchers);
   ~SocketConnection() override;
 
   Messenger* get_messenger() const override;

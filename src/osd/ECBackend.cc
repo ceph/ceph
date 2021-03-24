@@ -297,7 +297,7 @@ struct RecoveryMessages {
   map<pg_shard_t, vector<PushReplyOp> > push_replies;
   ObjectStore::Transaction t;
   RecoveryMessages() {}
-  ~RecoveryMessages(){}
+  ~RecoveryMessages() {}
 };
 
 void ECBackend::handle_recovery_push(
@@ -940,6 +940,11 @@ void ECBackend::handle_sub_write(
   if (msg)
     msg->mark_event("sub_op_started");
   trace.event("handle_sub_write");
+#ifdef HAVE_JAEGER
+  if (msg->osd_parent_span) {
+    auto ec_sub_trans = jaeger_tracing::child_span(__func__, msg->osd_parent_span);
+  }
+#endif
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
@@ -1248,6 +1253,7 @@ void ECBackend::handle_sub_read_reply(
   ceph_assert(rop.in_progress.count(from));
   rop.in_progress.erase(from);
   unsigned is_complete = 0;
+  bool need_resend = false;
   // For redundant reads check for completion as each shard comes in,
   // or in a non-recovery read check for completion once all the shards read.
   if (rop.do_redundant_reads || rop.in_progress.empty()) {
@@ -1274,7 +1280,8 @@ void ECBackend::handle_sub_read_reply(
 	  if (!rop.do_redundant_reads) {
 	    int r = send_all_remaining_reads(iter->first, rop);
 	    if (r == 0) {
-	      // We added to in_progress and not incrementing is_complete
+	      // We changed the rop's to_read and not incrementing is_complete
+	      need_resend = true;
 	      continue;
 	    }
 	    // Couldn't read any additional shards so handle as completed with errors
@@ -1302,11 +1309,17 @@ void ECBackend::handle_sub_read_reply(
 	    rop.complete[iter->first].errors.clear();
 	  }
 	}
+	// avoid re-read for completed object as we may send remaining reads for uncopmpleted objects
+	rop.to_read.at(iter->first).need.clear();
+	rop.to_read.at(iter->first).want_attrs = false;
 	++is_complete;
       }
     }
   }
-  if (rop.in_progress.empty() || is_complete == rop.complete.size()) {
+  if (need_resend) {
+    do_read_op(rop);
+  } else if (rop.in_progress.empty() || 
+             is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
     rop.trace.event("ec read complete");
     complete_read_op(rop, m);
@@ -1529,7 +1542,12 @@ void ECBackend::submit_transaction(
   op->client_op = client_op;
   if (client_op)
     op->trace = client_op->pg_trace;
-  
+
+#ifdef HAVE_JAEGER
+  if (client_op->osd_parent_span) {
+    auto ec_sub_trans = jaeger_tracing::child_span("ECBackend::submit_transaction", client_op->osd_parent_span);
+  }
+#endif
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
   start_rmw(op, std::move(t));
 }
@@ -2098,6 +2116,12 @@ bool ECBackend::try_reads_to_commit()
       messages.push_back(std::make_pair(i->osd, r));
     }
   }
+
+#ifdef HAVE_JAEGER
+   if (op->client_op->osd_parent_span) {
+      auto sub_write_span = jaeger_tracing::child_span("EC sub write", op->client_op->osd_parent_span);
+    }
+#endif
   if (!messages.empty()) {
     get_parent()->send_message_osd_cluster(messages, get_osdmap_epoch());
   }
@@ -2452,7 +2476,6 @@ int ECBackend::send_all_remaining_reads(
 	shards,
 	want_attrs,
 	c)));
-  do_read_op(rop);
   return 0;
 }
 

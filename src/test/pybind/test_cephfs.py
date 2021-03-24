@@ -1,5 +1,5 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
-from nose.tools import assert_raises, assert_equal, assert_greater, with_setup
+from nose.tools import assert_raises, assert_equal, assert_not_equal, assert_greater, with_setup
 import cephfs as libcephfs
 import fcntl
 import os
@@ -541,6 +541,31 @@ def test_futimens():
     cephfs.unlink(b'/file-1')
 
 @with_setup(setup_test)
+def test_lchmod():
+    fd = cephfs.open(b'/file-1', 'w', 0o755)
+    cephfs.write(fd, b'0000', 0)
+    cephfs.close(fd)
+
+    cephfs.symlink(b'/file-1', b'/file-2')
+
+    stx_pre_t = cephfs.statx(b'/file-1', libcephfs.CEPH_STATX_MODE, 0)
+    stx_pre_s = cephfs.statx(b'/file-2', libcephfs.CEPH_STATX_MODE, libcephfs.AT_SYMLINK_NOFOLLOW)
+
+    time.sleep(1)
+    cephfs.lchmod(b'/file-2', 0o400)
+
+    stx_post_t = cephfs.statx(b'/file-1', libcephfs.CEPH_STATX_MODE, 0)
+    stx_post_s = cephfs.statx(b'/file-2', libcephfs.CEPH_STATX_MODE, libcephfs.AT_SYMLINK_NOFOLLOW)
+
+    assert_equal(stx_post_t['mode'], stx_pre_t['mode'])
+    assert_not_equal(stx_post_s['mode'], stx_pre_s['mode'])
+    stx_post_s_perm_bits = stx_post_s['mode'] & ~stat.S_IFMT(stx_post_s["mode"])
+    assert_equal(stx_post_s_perm_bits, 0o400)
+
+    cephfs.unlink(b'/file-2')
+    cephfs.unlink(b'/file-1')
+
+@with_setup(setup_test)
 def test_fchmod():
     fd = cephfs.open(b'/file-fchmod', 'w', 0o655)
     st = cephfs.statx(b'/file-fchmod', libcephfs.CEPH_STATX_MODE, 0)
@@ -832,3 +857,34 @@ def test_disk_quota_exceeeded_error():
     assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz", 0)
     cephfs.close(fd)
     cephfs.unlink(b"/dir-1/file-1")
+
+@with_setup(setup_test)
+def test_empty_snapshot_info():
+    cephfs.mkdir("/dir-1", 0o755)
+
+    # snap without metadata
+    cephfs.mkdir("/dir-1/.snap/snap0", 0o755)
+    snap_info = cephfs.snap_info("/dir-1/.snap/snap0")
+    assert_equal(snap_info["metadata"], {})
+    assert_greater(snap_info["id"], 0)
+    cephfs.rmdir("/dir-1/.snap/snap0")
+
+    # remove directory
+    cephfs.rmdir("/dir-1")
+
+@with_setup(setup_test)
+def test_snapshot_info():
+    cephfs.mkdir("/dir-1", 0o755)
+
+    # snap with custom metadata
+    md = {"foo": "bar", "zig": "zag", "abcdefg": "12345"}
+    cephfs.mksnap("/dir-1", "snap0", 0o755, metadata=md)
+    snap_info = cephfs.snap_info("/dir-1/.snap/snap0")
+    assert_equal(snap_info["metadata"]["foo"], md["foo"])
+    assert_equal(snap_info["metadata"]["zig"], md["zig"])
+    assert_equal(snap_info["metadata"]["abcdefg"], md["abcdefg"])
+    assert_greater(snap_info["id"], 0)
+    cephfs.rmsnap("/dir-1", "snap0")
+
+    # remove directory
+    cephfs.rmdir("/dir-1")

@@ -5,7 +5,7 @@ from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
-                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO)
+                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData, ExtendMismatch)
 from datetime import timedelta
 import time
 import threading
@@ -578,6 +578,65 @@ class TestIoctx(object):
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
 
+    def test_remove_omap_ramge2(self):
+        keys = ("1", "2", "3", "4")
+        values = (b"a", b"bb", b"ccc", b"dddd")
+        with WriteOpCtx() as write_op:
+            self.ioctx.set_omap(write_op, keys, values)
+            self.ioctx.operate_write_op(write_op, "test_obj")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "test_obj")
+            eq(list(iter), list(zip(keys, values)))
+        with WriteOpCtx() as write_op:
+            self.ioctx.remove_omap_range2(write_op, "1", "4")
+            self.ioctx.operate_write_op(write_op, "test_obj")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "test_obj")
+            eq(list(iter), [("4", b"dddd")])
+
+    def test_cmpext_op(self):
+        object_id = 'test'
+        with WriteOpCtx() as write_op:
+            write_op.write(b'12345', 0)
+            self.ioctx.operate_write_op(write_op, object_id)
+        with WriteOpCtx() as write_op:
+            write_op.cmpext(b'12345', 0)
+            write_op.write(b'54321', 0)
+            self.ioctx.operate_write_op(write_op, object_id)
+            eq(self.ioctx.read(object_id), b'54321')
+        with WriteOpCtx() as write_op:
+            write_op.cmpext(b'56789', 0)
+            write_op.write(b'12345', 0)
+            try:
+                self.ioctx.operate_write_op(write_op, object_id)
+            except ExtendMismatch as e:
+                # the cmpext_result compare with expected error number, it should be (-MAX_ERRNO - 1)
+                # where "1" is the offset of the first unmatched byte
+                eq(-e.errno, -MAX_ERRNO - 1)
+                eq(e.offset, 1)
+            else:
+                message = "cmpext did not raise Exception when object content does not match"
+                raise AssertionError(message)
+        with ReadOpCtx() as read_op:
+            read_op.cmpext(b'54321', 0)
+            self.ioctx.operate_read_op(read_op, object_id)
+        with ReadOpCtx() as read_op:
+            read_op.cmpext(b'54789', 0)
+            try:
+                self.ioctx.operate_read_op(read_op, object_id)
+            except ExtendMismatch as e:
+                # the cmpext_result compare with expected error number, it should be (-MAX_ERRNO - 2)
+                # where "2" is the offset of the first unmatched byte
+                eq(-e.errno, -MAX_ERRNO - 2)
+                eq(e.offset, 2)
+            else:
+                message = "cmpext did not raise Exception when object content does not match"
+                raise AssertionError(message)
+
     def test_xattrs_op(self):
         xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
         with WriteOpCtx() as write_op:
@@ -674,6 +733,25 @@ class TestIoctx(object):
             while count[0] < 1:
                 lock.wait()
         eq(comp.get_return_value(), 0)
+
+    def test_aio_rmxattr(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        self.ioctx.set_xattr("xyz", "key", b'value')
+        eq(self.ioctx.get_xattr("xyz", "key"), b'value')
+        comp = self.ioctx.aio_rmxattr("xyz", "key", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        with assert_raises(NoData):
+            self.ioctx.get_xattr("xyz", "key")
 
     def test_aio_write_no_comp_ref(self):
         lock = threading.Condition()
@@ -969,6 +1047,22 @@ class TestIoctx(object):
         eq(retval[0], b"Hello, nose!")
 
         [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_setxattr(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_setxattr("obj", "key", b'value', cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(self.ioctx.get_xattr("obj", "key"), b'value')
 
     def test_applications(self):
         cmd = {"prefix":"osd dump", "format":"json"}

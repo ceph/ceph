@@ -1664,124 +1664,15 @@ public:
       missing, pgmeta_oid, this);
   }
 
-  template <typename missing_type>
-  struct FuturizedStoreLogReader {
-    crimson::os::FuturizedStore &store;
-    crimson::os::CollectionRef ch;
-    const pg_info_t &info;
-    IndexedLog &log;
-    std::set<std::string>* log_keys_debug = NULL;
-    missing_type &missing;
-    ghobject_t pgmeta_oid;
-    const DoutPrefixProvider *dpp;
-
-    eversion_t on_disk_can_rollback_to;
-    eversion_t on_disk_rollback_info_trimmed_to;
-
-    std::map<eversion_t, hobject_t> divergent_priors;
-    bool must_rebuild = false;
-    std::list<pg_log_entry_t> entries;
-    std::list<pg_log_dup_t> dups;
-
-    std::optional<std::string> next;
-
-    void process_entry(crimson::os::FuturizedStore::OmapIteratorRef &p) {
-      if (p->key()[0] == '_')
-	return;
-      //Copy ceph::buffer::list before creating iterator
-      auto bl = p->value();
-      auto bp = bl.cbegin();
-      if (p->key() == "divergent_priors") {
-	decode(divergent_priors, bp);
-	ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
-			   << " divergent_priors" << dendl;
-	ceph_assert("crimson shouldn't have had divergent_priors" == 0);
-      } else if (p->key() == "can_rollback_to") {
-	decode(on_disk_can_rollback_to, bp);
-      } else if (p->key() == "rollback_info_trimmed_to") {
-	decode(on_disk_rollback_info_trimmed_to, bp);
-      } else if (p->key() == "may_include_deletes_in_missing") {
-	missing.may_include_deletes = true;
-      } else if (p->key().substr(0, 7) == std::string("missing")) {
-	hobject_t oid;
-	pg_missing_item item;
-	decode(oid, bp);
-	decode(item, bp);
-	if (item.is_delete()) {
-	  ceph_assert(missing.may_include_deletes);
-	}
-	missing.add(oid, std::move(item));
-      } else if (p->key().substr(0, 4) == std::string("dup_")) {
-	pg_log_dup_t dup;
-	decode(dup, bp);
-	if (!dups.empty()) {
-	  ceph_assert(dups.back().version < dup.version);
-	}
-	dups.push_back(dup);
-      } else {
-	pg_log_entry_t e;
-	e.decode_with_checksum(bp);
-	ldpp_dout(dpp, 20) << "read_log_and_missing " << e << dendl;
-	if (!entries.empty()) {
-	  pg_log_entry_t last_e(entries.back());
-	  ceph_assert(last_e.version.version < e.version.version);
-	  ceph_assert(last_e.version.epoch <= e.version.epoch);
-	}
-	entries.push_back(e);
-	if (log_keys_debug)
-	  log_keys_debug->insert(e.get_key_name());
-      }
-    }
-
-
-    seastar::future<> start() {
-      // will get overridden if recorded
-      on_disk_can_rollback_to = info.last_update;
-      missing.may_include_deletes = false;
-
-      auto reader = std::unique_ptr<FuturizedStoreLogReader>(this);
-      return store.get_omap_iterator(ch, pgmeta_oid).then([this](auto iter) {
-	return seastar::repeat([this, iter]() mutable {
-	  if (!iter->valid()) {
-	    return seastar::make_ready_future<seastar::stop_iteration>(
-		      seastar::stop_iteration::yes);
-	  }
-	  process_entry(iter);
-	  return iter->next().then([](int) {
-	    return seastar::stop_iteration::no;
-	  });
-	});
-      }).then([this, reader{std::move(reader)}]() {
-          log = IndexedLog(
-	     info.last_update,
-	     info.log_tail,
-	     on_disk_can_rollback_to,
-	     on_disk_rollback_info_trimmed_to,
-	     std::move(entries),
-	     std::move(dups));
-          return seastar::now();
-        });
-    }
-  };
-
-  template <typename missing_type>
   static seastar::future<> read_log_and_missing_crimson(
     crimson::os::FuturizedStore &store,
     crimson::os::CollectionRef ch,
     const pg_info_t &info,
     IndexedLog &log,
     std::set<std::string>* log_keys_debug,
-    missing_type &missing,
+    pg_missing_tracker_t &missing,
     ghobject_t pgmeta_oid,
-    const DoutPrefixProvider *dpp = nullptr
-    ) {
-    ldpp_dout(dpp, 20) << "read_log_and_missing coll "
-		       << ch->get_cid()
-		       << " " << pgmeta_oid << dendl;
-    return (new FuturizedStoreLogReader<missing_type>{
-      store, ch, info, log, log_keys_debug,
-      missing, pgmeta_oid, dpp})->start();
-  }
+    const DoutPrefixProvider *dpp = nullptr);
 
 #endif
 

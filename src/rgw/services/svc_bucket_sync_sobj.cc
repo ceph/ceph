@@ -59,7 +59,7 @@ void RGWSI_Bucket_Sync_SObj::init(RGWSI_Zone *_zone_svc,
   hint_index_mgr.reset(new RGWSI_Bucket_Sync_SObj_HintIndexManager(svc.zone, svc.sysobj));
 }
 
-int RGWSI_Bucket_Sync_SObj::do_start()
+int RGWSI_Bucket_Sync_SObj::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   sync_policy_cache.reset(new RGWChainedCacheImpl<bucket_sync_policy_cache_entry>);
   sync_policy_cache->init(svc.cache);
@@ -71,7 +71,7 @@ void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
                                                const std::set<rgw_zone_id>& zones,
                                                const std::set<rgw_bucket>& buckets,
                                                std::set<rgw_sync_bucket_entity> *hint_entities,
-                                               optional_yield y)
+                                               optional_yield y, const DoutPrefixProvider *dpp)
 {
   vector<rgw_bucket> hint_buckets;
 
@@ -81,9 +81,9 @@ void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
     RGWBucketInfo hint_bucket_info;
     int ret = svc.bucket_sobj->read_bucket_info(ctx, b, &hint_bucket_info,
                                                 nullptr, nullptr, boost::none,
-                                                y);
+                                                y, dpp);
     if (ret < 0) {
-      ldout(cct, 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+      ldpp_dout(dpp, 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
       continue;
     }
 
@@ -102,7 +102,8 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
                                                  RGWBucketSyncPolicyHandlerRef& handler,
                                                  RGWBucketSyncPolicyHandlerRef& zone_policy_handler,
                                                  std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
-                                                 optional_yield y)
+                                                 optional_yield y,
+                                                 const DoutPrefixProvider *dpp)
 {
   set<rgw_zone_id> source_zones;
   set<rgw_zone_id> target_zones;
@@ -115,8 +116,8 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
 
   std::set<rgw_sync_bucket_entity> hint_entities;
 
-  get_hint_entities(ctx, source_zones, handler->get_source_hints(), &hint_entities, y);
-  get_hint_entities(ctx, target_zones, handler->get_target_hints(), &hint_entities, y);
+  get_hint_entities(ctx, source_zones, handler->get_source_hints(), &hint_entities, y, dpp);
+  get_hint_entities(ctx, target_zones, handler->get_target_hints(), &hint_entities, y, dpp);
 
   std::set<rgw_sync_bucket_pipe> resolved_sources;
   std::set<rgw_sync_bucket_pipe> resolved_dests;
@@ -136,9 +137,9 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
     if (iter != temp_map.end()) {
       hint_bucket_handler = iter->second;
     } else {
-      int r = do_get_policy_handler(ctx, zid, hint_bucket, temp_map, &hint_bucket_handler, y);
+      int r = do_get_policy_handler(ctx, zid, hint_bucket, temp_map, &hint_bucket_handler, y, dpp);
       if (r < 0) {
-        ldout(cct, 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
+        ldpp_dout(dpp, 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
         continue;
       }
     }
@@ -159,7 +160,8 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                                                   std::optional<rgw_bucket> _bucket,
                                                   std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                                                   RGWBucketSyncPolicyHandlerRef *handler,
-                                                  optional_yield y)
+                                                  optional_yield y,
+                                                  const DoutPrefixProvider *dpp)
 {
   if (!_bucket) {
     *handler = svc.zone->get_sync_policy_handler(zone);
@@ -196,17 +198,18 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                                                      nullptr,
                                                      &attrs,
                                                      y,
+                                                     dpp,
                                                      &cache_info);
   if (r < 0) {
     if (r != -ENOENT) {
-      ldout(cct, 0) << "ERROR: svc.bucket->read_bucket_instance_info(key=" << bucket_key << ") returned r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: svc.bucket->read_bucket_instance_info(key=" << bucket_key << ") returned r=" << r << dendl;
     }
     return r;
   }
 
   auto zone_policy_handler = svc.zone->get_sync_policy_handler(zone);
   if (!zone_policy_handler) {
-    ldout(cct, 20) << "ERROR: could not find policy handler for zone=" << zone << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: could not find policy handler for zone=" << zone << dendl;
     return -ENOENT;
   }
 
@@ -214,7 +217,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
 
   r = e.handler->init(y);
   if (r < 0) {
-    ldout(cct, 20) << "ERROR: failed to init bucket sync policy handler: r=" << r << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: failed to init bucket sync policy handler: r=" << r << dendl;
     return r;
   }
 
@@ -225,14 +228,14 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   r = resolve_policy_hints(ctx, self_entity,
                            e.handler,
                            zone_policy_handler,
-                           temp_map, y);
+                           temp_map, y, dpp);
   if (r < 0) {
-    ldout(cct, 20) << "ERROR: failed to resolve policy hints: bucket_key=" << bucket_key << ", r=" << r << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: failed to resolve policy hints: bucket_key=" << bucket_key << ", r=" << r << dendl;
     return r;
   }
 
   if (!sync_policy_cache->put(svc.cache, cache_key, &e, {&cache_info})) {
-    ldout(cct, 20) << "couldn't put bucket_sync_policy cache entry, might have raced with data changes" << dendl;
+    ldpp_dout(dpp, 20) << "couldn't put bucket_sync_policy cache entry, might have raced with data changes" << dendl;
   }
 
   *handler = e.handler;
@@ -244,10 +247,11 @@ int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                                                std::optional<rgw_zone_id> zone,
                                                std::optional<rgw_bucket> _bucket,
                                                RGWBucketSyncPolicyHandlerRef *handler,
-                                               optional_yield y)
+                                               optional_yield y,
+                                               const DoutPrefixProvider *dpp)
 {
   std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef> temp_map;
-  return do_get_policy_handler(ctx, zone, _bucket, temp_map, handler, y);
+  return do_get_policy_handler(ctx, zone, _bucket, temp_map, handler, y, dpp);
 }
 
 static bool diff_sets(std::set<rgw_bucket>& orig_set,

@@ -125,10 +125,18 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
 
   char *cmd_json = nullptr;
   char *tag = nullptr;
+  char *inbuf_ptr = nullptr;
+  Py_ssize_t inbuf_len = 0;
+  bufferlist inbuf = {};
+
   PyObject *completion = nullptr;
-  if (!PyArg_ParseTuple(args, "Ossss:ceph_send_command",
-        &completion, &type, &name, &cmd_json, &tag)) {
+  if (!PyArg_ParseTuple(args, "Ossssz#:ceph_send_command",
+        &completion, &type, &name, &cmd_json, &tag, &inbuf_ptr, &inbuf_len)) {
     return nullptr;
+  }
+
+  if (inbuf_ptr) {
+    inbuf.append(inbuf_ptr, (unsigned)inbuf_len);
   }
 
   auto set_fn = PyObject_GetAttrString(completion, "complete");
@@ -163,7 +171,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     self->py_modules->get_monc().start_mon_command(
         name,
         {cmd_json},
-        {},
+        inbuf,
         &command_c->outbl,
         &command_c->outs,
         new C_OnFinisher(c, &self->py_modules->cmd_finisher));
@@ -183,7 +191,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     self->py_modules->get_objecter().osd_command(
         osd_id,
         {cmd_json},
-        {},
+        inbuf,
         &tid,
 	[command_c, f = &self->py_modules->cmd_finisher]
 	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {
@@ -195,7 +203,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     int r = self->py_modules->get_client().mds_command(
         name,
         {cmd_json},
-        {},
+        inbuf,
         &command_c->outbl,
         &command_c->outs,
         new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
@@ -221,7 +229,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     self->py_modules->get_objecter().pg_command(
         pgid,
         {cmd_json},
-        {},
+        inbuf,
         &tid,
 	[command_c, f = &self->py_modules->cmd_finisher]
 	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {
@@ -349,12 +357,10 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
   out_checks.dump(&jf);
   jf.flush(*_dout);
   *_dout << dendl;
-
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->set_health_checks(self->this_module->get_name(),
-                                      std::move(out_checks));
-  PyEval_RestoreThread(tstate);
-  
+  without_gil([&] {
+    self->py_modules->set_health_checks(self->this_module->get_name(),
+					std::move(out_checks));
+  });
   Py_RETURN_NONE;
 }
 
@@ -425,6 +431,18 @@ ceph_option_get(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_foreign_option_get(BaseMgrModule *self, PyObject *args)
+{
+  char *who = nullptr;
+  char *what = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_foreign_option_get", &who, &what)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+  return self->py_modules->get_foreign_config(who, what);
+}
+
+static PyObject*
 ceph_get_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *module = nullptr;
@@ -472,10 +490,13 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->set_config(module, key, val);
-  PyEval_RestoreThread(tstate);
-
+  auto [ret, msg] = without_gil([&] {
+    return self->py_modules->set_config(module, key, val);
+  });
+  if (ret) {
+    PyErr_SetString(PyExc_ValueError, msg.c_str());
+    return nullptr;
+  }
   Py_RETURN_NONE;
 }
 
@@ -512,10 +533,9 @@ ceph_store_set(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->set_store(self->this_module->get_name(), key, val);
-  PyEval_RestoreThread(tstate);
-
+  without_gil([&] {
+    self->py_modules->set_store(self->this_module->get_name(), key, val);
+  });
   Py_RETURN_NONE;
 }
 
@@ -567,11 +587,9 @@ ceph_cluster_log(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "sis:ceph_cluster_log", &channel, &prio, &message)) {
     return nullptr;
   }
-
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->cluster_log(channel, (clog_type)prio, message);
-  PyEval_RestoreThread(tstate);
-
+  without_gil([&] {
+    self->py_modules->cluster_log(channel, (clog_type)prio, message);
+  });
   Py_RETURN_NONE;
 }
 
@@ -585,6 +603,16 @@ static PyObject *
 ceph_get_release_name(BaseMgrModule *self, PyObject *args)
 {
   return PyUnicode_FromString(ceph_release_to_str());
+}
+
+static PyObject *
+ceph_lookup_release_name(BaseMgrModule *self, PyObject *args)
+{
+  int major = 0;
+  if (!PyArg_ParseTuple(args, "i:ceph_lookup_release_name", &major)) {
+    return nullptr;
+  }
+  return PyUnicode_FromString(ceph_release_name(major));
 }
 
 static PyObject *
@@ -648,14 +676,27 @@ ceph_set_uri(BaseMgrModule *self, PyObject *args)
         &svc_str)) {
     return nullptr;
   }
-
   // We call down into PyModules even though we have a MgrPyModule
   // reference here, because MgrPyModule's fields are protected
   // by PyModules' lock.
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->set_uri(self->this_module->get_name(), svc_str);
-  PyEval_RestoreThread(tstate);
+  without_gil([&] {
+    self->py_modules->set_uri(self->this_module->get_name(), svc_str);
+  });
+  Py_RETURN_NONE;
+}
 
+static PyObject*
+ceph_set_wear_level(BaseMgrModule *self, PyObject *args)
+{
+  char *devid = nullptr;
+  float wear_level;
+  if (!PyArg_ParseTuple(args, "sf:ceph_set_wear_level",
+			&devid, &wear_level)) {
+    return nullptr;
+  }
+  without_gil([&] {
+    self->py_modules->set_device_wear_level(devid, wear_level);
+  });
   Py_RETURN_NONE;
 }
 
@@ -675,15 +716,14 @@ ceph_update_progress_event(BaseMgrModule *self, PyObject *args)
   char *evid = nullptr;
   char *desc = nullptr;
   float progress = 0.0;
-  if (!PyArg_ParseTuple(args, "ssf:ceph_update_progress_event",
-			&evid, &desc, &progress)) {
+  bool add_to_ceph_s = false;
+  if (!PyArg_ParseTuple(args, "ssfb:ceph_update_progress_event",
+			&evid, &desc, &progress, &add_to_ceph_s)) {
     return nullptr;
   }
-
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->update_progress_event(evid, desc, progress);
-  PyEval_RestoreThread(tstate);
-
+  without_gil([&] {
+    self->py_modules->update_progress_event(evid, desc, progress, add_to_ceph_s);
+  });
   Py_RETURN_NONE;
 }
 
@@ -695,21 +735,18 @@ ceph_complete_progress_event(BaseMgrModule *self, PyObject *args)
 			&evid)) {
     return nullptr;
   }
-
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->complete_progress_event(evid);
-  PyEval_RestoreThread(tstate);
-
+  without_gil([&] {
+    self->py_modules->complete_progress_event(evid);
+  });
   Py_RETURN_NONE;
 }
 
 static PyObject*
 ceph_clear_all_progress_events(BaseMgrModule *self, PyObject *args)
 {
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->clear_all_progress_events();
-  PyEval_RestoreThread(tstate);
-
+  without_gil([&] {
+    self->py_modules->clear_all_progress_events();
+  });
   Py_RETURN_NONE;
 }
 
@@ -1046,6 +1083,10 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
     {"read_latency", MDSPerformanceCounterType::READ_LATENCY_METRIC},
     {"write_latency", MDSPerformanceCounterType::WRITE_LATENCY_METRIC},
     {"metadata_latency", MDSPerformanceCounterType::METADATA_LATENCY_METRIC},
+    {"dentry_lease", MDSPerformanceCounterType::DENTRY_LEASE_METRIC},
+    {"opened_files", MDSPerformanceCounterType::OPENED_FILES_METRIC},
+    {"pinned_icaps", MDSPerformanceCounterType::PINNED_ICAPS_METRIC},
+    {"opened_inodes", MDSPerformanceCounterType::OPENED_INODES_METRIC},
   };
 
   PyObject *py_query = nullptr;
@@ -1308,9 +1349,9 @@ ceph_is_authorized(BaseMgrModule *self, PyObject *args)
     arguments[arg_key] = arg_value;
   }
 
-  PyThreadState *tstate = PyEval_SaveThread();
-  bool r = self->this_module->is_authorized(arguments);
-  PyEval_RestoreThread(tstate);
+  bool r = without_gil([&] {
+    return self->this_module->is_authorized(arguments);
+  });
 
   if (r) {
     Py_RETURN_TRUE;
@@ -1325,9 +1366,9 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
     return nullptr;
   }
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->register_client(self->this_module->get_name(), addrs);
-  PyEval_RestoreThread(tstate);
+  without_gil([&] {
+    self->py_modules->register_client(self->this_module->get_name(), addrs);
+  });
   Py_RETURN_NONE;
 }
 
@@ -1338,9 +1379,9 @@ ceph_unregister_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
     return nullptr;
   }
-  PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->unregister_client(self->this_module->get_name(), addrs);
-  PyEval_RestoreThread(tstate);
+  without_gil([&] {
+    self->py_modules->unregister_client(self->this_module->get_name(), addrs);
+  });
   Py_RETURN_NONE;
 }
 
@@ -1368,6 +1409,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
    "Get a native configuration option value"},
+
+  {"_ceph_get_foreign_option", (PyCFunction)ceph_foreign_option_get, METH_VARARGS,
+   "Get a native configuration option value for another entity"},
 
   {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
    "Get a module configuration option value"},
@@ -1405,6 +1449,9 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_release_name", (PyCFunction)ceph_get_release_name, METH_NOARGS,
    "Get the ceph release name of this process"},
 
+  {"_ceph_lookup_release_name", (PyCFunction)ceph_lookup_release_name, METH_VARARGS,
+   "Get the ceph release name for a given major number"},
+
   {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
     "Get a CephContext* in a python capsule"},
 
@@ -1413,6 +1460,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_set_uri", (PyCFunction)ceph_set_uri, METH_VARARGS,
     "Advertize a service URI served by this module"},
+
+  {"_ceph_set_device_wear_level", (PyCFunction)ceph_set_wear_level, METH_VARARGS,
+   "Set device wear_level value"},
 
   {"_ceph_have_mon_connection", (PyCFunction)ceph_have_mon_connection,
     METH_NOARGS, "Find out whether this mgr daemon currently has "

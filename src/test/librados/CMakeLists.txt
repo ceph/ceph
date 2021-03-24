@@ -130,7 +130,7 @@ add_executable(ceph_test_rados_api_tier_pp
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rados_api_tier_pp
   librados global ${UNITTEST_LIBS} Boost::system radostest-cxx cls_cas_internal
-  spawn)
+  cls_cas_client spawn)
 
 add_executable(ceph_test_rados_api_snapshots
   snapshots.cc)

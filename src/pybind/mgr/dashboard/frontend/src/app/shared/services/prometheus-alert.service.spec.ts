@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
-import { configureTestBed, PrometheusHelper } from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -181,6 +181,28 @@ describe('PrometheusAlertService', () => {
       alerts = [alert1, prometheus.createAlert('alert2')];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('alert badge', () => {
+    beforeEach(() => {
+      service = TestBed.inject(PrometheusAlertService);
+
+      prometheusService = TestBed.inject(PrometheusService);
+      spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(prometheusService, 'getAlerts').and.callFake(() => of(alerts));
+
+      alerts = [
+        prometheus.createAlert('alert0', 'active'),
+        prometheus.createAlert('alert1', 'suppressed'),
+        prometheus.createAlert('alert2', 'suppressed')
+      ];
+      service.refresh();
+    });
+
+    it('should count active alerts', () => {
+      service.refresh();
+      expect(service.activeAlerts).toBe(1);
     });
   });
 });

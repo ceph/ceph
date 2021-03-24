@@ -527,8 +527,8 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   ceph_msg_header2 header2{header.seq,        header.tid,
                            header.type,       header.priority,
                            header.version,
-                           init_le32(0),      header.data_off,
-                           init_le64(ack_seq),
+                           ceph_le32(0),      header.data_off,
+                           ceph_le64(ack_seq),
                            footer.flags,      header.compat_version,
                            header.reserved};
 
@@ -749,7 +749,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
       if (unlikely(pre_auth.enabled) && r >= 0) {
         pre_auth.rxbuf.append(*next.node);
 	ceph_assert(!cct->_conf->ms_die_on_bug ||
-		    pre_auth.rxbuf.length() < 10000000);
+		    pre_auth.rxbuf.length() < 20000000);
       }
       next.r = r;
       run_continuation(next);
@@ -759,7 +759,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
     if (unlikely(pre_auth.enabled) && r == 0) {
       pre_auth.rxbuf.append(*next.node);
       ceph_assert(!cct->_conf->ms_die_on_bug ||
-		  pre_auth.rxbuf.length() < 10000000);
+		  pre_auth.rxbuf.length() < 20000000);
     }
     next.r = r;
     return &next;
@@ -791,7 +791,7 @@ CtPtr ProtocolV2::write(const std::string &desc,
   if (unlikely(pre_auth.enabled)) {
     pre_auth.txbuf.append(buffer);
     ceph_assert(!cct->_conf->ms_die_on_bug ||
-		pre_auth.txbuf.length() < 10000000);
+		pre_auth.txbuf.length() < 20000000);
   }
 
   ssize_t r =
@@ -1359,16 +1359,16 @@ CtPtr ProtocolV2::handle_message() {
                          current_header.type,
                          current_header.priority,
                          current_header.version,
-                         init_le32(msg_frame.front_len()),
-                         init_le32(msg_frame.middle_len()),
-                         init_le32(msg_frame.data_len()),
+                         ceph_le32(msg_frame.front_len()),
+                         ceph_le32(msg_frame.middle_len()),
+                         ceph_le32(msg_frame.data_len()),
                          current_header.data_off,
                          peer_name,
                          current_header.compat_version,
                          current_header.reserved,
-                         init_le32(0)};
-  ceph_msg_footer footer{init_le32(0), init_le32(0),
-	                 init_le32(0), init_le64(0), current_header.flags};
+                         ceph_le32(0)};
+  ceph_msg_footer footer{ceph_le32(0), ceph_le32(0),
+	                 ceph_le32(0), ceph_le64(0), current_header.flags};
 
   Message *message = decode_message(cct, 0, header, footer,
       msg_frame.front(),

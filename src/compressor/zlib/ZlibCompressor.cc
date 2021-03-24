@@ -113,7 +113,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, boost::
   return 0;
 }
 
-#if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
+#if __x86_64__ && defined(HAVE_NASM_X64_AVX2)
 int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message)
 {
   int ret;
@@ -174,7 +174,7 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, boost::optio
   if (qat_enabled)
     return qat_accel.compress(in, out, compressor_message);
 #endif
-#if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
+#if __x86_64__ && defined(HAVE_NASM_X64_AVX2)
   if (isal_enabled)
     return isal_compress(in, out, compressor_message);
   else

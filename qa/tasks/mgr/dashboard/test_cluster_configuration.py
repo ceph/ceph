@@ -29,17 +29,17 @@ class ClusterConfigurationTest(DashboardTestCase):
 
         self._ceph_cmd(['config', 'set', 'mon', config_name, 'true'])
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    [{'section': 'mon', 'value': 'true'}],
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            [{'section': 'mon', 'value': 'true'}],
+            timeout=30,
+            period=1)
 
         self._ceph_cmd(['config', 'set', 'mon', config_name, 'false'])
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    [{'section': 'mon', 'value': 'false'}],
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            [{'section': 'mon', 'value': 'false'}],
+            timeout=30,
+            period=1)
 
         # restore value
         if orig_value:
@@ -90,10 +90,10 @@ class ClusterConfigurationTest(DashboardTestCase):
         })
         self.assertStatus(201)
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    expected_result,
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            expected_result,
+            timeout=30,
+            period=1)
 
         # reset original value
         self._clear_all_values_for_config_option(config_name)
@@ -111,19 +111,19 @@ class ClusterConfigurationTest(DashboardTestCase):
         })
         self.assertStatus(201)
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    expected_result,
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            expected_result,
+            timeout=30,
+            period=1)
 
         # delete it and check if it's deleted
         self._delete('/api/cluster_conf/{}?section={}'.format(config_name, 'mon'))
         self.assertStatus(204)
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    None,
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            None,
+            timeout=30,
+            period=1)
 
         # reset original value
         self._clear_all_values_for_config_option(config_name)
@@ -147,10 +147,10 @@ class ClusterConfigurationTest(DashboardTestCase):
 
         # check if config option value is still the original one
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    orig_value,
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            orig_value,
+            timeout=30,
+            period=1)
 
     def test_create_two_values(self):
         config_name = 'debug_ms'
@@ -168,10 +168,10 @@ class ClusterConfigurationTest(DashboardTestCase):
         })
         self.assertStatus(201)
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    expected_result,
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            expected_result,
+            timeout=30,
+            period=1)
 
         # reset original value
         self._clear_all_values_for_config_option(config_name)
@@ -193,10 +193,10 @@ class ClusterConfigurationTest(DashboardTestCase):
 
         expected_result = [{'section': 'mon', 'value': '0/3'}]
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    expected_result,
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            expected_result,
+            timeout=30,
+            period=1)
 
         # reset original value
         self._clear_all_values_for_config_option(config_name)
@@ -217,10 +217,10 @@ class ClusterConfigurationTest(DashboardTestCase):
         self.assertStatus(201)
 
         self.wait_until_equal(
-                    lambda: self._get_config_by_name(config_name),
-                    expected_result,
-                    timeout=30,
-                    period=1)
+            lambda: self._get_config_by_name(config_name),
+            expected_result,
+            timeout=30,
+            period=1)
 
         # reset original value
         self._clear_all_values_for_config_option(config_name)
@@ -246,10 +246,10 @@ class ClusterConfigurationTest(DashboardTestCase):
 
         for config_name, value in expected_result.items():
             self.wait_until_equal(
-                        lambda: self._get_config_by_name(config_name),
-                        [value],
-                        timeout=30,
-                        period=1)
+                lambda: self._get_config_by_name(config_name),
+                [value],
+                timeout=30,
+                period=1)
 
             # reset original value
             self._clear_all_values_for_config_option(config_name)
@@ -276,10 +276,10 @@ class ClusterConfigurationTest(DashboardTestCase):
         # check if config option values are still the original ones
         for config_name, value in orig_values.items():
             self.wait_until_equal(
-                        lambda: self._get_config_by_name(config_name),
-                        value,
-                        timeout=30,
-                        period=1)
+                lambda: self._get_config_by_name(config_name),
+                value,
+                timeout=30,
+                period=1)
 
     def test_bulk_set_cant_update_at_runtime_partial(self):
         config_options = {
@@ -302,10 +302,10 @@ class ClusterConfigurationTest(DashboardTestCase):
         # check if config option values are still the original ones
         for config_name, value in orig_values.items():
             self.wait_until_equal(
-                        lambda: self._get_config_by_name(config_name),
-                        value,
-                        timeout=30,
-                        period=1)
+                lambda: self._get_config_by_name(config_name),
+                value,
+                timeout=30,
+                period=1)
 
     def test_check_existence(self):
         """
@@ -368,8 +368,8 @@ class ClusterConfigurationTest(DashboardTestCase):
         self.assertIn('services', data)
         self.assertIn('type', data)
         self.assertIn('desc', data)
-        self.assertIn(data['type'], ['str', 'bool', 'float', 'int', 'size', 'uint', 'addr', 'addrvec', 'uuid',
-                                     'secs'])
+        self.assertIn(data['type'], ['str', 'bool', 'float', 'int', 'size', 'uint', 'addr',
+                                     'addrvec', 'uuid', 'secs', 'millisecs'])
 
         if 'value' in data:
             self.assertIn('source', data)

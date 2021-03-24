@@ -7,10 +7,10 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { SharedModule } from '../../../../shared/shared.module';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdFlagsModalComponent } from './osd-flags-modal.component';
 
 function getFlagsArray(component: OsdFlagsModalComponent) {

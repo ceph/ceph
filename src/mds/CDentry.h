@@ -69,7 +69,7 @@ public:
     unsigned char get_remote_d_type() const { return remote_d_type; }
     std::string get_remote_d_type_string() const;
 
-    void set_remote(inodeno_t ino, unsigned char d_type) { 
+    void set_remote(inodeno_t ino, unsigned char d_type) {
       remote_ino = ino;
       remote_d_type = d_type;
       inode = 0;
@@ -100,22 +100,27 @@ public:
 
 
   CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    name(n)
+    name(n),
+    alternate_name(std::move(alternate_name))
   {}
-  CDentry(std::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
+  CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
+          inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    name(n)
+    name(n),
+    alternate_name(std::move(alternate_name))
   {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
@@ -151,6 +156,15 @@ public:
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
   std::string_view get_name() const { return std::string_view(name); }
+  std::string_view get_alternate_name() const {
+    return std::string_view(alternate_name);
+  }
+  void set_alternate_name(mempool::mds_co::string altn) {
+    alternate_name = std::move(altn);
+  }
+  void set_alternate_name(std::string_view altn) {
+    alternate_name = mempool::mds_co::string(altn);
+  }
 
   __u32 get_hash() const { return hash; }
 
@@ -332,6 +346,12 @@ public:
   void print(std::ostream& out) override;
   void dump(ceph::Formatter *f) const;
 
+  static void encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl);
+  static void decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
+                            ceph::buffer::list::const_iterator& bl);
 
   __u32 hash;
   snapid_t first, last;
@@ -359,7 +379,7 @@ protected:
   friend class C_MDC_XlockRequest;
 
   CDir *dir = nullptr;     // containing dirfrag
-  linkage_t linkage;
+  linkage_t linkage; /* durable */
   mempool::mds_co::list<linkage_t> projected;
 
   version_t version = 0;  // dir version when last touched.
@@ -367,6 +387,7 @@ protected:
 
 private:
   mempool::mds_co::string name;
+  mempool::mds_co::string alternate_name;
 };
 
 std::ostream& operator<<(std::ostream& out, const CDentry& dn);

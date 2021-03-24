@@ -274,7 +274,7 @@ function kill_daemon() {
 function test_kill_daemon() {
     local dir=$1
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
@@ -365,7 +365,7 @@ function kill_daemons() {
 function test_kill_daemons() {
     local dir=$1
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     #
@@ -514,7 +514,7 @@ function test_run_mon() {
 
     kill_daemons $dir || return 1
 
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"1"}' || return 1
@@ -932,7 +932,7 @@ function wait_for_osd() {
 function test_wait_for_osd() {
     local dir=$1
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1  --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
@@ -1038,7 +1038,7 @@ function test_get_pg() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1  --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1075,7 +1075,7 @@ function test_get_config() {
 
     # override the default config using command line arg and check it
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     test $(get_config mon a osd_pool_default_size) = 1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 --osd_max_scrubs=3 || return 1
@@ -1110,7 +1110,7 @@ function test_set_config() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     test $(get_config mon a ms_crc_header) = true || return 1
     set_config mon a ms_crc_header false || return 1
     test $(get_config mon a ms_crc_header) = false || return 1
@@ -1142,7 +1142,7 @@ function test_get_primary() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     local osd=0
     run_mgr $dir x || return 1
     run_osd $dir $osd || return 1
@@ -1245,7 +1245,7 @@ function test_objectstore_tool() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     local osd=0
     run_mgr $dir x || return 1
     run_osd $dir $osd || return 1
@@ -1310,7 +1310,7 @@ function test_get_num_active_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1340,7 +1340,7 @@ function test_get_num_active_or_peered() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1367,7 +1367,7 @@ function test_get_num_pgs() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1397,7 +1397,7 @@ function test_get_osd_id_used_by_pgs() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1439,7 +1439,7 @@ function test_wait_osd_id_used_by_pgs() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1471,7 +1471,7 @@ function test_get_last_scrub_stamp() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1499,7 +1499,7 @@ function test_is_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1761,7 +1761,7 @@ function test_repair() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1  --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1801,7 +1801,7 @@ function test_pg_scrub() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1893,7 +1893,7 @@ function test_wait_for_scrub() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
@@ -1998,7 +1998,7 @@ function run_in_background() {
     shift
     # Execute the command and prepend the output with its pid
     # We enforce to return the exit status of the command and not the sed one.
-    ("$@" |& sed 's/^/'$$': /'; return "${PIPESTATUS[0]}") >&2 &
+    ("$@" |& sed 's/^/'$BASHPID': /'; return "${PIPESTATUS[0]}") >&2 &
     eval "$pid_variable+=\" $!\""
 }
 
@@ -2095,7 +2095,7 @@ function test_flush_pg_stats()
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1

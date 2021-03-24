@@ -6,6 +6,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -164,6 +165,16 @@ bool ImageDispatch<I>::list_snaps(
     *m_image_ctx, aio_comp, std::move(image_extents), std::move(snap_ids),
     list_snaps_flags, snapshot_delta, parent_trace);
   req.send();
+  return true;
+}
+
+template <typename I>
+bool ImageDispatch<I>::invalidate_cache(Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  std::shared_lock owner_lock{m_image_ctx->owner_lock};
+  m_image_ctx->io_object_dispatcher->invalidate_cache(on_finish);
   return true;
 }
 

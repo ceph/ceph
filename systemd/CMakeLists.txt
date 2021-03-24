@@ -13,6 +13,7 @@ foreach(service
     ceph-radosgw@
     ceph-rbd-mirror@
     ceph-immutable-object-cache@
+    cephfs-mirror@
     rbdmap)
   configure_file(
     ${service}.service.in
@@ -34,4 +35,5 @@ install(FILES
   ceph-rbd-mirror.target
   ceph-immutable-object-cache.target
   ceph-volume@.service
+  cephfs-mirror.target
   DESTINATION ${CMAKE_INSTALL_SYSTEMD_SERVICEDIR})

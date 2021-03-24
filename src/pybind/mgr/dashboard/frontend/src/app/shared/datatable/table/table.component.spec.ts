@@ -1,18 +1,21 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import _ from 'lodash';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { ComponentsModule } from '../../components/components.module';
-import { CdTableColumnFilter } from '../../models/cd-table-column-filter';
-import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../models/cd-table-selection';
-import { PipesModule } from '../../pipes/pipes.module';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -40,6 +43,7 @@ describe('TableComponent', () => {
     imports: [
       BrowserAnimationsModule,
       NgxDatatableModule,
+      NgxPipeFunctionModule,
       FormsModule,
       ComponentsModule,
       RouterTestingModule,
@@ -514,6 +518,56 @@ describe('TableComponent', () => {
     });
   });
 
+  describe('test cell transformations', () => {
+    interface ExecutingTemplateConfig {
+      valueClass?: string;
+      executingClass?: string;
+    }
+
+    const testExecutingTemplate = (templateConfig?: ExecutingTemplateConfig) => {
+      const state = 'updating';
+      const value = component.data[0].a;
+
+      component.autoReload = -1;
+      component.columns[0].cellTransformation = CellTemplate.executing;
+      if (templateConfig) {
+        component.columns[0].customTemplateConfig = templateConfig;
+      }
+      component.data[0].cdExecuting = state;
+      fixture.detectChanges();
+
+      const elements = fixture.debugElement
+        .query(By.css('datatable-body-row datatable-body-cell'))
+        .queryAll(By.css('span'));
+      expect(elements.length).toBe(2);
+
+      // Value
+      const valueElement = elements[0];
+      if (templateConfig?.valueClass) {
+        templateConfig.valueClass.split(' ').forEach((clz) => {
+          expect(valueElement.classes).toHaveProperty(clz);
+        });
+      }
+      expect(valueElement.nativeElement.textContent.trim()).toBe(`${value}`);
+      // Executing state
+      const executingElement = elements[1];
+      if (templateConfig?.executingClass) {
+        templateConfig.executingClass.split(' ').forEach((clz) => {
+          expect(executingElement.classes).toHaveProperty(clz);
+        });
+      }
+      expect(executingElement.nativeElement.textContent.trim()).toBe(`(${state})`);
+    };
+
+    it.only('should display executing template', () => {
+      testExecutingTemplate();
+    });
+
+    it.only('should display executing template with custom classes', () => {
+      testExecutingTemplate({ valueClass: 'a b', executingClass: 'c d' });
+    });
+  });
+
   describe('reload data', () => {
     beforeEach(() => {
       component.ngOnInit();
@@ -686,7 +740,7 @@ describe('TableComponent', () => {
     });
 
     it('should open the table details and close other expanded rows', () => {
-      component.toggleExpandRow(component.expanded, false);
+      component.toggleExpandRow(component.expanded, false, new Event('click'));
       expect(component.expanded).toEqual({ a: 1, b: 10, c: true });
       expect(component.table.rowDetail.collapseAllRows).toHaveBeenCalled();
       expect(component.setExpandedRow.emit).toHaveBeenCalledWith(component.expanded);
@@ -694,10 +748,25 @@ describe('TableComponent', () => {
     });
 
     it('should close the current table details expansion', () => {
-      component.toggleExpandRow(component.expanded, true);
+      component.toggleExpandRow(component.expanded, true, new Event('click'));
       expect(component.expanded).toBeUndefined();
       expect(component.setExpandedRow.emit).toHaveBeenCalledWith(undefined);
       expect(component.table.rowDetail.toggleExpandRow).toHaveBeenCalled();
+    });
+
+    it('should not select the row when the row is expanded', () => {
+      expect(component.selection.selected).toEqual([]);
+      component.toggleExpandRow(component.data[1], false, new Event('click'));
+      expect(component.selection.selected).toEqual([]);
+    });
+
+    it('should not change selection when expanding different row', () => {
+      expect(component.selection.selected).toEqual([]);
+      expect(component.expanded).toEqual(component.data[1]);
+      component.selection.selected = [component.data[2]];
+      component.toggleExpandRow(component.data[3], false, new Event('click'));
+      expect(component.selection.selected).toEqual([component.data[2]]);
+      expect(component.expanded).toEqual(component.data[3]);
     });
   });
 });

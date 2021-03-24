@@ -4,7 +4,7 @@
 #include "messages/MMDSOp.h"
 
 
-class MGatherCaps : public MMDSOp {
+class MGatherCaps final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -14,7 +14,7 @@ public:
 protected:
   MGatherCaps() :
     MMDSOp{MSG_MDS_GATHERCAPS, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MGatherCaps() override {}
+  ~MGatherCaps() final {}
 
 public:
   std::string_view get_type_name() const override { return "gather_caps"; }

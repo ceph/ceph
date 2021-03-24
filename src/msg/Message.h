@@ -67,6 +67,8 @@
 #define MSG_CONFIG           62
 #define MSG_GET_CONFIG       63
 
+#define MSG_KV_DATA          54
+
 #define MSG_MON_GET_PURGED_SNAPS 76
 #define MSG_MON_GET_PURGED_SNAPS_REPLY 77
 
@@ -149,6 +151,7 @@
 #define MSG_MDS_BEACON             100  // to monitor
 #define MSG_MDS_PEER_REQUEST       101
 #define MSG_MDS_TABLE_REQUEST      102
+#define MSG_MDS_SCRUB              135
 
                                 // 150 already in use (MSG_OSD_RECOVERY_RESERVE)
 
@@ -193,6 +196,7 @@
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 #define MSG_MDS_METRICS            0x501  // for mds metric aggregator
 #define MSG_MDS_PING               0x502  // for mds pinger
+#define MSG_MDS_SCRUB_STATS        0x503  // for mds scrub stack
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600

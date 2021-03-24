@@ -3,15 +3,10 @@
 
 #include "io_uring.h"
 
-#if defined(HAVE_LIBURING) && defined(__x86_64__)
+#if defined(HAVE_LIBURING)
 
 #include "liburing.h"
 #include <sys/epoll.h>
-
-/* Options */
-
-static bool hipri = false;      /* use IO polling */
-static bool sq_thread = false;  /* use kernel submission/poller thread */
 
 struct ioring_data {
   struct io_uring io_uring;
@@ -108,9 +103,11 @@ static void build_fixed_fds_map(struct ioring_data *d,
   }
 }
 
-ioring_queue_t::ioring_queue_t(unsigned iodepth_) :
+ioring_queue_t::ioring_queue_t(unsigned iodepth_, bool hipri_, bool sq_thread_) :
   d(make_unique<ioring_data>()),
-  iodepth(iodepth_)
+  iodepth(iodepth_),
+  hipri(hipri_),
+  sq_thread(sq_thread_)
 {
 }
 
@@ -134,7 +131,7 @@ int ioring_queue_t::init(std::vector<int> &fds)
   if (ret < 0)
     return ret;
 
-  ret = io_uring_register(d->io_uring.ring_fd, IORING_REGISTER_FILES,
+  ret = io_uring_register_files(&d->io_uring,
 			  &fds[0], fds.size());
   if (ret < 0) {
     ret = -errno;
@@ -198,7 +195,7 @@ get_cqe:
 
   if (events == 0) {
     struct epoll_event ev;
-    int ret = epoll_wait(d->epoll_fd, &ev, 1, timeout_ms);
+    int ret = TEMP_FAILURE_RETRY(epoll_wait(d->epoll_fd, &ev, 1, timeout_ms));
     if (ret < 0)
       events = -errno;
     else if (ret > 0)
@@ -211,23 +208,20 @@ get_cqe:
 
 bool ioring_queue_t::supported()
 {
-  struct io_uring_params p;
-
-  memset(&p, 0, sizeof(p));
-  int fd = io_uring_setup(16, &p);
-  if (fd < 0)
+  struct io_uring ring;
+  int ret = io_uring_queue_init(16, &ring, 0);
+  if (ret) {
     return false;
-
-  close(fd);
-
+  }
+  io_uring_queue_exit(&ring);
   return true;
 }
 
-#else // #if defined(HAVE_LIBURING) && defined(__x86_64__)
+#else // #if defined(HAVE_LIBURING)
 
 struct ioring_data {};
 
-ioring_queue_t::ioring_queue_t(unsigned iodepth_)
+ioring_queue_t::ioring_queue_t(unsigned iodepth_, bool hipri_, bool sq_thread_)
 {
   ceph_assert(0);
 }
@@ -264,4 +258,4 @@ bool ioring_queue_t::supported()
   return false;
 }
 
-#endif // #if defined(HAVE_LIBURING) && defined(__x86_64__)
+#endif // #if defined(HAVE_LIBURING)

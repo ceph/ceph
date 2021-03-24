@@ -2,16 +2,27 @@ function(build_uring)
   include(FindMake)
   find_make("MAKE_EXECUTABLE" "make_cmd")
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/src/liburing/configure")
+    set(source_dir_args
+      SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/liburing")
+  else()
+    set(source_dir_args
+      SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
+      GIT_REPOSITORY https://github.com/axboe/liburing.git
+      GIT_TAG "liburing-0.7"
+      GIT_SHALLOW TRUE
+      GIT_CONFIG advice.detachedHead=false)
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(liburing_ext
-    GIT_REPOSITORY http://git.kernel.dk/liburing
-    GIT_TAG "4e360f71131918c36774f51688e5c65dea8d43f2"
-    SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
+    ${source_dir_args}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
-    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} ${make_cmd} -C src -s
+    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} "CFLAGS=${CMAKE_C_FLAGS} -fPIC" ${make_cmd} -C src -s
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS "<SOURCE_DIR>/src/liburing.a"
-    INSTALL_COMMAND "")
+    INSTALL_COMMAND ""
+    UPDATE_COMMAND "")
   unset(make_cmd)
 
   ExternalProject_Get_Property(liburing_ext source_dir)

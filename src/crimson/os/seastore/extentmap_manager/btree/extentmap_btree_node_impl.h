@@ -13,12 +13,12 @@
 namespace crimson::os::seastore::extentmap_manager {
 
 struct extmap_node_meta_le_t {
-  depth_le_t depth = init_les32(0);
+  depth_le_t depth = init_depth_le(0);
 
   extmap_node_meta_le_t() = default;
   extmap_node_meta_le_t(const extmap_node_meta_le_t &) = default;
   explicit extmap_node_meta_le_t(const extmap_node_meta_t &val)
-    : depth(init_les32(val.depth)) {}
+    : depth(init_depth_le(val.depth)) {}
 
   operator extmap_node_meta_t() const {
     return extmap_node_meta_t{ depth };
@@ -114,6 +114,10 @@ struct ExtMapInnerNode
     return get_size() == get_capacity() / 2;
   }
 
+  unsigned get_node_size() const {
+    return get_size();
+  }
+
   /* get the iterator containing [l, r]
    */
   std::pair<internal_iterator_t, internal_iterator_t> bound(
@@ -163,13 +167,13 @@ constexpr size_t LEAF_NODE_CAPACITY =
 
 struct lext_map_val_le_t {
   laddr_le_t laddr;
-  extent_len_le_t  length = init_extent_len_le_t(0);
+  extent_len_le_t  length = init_extent_len_le(0);
 
   lext_map_val_le_t() = default;
   lext_map_val_le_t(const lext_map_val_le_t &) = default;
   explicit lext_map_val_le_t(const lext_map_val_t &val)
     : laddr(laddr_le_t(val.laddr)),
-      length(init_extent_len_le_t(val.length)) {}
+      length(init_extent_len_le(val.length)) {}
 
   operator lext_map_val_t() const {
     return lext_map_val_t{laddr, length};
@@ -245,6 +249,10 @@ struct ExtMapLeafNode
 
   bool at_min_capacity() const final {
     return get_size() == get_capacity() / 2;
+  }
+
+  unsigned get_node_size() const {
+    return get_size();
   }
 
   /* get the iterator containing [l, r]

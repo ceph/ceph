@@ -10,13 +10,29 @@
 #include "include/denc.h"
 #include "include/buffer.h"
 #include "include/cmp.h"
+#include "include/uuid.h"
 
 namespace crimson::os::seastore {
 
-using depth_t = int32_t;
-using depth_le_t = ceph_les32;
+using depth_t = uint32_t;
+using depth_le_t = ceph_le32;
+
+inline depth_le_t init_depth_le(uint32_t i) {
+  return ceph_le32(i);
+}
 
 using checksum_t = uint32_t;
+
+// Immutable metadata for seastore to set at mkfs time
+struct seastore_meta_t {
+  uuid_d seastore_id;
+
+  DENC(seastore_meta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.seastore_id, p);
+    DENC_FINISH(p);
+  }
+};
 
 // Identifies segment location on disk, see SegmentManager,
 using segment_id_t = uint32_t;
@@ -160,15 +176,15 @@ constexpr paddr_t make_fake_paddr(segment_off_t off) {
   return paddr_t{FAKE_SEG_ID, off};
 }
 
-struct paddr_le_t {
-  ceph_le32 segment = init_le32(NULL_SEG_ID);
-  ceph_les32 offset = init_les32(NULL_SEG_OFF);
+struct __attribute((packed)) paddr_le_t {
+  ceph_le32 segment = ceph_le32(NULL_SEG_ID);
+  ceph_les32 offset = ceph_les32(NULL_SEG_OFF);
 
   paddr_le_t() = default;
   paddr_le_t(ceph_le32 segment, ceph_les32 offset)
     : segment(segment), offset(offset) {}
   paddr_le_t(segment_id_t segment, segment_off_t offset)
-    : segment(init_le32(segment)), offset(init_les32(offset)) {}
+    : segment(ceph_le32(segment)), offset(ceph_les32(offset)) {}
   paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
 
   operator paddr_t() const {
@@ -213,13 +229,13 @@ constexpr laddr_t L_ADDR_NULL = std::numeric_limits<laddr_t>::max();
 constexpr laddr_t L_ADDR_ROOT = std::numeric_limits<laddr_t>::max() - 1;
 constexpr laddr_t L_ADDR_LBAT = std::numeric_limits<laddr_t>::max() - 2;
 
-struct laddr_le_t {
-  ceph_le64 laddr = init_le64(L_ADDR_NULL);
+struct __attribute((packed)) laddr_le_t {
+  ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
 
   laddr_le_t() = default;
   laddr_le_t(const laddr_le_t &) = default;
   explicit laddr_le_t(const laddr_t &addr)
-    : laddr(init_le64(addr)) {}
+    : laddr(ceph_le64(addr)) {}
 
   operator laddr_t() const {
     return laddr_t(laddr);
@@ -238,8 +254,8 @@ constexpr extent_len_t EXTENT_LEN_MAX =
   std::numeric_limits<extent_len_t>::max();
 
 using extent_len_le_t = ceph_le32;
-inline extent_len_le_t init_extent_len_le_t(extent_len_t len) {
-  return init_le32(len);
+inline extent_len_le_t init_extent_len_le(extent_len_t len) {
+  return ceph_le32(len);
 }
 
 struct laddr_list_t : std::list<std::pair<laddr_t, extent_len_t>> {
@@ -266,9 +282,12 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  ONODE_BLOCK = 3,
   EXTMAP_INNER = 4,
   EXTMAP_LEAF = 5,
+  OMAP_INNER = 6,
+  OMAP_LEAF = 7,
+  ONODE_BLOCK_STAGED = 8,
+  COLL_BLOCK = 9,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
@@ -348,8 +367,193 @@ struct record_t {
   std::vector<delta_info_t> deltas;
 };
 
+struct omap_root_t {
+  laddr_t addr = L_ADDR_NULL;
+  depth_t depth = 0;
+  bool mutated = false;
+
+  omap_root_t() = default;
+  omap_root_t(laddr_t addr, depth_t depth)
+    : addr(addr),
+      depth(depth) {}
+
+  omap_root_t(const omap_root_t &o) = default;
+  omap_root_t(omap_root_t &&o) = default;
+  omap_root_t &operator=(const omap_root_t &o) = default;
+  omap_root_t &operator=(omap_root_t &&o) = default;
+
+  bool is_null() const {
+    return addr == L_ADDR_NULL;
+  }
+
+  bool must_update() const {
+    return mutated;
+  }
+  
+  void update(laddr_t _addr, depth_t _depth) {
+    mutated = true;
+    addr = _addr;
+    depth = _depth;
+  }
+  
+  laddr_t get_location() const {
+    return addr;
+  }
+
+  depth_t get_depth() const {
+    return depth;
+  }
+};
+
+class __attribute__((packed)) omap_root_le_t {
+  laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
+  depth_le_t depth = init_depth_le(0);
+
+public: 
+  omap_root_le_t() = default;
+  
+  omap_root_le_t(laddr_t addr, depth_t depth)
+    : addr(addr), depth(init_depth_le(depth)) {}
+
+  omap_root_le_t(const omap_root_le_t &o) = default;
+  omap_root_le_t(omap_root_le_t &&o) = default;
+  omap_root_le_t &operator=(const omap_root_le_t &o) = default;
+  omap_root_le_t &operator=(omap_root_le_t &&o) = default;
+  
+  void update(const omap_root_t &nroot) {
+    addr = nroot.get_location();
+    depth = init_depth_le(nroot.get_depth());
+  }
+  
+  omap_root_t get() const {
+    return omap_root_t(addr, depth);
+  }
+};
+
+/**
+ * lba_root_t 
+ */
+class __attribute__((packed)) lba_root_t {
+  paddr_le_t root_addr;
+  depth_le_t depth = init_extent_len_le(0);
+  
+public:
+  lba_root_t() = default;
+  
+  lba_root_t(paddr_t addr, depth_t depth)
+    : root_addr(addr), depth(init_depth_le(depth)) {}
+
+  lba_root_t(const lba_root_t &o) = default;
+  lba_root_t(lba_root_t &&o) = default;
+  lba_root_t &operator=(const lba_root_t &o) = default;
+  lba_root_t &operator=(lba_root_t &&o) = default;
+  
+  paddr_t get_location() const {
+    return root_addr;
+  }
+
+  void set_location(paddr_t location) {
+    root_addr = location;
+  }
+
+  depth_t get_depth() const {
+    return depth;
+  }
+
+  void adjust_addrs_from_base(paddr_t base) {
+    paddr_t _root_addr = root_addr;
+    if (_root_addr.is_relative()) {
+      root_addr = base.add_record_relative(_root_addr);
+    }
+  }
+};
+
+class coll_root_t {
+  laddr_t addr = L_ADDR_NULL;
+  extent_len_t size = 0;
+
+  bool mutated = false;
+
+public:
+  coll_root_t() = default;
+  coll_root_t(laddr_t addr, extent_len_t size) : addr(addr), size(size) {}
+
+  coll_root_t(const coll_root_t &o) = default;
+  coll_root_t(coll_root_t &&o) = default;
+  coll_root_t &operator=(const coll_root_t &o) = default;
+  coll_root_t &operator=(coll_root_t &&o) = default;
+  
+  bool must_update() const {
+    return mutated;
+  }
+  
+  void update(laddr_t _addr, extent_len_t _s) {
+    mutated = true;
+    addr = _addr;
+    size = _s;
+  }
+  
+  laddr_t get_location() const {
+    return addr;
+  }
+
+  extent_len_t get_size() const {
+    return size;
+  }
+};
+
+/**
+ * coll_root_le_t
+ *
+ * Information for locating CollectionManager information, to be embedded
+ * in root block.
+ */
+class __attribute__((packed)) coll_root_le_t {
+  laddr_le_t addr;
+  extent_len_le_t size = init_extent_len_le(0);
+  
+public:
+  coll_root_le_t() = default;
+  
+  coll_root_le_t(laddr_t laddr, segment_off_t size)
+    : addr(laddr), size(init_extent_len_le(size)) {}
+
+
+  coll_root_le_t(const coll_root_le_t &o) = default;
+  coll_root_le_t(coll_root_le_t &&o) = default;
+  coll_root_le_t &operator=(const coll_root_le_t &o) = default;
+  coll_root_le_t &operator=(coll_root_le_t &&o) = default;
+  
+  void update(const coll_root_t &nroot) {
+    addr = nroot.get_location();
+    size = init_extent_len_le(nroot.get_size());
+  }
+  
+  coll_root_t get() const {
+    return coll_root_t(addr, size);
+  }
+};
+
+
+/**
+ * root_t
+ *
+ * Contains information required to find metadata roots.
+ * TODO: generalize this to permit more than one lba_manager implementation
+ */
+struct __attribute__((packed)) root_t {
+  lba_root_t lba_root;
+  laddr_le_t onode_root;
+  coll_root_le_t collection_root;
+
+  void adjust_addrs_from_base(paddr_t base) {
+    lba_root.adjust_addrs_from_base(base);
+  }
+};
+
 }
 
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)

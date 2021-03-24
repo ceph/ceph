@@ -2,10 +2,10 @@ import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angu
 
 import _ from 'lodash';
 
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { OsdDevicesSelectionModalComponent } from '../osd-devices-selection-modal/osd-devices-selection-modal.component';
 import { DevicesSelectionChangeEvent } from './devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from './devices-selection-clear-event.interface';

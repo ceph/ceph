@@ -127,7 +127,7 @@ Availability
 ============
 
 **ceph-osd** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at http://ceph.com/docs for more information.
+the Ceph documentation at https://docs.ceph.com for more information.
 
 See also
 ========

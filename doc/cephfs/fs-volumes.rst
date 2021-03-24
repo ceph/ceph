@@ -65,8 +65,7 @@ cluster):
 
     "4 host1,host2"
 
-For more details on placement specification refer to the `orchestrator doc
-<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_
+For more details on placement specification refer to the :ref:`orchestrator-cli-service-spec`,
 but keep in mind that specifying the placement via a YAML file is not supported.
 
 Remove a volume using::
@@ -172,6 +171,24 @@ The command resizes the subvolume quota using the size specified by 'new_size'.
 '--no_shrink' flag prevents the subvolume to shrink below the current used size of the subvolume.
 
 The subvolume can be resized to an infinite size by passing 'inf' or 'infinite' as the new_size.
+
+Authorize cephx auth IDs, the read/read-write access to fs subvolumes::
+
+    $ ceph fs subvolume authorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>] [--access_level=<access_level>]
+
+The 'access_level' takes 'r' or 'rw' as value.
+
+Deauthorize cephx auth IDs, the read/read-write access to fs subvolumes::
+
+    $ ceph fs subvolume deauthorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
+
+List cephx auth IDs authorized to access fs subvolume::
+
+    $ ceph fs subvolume authorized_list <vol_name> <sub_name> [--group_name=<group_name>]
+
+Evict fs clients based on auth ID and subvolume mounted::
+
+    $ ceph fs subvolume evict <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
 
 Fetch the absolute path of a subvolume using::
 

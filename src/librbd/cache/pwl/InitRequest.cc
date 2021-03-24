@@ -8,14 +8,20 @@
 #include "common/errno.h"
 #include "librbd/asio/ContextWQ.h"
 
-#if defined(WITH_RBD_RWL)
 #include "librbd/cache/pwl/ImageCacheState.h"
-#include "librbd/cache/pwl/ReplicatedWriteLog.h"
 #include "librbd/cache/WriteLogImageDispatch.h"
-#endif // WITH_RBD_RWL
+#include "librbd/cache/ImageWriteback.h"
+#ifdef WITH_RBD_RWL
+#include "librbd/cache/pwl/rwl/WriteLog.h"
+#endif
+
+#ifdef WITH_RBD_SSD_CACHE
+#include "librbd/cache/pwl/ssd/WriteLog.h"
+#endif
 
 #include "librbd/cache/Utils.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/plugin/Api.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
@@ -30,35 +36,40 @@ using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 
 template <typename I>
-InitRequest<I>* InitRequest<I>::create(I &image_ctx,
-                                       Context *on_finish) {
-  return new InitRequest(image_ctx, on_finish);
+InitRequest<I>* InitRequest<I>::create(
+    I &image_ctx,
+    cache::ImageWritebackInterface& image_writeback,
+    plugin::Api<I>& plugin_api,
+    Context *on_finish) {
+  return new InitRequest(image_ctx, image_writeback, plugin_api, on_finish);
 }
 
 template <typename I>
-InitRequest<I>::InitRequest(I &image_ctx, Context *on_finish)
+InitRequest<I>::InitRequest(
+    I &image_ctx,
+    cache::ImageWritebackInterface& image_writeback,
+    plugin::Api<I>& plugin_api,
+    Context *on_finish)
   : m_image_ctx(image_ctx),
+    m_image_writeback(image_writeback),
+    m_plugin_api(plugin_api),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_error_result(0) {
 }
 
 template <typename I>
 void InitRequest<I>::send() {
-#if defined(WITH_RBD_RWL)
   get_image_cache_state();
-#else
-  finish();
-#endif // WITH_RBD_RWL
 }
 
-#if defined(WITH_RBD_RWL)
 template <typename I>
 void InitRequest<I>::get_image_cache_state() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
   int r;
-  auto cache_state = ImageCacheState<I>::get_image_cache_state(&m_image_ctx, r);
+  auto cache_state = ImageCacheState<I>::create_image_cache_state(
+    &m_image_ctx, m_plugin_api, r);
 
   if (r < 0 || !cache_state) {
     save_result(r);
@@ -76,11 +87,24 @@ void InitRequest<I>::get_image_cache_state() {
 
   auto cache_type = cache_state->get_image_cache_type();
   switch(cache_type) {
+    #ifdef WITH_RBD_RWL
     case cache::IMAGE_CACHE_TYPE_RWL:
       m_image_cache =
-        new librbd::cache::pwl::ReplicatedWriteLog<I>(m_image_ctx,
-                                                      cache_state);
+        new librbd::cache::pwl::rwl::WriteLog<I>(m_image_ctx,
+                                                 cache_state,
+                                                 m_image_writeback,
+                                                 m_plugin_api);
       break;
+    #endif
+    #ifdef WITH_RBD_SSD_CACHE
+    case cache::IMAGE_CACHE_TYPE_SSD:
+      m_image_cache =
+        new librbd::cache::pwl::ssd::WriteLog<I>(m_image_ctx,
+                                                 cache_state,
+                                                 m_image_writeback,
+                                                 m_plugin_api);
+      break;
+    #endif
     default:
       delete cache_state;
       cache_state = nullptr;
@@ -98,8 +122,8 @@ void InitRequest<I>::init_image_cache() {
   ldout(cct, 10) << dendl;
 
   using klass = InitRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_init_image_cache>(
-    this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_init_image_cache>(this);
   m_image_cache->init(ctx);
 }
 
@@ -161,7 +185,8 @@ void InitRequest<I>::handle_set_feature_bit(int r) {
   }
 
   // Register RWL dispatch
-  auto image_dispatch = new cache::WriteLogImageDispatch<I>(&m_image_ctx, m_image_cache);
+  auto image_dispatch = new cache::WriteLogImageDispatch<I>(
+    &m_image_ctx, m_image_cache, m_plugin_api);
 
   m_image_ctx.io_image_dispatcher->register_dispatch(image_dispatch);
 
@@ -174,8 +199,8 @@ void InitRequest<I>::shutdown_image_cache() {
   ldout(cct, 10) << dendl;
 
   using klass = InitRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_shutdown_image_cache>(
-    this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_shutdown_image_cache>(this);
   m_image_cache->shut_down(ctx);
 }
 
@@ -193,8 +218,6 @@ void InitRequest<I>::handle_shutdown_image_cache(int r) {
 
   finish();
 }
-
-#endif // WITH_RBD_RWL
 
 template <typename I>
 void InitRequest<I>::finish() {

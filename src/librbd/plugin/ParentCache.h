@@ -19,13 +19,14 @@ public:
   ParentCache(CephContext* cct) : Interface<ImageCtxT>(cct) {
   }
 
-  void init(ImageCtxT* image_ctx, Api<ImageCtxT>& api, HookPoints* hook_points,
+  void init(ImageCtxT* image_ctx, Api<ImageCtxT>& api,
+            cache::ImageWritebackInterface& image_writeback,
+            PluginHookPoints& hook_points_list,
             Context* on_finish) override;
 
 private:
-  ImageCtxT* m_image_ctx = nullptr;
-
   void handle_init_parent_cache(int r, Context* on_finish);
+  using ceph::Plugin::cct;
 
 };
 

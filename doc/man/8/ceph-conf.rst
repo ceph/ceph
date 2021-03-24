@@ -84,6 +84,13 @@ Options
    For example, if we specify ``--name osd.0``, the following sections will be
    searched: [osd.0], [osd], [global]
 
+.. option:: --pid *pid*
+
+   override the ``$pid`` when expanding options. For example, if an option is
+   configured like ``/var/log/$name.$pid.log``, the ``$pid`` portion in its
+   value will be substituded using the PID of **ceph-conf** instead of the
+   PID of the process specfied using the ``--name`` option.
+
 .. option:: -r, --resolve-search
 
    search for the first file that exists and can be opened in the resulted
@@ -132,7 +139,7 @@ Availability
 ============
 
 **ceph-conf** is part of Ceph, a massively scalable, open-source, distributed storage system.  Please refer
-to the Ceph documentation at http://ceph.com/docs for more
+to the Ceph documentation at https://docs.ceph.com for more
 information.
 
 

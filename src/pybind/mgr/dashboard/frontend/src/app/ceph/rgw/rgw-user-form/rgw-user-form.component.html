@@ -8,25 +8,66 @@
            class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
       <div class="card-body">
-        <!-- Username -->
+        <!-- User ID -->
         <div class="form-group row">
           <label class="cd-col-form-label"
                  [ngClass]="{'required': !editing}"
-                 for="uid"
-                 i18n>Username</label>
+                 for="user_id"
+                 i18n>User ID</label>
           <div class="cd-col-form-input">
-            <input id="uid"
+            <input id="user_id"
                    class="form-control"
                    type="text"
-                   formControlName="uid"
+                   formControlName="user_id"
+                   [readonly]="editing">
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_id', frm, 'required')"
+                    i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('user_id', frm, 'pattern')"
+                  i18n>The value is not valid.</span>
+            <span class="invalid-feedback"
+                  *ngIf="!userForm.getValue('show_tenant') && userForm.showError('user_id', frm, 'notUnique')"
+                  i18n>The chosen user ID is already in use.</span>
+          </div>
+        </div>
+
+          <!-- Show Tenant -->
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="show_tenant"
+                       type="checkbox"
+                       (click)="updateFieldsWhenTenanted()"
+                       formControlName="show_tenant"
+                       [readonly]="true">
+                <label class="custom-control-label"
+                       for="show_tenant"
+                       i18n>Show Tenant</label>
+              </div>
+            </div>
+          </div>
+
+        <!-- Tenant -->
+        <div class="form-group row"
+             *ngIf="userForm.getValue('show_tenant')">
+          <label class="cd-col-form-label"
+                 for="tenant"
+                 i18n>Tenant</label>
+          <div class="cd-col-form-input">
+            <input id="tenant"
+                   class="form-control"
+                   type="text"
+                   formControlName="tenant"
                    [readonly]="editing"
                    autofocus>
             <span class="invalid-feedback"
-                  *ngIf="userForm.showError('uid', frm, 'required')"
-                  i18n>This field is required.</span>
+                  *ngIf="userForm.showError('tenant', frm, 'pattern')"
+                  i18n>The value is not valid.</span>
             <span class="invalid-feedback"
-                  *ngIf="userForm.showError('uid', frm, 'notUnique')"
-                  i18n>The chosen user ID is already in use.</span>
+                  *ngIf="userForm.showError('tenant', frm, 'notUnique')"
+                  i18n>The chosen user ID exists in this tenant.</span>
           </div>
         </div>
 
@@ -155,10 +196,8 @@
                           class="btn btn-light"
                           cdPasswordButton="access_key">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="access_key">
-                  </button>
+                  <cd-copy-2-clipboard-button source="access_key">
+                  </cd-copy-2-clipboard-button>
                 </span>
               </div>
               <span class="invalid-feedback"
@@ -184,10 +223,8 @@
                           class="btn btn-light"
                           cdPasswordButton="secret_key">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="secret_key">
-                  </button>
+                  <cd-copy-2-clipboard-button source="secret_key">
+                  </cd-copy-2-clipboard-button>
                 </span>
               </div>
               <span class="invalid-feedback"
@@ -414,10 +451,10 @@
                 <div class="col-12">
                   <button type="button"
                           class="btn btn-light float-right tc_addCapButton"
-                          [disabled]="hasAllCapabilities()"
+                          [disabled]="capabilities | pipeFunction:hasAllCapabilities"
                           i18n-ngbTooltip
                           ngbTooltip="All capabilities are already added."
-                          [disableTooltip]="!hasAllCapabilities()"
+                          [disableTooltip]="!(capabilities | pipeFunction:hasAllCapabilities)"
                           triggers="pointerenter:pointerleave"
                           (click)="showCapabilityModal()">
                     <i [ngClass]="[icons.add]"></i>
@@ -619,12 +656,10 @@
       </div>
 
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button (submitAction)="onSubmit()"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            [form]="userForm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="userForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

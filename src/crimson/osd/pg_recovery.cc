@@ -36,7 +36,7 @@ void PGRecovery::start_pglogbased_recovery()
     pg->get_osdmap_epoch());
 }
 
-crimson::osd::blocking_future<bool>
+PGRecovery::blocking_interruptible_future<bool>
 PGRecovery::start_recovery_ops(size_t max_to_start)
 {
   assert(pg->is_primary());
@@ -51,13 +51,15 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
   assert(!pg->is_backfilling());
   assert(!pg->get_peering_state().is_deleting());
 
-  std::vector<crimson::osd::blocking_future<>> started;
+  std::vector<blocking_interruptible_future<>> started;
   started.reserve(max_to_start);
   max_to_start -= start_primary_recovery_ops(max_to_start, &started);
   if (max_to_start > 0) {
     max_to_start -= start_replica_recovery_ops(max_to_start, &started);
   }
-  return crimson::osd::join_blocking_futures(std::move(started)).then(
+  return crimson::join_blocking_interruptible_futures<
+    ::crimson::osd::IOInterruptCondition>(std::move(started)).then_interruptible<
+    ::crimson::osd::IOInterruptCondition>(
     [this] {
     bool done = !pg->get_peering_state().needs_recovery();
     if (done) {
@@ -94,7 +96,7 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
 
 size_t PGRecovery::start_primary_recovery_ops(
   size_t max_to_start,
-  std::vector<crimson::osd::blocking_future<>> *out)
+  std::vector<PGRecovery::blocking_interruptible_future<>> *out)
 {
   if (!pg->is_recovering()) {
     return 0;
@@ -147,18 +149,16 @@ size_t PGRecovery::start_primary_recovery_ops(
       pg->get_recovery_backend()->is_recovering(head) ? " (recovering head)":"");
 
     // TODO: handle lost/unfound
-    if (!pg->get_recovery_backend()->is_recovering(soid)) {
-      if (pg->get_recovery_backend()->is_recovering(head)) {
-	++skipped;
-      } else {
-	auto futopt = recover_missing(soid, item.need);
-	if (futopt) {
-	  out->push_back(std::move(*futopt));
-	  ++started;
-	} else {
-	  ++skipped;
-	}
-      }
+    if (pg->get_recovery_backend()->is_recovering(soid)) {
+      auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
+      out->push_back(recovery_waiter.wait_for_recovered_blocking<
+	    ::crimson::osd::IOInterruptCondition>());
+      ++started;
+    } else if (pg->get_recovery_backend()->is_recovering(head)) {
+      ++skipped;
+    } else {
+      out->push_back(recover_missing(soid, item.need));
+      ++started;
     }
 
     if (!skipped)
@@ -172,7 +172,7 @@ size_t PGRecovery::start_primary_recovery_ops(
 
 size_t PGRecovery::start_replica_recovery_ops(
   size_t max_to_start,
-  std::vector<crimson::osd::blocking_future<>> *out)
+  std::vector<PGRecovery::blocking_interruptible_future<>> *out)
 {
   if (!pg->is_recovering()) {
     return 0;
@@ -218,6 +218,10 @@ size_t PGRecovery::start_replica_recovery_ops(
 
       if (pg->get_recovery_backend()->is_recovering(soid)) {
 	logger().debug("{}: already recovering object {}", __func__, soid);
+	auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
+	out->push_back(recovery_waiter.wait_for_recovered_blocking<
+	    ::crimson::osd::IOInterruptCondition>());
+	started++;
 	continue;
       }
 
@@ -254,7 +258,8 @@ size_t PGRecovery::start_replica_recovery_ops(
   return started;
 }
 
-std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
+PGRecovery::blocking_interruptible_future<>
+PGRecovery::recover_missing(
   const hobject_t &soid, eversion_t need)
 {
   if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
@@ -262,7 +267,8 @@ std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
 	pg->get_recovery_backend()->recover_delete(soid, need));
   } else {
     return pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
-      pg->get_recovery_backend()->recover_object(soid, need).handle_exception(
+      pg->get_recovery_backend()->recover_object(soid, need)
+      .handle_exception_interruptible(
 	[=, soid = std::move(soid)] (auto e) {
 	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
 	return seastar::make_ready_future<>();
@@ -274,11 +280,12 @@ std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
 size_t PGRecovery::prep_object_replica_deletes(
   const hobject_t& soid,
   eversion_t need,
-  std::vector<crimson::osd::blocking_future<>> *in_progress)
+  std::vector<PGRecovery::blocking_interruptible_future<>> *in_progress)
 {
   in_progress->push_back(
     pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
-      pg->get_recovery_backend()->push_delete(soid, need).then([=] {
+      pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
+	[=] {
 	object_stat_sum_t stat_diff;
 	stat_diff.num_objects_recovered = 1;
 	on_global_recover(soid, stat_diff, true);
@@ -292,11 +299,12 @@ size_t PGRecovery::prep_object_replica_deletes(
 size_t PGRecovery::prep_object_replica_pushes(
   const hobject_t& soid,
   eversion_t need,
-  std::vector<crimson::osd::blocking_future<>> *in_progress)
+  std::vector<PGRecovery::blocking_interruptible_future<>> *in_progress)
 {
   in_progress->push_back(
     pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
-      pg->get_recovery_backend()->recover_object(soid, need).handle_exception(
+      pg->get_recovery_backend()->recover_object(soid, need)
+      .handle_exception_interruptible(
 	[=, soid = std::move(soid)] (auto e) {
 	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
 	return seastar::make_ready_future<>();
@@ -320,13 +328,11 @@ void PGRecovery::on_local_recover(
       auto& obc = pg->get_recovery_backend()->get_recovering(soid).obc; //TODO: move to pg backend?
       obc->obs.exists = true;
       obc->obs.oi = recovery_info.oi;
-      // obc is loaded the excl lock
-      obc->put_lock_type(RWState::RWEXCL);
-      ceph_assert_always(obc->get_recovery_read());
     }
     if (!pg->is_unreadable_object(soid)) {
       pg->get_recovery_backend()->get_recovering(soid).set_readable();
     }
+    pg->publish_stats_to_osd();
   }
 }
 
@@ -337,6 +343,7 @@ void PGRecovery::on_global_recover (
 {
   logger().info("{} {}", __func__, soid);
   pg->get_peering_state().object_recovered(soid, stat_diff);
+  pg->publish_stats_to_osd();
   auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
   if (!is_delete)
     recovery_waiter.obc->drop_recovery_read();
@@ -419,7 +426,7 @@ void PGRecovery::request_primary_scan(
     begin,
     local_conf()->osd_backfill_scan_min,
     local_conf()->osd_backfill_scan_max
-  ).then([this] (BackfillInterval bi) {
+  ).then_interruptible([this] (BackfillInterval bi) {
     logger().debug("request_primary_scan:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
     start_backfill_recovery(BackfillState::PrimaryScanned{ std::move(bi) });
@@ -427,18 +434,17 @@ void PGRecovery::request_primary_scan(
 }
 
 void PGRecovery::enqueue_push(
-  const pg_shard_t& target,
   const hobject_t& obj,
   const eversion_t& v)
 {
-  logger().debug("{}: target={} obj={} v={}",
-                 __func__, target, obj, v);
+  logger().debug("{}: obj={} v={}",
+                 __func__, obj, v);
   pg->get_recovery_backend()->add_recovering(obj);
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
-  handle_exception([] (auto) {
+  handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
     return seastar::make_ready_future<>();
-  }).then([this, obj] {
+  }).then_interruptible([this, obj] {
     logger().debug("enqueue_push:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
     start_backfill_recovery(BackfillState::ObjectPushed(std::move(obj)));
@@ -450,7 +456,24 @@ void PGRecovery::enqueue_drop(
   const hobject_t& obj,
   const eversion_t& v)
 {
-  ceph_abort_msg("Not implemented");
+  // allocate a pair if target is seen for the first time
+  auto& req = backfill_drop_requests[target];
+  if (!req) {
+    req = ceph::make_message<MOSDPGBackfillRemove>(
+      spg_t(pg->get_pgid().pgid, target.shard), pg->get_osdmap_epoch());
+  }
+  req->ls.emplace_back(obj, v);
+}
+
+void PGRecovery::maybe_flush()
+{
+  for (auto& [target, req] : backfill_drop_requests) {
+    std::ignore = pg->get_shard_services().send_to_osd(
+      target.osd,
+      std::move(req),
+      pg->get_osdmap_epoch());
+  }
+  backfill_drop_requests.clear();
 }
 
 void PGRecovery::update_peers_last_backfill(
@@ -521,8 +544,8 @@ void PGRecovery::on_backfill_reserved()
   using BackfillState = crimson::osd::BackfillState;
   backfill_state = std::make_unique<BackfillState>(
     *this,
-    std::make_unique<BackfillState::PeeringFacade>(pg->get_peering_state()),
-    std::make_unique<BackfillState::PGFacade>(
+    std::make_unique<crimson::osd::PeeringFacade>(pg->get_peering_state()),
+    std::make_unique<crimson::osd::PGFacade>(
       *static_cast<crimson::osd::PG*>(pg)));
   // yes, it's **not** backfilling yet. The PG_STATE_BACKFILLING
   // will be set after on_backfill_reserved() returns.

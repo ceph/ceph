@@ -1,9 +1,9 @@
 import logging
 import random
-from typing import List, Optional, Callable, Iterable, TypeVar, Set
+from typing import List, Optional, Callable, TypeVar, Tuple, NamedTuple, Dict
 
 import orchestrator
-from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
 
@@ -11,44 +11,47 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T')
 
 
-class BaseScheduler(object):
-    """
-    Base Scheduler Interface
+class DaemonPlacement(NamedTuple):
+    hostname: str
+    network: str = ''   # for mons only
+    name: str = ''
+    ip: Optional[str] = None
+    port: Optional[int] = None
 
-    * requires a ServiceSpec
+    def __str__(self) -> str:
+        res = self.hostname
+        other = []
+        if self.network:
+            other.append(f'network={self.network}')
+        if self.name:
+            other.append(f'name={self.name}')
+        if self.port:
+            other.append(f'{self.ip or "*"}:{self.port}')
+        if other:
+            res += '(' + ' '.join(other) + ')'
+        return res
 
-    `place(host_pool)` needs to return a List[HostPlacementSpec, ..]
-    """
+    def renumber_port(self, n: int) -> 'DaemonPlacement':
+        return DaemonPlacement(
+            self.hostname,
+            self.network,
+            self.name,
+            self.ip,
+            (self.port + n) if self.port is not None else None
+        )
 
-    def __init__(self, spec):
-        # type: (ServiceSpec) -> None
-        self.spec = spec
-
-    def place(self, host_pool, count=None):
-        # type: (List[T], Optional[int]) -> List[T]
-        raise NotImplementedError
-
-
-class SimpleScheduler(BaseScheduler):
-    """
-    The most simple way to pick/schedule a set of hosts.
-    1) Shuffle the provided host_pool
-    2) Select from list up to :count
-    """
-
-    def __init__(self, spec):
-        super(SimpleScheduler, self).__init__(spec)
-
-    def place(self, host_pool, count=None):
-        # type: (List[T], Optional[int]) -> List[T]
-        if not host_pool:
-            return []
-        host_pool = [x for x in host_pool]
-        # gen seed off of self.spec to make shuffling deterministic
-        seed = hash(self.spec.service_name())
-        # shuffle for pseudo random selection
-        random.Random(seed).shuffle(host_pool)
-        return host_pool[:count]
+    def matches_daemon(self, dd: DaemonDescription) -> bool:
+        if self.hostname != dd.hostname:
+            return False
+        # fixme: how to match against network?
+        if self.name and self.name != dd.daemon_id:
+            return False
+        if self.port:
+            if [self.port] != dd.ports:
+                return False
+            if self.ip != dd.ip:
+                return False
+        return True
 
 
 class HostAssignment(object):
@@ -56,17 +59,20 @@ class HostAssignment(object):
     def __init__(self,
                  spec,  # type: ServiceSpec
                  hosts: List[orchestrator.HostSpec],
-                 get_daemons_func,  # type: Callable[[str],List[orchestrator.DaemonDescription]]
+                 daemons: List[orchestrator.DaemonDescription],
+                 networks: Dict[str, Dict[str, List[str]]] = {},
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
-                 scheduler=None,  # type: Optional[BaseScheduler]
+                 allow_colo: bool = False,
                  ):
-        assert spec and get_daemons_func
+        assert spec
         self.spec = spec  # type: ServiceSpec
-        self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec)
         self.hosts: List[orchestrator.HostSpec] = hosts
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
-        self.daemons = get_daemons_func(self.service_name)
+        self.daemons = daemons
+        self.networks = networks
+        self.allow_colo = allow_colo
+        self.port_start = spec.get_port_start()
 
     def hosts_by_label(self, label: str) -> List[orchestrator.HostSpec]:
         return [h for h in self.hosts if label in h.labels]
@@ -74,12 +80,21 @@ class HostAssignment(object):
     def get_hostnames(self) -> List[str]:
         return [h.hostname for h in self.hosts]
 
-    def validate(self):
+    def validate(self) -> None:
         self.spec.validate()
 
         if self.spec.placement.count == 0:
             raise OrchestratorValidationError(
                 f'<count> can not be 0 for {self.spec.one_line_str()}')
+
+        if (
+                self.spec.placement.count_per_host is not None
+                and self.spec.placement.count_per_host > 1
+                and not self.allow_colo
+        ):
+            raise OrchestratorValidationError(
+                f'Cannot place more than one {self.spec.service_type} per host'
+            )
 
         if self.spec.placement.hosts:
             explicit_hostnames = {h.hostname for h in self.spec.placement.hosts}
@@ -102,7 +117,7 @@ class HostAssignment(object):
                     f'hosts for label {self.spec.placement.label}')
 
     def place(self):
-        # type: () -> List[HostPlacementSpec]
+        # type: () -> Tuple[List[DaemonPlacement], List[DaemonPlacement], List[orchestrator.DaemonDescription]]
         """
         Generate a list of HostPlacementSpec taking into account:
 
@@ -116,145 +131,138 @@ class HostAssignment(object):
 
         count = self.spec.placement.count
 
-        # get candidates based on [hosts, label, host_pattern]
-        candidates = self.get_candidates()
+        # get candidate hosts based on [hosts, label, host_pattern]
+        candidates = self.get_candidates()  # type: List[DaemonPlacement]
+
+        def expand_candidates(ls: List[DaemonPlacement], num: int) -> List[DaemonPlacement]:
+            r = []
+            for offset in range(num):
+                r.extend([dp.renumber_port(offset) for dp in ls])
+            return r
+
+        # consider enough slots to fulfill target count-per-host or count
+        if count is None:
+            if self.spec.placement.count_per_host:
+                per_host = self.spec.placement.count_per_host
+            else:
+                per_host = 1
+            candidates = expand_candidates(candidates, per_host)
+        elif self.allow_colo and candidates:
+            per_host = 1 + ((count - 1) // len(candidates))
+            candidates = expand_candidates(candidates, per_host)
+
+        # consider active daemons first
+        daemons = [
+            d for d in self.daemons if d.is_active
+        ] + [
+            d for d in self.daemons if not d.is_active
+        ]
+
+        # sort candidates into existing/used slots that already have a
+        # daemon, and others (the rest)
+        existing_active: List[orchestrator.DaemonDescription] = []
+        existing_standby: List[orchestrator.DaemonDescription] = []
+        existing_slots: List[DaemonPlacement] = []
+        to_remove: List[orchestrator.DaemonDescription] = []
+        others = candidates.copy()
+        for dd in daemons:
+            found = False
+            for p in others:
+                if p.matches_daemon(dd):
+                    others.remove(p)
+                    if dd.is_active:
+                        existing_active.append(dd)
+                    else:
+                        existing_standby.append(dd)
+                    existing_slots.append(p)
+                    found = True
+                    break
+            if not found:
+                to_remove.append(dd)
+
+        existing = existing_active + existing_standby
 
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
-            return candidates
+            return candidates, others, to_remove
 
-        # prefer hosts that already have services.
-        # this avoids re-assigning to _new_ hosts
-        # and constant re-distribution of hosts when new nodes are
-        # added to the cluster
-        hosts_with_daemons = self.hosts_with_daemons(candidates)
+        # The number of new slots that need to be selected in order to fulfill count
+        need = count - len(existing)
 
-        # The amount of hosts that need to be selected in order to fulfill count.
-        need = count - len(hosts_with_daemons)
+        # we don't need any additional placements
+        if need <= 0:
+            to_remove.extend(existing[count:])
+            del existing_slots[count:]
+            return existing_slots, [], to_remove
 
-        # hostspecs that are do not have daemons on them but are still candidates.
-        others = difference_hostspecs(candidates, hosts_with_daemons)
+        # ask the scheduler to select additional slots
+        to_add = others[:need]
+        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
+            existing, to_add))
+        return existing_slots + to_add, to_add, to_remove
 
-        # we don't need any additional hosts
-        if need < 0:
-            return self.prefer_hosts_with_active_daemons(hosts_with_daemons, count)
-        else:
-            # exclusive to 'mon' daemons. Filter out hosts that don't have a public network assigned
-            if self.filter_new_host:
-                old = others
-                others = [h for h in others if self.filter_new_host(h.hostname)]
-                logger.debug('filtered %s down to %s' % (old, others))
+    def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
+        for subnet in subnets:
+            ips = self.networks.get(hostname, {}).get(subnet, [])
+            if ips:
+                return sorted(ips)[0]
+        return None
 
-            # ask the scheduler to return a set of hosts with a up to the value of <count>
-            others = self.scheduler.place(others, need)
-            logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
-                hosts_with_daemons, others))
-            # if a host already has the anticipated daemon, merge it with the candidates
-            # to get a list of HostPlacementSpec that can be deployed on.
-            return list(merge_hostspecs(hosts_with_daemons, others))
-
-    def get_hosts_with_active_daemon(self, hosts: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
-        active_hosts: List['HostPlacementSpec'] = []
-        for daemon in self.daemons:
-            if daemon.is_active:
-                for h in hosts:
-                    if h.hostname == daemon.hostname:
-                        active_hosts.append(h)
-        # remove duplicates before returning
-        return list(dict.fromkeys(active_hosts))
-
-    def prefer_hosts_with_active_daemons(self, hosts: List[HostPlacementSpec], count) -> List[HostPlacementSpec]:
-        # try to prefer host with active daemon if possible
-        active_hosts = self.get_hosts_with_active_daemon(hosts)
-        if len(active_hosts) != 0 and count > 0:
-            for host in active_hosts:
-                hosts.remove(host)
-            if len(active_hosts) >= count:
-                return self.scheduler.place(active_hosts, count)
-            else:
-                return list(merge_hostspecs(self.scheduler.place(active_hosts, count),
-                                            self.scheduler.place(hosts, count - len(active_hosts))))
-        # ask the scheduler to return a set of hosts with a up to the value of <count>
-        return self.scheduler.place(hosts, count)
-
-    def add_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> Set[HostPlacementSpec]:
-        hosts_with_daemons = {d.hostname for d in self.daemons}
-        _add_daemon_hosts = set()
-        for host in host_pool:
-            if host.hostname not in hosts_with_daemons:
-                _add_daemon_hosts.add(host)
-        return _add_daemon_hosts
-
-    def remove_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> Set[DaemonDescription]:
-        target_hosts = [h.hostname for h in host_pool]
-        _remove_daemon_hosts = set()
-        for d in self.daemons:
-            if d.hostname not in target_hosts:
-                _remove_daemon_hosts.add(d)
-        return _remove_daemon_hosts
-
-    def get_candidates(self) -> List[HostPlacementSpec]:
+    def get_candidates(self) -> List[DaemonPlacement]:
         if self.spec.placement.hosts:
-            return self.spec.placement.hosts
+            ls = [
+                DaemonPlacement(hostname=h.hostname, network=h.network, name=h.name,
+                                port=self.port_start)
+                for h in self.spec.placement.hosts
+            ]
         elif self.spec.placement.label:
-            return [
-                HostPlacementSpec(x.hostname, '', '')
+            ls = [
+                DaemonPlacement(hostname=x.hostname, port=self.port_start)
                 for x in self.hosts_by_label(self.spec.placement.label)
             ]
         elif self.spec.placement.host_pattern:
-            return [
-                HostPlacementSpec(x, '', '')
+            ls = [
+                DaemonPlacement(hostname=x, port=self.port_start)
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
             ]
-        # If none of the above and also no <count>
-        if self.spec.placement.count is None:
+        elif (
+                self.spec.placement.count is not None
+                or self.spec.placement.count_per_host is not None
+        ):
+            ls = [
+                DaemonPlacement(hostname=x.hostname, port=self.port_start)
+                for x in self.hosts
+            ]
+        else:
             raise OrchestratorValidationError(
                 "placement spec is empty: no hosts, no label, no pattern, no count")
-        # backward compatibility: consider an empty placements to be the same pattern = *
-        return [
-            HostPlacementSpec(x.hostname, '', '')
-            for x in self.hosts
-        ]
 
-    def hosts_with_daemons(self, candidates: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
-        """
-        Prefer hosts with daemons. Otherwise we'll constantly schedule daemons
-        on different hosts all the time. This is about keeping daemons where
-        they are. This isn't about co-locating.
-        """
-        hosts_with_daemons = {d.hostname for d in self.daemons}
+        # allocate an IP?
+        if self.spec.networks:
+            orig = ls.copy()
+            ls = []
+            for p in orig:
+                ip = self.find_ip_on_host(p.hostname, self.spec.networks)
+                if ip:
+                    ls.append(DaemonPlacement(hostname=p.hostname, network=p.network,
+                                              name=p.name, port=p.port, ip=ip))
+                else:
+                    logger.debug(
+                        f'Skipping {p.hostname} with no IP in network(s) {self.spec.networks}'
+                    )
 
-        # calc existing daemons (that aren't already in chosen)
-        existing = [hs for hs in candidates if hs.hostname in hosts_with_daemons]
+        if self.filter_new_host:
+            old = ls.copy()
+            ls = [h for h in ls if self.filter_new_host(h.hostname)]
+            for h in list(set(old) - set(ls)):
+                logger.info(
+                    f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
+                logger.debug('Filtered %s down to %s' % (old, ls))
 
-        logger.debug('Hosts with existing daemons: {}'.format(existing))
-        return existing
+        # shuffle for pseudo random selection
+        # gen seed off of self.spec to make shuffling deterministic
+        seed = hash(self.spec.service_name())
+        random.Random(seed).shuffle(ls)
 
-
-def merge_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec]) -> Iterable[HostPlacementSpec]:
-    """
-    Merge two lists of HostPlacementSpec by hostname. always returns `l` first.
-
-    >>> list(merge_hostspecs([HostPlacementSpec(hostname='h', name='x', network='')],
-    ...                      [HostPlacementSpec(hostname='h', name='y', network='')]))
-    [HostPlacementSpec(hostname='h', network='', name='x')]
-
-    """
-    l_names = {h.hostname for h in l}
-    yield from l
-    yield from (h for h in r if h.hostname not in l_names)
-
-
-def difference_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
-    """
-    returns l "minus" r by hostname.
-
-    >>> list(difference_hostspecs([HostPlacementSpec(hostname='h1', name='x', network=''),
-    ...                           HostPlacementSpec(hostname='h2', name='y', network='')],
-    ...                           [HostPlacementSpec(hostname='h2', name='', network='')]))
-    [HostPlacementSpec(hostname='h1', network='', name='x')]
-
-    """
-    r_names = {h.hostname for h in r}
-    return [h for h in l if h.hostname not in r_names]
+        return ls

@@ -56,6 +56,10 @@ class SubvolumeOpType(Enum):
     CLONE_STATUS    = 'clone-status'
     CLONE_CANCEL    = 'clone-cancel'
     CLONE_INTERNAL  = 'clone_internal'
+    ALLOW_ACCESS    = 'allow-access'
+    DENY_ACCESS     = 'deny-access'
+    AUTH_LIST       = 'auth-list'
+    EVICT           = 'evict'
 
 class SubvolumeTemplate(object):
     VERSION = None # type: int

@@ -1,9 +1,9 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { AppModule } from '../../../app.module';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
+import { AppModule } from '~/app/app.module';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
 
 describe('TablePerformanceCounterComponent', () => {

@@ -5,6 +5,7 @@
 #define CEPH_TEST_LIBRBD_MOCK_IO_OBJECT_DISPATCH_H
 
 #include "gmock/gmock.h"
+#include "common/ceph_mutex.h"
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "librbd/io/Types.h"
 
@@ -15,10 +16,9 @@ namespace io {
 
 struct MockObjectDispatch : public ObjectDispatchInterface {
 public:
-  RWLock lock;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("MockObjectDispatch::lock");
 
-  MockObjectDispatch() : lock("MockObjectDispatch::lock", true, false) {
-  }
+  MockObjectDispatch() {}
 
   MOCK_CONST_METHOD0(get_dispatch_layer, ObjectDispatchLayer());
 
@@ -128,7 +128,7 @@ public:
 
   MOCK_METHOD5(extent_overwritten, void(uint64_t, uint64_t, uint64_t, uint64_t,
                                         uint64_t));
-  MOCK_METHOD2(prepare_copyup, void(uint64_t, SnapshotSparseBufferlist*));
+  MOCK_METHOD2(prepare_copyup, int(uint64_t, SnapshotSparseBufferlist*));
 };
 
 } // namespace io

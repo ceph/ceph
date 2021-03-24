@@ -17,17 +17,17 @@ namespace crypto {
 template <typename ImageCtxT = librbd::ImageCtx>
 class CryptoObjectDispatch : public io::ObjectDispatchInterface {
 public:
-  static CryptoObjectDispatch* create(ImageCtxT* image_ctx) {
-    return new CryptoObjectDispatch(image_ctx, nullptr);
+  static CryptoObjectDispatch* create(
+          ImageCtxT* image_ctx, ceph::ref_t<CryptoInterface> crypto) {
+    return new CryptoObjectDispatch(image_ctx, crypto);
   }
 
-  CryptoObjectDispatch(ImageCtxT* image_ctx, CryptoInterface *crypto);
+  CryptoObjectDispatch(ImageCtxT* image_ctx,
+                       ceph::ref_t<CryptoInterface> crypto);
 
   io::ObjectDispatchLayer get_dispatch_layer() const override {
     return io::OBJECT_DISPATCH_LAYER_CRYPTO;
   }
-
-  void init(Context* on_finish);
 
   void shut_down(Context* on_finish) override;
 
@@ -97,15 +97,13 @@ public:
           uint64_t journal_tid, uint64_t new_journal_tid) override {
   }
 
-  void prepare_copyup(
+  int prepare_copyup(
       uint64_t object_no,
-      io::SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override {
-  }
+      io::SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override;
 
 private:
-
   ImageCtxT* m_image_ctx;
-  CryptoInterface *m_crypto;
+  ceph::ref_t<CryptoInterface> m_crypto;
 
 };
 

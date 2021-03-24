@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MClientSnap : public SafeMessage {
+class MClientSnap final : public SafeMessage {
 public:
   ceph_mds_snap_head head;
   ceph::buffer::list bl;
@@ -32,7 +32,7 @@ protected:
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
-  ~MClientSnap() override {}
+  ~MClientSnap() final {}
 
 public:  
   std::string_view get_type_name() const override { return "client_snap"; }

@@ -204,7 +204,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     ::shutdown(_fd, SHUT_RDWR);
   }
   void close() override {
-    ::close(_fd);
+    compat_closesocket(_fd);
   }
   int fd() const override {
     return _fd;
@@ -332,7 +332,7 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   return 0;
 }
 
-PosixNetworkStack::PosixNetworkStack(CephContext *c, const std::string &t)
-    : NetworkStack(c, t)
+PosixNetworkStack::PosixNetworkStack(CephContext *c)
+    : NetworkStack(c)
 {
 }

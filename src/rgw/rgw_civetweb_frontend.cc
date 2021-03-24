@@ -64,12 +64,12 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
                                 &cw_client))));
   RGWRestfulIO client_io(dout_context, &real_client_io);
 
-  RGWRequest req(env.store->getRados()->get_new_req_id());
+  RGWRequest req(env.store->get_new_req_id());
   int http_ret = 0;
   //assert (scheduler != nullptr);
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
                             *env.auth_registry, &client_io, env.olog,
-                            null_yield, scheduler.get() ,&http_ret);
+                            null_yield, scheduler.get(), nullptr, &http_ret);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;

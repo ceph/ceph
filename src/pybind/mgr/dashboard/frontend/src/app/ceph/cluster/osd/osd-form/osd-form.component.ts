@@ -4,16 +4,17 @@ import { Router } from '@angular/router';
 
 import _ from 'lodash';
 
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';
-import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdForm } from '../../../../shared/forms/cd-form';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { FormButtonPanelComponent } from '~/app/shared/components/form-button-panel/form-button-panel.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
@@ -36,8 +37,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
   @ViewChild('dbDeviceSelectionGroups')
   dbDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
-  @ViewChild('previewButton')
-  previewButton: SubmitButtonComponent;
+  @ViewChild('previewButtonPanel')
+  previewButtonPanel: FormButtonPanelComponent;
 
   icons = Icons;
 
@@ -65,6 +66,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private orchService: OrchestratorService,
+    private hostService: HostService,
     private router: Router,
     private modalService: ModalService
   ) {
@@ -120,7 +122,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
   }
 
   getDataDevices() {
-    this.orchService.inventoryDeviceList().subscribe(
+    this.hostService.inventoryDeviceList().subscribe(
       (devices: InventoryDevice[]) => {
         this.allDevices = _.filter(devices, 'available');
         this.availDevices = [...this.allDevices];
@@ -209,6 +211,6 @@ export class OsdFormComponent extends CdForm implements OnInit {
     modalRef.componentInstance.submitAction.subscribe(() => {
       this.router.navigate(['/osd']);
     });
-    this.previewButton.loading = false;
+    this.previewButtonPanel.submitButton.loading = false;
   }
 }

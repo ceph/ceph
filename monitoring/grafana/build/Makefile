@@ -1,5 +1,5 @@
 
-GRAFANA_VERSION := 6.6.2-1
+GRAFANA_VERSION := 6.7.4-1
 PIECHART_VERSION := "1.4.0"
 STATUS_PANEL_VERSION := "1.0.9"
 DASHBOARD_DIR := "monitoring/grafana/dashboards"

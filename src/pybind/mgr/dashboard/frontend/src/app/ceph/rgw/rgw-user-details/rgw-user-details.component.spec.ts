@@ -4,8 +4,8 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, TabHelper } from '../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserDetailsComponent } from './rgw-user-details.component';
 
@@ -62,13 +62,13 @@ describe('RgwUserDetailsComponent', () => {
     const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
       '.table.table-striped.table-bordered tr td'
     );
-    expect(detailsTab[6].textContent).toEqual('System');
-    expect(detailsTab[7].textContent).toEqual('Yes');
+    expect(detailsTab[10].textContent).toEqual('System');
+    expect(detailsTab[11].textContent).toEqual('Yes');
 
     component.selection.system = 'false';
     component.ngOnChanges();
     fixture.detectChanges();
 
-    expect(detailsTab[7].textContent).toEqual('No');
+    expect(detailsTab[11].textContent).toEqual('No');
   });
 });

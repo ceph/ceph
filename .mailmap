@@ -8,6 +8,7 @@
 #
 #
 Aaron Bassett <abassett@gmail.com>
+Aashish Sharma <aasharma@redhat.com>
 Abhishek Lekshmanan <abhishek@suse.com> <abhishek.lekshmanan@gmail.com>
 Abhishek Lekshmanan <abhishek@suse.com> <alekshmanan@suse.com>
 Adam C. Emerson <aemerson@redhat.com>
@@ -105,6 +106,7 @@ Clement Lebrun <clement.lebrun.31@gmail.com> <clem_noob@hotmail.fr>
 Colin P. McCabe <colinm@hq.newdream.net> <cmccabe@alumni.cmu.edu>
 Colin P. McCabe <colinm@hq.newdream.net> <cmccabe@fatty.ops.newdream.net>
 Colin Walters <walters@redhat.com> <walters@verbum.org>
+Courtney Caldwell <ccaldwel@redhat.com>
 Dai Zhi Wei <daizhiwei3@huawei.com>
 Dan Chai <tengweicai@gmail.com> <tengweicai@gmail.com>
 Dan Guo <guodan1@lenovo.com>
@@ -289,6 +291,7 @@ John Wilkins <jwilkins@redhat.com> <jowilk@redhat.com>
 John Wilkins <jwilkins@redhat.com> <jowilki@redhat.com>
 John Wilkins <jwilkins@redhat.com> <jowilkin@redhat.com>
 Johnu George <johnugeo@cisco.com> <johnugeorge109@gmail.com>
+Jonas Jelten <jj@sft.lol> <jj@stusta.net>
 Jonas Keidel <jonas@jonas-keidel.de>
 Jordan Dorne <jordan.dorne@gmail.com>
 Josh Durgin <jdurgin@redhat.com>
@@ -437,6 +440,7 @@ Nick Fisk <nick@fisk.me.uk>
 Nicolas Yong <nicolas.yong93@gmail.com>
 Ning Yao <yaoning@ruijie.com.cn> <zay11022@gmail.com>
 Ning Yao <yaoning@unitedstack.com>
+Nizamudeen A <nia@redhat.com>
 Noah Watkins <nwatkins@redhat.com> <jayhawk@cs.ucsc.edu>
 Noah Watkins <nwatkins@redhat.com> <noahwatkins@gmail.com>
 Or Friedmann <ofriedma@redhat.com>
@@ -498,19 +502,19 @@ Ruifeng Yang <yangruifeng.09209@h3c.com>
 Ruifeng Yang <yangruifeng.09209@h3c.com> <149233652@qq.com>
 Rust Shen <rustinpeace@163.com>
 Rémi Buisson <remi.buisson@cdiscount.com>
-Sage Weil <sage@inktank.com>
-Sage Weil <sage@inktank.com> <sage.weil@dreamhost.com>
-Sage Weil <sage@inktank.com> <sage.weil@inktank.com>
-Sage Weil <sage@inktank.com> <sage@29311d96-e01e-0410-9327-a35deaab8ce9>
-Sage Weil <sage@inktank.com> <sage@ceph0.dreamhost.com>
-Sage Weil <sage@inktank.com> <sage@foil.westwood.newdream.net>
-Sage Weil <sage@inktank.com> <sage@inkank.com>
-Sage Weil <sage@inktank.com> <sage@Inktank.com>
-Sage Weil <sage@inktank.com> <sage@newdream.net>
-Sage Weil <sage@inktank.com> <sage@skinny.ops.newdream.net>
-Sage Weil <sage@inktank.com> <sage@vapre.localdomain>
-Sage Weil <sage@inktank.com> <sageweil@29311d96-e01e-0410-9327-a35deaab8ce9>
 Sage Weil <sweil@redhat.com>
+Sage Weil <sweil@redhat.com> <sage@newdream.net>
+Sage Weil <sweil@redhat.com> <sage@inktank.com>
+Sage Weil <sweil@redhat.com> <sage.weil@dreamhost.com>
+Sage Weil <sweil@redhat.com> <sage.weil@inktank.com>
+Sage Weil <sweil@redhat.com> <sage@29311d96-e01e-0410-9327-a35deaab8ce9>
+Sage Weil <sweil@redhat.com> <sage@ceph0.dreamhost.com>
+Sage Weil <sweil@redhat.com> <sage@foil.westwood.newdream.net>
+Sage Weil <sweil@redhat.com> <sage@inkank.com>
+Sage Weil <sweil@redhat.com> <sage@Inktank.com>
+Sage Weil <sweil@redhat.com> <sage@skinny.ops.newdream.net>
+Sage Weil <sweil@redhat.com> <sage@vapre.localdomain>
+Sage Weil <sweil@redhat.com> <sageweil@29311d96-e01e-0410-9327-a35deaab8ce9>
 Sage Weil <sweil@redhat.com> <sage@redhat.com.>
 Sage Weil <sweil@redhat.com> <sage@redhat.com>
 Sage Weil <sweil@redhat.com> <sage@telemetry.ceph.com>
@@ -700,9 +704,9 @@ Yan Jun <yan.jun8@zte.com.cn>
 Yan Lei <yongyou.yl@alibaba-inc.com>
 Yan Lei <yongyou.yl@alibaba-inc.com> <yanlei_cv@aliyun.com>
 Yan Lei <yongyou.yl@alibaba-inc.com> <youngyou.yl@alibaba-inc.com>
-Yan, Zheng <zheng.z.yan@intel.com>
-Yan, Zheng <zheng.z.yan@intel.com> <ukernel@gmail.com>
-Yan, Zheng <zyan@redhat.com>
+Yan, Zheng <ukernel@gmail.com>
+Yan, Zheng <ukernel@gmail.com> <zyan@redhat.com>
+Yan, Zheng <ukernel@gmail.com> <zheng.z.yan@intel.com>
 Yanchun Bai <yanchun.bai@istuary.com>
 Yang DeLiu <yangdeliu@szsandstone.com>
 Yang DeLiu <yangdeliu@szsandstone.com> <455619311@qq.com>

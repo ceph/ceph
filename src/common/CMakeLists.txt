@@ -8,7 +8,7 @@ add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
 
 if(WIN32)
-  add_library(dlfcn_win32 STATIC dlfcn_win32.cc)
+  add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
 endif()
 
 set(common_srcs
@@ -74,10 +74,8 @@ set(common_srcs
   hostname.cc
   ipaddr.cc
   iso_8601.cc
-  lockdep.cc
   mempool.cc
   mime.c
-  mutex_debug.cc
   numa.cc
   openssl_opts_handler.cc
   options.cc
@@ -90,7 +88,6 @@ set(common_srcs
   reverse.c
   run_cmd.cc
   scrub_types.cc
-  shared_mutex_debug.cc
   signal.cc
   snap_types.cc
   str_list.cc
@@ -103,12 +100,42 @@ set(common_srcs
   util.cc
   version.cc)
 
-if(WIN32)
+if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND common_srcs
-    blkdev_win32.cc
-    dns_resolve_win32.cc
-    SubProcess_win32.cc
-    ifaddrs_win32.c)
+    lockdep.cc
+    mutex_debug.cc
+    shared_mutex_debug.cc)
+endif()
+
+if(WIN32)
+  if(MINGW)
+    set(CMAKE_MC_COMPILER x86_64-w64-mingw32-windmc)
+    set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+  endif()
+
+  add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/src/common/event_logging.h
+    COMMAND ${CMAKE_MC_COMPILER} -b -e h -h ${CMAKE_BINARY_DIR}/src/common/
+      -r ${CMAKE_BINARY_DIR}/src/common ${CMAKE_SOURCE_DIR}/src/common/win32/event_logging.mc
+    COMMAND ${CMAKE_RC_COMPILER} ${CMAKE_BINARY_DIR}/src/common/event_logging.rc
+      -o ${CMAKE_BINARY_DIR}/src/common/event_logging.o
+    COMMAND ${CMAKE_CXX_COMPILER} -o ${CMAKE_BINARY_DIR}/bin/event_logging.dll -shared
+      ${CMAKE_BINARY_DIR}/src/common/event_logging.o
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/common/win32/event_logging.mc)
+
+  set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/win32/syslog.cc
+    APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/common/event_logging.h)
+
+  include_directories(SYSTEM "${CMAKE_BINARY_DIR}/src/common/")
+
+  list(APPEND common_srcs
+    win32/blkdev.cc
+    win32/dns_resolve.cc
+    win32/ifaddrs.cc
+    win32/registry.cc
+    win32/service.cc
+    win32/SubProcess.cc
+    win32/syslog.cc)
 else()
   list(APPEND common_srcs
     blkdev.cc
@@ -135,6 +162,8 @@ elseif(SUN)
   list(APPEND common_srcs solaris_errno.cc)
 elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
+elseif(WIN32)
+  list(APPEND common_srcs win32/errno.cc)
 endif()
 
 if(WITH_EVENTTRACE)
@@ -166,15 +195,15 @@ set(crc32_srcs
   crc32c.cc
   crc32c_intel_baseline.c
   sctp_crc32.c)
-
 if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
-  if(HAVE_GOOD_YASM_ELF64)
+  if(HAVE_NASM_X64)
+    set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
-      crc32c_intel_fast_asm.s
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_00.asm
       crc32c_intel_fast_zero_asm.s)
-  endif(HAVE_GOOD_YASM_ELF64)
+  endif(HAVE_NASM_X64)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
     crc32c_ppc.c)
@@ -188,7 +217,7 @@ elseif(HAVE_ARMV8_CRC)
     crc32c_aarch64.c)
 endif(HAVE_INTEL)
 
-add_library(crc32 ${crc32_srcs})
+add_library(crc32 STATIC ${crc32_srcs})
 if(HAVE_ARMV8_CRC)
   set_target_properties(crc32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")

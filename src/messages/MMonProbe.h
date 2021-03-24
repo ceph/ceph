@@ -21,7 +21,7 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonProbe : public Message {
+class MMonProbe final : public Message {
 public:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 5;
@@ -71,7 +71,7 @@ public:
       required_features(0),
       mon_release{mr} {}
 private:
-  ~MMonProbe() override {}
+  ~MMonProbe() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_probe"; }

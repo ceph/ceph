@@ -7,6 +7,7 @@ usr/bin/ceph-clsinfo
 usr/bin/ceph-erasure-code-tool
 usr/bin/ceph-objectstore-tool
 usr/bin/ceph-osdomap-tool
+<pkg.ceph.crimson> usr/bin/crimson-store-nbd
 usr/bin/${CEPH_OSD_BASENAME} => /usr/bin/ceph-osd
 usr/bin/ceph_objectstore_bench
 usr/libexec/ceph/ceph-osd-prestart.sh

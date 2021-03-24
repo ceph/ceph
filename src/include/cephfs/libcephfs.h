@@ -98,6 +98,19 @@ typedef struct Inode Inode;
 struct ceph_mount_info;
 struct ceph_dir_result;
 
+// user supplied key,value pair to be associated with a snapshot.
+// callers can supply an array of this struct via ceph_mksnap().
+struct snap_metadata {
+  const char *key;
+  const char *value;
+};
+
+struct snap_info {
+  uint64_t id;
+  size_t nr_snap_metadata;
+  struct snap_metadata *snap_metadata;
+};
+
 /* setattr mask bits */
 #ifndef CEPH_SETATTR_MODE
 # define CEPH_SETATTR_MODE	1
@@ -639,6 +652,32 @@ void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, 
 int ceph_mkdir(struct ceph_mount_info *cmount, const char *path, mode_t mode);
 
 /**
+ * Create a snapshot
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param path the path of the directory to create snapshot.  This must be either an
+ *        absolute path or a relative path off of the current working directory.
+ * @param name snapshot name
+ * @param mode the permissions the directory should have once created.
+ * @param snap_metadata array of snap metadata structs
+ * @param nr_snap_metadata number of snap metadata struct entries
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_mksnap(struct ceph_mount_info *cmount, const char *path, const char *name,
+                mode_t mode, struct snap_metadata *snap_metadata, size_t nr_snap_metadata);
+
+/**
+ * Remove a snapshot
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param path the path of the directory to create snapshot.  This must be either an
+ *        absolute path or a relative path off of the current working directory.
+ * @param name snapshot name
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, const char *name);
+
+/**
  * Create multiple directories at once.
  *
  * @param cmount the ceph mount handle to use for making the directories.
@@ -706,6 +745,16 @@ int ceph_symlink(struct ceph_mount_info *cmount, const char *existing, const cha
  *
  * @{
  */
+
+
+/**
+ * Checks if deleting a file, link or directory is allowed.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param path the path of the file, link or directory.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_may_delete(struct ceph_mount_info *cmount, const char *path);
 
 /**
  * Removes a file, link, or symbolic link.  If the file/link has multiple links to it, the
@@ -825,6 +874,17 @@ int ceph_fsetattrx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *st
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
+
+/**
+ * Change the mode bits (permissions) of a file/directory. If the path is a
+ * symbolic link, it's not de-referenced.
+ *
+ * @param cmount the ceph mount handle to use for performing the chmod.
+ * @param path the path of file/directory to change the mode bits on.
+ * @param mode the new permissions to set.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_lchmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
 
 /**
  * Change the mode bits (permissions) of an open file.
@@ -1627,6 +1687,10 @@ int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
 /* Low Level */
 struct Inode *ceph_ll_get_inode(struct ceph_mount_info *cmount,
 				vinodeno_t vino);
+
+int ceph_ll_lookup_vino(struct ceph_mount_info *cmount, vinodeno_t vino,
+			Inode **inode);
+
 int ceph_ll_lookup_inode(
     struct ceph_mount_info *cmount,
     struct inodeno_t ino,
@@ -1899,6 +1963,24 @@ void ceph_finish_reclaim(struct ceph_mount_info *cmount);
  */
 void ceph_ll_register_callbacks(struct ceph_mount_info *cmount,
 				struct ceph_client_callback_args *args);
+
+/**
+ * Get snapshot info
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param path the path of the snapshot.  This must be either an
+ *        absolute path or a relative path off of the current working directory.
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_get_snap_info(struct ceph_mount_info *cmount,
+                       const char *path, struct snap_info *snap_info);
+
+/**
+ * Free snapshot info buffers
+ *
+ * @param snap_info snapshot info struct (fetched via call to ceph_get_snap_info()).
+ */
+void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 #ifdef __cplusplus
 }
 #endif

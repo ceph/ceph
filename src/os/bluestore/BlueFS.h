@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <limits>
 
 #include "bluefs_types.h"
 #include "blk/BlockDevice.h"
@@ -49,6 +50,8 @@ enum {
   l_bluefs_read_bytes,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
+  l_bluefs_read_zeros_candidate,
+  l_bluefs_read_zeros_errors,
 
   l_bluefs_last,
 };
@@ -60,7 +63,7 @@ public:
   virtual ~BlueFSVolumeSelector() {
   }
   virtual void* get_hint_for_log() const = 0;
-  virtual void* get_hint_by_dir(const std::string& dirname) const = 0;
+  virtual void* get_hint_by_dir(std::string_view dirname) const = 0;
 
   virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
   virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
@@ -150,7 +153,7 @@ public:
   struct Dir : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
 
-    mempool::bluefs::map<std::string,FileRef> file_map;
+    mempool::bluefs::map<std::string, FileRef, std::less<>> file_map;
 
   private:
     FRIEND_MAKE_REF(Dir);
@@ -204,15 +207,21 @@ public:
     // to use buffer_appender exclusively here (e.g., it's notion of
     // offset will remain accurate).
     void append(const char *buf, size_t len) {
+      uint64_t l0 = get_buffer_length();
+      ceph_assert(l0 + len <= std::numeric_limits<unsigned>::max());
       buffer_appender.append(buf, len);
     }
 
     // note: used internally only, for ino 1 or 0.
     void append(ceph::buffer::list& bl) {
+      uint64_t l0 = get_buffer_length();
+      ceph_assert(l0 + bl.length() <= std::numeric_limits<unsigned>::max());
       buffer.claim_append(bl);
     }
 
     void append_zero(size_t len) {
+      uint64_t l0 = get_buffer_length();
+      ceph_assert(l0 + len <= std::numeric_limits<unsigned>::max());
       buffer_appender.append_zero(len);
     }
 
@@ -300,8 +309,8 @@ private:
   };
 
   // cache
-  mempool::bluefs::map<std::string, DirRef> dir_map;              ///< dirname -> Dir
-  mempool::bluefs::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
+  mempool::bluefs::map<std::string, DirRef, std::less<>> dir_map;          ///< dirname -> Dir
+  mempool::bluefs::unordered_map<uint64_t, FileRef> file_map; ///< ino -> File
 
   // map of dirty files, files of same dirty_seq are grouped into list.
   std::map<uint64_t, dirty_file_list_t> dirty_files;
@@ -347,6 +356,8 @@ private:
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
+  // used to trigger zeros into read (debug / verify)
+  std::atomic<uint64_t> inject_read_zeros{0};
 
   void _init_logger();
   void _shutdown_logger();
@@ -495,14 +506,14 @@ public:
   int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
 
   int open_for_write(
-    const std::string& dir,
-    const std::string& file,
+    std::string_view dir,
+    std::string_view file,
     FileWriter **h,
     bool overwrite);
 
   int open_for_read(
-    const std::string& dir,
-    const std::string& file,
+    std::string_view dir,
+    std::string_view file,
     FileReader **h,
     bool random = false);
 
@@ -511,21 +522,21 @@ public:
     _close_writer(h);
   }
 
-  int rename(const std::string& old_dir, const std::string& old_file,
-	     const std::string& new_dir, const std::string& new_file);
+  int rename(std::string_view old_dir, std::string_view old_file,
+	     std::string_view new_dir, std::string_view new_file);
 
-  int readdir(const std::string& dirname, std::vector<std::string> *ls);
+  int readdir(std::string_view dirname, std::vector<std::string> *ls);
 
-  int unlink(const std::string& dirname, const std::string& filename);
-  int mkdir(const std::string& dirname);
-  int rmdir(const std::string& dirname);
+  int unlink(std::string_view dirname, std::string_view filename);
+  int mkdir(std::string_view dirname);
+  int rmdir(std::string_view dirname);
   bool wal_is_rotational();
 
-  bool dir_exists(const std::string& dirname);
-  int stat(const std::string& dirname, const std::string& filename,
+  bool dir_exists(std::string_view dirname);
+  int stat(std::string_view dirname, std::string_view filename,
 	   uint64_t *size, utime_t *mtime);
 
-  int lock_file(const std::string& dirname, const std::string& filename, FileLock **p);
+  int lock_file(std::string_view dirname, std::string_view filename, FileLock **p);
   int unlock_file(FileLock *l);
 
   void compact_log();
@@ -560,9 +571,25 @@ public:
     int r = _flush(h, force, l);
     ceph_assert(r == 0);
   }
-  void try_flush(FileWriter *h) {
-    if (h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size) {
-      flush(h, true);
+
+  void append_try_flush(FileWriter *h, const char* buf, size_t len) {
+    size_t max_size = 1ull << 30; // cap to 1GB
+    while (len > 0) {
+      bool need_flush = true;
+      auto l0 = h->get_buffer_length();
+      if (l0 < max_size) {
+	size_t l = std::min(len, max_size - l0);
+	h->append(buf, l);
+	buf += l;
+	len -= l;
+	need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
+      }
+      if (need_flush) {
+	flush(h, true);
+	// make sure we've made any progress with flush hence the
+	// loop doesn't iterate forever
+	ceph_assert(h->get_buffer_length() < max_size);
+      }
     }
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
@@ -607,10 +634,19 @@ public:
 			      size_t read_len,
 			      bufferlist* bl);
 
+  size_t probe_alloc_avail(int dev, uint64_t alloc_size);
+
   /// test purpose methods
   const PerfCounters* get_perf_counters() const {
     return logger;
   }
+
+private:
+  // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
+  // They are used for checking if read values are all 0, and reread if so.
+  int read(uint8_t ndev, uint64_t off, uint64_t len,
+	   ceph::buffer::list *pbl, IOContext *ioc, bool buffered);
+  int read_random(uint8_t ndev, uint64_t off, uint64_t len, char *buf, bool buffered);
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {
@@ -626,7 +662,7 @@ public:
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
   void* get_hint_for_log() const override;
-  void* get_hint_by_dir(const std::string& dirname) const override;
+  void* get_hint_by_dir(std::string_view dirname) const override;
 
   void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
     // do nothing
@@ -648,6 +684,17 @@ public:
   uint8_t select_prefer_bdev(void* hint) override;
   void get_paths(const std::string& base, paths& res) const override;
   void dump(std::ostream& sout) override;
+};
+
+class FitToFastVolumeSelector : public OriginalVolumeSelector {
+public:
+  FitToFastVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total)
+    : OriginalVolumeSelector(_wal_total, _db_total, _slow_total) {}
+
+  void get_paths(const std::string& base, paths& res) const override;
 };
 
 #endif

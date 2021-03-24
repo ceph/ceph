@@ -4,13 +4,13 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { TableColumnProp } from '@swimlane/ngx-datatable';
 import _ from 'lodash';
 
-import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
-import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 
 @Component({
   selector: 'cd-osd-devices-selection-modal',

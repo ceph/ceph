@@ -5,9 +5,6 @@
 #include <boost/type_index.hpp>
 
 #include "crimson/osd/backfill_state.h"
-#include "crimson/osd/backfill_facades.h"
-#include "crimson/osd/pg.h"
-#include "osd/PeeringState.h"
 
 namespace {
   seastar::logger& logger() {
@@ -70,7 +67,7 @@ BackfillState::Initial::Initial(my_context ctx)
                  backfill_state().last_backfill_started);
   for (const auto& bt : peering_state().get_backfill_targets()) {
     logger().debug("{}: target shard {} from {}",
-                   __func__, bt, peering_state().get_peer_info(bt).last_backfill);
+                   __func__, bt, peering_state().get_peer_last_backfill(bt));
   }
   ceph_assert(peering_state().get_backfill_targets().size());
   ceph_assert(!backfill_state().last_backfill_started.is_max());
@@ -86,7 +83,7 @@ BackfillState::Initial::react(const BackfillState::Triggered& evt)
   // initialize BackfillIntervals
   for (const auto& bt : peering_state().get_backfill_targets()) {
     backfill_state().peer_backfill_info[bt].reset(
-      peering_state().get_peer_info(bt).last_backfill);
+      peering_state().get_peer_last_backfill(bt));
   }
   backfill_state().backfill_info.reset(backfill_state().last_backfill_started);
   if (Enqueuing::all_enqueued(peering_state(),
@@ -108,7 +105,7 @@ void BackfillState::Enqueuing::maybe_update_range()
       primary_bi.version >= pg().get_projected_last_update()) {
     logger().info("{}: bi is current", __func__);
     ceph_assert(primary_bi.version == pg().get_projected_last_update());
-  } else if (primary_bi.version >= peering_state().get_info().log_tail) {
+  } else if (primary_bi.version >= peering_state().get_log_tail()) {
 #if 0
     if (peering_state().get_pg_log().get_log().empty() &&
         pg().get_projected_log().empty()) {
@@ -127,7 +124,7 @@ void BackfillState::Enqueuing::maybe_update_range()
                    primary_bi.version,
                    pg().get_projected_last_update());
     logger().debug("{}: scanning pg log first", __func__);
-    peering_state().get_pg_log().get_log().scan_log_after(primary_bi.version,
+    peering_state().scan_log_after(primary_bi.version,
       [&](const pg_log_entry_t& e) {
         logger().debug("maybe_update_range(lambda): updating from version {}",
                        e.version);
@@ -156,7 +153,7 @@ void BackfillState::Enqueuing::trim_backfill_infos()
 {
   for (const auto& bt : peering_state().get_backfill_targets()) {
     backfill_state().peer_backfill_info[bt].trim_to(
-      std::max(peering_state().get_peer_info(bt).last_backfill,
+      std::max(peering_state().get_peer_last_backfill(bt),
                backfill_state().last_backfill_started));
   }
   backfill_state().backfill_info.trim_to(
@@ -247,6 +244,7 @@ BackfillState::Enqueuing::remove_on_peers(const hobject_t& check)
 BackfillState::Enqueuing::result_t
 BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
 {
+  logger().debug("{}: check={}", __func__, check);
   const auto& primary_bi = backfill_state().backfill_info;
   result_t result { {}, primary_bi.begin };
 
@@ -256,25 +254,37 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
     // Find all check peers that have the wrong version
     if (const eversion_t& obj_v = primary_bi.objects.begin()->second;
         check == primary_bi.begin && check == peer_bi.begin) {
-      if(peer_bi.objects.begin()->second != obj_v) {
-        backfill_state().progress_tracker->enqueue_push(primary_bi.begin);
-        backfill_listener().enqueue_push(bt, primary_bi.begin, obj_v);
+      if(peer_bi.objects.begin()->second != obj_v &&
+          backfill_state().progress_tracker->enqueue_push(primary_bi.begin)) {
+        backfill_listener().enqueue_push(primary_bi.begin, obj_v);
       } else {
-        // it's fine, keep it!
+        // it's fine, keep it! OR already recovering
       }
       result.pbi_targets.insert(bt);
     } else {
-      const pg_info_t& pinfo = peering_state().get_peer_info(bt);
       // Only include peers that we've caught up to their backfill line
       // otherwise, they only appear to be missing this object
       // because their peer_bi.begin > backfill_info.begin.
-      if (primary_bi.begin > pinfo.last_backfill) {
-        backfill_state().progress_tracker->enqueue_push(primary_bi.begin);
-        backfill_listener().enqueue_push(bt, primary_bi.begin, obj_v);
+      if (primary_bi.begin > peering_state().get_peer_last_backfill(bt) &&
+          backfill_state().progress_tracker->enqueue_push(primary_bi.begin)) {
+        backfill_listener().enqueue_push(primary_bi.begin, obj_v);
       }
     }
   }
   return result;
+}
+
+bool BackfillState::Enqueuing::Enqueuing::all_emptied(
+  const BackfillInterval& local_backfill_info,
+  const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const
+{
+  const auto& targets = peering_state().get_backfill_targets();
+  const auto replicas_emptied =
+    std::all_of(std::begin(targets), std::end(targets),
+      [&] (const auto& bt) {
+        return peer_backfill_info.at(bt).empty();
+      });
+  return local_backfill_info.empty() && replicas_emptied;
 }
 
 BackfillState::Enqueuing::Enqueuing(my_context ctx)
@@ -284,7 +294,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 
   // update our local interval to cope with recent changes
   primary_bi.begin = backfill_state().last_backfill_started;
-  if (primary_bi.version < peering_state().get_info().log_tail) {
+  if (primary_bi.version < peering_state().get_log_tail()) {
     // it might be that the OSD is so flooded with modifying operations
     // that backfill will be spinning here over and over. For the sake
     // of performance and complexity we don't synchronize with entire PG.
@@ -298,7 +308,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   }
   trim_backfill_infos();
 
-  while (!primary_bi.empty()) {
+  while (!all_emptied(primary_bi, backfill_state().peer_backfill_info)) {
     if (!backfill_listener().budget_available()) {
       post_event(RequestWaiting{});
       return;
@@ -326,8 +336,9 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
 					    backfill_state().peer_backfill_info);
-      backfill_state().backfill_info.pop_front();
+      primary_bi.pop_front();
     }
+    backfill_listener().maybe_flush();
   }
 
   if (should_rescan_primary(backfill_state().peer_backfill_info,
@@ -340,7 +351,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   } else if (backfill_state().progress_tracker->tracked_objects_completed()) {
     post_event(RequestDone{});
   } else {
-    logger().debug("{}: reached end for both local and all peers ",
+    logger().debug("{}: reached end for both local and all peers "
                    "but still has in-flight operations", __func__);
     post_event(RequestWaiting{});
   }
@@ -350,8 +361,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   : my_base(ctx)
 {
-  backfill_state().backfill_info.version = \
-    peering_state().get_info().last_update;
+  backfill_state().backfill_info.version = peering_state().get_last_update();
   backfill_listener().request_primary_scan(
     backfill_state().backfill_info.begin);
 }
@@ -496,16 +506,17 @@ bool BackfillState::ProgressTracker::tracked_objects_completed() const
   return registry.empty();
 }
 
-void BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
+bool BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
 {
-  ceph_assert(registry.count(obj) == 0);
-  registry[obj] = registry_item_t{ op_stage_t::enqueued_push, std::nullopt };
+  [[maybe_unused]] const auto [it, first_seen] = registry.try_emplace(
+    obj, registry_item_t{op_stage_t::enqueued_push, std::nullopt});
+  return first_seen;
 }
 
 void BackfillState::ProgressTracker::enqueue_drop(const hobject_t& obj)
 {
-  ceph_assert(registry.count(obj) == 0);
-  registry[obj] = registry_item_t{ op_stage_t::enqueued_drop, pg_stat_t{} };
+  registry.try_emplace(
+    obj, registry_item_t{op_stage_t::enqueued_drop, pg_stat_t{}});
 }
 
 void BackfillState::ProgressTracker::complete_to(

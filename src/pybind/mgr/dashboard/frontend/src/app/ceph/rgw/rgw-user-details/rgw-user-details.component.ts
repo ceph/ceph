@@ -2,11 +2,11 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 
 import _ from 'lodash';
 
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ModalService } from '../../../shared/services/modal.service';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';

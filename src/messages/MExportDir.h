@@ -18,7 +18,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MExportDir : public MMDSOp {
+class MExportDir final : public MMDSOp {
 public:
   dirfrag_t dirfrag;
   ceph::buffer::list export_data;
@@ -31,7 +31,7 @@ protected:
     MMDSOp{MSG_MDS_EXPORTDIR}, dirfrag(df) {
     set_tid(tid);
   }
-  ~MExportDir() override {}
+  ~MExportDir() final {}
 
 public:
   std::string_view get_type_name() const override { return "Ex"; }

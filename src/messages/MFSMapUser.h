@@ -19,7 +19,7 @@
 #include "mds/FSMapUser.h"
 #include "include/ceph_features.h"
 
-class MFSMapUser : public Message {
+class MFSMapUser final : public Message {
 public:
   epoch_t epoch;
 
@@ -36,7 +36,7 @@ public:
 private:
   FSMapUser fsmap;
 
-  ~MFSMapUser() override {}
+  ~MFSMapUser() final {}
 
 public:
   std::string_view get_type_name() const override { return "fsmap.user"; }

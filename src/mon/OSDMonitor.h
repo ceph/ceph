@@ -53,7 +53,8 @@ struct failure_reporter_t {
   MonOpRequestRef op;       ///< failure op request
 
   failure_reporter_t() {}
-  explicit failure_reporter_t(utime_t s) : failed_since(s) {}
+  failure_reporter_t(utime_t s, MonOpRequestRef op)
+    : failed_since(s), op(op) {}
   ~failure_reporter_t() { }
 };
 
@@ -74,20 +75,15 @@ struct failure_info_t {
     return max_failed_since;
   }
 
-  // set the message for the latest report.  return any old op request we had,
-  // if any, so we can discard it.
-  MonOpRequestRef add_report(int who, utime_t failed_since,
-			     MonOpRequestRef op) {
-    auto p = reporters.find(who);
-    if (p == reporters.end()) {
-      if (max_failed_since != utime_t() && max_failed_since < failed_since)
+  // set the message for the latest report.
+  void add_report(int who, utime_t failed_since, MonOpRequestRef op) {
+    [[maybe_unused]] auto [it, new_reporter] =
+      reporters.insert_or_assign(who, failure_reporter_t{failed_since, op});
+    if (new_reporter) {
+      if (max_failed_since != utime_t() && max_failed_since < failed_since) {
 	max_failed_since = failed_since;
-      p = reporters.insert(std::map<int, failure_reporter_t>::value_type(who, failure_reporter_t(failed_since))).first;
+      }
     }
-
-    MonOpRequestRef ret = p->second.op;
-    p->second.op = op;
-    return ret;
   }
 
   void take_report_messages(std::list<MonOpRequestRef>& ls) {
@@ -99,14 +95,9 @@ struct failure_info_t {
     }
   }
 
-  MonOpRequestRef cancel_report(int who) {
-    auto p = reporters.find(who);
-    if (p == reporters.end())
-      return MonOpRequestRef();
-    MonOpRequestRef ret = p->second.op;
-    reporters.erase(p);
+  void cancel_report(int who) {
+    reporters.erase(who);
     max_failed_since = utime_t();
-    return ret;
   }
 };
 
@@ -245,6 +236,8 @@ public:
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
+  utime_t get_grace_time(utime_t now, int target_osd, failure_info_t& fi) const;
+  bool is_failure_stale(utime_t now, failure_info_t& fi) const;
   void force_failure(int target_osd, int by);
 
   bool _have_pending_crush();
@@ -634,6 +627,7 @@ private:
   void reencode_full_map(ceph::buffer::list& bl, uint64_t features);
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
+  void get_versions(std::map<std::string, std::list<std::string>> &versions);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
@@ -676,7 +670,7 @@ protected:
   void set_default_laggy_params(int target_osd);
 
 public:
-  OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const std::string& service_name);
+  OSDMonitor(CephContext *cct, Monitor &mn, Paxos &p, const std::string& service_name);
 
   void tick() override;  // check state, take actions
 

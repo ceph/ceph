@@ -7,13 +7,12 @@ declare global {
   }
 }
 
-import { Permissions } from '../../src/app/shared/models/permissions';
+import { Permissions } from '~/app/shared/models/permissions';
 
 let auth: any;
 
 const fillAuth = () => {
   window.localStorage.setItem('dashboard_username', auth.username);
-  window.localStorage.setItem('access_token', auth.token);
   window.localStorage.setItem('dashboard_permissions', auth.permissions);
   window.localStorage.setItem('user_pwd_expiration_date', auth.pwdExpirationDate);
   window.localStorage.setItem('user_pwd_update_required', auth.pwdUpdateRequired);
@@ -28,6 +27,7 @@ Cypress.Commands.add('login', () => {
     cy.request({
       method: 'POST',
       url: 'api/auth',
+      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' },
       body: { username: username, password: password }
     }).then((resp) => {
       auth = resp.body;

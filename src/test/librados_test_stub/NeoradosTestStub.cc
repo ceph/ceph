@@ -268,7 +268,7 @@ void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
     &librados::TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl, _4);
   if (s != nullptr) {
     op = std::bind(
-      save_operation_size, std::bind(op, _1, _2, _3, _4, _5), s);
+      save_operation_size, std::bind(op, _1, _2, _3, _4, _5, _6), s);
   }
   o->ops.push_back(op);
 }
@@ -316,7 +316,7 @@ void Op::exec(std::string_view cls, std::string_view method,
   librados::ObjectOperationTestImpl op =
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl), out]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc) mutable -> int {
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*) mutable -> int {
       return io_ctx->exec(
         oid, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl,
@@ -324,7 +324,7 @@ void Op::exec(std::string_view cls, std::string_view method,
     };
   if (ec != nullptr) {
     op = std::bind(
-      save_operation_ec, std::bind(op, _1, _2, _3, _4, _5), ec);
+      save_operation_ec, std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
 }
@@ -338,14 +338,14 @@ void Op::exec(std::string_view cls, std::string_view method,
   librados::ObjectOperationTestImpl op =
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl)]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc) mutable -> int {
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*) mutable -> int {
       return io_ctx->exec(
         oid, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl, outbl, snap_id, snapc);
     };
   if (ec != NULL) {
     op = std::bind(
-      save_operation_ec, std::bind(op, _1, _2, _3, _4, _5), ec);
+      save_operation_ec, std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
 }
@@ -355,14 +355,16 @@ void ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op;
   if (out != nullptr) {
-    op = std::bind(&librados::TestIoCtxImpl::read, _1, _2, len, off, out, _4);
+    op = std::bind(
+            &librados::TestIoCtxImpl::read, _1, _2, len, off, out, _4, _6);
   } else {
-    op = std::bind(&librados::TestIoCtxImpl::read, _1, _2, len, off, _3, _4);
+    op = std::bind(
+            &librados::TestIoCtxImpl::read, _1, _2, len, off, _3, _4, _6);
   }
 
   if (ec != NULL) {
     op = std::bind(
-      save_operation_ec, std::bind(op, _1, _2, _3, _4, _5), ec);
+      save_operation_ec, std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
 }
@@ -376,7 +378,7 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
   librados::ObjectOperationTestImpl op =
     [off, len, out, extents]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc) mutable -> int {
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*) mutable -> int {
       std::map<uint64_t,uint64_t> m;
       int r = io_ctx->sparse_read(
         oid, off, len, &m, (out != nullptr ? out : outbl), snap_id);
@@ -388,7 +390,7 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
     };
   if (ec != NULL) {
     op = std::bind(save_operation_ec,
-                     std::bind(op, _1, _2, _3, _4, _5), ec);
+                     std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
 }
@@ -398,7 +400,7 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
   librados::ObjectOperationTestImpl op =
     [snaps]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist*,
-     uint64_t, const SnapContext&) mutable -> int {
+     uint64_t, const SnapContext&, uint64_t*) mutable -> int {
       librados::snap_set_t snap_set;
       int r = io_ctx->list_snaps(oid, &snap_set);
       if (r >= 0 && snaps != nullptr) {
@@ -418,7 +420,7 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
     };
   if (ec != NULL) {
     op = std::bind(save_operation_ec,
-                   std::bind(op, _1, _2, _3, _4, _5), ec);
+                   std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
 }
@@ -519,7 +521,7 @@ void RADOS::execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 
   auto completion = create_aio_completion(std::move(c));
   auto r = io_ctx->aio_operate_read(std::string{o}, *ops, completion, 0U, bl,
-                                    snap_id);
+                                    snap_id, objver);
   ceph_assert(r == 0);
 }
 

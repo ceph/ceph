@@ -1,11 +1,12 @@
 import json
+import uuid
 from io import StringIO
 from os.path import join as os_path_join
 
 from teuthology.orchestra.run import CommandFailedError, Raw
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from tasks.cephfs.filesystem import FileLayout
+from tasks.cephfs.filesystem import FileLayout, FSMissing
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.caps_helper import CapsHelper
 
@@ -193,6 +194,10 @@ class TestAdminCommands(CephFSTestCase):
             self._check_pool_application_metadata_key_value(
                 pool_names[i], 'cephfs', keys[i], fs_name)
 
+class TestRequiredClientFeatures(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
     def test_required_client_features(self):
         """
         That `ceph fs required_client_features` command functions.
@@ -209,7 +214,7 @@ class TestAdminCommands(CephFSTestCase):
         self.assertGreater(len(features), 0);
 
         for f in features:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', str(f['index']))
+            self.fs.required_client_features('rm', str(f['index']))
 
         for f in features:
             index = f['index']
@@ -219,14 +224,46 @@ class TestAdminCommands(CephFSTestCase):
 
             if index % 3 == 0:
                 continue;
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'add', feature)
+            self.fs.required_client_features('add', feature)
             self.assertTrue(is_required(index))
 
             if index % 2 == 0:
                 continue;
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', feature)
+            self.fs.required_client_features('rm', feature)
             self.assertFalse(is_required(index))
 
+    def test_required_client_feature_add_reserved(self):
+        """
+        That `ceph fs required_client_features X add reserved` fails.
+        """
+
+        p = self.fs.required_client_features('add', 'reserved', check_status=False, stderr=StringIO())
+        self.assertIn('Invalid feature name', p.stderr.getvalue())
+
+    def test_required_client_feature_rm_reserved(self):
+        """
+        That `ceph fs required_client_features X rm reserved` fails.
+        """
+
+        p = self.fs.required_client_features('rm', 'reserved', check_status=False, stderr=StringIO())
+        self.assertIn('Invalid feature name', p.stderr.getvalue())
+
+    def test_required_client_feature_add_reserved_bit(self):
+        """
+        That `ceph fs required_client_features X add <reserved_bit>` passes.
+        """
+
+        p = self.fs.required_client_features('add', '1', stderr=StringIO())
+        self.assertIn("added feature 'reserved' to required_client_features", p.stderr.getvalue())
+
+    def test_required_client_feature_rm_reserved_bit(self):
+        """
+        That `ceph fs required_client_features X rm <reserved_bit>` passes.
+        """
+
+        self.fs.required_client_features('add', '1')
+        p = self.fs.required_client_features('rm', '1', stderr=StringIO())
+        self.assertIn("removed feature 'reserved' from required_client_features", p.stderr.getvalue())
 
 class TestConfigCommands(CephFSTestCase):
     """
@@ -310,7 +347,8 @@ class TestMirroringCommands(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", fs_name)
 
     def _add_peer(self, fs_name, peer_spec, remote_fs_name):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_spec, remote_fs_name)
+        peer_uuid = str(uuid.uuid4())
+        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
 
     def _remove_peer(self, fs_name, peer_uuid):
         self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
@@ -330,12 +368,12 @@ class TestMirroringCommands(CephFSTestCase):
         fs_map = status.get_fsmap_byname(fs_name)
         mirror_info = fs_map.get('mirror_info', None)
         self.assertTrue(mirror_info is not None)
-        for uuid, remote in mirror_info['peers'].items():
+        for peer_uuid, remote in mirror_info['peers'].items():
             client_name = remote['remote']['client_name']
             cluster_name = remote['remote']['cluster_name']
             spec = f'{client_name}@{cluster_name}'
             if spec == peer_spec:
-                return uuid
+                return peer_uuid
         return None
 
     def test_mirroring_command(self):
@@ -456,6 +494,24 @@ class TestSubCmdFsAuthorize(CapsHelper):
             cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
             self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
 
+    def test_single_path_authorize_on_nonalphanumeric_fsname(self):
+        """
+        That fs authorize command works on filesystems with names having [_.-] characters
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        fs_name = "cephfs-_."
+        self.fs = self.mds_cluster.newfs(name=fs_name)
+        self.fs.wait_for_daemons()
+        self.run_cluster_cmd(f'auth caps client.{self.mount_a.client_id} '
+                             f'mon "allow r" '
+                             f'osd "allow rw pool={self.fs.get_data_pool_name()}" '
+                             f'mds allow')
+        self.mount_a.remount(cephfs_name=self.fs.name)
+        perm = 'rw'
+        filepaths, filedata, mounts, keyring = self.setup_test_env(perm)
+        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+
     def test_multiple_path_r(self):
         perm, paths = 'r', ('/dir1', '/dir2/dir22')
         filepaths, filedata, mounts, keyring = self.setup_test_env(perm, paths)
@@ -540,3 +596,29 @@ class TestSubCmdFsAuthorize(CapsHelper):
         mounts = (self.mount_a, )
 
         return filepaths, filedata, mounts, keyring
+
+class TestAdminCommandIdempotency(CephFSTestCase):
+    """
+    Tests for administration command idempotency.
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
+    def test_rm_idempotency(self):
+        """
+        That a removing a fs twice is idempotent.
+        """
+
+        data_pools = self.fs.get_data_pool_names(refresh=True)
+        self.fs.fail()
+        self.fs.rm()
+        try:
+            self.fs.get_mds_map()
+        except FSMissing:
+            pass
+        else:
+            self.fail("get_mds_map should raise")
+        p = self.fs.rm()
+        self.assertIn("does not exist", p.stderr.getvalue())
+        self.fs.remove_pools(data_pools)

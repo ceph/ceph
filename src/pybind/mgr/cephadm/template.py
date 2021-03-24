@@ -1,7 +1,7 @@
 import copy
 from typing import Optional, TYPE_CHECKING
 
-from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined, Template
+from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined
 from jinja2 import exceptions as j2_exceptions
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ class TemplateEngine:
 
 
 class Jinja2Engine(TemplateEngine):
-    def __init__(self):
+    def __init__(self) -> None:
         self.env = Environment(
             loader=PackageLoader('cephadm', 'templates'),
             autoescape=select_autoescape(['html', 'xml'], default_for_string=False),
@@ -46,7 +46,7 @@ class Jinja2Engine(TemplateEngine):
         except j2_exceptions.TemplateNotFound as e:
             raise TemplateNotFoundError(e.message)
 
-    def render_plain(self, source, context):
+    def render_plain(self, source: str, context: Optional[dict]) -> str:
         try:
             template = self.env.from_string(source)
             if context is None:
@@ -66,7 +66,10 @@ class TemplateMgr:
         }
         self.mgr = mgr
 
-    def render(self, name: str, context: Optional[dict] = None, managed_context=True) -> str:
+    def render(self, name: str,
+               context: Optional[dict] = None,
+               managed_context: bool = True,
+               host: Optional[str] = None) -> str:
         """Render a string from a template with context.
 
         :param name: template name. e.g. services/nfs/ganesha.conf.j2
@@ -77,6 +80,9 @@ class TemplateMgr:
         :param managed_context: to inject default context like managed header or not, defaults
             to True
         :type managed_context: bool, optional
+        :param host: The host name used to build the key to access
+            the module's persistent key-value store.
+        :type host: Optional[str], optional
         :return: the templated string
         :rtype: str
         """
@@ -86,8 +92,17 @@ class TemplateMgr:
         if context is not None:
             ctx = {**ctx, **context}
 
-        store_name = name.replace('/', '_').rstrip('.j2')
+        # Check if the given name exists in the module's persistent
+        # key-value store, e.g.
+        # - blink_device_light_cmd
+        # - <host>/blink_device_light_cmd
+        # - services/nfs/ganesha.conf
+        store_name = name.rstrip('.j2')
         custom_template = self.mgr.get_store(store_name, None)
+        if host and custom_template is None:
+            store_name = '{}/{}'.format(host, store_name)
+            custom_template = self.mgr.get_store(store_name, None)
+
         if custom_template:
             return self.engine.render_plain(custom_template, ctx)
         else:

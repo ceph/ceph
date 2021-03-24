@@ -6,6 +6,7 @@ import functools
 import json
 import socket
 import os
+import platform
 import time
 import sys
 
@@ -41,7 +42,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED,
                  RBD_SNAP_CREATE_SKIP_QUIESCE,
                  RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
-                 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION)
+                 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
+                 RBD_ENCRYPTION_FORMAT_LUKS1, RBD_ENCRYPTION_FORMAT_LUKS2)
 
 rados = None
 ioctx = None
@@ -149,6 +151,15 @@ def require_features(required_features):
                     raise SkipTest
             return fn(*args, **kwargs)
         return functools.wraps(fn)(_require_features)
+    return wrapper
+
+def require_linux():
+    def wrapper(fn):
+        def _require_linux(*args, **kwargs):
+            if platform.system() != "Linux":
+                raise SkipTest
+            return fn(*args, **kwargs)
+        return functools.wraps(fn)(_require_linux)
     return wrapper
 
 def blocklist_features(blocklisted_features):
@@ -323,6 +334,40 @@ def test_open_by_id():
                 image_id = image.id()
             with Image(ioctx, image_id=image_id) as image:
                 eq(image.get_name(), image_name)
+            RBD().remove(ioctx, image_name)
+
+def test_aio_open():
+    with Rados(conffile='') as cluster:
+        with cluster.open_ioctx(pool_name) as ioctx:
+            image_name = get_temp_image_name()
+            order = 20
+            RBD().create(ioctx, image_name, IMG_SIZE, order)
+
+            # this is a list so that the open_cb() can modify it
+            image = [None]
+            def open_cb(_, image_):
+                image[0] = image_
+
+            comp = RBD().aio_open_image(open_cb, ioctx, image_name)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), 2)
+            assert_not_equal(image[0], None)
+
+            image = image[0]
+            eq(image.get_name(), image_name)
+            check_stat(image.stat(), IMG_SIZE, order)
+
+            closed = [False]
+            def close_cb(_):
+                closed[0] = True
+
+            comp = image.aio_close(close_cb)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), 2)
+            eq(closed[0], True)
+
             RBD().remove(ioctx, image_name)
 
 def test_remove_dne():
@@ -1314,6 +1359,47 @@ class TestImage(object):
         assert_raises(InvalidArgument, self.image.sparsify, 16)
         self.image.sparsify(4096)
 
+    @require_linux()
+    @blocklist_features([RBD_FEATURE_JOURNALING])
+    def test_encryption_luks1(self):
+        data = b'hello world'
+        offset = 16<<20
+        image_size = 32<<20
+
+        with Image(ioctx, image_name) as image:
+            image.resize(image_size)
+            image.write(data, offset)
+            image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+            image.write(data, offset)
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            eq(data, image.read(offset, len(data)))
+
+    @require_linux()
+    @blocklist_features([RBD_FEATURE_JOURNALING])
+    def test_encryption_luks2(self):
+        data = b'hello world'
+        offset = 16<<20
+        image_size = 256<<20
+
+        with Image(ioctx, image_name) as image:
+            image.resize(image_size)
+            image.write(data, offset)
+            image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+            image.write(data, offset)
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            eq(data, image.read(offset, len(data)))
+
+
 class TestImageId(object):
 
     def setUp(self):
@@ -2206,6 +2292,62 @@ class TestMirroring(object):
         self.rbd.mirror_peer_remove(ioctx, peer2_uuid)
         self.image.mirror_image_promote(False)
 
+    def test_aio_mirror_image_create_snapshot(self):
+        peer_uuid = self.rbd.mirror_peer_add(ioctx, "cluster", "client")
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        self.image.mirror_image_disable(False)
+        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+
+        snaps = list(self.image.list_snaps())
+        eq(1, len(snaps))
+        snap = snaps[0]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+
+        # this is a list so that the local cb() can modify it
+        info = [None]
+        def cb(_, _info):
+            info[0] = _info
+
+        comp = self.image.aio_mirror_image_get_info(cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(info[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        info = info[0]
+        global_id = info['global_id']
+        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+        mode = [None]
+        def cb(_, _mode):
+            mode[0] = _mode
+
+        comp = self.image.aio_mirror_image_get_mode(cb)
+        comp.wait_for_complete_and_cb()
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        eq(mode[0], RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+
+        snap_id = [None]
+        def cb(_, _snap_id):
+            snap_id[0] = _snap_id
+
+        comp = self.image.aio_mirror_image_create_snapshot(0, cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(snap_id[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+
+        snaps = list(self.image.list_snaps())
+        eq(2, len(snaps))
+        snap = snaps[1]
+        eq(snap['id'], snap_id[0])
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+        eq([peer_uuid], snap['mirror']['mirror_peer_uuids'])
+
+        self.rbd.mirror_peer_remove(ioctx, peer_uuid)
+
 class TestTrash(object):
 
     def setUp(self):
@@ -2438,6 +2580,27 @@ class TestGroups(object):
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
 
+    def test_group_snap_flags(self):
+        global snap_name
+        eq([], list(self.group.list_snaps()))
+
+        self.group.create_snap(snap_name, 0)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.remove_snap(snap_name)
+
+        self.group.create_snap(snap_name, RBD_SNAP_CREATE_SKIP_QUIESCE)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.remove_snap(snap_name)
+
+        self.group.create_snap(snap_name, RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.remove_snap(snap_name)
+
+        assert_raises(InvalidArgument, self.group.create_snap, snap_name,
+                      RBD_SNAP_CREATE_SKIP_QUIESCE |
+                      RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
+        eq([], list(self.group.list_snaps()))
+
     def test_group_snap_list_many(self):
         global snap_name
         eq([], list(self.group.list_snaps()))
@@ -2521,9 +2684,51 @@ class TestMigration(object):
         eq(image_name, status['dest_image_name'])
         eq(RBD_IMAGE_MIGRATION_STATE_PREPARED, status['state'])
 
+        with Image(ioctx, image_name) as image:
+            source_spec = image.migration_source_spec()
+            eq("native", source_spec["type"])
+
         RBD().migration_execute(ioctx, image_name)
         RBD().migration_commit(ioctx, image_name)
         remove_image()
+
+    def test_migration_import(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+            image.create_snap('snap')
+
+        source_spec = json.dumps(
+            {'type': 'native',
+             'pool_id': ioctx.get_pool_id(),
+             'pool_namespace': '',
+             'image_name': image_name,
+             'image_id': image_id,
+             'snap_name': 'snap'})
+        dst_image_name = get_temp_image_name()
+        RBD().migration_prepare_import(source_spec, ioctx, dst_image_name,
+                                       features=63, order=23, stripe_unit=1<<23,
+                                       stripe_count=1, data_pool=None)
+
+        status = RBD().migration_status(ioctx, dst_image_name)
+        eq('', status['source_image_name'])
+        eq(dst_image_name, status['dest_image_name'])
+        eq(RBD_IMAGE_MIGRATION_STATE_PREPARED, status['state'])
+
+        with Image(ioctx, dst_image_name) as image:
+            source_spec = image.migration_source_spec()
+            eq("native", source_spec["type"])
+
+        RBD().migration_execute(ioctx, dst_image_name)
+        RBD().migration_commit(ioctx, dst_image_name)
+
+        with Image(ioctx, image_name) as image:
+            image.remove_snap('snap')
+        with Image(ioctx, dst_image_name) as image:
+            image.remove_snap('snap')
+
+        RBD().remove(ioctx, dst_image_name)
+        RBD().remove(ioctx, image_name)
 
     def test_migration_with_progress(self):
         d = {'received_callback': False}

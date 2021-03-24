@@ -22,6 +22,9 @@ public:
              uint16_t key_length);
     uint32_t get_block_size() const override;
     uint32_t get_iv_size() const override;
+    const unsigned char* get_key() const override;
+    int get_key_length() const override;
+
     EVP_CIPHER_CTX* get_context(CipherMode mode) override;
     void return_context(EVP_CIPHER_CTX* ctx, CipherMode mode) override;
     int init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,

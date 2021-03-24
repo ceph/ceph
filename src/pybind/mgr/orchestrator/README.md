@@ -1,6 +1,6 @@
 # Orchestrator CLI
 
-See also [orchestrator cli doc](https://docs.ceph.com/docs/master/mgr/orchestrator_cli/).
+See also [orchestrator cli doc](https://docs.ceph.com/en/latest/mgr/orchestrator/).
 
 ## Running the Teuthology tests
 

@@ -4,7 +4,6 @@
 #include <boost/optional.hpp>
 
 #include "common/ceph_json.h"
-#include "common/RWLock.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
@@ -1084,11 +1083,12 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
   string raw_key;
   bufferlist bl;
+  const DoutPrefixProvider *dpp;
 protected:
   int _send_request() override {
-    int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, RGWMDLogSyncType::APPLY_ALWAYS);
+    int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, dpp, RGWMDLogSyncType::APPLY_ALWAYS, true);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
     }
     return 0;
@@ -1096,8 +1096,9 @@ protected:
 public:
   RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                        const string& _raw_key,
-                       bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                          raw_key(_raw_key), bl(_bl) {}
+                       bufferlist& _bl,
+                       const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                          raw_key(_raw_key), bl(_bl), dpp(dpp) {}
 };
 
 
@@ -1123,7 +1124,7 @@ public:
 
   int send_request() override {
     req = new RGWAsyncMetaStoreEntry(this, stack->create_completion_notifier(),
-			           sync_env->store, raw_key, bl);
+			           sync_env->store, raw_key, bl, sync_env->dpp);
     sync_env->async_rados->queue(req);
     return 0;
   }
@@ -1136,19 +1137,20 @@ public:
 class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
   string raw_key;
+  const DoutPrefixProvider *dpp;
 protected:
   int _send_request() override {
-    int ret = store->ctl()->meta.mgr->remove(raw_key, null_yield);
+    int ret = store->ctl()->meta.mgr->remove(raw_key, null_yield, dpp);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;
     }
     return 0;
   }
 public:
   RGWAsyncMetaRemoveEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
-                       const string& _raw_key) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                          raw_key(_raw_key) {}
+                       const string& _raw_key, const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                          raw_key(_raw_key), dpp(dpp) {}
 };
 
 
@@ -1172,7 +1174,7 @@ public:
 
   int send_request() override {
     req = new RGWAsyncMetaRemoveEntry(this, stack->create_completion_notifier(),
-			           sync_env->store, raw_key);
+			           sync_env->store, raw_key, sync_env->dpp);
     sync_env->async_rados->queue(req);
     return 0;
   }
@@ -2088,7 +2090,8 @@ int RGWRemoteMetaLog::store_sync_info(const rgw_meta_sync_info& sync_info)
 
 // return a cursor to the period at our sync position
 static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
-                                              const rgw_meta_sync_info& info)
+                                              const rgw_meta_sync_info& info,
+					      optional_yield y)
 {
   if (info.period.empty()) {
     // return an empty cursor with error=0
@@ -2111,14 +2114,14 @@ static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->svc()->mdlog->pull_period(info.period, period);
+  int r = store->svc()->mdlog->pull_period(info.period, period, y);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
     return RGWPeriodHistory::Cursor{r};
   }
   // attach the period to our history
-  cursor = store->svc()->mdlog->get_period_history()->attach(std::move(period));
+  cursor = store->svc()->mdlog->get_period_history()->attach(std::move(period), y);
   if (!cursor) {
     r = cursor.get_error();
     lderr(store->ctx()) << "ERROR: failed to read period history back to "
@@ -2127,7 +2130,7 @@ static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
   return cursor;
 }
 
-int RGWRemoteMetaLog::run_sync()
+int RGWRemoteMetaLog::run_sync(optional_yield y)
 {
   if (store->svc()->zone->is_meta_master()) {
     return 0;
@@ -2249,7 +2252,7 @@ int RGWRemoteMetaLog::run_sync()
       case rgw_meta_sync_info::StateSync:
         tn->log(20, "sync");
         // find our position in the period history (if any)
-        cursor = get_period_at(store, sync_status.sync_info);
+        cursor = get_period_at(store, sync_status.sync_info, y);
         r = cursor.get_error();
         if (r < 0) {
           return r;

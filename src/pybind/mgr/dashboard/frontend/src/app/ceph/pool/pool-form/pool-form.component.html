@@ -325,6 +325,10 @@
                             [ngClass]="{'active': data.crushInfo}"
                             id="crush-info-button"
                             type="button"
+                            ngbTooltip="Placement and
+                            replication strategies or distribution policies that allow to
+                            specify how CRUSH places data replicas."
+                            i18n-ngbTooltip
                             (click)="data.crushInfo = !data.crushInfo">
                       <i [ngClass]="[icons.questionCircle]"
                          aria-hidden="true"></i>
@@ -593,13 +597,10 @@
         </div>
       </div>
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button [form]="formDir"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            (submitAction)="submit()">{{ action | titlecase }} {{ resource | upperFirst }}
-          </cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="form"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
 
     </div>

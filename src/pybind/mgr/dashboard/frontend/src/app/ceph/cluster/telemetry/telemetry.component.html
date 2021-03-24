@@ -207,7 +207,7 @@
               <button type="button"
                       class="btn btn-light"
                       (click)="next()">
-                <ng-container i18n>Next</ng-container>
+                <ng-container>{{ actionLabels.NEXT }}</ng-container>
               </button>
             </div>
           </div>
@@ -267,10 +267,8 @@
                   <cd-download-button [objectItem]="report"
                                       fileName="telemetry_report">
                   </cd-download-button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="report">
-                  </button>
+                  <cd-copy-2-clipboard-button source="report">
+                  </cd-copy-2-clipboard-button>
                 </div>
               </div>
             </div>
@@ -293,14 +291,11 @@
           </div>
           <div class="card-footer">
             <div class="button-group text-right">
-              <cd-submit-button (submitAction)="onSubmit()"
-                                [form]="previewForm">
-                <ng-container i18n>Save</ng-container>
-              </cd-submit-button>
-              <button type="button"
-                      class="btn btn-light"
-                      (click)="back()"
-                      i18n>Back</button>
+              <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                                    (backActionEvent)="back()"
+                                    [form]="previewForm"
+                                    [submitText]="actionLabels.UPDATE"
+                                    [cancelText]="actionLabels.BACK"></cd-form-button-panel>
             </div>
           </div>
         </div>

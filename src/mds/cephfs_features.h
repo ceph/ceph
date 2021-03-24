@@ -27,7 +27,7 @@ namespace ceph {
 // and update Server::update_required_client_features(). This feature bit
 // is used to indicate that operator only wants clients from that release or
 // later to mount CephFS.
-#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_PACIFIC
+#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_QUINCY
 
 // The first 5 bits are reserved for old ceph releases.
 #define CEPHFS_FEATURE_JEWEL		5
@@ -42,7 +42,8 @@ namespace ceph {
 #define CEPHFS_FEATURE_DELEG_INO        13
 #define CEPHFS_FEATURE_OCTOPUS          13
 #define CEPHFS_FEATURE_METRIC_COLLECT   14
-#define CEPHFS_FEATURE_MAX		14
+#define CEPHFS_FEATURE_ALTERNATE_NAME   15
+#define CEPHFS_FEATURE_MAX              15
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -58,6 +59,7 @@ namespace ceph {
   CEPHFS_FEATURE_DELEG_INO,             \
   CEPHFS_FEATURE_OCTOPUS,               \
   CEPHFS_FEATURE_METRIC_COLLECT,        \
+  CEPHFS_FEATURE_ALTERNATE_NAME,        \
 }
 
 #define CEPHFS_METRIC_FEATURES_ALL {		\
@@ -65,6 +67,10 @@ namespace ceph {
     CLIENT_METRIC_TYPE_READ_LATENCY,		\
     CLIENT_METRIC_TYPE_WRITE_LATENCY,		\
     CLIENT_METRIC_TYPE_METADATA_LATENCY,	\
+    CLIENT_METRIC_TYPE_DENTRY_LEASE,		\
+    CLIENT_METRIC_TYPE_OPENED_FILES,		\
+    CLIENT_METRIC_TYPE_PINNED_ICAPS,		\
+    CLIENT_METRIC_TYPE_OPENED_INODES,		\
 }
 
 #define CEPHFS_FEATURES_MDS_SUPPORTED CEPHFS_FEATURES_ALL

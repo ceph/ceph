@@ -42,16 +42,13 @@ public:
     CyanOmapIterator(ObjectRef obj) : obj(obj) {
       iter = obj->omap.begin();
     }
-    virtual seastar::future<int> seek_to_first();
-    virtual seastar::future<int> upper_bound(const std::string &after);
-    virtual seastar::future<int> lower_bound(const std::string &to);
-    virtual bool valid() const;
-    virtual seastar::future<int> next();
-    virtual std::string key() {
+    seastar::future<> seek_to_first() final;
+    seastar::future<> upper_bound(const std::string &after) final;
+    seastar::future<> lower_bound(const std::string &to) final;
+    bool valid() const final;
+    seastar::future<> next() final;
+    std::string key() final {
       return iter->first;
-    }
-    virtual seastar::future<std::string> tail_key() {
-      return seastar::make_ready_future<std::string>((++obj->omap.end())->first);
     }
     virtual ceph::buffer::list value() {
       return iter->second;
@@ -118,7 +115,7 @@ public:
     const ghobject_t& end,
     uint64_t limit) const final;
 
-  seastar::future<ceph::bufferlist> omap_get_header(
+  read_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef c,
     const ghobject_t& oid) final;
 

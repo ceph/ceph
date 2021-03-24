@@ -35,7 +35,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::RoleApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   rgw::auth::ImplicitTenants& implicit_tenant_context;
 
   STSEngine  sts_engine;
@@ -45,8 +45,8 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::RemoteApplier(cct, ctl, std::move(acl_alg), info,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
 			       implicit_tenant_context,
                                rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -57,7 +57,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -68,20 +68,21 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const rgw_user& user_id,
                             const std::string& token_policy,
                             const std::string& role_session_name,
-                            const std::vector<string>& token_claims) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::RoleApplier(cct, role, user_id, token_policy, role_session_name, token_claims));
+                            const std::vector<string>& token_claims,
+                            const std::string& token_issued_at) const override {
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RoleApplier(cct, role, user_id, token_policy, role_session_name, token_claims, token_issued_at));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
   STSAuthStrategy(CephContext* const cct,
-                       RGWCtl* const ctl,
+                       rgw::sal::RGWStore* store,
                        rgw::auth::ImplicitTenants& implicit_tenant_context,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
-    : ctl(ctl),
+    : store(store),
       implicit_tenant_context(implicit_tenant_context),
-      sts_engine(cct, ctl, *ver_abstractor,
+      sts_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::LocalApplier::Factory*>(this),
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                   static_cast<rgw::auth::RoleApplier::Factory*>(this)) {
@@ -98,7 +99,7 @@ public:
 class ExternalAuthStrategy : public rgw::auth::Strategy,
                              public rgw::auth::RemoteApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   rgw::auth::ImplicitTenants& implicit_tenant_context;
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
@@ -114,8 +115,8 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::RemoteApplier(cct, ctl, std::move(acl_alg), info,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
                                implicit_tenant_context,
                                rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
     /* TODO(rzarzynski): replace with static_ptr. */
@@ -124,12 +125,12 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 
 public:
   ExternalAuthStrategy(CephContext* const cct,
-                       RGWCtl* const ctl,
+                       rgw::sal::RGWStore* store,
                        rgw::auth::ImplicitTenants& implicit_tenant_context,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
-    : ctl(ctl),
+    : store(store),
       implicit_tenant_context(implicit_tenant_context),
-      ldap_engine(cct, ctl, *ver_abstractor,
+      ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
     if (cct->_conf->rgw_s3_auth_use_keystone &&
@@ -165,7 +166,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                                 AbstractorT>::value,
                 "AbstractorT must be a subclass of rgw::auth::s3::VersionAbstractor");
 
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   AbstractorT ver_abstractor;
 
   S3AnonymousEngine anonymous_engine;
@@ -178,7 +179,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -223,14 +224,14 @@ public:
 
   AWSAuthStrategy(CephContext* const cct,
                   rgw::auth::ImplicitTenants& implicit_tenant_context,
-                  RGWCtl* const ctl)
-    : ctl(ctl),
+                  rgw::sal::RGWStore* store)
+    : store(store),
       ver_abstractor(cct),
       anonymous_engine(cct,
                        static_cast<rgw::auth::LocalApplier::Factory*>(this)),
-      external_engines(cct, ctl, implicit_tenant_context, &ver_abstractor),
-      sts_engine(cct, ctl, implicit_tenant_context, &ver_abstractor),
-      local_engine(cct, ctl, ver_abstractor,
+      external_engines(cct, store, implicit_tenant_context, &ver_abstractor),
+      sts_engine(cct, store, implicit_tenant_context, &ver_abstractor),
+      local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
     /* The anonymous auth. */
     if (AllowAnonAccessT) {
@@ -462,7 +463,12 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 			 std::string_view& signature,            /* out */
 			 std::string_view& date,                 /* out */
 			 std::string_view& session_token,        /* out */
-			 const bool using_qs);                     /* in */
+			 const bool using_qs,                    /* in  */
+                         const DoutPrefixProvider *dpp);         /* in */
+
+string gen_v4_scope(const ceph::real_time& timestamp,
+                    const string& region,
+                    const string& service);
 
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
 {
@@ -513,6 +519,22 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
    * approach that boto library. See auth.py:canonical_uri(...). */
 
   std::string canonical_uri = aws4_uri_recode(info.request_uri_aws4, false);
+
+  if (canonical_uri.empty()) {
+    canonical_uri = "/";
+  } else {
+    boost::replace_all(canonical_uri, "+", "%20");
+  }
+
+  return canonical_uri;
+}
+
+static inline std::string gen_v4_canonical_uri(const req_info& info) {
+  /* The code should normalize according to RFC 3986 but S3 does NOT do path
+   * normalization that SigV4 typically does. This code follows the same
+   * approach that boto library. See auth.py:canonical_uri(...). */
+
+  std::string canonical_uri = aws4_uri_recode(info.request_uri, false);
 
   if (canonical_uri.empty()) {
     canonical_uri = "/";
@@ -579,11 +601,17 @@ static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
+std::string gen_v4_canonical_qs(const req_info& info);
+
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
                          const std::string_view& signedheaders,
                          bool using_qs,
                          bool force_boto2_compat);
+
+std::string gen_v4_canonical_headers(const req_info& info,
+                                     const map<string, string>& extra_headers,
+                                     string *signed_hdrs);
 
 extern sha256_digest_t
 get_v4_canon_req_hash(CephContext* cct,
@@ -592,20 +620,23 @@ get_v4_canon_req_hash(CephContext* cct,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
                       const std::string_view& signed_hdrs,
-                      const std::string_view& request_payload_hash);
+                      const std::string_view& request_payload_hash,
+                      const DoutPrefixProvider *dpp);
 
 AWSEngine::VersionAbstractor::string_to_sign_t
 get_v4_string_to_sign(CephContext* cct,
                       const std::string_view& algorithm,
                       const std::string_view& request_date,
                       const std::string_view& credential_scope,
-                      const sha256_digest_t& canonreq_hash);
+                      const sha256_digest_t& canonreq_hash,
+                      const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v4_signature(const std::string_view& credential_scope,
                  CephContext* const cct,
                  const std::string_view& secret_key,
-                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign,
+                 const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,

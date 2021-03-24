@@ -7,7 +7,7 @@
 
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/segment_manager/ephemeral.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
@@ -26,21 +26,24 @@ using namespace crimson::os::seastore::lba_manager::btree;
 
 struct btree_lba_manager_test :
   public seastar_test_suite_t, JournalSegmentProvider {
-  SegmentManagerRef segment_manager;
+  segment_manager::EphemeralSegmentManagerRef segment_manager;
   Journal journal;
   Cache cache;
   BtreeLBAManagerRef lba_manager;
 
   const size_t block_size;
 
+  WritePipeline pipeline;
+
   btree_lba_manager_test()
-    : segment_manager(create_ephemeral(segment_manager::DEFAULT_TEST_EPHEMERAL)),
+    : segment_manager(segment_manager::create_test_ephemeral()),
       journal(*segment_manager),
       cache(*segment_manager),
       lba_manager(new BtreeLBAManager(*segment_manager, cache)),
       block_size(segment_manager->get_block_size())
   {
     journal.set_segment_provider(this);
+    journal.set_write_pipeline(&pipeline);
   }
 
   segment_id_t next = 0;
@@ -60,15 +63,13 @@ struct btree_lba_manager_test :
       ceph_assert(0 == "cannot fail");
     }
 
-    return journal.submit_record(std::move(*record)).safe_then(
+    return journal.submit_record(std::move(*record), t->handle).safe_then(
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
 	lba_manager->complete_transaction(*t);
       },
-      crimson::ct_error::all_same_way([](auto e) {
-	ceph_assert(0 == "Hit error submitting to journal");
-      }));
+      crimson::ct_error::assert_all{});
   }
 
   seastar::future<> set_up_fut() final {

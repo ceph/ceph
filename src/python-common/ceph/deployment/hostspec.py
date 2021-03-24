@@ -28,22 +28,23 @@ class HostSpec(object):
         #: human readable status
         self.status = status or ''  # type: str
 
-    def to_json(self):
+    def to_json(self) -> dict:
         return {
             'hostname': self.hostname,
             'addr': self.addr,
-            'labels': self.labels,
+            'labels': list(set((self.labels))),
             'status': self.status,
         }
 
     @classmethod
-    def from_json(cls, host_spec):
+    def from_json(cls, host_spec: dict) -> 'HostSpec':
         _cls = cls(host_spec['hostname'],
                    host_spec['addr'] if 'addr' in host_spec else None,
-                   host_spec['labels'] if 'labels' in host_spec else None)
+                   list(set(host_spec['labels'])) if 'labels' in host_spec else None,
+                   host_spec['status'] if 'status' in host_spec else None)
         return _cls
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         args = [self.hostname]  # type: List[Any]
         if self.addr is not None:
             args.append(self.addr)
@@ -54,12 +55,12 @@ class HostSpec(object):
 
         return "HostSpec({})".format(', '.join(map(repr, args)))
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.hostname != self.addr:
             return f'{self.hostname} ({self.addr})'
         return self.hostname
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         # Let's omit `status` for the moment, as it is still the very same host.
         return self.hostname == other.hostname and \
                self.addr == other.addr and \

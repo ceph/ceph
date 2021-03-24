@@ -18,7 +18,7 @@
 #include "include/types.h"
 #include "messages/MMDSOp.h"
 
-class MExportDirPrepAck : public MMDSOp {
+class MExportDirPrepAck final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -36,7 +36,7 @@ protected:
     MMDSOp{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), success(s) {
     set_tid(tid);
   }
-  ~MExportDirPrepAck() override {}
+  ~MExportDirPrepAck() final {}
 
 public:  
   bool is_success() const { return success; }

@@ -105,8 +105,8 @@ public :
   void expect_cache_lookup_object(MockParentImageCache& mparent_image_cache,
                                   const std::string &cache_path) {
     EXPECT_CALL(*(mparent_image_cache.get_cache_client()),
-                lookup_object(_, _, _, _, _))
-      .WillOnce(WithArg<4>(Invoke([cache_path](CacheGenContextURef on_finish) {
+                lookup_object(_, _, _, _, _, _))
+      .WillOnce(WithArg<5>(Invoke([cache_path](CacheGenContextURef on_finish) {
         auto ack = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, 0, cache_path);
         on_finish.release()->complete(ack);
       })));

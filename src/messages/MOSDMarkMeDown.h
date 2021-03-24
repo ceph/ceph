@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDMarkMeDown : public PaxosServiceMessage {
+class MOSDMarkMeDown final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
@@ -39,7 +39,7 @@ private:
       fsid(fs), target_osd(osd), target_addrs(av),
       epoch(e), request_ack(request_ack) {}
  private:
-  ~MOSDMarkMeDown() override {}
+  ~MOSDMarkMeDown() final {}
 
 public: 
   epoch_t get_epoch() const { return epoch; }
@@ -48,16 +48,7 @@ public:
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
-    if (header.version <= 2) {
-      decode(fsid, p);
-      entity_inst_t i;
-      decode(i, p);
-      target_osd = i.name.num();
-      target_addrs = entity_addrvec_t(i.addr);
-      decode(epoch, p);
-      decode(request_ack, p);
-      return;
-    }
+    assert(header.version >= 3);
     decode(fsid, p);
     decode(target_osd, p);
     decode(target_addrs, p);
@@ -68,17 +59,7 @@ public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     paxos_encode();
-    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-      header.version = 2;
-      header.compat_version = 2;
-      encode(fsid, payload);
-      encode(entity_inst_t(entity_name_t::OSD(target_osd),
-			   target_addrs.legacy_addr()),
-	     payload, features);
-      encode(epoch, payload);
-      encode(request_ack, payload);
-      return;
-    }
+    assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
     encode(fsid, payload);

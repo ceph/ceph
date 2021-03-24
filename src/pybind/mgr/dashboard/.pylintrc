@@ -123,7 +123,8 @@ disable=import-star-module-level,
         relative-beyond-top-level,
         raise-missing-from,
         super-with-arguments,
-        import-outside-toplevel
+        import-outside-toplevel,
+        unsubscriptable-object
 
 
 # Enable the message, report, category or checker with the given id(s). You can

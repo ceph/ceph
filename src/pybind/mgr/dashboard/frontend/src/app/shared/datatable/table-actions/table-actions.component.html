@@ -1,23 +1,22 @@
 <div class="btn-group">
-  <ng-container *ngIf="getCurrentButton() as action">
+  <ng-container *ngIf="currentAction">
     <button type="button"
-            title="{{ useDisableDesc(action) }}"
+            title="{{ useDisableDesc(currentAction) }}"
             class="btn btn-{{btnColor}}"
-            [ngClass]="{'disabled': disableSelectionAction(action)}"
-            (click)="useClickAction(action)"
-            [routerLink]="useRouterLink(action)"
-            [preserveFragment]="action.preserveFragment ? '' : null">
-      <i [ngClass]="[action.icon]"></i>
-      <span>{{ action.name }}</span>
+            [ngClass]="{'disabled': disableSelectionAction(currentAction)}"
+            (click)="useClickAction(currentAction)"
+            [routerLink]="useRouterLink(currentAction)"
+            [preserveFragment]="currentAction.preserveFragment ? '' : null">
+      <i [ngClass]="[currentAction.icon]"></i>
+      <span>{{ currentAction.name }}</span>
     </button>
   </ng-container>
   <div class="btn-group"
        ngbDropdown
-       placement="bottom-right"
        role="group"
+       *ngIf="dropDownActions.length > 1"
        aria-label="Button group with nested dropdown">
     <button class="btn btn-{{btnColor}} dropdown-toggle-split"
-            *ngIf="showDropDownActions()"
             ngbDropdownToggle>
       <ng-container *ngIf="dropDownOnly">{{ dropDownOnly }} </ng-container>
       <span *ngIf="!dropDownOnly"
@@ -27,7 +26,7 @@
          ngbDropdownMenu>
       <ng-container *ngFor="let action of dropDownActions">
         <button ngbDropdownItem
-                class="{{ toClassName(action['name']) }}"
+                class="{{ toClassName(action) }}"
                 title="{{ useDisableDesc(action) }}"
                 (click)="useClickAction(action)"
                 [routerLink]="useRouterLink(action)"

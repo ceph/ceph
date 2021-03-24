@@ -3,6 +3,7 @@ Ceph cluster task.
 
 Handle the setup, starting, and clean-up of a Ceph cluster.
 """
+from copy import deepcopy
 from io import BytesIO
 from io import StringIO
 
@@ -20,9 +21,9 @@ import socket
 import yaml
 
 from paramiko import SSHException
-from tasks.ceph_manager import CephManager, write_conf
+from tasks.ceph_manager import CephManager, write_conf, get_valgrind_args
 from tarfile import ReadError
-from tasks.cephfs.filesystem import Filesystem
+from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
@@ -73,21 +74,30 @@ def generate_caps(type_):
         yield capability
 
 
+def update_archive_setting(ctx, key, value):
+    """
+    Add logs directory to job's info log file
+    """
+    if ctx.archive is None:
+        return
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' in info_yaml:
+            info_yaml['archive'][key] = value
+        else:
+            info_yaml['archive'] = {key: value}
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
+
 @contextlib.contextmanager
 def ceph_crash(ctx, config):
     """
     Gather crash dumps from /var/lib/ceph/crash
     """
 
-    # Add logs directory to job's info log file
-    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
-        info_yaml = yaml.safe_load(info_file)
-        info_file.seek(0)
-        if 'archive' not in info_yaml:
-            info_yaml['archive'] = {'crash': '/var/lib/ceph/crash'}
-        else:
-            info_yaml['archive']['crash'] = '/var/lib/ceph/crash'
-        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+    # Add crash directory to job's archive
+    update_archive_setting(ctx, 'crash', '/var/lib/ceph/crash')
 
     try:
         yield
@@ -159,14 +169,7 @@ def ceph_log(ctx, config):
     )
 
     # Add logs directory to job's info log file
-    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
-        info_yaml = yaml.safe_load(info_file)
-        info_file.seek(0)
-        if 'archive' not in info_yaml:
-            info_yaml['archive'] = {'log': '/var/log/ceph'}
-        else:
-            info_yaml['archive']['log'] = '/var/log/ceph'
-        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+    update_archive_setting(ctx, 'log', '/var/log/ceph')
 
     class Rotater(object):
         stop_event = gevent.event.Event()
@@ -231,24 +234,10 @@ def ceph_log(ctx, config):
 
             for remote in ctx.cluster.remotes.keys():
                 remote.write_file(remote_logrotate_conf, BytesIO(conf.encode()))
-                remote.run(
-                    args=[
-                        'sudo',
-                        'mv',
-                        remote_logrotate_conf,
-                        '/etc/logrotate.d/ceph-test.conf',
-                        run.Raw('&&'),
-                        'sudo',
-                        'chmod',
-                        '0644',
-                        '/etc/logrotate.d/ceph-test.conf',
-                        run.Raw('&&'),
-                        'sudo',
-                        'chown',
-                        'root.root',
-                        '/etc/logrotate.d/ceph-test.conf'
-                    ]
-                )
+                remote.sh(
+                    f'sudo mv {remote_logrotate_conf} /etc/logrotate.d/ceph-test.conf && '
+                    'sudo chmod 0644 /etc/logrotate.d/ceph-test.conf && '
+                    'sudo chown root.root /etc/logrotate.d/ceph-test.conf')
                 remote.chcon('/etc/logrotate.d/ceph-test.conf',
                              'system_u:object_r:etc_t:s0')
 
@@ -265,10 +254,7 @@ def ceph_log(ctx, config):
         if ctx.config.get('log-rotate'):
             log.info('Shutting down logrotate')
             logrotater.end()
-            ctx.cluster.run(
-                args=['sudo', 'rm', '/etc/logrotate.d/ceph-test.conf'
-                      ]
-            )
+            ctx.cluster.sh('sudo rm /etc/logrotate.d/ceph-test.conf')
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             # and logs
@@ -426,12 +412,37 @@ def cephfs_setup(ctx, config):
     # If there are any MDSs, then create a filesystem for them to use
     # Do this last because requires mon cluster to be up and running
     if mdss.remotes:
-        log.info('Setting up CephFS filesystem...')
+        log.info('Setting up CephFS filesystem(s)...')
+        cephfs_config = config.get('cephfs', {})
+        fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
+        set_allow_multifs = len(fs_configs) > 1
 
-        Filesystem(ctx, fs_config=config.get('cephfs', None), name='cephfs',
-                   create=True, ec_profile=config.get('cephfs_ec_profile', None))
+        # wait for standbys to become available (slow due to valgrind, perhaps)
+        mdsc = MDSCluster(ctx)
+        mds_count = len(list(teuthology.all_roles_of_type(ctx.cluster, 'mds')))
+        with contextutil.safe_while(sleep=2,tries=150) as proceed:
+            while proceed():
+                if len(mdsc.get_standby_daemons()) >= mds_count:
+                    break
 
-    yield
+        fss = []
+        for fs_config in fs_configs:
+            assert isinstance(fs_config, dict)
+            name = fs_config.pop('name')
+            temp = deepcopy(cephfs_config)
+            teuthology.deep_merge(temp, fs_config)
+            fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
+            if set_allow_multifs:
+                fs.set_allow_multifs()
+                set_allow_multifs = False
+            fss.append(fs)
+
+        yield
+
+        for fs in fss:
+            fs.destroy()
+    else:
+        yield
 
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):
@@ -732,6 +743,7 @@ def cluster(ctx, config):
         path=monmap_path,
         mon_bind_addrvec=config.get('mon_bind_addrvec'),
     )
+    ctx.ceph[cluster_name].fsid = fsid
     if not 'global' in conf:
         conf['global'] = {}
     conf['global']['fsid'] = fsid
@@ -1375,15 +1387,16 @@ def run_daemon(ctx, config, type_):
                 profile_path = '/var/log/ceph/profiling-logger/%s.prof' % (role)
                 run_cmd.extend(['env', 'CPUPROFILE=%s' % profile_path])
 
-            if config.get('valgrind') is not None:
+            vc = config.get('valgrind')
+            if vc is not None:
                 valgrind_args = None
-                if type_ in config['valgrind']:
-                    valgrind_args = config['valgrind'][type_]
-                if role in config['valgrind']:
-                    valgrind_args = config['valgrind'][role]
-                run_cmd = teuthology.get_valgrind_args(testdir, role,
-                                                       run_cmd,
-                                                       valgrind_args)
+                if type_ in vc:
+                    valgrind_args = vc[type_]
+                if role in vc:
+                    valgrind_args = vc[role]
+                exit_on_first_error = vc.get('exit_on_first_error', True)
+                run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args,
+                    exit_on_first_error=exit_on_first_error)
 
             run_cmd.extend(run_cmd_tail)
             log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
@@ -1712,6 +1725,20 @@ def task(ctx, config):
         - ceph:
             cephfs:
               max_mds: 2
+
+    To change the max_mds of a specific filesystem, use::
+
+        tasks:
+        - ceph:
+            cephfs:
+              max_mds: 2
+              fs:
+                - name: a
+                  max_mds: 3
+                - name: b
+
+    In the above example, filesystem 'a' will have 'max_mds' 3,
+    and filesystme 'b' will have 'max_mds' 2.
 
     To change the mdsmap's default session_timeout (60 seconds), use::
 

@@ -1,10 +1,9 @@
 import logging
-import re
 import json
-import datetime
+import socket
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING
+from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Any, NamedTuple
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -15,15 +14,27 @@ logger = logging.getLogger(__name__)
 
 ConfEntity = NewType('ConfEntity', str)
 
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
-
 
 class CephadmNoImage(Enum):
     token = 1
 
 
+# ceph daemon types that use the ceph container image.
+# NOTE: order important here as these are used for upgrade order
+CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror', 'cephfs-mirror']
+GATEWAY_TYPES = ['iscsi', 'nfs']
+MONITORING_STACK_TYPES = ['node-exporter', 'prometheus', 'alertmanager', 'grafana']
+CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES
+
+
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token
+
+
+class ContainerInspectInfo(NamedTuple):
+    image_id: str
+    ceph_version: Optional[str]
+    repo_digests: Optional[List[str]]
 
 
 def name_to_config_section(name: str) -> ConfEntity:
@@ -41,7 +52,7 @@ def name_to_config_section(name: str) -> ConfEntity:
 
 def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
     @wraps(f)
-    def forall_hosts_wrapper(*args) -> List[T]:
+    def forall_hosts_wrapper(*args: Any) -> List[T]:
         from cephadm.module import CephadmOrchestrator
 
         # Some weired logic to make calling functions with multiple arguments work.
@@ -53,14 +64,14 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
         else:
             assert 'either f([...]) or self.f([...])'
 
-        def do_work(arg):
+        def do_work(arg: Any) -> T:
             if not isinstance(arg, tuple):
                 arg = (arg, )
             try:
                 if self:
                     return f(self, *arg)
                 return f(*arg)
-            except Exception as e:
+            except Exception:
                 logger.exception(f'executing {f.__name__}({args}) failed.')
                 raise
 
@@ -78,7 +89,9 @@ def get_cluster_health(mgr: 'CephadmOrchestrator') -> str:
     })
     try:
         j = json.loads(out)
-    except Exception as e:
+    except ValueError:
+        msg = 'Failed to parse health status: Cannot decode JSON'
+        logger.exception('%s: \'%s\'' % (msg, out))
         raise OrchestratorError('failed to parse health status')
 
     return j['status']
@@ -91,9 +104,12 @@ def is_repo_digest(image_name: str) -> bool:
     return '@' in image_name
 
 
-def str_to_datetime(input: str) -> datetime.datetime:
-    return datetime.datetime.strptime(input, DATEFMT)
+def resolve_ip(hostname: str) -> str:
+    try:
+        return socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]
+    except socket.gaierror as e:
+        raise OrchestratorError(f"Cannot resolve ip for host {hostname}: {e}")
 
 
-def datetime_to_str(dt: datetime.datetime) -> str:
-    return dt.strftime(DATEFMT)
+def ceph_release_to_major(release: str) -> int:
+    return ord(release[0]) - ord('a') + 1

@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 
 import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../components/alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../components/loading-panel/loading-panel.component';
 import { CdForm } from '../forms/cd-form';

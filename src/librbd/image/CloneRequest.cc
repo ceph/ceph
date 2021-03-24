@@ -214,7 +214,7 @@ void CloneRequest<I>::validate_parent() {
     return;
   }
   if (m_use_p_features) {
-    m_features = (p_features & ~RBD_FEATURES_IMPLICIT_ENABLE);
+    m_features = p_features;
   }
 
   if (r < 0) {

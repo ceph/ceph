@@ -637,6 +637,7 @@ static int check_index(cls_method_context_t hctx,
 
   calc_header->tag_timeout = existing_header->tag_timeout;
   calc_header->ver = existing_header->ver;
+  calc_header->syncstopped = existing_header->syncstopped;
 
   map<string, bufferlist> keys;
   string start_obj;
@@ -981,9 +982,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   entry.index_ver = header.ver;
   /* resetting entry flags, entry might have been previously a delete
    * marker */
-  entry.flags = (entry.key.instance.empty() ?
-		 0 :
-		 rgw_bucket_dir_entry::FLAG_VER);
+  entry.flags &= rgw_bucket_dir_entry::FLAG_VER;
 
   if (op.tag.size()) {
     auto pinter = entry.pending_map.find(op.tag);

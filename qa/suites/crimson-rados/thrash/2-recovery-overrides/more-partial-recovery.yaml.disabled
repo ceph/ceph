@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_object_clean_region_max_num_intervals: 1000

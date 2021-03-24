@@ -1,23 +1,23 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Subject } from 'rxjs';
 
-import { RbdService } from '../../../shared/api/rbd.service';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { ImageSpec } from '../../../shared/models/image-spec';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { TaskManagerService } from '../../../shared/services/task-manager.service';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ImageSpec } from '~/app/shared/models/image-spec';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 
 @Component({
   selector: 'cd-rbd-snapshot-form-modal',
   templateUrl: './rbd-snapshot-form-modal.component.html',
   styleUrls: ['./rbd-snapshot-form-modal.component.scss']
 })
-export class RbdSnapshotFormModalComponent implements OnInit {
+export class RbdSnapshotFormModalComponent {
   poolName: string;
   namespace: string;
   imageName: string;
@@ -29,7 +29,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
   action: string;
   resource: string;
 
-  public onSubmit: Subject<string>;
+  public onSubmit: Subject<string> = new Subject();
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -49,10 +49,6 @@ export class RbdSnapshotFormModalComponent implements OnInit {
         validators: [Validators.required]
       })
     });
-  }
-
-  ngOnInit() {
-    this.onSubmit = new Subject();
   }
 
   setSnapName(snapName: string) {

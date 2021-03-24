@@ -70,13 +70,9 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button [form]="namespaceForm"
-                          (submitAction)="submit()"
-                          i18n>Create Namespace</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Close"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="namespaceForm"
+                              [submitText]="actionLabels.CREATE"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

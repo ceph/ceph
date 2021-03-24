@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/RWLock.h"
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_cache.h"
 
@@ -33,7 +34,7 @@ protected:
     notify_svc = _notify_svc;
   }
 
-  int do_start() override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
   int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,

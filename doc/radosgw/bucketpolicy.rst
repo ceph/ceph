@@ -65,6 +65,8 @@ Currently, we support only the following actions:
 - s3:GetObjectVersion
 - s3:GetObjectVersionTorrent
 - s3:GetReplicationConfiguration
+- s3:IPAddress
+- s3:NotIpAddress
 - s3:ListAllMyBuckets
 - s3:ListBucketMultipartUploads
 - s3:ListBucket
@@ -196,7 +198,7 @@ Object Related Operations
 |s3:GetObjectTagging &        |s3:ExistingObjectTag/<tag-key>                 |                   |
 |s3:GetObjectVersionTagging   |                                               |                   |
 +-----------------------------+-----------------------------------------------+-------------------+
-|s3:DeleteObjectTagging &     |s3:ExistingOBjectTag/<tag-key>                 |                   |
+|s3:DeleteObjectTagging &     |s3:ExistingObjectTag/<tag-key>                 |                   |
 |s3:DeleteObjectVersionTagging|                                               |                   |
 +-----------------------------+-----------------------------------------------+-------------------+
 

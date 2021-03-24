@@ -387,7 +387,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_ACCOUNT"),
                                    {NULL, 0} };
 
-void req_info::init_meta_info(bool *found_bad_meta)
+void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta)
 {
   x_meta_map.clear();
 
@@ -399,7 +399,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
       int len = meta_prefixes[prefix_num].len;
       const char *p = header_name.c_str();
       if (strncmp(p, prefix, len) == 0) {
-        dout(10) << "meta>> " << p << dendl;
+        ldpp_dout(dpp, 10) << "meta>> " << p << dendl;
         const char *name = p+len; /* skip the prefix */
         int name_len = header_name.size() - len;
 
@@ -431,7 +431,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
     }
   }
   for (const auto& kv: x_meta_map) {
-    dout(10) << "x>> " << kv.first << ":" << rgw::crypt_sanitize::x_meta_map{kv.first, kv.second} << dendl;
+    ldpp_dout(dpp, 10) << "x>> " << kv.first << ":" << rgw::crypt_sanitize::x_meta_map{kv.first, kv.second} << dendl;
   }
 }
 
@@ -788,7 +788,7 @@ int NameVal::parse()
   return ret; 
 }
 
-int RGWHTTPArgs::parse()
+int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
 {
   int pos = 0;
   bool end = false;
@@ -820,7 +820,7 @@ int RGWHTTPArgs::parse()
         });
       }
       string& val = nv.get_val();
-      dout(10) << "name: " << name << " val: " << val << dendl;
+      ldpp_dout(dpp, 10) << "name: " << name << " val: " << val << dendl;
       append(name, val);
     }
 
@@ -838,6 +838,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
     val_map[name] = val;
   }
 
+// when sub_resources exclusive by object are added, please remember to update obj_sub_resource in RGWHTTPArgs::exist_obj_excl_sub_resource().
   if ((name.compare("acl") == 0) ||
       (name.compare("cors") == 0) ||
       (name.compare("notification") == 0) ||
@@ -1012,14 +1013,16 @@ namespace {
 
 struct perm_state_from_req_state : public perm_state_base {
   req_state * const s;
-  perm_state_from_req_state(req_state * const _s) : perm_state_base(_s->cct,
-                                                                    _s->env,
-                                                                    _s->auth.identity.get(),
-                                                                    _s->bucket.get() ? _s->bucket->get_info() : RGWBucketInfo(),
-                                                                    _s->perm_mask,
-                                                                    _s->defer_to_bucket_acls,
-                                                                    _s->bucket_access_conf),
-                                                                    s(_s) {}
+  perm_state_from_req_state(req_state * const _s)
+    : perm_state_base(_s->cct,
+		      _s->env,
+		      _s->auth.identity.get(),
+		      _s->bucket.get() ? _s->bucket->get_info() : RGWBucketInfo(),
+		      _s->perm_mask,
+		      _s->defer_to_bucket_acls,
+		      _s->bucket_access_conf),
+      s(_s) {}
+
   std::optional<bool> get_request_payer() const override {
     const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
     if (!request_payer) {
@@ -1489,6 +1492,41 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s
                                   s->iam_user_policies,
                                   op);
 }
+
+
+int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::RGWAttrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
+  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (aiter != attrs.end()) {
+    RGWObjectRetention obj_retention;
+    try {
+      decode(obj_retention, aiter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+      return -EIO;
+    }
+    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) > ceph_clock_now()) {
+      if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
+        return -EACCES;
+      }
+    }
+  }
+  aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (aiter != attrs.end()) {
+    RGWObjectLegalHold obj_legal_hold;
+    try {
+      decode(obj_legal_hold, aiter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
+      return -EIO;
+    }
+    if (obj_legal_hold.is_enabled()) {
+      return -EACCES;
+    }
+  }
+  
+  return 0;
+}
+
 
 class HexTable
 {

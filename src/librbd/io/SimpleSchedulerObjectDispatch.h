@@ -112,9 +112,10 @@ public:
       uint64_t journal_tid, uint64_t new_journal_tid) override {
   }
 
-  void prepare_copyup(
+  int prepare_copyup(
       uint64_t object_no,
       SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override {
+    return 0;
   }
 
 private:

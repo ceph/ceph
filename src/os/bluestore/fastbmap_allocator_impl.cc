@@ -678,6 +678,9 @@ uint64_t AllocatorLevel01Loose::_claim_free_to_right_l0(int64_t l0_pos_start)
   int64_t pos = l0_pos_start;
   slot_t bits = (slot_t)1 << (pos % d0);
   size_t idx = pos / d0;
+  if (idx >= l0.size()) {
+    return pos;
+  }
   slot_t* val_s = l0.data() + idx;
 
   int64_t pos_e = p2roundup<int64_t>(pos + 1, d0);

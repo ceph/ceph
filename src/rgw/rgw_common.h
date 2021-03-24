@@ -48,6 +48,7 @@ namespace rgw::sal {
   class RGWUser;
   class RGWBucket;
   class RGWObject;
+  using RGWAttrs = std::map<std::string, ceph::buffer::list>;
 }
 
 using ceph::crypto::MD5;
@@ -139,6 +140,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
 #define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
+#define RGW_ATTR_CRYPT_CONTEXT  RGW_ATTR_CRYPT_PREFIX "context"
+#define RGW_ATTR_CRYPT_DATAKEY  RGW_ATTR_CRYPT_PREFIX "datakey"
 
 
 #define RGW_FORMAT_PLAIN        0
@@ -318,9 +321,9 @@ class RGWHTTPArgs {
   bool admin_subresource_added = false;
  public:
   RGWHTTPArgs() = default;
-  explicit RGWHTTPArgs(const std::string& s) {
+  explicit RGWHTTPArgs(const std::string& s, const DoutPrefixProvider *dpp) {
       set(s);
-      parse();
+      parse(dpp);
   }
 
   /** Set the arguments; as received */
@@ -331,7 +334,7 @@ class RGWHTTPArgs {
     str = s;
   }
   /** parse the received arguments */
-  int parse();
+  int parse(const DoutPrefixProvider *dpp);
   void append(const std::string& name, const string& val);
   /** Get the value for a specific argument parameter */
   const string& get(const std::string& name, bool *exists = NULL) const;
@@ -352,8 +355,26 @@ class RGWHTTPArgs {
   bool sub_resource_exists(const char *name) const {
     return (sub_resources.find(name) != std::end(sub_resources));
   }
+  bool exist_obj_excl_sub_resource() const {
+    const char* const obj_sub_resource[] = {"append", "torrent", "uploadId",
+                                            "partNumber", "versionId"};
+    for (unsigned i = 0; i != std::size(obj_sub_resource); i++) {
+      if (sub_resource_exists(obj_sub_resource[i])) return true;
+    }
+    return false;
+  }
+
   std::map<std::string, std::string>& get_params() {
     return val_map;
+  }
+  const std::map<std::string, std::string>& get_params() const {
+    return val_map;
+  }
+  std::map<std::string, std::string>& get_sys_params() {
+    return sys_val_map;
+  }
+  const std::map<std::string, std::string>& get_sys_params() const {
+    return sys_val_map;
   }
   const std::map<std::string, std::string>& get_sub_resources() const {
     return sub_resources;
@@ -706,7 +727,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(21, 9, bl);
+     ENCODE_START(22, 9, bl);
      encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
@@ -749,10 +770,11 @@ struct RGWUserInfo
      encode(type, bl);
      encode(mfa_ids, bl);
      encode(assumed_role_arn, bl);
+     encode(user_id.ns, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(21, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(22, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -832,6 +854,11 @@ struct RGWUserInfo
     }
     if (struct_v >= 21) {
       decode(assumed_role_arn, bl);
+    }
+    if (struct_v >= 22) {
+      decode(user_id.ns, bl);
+    } else {
+      user_id.ns.clear();
     }
     DECODE_FINISH(bl);
   }
@@ -1159,7 +1186,7 @@ struct req_info {
 
   req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
-  void init_meta_info(bool *found_bad_meta);
+  void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta);
 };
 
 typedef cls_rgw_obj_key rgw_obj_index_key;
@@ -1595,7 +1622,6 @@ struct req_state : DoutPrefixProvider {
   Clock::duration time_elapsed() const { return Clock::now() - time; }
 
   RGWObjectCtx *obj_ctx{nullptr};
-  RGWSysObjectCtx *sysobj_ctx{nullptr};
   string dialect;
   string req_id;
   string trans_id;
@@ -1994,7 +2020,7 @@ struct perm_state_base {
   CephContext *cct;
   const rgw::IAM::Environment& env;
   rgw::auth::Identity *identity;
-  const RGWBucketInfo& bucket_info;
+  const RGWBucketInfo bucket_info;
   int perm_mask;
   bool defer_to_bucket_acls;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
@@ -2139,6 +2165,12 @@ extern bool verify_object_permission_no_policy(
   int perm);
 extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state *s,
 					       int perm);
+extern int verify_object_lock(
+  const DoutPrefixProvider* dpp,
+  const rgw::sal::RGWAttrs& attrs,
+  const bool bypass_perm,
+  const bool bypass_governance_mode);
+
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);

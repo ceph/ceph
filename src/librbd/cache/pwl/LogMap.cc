@@ -36,7 +36,7 @@ LogMapEntry<T>::LogMapEntry(std::shared_ptr<T> log_entry)
 template <typename T>
 LogMap<T>::LogMap(CephContext *cct)
   : m_cct(cct),
-    m_lock(ceph::make_mutex(util::unique_lock_name(
+    m_lock(ceph::make_mutex(pwl::unique_lock_name(
            "librbd::cache::pwl::LogMap::m_lock", this))) {
 }
 

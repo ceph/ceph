@@ -2,10 +2,11 @@ import { PoolPageHelper } from './pools.po';
 
 describe('Pools page', () => {
   const pools = new PoolPageHelper();
-  const poolName = 'pool_e2e_pool/test';
+  const poolName = 'pool_e2e_pool-test';
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     pools.navigateTo();
   });
 
@@ -31,13 +32,19 @@ describe('Pools page', () => {
     it('should create a pool', () => {
       pools.exist(poolName, false);
       pools.navigateTo('create');
-      pools.create(poolName, 8);
+      pools.create(poolName, 8, 'rbd');
       pools.exist(poolName, true);
     });
 
     it('should edit a pools placement group', () => {
       pools.exist(poolName, true);
       pools.edit_pool_pg(poolName, 32);
+    });
+
+    it('should show updated configuration field values', () => {
+      pools.exist(poolName, true);
+      const bpsLimit = '4 B/s';
+      pools.edit_pool_configuration(poolName, bpsLimit);
     });
 
     it('should delete a pool', () => {

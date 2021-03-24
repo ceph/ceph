@@ -26,8 +26,10 @@
 
 int SelectDriver::init(EventCenter *c, int nevent)
 {
+  #ifndef _WIN32
   ldout(cct, 0) << "Select isn't suitable for production env, just avoid "
                 << "compiling error or special purpose" << dendl;
+  #endif
   FD_ZERO(&rfds);
   FD_ZERO(&wfds);
   max_fd = 0;

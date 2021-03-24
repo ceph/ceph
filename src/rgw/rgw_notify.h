@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
 
@@ -25,7 +25,7 @@ namespace rgw::notify {
 // initialize the notification manager
 // notification manager is dequeing the 2-phase-commit queues
 // and send the notifications to the endpoints
-bool init(CephContext* cct, rgw::sal::RGWRadosStore* store);
+bool init(CephContext* cct, rgw::sal::RGWRadosStore* store, const DoutPrefixProvider *dpp);
 
 // shutdown the notification manager
 void shutdown();
@@ -56,9 +56,9 @@ struct reservation_t {
   rgw::sal::RGWRadosStore* const store;
   const req_state* const s;
   size_t size;
-  const rgw::sal::RGWObject* const object;
+  rgw::sal::RGWObject* const object;
 
-  reservation_t(rgw::sal::RGWRadosStore* _store, const req_state* _s, const rgw::sal::RGWObject* _object) : 
+  reservation_t(rgw::sal::RGWRadosStore* _store, const req_state* _s, rgw::sal::RGWObject* _object) : 
       store(_store), s(_s), object(_object) {}
 
   // dtor doing resource leak guarding
@@ -68,15 +68,17 @@ struct reservation_t {
 
 // create a reservation on the 2-phase-commit queue
 int publish_reserve(EventType event_type,
-        reservation_t& reservation);
+        reservation_t& reservation,
+        const RGWObjTags* req_tags);
 
 // commit the reservation to the queue
-int publish_commit(const rgw::sal::RGWObject* obj,
+int publish_commit(rgw::sal::RGWObject* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
-        reservation_t& reservation);
+        reservation_t& reservation,
+        const DoutPrefixProvider *dpp);
 
 // cancel the reservation
 int publish_abort(reservation_t& reservation);

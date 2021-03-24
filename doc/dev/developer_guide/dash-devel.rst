@@ -5,6 +5,21 @@ Ceph Dashboard Developer Documentation
 
 .. contents:: Table of Contents
 
+Feature Design
+--------------
+
+To promote collaboration on new Ceph Dashboard features, the first step is
+the definition of a design document. These documents then form the basis of
+implementation scope and permit wider participation in the evolution of the
+Ceph Dashboard UI.
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Design Documents:
+
+    UI Design Goals <../dashboard/ui_goals>
+
+
 Preliminary Steps
 -----------------
 
@@ -800,6 +815,129 @@ To change the variable defaults or add your own ones you can overwrite them in
 Just reassign the variable you want to change, for example ``$color-primary: teal;``
 To overwrite or extend the default CSS, you can add your own styles in
 ``./frontend/src/styles/vendor/_style-overrides.scss``.
+
+UI Style Guide
+~~~~~~~~~~~~~~
+
+The style guide is created to document Ceph Dashboard standards and maintain
+consistency across the project. Its an effort to make it easier for
+contributors to process designing and deciding mockups and designs for
+Dashboard.
+
+The development environment for Ceph Dashboard has live reloading enabled so
+any changes made in UI are reflected in open browser windows. Ceph Dashboard
+uses Bootstrap as the main third-party CSS library.
+
+Avoid duplication of code. Be consistent with the existing UI by reusing
+existing SCSS declarations as much as possible.
+
+Always check for existing code similar to what you want to write.
+You should always try to keep the same look-and-feel as the existing code.
+
+Colors
+......
+
+All the colors used in Ceph Dashboard UI are listed in
+`frontend/src/styles/defaults/_bootstrap-defaults.scss`. If using new color
+always define color variables in the `_bootstrap-defaults.scss` and
+use the variable instead of hard coded color values so that changes to the
+color are reflected in similar UI elements.
+
+The main color for the Ceph Dashboard is `$primary`. The primary color is
+used in navigation components and as the `$border-color` for input components of
+form.
+
+The secondary color is `$secondary` and is the background color for Ceph
+Dashboard.
+
+Buttons
+.......
+
+Buttons are used for performing actions such as: “Submit”, “Edit, “Create" and
+“Update”.
+
+**Forms:** When using to submit forms anywhere in the Dashboard, the main action
+button should use the `cd-submit-button` component and the secondary button should
+use `cd-back-button` component. The text on the action button should be same as the
+form title and follow a title case. The text on the secondary button should be
+`Cancel`. `Perform action` button should always be on right while `Cancel`
+button should always be on left.
+
+**Modals**: The main action button should use the `cd-submit-button` component and
+the secondary button should use `cd-back-button` component. The text on the action
+button should follow a title case and correspond to the action to be performed.
+The text on the secondary button should be `Close`.
+
+**Disclosure Button:** Disclosure buttons should be used to allow users to
+display and hide additional content in the interface.
+
+**Action Button**: Use the action button to perform actions such as edit or update
+a component. All action button should have an icon corresponding to the actions they
+perform and button text should follow title case. The button color should be the
+same as the form's main button color.
+
+**Drop Down Buttons:** Use dropdown buttons to display predefined lists of
+actions. All drop down buttons have icons corresponding to the action they
+perform.
+
+Links
+.....
+
+Use text hyperlinks as navigation to guide users to a new page in the application
+or to anchor users to a section within a page. The color of the hyperlinks
+should be `$primary`.
+
+Forms
+.....
+
+Mark invalid form fields with red outline and show a meaningful error message.
+Use red as font color for message and be as specific as possible.
+`This field is required.` should be the exact error message for required fields.
+Mark valid forms with a green outline and a green tick at the end of the form.
+Sections should not have a bigger header than the parent.
+
+Modals
+......
+
+Blur any interface elements in the background to bring the modal content into
+focus. The heading of the modal should reflect the action it can perform and
+should be clearly mentioned at the top of the modal. Use `cd-back-button`
+component in the footer for closing the modal.
+
+Icons
+.....
+
+We use `Fork Awesome <https://forkaweso.me/Fork-Awesome/>`_ classes for icons.
+We have a list of used icons in `src/app/shared/enum/icons.enum.ts`, these
+should be referenced in the HTML, so its easier to change them later. When
+icons are next to text, they should be center-aligned horizontally. If icons
+are stacked, they should also be center-aligned vertically. Use small icons
+with buttons. For notifications use large icons.
+
+Navigation
+..........
+
+For local navigation use tabs. For overall navigation use expandable vertical
+navigation to collapse and expand items as needed.
+
+Alerts and notifications
+........................
+
+Default notification should have `text-info` color. Success notification should
+have `text-success` color. Failure notification should have `text-danger` color.
+
+Error Handling
+~~~~~~~~~~~~~~
+
+For handling front-end errors, there is a generic Error Component which can be
+found in ``./src/pybind/mgr/dashboard/frontend/src/app/core/error``. For
+reporting a new error, you can simply extend the ``DashboardError`` class
+in ``error.ts`` file and add specific header and message for the new error. Some
+generic error classes are already in place such as ``DashboardNotFoundError``
+and ``DashboardForbiddenError`` which can be called and reused in different
+scenarios.
+
+For example - ``throw new DashboardNotFoundError()``.
 
 I18N
 ----
@@ -1998,7 +2136,7 @@ REST API documentation
 ~~~~~~~~~~~~~~~~~~~~~~
 Ceph-Dashboard provides two types of documentation for the **Ceph RESTful API**:
 
-* **Static documentation**: available at :ref:`mgr-ceph-api`. This comes from a versioned specification located at ``src/pybind/mgr/dashboard/openapi.yaml``.
+* **Static documentation**: available at :ref:`mgr ceph api`. This comes from a versioned specification located at ``src/pybind/mgr/dashboard/openapi.yaml``.
 * **Interactive documentation**: available from a running Ceph-Dashboard instance (top-right ``?`` icon > API Docs).
 
 If changes are made to the ``controllers/`` directory, it's very likely that

@@ -12,7 +12,7 @@
  * 
  */
 
-#include <sstream>
+#include <ostream>
 
 #include "common/debug.h"
 #include "mon/health_check.h"

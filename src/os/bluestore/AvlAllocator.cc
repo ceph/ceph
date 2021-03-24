@@ -36,8 +36,8 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
 				     uint64_t align)
 {
   const auto compare = t.key_comp();
-  for (auto rs = t.lower_bound(range_t{*cursor, size}, compare);
-       rs != t.end(); ++rs) {
+  auto rs_start = t.lower_bound(range_t{*cursor, size}, compare);
+  for (auto rs = rs_start; rs != t.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
       *cursor = offset + size;
@@ -48,7 +48,7 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
    * If we know we've searched the whole tree (*cursor == 0), give up.
    * Otherwise, reset the cursor to the beginning and try again.
    */
-   if (*cursor == 0) {
+   if (*cursor == 0 || rs_start == t.begin()) {
      return -1ULL;
    }
    *cursor = 0;
@@ -230,7 +230,7 @@ int AvlAllocator::_allocate(
   ceph_assert(align != 0);
   uint64_t *cursor = &lbas[cbits(align) - 1];
 
-  const int free_pct = num_free * 100 / num_total;
+  const int free_pct = num_free * 100 / device_size;
   uint64_t start = 0;
   /*
    * If we're running low on space switch to using the size
@@ -240,7 +240,15 @@ int AvlAllocator::_allocate(
       max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
     *cursor = 0;
-    start = _block_picker(range_size_tree, cursor, size, unit);
+    do {
+      start = _block_picker(range_size_tree, cursor, size, unit);
+      if (start != -1ULL || !force_range_size_alloc) {
+        break;
+      }
+      // try to collect smaller extents as we could fail to retrieve
+      // that large block due to misaligned extents
+      size = p2align(size >> 1, unit);
+    } while (size >= unit);
   } else {
     start = _block_picker(range_tree, cursor, size, unit);
   }
@@ -260,6 +268,7 @@ void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
   for (auto p = release_set.begin(); p != release_set.end(); ++p) {
     const auto offset = p.get_start();
     const auto length = p.get_len();
+    ceph_assert(offset + length <= uint64_t(device_size));
     ldout(cct, 10) << __func__ << std::hex
       << " offset 0x" << offset
       << " length 0x" << length
@@ -289,9 +298,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
                            int64_t block_size,
                            uint64_t max_mem,
                            const std::string& name) :
-  Allocator(name),
-  num_total(device_size),
-  block_size(block_size),
+  Allocator(name, device_size, block_size),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
@@ -304,9 +311,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
 			   int64_t device_size,
 			   int64_t block_size,
 			   const std::string& name) :
-  Allocator(name),
-  num_total(device_size),
-  block_size(block_size),
+  Allocator(name, device_size, block_size),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
@@ -398,6 +403,7 @@ void AvlAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> no
 void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
@@ -408,6 +414,7 @@ void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length

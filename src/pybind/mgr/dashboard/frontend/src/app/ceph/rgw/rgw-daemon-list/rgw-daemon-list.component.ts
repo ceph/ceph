@@ -1,13 +1,15 @@
 import { Component, OnInit } from '@angular/core';
 
-import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
-import { RgwSiteService } from '../../../shared/api/rgw-site.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { Permission } from '../../../shared/models/permissions';
-import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { take } from 'rxjs/operators';
+
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { Permission } from '~/app/shared/models/permissions';
+import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-rgw-daemon-list',
@@ -43,6 +45,16 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       },
       {
+        name: $localize`Zone Group`,
+        prop: 'zonegroup_name',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Zone`,
+        prop: 'zone_name',
+        flexGrow: 2
+      },
+      {
         name: $localize`Version`,
         prop: 'version',
         flexGrow: 1,
@@ -55,7 +67,7 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
   }
 
   getDaemonList(context: CdTableFetchDataContext) {
-    this.rgwDaemonService.list().subscribe(
+    this.rgwDaemonService.daemons$.pipe(take(1)).subscribe(
       (resp: object[]) => {
         this.daemons = resp;
       },

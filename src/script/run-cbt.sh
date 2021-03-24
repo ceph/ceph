@@ -1,7 +1,7 @@
 #!/bin/sh
 
 usage() {
-    local prog_name=$1
+    prog_name=$1
     shift
     cat <<EOF
 usage:
@@ -86,13 +86,13 @@ fi
 # store absolute path before changing cwd
 source_dir=$(readlink -f $source_dir)
 if ! $use_existing; then
-    cd $build_dir
+    cd $build_dir || exit
     # seastar uses 128*8 aio in reactor for io and 10003 aio for events pooling
     # for each core, if it fails to enough aio context, the seastar application
     # bails out. and take other process into consideration, let's make it
     # 32768 per core
-    max_io=$(expr 32768 \* $(nproc))
-    if test $(/sbin/sysctl --values fs.aio-max-nr) -lt $max_io; then
+    max_io=$(expr 32768 \* "$(nproc)")
+    if test "$(/sbin/sysctl --values fs.aio-max-nr)" -lt $max_io; then
         sudo /sbin/sysctl -q -w fs.aio-max-nr=$max_io
     fi
     if $classical; then
@@ -105,7 +105,18 @@ if ! $use_existing; then
            --crimson --nodaemon --redirect-output \
            --osd-args "--memory 4G"
     fi
-    cd -
+    cd - || exit
+fi
+
+# i need to read the performance events,
+# see https://www.kernel.org/doc/Documentation/sysctl/kernel.txt
+if /sbin/capsh --supports=cap_sys_admin; then
+    perf_event_paranoid=$(/sbin/sysctl --values kernel.perf_event_paranoid)
+    if test $perf_event_paranoid -gt 0; then
+        sudo /sbin/sysctl -q -w kernel.perf_event_paranoid=0
+    fi
+else
+    echo "without cap_sys_admin, $(whoami) cannot read the perf events"
 fi
 
 for config_file in $config_files; do
@@ -122,8 +133,13 @@ for config_file in $config_files; do
     rm -f $cbt_config
 done
 
+if test -n "$perf_event_paranoid"; then
+    # restore the setting
+    sudo /sbin/sysctl -q -w kernel.perf_event_paranoid=$perf_event_paranoid
+fi
+
 if ! $use_existing; then
-    cd $build_dir
+    cd $build_dir || exit
     if $classical; then
       $source_dir/src/stop.sh
     else

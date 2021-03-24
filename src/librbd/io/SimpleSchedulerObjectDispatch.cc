@@ -269,6 +269,8 @@ bool SimpleSchedulerObjectDispatch<I>::write(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << data.length() << dendl;
 
+  std::lock_guard locker{m_lock};
+
   // don't try to batch assert version writes
   if (assert_version.has_value() ||
       (write_flags & OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
@@ -276,7 +278,6 @@ bool SimpleSchedulerObjectDispatch<I>::write(
     return false;
   }
 
-  std::lock_guard locker{m_lock};
   if (try_delay_write(object_no, object_off, std::move(data), io_context,
                       op_flags, *object_dispatch_flags, on_dispatched)) {
 

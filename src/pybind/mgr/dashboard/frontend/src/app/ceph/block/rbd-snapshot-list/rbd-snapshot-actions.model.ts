@@ -1,9 +1,8 @@
-import { RbdService } from 'app/shared/api/rbd.service';
-
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 export class RbdSnapshotActionsModel {
   create: CdTableAction;
@@ -18,7 +17,11 @@ export class RbdSnapshotActionsModel {
 
   cloneFormatVersion = 1;
 
-  constructor(actionLabels: ActionLabelsI18n, featuresName: string[], rbdService: RbdService) {
+  constructor(
+    actionLabels: ActionLabelsI18n,
+    public featuresName: string[],
+    rbdService: RbdService
+  ) {
     rbdService.cloneFormatVersion().subscribe((version: number) => {
       this.cloneFormatVersion = version;
     });
@@ -50,7 +53,8 @@ export class RbdSnapshotActionsModel {
     this.clone = {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
-      disable: (selection: CdTableSelection) => this.getCloneDisableDesc(selection, featuresName),
+      disable: (selection: CdTableSelection) =>
+        this.getCloneDisableDesc(selection, this.featuresName),
       icon: Icons.clone,
       name: actionLabels.CLONE
     };

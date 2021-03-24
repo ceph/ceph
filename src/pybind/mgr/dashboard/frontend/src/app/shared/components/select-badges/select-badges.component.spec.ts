@@ -3,7 +3,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SelectMessages } from '../select/select-messages.model';
 import { SelectComponent } from '../select/select.component';
 import { SelectBadgesComponent } from './select-badges.component';

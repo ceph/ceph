@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, JObj, JList
+from .helper import DashboardTestCase, JList, JObj
 
 
 class ECPTest(DashboardTestCase):
@@ -48,7 +48,6 @@ class ECPTest(DashboardTestCase):
             self.assertSubset(default_ecp, default[0])
             get_data = self._get('/api/erasure_code_profile/default')
             self.assertEqual(get_data, default[0])
-
 
     def test_create(self):
         data = {'name': 'ecp32', 'k': 3, 'm': 2}
@@ -104,4 +103,3 @@ class ECPTest(DashboardTestCase):
             'directory': str,
             'nodes': JList(JObj({}, allow_unknown=True))
         }))
-

@@ -21,37 +21,49 @@
 namespace crimson::os::seastore {
 
 class OnodeManager {
+  using base_ertr = TransactionManager::base_ertr;
 public:
-  using open_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  virtual open_ertr::future<OnodeRef> get_or_create_onode(
+  using mkfs_ertr = TransactionManager::mkfs_ertr;
+  using mkfs_ret = mkfs_ertr::future<>;
+  virtual mkfs_ret mkfs(Transaction &t) = 0;
+
+  using get_onode_ertr = base_ertr::extend<
+    crimson::ct_error::enoent>;
+  using get_onode_ret = get_onode_ertr::future<
+    OnodeRef>;
+  virtual get_onode_ret get_onode(
     Transaction &trans,
     const ghobject_t &hoid) {
-    return open_ertr::make_ready_future<OnodeRef>();
-  }
-  virtual open_ertr::future<std::vector<OnodeRef>> get_or_create_onodes(
-    Transaction &trans,
-    const std::vector<ghobject_t> &hoids) {
-    return open_ertr::make_ready_future<std::vector<OnodeRef>>();
+    return seastar::make_ready_future<OnodeRef>();
   }
 
-  using write_ertr= crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  virtual write_ertr::future<> write_dirty(
+  using get_or_create_onode_ertr = base_ertr;
+  using get_or_create_onode_ret = get_or_create_onode_ertr::future<
+    OnodeRef>;
+  virtual get_or_create_onode_ret get_or_create_onode(
+    Transaction &trans,
+    const ghobject_t &hoid) {
+    return seastar::make_ready_future<OnodeRef>();
+  }
+
+  using get_or_create_onodes_ertr = base_ertr;
+  using get_or_create_onodes_ret = get_or_create_onodes_ertr::future<
+    std::vector<OnodeRef>>;
+  virtual get_or_create_onodes_ret get_or_create_onodes(
+    Transaction &trans,
+    const std::vector<ghobject_t> &hoids) {
+    return seastar::make_ready_future<std::vector<OnodeRef>>();
+  }
+
+  using write_dirty_ertr = base_ertr;
+  using write_dirty_ret = write_dirty_ertr::future<>;
+  virtual write_dirty_ret write_dirty(
     Transaction &trans,
     const std::vector<OnodeRef> &onodes) {
-    return write_ertr::now();
+    return seastar::now();
   }
   virtual ~OnodeManager() {}
 };
 using OnodeManagerRef = std::unique_ptr<OnodeManager>;
-
-namespace onode_manager {
-
-OnodeManagerRef create_ephemeral() {
-  return OnodeManagerRef();
-}
-
-}
 
 }

@@ -11,7 +11,7 @@
 namespace rgw {
 
 /* static */
-  int RGWHandler_Lib::init_from_header(rgw::sal::RGWRadosStore *store,
+  int RGWHandler_Lib::init_from_header(rgw::sal::RGWStore *store,
 				       struct req_state *s)
   {
     string req;
@@ -29,7 +29,7 @@ namespace rgw {
     }
 
     s->info.args.set(p);
-    s->info.args.parse();
+    s->info.args.parse(s);
 
     if (*req_name != '/')
       return 0;

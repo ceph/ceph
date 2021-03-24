@@ -1,7 +1,7 @@
 import { Component, Input } from '@angular/core';
 
-import { Icons } from '../../enum/icons.enum';
-import { TextToDownloadService } from '../../services/text-to-download.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { TextToDownloadService } from '~/app/shared/services/text-to-download.service';
 
 @Component({
   selector: 'cd-download-button',

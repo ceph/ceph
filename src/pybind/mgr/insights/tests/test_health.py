@@ -2,6 +2,7 @@ import unittest
 from tests import mock
 from ..health import *
 
+
 class HealthChecksTest(unittest.TestCase):
     def test_check_accum_empty(self):
         # health checks accum initially empty reports empty
@@ -86,7 +87,7 @@ class HealthChecksTest(unittest.TestCase):
         self.assertFalse(h.add({
             "C0": {
                 "severity": "S0",
-                "summary": { "message": "s0" },
+                "summary": {"message": "s0"},
                 "detail": []
             }
         }))
@@ -94,16 +95,16 @@ class HealthChecksTest(unittest.TestCase):
         self.assertFalse(h.add({
             "C0": {
                 "severity": "S0",
-                "summary": { "message": "s1" },
-                "detail": [{ "message": "d1" }]
+                "summary": {"message": "s1"},
+                "detail": [{"message": "d1"}]
             }
         }))
 
         self.assertFalse(h.add({
             "C0": {
                 "severity": "S0",
-                "summary": { "message": "s0" },
-                "detail": [{ "message": "d1" }, { "message": "d2" }]
+                "summary": {"message": "s0"},
+                "detail": [{"message": "d1"}, {"message": "d2"}]
             }
         }))
 
@@ -114,7 +115,7 @@ class HealthChecksTest(unittest.TestCase):
         self.assertTrue(h.add({
             "C0": {
                 "severity": "S0",
-                "summary": { "message": "s3" },
+                "summary": {"message": "s3"},
                 "detail": []
             }
         }))
@@ -122,24 +123,24 @@ class HealthChecksTest(unittest.TestCase):
         self.assertTrue(h.add({
             "C0": {
                 "severity": "S0",
-                "summary": { "message": "s1" },
-                "detail": [{ "message": "d4" }]
+                "summary": {"message": "s1"},
+                "detail": [{"message": "d4"}]
             }
         }))
 
         self.assertTrue(h.add({
             "C0": {
                 "severity": "S2",
-                "summary": { "message": "s0" },
-                "detail": [{ "message": "d0" }]
+                "summary": {"message": "s0"},
+                "detail": [{"message": "d0"}]
             }
         }))
 
         self.assertTrue(h.add({
             "C2": {
                 "severity": "S0",
-                "summary": { "message": "s0" },
-                "detail": [{ "message": "d0" }, { "message": "d1" }]
+                "summary": {"message": "s0"},
+                "detail": [{"message": "d0"}, {"message": "d1"}]
             }
         }))
 
@@ -172,6 +173,7 @@ class HealthChecksTest(unittest.TestCase):
             }
         })
 
+
 class HealthHistoryTest(unittest.TestCase):
     def _now(self):
         # return some time truncated at 30 minutes past the hour. this lets us
@@ -180,11 +182,11 @@ class HealthHistoryTest(unittest.TestCase):
         # tracking health history.
         dt = datetime.datetime.utcnow()
         return datetime.datetime(
-            year   = dt.year,
-            month  = dt.month,
-            day    = dt.day,
-            hour   = dt.hour,
-            minute = 30)
+            year=dt.year,
+            month=dt.month,
+            day=dt.day,
+            hour=dt.hour,
+            minute=30)
 
     def test_empty_slot(self):
         now = self._now()
@@ -193,7 +195,7 @@ class HealthHistoryTest(unittest.TestCase):
         h = HealthHistorySlot()
 
         # reports no historical checks
-        self.assertEqual(h.health(), { "checks": {} })
+        self.assertEqual(h.health(), {"checks": {}})
 
         # an empty slot doesn't need to be flushed
         self.assertFalse(h.need_flush())
@@ -206,7 +208,7 @@ class HealthHistoryTest(unittest.TestCase):
         self.assertFalse(h.expired())
 
         # an hour from now it would be expired
-        future = now + datetime.timedelta(hours = 1)
+        future = now + datetime.timedelta(hours=1)
         HealthHistorySlot._now = mock.Mock(return_value=future)
         self.assertTrue(h.expired())
 
@@ -217,11 +219,11 @@ class HealthHistoryTest(unittest.TestCase):
         h = HealthHistorySlot()
         self.assertFalse(h.need_flush())
 
-        self.assertTrue(h.add(dict(checks = {
+        self.assertTrue(h.add(dict(checks={
             "C0": {
                 "severity": "S0",
-                "summary": { "message": "s0" },
-                "detail": [{ "message": "d0" }]
+                "summary": {"message": "s0"},
+                "detail": [{"message": "d0"}]
             }
         })))
         # no flush needed, yet...
@@ -241,23 +243,23 @@ class HealthHistoryTest(unittest.TestCase):
         # been dirty for the persistence period
         dt = datetime.datetime.utcnow()
         now = datetime.datetime(
-            year   = dt.year,
-            month  = dt.month,
-            day    = dt.day,
-            hour   = dt.hour,
-            minute = 59,
-            second = 59)
+            year=dt.year,
+            month=dt.month,
+            day=dt.day,
+            hour=dt.hour,
+            minute=59,
+            second=59)
         HealthHistorySlot._now = mock.Mock(return_value=now)
         h = HealthHistorySlot()
         self.assertFalse(h.expired())
         self.assertFalse(h.need_flush())
 
         # now it is dirty, but it doesn't need a flush
-        self.assertTrue(h.add(dict(checks = {
+        self.assertTrue(h.add(dict(checks={
             "C0": {
                 "severity": "S0",
-                "summary": { "message": "s0" },
-                "detail": [{ "message": "d0" }]
+                "summary": {"message": "s0"},
+                "detail": [{"message": "d0"}]
             }
         })))
         self.assertFalse(h.expired())
@@ -266,7 +268,7 @@ class HealthHistoryTest(unittest.TestCase):
         # advance time past the hour so it expires, but not past the persistence
         # period deadline for the last event that set the dirty bit
         self.assertTrue(PERSIST_PERIOD.total_seconds() > 5)
-        future = now + datetime.timedelta(seconds = 5)
+        future = now + datetime.timedelta(seconds=5)
         HealthHistorySlot._now = mock.Mock(return_value=future)
 
         self.assertTrue(h.expired())

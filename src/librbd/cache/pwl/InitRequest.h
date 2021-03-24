@@ -12,7 +12,11 @@ class ImageCtx;
 
 namespace io { class ImageDispatchInterface; }
 
+namespace plugin { template <typename> struct Api; }
+
 namespace cache {
+
+class ImageWritebackInterface;
 
 namespace pwl {
 
@@ -25,7 +29,11 @@ class ImageCacheState;
 template <typename ImageCtxT = ImageCtx>
 class InitRequest {
 public:
-  static InitRequest* create(ImageCtxT &image_ctx, Context *on_finish);
+  static InitRequest* create(
+      ImageCtxT &image_ctx,
+      librbd::cache::ImageWritebackInterface& image_writeback,
+      plugin::Api<ImageCtxT>& plugin_api,
+      Context *on_finish);
 
   void send();
 
@@ -53,9 +61,14 @@ private:
    * @endverbatim
    */
 
-  InitRequest(ImageCtxT &image_ctx, Context *on_finish);
+  InitRequest(ImageCtxT &image_ctx,
+              librbd::cache::ImageWritebackInterface& image_writeback,
+	      plugin::Api<ImageCtxT>& plugin_api,
+              Context *on_finish);
 
   ImageCtxT &m_image_ctx;
+  librbd::cache::ImageWritebackInterface& m_image_writeback;
+  plugin::Api<ImageCtxT>& m_plugin_api;
   AbstractWriteLog<ImageCtxT> *m_image_cache;
   Context *m_on_finish;
 

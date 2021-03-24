@@ -718,7 +718,7 @@ void RADOS::Builder::build(boost::asio::io_context& ioctx,
     auto r = cct->_conf.parse_config_files(conf_files ? conf_files->data() : nullptr,
 					   &ss, flags);
     if (r < 0)
-      c->dispatch(std::move(c), ceph::to_error_code(r), RADOS{nullptr});
+      c->post(std::move(c), ceph::to_error_code(r), RADOS{nullptr});
   }
 
   cct->_conf.parse_env(cct->get_module_type());
@@ -727,7 +727,7 @@ void RADOS::Builder::build(boost::asio::io_context& ioctx,
     std::stringstream ss;
     auto r = cct->_conf.set_val(n, v, &ss);
     if (r < 0)
-      c->dispatch(std::move(c), ceph::to_error_code(-EINVAL), RADOS{nullptr});
+      c->post(std::move(c), ceph::to_error_code(-EINVAL), RADOS{nullptr});
   }
 
   if (!no_mon_conf) {
@@ -735,7 +735,7 @@ void RADOS::Builder::build(boost::asio::io_context& ioctx,
     // TODO This function should return an error code.
     auto err = mc_bootstrap.get_monmap_and_config();
     if (err < 0)
-      c->dispatch(std::move(c), ceph::to_error_code(err), RADOS{nullptr});
+      c->post(std::move(c), ceph::to_error_code(err), RADOS{nullptr});
   }
   if (!cct->_log->is_started()) {
     cct->_log->start();
@@ -756,7 +756,7 @@ void RADOS::make_with_cct(CephContext* cct,
 		    RADOS{std::move(r)});
       });
   } catch (const bs::system_error& err) {
-    c->dispatch(std::move(c), err.code(), RADOS{nullptr});
+    c->post(std::move(c), err.code(), RADOS{nullptr});
   }
 }
 
@@ -899,8 +899,9 @@ void RADOS::lookup_pool(std::string_view name,
        objecter = impl->objecter]
       (bs::error_code ec) mutable {
 	int64_t ret =
-	  objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-				name);
+	  objecter->with_osdmap([&](const OSDMap &osdmap) {
+	    return osdmap.lookup_pg_pool_name(name);
+	  });
 	if (ret < 0)
 	  ca::dispatch(std::move(c), osdc_errc::pool_dne,
 		       std::int64_t(0));
@@ -908,10 +909,10 @@ void RADOS::lookup_pool(std::string_view name,
 	  ca::dispatch(std::move(c), bs::error_code{}, ret);
       });
   } else if (ret < 0) {
-    ca::dispatch(std::move(c), osdc_errc::pool_dne,
+    ca::post(std::move(c), osdc_errc::pool_dne,
 		 std::int64_t(0));
   } else {
-    ca::dispatch(std::move(c), bs::error_code{}, ret);
+    ca::post(std::move(c), bs::error_code{}, ret);
   }
 }
 
@@ -1544,7 +1545,7 @@ void RADOS::enable_application(std::string_view pool, std::string_view app_name,
   // preserved until Luminous is configured as minimum version.
   if (!impl->get_required_monitor_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
-    ca::dispatch(std::move(c), ceph::to_error_code(-EOPNOTSUPP));
+    ca::post(std::move(c), ceph::to_error_code(-EOPNOTSUPP));
   } else {
     impl->monclient.start_mon_command(
       { fmt::format("{{ \"prefix\": \"osd pool application enable\","

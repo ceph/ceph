@@ -306,16 +306,16 @@ public:
     return new RGWMetadataObject;
   }
 
-  int get(string& entry, RGWMetadataObject **obj, optional_yield y) override {
+  int get(string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
     return -ENOTSUP;
   }
 
   int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-          optional_yield y, RGWMDLogSyncType type) override {
+          optional_yield y, const DoutPrefixProvider *dpp, RGWMDLogSyncType type, bool from_remote_zone) override {
     return -ENOTSUP;
   }
 
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y) override {
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) override {
     return -ENOTSUP;
   }
 
@@ -323,6 +323,7 @@ public:
              const ceph::real_time& mtime,
              RGWObjVersionTracker *objv_tracker,
              optional_yield y,
+             const DoutPrefixProvider *dpp,
              RGWMDLogStatus op_type,
              std::function<int()> f) {
     return -ENOTSUP;
@@ -388,27 +389,28 @@ RGWMetadataHandler_GenericMetaBE::Put::Put(RGWMetadataHandler_GenericMetaBE *_ha
 					   string& _entry, RGWMetadataObject *_obj,
 					   RGWObjVersionTracker& _objv_tracker,
 					   optional_yield _y,
-					   RGWMDLogSyncType _type):
+					   RGWMDLogSyncType _type, bool _from_remote_zone):
   handler(_handler), op(_op),
   entry(_entry), obj(_obj),
   objv_tracker(_objv_tracker),
   apply_type(_type),
-  y(_y)
+  y(_y),
+  from_remote_zone(_from_remote_zone)
 {
 }
 
 RGWMetadataHandlerPut_SObj::RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
                                                        string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
 						       optional_yield y,
-                                                       RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, y, type) {
+                                                       RGWMDLogSyncType type, bool from_remote_zone) : Put(handler, op, entry, obj, objv_tracker, y, type, from_remote_zone) {
 }
 
 RGWMetadataHandlerPut_SObj::~RGWMetadataHandlerPut_SObj() {
 }
 
-int RGWMetadataHandlerPut_SObj::put_pre()
+int RGWMetadataHandlerPut_SObj::put_pre(const DoutPrefixProvider *dpp)
 {
-  int ret = get(&old_obj);
+  int ret = get(&old_obj, dpp);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -431,23 +433,23 @@ int RGWMetadataHandlerPut_SObj::put_pre()
   return 0;
 }
 
-int RGWMetadataHandlerPut_SObj::put()
+int RGWMetadataHandlerPut_SObj::put(const DoutPrefixProvider *dpp)
 {
   int ret = put_check();
   if (ret != 0) {
     return ret;
   }
 
-  return put_checked();
+  return put_checked(dpp);
 }
 
-int RGWMetadataHandlerPut_SObj::put_checked()
+int RGWMetadataHandlerPut_SObj::put_checked(const DoutPrefixProvider *dpp)
 {
   RGWSI_MBSObj_PutParams params(obj->get_pattrs(), obj->get_mtime());
 
   encode_obj(&params.bl);
 
-  int ret = op->put(entry, params, &objv_tracker, y);
+  int ret = op->put(entry, params, &objv_tracker, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -455,19 +457,19 @@ int RGWMetadataHandlerPut_SObj::put_checked()
   return 0;
 }
 
-int RGWMetadataHandler_GenericMetaBE::do_put_operate(Put *put_op)
+int RGWMetadataHandler_GenericMetaBE::do_put_operate(Put *put_op, const DoutPrefixProvider *dpp)
 {
-  int r = put_op->put_pre();
+  int r = put_op->put_pre(dpp);
   if (r != 0) { /* r can also be STATUS_NO_APPLY */
     return r;
   }
 
-  r = put_op->put();
+  r = put_op->put(dpp);
   if (r != 0) {
     return r;
   }
 
-  r = put_op->put_post();
+  r = put_op->put_post(dpp);
   if (r != 0) {  /* e.g., -error or STATUS_APPLIED */
     return r;
   }
@@ -475,24 +477,25 @@ int RGWMetadataHandler_GenericMetaBE::do_put_operate(Put *put_op)
   return 0;
 }
 
-int RGWMetadataHandler_GenericMetaBE::get(string& entry, RGWMetadataObject **obj, optional_yield y)
+int RGWMetadataHandler_GenericMetaBE::get(string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return do_get(op, entry, obj, y);
+    return do_get(op, entry, obj, y, dpp);
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield y, RGWMDLogSyncType type)
+int RGWMetadataHandler_GenericMetaBE::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+                                          optional_yield y, const DoutPrefixProvider *dpp, RGWMDLogSyncType type, bool from_remote_zone)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return do_put(op, entry, obj, objv_tracker, y, type);
+    return do_put(op, entry, obj, objv_tracker, y, dpp, type, from_remote_zone);
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y)
+int RGWMetadataHandler_GenericMetaBE::remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return do_remove(op, entry, objv_tracker, y);
+    return do_remove(op, entry, objv_tracker, y, dpp);
   });
 }
 
@@ -500,6 +503,7 @@ int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
                                              const ceph::real_time& mtime,
                                              RGWObjVersionTracker *objv_tracker,
                                              optional_yield y,
+                                             const DoutPrefixProvider *dpp,
                                              RGWMDLogStatus op_type,
                                              std::function<int()> f)
 {
@@ -509,7 +513,8 @@ int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
                       params,
                       objv_tracker,
 		      y,
-                      f);
+                      f,
+                      dpp);
   });
 }
 
@@ -624,7 +629,7 @@ int RGWMetadataManager::find_handler(const string& metadata_key, RGWMetadataHand
 
 }
 
-int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y)
+int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -635,7 +640,7 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y
 
   RGWMetadataObject *obj;
 
-  ret = handler->get(entry, &obj, y);
+  ret = handler->get(entry, &obj, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -658,7 +663,9 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y
 
 int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 			    optional_yield y,
+                            const DoutPrefixProvider *dpp,
                             RGWMDLogSyncType sync_type,
+                            bool from_remote_zone,
                             obj_version *existing_version)
 {
   RGWMetadataHandler *handler;
@@ -698,7 +705,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
     return -EINVAL;
   }
 
-  ret = handler->put(entry, obj, objv_tracker, y, sync_type);
+  ret = handler->put(entry, obj, objv_tracker, y, dpp, sync_type, from_remote_zone);
   if (existing_version) {
     *existing_version = objv_tracker.read_version;
   }
@@ -708,7 +715,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   return ret;
 }
 
-int RGWMetadataManager::remove(string& metadata_key, optional_yield y)
+int RGWMetadataManager::remove(string& metadata_key, optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -719,7 +726,7 @@ int RGWMetadataManager::remove(string& metadata_key, optional_yield y)
   }
 
   RGWMetadataObject *obj;
-  ret = handler->get(entry, &obj, y);
+  ret = handler->get(entry, &obj, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -727,13 +734,14 @@ int RGWMetadataManager::remove(string& metadata_key, optional_yield y)
   objv_tracker.read_version = obj->get_version();
   delete obj;
 
-  return handler->remove(entry, objv_tracker, y);
+  return handler->remove(entry, objv_tracker, y, dpp);
 }
 
 int RGWMetadataManager::mutate(const string& metadata_key,
                                const ceph::real_time& mtime,
                                RGWObjVersionTracker *objv_tracker,
 			       optional_yield y,
+                               const DoutPrefixProvider *dpp,
                                RGWMDLogStatus op_type,
                                std::function<int()> f)
 {
@@ -745,7 +753,7 @@ int RGWMetadataManager::mutate(const string& metadata_key,
     return ret;
   }
 
-  return handler->mutate(entry, mtime, objv_tracker, y, op_type, f);
+  return handler->mutate(entry, mtime, objv_tracker, y, dpp, op_type, f);
 }
 
 int RGWMetadataManager::get_shard_id(const string& section, const string& entry, int *shard_id)

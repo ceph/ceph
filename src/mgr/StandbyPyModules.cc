@@ -20,13 +20,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/Gil.h"
 
-
-#define BOOST_BIND_GLOBAL_PLACEHOLDERS
-#include <boost/python.hpp>
-#undef BOOST_BIND_GLOBAL_PLACEHOLDERS
-#include "include/ceph_assert.h"  // boost clobbers this
-
-// For ::config_prefix
+// For ::mgr_store_prefix
 #include "PyModuleRegistry.h"
 
 #define dout_context g_ceph_context
@@ -131,8 +125,7 @@ int StandbyPyModule::load()
 bool StandbyPyModule::get_config(const std::string &key,
                                  std::string *value) const
 {
-  const std::string global_key = PyModule::config_prefix
-    + get_name() + "/" + key;
+  const std::string global_key = "mgr/" + get_name() + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;
  
@@ -150,7 +143,7 @@ bool StandbyPyModule::get_store(const std::string &key,
                                 std::string *value) const
 {
 
-  const std::string global_key = PyModule::config_prefix
+  const std::string global_key = PyModule::mgr_store_prefix
     + get_name() + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;

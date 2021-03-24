@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Union
 
 import cherrypy
 
-from .. import mgr
+from .. import DEFAULT_VERSION, mgr
 from ..api.doc import Schema, SchemaInput, SchemaType
 from . import ENDPOINT_MAP, BaseController, Controller, Endpoint, allow_empty_body
 
@@ -204,23 +204,33 @@ class Docs(BaseController):
             }
         }
         if method.lower() == 'get':
-            resp['200'] = {'description': "OK"}
+            resp['200'] = {'description': "OK",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() == 'post':
-            resp['201'] = {'description': "Resource created."}
+            resp['201'] = {'description': "Resource created.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() == 'put':
-            resp['200'] = {'description': "Resource updated."}
+            resp['200'] = {'description': "Resource updated.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() == 'delete':
-            resp['204'] = {'description': "Resource deleted."}
+            resp['204'] = {'description': "Resource deleted.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() in ['post', 'put', 'delete']:
             resp['202'] = {'description': "Operation is still executing."
-                                          " Please check the task queue."}
+                                          " Please check the task queue.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
 
         if resp_object:
             for status_code, response_body in resp_object.items():
                 if status_code in resp:
                     resp[status_code].update({
                         'content': {
-                            'application/json': {
+                            'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION): {
                                 'schema': cls._gen_schema_for_content(response_body)}}})
 
         return resp
@@ -365,11 +375,11 @@ class Docs(BaseController):
 
         return spec
 
-    @Endpoint(path="api.json")
+    @Endpoint(path="api.json", version=None)
     def api_json(self):
         return self._gen_spec(False, "/")
 
-    @Endpoint(path="api-all.json")
+    @Endpoint(path="api-all.json", version=None)
     def api_all_json(self):
         return self._gen_spec(True, "/")
 
@@ -381,8 +391,11 @@ class Docs(BaseController):
             spec_url = "{}/docs/api.json".format(base)
 
         auth_header = cherrypy.request.headers.get('authorization')
+        auth_cookie = cherrypy.request.cookie['token']
         jwt_token = ""
-        if auth_header is not None:
+        if auth_cookie is not None:
+            jwt_token = auth_cookie.value
+        elif auth_header is not None:
             scheme, params = auth_header.split(' ', 1)
             if scheme.lower() == 'bearer':
                 jwt_token = params
@@ -446,12 +459,12 @@ class Docs(BaseController):
 
         return page
 
-    @Endpoint(json_response=False)
+    @Endpoint(json_response=False, version=None)
     def __call__(self, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints)
 
     @Endpoint('POST', path="/", json_response=False,
-              query_params="{all_endpoints}")
+              query_params="{all_endpoints}", version=None)
     @allow_empty_body
     def _with_token(self, token, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints, token)

@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 from enum import Enum
+from typing import List, Optional
 
 import cherrypy
 from mgr_module import CLICommand, Option
@@ -77,14 +78,13 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def register_commands(self):
-        @CLICommand(
-            "dashboard feature",
-            "name=action,type=CephChoices,strings={} ".format(
-                "|".join(a.value for a in Actions))
-            + "name=features,type=CephChoices,strings={},req=false,n=N".format(
-                "|".join(f.value for f in Features)),
-            "Enable or disable features in Ceph-Mgr Dashboard")
-        def cmd(mgr, action, features=None):
+        @CLICommand("dashboard feature")
+        def cmd(mgr,
+                action: Actions,
+                features: Optional[List[Features]] = None):
+            '''
+            Enable or disable features in Ceph-Mgr Dashboard
+            '''
             ret = 0
             msg = []
             if action in [Actions.ENABLE.value, Actions.DISABLE.value]:

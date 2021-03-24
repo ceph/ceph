@@ -56,10 +56,10 @@ def clients_evicted(ctx, config):
         if mount is not None:
             if evicted:
                 log.info("confirming client {} is blocklisted".format(client))
-                assert mount.is_blocklisted()
+                assert fs.is_addr_blocklisted(mount.get_global_addr())
             elif client in no_session:
                 log.info("client {} should not be evicted but has no session with an MDS".format(client))
-                mount.is_blocklisted() # for debugging
+                fs.is_addr_blocklisted(mount.get_global_addr()) # for debugging
                 should_assert = True
     if should_assert:
         raise RuntimeError("some clients which should not be evicted have no session with an MDS?")

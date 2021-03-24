@@ -4,8 +4,9 @@ import { FormControl } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-iscsi-target-iqn-settings-modal',
@@ -19,7 +20,11 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
 
   settingsForm: CdFormGroup;
 
-  constructor(public activeModal: NgbActiveModal, public iscsiService: IscsiService) {}
+  constructor(
+    public activeModal: NgbActiveModal,
+    public iscsiService: IscsiService,
+    public actionLabels: ActionLabelsI18n
+  ) {}
 
   ngOnInit() {
     const fg: Record<string, FormControl> = {};

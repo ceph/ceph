@@ -31,11 +31,13 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
+#include "librbd/PluginRegistry.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Image.h"
 #include "librbd/api/Io.h"
+#include "librbd/cache/Utils.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
@@ -44,7 +46,8 @@
 #include "librbd/image/GetMetadataRequest.h"
 #include "librbd/image/Types.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
@@ -178,7 +181,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int obj_order = ictx->order;
     {
       std::shared_lock locker{ictx->image_lock};
-      info.size = ictx->get_image_size(ictx->snap_id);
+      info.size = ictx->get_effective_image_size(ictx->snap_id);
     }
     info.obj_size = 1ULL << obj_order;
     info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
@@ -855,7 +858,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0)
       return r;
     std::shared_lock l2{ictx->image_lock};
-    *size = ictx->get_image_size(ictx->snap_id);
+    *size = ictx->get_effective_image_size(ictx->snap_id);
     return 0;
   }
 
@@ -1293,7 +1296,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       trace.init("copy", &src->trace_endpoint);
     }
 
-    std::shared_lock owner_lock{src->owner_lock};
     SimpleThrottle throttle(src->config.get_val<uint64_t>("rbd_concurrent_management_ops"), false);
     uint64_t period = src->get_stripe_period();
     unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
@@ -1328,13 +1330,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       auto ctx = new C_CopyRead(&throttle, dest, offset, bl, sparse_size);
       auto comp = io::AioCompletion::create_and_start<Context>(
 	ctx, src, io::AIO_TYPE_READ);
+      auto req = io::ImageDispatchSpec::create_read(
+        *src, io::IMAGE_DISPATCH_LAYER_NONE, comp,
+        {{offset, len}}, io::ReadResult{bl},
+        src->get_data_io_context(), fadvise_flags, 0, trace);
 
-      io::ImageReadRequest<> req(*src, comp, {{offset, len}},
-				 io::ReadResult{bl}, src->get_data_io_context(),
-                                 fadvise_flags, 0, std::move(trace));
-      ctx->read_trace = req.get_trace();
+      ctx->read_trace = trace;
+      req->send();
 
-      req.send();
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -1540,10 +1543,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       C_SaferCond ctx;
       auto c = io::AioCompletion::create_and_start(&ctx, ictx,
                                                    io::AIO_TYPE_READ);
-      io::ImageRequest<>::aio_read(ictx, c, {{off, read_len}},
-                                   io::ReadResult{&bl},
-                                   ictx->get_data_io_context(), 0, 0,
-                                   std::move(trace));
+      auto req = io::ImageDispatchSpec::create_read(
+        *ictx, io::IMAGE_DISPATCH_LAYER_NONE, c,
+        {{off, read_len}}, io::ReadResult{&bl},
+        ictx->get_data_io_context(), 0, 0, trace);
+      req->send();
 
       int ret = ctx.wait();
       if (ret < 0) {
@@ -1572,16 +1576,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   {
     ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
 
-    uint64_t image_size;
-    if (ictx->snap_id == CEPH_NOSNAP) {
-      image_size = ictx->get_image_size(CEPH_NOSNAP);
-    } else {
-      auto snap_info = ictx->get_snap_info(ictx->snap_id);
-      if (snap_info == nullptr) {
-	return -ENOENT;
-      }
-      image_size = snap_info->size;
+    if (ictx->snap_id != CEPH_NOSNAP &&
+        ictx->get_snap_info(ictx->snap_id) == nullptr) {
+      return -ENOENT;
     }
+    uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
 
     // special-case "len == 0" requests: always valid
     if (*len == 0)
@@ -1610,11 +1609,25 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond ctx;
     {
-      std::shared_lock owner_locker{ictx->owner_lock};
-      ictx->io_object_dispatcher->invalidate_cache(&ctx);
+      ictx->io_image_dispatcher->invalidate_cache(&ctx);
     }
     r = ctx.wait();
+
+    if (r < 0) {
+      ldout(cct, 20) << "failed to invalidate image cache" << dendl;
+      return r;
+    }
+
     ictx->perfcounter->inc(l_librbd_invalidate_cache);
+
+    // Delete writeback cache if it is not initialized
+    if ((!ictx->exclusive_lock ||
+         !ictx->exclusive_lock->is_lock_owner()) &&
+        ictx->test_features(RBD_FEATURE_DIRTY_CACHE)) {
+      C_SaferCond ctx3;
+      ictx->plugin_registry->discard(&ctx3);
+      r = ctx3.wait();
+    }
     return r;
   }
 

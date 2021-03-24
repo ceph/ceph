@@ -1489,9 +1489,17 @@ int RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
     return 0;
   }
 
-  parent_md->spec.pool_id = m_migration_spec.pool_id;
-  parent_md->spec.pool_namespace = m_migration_spec.pool_namespace;
-  parent_md->spec.image_id = m_migration_spec.image_id;
+  if (!m_migration_spec.source_spec.empty()) {
+    // use special pool id just to indicate a parent (migration source image)
+    // exists
+    parent_md->spec.pool_id = std::numeric_limits<int64_t>::max();
+    parent_md->spec.pool_namespace = "";
+    parent_md->spec.image_id = "";
+  } else {
+    parent_md->spec.pool_id = m_migration_spec.pool_id;
+    parent_md->spec.pool_namespace = m_migration_spec.pool_namespace;
+    parent_md->spec.image_id = m_migration_spec.image_id;
+  }
   parent_md->spec.snap_id = CEPH_NOSNAP;
   parent_md->overlap = std::min(m_size, m_migration_spec.overlap);
 
@@ -1521,8 +1529,9 @@ int RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
   }
 
   *migration_info = {m_migration_spec.pool_id, m_migration_spec.pool_namespace,
-                     m_migration_spec.image_name, m_migration_spec.image_id, {},
-                     overlap, m_migration_spec.flatten};
+                     m_migration_spec.image_name, m_migration_spec.image_id,
+                     m_migration_spec.source_spec, {}, overlap,
+                     m_migration_spec.flatten};
   *migration_info_valid = true;
 
   deep_copy::util::compute_snap_map(m_image_ctx.cct, 0, CEPH_NOSNAP, {},

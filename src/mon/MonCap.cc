@@ -201,7 +201,7 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("fs", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
-    profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
+    profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_W | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("config", MON_CAP_R | MON_CAP_W));
     // cephadm orchestrator provisions new daemon keys and updates caps
@@ -290,6 +290,17 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
+  if (profile == "simple-rados-client-with-blocklist") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd blocklist"));
+    profile_grants.back().command_args["blocklistop"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_EQUAL, "add");
+    profile_grants.back().command_args["addr"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_REGEX, "^[^/]+/[0-9]+$");
+
+  }
   if (boost::starts_with(profile, "rbd")) {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
@@ -326,6 +337,16 @@ void MonCapGrant::expand_profile(const EntityName& name) const
   else if (profile == "crash") {
     // TODO: we could limit this to getting the monmap and mgrmap...
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+  }
+  if (profile == "cephfs-mirror") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("mds", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                "cephfs/mirror/peer/");
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
+
   }
   if (profile == "role-definer") {
     // grants ALL caps to the auth subsystem, read-only on the
@@ -540,7 +561,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     unquoted_word %= +char_("a-zA-Z0-9_./-");
     str %= quoted_string | unquoted_word;
     network_str %= +char_("/.:a-fA-F0-9][");
-    fs_name_str %= +char_("a-zA-Z0-9-_.");
+    fs_name_str %= +char_("a-zA-Z0-9_.-");
 
     spaces = +(lit(' ') | lit('\n') | lit('\t'));
 

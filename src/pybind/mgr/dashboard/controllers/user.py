@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 
 import cherrypy
+from ceph_argparse import CephString
 
 from .. import mgr
 from ..exceptions import DashboardException, PasswordPolicyException, \
@@ -13,7 +14,7 @@ from ..security import Scope
 from ..services.access_control import SYSTEM_ROLES, PasswordPolicy
 from ..services.auth import JwtManager
 from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, RESTController, allow_empty_body
+    EndpointDoc, RESTController, allow_empty_body, validate_ceph_type
 
 USER_SCHEMA = ([{
     "username": (str, 'Username of the user'),
@@ -81,6 +82,7 @@ class User(RESTController):
             raise cherrypy.HTTPError(404)
         return User._user_to_dict(user)
 
+    @validate_ceph_type([('username', CephString())], 'user')
     def create(self, username=None, password=None, name=None, email=None,
                roles=None, enabled=True, pwdExpirationDate=None, pwdUpdateRequired=True):
         if not username:

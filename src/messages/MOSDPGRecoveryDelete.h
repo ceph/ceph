@@ -10,7 +10,7 @@
  * instruct non-primary to remove some objects during recovery
  */
 
-class MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
+class MOSDPGRecoveryDelete final : public MOSDFastDispatchOp {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -58,7 +58,7 @@ public:
   {}
 
 private:
-  ~MOSDPGRecoveryDelete() {}
+  ~MOSDPGRecoveryDelete() final {}
 
 public:
   std::string_view get_type_name() const { return "recovery_delete"; }

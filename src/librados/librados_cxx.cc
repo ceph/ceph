@@ -850,22 +850,24 @@ void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
 void librados::NObjectIteratorImpl::get_next()
 {
   const char *entry, *key, *nspace;
+  size_t entry_size, key_size, nspace_size;
   if (ctx->nlc->at_end())
     return;
-  int ret = rados_nobjects_list_next(ctx.get(), &entry, &key, &nspace);
+  int ret = rados_nobjects_list_next2(ctx.get(), &entry, &key, &nspace,
+                                      &entry_size, &key_size, &nspace_size);
   if (ret == -ENOENT) {
     return;
   }
   else if (ret) {
     throw std::system_error(-ret, std::system_category(),
-                            "rados_nobjects_list_next");
+                            "rados_nobjects_list_next2");
   }
 
   if (cur_obj.impl == NULL)
     cur_obj.impl = new ListObjectImpl();
-  cur_obj.impl->nspace = nspace;
-  cur_obj.impl->oid = entry;
-  cur_obj.impl->locator = key ? key : string();
+  cur_obj.impl->nspace = string{nspace, nspace_size};
+  cur_obj.impl->oid = string{entry, entry_size};
+  cur_obj.impl->locator = key ? string(key, key_size) : string();
 }
 
 uint32_t librados::NObjectIteratorImpl::get_pg_hash_position() const
@@ -2306,22 +2308,22 @@ librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
 
 void librados::IoCtx::set_osdmap_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_osdmap_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::set_pool_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_pool_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
 
 ///////////////////////////// Rados //////////////////////////////

@@ -567,6 +567,8 @@ public:
 
   void print(std::ostream& out) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
+  void print_daemon_summary(std::ostream& out) const;
+  void print_fs_summary(std::ostream& out) const;
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<FSMap*>& ls);
@@ -576,8 +578,8 @@ protected:
   uint64_t next_filesystem_id = FS_CLUSTER_ID_ANONYMOUS + 1;
   fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
   CompatSet compat;
-  bool enable_multiple = false;
-  bool ever_enabled_multiple = false; // < the cluster had multiple MDSes enabled once
+  bool enable_multiple = true;
+  bool ever_enabled_multiple = true; // < the cluster had multiple FS enabled once
 
   std::map<fs_cluster_id_t, Filesystem::ref> filesystems;
 

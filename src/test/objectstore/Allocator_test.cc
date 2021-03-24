@@ -341,12 +341,14 @@ TEST_P(AllocTest, test_dump_fragmentation_score)
 	//allocate
 	want_size = ( rng() % one_alloc_max ) / alloc_unit * alloc_unit + alloc_unit;
 	tmp.clear();
-	uint64_t r = alloc->allocate(want_size, alloc_unit, 0, 0, &tmp);
-	for (auto& t: tmp) {
-	  if (t.length > 0)
-	    allocated.push_back(t);
-	}
-	allocated_cnt += r;
+        int64_t r = alloc->allocate(want_size, alloc_unit, 0, 0, &tmp);
+        if (r > 0) {
+          for (auto& t: tmp) {
+            if (t.length > 0)
+              allocated.push_back(t);
+          }
+          allocated_cnt += r;
+        }
       } else {
 	//free
 	ceph_assert(allocated.size() > 0);
@@ -478,6 +480,24 @@ TEST_P(AllocTest, test_alloc_contiguous)
   }
 
   alloc->shutdown();
+}
+
+TEST_P(AllocTest, test_alloc_47883)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 1599858540544ul;
+
+  init_alloc(size, block);
+
+  alloc->init_add_free(0x1b970000, 0x26000);
+  alloc->init_add_free(0x1747e9d5000, 0x493000);
+  alloc->init_add_free(0x1747ee6a000, 0x196000);
+
+  PExtentVector extents;
+  auto need = 0x3f980000;
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  EXPECT_GT(got, 0);
+  EXPECT_EQ(got, 0x630000);
 }
 
 INSTANTIATE_TEST_SUITE_P(

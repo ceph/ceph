@@ -5,7 +5,7 @@ set -e
 SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
 
-num_vcpus=$(( $(lscpu -p | tail -1 | cut -d "," -f 1) + 1 ))
+num_vcpus=$(nproc)
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
 
 DEPS_DIR="${DEPS_DIR:-$SCRIPT_DIR/build.deps}"
@@ -15,67 +15,82 @@ depsToolsetDir="$DEPS_DIR/mingw"
 lz4SrcDir="${depsSrcDir}/lz4"
 lz4Dir="${depsToolsetDir}/lz4"
 lz4Tag="v1.9.2"
-sslVersion="1.1.1c"
+sslTag="OpenSSL_1_1_1c"
 sslDir="${depsToolsetDir}/openssl"
-sslSrcDir="${depsSrcDir}/openssl-${sslVersion}"
+sslSrcDir="${depsSrcDir}/openssl"
 
 curlTag="curl-7_66_0"
 curlSrcDir="${depsSrcDir}/curl"
 curlDir="${depsToolsetDir}/curl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://dl.bintray.com/boostorg/release/1.70.0/source/boost_1_70_0.tar.gz"
-boostSrcDir="${depsSrcDir}/boost_1_70_0"
+boostUrl="https://dl.bintray.com/boostorg/release/1.73.0/source/boost_1_73_0.tar.gz"
+boostSrcDir="${depsSrcDir}/boost_1_73_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
-backtraceDir="${depsToolsetDir}/backtrace"
-backtraceSrcDir="${depsSrcDir}/backtrace"
+backtraceDir="${depsToolsetDir}/libbacktrace"
+backtraceSrcDir="${depsSrcDir}/libbacktrace"
 snappySrcDir="${depsSrcDir}/snappy"
 snappyDir="${depsToolsetDir}/snappy"
 snappyTag="1.1.7"
 # Additional Windows libraries, which aren't provided by Mingw
 winLibDir="${depsToolsetDir}/windows/lib"
 
+wnbdUrl="https://github.com/cloudbase/wnbd"
+wnbdTag="master"
+wnbdSrcDir="${depsSrcDir}/wnbd"
+wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 
-MINGW_PREFIX="x86_64-w64-mingw32-"
+dokanUrl="https://github.com/dokan-dev/dokany"
+dokanTag="v1.3.1.1000"
+dokanSrcDir="${depsSrcDir}/dokany"
+dokanLibDir="${depsToolsetDir}/dokany/lib"
+
+# Allow for OS specific customizations through the OS flag (normally
+# passed through from win32_build).
+# Valid options are currently "ubuntu" and "suse".
+OS=${OS:-"ubuntu"}
 
 function _make() {
   make -j $NUM_WORKERS $@
 }
 
+if [[ -d $DEPS_DIR ]]; then
+    echo "Cleaning up dependency build dir: $DEPS_DIR"
+    rm -rf $DEPS_DIR
+fi
+
 mkdir -p $DEPS_DIR
 mkdir -p $depsToolsetDir
 mkdir -p $depsSrcDir
 
+case "$OS" in
+    ubuntu)
+        sudo apt-get update
+        sudo apt-get -y install mingw-w64 cmake pkg-config python3-dev python3-pip \
+                autoconf libtool ninja-build zip
+        sudo python3 -m pip install cython
+        ;;
+    suse)
+        for PKG in mingw64-cross-gcc-c++ mingw64-libgcc_s_seh1 mingw64-libstdc++6 \
+                cmake pkgconf python3-devel autoconf libtool ninja zip \
+                python3-Cython gcc patch wget git; do
+            rpm -q $PKG >/dev/null || zypper -n install $PKG
+        done
+        ;;
+esac
+
 MINGW_CMAKE_FILE="$DEPS_DIR/mingw.cmake"
-cat > $MINGW_CMAKE_FILE <<EOL
-set(CMAKE_SYSTEM_NAME Windows)
-set(TOOLCHAIN_PREFIX x86_64-w64-mingw32)
-
-# We'll need to use posix threads in order to use
-# C++11 features, such as std::thread.
-set(CMAKE_C_COMPILER \${TOOLCHAIN_PREFIX}-gcc-posix)
-set(CMAKE_CXX_COMPILER \${TOOLCHAIN_PREFIX}-g++-posix)
-set(CMAKE_RC_COMPILER \${TOOLCHAIN_PREFIX}-windres)
-
-set(CMAKE_FIND_ROOT_PATH /usr/\${TOOLCHAIN_PREFIX} /usr/lib/gcc/\${TOOLCHAIN_PREFIX}/7.3-posix)
-set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
-EOL
-
-sudo apt-get -y install mingw-w64 cmake pkg-config python3-dev python3-pip \
-                autoconf libtool ninja-build
-sudo python3 -m pip install cython
+source "$SCRIPT_DIR/mingw_conf.sh"
 
 cd $depsSrcDir
-if [[ ! -d $zlibDir ]]; then
+if [[ ! -d $zlibSrcDir ]]; then
     git clone https://github.com/madler/zlib
 fi
-cd zlib
+cd $zlibSrcDir
 # Apparently the configure script is broken...
-sed -e s/"PREFIX ="/"PREFIX = x86_64-w64-mingw32-"/ -i win32/Makefile.gcc
+sed -e s/"PREFIX = *$"/"PREFIX = ${MINGW_PREFIX}"/ -i win32/Makefile.gcc
 _make -f win32/Makefile.gcc
 _make BINARY_PATH=$zlibDir \
      INCLUDE_PATH=$zlibDir/include \
@@ -86,20 +101,23 @@ _make BINARY_PATH=$zlibDir \
 cd $depsToolsetDir
 if [[ ! -d $lz4Dir ]]; then
     git clone https://github.com/lz4/lz4
+    cd $lz4Dir; git checkout $lz4Tag
 fi
-cd lz4
-git checkout $lz4Tag
-_make BUILD_STATIC=no CC=x86_64-w64-mingw32-gcc \
-      DLLTOOL=x86_64-w64-mingw32-dlltool OS=Windows_NT
+cd $lz4Dir
+_make BUILD_STATIC=no CC=${MINGW_CC%-posix*} \
+      DLLTOOL=${MINGW_DLLTOOL} \
+      WINDRES=${MINGW_WINDRES} \
+      TARGET_OS=Windows_NT
 
 cd $depsSrcDir
 if [[ ! -d $sslSrcDir ]]; then
-    curl "https://www.openssl.org/source/openssl-${sslVersion}.tar.gz" | tar xz
+    git clone https://github.com/openssl/openssl
+    cd $sslSrcDir; git checkout $sslTag
 fi
 cd $sslSrcDir
 mkdir -p $sslDir
-CROSS_COMPILE="x86_64-w64-mingw32-" ./Configure \
-    mingw64 shared --prefix=$sslDir
+CROSS_COMPILE="${MINGW_PREFIX}" ./Configure \
+    mingw64 shared --prefix=$sslDir --libdir="$sslDir/lib"
 _make depend
 _make
 _make install
@@ -107,12 +125,12 @@ _make install
 cd $depsSrcDir
 if [[ ! -d $curlSrcDir ]]; then
     git clone https://github.com/curl/curl
+    cd $curlSrcDir && git checkout $curlTag
 fi
 cd $curlSrcDir
-git checkout $curlTag
 ./buildconf
 ./configure --prefix=$curlDir --with-ssl=$sslDir --with-zlib=$zlibDir \
-            --host=x86_64-w64-mingw32
+            --host=${MINGW_BASE} --libdir="$curlDir/lib"
 _make
 _make install
 
@@ -123,7 +141,7 @@ if [[ ! -d $boostSrcDir ]]; then
 fi
 
 cd $boostSrcDir
-echo "using gcc : mingw32 : x86_64-w64-mingw32-g++-posix ;" > user-config.jam
+echo "using gcc : mingw32 : ${MINGW_CXX} ;" > user-config.jam
 
 # Workaround for https://github.com/boostorg/thread/issues/156
 # Older versions of mingw provided a different pthread lib.
@@ -134,14 +152,14 @@ sed -i 's/mthreads/pthreads/g' ./tools/build/src/tools/gcc.jam
 sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.py
 sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.jam
 
-export PTW32_INCLUDE=/usr/share/mingw-w64/include
-export PTW32_LIB=/usr/x86_64-w64-mingw32/lib
+export PTW32_INCLUDE=${PTW32Include}
+export PTW32_LIB=${PTW32Lib}
 
 # Fix getting Windows page size
 # TODO: send this upstream and maybe use a fork until it merges.
 # Meanwhile, we might consider moving those to ceph/cmake/modules/BuildBoost.cmake.
 # This cmake module will first have to be updated to support Mingw though.
-cat | patch -N boost/thread/pthread/thread_data.hpp <<EOL
+patch -N boost/thread/pthread/thread_data.hpp <<EOL
 --- boost/thread/pthread/thread_data.hpp        2019-10-11 15:26:15.678703586 +0300
 +++ boost/thread/pthread/thread_data.hpp.new    2019-10-11 15:26:07.321463698 +0300
 @@ -32,6 +32,10 @@
@@ -169,7 +187,7 @@ cat | patch -N boost/thread/pthread/thread_data.hpp <<EOL
 EOL
 
 # Use pthread if requested
-cat | patch -N boost/asio/detail/thread.hpp <<EOL
+patch -N boost/asio/detail/thread.hpp <<EOL
 --- boost/asio/detail/thread.hpp        2019-10-11 16:26:11.191094656 +0300
 +++ boost/asio/detail/thread.hpp.new    2019-10-11 16:26:03.310542438 +0300
 @@ -19,6 +19,8 @@
@@ -212,7 +230,7 @@ EOL
 
 # Unix socket support for Windows is currently disabled by Boost.
 # https://github.com/huangqinjin/asio/commit/d27a8ad1870
-cat | patch -N boost/asio/detail/socket_types.hpp <<EOL
+patch -N boost/asio/detail/socket_types.hpp <<EOL
 --- boost/asio/detail/socket_types.hpp       2019-11-29 16:50:58.647125797 +0000
 +++ boost/asio/detail/socket_types.hpp.new   2020-01-13 11:45:05.015104678 +0000
 @@ -200,6 +200,8 @@
@@ -225,7 +243,7 @@ cat | patch -N boost/asio/detail/socket_types.hpp <<EOL
  # endif
  typedef ::linger linger_type;
 EOL
-cat | patch -N boost/asio/detail/config.hpp <<EOL
+patch -N boost/asio/detail/config.hpp <<EOL
 --- boost/asio/detail/config.hpp       2019-11-29 16:50:58.691126211 +0000
 +++ boost/asio/detail/config.hpp.new   2020-01-13 13:09:17.966771750 +0000
 @@ -1142,13 +1142,9 @@
@@ -245,35 +263,75 @@ cat | patch -N boost/asio/detail/config.hpp <<EOL
  #endif // !defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
 EOL
 
+# TODO: drop this when switching to Boost>=1.75, it's unreleased as of 1.74.
+patch -N boost/process/detail/windows/handle_workaround.hpp <<EOL
+--- boost/process/detail/windows/handle_workaround.hpp
++++ boost/process/detail/windows/handle_workaround.hpp.new
+@@ -198,20 +198,20 @@ typedef struct _OBJECT_TYPE_INFORMATION_ {
+ 
+ 
+ /*
+-__kernel_entry NTSTATUS NtQuerySystemInformation(
++NTSTATUS NtQuerySystemInformation(
+   IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
+   OUT PVOID                   SystemInformation,
+   IN ULONG                    SystemInformationLength,
+   OUT PULONG                  ReturnLength
+ );
+  */
+-typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_system_query_information_p )(
++typedef ::boost::winapi::NTSTATUS_ (*nt_system_query_information_p )(
+         SYSTEM_INFORMATION_CLASS_,
+         void *,
+         ::boost::winapi::ULONG_,
+         ::boost::winapi::PULONG_);
+ /*
+-__kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
++NTSYSCALLAPI NTSTATUS NtQueryObject(
+   HANDLE                   Handle,
+   OBJECT_INFORMATION_CLASS ObjectInformationClass,
+   PVOID                    ObjectInformation,
+@@ -220,7 +220,7 @@ __kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
+ );
+  */
+ 
+-typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_query_object_p )(
++typedef ::boost::winapi::NTSTATUS_ (*nt_query_object_p )(
+         ::boost::winapi::HANDLE_,
+         OBJECT_INFORMATION_CLASS_,
+         void *,
+EOL
+
 ./bootstrap.sh
 
 ./b2 install --user-config=user-config.jam toolset=gcc-mingw32 \
     target-os=windows release \
+    link=static,shared \
     threadapi=pthread --prefix=$boostDir \
     address-model=64 architecture=x86 \
     binary-format=pe abi=ms -j $NUM_WORKERS \
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \
-    --without-python --without-mpi
+    --without-python --without-mpi --without-log --without-wave
 
 cd $depsSrcDir
 if [[ ! -d $backtraceSrcDir ]]; then
     git clone https://github.com/ianlancetaylor/libbacktrace
 fi
-mkdir libbacktrace/build
-cd libbacktrace/build
+mkdir -p $backtraceSrcDir/build
+cd $backtraceSrcDir/build
 ../configure --prefix=$backtraceDir --exec-prefix=$backtraceDir \
-             --host x86_64-w64-mingw32 --enable-host-shared
+             --host ${MINGW_BASE} --enable-host-shared \
+             --libdir="$backtraceDir/lib"
 _make LDFLAGS="-no-undefined"
 _make install
-cp $backtraceDir/lib/libbacktrace.a $backtraceDir/lib/libbacktrace.dll.a
 
 cd $depsSrcDir
 if [[ ! -d $snappySrcDir ]]; then
     git clone https://github.com/google/snappy
+    cd $snappySrcDir && git checkout $snappyTag
 fi
-mkdir -p snappy/build
-cd snappy && git checkout $snappyTag
-cd build
+mkdir -p $snappySrcDir/build
+cd $snappySrcDir/build
 
 cmake -DCMAKE_INSTALL_PREFIX=$snappyDir \
       -DCMAKE_BUILD_TYPE=Release \
@@ -325,5 +383,34 @@ rexec@24rresvport@4
 s_perror@8sethostname@8
 EOF
 
-x86_64-w64-mingw32-dlltool -d $winLibDir/mswsock.def \
-                           -l $winLibDir/libmswsock.a
+$MINGW_DLLTOOL -d $winLibDir/mswsock.def \
+               -l $winLibDir/libmswsock.a
+
+cd $depsSrcDir
+if [[ ! -d $wnbdSrcDir ]]; then
+    git clone $wnbdUrl
+    cd $wnbdSrcDir && git checkout $wnbdTag
+fi
+cd $wnbdSrcDir
+mkdir -p $wnbdLibDir
+$MINGW_DLLTOOL -d $wnbdSrcDir/libwnbd/libwnbd.def \
+               -D libwnbd.dll \
+               -l $wnbdLibDir/libwnbd.a
+
+cd $depsSrcDir
+if [[ ! -d $dokanSrcDir ]]; then
+    git clone $dokanUrl
+fi
+cd $dokanSrcDir
+git checkout $dokanTag
+
+mkdir -p $dokanLibDir
+$MINGW_DLLTOOL -d $dokanSrcDir/dokan/dokan.def \
+               -l $dokanLibDir/libdokan.a
+
+# That's probably the easiest way to deal with the dokan imports.
+# dokan.h is defined in both ./dokan and ./sys while both are using
+# sys/public.h without the "sys" prefix.
+cp $dokanSrcDir/sys/public.h $dokanSrcDir/dokan
+
+touch $depsToolsetDir/completed

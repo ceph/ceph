@@ -1,0 +1,234 @@
+build/ops:
+  - "**/CMakeLists.txt"
+  - admin/**
+  - ceph.spec.in
+  - cmake/**
+  - debian/**
+  - do_cmake.sh
+  - do_freebsd.sh
+  - install-deps.sh
+  - keys/**
+  - make-debs.sh
+  - make-dist
+  - make-srpm.sh
+  - run-make-check.sh
+  - win32_build.sh
+  - win32_deps_build.sh
+
+documentation:
+  - AUTHORS
+  - CONTRIBUTING.rst
+  - COPYING*
+  - CodingStyle
+  - PendingReleaseNotes
+  - README.*
+  - SubmittingPatches*
+  - doc/**
+  - doc_deps.deb.txt
+  - man/**
+  - "**/*.+(rst|md)"
+
+libcephsqlite:
+  - doc/rados/api/libcephsqlite.rst
+  - qa/suites/rados/basic/tasks/libcephsqlite.yaml
+  - qa/workunits/rados/test_libcephsqlite.sh
+  - src/SimpleRADOSStriper.*
+  - src/include/libcephsqlite.h
+  - src/libcephsqlite.cc
+  - src/test/libcephsqlite/**
+
+mon:
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/monmaptool.rst
+  - doc/mon/**
+  - qa/workunits/mon/**
+  - src/mon/**
+  - src/test/mon/**
+
+mgr:
+  - doc/mgr/**
+  - src/mgr/**
+  - src/pybind/mgr/ceph_module.pyi
+  - src/pybind/mgr/mgr_module.py
+  - src/pybind/mgr/mgr_util.py
+  - src/pybind/mgr/requirements.txt
+  - src/pybind/mgr/tox.ini
+  - src/test/mgr/**
+
+pybind:
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/**
+  - src/pybind/rados/**
+  - src/pybind/rbd/**
+  - src/pybind/rgw/**
+  - src/pybind/**
+  - src/python-common/**
+
+common:
+  - src/common/**
+  - src/global/**
+  - src/log/**
+
+cephadm:
+  - doc/cephadm/**
+  - doc/dev/cephadm/**
+  - doc/man/8/cephadm.rst
+  - qa/suites/rados/cephadm/**
+  - qa/tasks/cephadm.py
+  - qa/tasks/cephadm_cases
+  - qa/tasks/mgr/test_cephadm_orchestrator.py
+  - qa/tasks/mgr/test_orchestrator_cli.py
+  - qa/workunits/cephadm/**
+  - src/cephadm/**
+  - src/pybind/mgr/cephadm/**
+  - src/python-common/**
+    
+orchestrator:
+  - doc/mgr/orchestrator.rst
+  - doc/mgr/orchestrator_modules.rst
+  - src/pybind/mgr/orchestrator/**
+  - src/pybind/mgr/rook/**
+  - src/pybind/mgr/test_orchestrator/**
+  - qa/tasks/mgr/test_orchestrator_cli.py
+
+bluestore:
+  - src/os/bluestore/**
+
+core:
+  - doc/man/8/ceph-authtool.rst
+  - doc/man/8/ceph-conf.rst
+  - doc/man/8/ceph-create-keys.rst
+  - doc/man/8/ceph-kvstore-tool.rst
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/ceph-objectstore-tool.rst
+  - doc/man/8/ceph-osd.rst
+  - doc/man/8/ceph.rst
+  - doc/man/8/crushtool.rst
+  - doc/man/8/monmaptool.rst
+  - doc/man/8/rados.rst
+  - doc/rados/**
+  - qa/standalone/**
+  - qa/suites/rados/**
+  - qa/workunits/erasure-code/**
+  - qa/workunits/mgr/**
+  - qa/workunits/mon/**
+  - qa/workunits/objectstore/**
+  - qa/workunits/rados/**
+  - src/ceph.in
+  - src/ceph_osd.cc
+  - src/ceph_mon.cc
+  - src/blk/**
+  - src/crush/*
+  - src/erasure-code/**
+  - src/kv/**
+  - src/librados/**
+  - src/mgr/**
+  - src/mon/**
+  - src/msg/**
+  - src/os/**
+  - src/osd/**
+  - src/tools/rados/**
+  - src/test/osd/**
+
+crimson:
+  - doc/dev/crimson/**
+  - src/crimson/**
+  - src/test/crimson/**
+  - qa/suites/crimson-rados/**
+
+dashboard:
+  - src/pybind/mgr/dashboard/**
+  - qa/suites/rados/dashboard/**
+  - qa/tasks/mgr/test_dashboard.py
+  - qa/tasks/mgr/dashboard/**
+  - monitoring/**
+  - doc/mgr/dashboard.rst
+  - doc/dev/developer_guide/dash-devel.rst
+
+cephfs:
+  - doc/cephfs/**
+  - doc/man/8/ceph-fuse.rst
+  - doc/man/8/ceph-mds.rst
+  - doc/man/8/ceph-syn.rst
+  - doc/man/8/mount.ceph.rst
+  - doc/man/8/mount.fuse.ceph.rst
+  - qa/suites/fs/**
+  - qa/suites/multimds/**
+  - qa/tasks/ceph_fuse.py
+  - qa/tasks/cephfs/**
+  - qa/tasks/cephfs_test_runner.py
+  - qa/tasks/fs.py
+  - qa/tasks/kclient.py
+  - qa/tasks/mds_creation_failure.py
+  - qa/tasks/mds_thrash.py
+  - src/ceph_fuse.cc
+  - src/ceph_mds.cc
+  - src/ceph_syn.cc
+  - src/client/**
+  - src/include/ceph_fs.h
+  - src/include/ceph_fuse.h
+  - src/include/cephfs/**
+  - src/include/filepath.h
+  - src/include/frag.h
+  - src/include/fs_types.h
+  - src/libcephfs.cc
+  - src/mds/**
+  - src/mon/MDSMonitor.*
+  - src/mon/FSCommands.*
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/mds_autoscaler/**
+  - src/pybind/mgr/status/**
+  - src/pybind/mgr/volumes/**
+  - src/test/fs/**
+  - src/test/libcephfs/**
+  - src/tools/cephfs/**
+  - src/tools/cephfs_mirror/**
+
+CI:
+  - .github/**
+
+rbd:
+  - doc/man/8/rbd*
+  - doc/rbd/**
+  - qa/suites/rbd/**
+  - qa/workunits/rbd/**
+  - src/include/rbd/**
+  - src/librbd/**
+  - src/pybind/mgr/rbd_support/**
+  - src/pybind/rbd/**
+  - src/test/librbd/**
+  - src/test/rbd_mirror/**
+  - src/tools/rbd/**
+  - src/tools/rbd_ggate/**
+  - src/tools/rbd_mirror/**
+  - src/tools/rbd_nbd/**
+  - src/tools/rbd_wnbd/**
+
+rgw:
+  - qa/suites/rgw/**
+  - qa/tasks/rgw*
+  - qa/tasks/s3*
+  - src/cls/cmpomap/**
+  - src/cls/fifo/**
+  - src/cls/otp/**
+  - src/cls/queue/**
+  - src/cls/rgw/**
+  - src/cls/rgw_gc/**
+  - src/cls/timeindex/**
+  - src/mrgw.sh
+  - src/rgw/**
+  - src/test/cls_rgw/**
+  - src/test/librgw_*
+  - src/test/rgw/**
+  - src/test/test_rgw*
+
+ceph-volume:
+  - src/ceph-volume/**
+  - doc/ceph-volume/**
+  - src/python-common/ceph/deployment/drive_group.py
+  - src/python-common/ceph/deployment/drive_selection/**
+
+tests:
+  - qa/tasks/**
+  - qa/workunits/**
+  - src/test/**

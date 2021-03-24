@@ -12,7 +12,7 @@
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/formatter.h"
 
-#include "Dispatcher.h"
+#include "chained_dispatchers.h"
 #include "Errors.h"
 #include "Socket.h"
 #include "SocketConnection.h"
@@ -143,10 +143,10 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
   });
 }
 
-ProtocolV2::ProtocolV2(ChainedDispatchersRef& dispatcher,
+ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(proto_t::v2, dispatcher, conn),
+  : Protocol(proto_t::v2, dispatchers, conn),
     messenger{messenger},
     protocol_timer{conn}
 {}
@@ -164,6 +164,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
 {
   ceph_assert(state == state_t::NONE);
   ceph_assert(!socket);
+  ceph_assert(!gate.is_closed());
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
   conn.set_peer_name(_peer_name);
@@ -385,7 +386,7 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
     reset_write();
-    dispatcher->ms_handle_remote_reset(
+    dispatchers.ms_handle_remote_reset(
 	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 }
@@ -1601,7 +1602,7 @@ void ProtocolV2::execute_establishing(
     accept_me();
   }
 
-  dispatcher->ms_handle_accept(
+  dispatchers.ms_handle_accept(
       seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 
   gated_execute("execute_establishing", [this] {
@@ -1699,7 +1700,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   if (socket) {
     socket->shutdown();
   }
-  dispatcher->ms_handle_accept(
+  dispatchers.ms_handle_accept(
       seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   gate.dispatch_in_background("trigger_replacing", *this,
                  [this,
@@ -1811,7 +1812,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, bp_type_t::WRITE);
   }
 
-  if (require_ack && !num_msgs) {
+  if (require_ack && num_msgs == 0u) {
     auto ack_frame = AckFrame::Encode(conn.in_seq);
     bl.append(ack_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
@@ -1833,8 +1834,8 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     ceph_msg_header2 header2{header.seq,        header.tid,
                              header.type,       header.priority,
                              header.version,
-                             init_le32(0),      header.data_off,
-                             init_le64(conn.in_seq),
+                             ceph_le32(0),      header.data_off,
+                             ceph_le64(conn.in_seq),
                              footer.flags,      header.compat_version,
                              header.reserved};
 
@@ -1872,22 +1873,21 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
                            current_header.type,
                            current_header.priority,
                            current_header.version,
-                           init_le32(msg_frame.front_len()),
-                           init_le32(msg_frame.middle_len()),
-                           init_le32(msg_frame.data_len()),
+                           ceph_le32(msg_frame.front_len()),
+                           ceph_le32(msg_frame.middle_len()),
+                           ceph_le32(msg_frame.data_len()),
                            current_header.data_off,
                            conn.get_peer_name(),
                            current_header.compat_version,
                            current_header.reserved,
-                           init_le32(0)};
-    ceph_msg_footer footer{init_le32(0), init_le32(0),
-                           init_le32(0), init_le64(0), current_header.flags};
+                           ceph_le32(0)};
+    ceph_msg_footer footer{ceph_le32(0), ceph_le32(0),
+                           ceph_le32(0), ceph_le64(0), current_header.flags};
 
-    auto pconn = seastar::static_pointer_cast<SocketConnection>(
+    auto conn_ref = seastar::static_pointer_cast<SocketConnection>(
         conn.shared_from_this());
     Message *message = decode_message(nullptr, 0, header, footer,
-        msg_frame.front(), msg_frame.middle(), msg_frame.data(),
-        std::move(pconn));
+        msg_frame.front(), msg_frame.middle(), msg_frame.data(), conn_ref);
     if (!message) {
       logger().warn("{} decode message failed", conn);
       abort_in_fault();
@@ -1914,7 +1914,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
           local_conf()->ms_die_on_old_message) {
         ceph_assert(0 == "old msgs despite reconnect_seq feature");
       }
-      return;
+      return seastar::now();
     } else if (message->get_seq() > cur_seq + 1) {
       logger().error("{} missed message? skipped from seq {} to {}",
                      conn, cur_seq, message->get_seq());
@@ -1932,7 +1932,8 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    std::ignore = dispatcher->ms_dispatch(&conn, std::move(msg_ref));
+    // throttle the reading process by the returned future
+    return dispatchers.ms_dispatch(conn_ref, std::move(msg_ref));
   });
 }
 
@@ -1941,7 +1942,7 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
   if (dispatch_connect) {
-    dispatcher->ms_handle_connect(
+    dispatchers.ms_handle_connect(
 	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 #ifdef UNIT_TESTS_BUILT
@@ -2102,6 +2103,10 @@ void ProtocolV2::execute_server_wait()
 
 void ProtocolV2::trigger_close()
 {
+  messenger.closing_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
+
   if (state == state_t::ACCEPTING || state == state_t::SERVER_WAIT) {
     messenger.unaccept_conn(
       seastar::static_pointer_cast<SocketConnection>(
@@ -2116,9 +2121,6 @@ void ProtocolV2::trigger_close()
   }
 
   protocol_timer.cancel();
-  messenger.closing_conn(
-      seastar::static_pointer_cast<SocketConnection>(
-	conn.shared_from_this()));
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
 }
 

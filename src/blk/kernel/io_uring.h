@@ -13,13 +13,15 @@ struct ioring_data;
 struct ioring_queue_t final : public io_queue_t {
   std::unique_ptr<ioring_data> d;
   unsigned iodepth = 0;
+  bool hipri = false;
+  bool sq_thread = false;
 
   typedef std::list<aio_t>::iterator aio_iter;
 
   // Returns true if arch is x86-64 and kernel supports io_uring
   static bool supported();
 
-  ioring_queue_t(unsigned iodepth_);
+  ioring_queue_t(unsigned iodepth_, bool hipri_, bool sq_thread_);
   ~ioring_queue_t() final;
 
   int init(std::vector<int> &fds) final;

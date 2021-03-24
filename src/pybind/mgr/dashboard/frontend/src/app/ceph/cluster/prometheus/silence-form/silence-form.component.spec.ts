@@ -10,22 +10,23 @@ import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
+import { DashboardNotFoundError } from '~/app/core/error/error';
+import { ErrorComponent } from '~/app/core/error/error.component';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { AlertmanagerSilence } from '~/app/shared/models/alertmanager-silence';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
   PrometheusHelper
-} from '../../../../../testing/unit-test-helper';
-import { NotFoundComponent } from '../../../../core/not-found/not-found.component';
-import { PrometheusService } from '../../../../shared/api/prometheus.service';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { AlertmanagerSilence } from '../../../../shared/models/alertmanager-silence';
-import { Permission } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { SharedModule } from '../../../../shared/shared.module';
+} from '~/testing/unit-test-helper';
 import { SilenceFormComponent } from './silence-form.component';
 
 describe('SilenceFormComponent', () => {
@@ -49,10 +50,11 @@ describe('SilenceFormComponent', () => {
   // Date mocking related
   const baseTime = '2022-02-22 00:00';
   const beginningDate = '2022-02-22T00:00:12.35';
+  let prometheusPermissions: Permission;
 
-  const routes: Routes = [{ path: '404', component: NotFoundComponent }];
+  const routes: Routes = [{ path: '404', component: ErrorComponent }];
   configureTestBed({
-    declarations: [NotFoundComponent, SilenceFormComponent],
+    declarations: [ErrorComponent, SilenceFormComponent],
     imports: [
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
@@ -128,6 +130,10 @@ describe('SilenceFormComponent', () => {
     authStorageService = TestBed.inject(AuthStorageService);
     spyOn(authStorageService, 'getUsername').and.returnValue('someUser');
 
+    spyOn(authStorageService, 'getPermissions').and.callFake(() => ({
+      prometheus: prometheusPermissions
+    }));
+    prometheusPermissions = new Permission(['update', 'delete', 'read', 'create']);
     fixture = TestBed.createComponent(SilenceFormComponent);
     fixtureH = new FixtureHelper(fixture);
     component = fixture.componentInstance;
@@ -166,56 +172,53 @@ describe('SilenceFormComponent', () => {
     );
   });
 
-  describe('redirect not allowed users', () => {
-    let prometheusPermissions: Permission;
+  describe('throw error for not allowed users', () => {
     let navigateSpy: jasmine.Spy;
 
-    const expectRedirect = (action: string, redirected: boolean) => {
-      changeAction(action);
-      expect(router.navigate).toHaveBeenCalledTimes(redirected ? 1 : 0);
+    const expectError = (action: string, redirected: boolean) => {
+      Object.defineProperty(router, 'url', { value: action });
       if (redirected) {
-        expect(router.navigate).toHaveBeenCalledWith(['/404']);
+        expect(() => callInit()).toThrowError(DashboardNotFoundError);
+      } else {
+        expect(() => callInit()).not.toThrowError();
       }
       navigateSpy.calls.reset();
     };
 
     beforeEach(() => {
       navigateSpy = spyOn(router, 'navigate').and.stub();
-      spyOn(authStorageService, 'getPermissions').and.callFake(() => ({
-        prometheus: prometheusPermissions
-      }));
     });
 
-    it('redirects to 404 if not allowed', () => {
+    it('should throw error if not allowed', () => {
       prometheusPermissions = new Permission(['delete', 'read']);
-      expectRedirect('add', true);
-      expectRedirect('alertAdd', true);
+      expectError('add', true);
+      expectError('alertAdd', true);
     });
 
-    it('redirects if user does not have minimum permissions to create silences', () => {
+    it('should throw error if user does not have minimum permissions to create silences', () => {
       prometheusPermissions = new Permission(['update', 'delete', 'read']);
-      expectRedirect('add', true);
+      expectError('add', true);
       prometheusPermissions = new Permission(['update', 'delete', 'create']);
-      expectRedirect('recreate', true);
+      expectError('recreate', true);
     });
 
-    it('redirects if user does not have minimum permissions to update silences', () => {
-      prometheusPermissions = new Permission(['create', 'delete', 'read']);
-      expectRedirect('edit', true);
+    it('should throw error if user does not have minimum permissions to update silences', () => {
+      prometheusPermissions = new Permission(['delete', 'read']);
+      expectError('edit', true);
       prometheusPermissions = new Permission(['create', 'delete', 'update']);
-      expectRedirect('edit', true);
+      expectError('edit', true);
     });
 
-    it('does not redirect if user has minimum permissions to create silences', () => {
+    it('does not throw error if user has minimum permissions to create silences', () => {
       prometheusPermissions = new Permission(['create', 'read']);
-      expectRedirect('add', false);
-      expectRedirect('alertAdd', false);
-      expectRedirect('recreate', false);
+      expectError('add', false);
+      expectError('alertAdd', false);
+      expectError('recreate', false);
     });
 
-    it('does not redirect if user has minimum permissions to update silences', () => {
-      prometheusPermissions = new Permission(['update', 'read']);
-      expectRedirect('edit', false);
+    it('does not throw error if user has minimum permissions to update silences', () => {
+      prometheusPermissions = new Permission(['read', 'create']);
+      expectError('edit', false);
     });
   });
 

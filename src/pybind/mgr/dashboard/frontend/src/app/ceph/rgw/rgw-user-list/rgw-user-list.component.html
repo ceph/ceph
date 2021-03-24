@@ -19,3 +19,26 @@
                        [selection]="expandedRow">
   </cd-rgw-user-details>
 </cd-table>
+
+<ng-template #userSizeTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row.user_quota.max_size > 0 && row.user_quota.enabled; else noSizeQuota"
+                [total]="row.user_quota.max_size"
+                [used]="row.stats.size_actual">
+  </cd-usage-bar>
+
+  <ng-template #noSizeQuota
+               i18n>No Limit</ng-template>
+</ng-template>
+
+<ng-template #userObjectTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row.user_quota.max_objects > 0 && row.user_quota.enabled; else noObjectQuota"
+                [total]="row.user_quota.max_objects"
+                [used]="row.stats.num_objects"
+                [isBinary]="false">
+  </cd-usage-bar>
+
+  <ng-template #noObjectQuota
+               i18n>No Limit</ng-template>
+</ng-template>

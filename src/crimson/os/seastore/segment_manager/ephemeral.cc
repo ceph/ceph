@@ -4,6 +4,8 @@
 #include <sys/mman.h>
 #include <string.h>
 
+#include "seastar/core/sleep.hh"
+
 #include "crimson/common/log.h"
 
 #include "include/buffer.h"
@@ -17,6 +19,16 @@ namespace {
 
 namespace crimson::os::seastore::segment_manager {
 
+std::ostream &operator<<(std::ostream &lhs, const ephemeral_config_t &c) {
+  return lhs << "ephemeral_config_t(size=" << c.size << ", block_size=" << c.block_size
+	     << ", segment_size=" << c.segment_size << ")";
+}
+
+EphemeralSegmentManagerRef create_test_ephemeral() {
+  return EphemeralSegmentManagerRef(
+    new EphemeralSegmentManager(DEFAULT_TEST_EPHEMERAL));
+}
+
 EphemeralSegment::EphemeralSegment(
   EphemeralSegmentManager &manager, segment_id_t id)
   : manager(manager), id(id) {}
@@ -29,7 +41,9 @@ segment_off_t EphemeralSegment::get_write_capacity() const
 Segment::close_ertr::future<> EphemeralSegment::close()
 {
   manager.segment_close(id);
-  return close_ertr::now();
+  return close_ertr::now().safe_then([] {
+    return seastar::sleep(std::chrono::milliseconds(1));
+  });
 }
 
 Segment::write_ertr::future<> EphemeralSegment::write(
@@ -44,16 +58,15 @@ Segment::write_ertr::future<> EphemeralSegment::write(
   return manager.segment_write({id, offset}, bl);
 }
 
-EphemeralSegmentManager::EphemeralSegmentManager(ephemeral_config_t config)
-  : config(config) {}
-
 Segment::close_ertr::future<> EphemeralSegmentManager::segment_close(segment_id_t id)
 {
   if (segment_state[id] != segment_state_t::OPEN)
     return crimson::ct_error::invarg::make();
 
   segment_state[id] = segment_state_t::CLOSED;
-  return Segment::close_ertr::now();
+  return Segment::close_ertr::now().safe_then([] {
+    return seastar::sleep(std::chrono::milliseconds(1));
+  });
 }
 
 Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
@@ -72,7 +85,9 @@ Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
     return crimson::ct_error::invarg::make();
 
   bl.begin().copy(bl.length(), buffer + get_offset(addr));
-  return Segment::write_ertr::now();
+  return Segment::write_ertr::now().safe_then([] {
+    return seastar::sleep(std::chrono::milliseconds(1));
+  });
 }
 
 EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
@@ -80,6 +95,8 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
   logger().debug(
     "Initing ephemeral segment manager with config {}",
     config);
+
+  meta = seastore_meta_t{};
 
   if (config.block_size % (4<<10) != 0) {
     return crimson::ct_error::invarg::make();
@@ -91,7 +108,7 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
     return crimson::ct_error::invarg::make();
   }
 
-  auto addr = ::mmap(
+  void* addr = ::mmap(
     nullptr,
     config.size,
     PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
@@ -106,7 +123,9 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
   buffer = (char*)addr;
 
   ::memset(buffer, 0, config.size);
-  return init_ertr::now();
+  return init_ertr::now().safe_then([] {
+    return seastar::sleep(std::chrono::milliseconds(1));
+  });
 }
 
 EphemeralSegmentManager::~EphemeralSegmentManager()
@@ -162,7 +181,9 @@ SegmentManager::release_ertr::future<> EphemeralSegmentManager::release(
 
   ::memset(buffer + get_offset({id, 0}), 0, config.segment_size);
   segment_state[id] = segment_state_t::EMPTY;
-  return release_ertr::now();
+  return release_ertr::now().safe_then([] {
+    return seastar::sleep(std::chrono::milliseconds(1));
+  });
 }
 
 SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
@@ -197,7 +218,9 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
     len,
     bl.begin().crc32c(len, 1));
 
-  return read_ertr::now();
+  return read_ertr::now().safe_then([] {
+    return seastar::sleep(std::chrono::milliseconds(1));
+  });
 }
 
 }

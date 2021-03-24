@@ -137,6 +137,9 @@ void Inode::make_nosnap_relative_path(filepath& p)
 
 void Inode::get_open_ref(int mode)
 {
+  client->inc_opened_files();
+  if (open_by_mode.count(mode) == 0)
+    client->inc_opened_inodes();
   open_by_mode[mode]++;
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
@@ -146,8 +149,11 @@ bool Inode::put_open_ref(int mode)
   //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
   auto& ref = open_by_mode.at(mode);
   ceph_assert(ref > 0);
-  if (--ref == 0)
+  client->dec_opened_files();
+  if (--ref == 0) {
+    client->dec_opened_inodes();
     return true;
+  }
   return false;
 }
 
@@ -696,13 +702,13 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
    * allow it, with an unusual error to make it clear.
    */
   if (!client->get_deleg_timeout())
-    return -ETIME;
+    return -CEPHFS_ETIME;
 
   // Just say no if we have any recalled delegs still outstanding
   if (has_recalled_deleg()) {
     lsubdout(client->cct, client, 10) << __func__ <<
 	  ": has_recalled_deleg" << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   // check vs. currently open files on this inode
@@ -711,17 +717,17 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
     if (open_count_for_write()) {
       lsubdout(client->cct, client, 10) << __func__ <<
 	    ": open for write" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   case CEPH_DELEGATION_WR:
     if (open_count() > 1) {
       lsubdout(client->cct, client, 10) << __func__ << ": open" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   default:
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   /*
@@ -742,7 +748,7 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
   if (!caps_issued_mask(need)) {
     lsubdout(client->cct, client, 10) << __func__ << ": cap mismatch, have="
       << ccap_string(caps_issued()) << " need=" << ccap_string(need) << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   for (list<Delegation>::iterator d = delegations.begin();

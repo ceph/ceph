@@ -166,6 +166,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to use Jaeger */
+#cmakedefine HAVE_JAEGER
+
 /* Define if you want to use EVENTTRACE */
 #cmakedefine WITH_EVENTTRACE
 
@@ -241,11 +244,14 @@
 /* name_to_handle_at exists */
 #cmakedefine HAVE_NAME_TO_HANDLE_AT
 
-/* we have a recent yasm and are x86_64 */
-#cmakedefine HAVE_GOOD_YASM_ELF64 
+/* we have a recent nasm and are x86_64 */
+#cmakedefine HAVE_NASM_X64
 
-/* yasm can also build the isa-l */
-#cmakedefine HAVE_BETTER_YASM_ELF64
+/* nasm can also build the isa-l:avx2 */
+#cmakedefine HAVE_NASM_X64_AVX2
+
+/* nasm can also build the isa-l:avx512 */
+#cmakedefine HAVE_NASM_X64_AVX512
 
 /* Define if isa-l is compiled for arm64 */
 #cmakedefine HAVE_ARMV8_SIMD
@@ -339,6 +345,9 @@
 /* Defined if libedkafka is available for rgw kafka push endpoint */
 #cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
 
+/* Defined if lua packages can be installed by radosgw */
+#cmakedefine WITH_RADOSGW_LUA_PACKAGES
+
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 
@@ -351,8 +360,23 @@
 /* Define if unit tests are built. */
 #cmakedefine UNIT_TESTS_BUILT
 
+/* Define if RBD QCOW migration format is enabled */
+#cmakedefine WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+
+/* Define if libcephsqlite is enabled */
+#cmakedefine WITH_LIBCEPHSQLITE
+
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
+
+/* Define if PWL-SSD is enabled */
+#cmakedefine WITH_RBD_SSD_CACHE
+
+/* Define if libcryptsetup version < 2.0.5 */
+#cmakedefine LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT
+
+/* Define if libcryptsetup can be used (linux only) */
+#cmakedefine HAVE_LIBCRYPTSETUP
 
 /* Shared library extension, such as .so, .dll or .dylib */
 #cmakedefine CMAKE_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"

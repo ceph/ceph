@@ -19,7 +19,7 @@
 #include "messages/MMDSOp.h"
 
 
-class MMDSResolveAck : public MMDSOp {
+class MMDSResolveAck final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:
@@ -28,7 +28,7 @@ public:
 
 protected:
   MMDSResolveAck() : MMDSOp{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MMDSResolveAck() override {}
+  ~MMDSResolveAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "resolve_ack"; }

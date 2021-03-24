@@ -3,7 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { AuthStorageService } from '../services/auth-storage.service';
 import { AuthService } from './auth.service';
 
@@ -33,7 +33,7 @@ describe('AuthService', () => {
 
   it('should login and save the user', fakeAsync(() => {
     const fakeCredentials = { username: 'foo', password: 'bar' };
-    const fakeResponse = { username: 'foo', token: 'tokenbytes' };
+    const fakeResponse = { username: 'foo' };
     service.login(fakeCredentials).subscribe();
     const req = httpTesting.expectOne('api/auth');
     expect(req.request.method).toBe('POST');
@@ -41,7 +41,6 @@ describe('AuthService', () => {
     req.flush(fakeResponse);
     tick();
     expect(localStorage.getItem('dashboard_username')).toBe('foo');
-    expect(localStorage.getItem('access_token')).toBe('tokenbytes');
   }));
 
   it('should logout and remove the user', () => {

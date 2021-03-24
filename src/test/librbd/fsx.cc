@@ -25,11 +25,13 @@
 #endif
 #include <sys/file.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#include <sys/ioctl.h>
+#endif
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
-#include <sys/ioctl.h>
 #ifdef HAVE_ERR_H
 #include <err.h>
 #endif
@@ -132,7 +134,7 @@ int			logcount = 0;	/* total ops */
 #define OP_SKIPPED	101
 
 #undef PAGE_SIZE
-#define PAGE_SIZE       getpagesize()
+#define PAGE_SIZE       get_page_size()
 #undef PAGE_MASK
 #define PAGE_MASK       (PAGE_SIZE - 1)
 
@@ -1227,7 +1229,7 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE,
 			   SubProcess::KEEP);
 	process.add_cmd_arg("map");
-	process.add_cmd_arg("--timeout=600");
+	process.add_cmd_arg("--io-timeout=600");
 	std::string img;
 	img.append(pool);
 	img.append("/");
@@ -3070,7 +3072,7 @@ main(int argc, char **argv)
 	goodfile[0] = 0;
 	logfile[0] = 0;
 
-	page_size = getpagesize();
+	page_size = PAGE_SIZE;
 	page_mask = page_size - 1;
 	mmap_mask = page_mask;
 
@@ -3271,7 +3273,9 @@ main(int argc, char **argv)
 				fprintf(stdout, "mapped writes DISABLED\n");
 			break;
 		case 'Z':
+            #ifdef O_DIRECT
 			o_direct = O_DIRECT;
+            #endif
 			break;
 		default:
 			usage();
@@ -3285,6 +3289,7 @@ main(int argc, char **argv)
 	pool = argv[0];
 	iname = argv[1];
 
+    #ifndef _WIN32
 	signal(SIGHUP,	cleanup);
 	signal(SIGINT,	cleanup);
 	signal(SIGPIPE,	cleanup);
@@ -3295,6 +3300,7 @@ main(int argc, char **argv)
 	signal(SIGVTALRM,	cleanup);
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
+    #endif
 
 	random_generator.seed(seed);
 

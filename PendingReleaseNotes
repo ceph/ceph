@@ -1,22 +1,116 @@
+>=17.0.0
+
+* A new library is available, libcephsqlite. It provides a SQLite Virtual File
+  System (VFS) on top of RADOS. The database and journals are striped over
+  RADOS across multiple objects for virtually unlimited scaling and throughput
+  only limited by the SQLite client. Applications using SQLite may change to
+  the Ceph VFS with minimal changes, usually just by specifying the alternate
+  VFS. We expect the library to be most impactful and useful for applications
+  that were storing state in RADOS omap, especially without striping which
+  limits scalability.
+
 >=16.0.0
 --------
+* mgr-pg_autoscaler: Autoscaler will now start out by scaling each
+  pool to have a full complements of pgs from the start and will only
+  decrease it when other pools need more pgs due to increased usage.
+  This improves out of the box performance of Ceph by allowing more PGs 
+  to be created for a given pool.
+
+* CephFS: Disabling allow_standby_replay on a file system will also stop all
+  standby-replay daemons for that file system.
+
+* New bluestore_rocksdb_options_annex config parameter. Complements
+  bluestore_rocksdb_options and allows setting rocksdb options without repeating
+  the existing defaults.
+* The MDS in Pacific makes backwards-incompatible changes to the ON-RADOS
+  metadata structures, which prevent a downgrade to older releases
+  (to Octopus and older).
+
+* $pid expansion in config paths like `admin_socket` will now properly expand
+  to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
+  `ceph-fuse`/`rbd-nbd` expanded `$pid` with the actual daemon pid.
+
 * The allowable options for some "radosgw-admin" commands have been changed.
 
-  * "mdlog-list", "datalog-list", "sync-error-list" no longer accepts
-    start and end dates, but does accept a single optional start marker.
+  * "mdlog-list", "datalog-list", "sync-error-list" no longer accept
+    start and end dates, but do accept a single optional start marker.
   * "mdlog-trim", "datalog-trim", "sync-error-trim" only accept a
     single marker giving the end of the trimmed range.
   * Similarly the date ranges and marker ranges have been removed on
     the RESTful DATALog and MDLog list and trim operations.
 
-* ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
-  a number of bugs and improves usability in terms of size specification and
-  calculation, as well as idempotency behaviour and disk replacement process.
-  Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
-  more detailed information.
+* ceph-volume: The ``lvm batch`` subcommand received a major rewrite. This 
+  closed a number of bugs and improves usability in terms of size specification
+  and calculation, as well as idempotency behaviour and disk replacement 
+  process. Please refer to 
+  https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for more detailed 
+  information.
+
+* Configuration variables for permitted scrub times have changed.  The legal
+  values for ``osd_scrub_begin_hour`` and ``osd_scrub_end_hour`` are ``0`` -
+  ``23``. The use of 24 is now illegal. Specifying ``0`` for both values 
+  causes every hour to be allowed.  The legal vaues for 
+  ``osd_scrub_begin_week_day`` and ``osd_scrub_end_week_day`` are ``0`` - 
+  ``6``. The use of ``7`` is now illegal. Specifying ``0`` for both values 
+  causes every day of the week to be allowed.
+
+* Support for multiple file systems in a single Ceph cluster is now stable. 
+  New Ceph clusters enable support for multiple file systems by default.
+  Existing clusters must still set the "enable_multiple" flag on the fs. 
+  See the CephFS documentation for more information.
+
+* volume/nfs: The "ganesha-" prefix from cluster id and nfs-ganesha common
+  config object was removed to ensure a consistent namespace across different
+  orchestrator backends. Delete any existing nfs-ganesha clusters prior
+  to upgrading and redeploy new clusters after upgrading to Pacific.
+
+* A new health check, DAEMON_OLD_VERSION, warns if different versions of
+  Ceph are running on daemons. It generates a health error if multiple
+  versions are detected.  This condition must exist for over 
+  ``mon_warn_older_version_delay`` (set to 1 week by default) in order for the 
+  health condition to be triggered. This allows most upgrades to proceed 
+  without falsely seeing the warning.  If upgrade is paused for an extended 
+  time period, health mute can be used like this "ceph health mute 
+  DAEMON_OLD_VERSION --sticky". In this case after upgrade has finished use 
+  "ceph health unmute DAEMON_OLD_VERSION".
+
+* MGR: progress module can now be turned on/off, using these commands:
+  ``ceph progress on`` and ``ceph progress off``.
+
+* The ceph_volume_client.py library used for manipulating legacy "volumes" in
+  CephFS is removed. All remaining users should use the "fs volume" interface
+  exposed by the ceph-mgr:
+  https://docs.ceph.com/en/latest/cephfs/fs-volumes/
+
+* An AWS-compliant API: "GetTopicAttributes" was added to replace the existing 
+  "GetTopic" API. The new API should be used to fetch information about topics 
+  used for bucket notifications.
+
+* librbd: The shared, read-only parent cache's config option 
+  ``immutable_object_cache_watermark`` has now been updated to properly reflect 
+  the upper cache utilization before space is reclaimed. The default 
+  ``immutable_object_cache_watermark`` is now ``0.9``. If the capacity reaches 
+  90% the daemon will delete cold cache.
+
+* OSD: the option ``osd_fast_shutdown_notify_mon`` has been introduced to allow
+  the OSD to notify the monitor it is shutting down even if ``osd_fast_shutdown``
+  is enabled. This helps with the monitor logs on larger clusters, that may get
+  many 'osd.X reported immediately failed by osd.Y' messages, and confuse tools.
+* rgw/kms/vault: the transit logic has been revamped to better use
+  the transit engine in vault.  To take advantage of this new
+  functionality configuration changes are required.  See the current
+  documentation (radosgw/vault) for more details.
+
+* Scubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
+  It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.
 
 >=15.0.0
 --------
+
+* MON: The cluster log now logs health detail every ``mon_health_to_clog_interval``,
+  which has been changed from 1hr to 10min. Logging of health detail will be
+  skipped if there is no change in health summary since last known.
 
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
@@ -163,6 +257,9 @@
     ceph daemon <mds of rank 0> scrub_path / force recursive repair
     ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
 
+* CephFS: Scrub is supported in multiple active mds setup. MDS rank 0 handles
+  scrub commands, and forward scrub to other mds if necessary.
+
 * The following librados API calls have changed:
 
   - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.
@@ -188,3 +285,12 @@
 * ``ceph pg #.# list_unfound`` output has been enhanced to provide
   might_have_unfound information which indicates which OSDs may
   contain the unfound objects.
+
+* The ``ceph orch apply rgw`` syntax and behavior have changed.  RGW
+  services can now be arbitrarily named (it is no longer forced to be
+  `realm.zone`).  The ``--rgw-realm=...`` and ``--rgw-zone=...``
+  arguments are now optional, which means that if they are omitted, a
+  vanilla single-cluster RGW will be deployed.  When the realm and
+  zone are provided, the user is now responsible for setting up the
+  multisite configuration beforehand--cephadm no longer attempts to
+  create missing realms or zones.

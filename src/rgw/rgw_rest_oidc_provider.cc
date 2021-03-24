@@ -16,11 +16,11 @@
 #include "rgw_role.h"
 #include "rgw_rest_oidc_provider.h"
 #include "rgw_oidc_provider.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRestOIDCProvider::verify_permission()
+int RGWRestOIDCProvider::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -69,7 +69,7 @@ int RGWRestOIDCProviderWrite::check_caps(const RGWUserCaps& caps)
     return caps.check_cap("oidc-provider", RGW_CAP_WRITE);
 }
 
-int RGWCreateOIDCProvider::verify_permission()
+int RGWCreateOIDCProvider::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -114,16 +114,16 @@ int RGWCreateOIDCProvider::get_params()
   return 0;
 }
 
-void RGWCreateOIDCProvider::execute()
+void RGWCreateOIDCProvider::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
 
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_url,
+  RGWOIDCProvider provider(s->cct, store, provider_url,
                             s->user->get_tenant(), client_ids, thumbprints);
-  op_ret = provider.create(true);
+  op_ret = provider.create(s, true, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("CreateOpenIDConnectProviderResponse");
@@ -138,11 +138,11 @@ void RGWCreateOIDCProvider::execute()
 
 }
 
-void RGWDeleteOIDCProvider::execute()
+void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
-  op_ret = provider.delete_obj();
-  
+  RGWOIDCProvider provider(s->cct, store, provider_arn, s->user->get_tenant());
+  op_ret = provider.delete_obj(y);
+
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
   }
@@ -156,10 +156,10 @@ void RGWDeleteOIDCProvider::execute()
   }
 }
 
-void RGWGetOIDCProvider::execute()
+void RGWGetOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
-  op_ret = provider.get();
+  RGWOIDCProvider provider(s->cct, store, provider_arn, s->user->get_tenant());
+  op_ret = provider.get(s);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -177,7 +177,7 @@ void RGWGetOIDCProvider::execute()
   }
 }
 
-int RGWListOIDCProviders::verify_permission()
+int RGWListOIDCProviders::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -197,10 +197,10 @@ int RGWListOIDCProviders::verify_permission()
   return 0;
 }
 
-void RGWListOIDCProviders::execute()
+void RGWListOIDCProviders::execute(optional_yield y)
 {
   vector<RGWOIDCProvider> result;
-  op_ret = RGWOIDCProvider::get_providers(store->getRados(), s->user->get_tenant(), result);
+  op_ret = RGWOIDCProvider::get_providers(s, store, s->user->get_tenant(), result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListOpenIDConnectProvidersResponse");
@@ -212,7 +212,7 @@ void RGWListOIDCProviders::execute()
     for (const auto& it : result) {
       s->formatter->open_object_section("Arn");
       auto& arn = it.get_arn();
-      ldout(s->cct, 0) << "ARN: " << arn << dendl;
+      ldpp_dout(s, 0) << "ARN: " << arn << dendl;
       s->formatter->dump_string("Arn", arn);
       s->formatter->close_section();
     }

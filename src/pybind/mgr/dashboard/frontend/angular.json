@@ -5,7 +5,7 @@
   "projects": {
     "ceph-dashboard": {
       "i18n": {
-        "sourceLocale": { "code": "en", "baseHref": "" },
+        "sourceLocale": { "code": "en-US", "baseHref": "" },
         "locales": {
           "cs": { "translation": "src/locale/messages.cs.xlf", "baseHref": "" },
           "de": { "translation": "src/locale/messages.de-DE.xlf", "baseHref": "" },
@@ -39,7 +39,7 @@
             "outputPath": "dist",
             "index": "src/index.html",
             "main": "src/main.ts",
-            "tsConfig": "src/tsconfig.app.json",
+            "tsConfig": "tsconfig.app.json",
             "polyfills": "src/polyfills.ts",
             "assets": [
               "src/assets",
@@ -95,8 +95,8 @@
             "de": {
               "localize": ["de"]
             },
-            "en": {
-              "localize": ["en"]
+            "en-US": {
+              "localize": ["en-US"]
             },
             "es": {
               "localize": ["es"]
@@ -146,8 +146,8 @@
             "de": {
               "browserTarget": "ceph-dashboard:build:de"
             },
-            "en": {
-              "browserTarget": "ceph-dashboard:build:en"
+            "en-US": {
+              "browserTarget": "ceph-dashboard:build:en-US"
             },
             "es": {
               "browserTarget": "ceph-dashboard:build:es"
@@ -191,7 +191,7 @@
           "builder": "@angular-devkit/build-angular:tslint",
           "options": {
             "tsConfig": [
-              "src/tsconfig.app.json",
+              "tsconfig.app.json",
               "tsconfig.spec.json",
               "cypress/tsconfig.json"
             ],

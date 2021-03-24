@@ -23,6 +23,7 @@ struct Option {
     TYPE_UUID = 7,
     TYPE_SIZE = 8,
     TYPE_SECS = 9,
+    TYPE_MILLISECS = 10,
   };
 
   static const char *type_to_c_type_str(type_t t) {
@@ -35,8 +36,9 @@ struct Option {
     case TYPE_ADDR: return "entity_addr_t";
     case TYPE_ADDRVEC: return "entity_addrvec_t";
     case TYPE_UUID: return "uuid_d";
-    case TYPE_SIZE: return "size_t";
+    case TYPE_SIZE: return "uint64_t";
     case TYPE_SECS: return "secs";
+    case TYPE_MILLISECS: return "millisecs";
     default: return "unknown";
     }
   }
@@ -52,6 +54,7 @@ struct Option {
     case TYPE_UUID: return "uuid";
     case TYPE_SIZE: return "size";
     case TYPE_SECS: return "secs";
+    case TYPE_MILLISECS: return "millisecs";
     default: return "unknown";
     }
   }
@@ -85,6 +88,9 @@ struct Option {
     }
     if (s == "secs") {
       return TYPE_SECS;
+    }
+    if (s == "millisecs") {
+      return TYPE_MILLISECS;
     }
     return -1;
   }
@@ -121,7 +127,7 @@ struct Option {
   };
 
   struct size_t {
-    std::size_t value;
+    std::uint64_t value;
     operator uint64_t() const {
       return static_cast<uint64_t>(value);
     }
@@ -140,6 +146,7 @@ struct Option {
     entity_addr_t,
     entity_addrvec_t,
     std::chrono::seconds,
+    std::chrono::milliseconds,
     size_t,
     uuid_d>;
   const std::string name;
@@ -215,6 +222,8 @@ struct Option {
       value = size_t{0}; break;
     case TYPE_SECS:
       value = std::chrono::seconds{0}; break;
+    case TYPE_MILLISECS:
+      value = std::chrono::milliseconds{0}; break;
     default:
       ceph_abort();
     }
@@ -262,9 +271,11 @@ struct Option {
     case TYPE_BOOL:
       v = bool(new_value); break;
     case TYPE_SIZE:
-      v = size_t{static_cast<std::size_t>(new_value)}; break;
+      v = size_t{static_cast<std::uint64_t>(new_value)}; break;
     case TYPE_SECS:
       v = std::chrono::seconds{new_value}; break;
+    case TYPE_MILLISECS:
+      v = std::chrono::milliseconds{new_value}; break;
     default:
       std::cerr << "Bad type in set_value: " << name << ": "
                 << typeid(T).name() << std::endl;
@@ -377,10 +388,11 @@ struct Option {
   {
     return
       (has_flag(FLAG_RUNTIME)
-       || (!has_flag(FLAG_MGR)
-	   && (type == TYPE_BOOL || type == TYPE_INT
-	       || type == TYPE_UINT || type == TYPE_FLOAT
-	       || type == TYPE_SIZE || type == TYPE_SECS)))
+        || (!has_flag(FLAG_MGR)
+          && (type == TYPE_BOOL || type == TYPE_INT
+            || type == TYPE_UINT || type == TYPE_FLOAT
+            || type == TYPE_SIZE || type == TYPE_SECS
+            || type == TYPE_MILLISECS)))
       && !has_flag(FLAG_STARTUP)
       && !has_flag(FLAG_CLUSTER_CREATE)
       && !has_flag(FLAG_CREATE);

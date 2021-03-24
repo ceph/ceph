@@ -5,7 +5,6 @@
 
 #include "osd/PeeringState.h"
 
-#include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGCreate2.h"
 
 #include "common/Formatter.h"
@@ -28,7 +27,7 @@ struct compound_state {
   seastar::promise<BufferedRecoveryMessages> promise;
   // assuming crimson-osd won't need to be compatible with pre-octopus
   // releases
-  BufferedRecoveryMessages ctx{ceph_release_t::octopus};
+  BufferedRecoveryMessages ctx;
   compound_state() = default;
   ~compound_state() {
     promise.set_value(std::move(ctx));
@@ -57,13 +56,13 @@ public:
   }
 };
 
-std::vector<OperationRef> handle_pg_create(
+std::vector<crimson::OperationRef> handle_pg_create(
   OSD &osd,
   crimson::net::ConnectionRef conn,
   compound_state_ref state,
   Ref<MOSDPGCreate2> m)
 {
-  std::vector<OperationRef> ret;
+  std::vector<crimson::OperationRef> ret;
   for (auto& [pgid, when] : m->pgs) {
     const auto &[created, created_stamp] = when;
     auto q = m->pg_extra.find(pgid);
@@ -100,11 +99,12 @@ std::vector<OperationRef> handle_pg_create(
   return ret;
 }
 
-struct SubOpBlocker : BlockerT<SubOpBlocker> {
+struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
   static constexpr const char * type_name = "CompoundOpBlocker";
 
-  std::vector<OperationRef> subops;
-  SubOpBlocker(std::vector<OperationRef> &&subops) : subops(subops) {}
+  std::vector<crimson::OperationRef> subops;
+  SubOpBlocker(std::vector<crimson::OperationRef> &&subops)
+    : subops(subops) {}
 
   virtual void dump_detail(Formatter *f) const {
     f->open_array_section("dependent_operations");

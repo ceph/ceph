@@ -19,6 +19,14 @@ TYPE(rbd_replay::action::ActionEntry)
 TYPE(rbd::mirror::image_map::PolicyData)
 #endif
 
+#if defined(WITH_RBD) && defined(WITH_RBD_SSD_CACHE)
+#include "librbd/cache/pwl/Types.h"
+#include "librbd/cache/pwl/ssd/Types.h"
+TYPE(librbd::cache::pwl::WriteLogCacheEntry)
+TYPE(librbd::cache::pwl::WriteLogPoolRoot)
+TYPE(librbd::cache::pwl::ssd::SuperBlock)
+#endif
+
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE_FEATUREFUL(cls_rbd_parent)

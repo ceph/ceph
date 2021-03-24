@@ -1,23 +1,24 @@
-import { Component, NgZone, ViewChild } from '@angular/core';
+import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import * as _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { TableStatus } from '../../../shared/classes/table-status';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { URLBuilderService } from '../../../shared/services/url-builder.service';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { TableStatus } from '~/app/shared/classes/table-status';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 const BASE_URL = 'rgw/user';
 
@@ -27,9 +28,13 @@ const BASE_URL = 'rgw/user';
   styleUrls: ['./rgw-user-list.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RgwUserListComponent extends ListWithDetails {
+export class RgwUserListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
+  @ViewChild('userSizeTpl', { static: true })
+  userSizeTpl: TemplateRef<any>;
+  @ViewChild('userObjectTpl', { static: true })
+  userObjectTpl: TemplateRef<any>;
   permission: Permission;
   tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
@@ -47,11 +52,19 @@ export class RgwUserListComponent extends ListWithDetails {
     private ngZone: NgZone
   ) {
     super();
+  }
+
+  ngOnInit() {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
         name: $localize`Username`,
         prop: 'uid',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Tenant`,
+        prop: 'tenant',
         flexGrow: 1
       },
       {
@@ -80,6 +93,18 @@ export class RgwUserListComponent extends ListWithDetails {
           '-1': $localize`Disabled`,
           0: $localize`Unlimited`
         }
+      },
+      {
+        name: $localize`Capacity Limit %`,
+        prop: 'size_usage',
+        cellTemplate: this.userSizeTpl,
+        flexGrow: 0.8
+      },
+      {
+        name: $localize`Object Limit %`,
+        prop: 'object_usage',
+        cellTemplate: this.userObjectTpl,
+        flexGrow: 0.8
       }
     ];
     const getUserUri = () =>

@@ -3,9 +3,9 @@ import { Router } from '@angular/router';
 
 import { Subscription } from 'rxjs';
 
-import { FaviconService } from '../../../shared/services/favicon.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskManagerService } from '../../../shared/services/task-manager.service';
+import { FaviconService } from '~/app/shared/services/favicon.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 
 @Component({
   selector: 'cd-workbench-layout',

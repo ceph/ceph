@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 
-import { Icons } from '../../shared/enum/icons.enum';
+import { Icons } from '../enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import {

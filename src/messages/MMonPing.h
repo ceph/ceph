@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "mon/ConnectionTracker.h"
 
-class MMonPing : public Message {
+class MMonPing final : public Message {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -53,7 +53,7 @@ private:
     : Message{MSG_MON_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MMonPing() override {}
+  ~MMonPing() final {}
 
 public:
   void decode_payload() override {

@@ -1219,7 +1219,12 @@ std::ostream& operator<<(std::ostream& os,
 }
 
 void MigrationSpec::encode(bufferlist& bl) const {
-  ENCODE_START(2, 1, bl);
+  uint8_t min_version = 1;
+  if (!source_spec.empty()) {
+    min_version = 3;
+  }
+
+  ENCODE_START(3, min_version, bl);
   encode(header_type, bl);
   encode(pool_id, bl);
   encode(pool_namespace, bl);
@@ -1232,11 +1237,12 @@ void MigrationSpec::encode(bufferlist& bl) const {
   encode(state, bl);
   encode(state_description, bl);
   encode(static_cast<uint8_t>(mirror_image_mode), bl);
+  encode(source_spec, bl);
   ENCODE_FINISH(bl);
 }
 
 void MigrationSpec::decode(bufferlist::const_iterator& bl) {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   decode(header_type, bl);
   decode(pool_id, bl);
   decode(pool_namespace, bl);
@@ -1253,7 +1259,10 @@ void MigrationSpec::decode(bufferlist::const_iterator& bl) {
     decode(int_mode, bl);
     mirror_image_mode = static_cast<MirrorImageMode>(int_mode);
   }
- DECODE_FINISH(bl);
+  if (struct_v >= 3) {
+    decode(source_spec, bl);
+  }
+  DECODE_FINISH(bl);
 }
 
 std::ostream& operator<<(std::ostream& os,
@@ -1270,10 +1279,15 @@ std::ostream& operator<<(std::ostream& os,
 
 void MigrationSpec::dump(Formatter *f) const {
   f->dump_stream("header_type") << header_type;
-  f->dump_int("pool_id", pool_id);
-  f->dump_string("pool_namespace", pool_namespace);
-  f->dump_string("image_name", image_name);
-  f->dump_string("image_id", image_id);
+  if (header_type == MIGRATION_HEADER_TYPE_SRC ||
+      source_spec.empty()) {
+    f->dump_int("pool_id", pool_id);
+    f->dump_string("pool_namespace", pool_namespace);
+    f->dump_string("image_name", image_name);
+    f->dump_string("image_id", image_id);
+  } else {
+    f->dump_string("source_spec", source_spec);
+  }
   f->dump_stream("snap_seqs") << snap_seqs;
   f->dump_unsigned("overlap", overlap);
   f->dump_bool("mirroring", mirroring);
@@ -1283,20 +1297,29 @@ void MigrationSpec::dump(Formatter *f) const {
 void MigrationSpec::generate_test_instances(std::list<MigrationSpec*> &o) {
   o.push_back(new MigrationSpec());
   o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "ns",
-                                "image_name", "image_id", {{1, 2}}, 123, true,
-                                MIRROR_IMAGE_MODE_SNAPSHOT, true,
+                                "image_name", "image_id", "", {{1, 2}}, 123,
+                                true, MIRROR_IMAGE_MODE_SNAPSHOT, true,
+                                MIGRATION_STATE_PREPARED, "description"));
+  o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_DST, -1, "", "", "",
+                                "{\"format\": \"raw\"}", {{1, 2}}, 123,
+                                true, MIRROR_IMAGE_MODE_SNAPSHOT, true,
                                 MIGRATION_STATE_PREPARED, "description"));
 }
 
 std::ostream& operator<<(std::ostream& os,
                          const MigrationSpec& migration_spec) {
   os << "["
-     << "header_type=" << migration_spec.header_type << ", "
-     << "pool_id=" << migration_spec.pool_id << ", "
-     << "pool_namespace=" << migration_spec.pool_namespace << ", "
-     << "image_name=" << migration_spec.image_name << ", "
-     << "image_id=" << migration_spec.image_id << ", "
-     << "snap_seqs=" << migration_spec.snap_seqs << ", "
+     << "header_type=" << migration_spec.header_type << ", ";
+  if (migration_spec.header_type == MIGRATION_HEADER_TYPE_SRC ||
+      migration_spec.source_spec.empty()) {
+    os << "pool_id=" << migration_spec.pool_id << ", "
+       << "pool_namespace=" << migration_spec.pool_namespace << ", "
+       << "image_name=" << migration_spec.image_name << ", "
+       << "image_id=" << migration_spec.image_id << ", ";
+  } else {
+     os << "source_spec=" << migration_spec.source_spec << ", ";
+  }
+  os << "snap_seqs=" << migration_spec.snap_seqs << ", "
      << "overlap=" << migration_spec.overlap << ", "
      << "flatten=" << migration_spec.flatten << ", "
      << "mirroring=" << migration_spec.mirroring << ", "

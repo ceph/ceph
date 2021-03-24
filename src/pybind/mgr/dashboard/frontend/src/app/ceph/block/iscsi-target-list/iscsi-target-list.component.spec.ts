@@ -8,18 +8,14 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { IscsiTabsComponent } from '../iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from '../iscsi-target-details/iscsi-target-details.component';
 import { IscsiTargetListComponent } from './iscsi-target-list.component';

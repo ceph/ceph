@@ -202,9 +202,11 @@ directories do not have layouts set:
     # file: dir/childdir/grandchild
     ceph.file.layout="stripe_unit=4194304 stripe_count=4 object_size=4194304 pool=cephfs_data"
 
+
+.. _adding-data-pool-to-file-system:
     
-Adding a data pool to the MDS
------------------------------
+Adding a data pool to the File System 
+-------------------------------------
 
 Before you can use a pool with CephFS you have to add it to the Metadata Servers.
 

@@ -47,19 +47,22 @@ seastar::future<> Client::stop()
   return fut;
 }
 
-seastar::future<> Client::ms_dispatch(crimson::net::Connection* conn,
-                                      MessageRef m)
+std::optional<seastar::future<>>
+Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
-  return gate.dispatch(__func__, *this, [this, conn, &m] {
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
     switch(m->get_type()) {
     case MSG_MGR_MAP:
       return handle_mgr_map(conn, boost::static_pointer_cast<MMgrMap>(m));
     case MSG_MGR_CONFIGURE:
       return handle_mgr_conf(conn, boost::static_pointer_cast<MMgrConfigure>(m));
     default:
+      dispatched = false;
       return seastar::now();
     }
   });
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
 void Client::ms_handle_connect(crimson::net::ConnectionRef c)
@@ -114,7 +117,7 @@ seastar::future<> Client::reconnect()
   });
 }
 
-seastar::future<> Client::handle_mgr_map(crimson::net::Connection*,
+seastar::future<> Client::handle_mgr_map(crimson::net::ConnectionRef,
                                          Ref<MMgrMap> m)
 {
   mgrmap = m->get_map();
@@ -128,7 +131,7 @@ seastar::future<> Client::handle_mgr_map(crimson::net::Connection*,
   }
 }
 
-seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
+seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
                                           Ref<MMgrConfigure> m)
 {
   logger().info("{} {}", __func__, *m);
@@ -148,7 +151,6 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
 
 void Client::report()
 {
-  with_stats.update_stats();
   gate.dispatch_in_background(__func__, *this, [this] {
     assert(conn);
     auto pg_stats = with_stats.get_stats();

@@ -7,11 +7,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, Mocks } from '../../../../../testing/unit-test-helper';
-import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
-import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
-import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, Mocks } from '~/testing/unit-test-helper';
 import { OsdDevicesSelectionModalComponent } from './osd-devices-selection-modal.component';
 
 describe('OsdDevicesSelectionModalComponent', () => {
@@ -23,7 +23,7 @@ describe('OsdDevicesSelectionModalComponent', () => {
 
   const expectSubmitButton = (enabled: boolean) => {
     const nativeElement = fixture.debugElement.nativeElement;
-    const button = nativeElement.querySelector('.modal-footer button');
+    const button = nativeElement.querySelector('.modal-footer .tc_submitButton');
     expect(button.disabled).toBe(!enabled);
   };
 

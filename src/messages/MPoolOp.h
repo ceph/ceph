@@ -18,7 +18,7 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-class MPoolOp : public PaxosServiceMessage {
+class MPoolOp final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 2;
@@ -41,7 +41,7 @@ public:
   }
 
 private:
-  ~MPoolOp() override {}
+  ~MPoolOp() final {}
 
 public:
   std::string_view get_type_name() const override { return "poolop"; }

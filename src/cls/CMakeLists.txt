@@ -231,20 +231,23 @@ if (WITH_CEPHFS)
 
 endif (WITH_CEPHFS)
 
-# cls_lua
-set(cls_lua_srcs
-    lua/cls_lua.cc
-    lua/lua_bufferlist.cc)
-add_library(cls_lua SHARED ${cls_lua_srcs})
-set_target_properties(cls_lua PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_lua DESTINATION ${cls_dir})
-target_link_libraries(cls_lua
-    liblua
-    json_spirit)
+if (NOT WIN32)
+  # cls_lua
+  set(cls_lua_srcs
+      lua/cls_lua.cc
+      lua/lua_bufferlist.cc)
+  add_library(cls_lua SHARED ${cls_lua_srcs})
+  set_target_properties(cls_lua PROPERTIES
+    VERSION "1.0.0"
+    SOVERSION "1"
+    INSTALL_RPATH ""
+    CXX_VISIBILITY_PRESET hidden)
+  install(TARGETS cls_lua DESTINATION ${cls_dir})
+  target_link_libraries(cls_lua
+      ${LUA_LIBRARIES}
+      json_spirit)
+  target_include_directories(cls_lua PRIVATE "${LUA_INCLUDE_DIR}")
+endif (NOT WIN32)
 
 set(cls_lua_client_srcs
     lua/cls_lua_client.cc)

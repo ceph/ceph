@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "rgw/rgw_rest.h"
 
 class RGWRESTMgr_Admin : public RGWRESTMgr {
 public:

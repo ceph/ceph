@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <array>
-#include <sstream>
 #include "cephfs_features.h"
 #include "mdstypes.h"
 
@@ -23,18 +22,22 @@ static const std::array feature_names
   "multi_reconnect",
   "deleg_ino",
   "metric_collect",
+  "alternate_name",
 };
 static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 
 std::string_view cephfs_feature_name(size_t id)
 {
   if (id > feature_names.size())
-    return "unknown";
+    return "unknown"sv;
   return feature_names[id];
 }
 
 int cephfs_feature_from_name(std::string_view name)
 {
+  if (name == "reserved"sv) {
+    return -1;
+  }
   for (size_t i = 0; i < feature_names.size(); ++i) {
     if (name == feature_names[i])
       return i;

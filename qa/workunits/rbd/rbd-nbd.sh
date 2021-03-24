@@ -64,7 +64,7 @@ function cleanup()
 
     set +e
 
-    mount | fgrep ${TEMPDIR}/mnt && umount ${TEMPDIR}/mnt
+    mount | fgrep ${TEMPDIR}/mnt && _sudo umount -f ${TEMPDIR}/mnt
 
     rm -Rf ${TEMPDIR}
     if [ -n "${DEV}" ]
@@ -97,7 +97,7 @@ function get_pid()
 
     PID=$(rbd-nbd --format xml list-mapped | $XMLSTARLET sel -t -v \
       "//devices/device[pool='${POOL}'][namespace='${ns}'][image='${IMAGE}'][device='${DEV}']/id")
-    test -n "${PID}"
+    test -n "${PID}" || return 1
     ps -p ${PID} -C rbd-nbd
 }
 
@@ -105,15 +105,13 @@ unmap_device()
 {
     local dev=$1
     local pid=$2
-    _sudo rbd-nbd unmap ${dev}
 
-    for s in 0.5 1 2 4 8 16 32; do
-	sleep ${s}
-        rbd-nbd list-mapped | expect_false grep "^${pid}\\b" &&
-            ps -C rbd-nbd | expect_false grep "^${pid}\\b" &&
-            return 0
-    done
-    return 1
+    _sudo rbd-nbd unmap ${dev}
+    rbd-nbd list-mapped | expect_false grep "^${pid}\\b" || return 1
+    ps -C rbd-nbd | expect_false grep "^ *${pid}\\b" || return 1
+
+    # workaround possible race between unmap and following map
+    sleep 0.5
 }
 
 #
@@ -311,7 +309,26 @@ rbd snap create ${POOL}/${IMAGE}@quiesce3
 _sudo dd if=${DATA} of=${TEMPDIR}/mnt/test bs=1M count=1 oflag=direct
 _sudo umount ${TEMPDIR}/mnt
 unmap_device ${DEV} ${PID}
+DEV=
 cat ${LOG_FILE}
 expect_false grep 'quiesce failed' ${LOG_FILE}
+
+# test detach/attach
+DEV=`_sudo rbd-nbd map --try-netlink ${POOL}/${IMAGE}`
+get_pid
+_sudo mount ${DEV} ${TEMPDIR}/mnt
+_sudo rbd-nbd detach ${POOL}/${IMAGE}
+expect_false get_pid
+_sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
+get_pid
+_sudo rbd-nbd detach ${DEV}
+expect_false get_pid
+_sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
+get_pid
+ls ${TEMPDIR}/mnt/
+dd if=${TEMPDIR}/mnt/test of=/dev/null bs=1M count=1
+_sudo dd if=${DATA} of=${TEMPDIR}/mnt/test1 bs=1M count=1 oflag=direct
+_sudo umount ${TEMPDIR}/mnt
+unmap_device ${DEV} ${PID}
 
 echo OK

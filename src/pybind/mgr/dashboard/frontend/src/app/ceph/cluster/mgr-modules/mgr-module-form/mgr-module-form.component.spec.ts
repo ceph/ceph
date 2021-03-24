@@ -5,9 +5,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { LoadingPanelComponent } from '../../../../shared/components/loading-panel/loading-panel.component';
-import { SharedModule } from '../../../../shared/shared.module';
+import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleFormComponent } from './mgr-module-form.component';
 
 describe('MgrModuleFormComponent', () => {

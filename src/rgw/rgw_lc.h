@@ -184,9 +184,6 @@ class LCFilter
   bool has_multi_condition() const {
     if (obj_tags.count() > 1)
       return true;
-    else if (has_prefix() && has_tags())
-      return true;
-
     return false;
   }
 
@@ -464,7 +461,8 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
+  std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
   int max_objs{0};
   string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
@@ -510,7 +508,7 @@ public:
   RGWLC() : cct(nullptr), store(nullptr) {}
   ~RGWLC();
 
-  void initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store);
+  void initialize(CephContext *_cct, rgw::sal::RGWStore *_store);
   void finalize();
 
   int process(LCWorker* worker, bool once);
@@ -519,36 +517,38 @@ public:
   bool expired_session(time_t started);
   time_t thread_stop_at();
   int list_lc_progress(string& marker, uint32_t max_entries,
-		       vector<cls_rgw_lc_entry>&, int& index);
+		       vector<rgw::sal::Lifecycle::LCEntry>&, int& index);
   int bucket_lc_prepare(int index, LCWorker* worker);
   int bucket_lc_process(string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
-		     cls_rgw_lc_entry& entry, int& result, LCWorker* worker);
+		     rgw::sal::Lifecycle::LCEntry& entry, int& result, LCWorker* worker);
   bool going_down();
   void start_processor();
   void stop_processor();
-  int set_bucket_config(RGWBucketInfo& bucket_info,
-                        const map<string, bufferlist>& bucket_attrs,
+  int set_bucket_config(rgw::sal::RGWBucket* bucket,
+                        const rgw::sal::RGWAttrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
-  int remove_bucket_config(RGWBucketInfo& bucket_info,
-                           const map<string, bufferlist>& bucket_attrs);
+  int remove_bucket_config(rgw::sal::RGWBucket* bucket,
+                           const rgw::sal::RGWAttrs& bucket_attrs);
 
   CephContext *get_cct() const override { return cct; }
+  rgw::sal::Lifecycle *get_lc() const { return sal_lc.get(); }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 
   private:
 
-  int handle_multipart_expiration(RGWRados::Bucket *target,
+  int handle_multipart_expiration(rgw::sal::RGWBucket* target,
 				  const multimap<string, lc_op>& prefix_map,
 				  LCWorker* worker, time_t stop_at, bool once);
 };
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
-		       const map<std::string,bufferlist>& battrs);
+int fix_lc_shard_entry(rgw::sal::RGWStore *store,
+		       rgw::sal::Lifecycle* sal_lc,
+		       rgw::sal::RGWBucket* bucket);
 
 std::string s3_expiration_header(
   DoutPrefixProvider* dpp,

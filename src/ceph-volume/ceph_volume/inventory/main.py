@@ -38,17 +38,25 @@ class Inventory(object):
                   'no effect when <path> is passed'),
             default=False,
         )
+        parser.add_argument(
+            '--with-lsm',
+            action='store_true',
+            help=('Attempt to retrieve additional health and metadata through '
+                  'libstoragemgmt'),
+            default=False,
+        )
         self.args = parser.parse_args(self.argv)
         if self.args.path:
-            self.format_report(Device(self.args.path))
+            self.format_report(Device(self.args.path, with_lsm=self.args.with_lsm))
         else:
-            self.format_report(Devices(filter_for_batch=self.args.filter_for_batch))
+            self.format_report(Devices(filter_for_batch=self.args.filter_for_batch,
+                                       with_lsm=self.args.with_lsm))
 
     def get_report(self):
         if self.args.path:
-            return Device(self.args.path).json_report()
+            return Device(self.args.path, with_lsm=self.args.with_lsm).json_report()
         else:
-            return Devices(filter_for_batch=self.args.filter_for_batch).json_report()
+            return Devices(filter_for_batch=self.args.filter_for_batch, with_lsm=self.args.with_lsm).json_report()
 
     def format_report(self, inventory):
         if self.args.format == 'json':

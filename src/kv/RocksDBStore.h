@@ -115,7 +115,8 @@ private:
   };
   std::unordered_map<std::string, prefix_shards> cf_handles;
   std::unordered_map<uint32_t, std::string> cf_ids_to_prefix;
-
+  std::unordered_map<std::string, rocksdb::BlockBasedTableOptions> cf_bbt_opts;
+  
   void add_column_family(const std::string& cf_name, uint32_t hash_l, uint32_t hash_h,
 			 size_t shard_idx, rocksdb::ColumnFamilyHandle *handle);
   bool is_column_family(const std::string& prefix);
@@ -149,7 +150,10 @@ private:
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
-
+  std::shared_ptr<rocksdb::Cache> create_block_cache(const std::string& cache_type, size_t cache_size, double cache_prio_high = 0.0);
+  int extract_block_cache_options(const std::string& opts_str,
+				  std::unordered_map<std::string, std::string>* column_opts_map,
+				  std::string* block_cache_opt);
   // manage async compactions
   ceph::mutex compact_queue_lock =
     ceph::make_mutex("RocksDBStore::compact_thread_lock");
@@ -460,16 +464,34 @@ err:
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
 
+  virtual int64_t get_cache_usage(string prefix) const override {
+    auto it = cf_bbt_opts.find(prefix);
+    if (it != cf_bbt_opts.end() && it->second.block_cache) {
+      return static_cast<int64_t>(it->second.block_cache->GetUsage());
+    }
+    return -EINVAL;
+  }
+
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
     return 0;
   }
 
-  virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() 
-      const override {
-    return std::dynamic_pointer_cast<PriorityCache::PriCache>(
+  virtual std::shared_ptr<PriorityCache::PriCache>
+      get_priority_cache() const override {
+    return dynamic_pointer_cast<PriorityCache::PriCache>(
         bbt_opts.block_cache);
+  }
+
+  virtual std::shared_ptr<PriorityCache::PriCache>
+      get_priority_cache(string prefix) const override {
+    auto it = cf_bbt_opts.find(prefix);
+    if (it != cf_bbt_opts.end()) {
+      return dynamic_pointer_cast<PriorityCache::PriCache>(
+          it->second.block_cache);
+    }
+    return nullptr;
   }
 
   WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
@@ -494,6 +516,8 @@ public:
     bool   unittest_fail_after_successful_processing = false;
   };
   int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
+  bool get_sharding(std::string& sharding);
+
 };
 
 #endif

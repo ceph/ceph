@@ -10,6 +10,9 @@
 #include "librbd/operation/ObjectMapIterate.h"
 #include <atomic>
 #include <string>
+#include <list>
+#include <map>
+#include <set>
 #include <boost/function.hpp>
 
 class Context;
@@ -19,14 +22,31 @@ namespace librbd {
 class ImageCtx;
 class ProgressContext;
 
+enum Operation {
+  OPERATION_CHECK_OBJECT_MAP,
+  OPERATION_FLATTEN,
+  OPERATION_METADATA_UPDATE,
+  OPERATION_MIGRATE,
+  OPERATION_REBUILD_OBJECT_MAP,
+  OPERATION_RENAME,
+  OPERATION_RESIZE,
+  OPERATION_SNAP_CREATE,
+  OPERATION_SNAP_PROTECT,
+  OPERATION_SNAP_REMOVE,
+  OPERATION_SNAP_RENAME,
+  OPERATION_SNAP_ROLLBACK,
+  OPERATION_SNAP_UNPROTECT,
+  OPERATION_SPARSIFY,
+  OPERATION_UPDATE_FEATURES,
+};
+
 template <typename ImageCtxT = ImageCtx>
 class Operations {
 public:
   Operations(ImageCtxT &image_ctx);
 
-  uint64_t reserve_async_request_id() {
-    return ++m_async_request_seq;
-  }
+  void start_op(enum Operation op, Context *ctx);
+  void finish_op(enum Operation op, int r);
 
   int flatten(ProgressContext &prog_ctx);
   void execute_flatten(ProgressContext &prog_ctx, Context *on_finish);
@@ -119,9 +139,12 @@ public:
 
 private:
   ImageCtxT &m_image_ctx;
-  std::atomic<uint64_t> m_async_request_seq;
 
-  int invoke_async_request(const std::string& name,
+  mutable ceph::mutex m_queue_lock;
+  std::set<Operation> m_in_flight_ops;
+  std::map<Operation, std::list<Context *>> m_queued_ops;
+
+  int invoke_async_request(Operation op,
                            exclusive_lock::OperationRequestType request_type,
                            bool permit_snapshot,
                            const boost::function<void(Context*)>& local,

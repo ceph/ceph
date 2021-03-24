@@ -214,6 +214,20 @@ namespace librbd {
     config_source_t source;
   } config_option_t;
 
+  typedef rbd_encryption_format_t encryption_format_t;
+  typedef rbd_encryption_algorithm_t encryption_algorithm_t;
+  typedef rbd_encryption_options_t encryption_options_t;
+
+  typedef struct {
+    encryption_algorithm_t alg;
+    std::string passphrase;
+  } encryption_luks1_format_options_t;
+
+  typedef struct {
+    encryption_algorithm_t alg;
+    std::string passphrase;
+  } encryption_luks2_format_options_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -294,6 +308,8 @@ public:
   int migration_prepare(IoCtx& io_ctx, const char *image_name,
                         IoCtx& dest_io_ctx, const char *dest_image_name,
                         ImageOptions& opts);
+  int migration_prepare_import(const char *source_spec, IoCtx& dest_io_ctx,
+                               const char *dest_image_name, ImageOptions& opts);
   int migration_execute(IoCtx& io_ctx, const char *image_name);
   int migration_execute_with_progress(IoCtx& io_ctx, const char *image_name,
                                       ProgressContext &prog_ctx);
@@ -404,6 +420,8 @@ public:
 
   int group_snap_create(IoCtx& io_ctx, const char *group_name,
 			const char *snap_name);
+  int group_snap_create2(IoCtx& io_ctx, const char *group_name,
+                         const char *snap_name, uint32_t flags);
   int group_snap_remove(IoCtx& io_ctx, const char *group_name,
 			const char *snap_name);
   int group_snap_rename(IoCtx& group_ioctx, const char *group_name,
@@ -528,6 +546,8 @@ public:
       CEPH_RBD_DEPRECATED;
   int get_parent(linked_image_spec_t *parent_image, snap_spec_t *parent_snap);
 
+  int get_migration_source_spec(std::string* source_spec);
+
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int get_group(group_info_t *group_info, size_t group_info_size);
@@ -569,6 +589,12 @@ public:
   int deep_copy(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
   int deep_copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
                               ImageOptions& opts, ProgressContext &prog_ctx);
+
+  /* encryption */
+  int encryption_format(encryption_format_t format, encryption_options_t opts,
+                        size_t opts_size);
+  int encryption_load(encryption_format_t format, encryption_options_t opts,
+                      size_t opts_size);
 
   /* striping */
   uint64_t get_stripe_unit() const;
@@ -784,6 +810,8 @@ public:
       mirror_image_status_t *mirror_image_status, size_t status_size,
       RBD::AioCompletion *c)
     CEPH_RBD_DEPRECATED;
+  int aio_mirror_image_create_snapshot(uint32_t flags, uint64_t *snap_id,
+      RBD::AioCompletion *c);
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);

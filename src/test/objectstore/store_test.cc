@@ -3521,6 +3521,92 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+#if defined(WITH_BLUESTORE)
+TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  hoid.hobj.pool = -1;
+  ghobject_t hoid2(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  hoid2.hobj.pool = -1;
+  hoid2.generation = 2;
+  {
+    // check if blob is unshared properly
+    bufferlist data, newdata;
+    data.append(string(8192, 'a'));
+
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, data.length(), data);
+    cerr << "Creating object and write 8K " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction t2;
+    t2.clone_range(cid, hoid, hoid2, 0, 4096, 0);
+    cerr << "Clone range object" << std::endl;
+    r = queue_transaction(store, ch, std::move(t2));
+    ASSERT_EQ(r, 0);
+
+    data.clear();
+    data.append(string(4096, 'b'));
+
+    ObjectStore::Transaction t3;
+    t3.write(cid, hoid, 0, data.length(), data);
+    cerr << "Writing 4k to source object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t3));
+    ASSERT_EQ(r, 0);
+
+    {
+      // this trims hoid one out of onode cache
+      EXPECT_EQ(store->umount(), 0);
+      EXPECT_EQ(store->mount(), 0);
+      ch = store->open_collection(cid);
+    }
+
+    ObjectStore::Transaction t4;
+    t4.remove(cid, hoid2);
+    cerr << "Deleting dest object" << hoid2 << std::endl;
+    r = queue_transaction(store, ch, std::move(t4));
+    ASSERT_EQ(r, 0);
+
+    bufferlist resdata;
+    r = store->read(ch, hoid, 0, 0x2000, resdata);
+    ASSERT_EQ(r, 0x2000);
+
+    {
+      BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+      auto* kv = bstore->get_kv();
+
+      // to be inline with BlueStore.cc
+      const string PREFIX_SHARED_BLOB = "X";
+
+      size_t cnt = 0;
+      auto it = kv->get_iterator(PREFIX_SHARED_BLOB);
+      ceph_assert(it);
+      for (it->lower_bound(string()); it->valid(); it->next()) {
+        ++cnt;
+      }
+      ASSERT_EQ(cnt, 0);
+    }
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = queue_transaction(store, ch, std::move(t));
@@ -3528,6 +3614,97 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
   }
 }
 
+TEST_P(StoreTest, BlueStoreUnshareBlobBugTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  hoid.hobj.pool = -1;
+  ghobject_t hoid2(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  hoid2.hobj.pool = -1;
+  hoid2.generation = 2;
+  {
+    // check if blob is unshared properly
+    bufferlist data, newdata;
+    data.append(string(8192, 'a'));
+
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, data.length(), data);
+    cerr << "Creating object and write 8K " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction t2;
+    t2.clone_range(cid, hoid, hoid2, 0, 4096, 0);
+    cerr << "Clone range object" << std::endl;
+    r = queue_transaction(store, ch, std::move(t2));
+    ASSERT_EQ(r, 0);
+
+    data.clear();
+    data.append(string(4096, 'b'));
+
+    ObjectStore::Transaction t3;
+    t3.write(cid, hoid, 0, data.length(), data);
+    cerr << "Writing 4k to source object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t3));
+    ASSERT_EQ(r, 0);
+
+    {
+      // this trims hoid one out of onode cache
+      EXPECT_EQ(store->umount(), 0);
+      EXPECT_EQ(store->mount(), 0);
+      ch = store->open_collection(cid);
+    }
+
+    ObjectStore::Transaction t4;
+    t4.write(cid, hoid2, 0, data.length(), data);
+    cerr << "Writing 4k to second object " << hoid2 << std::endl;
+    r = queue_transaction(store, ch, std::move(t4));
+    ASSERT_EQ(r, 0);
+
+    bufferlist resdata;
+    r = store->read(ch, hoid, 0, 0x2000, resdata);
+    ASSERT_EQ(r, 0x2000);
+
+    {
+      BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+      auto* kv = bstore->get_kv();
+
+      // to be inline with BlueStore.cc
+      const string PREFIX_SHARED_BLOB = "X";
+
+      size_t cnt = 0;
+      auto it = kv->get_iterator(PREFIX_SHARED_BLOB);
+      ceph_assert(it);
+      for (it->lower_bound(string()); it->valid(); it->next()) {
+        ++cnt;
+      }
+      // This shows a bug in unsharing a blob,
+      // after writing to 0x0~1000 to hoid2 share blob at hoid should be
+      //unshared but it doesn't in the current implementation
+      ASSERT_EQ(cnt, 1);
+    }
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+#endif
 
 TEST_P(StoreTest, SimpleObjectLongnameTest) {
   int r;
@@ -7716,8 +7893,8 @@ TEST_P(StoreTest, KVDBHistogramTest) {
     ASSERT_EQ(r, 0);
   }
 
-  Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
-  store->generate_db_histogram(f);
+  std::unique_ptr<Formatter> f(Formatter::create("store_test", "json-pretty", "json-pretty"));
+  store->generate_db_histogram(f.get());
   f->flush(cout);
   cout << std::endl;
 }
@@ -7760,8 +7937,8 @@ TEST_P(StoreTest, KVDBStatsTest) {
     ASSERT_EQ(r, 0);
   }
 
-  Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
-  store->get_db_statistics(f);
+  std::unique_ptr<Formatter> f(Formatter::create("store_test", "json-pretty", "json-pretty"));
+  store->get_db_statistics(f.get());
   f->flush(cout);
   cout << std::endl;
 }
@@ -8128,13 +8305,41 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     ASSERT_EQ(bstore->fsck(false), 0);
   }
 
+  cerr << "Zombie spanning blob" << std::endl;
+  {
+    bstore->mount();
+    ghobject_t hoid4 = make_object("Object 4", pool);
+    auto ch = store->open_collection(cid);
+    {
+      bufferlist bl;
+      string s(0x1000, 'a');
+      bl.append(s);
+      ObjectStore::Transaction t;
+      for(size_t i = 0; i < 0x10; i++) {
+              t.write(cid, hoid4, i * bl.length(), bl.length(), bl);
+      }
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    sleep(5);
+    {
+      bstore->inject_zombie_spanning_blob(cid, hoid4, 12345);
+      bstore->inject_zombie_spanning_blob(cid, hoid4, 23456);
+      bstore->inject_zombie_spanning_blob(cid, hoid4, 23457);
+    }
+
+    bstore->umount();
+    ASSERT_EQ(bstore->fsck(false), 1);
+    ASSERT_LE(bstore->repair(false), 0);
+    ASSERT_EQ(bstore->fsck(false), 0);
+  }
+
   cerr << "Completing" << std::endl;
   bstore->mount();
 
 }
 
-TEST_P(StoreTest, BluestoreRepairGlobalStats)
-{
+TEST_P(StoreTest, BluestoreRepairGlobalStats) {
   if (string(GetParam()) != "bluestore")
     return;
   const size_t offs_base = 65536 / 2;
@@ -8196,8 +8401,7 @@ TEST_P(StoreTest, BluestoreRepairGlobalStats)
   bstore->mount();
 }
 
-TEST_P(StoreTest, BluestoreRepairGlobalStatsFixOnMount)
-{
+TEST_P(StoreTest, BluestoreRepairGlobalStatsFixOnMount) {
   if (string(GetParam()) != "bluestore")
     return;
   const size_t offs_base = 65536 / 2;
@@ -8305,8 +8509,8 @@ TEST_P(StoreTest, BluestoreStatistics) {
     ASSERT_EQ(static_cast<int>(bl.length()), r);
     ASSERT_TRUE(bl_eq(bl, readback));
   }
-  Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
-  EXPECT_NO_THROW(store->get_db_statistics(f));
+  std::unique_ptr<Formatter> f(Formatter::create("store_test", "json-pretty", "json-pretty"));
+  EXPECT_NO_THROW(store->get_db_statistics(f.get()));
   f->flush(cout);
   cout << std::endl;
 }
@@ -8806,6 +9010,29 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
   );
 }
 
+TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
+  SetVal(g_conf(), "bluestore_volume_selection_policy", "fit_to_fast");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+  doManySetAttr(store.get(),
+    [&](ObjectStore* _store) {
+
+      BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
+      ceph_assert(bstore);
+      bstore->compact();
+      const PerfCounters* logger = bstore->get_bluefs_perf_counters();
+      ASSERT_EQ(logger->get(l_bluefs_slow_used_bytes), 0); // reffering to SpilloverFixedTest
+    }
+  );
+}
+
 TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -8912,7 +9139,6 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mkfs", "false");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_umount", "false");
-  g_ceph_context->_conf.set_val_or_die("bluestore_debug_misc", "true");
   g_ceph_context->_conf.set_val_or_die("bluestore_debug_small_allocations", "4");
   g_ceph_context->_conf.set_val_or_die("bluestore_debug_freelist", "true");
   g_ceph_context->_conf.set_val_or_die("bluestore_clone_cow", "true");

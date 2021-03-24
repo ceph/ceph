@@ -3,8 +3,9 @@ from __future__ import absolute_import
 
 import errno
 import json
+from typing import Optional
 
-from mgr_module import CLIReadCommand, CLIWriteCommand
+from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
 
 from ..rest_client import RequestException
 from .iscsi_client import IscsiClient
@@ -13,16 +14,21 @@ from .iscsi_config import InvalidServiceUrl, IscsiGatewayAlreadyExists, \
     ManagedByOrchestratorException
 
 
-@CLIReadCommand('dashboard iscsi-gateway-list', desc='List iSCSI gateways')
+@CLIReadCommand('dashboard iscsi-gateway-list')
 def list_iscsi_gateways(_):
+    '''
+    List iSCSI gateways
+    '''
     return 0, json.dumps(IscsiGatewaysConfig.get_gateways_config()), ''
 
 
-@CLIWriteCommand('dashboard iscsi-gateway-add',
-                 'name=service_url,type=CephString '
-                 'name=name,type=CephString,req=false',
-                 'Add iSCSI gateway configuration')
-def add_iscsi_gateway(_, service_url, name=None):
+@CLIWriteCommand('dashboard iscsi-gateway-add')
+@CLICheckNonemptyFileInput
+def add_iscsi_gateway(_, inbuf, name: Optional[str] = None):
+    '''
+    Add iSCSI gateway configuration. Gateway URL read from -i <file>
+    '''
+    service_url = inbuf
     try:
         IscsiGatewaysConfig.validate_service_url(service_url)
         if name is None:
@@ -39,10 +45,11 @@ def add_iscsi_gateway(_, service_url, name=None):
         return -errno.EINVAL, '', str(ex)
 
 
-@CLIWriteCommand('dashboard iscsi-gateway-rm',
-                 'name=name,type=CephString',
-                 'Remove iSCSI gateway configuration')
-def remove_iscsi_gateway(_, name):
+@CLIWriteCommand('dashboard iscsi-gateway-rm')
+def remove_iscsi_gateway(_, name: str):
+    '''
+    Remove iSCSI gateway configuration
+    '''
     try:
         IscsiGatewaysConfig.remove_gateway(name)
         return 0, 'Success', ''

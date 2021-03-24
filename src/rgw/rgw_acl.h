@@ -117,6 +117,7 @@ protected:
   ACLGranteeType type;
   rgw_user id;
   string email;
+  mutable rgw_user email_id;
   ACLPermission permission;
   string name;
   ACLGroupTypeEnum group;
@@ -139,6 +140,19 @@ public:
     default:
       _id = id;
       return true;
+    }
+  }
+
+  const rgw_user* get_id() const {
+    switch(type.get_type()) {
+    case ACL_TYPE_EMAIL_USER:
+      email_id.from_str(email);
+      return &email_id;
+    case ACL_TYPE_GROUP:
+    case ACL_TYPE_REFERER:
+      return nullptr;
+    default:
+      return &id;
     }
   }
 
@@ -387,6 +401,7 @@ protected:
   string display_name;
 public:
   ACLOwner() {}
+  ACLOwner(const rgw_user& _id) : id(_id) {}
   ~ACLOwner() {}
 
   void encode(bufferlist& bl) const {

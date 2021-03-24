@@ -16,14 +16,15 @@ fine with a public network only, but you may see significant performance
 improvement with a second "cluster" network in a large cluster.
 
 It is possible to run a Ceph Storage Cluster with two networks: a public
-(front-side) network and a cluster (back-side) network.  However, this approach
+(client, front-side) network and a cluster (private, replication, back-side)
+network.  However, this approach
 complicates network configuration (both hardware and software) and does not usually
 have a significant impact on overall performance.  For this reason, we recommend
 that for resilience and capacity dual-NIC systems either active/active bond
 these interfaces or implemebnt a layer 3 multipath strategy with eg. FRR.
 
 If, despite the complexity, one still wishes to use two networks, each
-:term:`Ceph Node` will need to have more than one NIC. See `Hardware
+:term:`Ceph Node` will need to have more than one network interface or VLAN. See `Hardware
 Recommendations - Networks`_ for additional details.
 
 .. ditaa::
@@ -184,8 +185,9 @@ section of your Ceph configuration file.
 
 	[global]
 		# ... elided configuration
-		public network = {public-network/netmask}
+		public_network = {public-network/netmask}
 
+.. _cluster-network:
 
 Cluster Network
 ---------------
@@ -199,7 +201,7 @@ following option to the ``[global]`` section of your Ceph configuration file.
 
 	[global]
 		# ... elided configuration
-		cluster network = {cluster-network/netmask}
+		cluster_network = {cluster-network/netmask}
 
 We prefer that the cluster network is **NOT** reachable from the public network
 or the Internet for added security.
@@ -214,9 +216,9 @@ cluster networks, then you need to specify both your IPv4 and IPv6 networks for 
 
 	[global]
 		# ... elided configuration
-		public network = {IPv4 public-network/netmask}, {IPv6 public-network/netmask}
+		public_network = {IPv4 public-network/netmask}, {IPv6 public-network/netmask}
 
-This is so ceph can find a valid IP address for both address families.
+This is so that Ceph can find a valid IP address for both address families.
 
 If you want just an IPv4 or an IPv6 stack environment, then make sure you set the `ms bind`
 options correctly.
@@ -229,14 +231,17 @@ options correctly.
 Ceph Daemons
 ============
 
-The monitor daemons are each configured to bind to a specific IP address.  These addresses are normally configured by your deployment tool.  Other components in the Ceph system discover the monitors via the ``mon host`` configuration option, normally specified in the ``[global]`` section of the ``ceph.conf`` file.
+Monitor daemons are each configured to bind to a specific IP address.  These
+addresses are normally configured by your deployment tool.  Other components
+in the Ceph cluster discover the monitors via the ``mon host`` configuration
+option, normally specified in the ``[global]`` section of the ``ceph.conf`` file.
 
 .. code-block:: ini
 
      [global]
-         mon host = 10.0.0.2, 10.0.0.3, 10.0.0.4
+         mon_host = 10.0.0.2, 10.0.0.3, 10.0.0.4
 
-The ``mon host`` value can be a list of IP addresses or a name that is
+The ``mon_host`` value can be a list of IP addresses or a name that is
 looked up via DNS.  In the case of a DNS name with multiple A or AAAA
 records, all records are probed in order to discover a monitor.  Once
 one monitor is reached, all other current monitors are discovered, so
@@ -257,11 +262,11 @@ configuration option.  For example,
 
 .. topic:: One NIC OSD in a Two Network Cluster
 
-   Generally, we do not recommend deploying an OSD host with a single NIC in a 
+   Generally, we do not recommend deploying an OSD host with a single network interface in a 
    cluster with two networks. However, you may accomplish this by forcing the 
-   OSD host to operate on the public network by adding a ``public addr`` entry
+   OSD host to operate on the public network by adding a ``public_addr`` entry
    to the ``[osd.n]`` section of the Ceph configuration file, where ``n`` 
-   refers to the number of the OSD with one NIC. Additionally, the public
+   refers to the ID of the OSD with one network interface. Additionally, the public
    network and cluster network must be able to route traffic to each other, 
    which we don't recommend for security reasons.
 
@@ -279,10 +284,10 @@ Public Network
 
 The public network configuration allows you specifically define IP addresses
 and subnets for the public network. You may specifically assign static IP 
-addresses or override ``public network`` settings using the ``public addr``
+addresses or override ``public_network`` settings using the ``public_addr``
 setting for a specific daemon.
 
-``public network``
+``public_network``
 
 :Description: The IP address and netmask of the public (front-side) network 
               (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
@@ -293,7 +298,7 @@ setting for a specific daemon.
 :Default: N/A
 
 
-``public addr``
+``public_addr``
 
 :Description: The IP address for the public (front-side) network. 
               Set for each daemon.
@@ -309,11 +314,11 @@ Cluster Network
 
 The cluster network configuration allows you to declare a cluster network, and
 specifically define IP addresses and subnets for the cluster network. You may
-specifically assign static IP  addresses or override ``cluster network``
-settings using the ``cluster addr`` setting for specific OSD daemons.
+specifically assign static IP  addresses or override ``cluster_network``
+settings using the ``cluster_addr`` setting for specific OSD daemons.
 
 
-``cluster network``
+``cluster_network``
 
 :Description: The IP address and netmask of the cluster (back-side) network 
               (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
@@ -324,7 +329,7 @@ settings using the ``cluster addr`` setting for specific OSD daemons.
 :Default: N/A
 
 
-``cluster addr``
+``cluster_addr``
 
 :Description: The IP address for the cluster (back-side) network. 
               Set for each daemon.
@@ -345,7 +350,7 @@ You may also enable Ceph daemons to bind to IPv6 addresses instead of IPv4
 addresses.
 
 
-``ms bind port min``
+``ms_bind_port_min``
 
 :Description: The minimum port number to which an OSD or MDS daemon will bind.
 :Type: 32-bit Integer
@@ -353,36 +358,36 @@ addresses.
 :Required: No
 
 
-``ms bind port max``
+``ms_bind_port_max``
 
 :Description: The maximum port number to which an OSD or MDS daemon will bind.
 :Type: 32-bit Integer
 :Default: ``7300``
 :Required: No. 
 
-``ms bind ipv4``
+``ms_bind_ipv4``
 
 :Description: Enables Ceph daemons to bind to IPv4 addresses.
 :Type: Boolean
 :Default: ``true``
 :Required: No
 
-``ms bind ipv6``
+``ms_bind_ipv6``
 
 :Description: Enables Ceph daemons to bind to IPv6 addresses.
 :Type: Boolean
 :Default: ``false``
 :Required: No
 
-``public bind addr``
+``public_bind_addr``
 
 :Description: In some dynamic deployments the Ceph MON daemon might bind
-              to an IP address locally that is different from the ``public addr``
+              to an IP address locally that is different from the ``public_addr``
               advertised to other peers in the network. The environment must ensure
-              that routing rules are set correctly. If ``public bind addr`` is set
-              the Ceph MON daemon will bind to it locally and use ``public addr``
+              that routing rules are set correctly. If ``public_bind_addr`` is set
+              the Ceph Monitor daemon will bind to it locally and use ``public_addr``
               in the monmaps to advertise its address to peers. This behavior is limited
-              to the MON daemon.
+              to the Monitor daemon.
 
 :Type: IP Address
 :Required: No
@@ -396,21 +401,20 @@ TCP
 Ceph disables TCP buffering by default.
 
 
-``ms tcp nodelay``
+``ms_tcp_nodelay``
 
-:Description: Ceph enables ``ms tcp nodelay`` so that each request is sent 
+:Description: Ceph enables ``ms_tcp_nodelay`` so that each request is sent 
               immediately (no buffering). Disabling `Nagle's algorithm`_
               increases network traffic, which can introduce latency. If you 
               experience large numbers of small packets, you may try 
-              disabling ``ms tcp nodelay``. 
+              disabling ``ms_tcp_nodelay``. 
 
 :Type: Boolean
 :Required: No
 :Default: ``true``
 
 
-
-``ms tcp rcvbuf``
+``ms_tcp_rcvbuf``
 
 :Description: The size of the socket buffer on the receiving end of a network
               connection. Disable by default.
@@ -418,20 +422,6 @@ Ceph disables TCP buffering by default.
 :Type: 32-bit Integer
 :Required: No
 :Default: ``0``
-
-
-
-``ms tcp read timeout``
-
-:Description: If a client or daemon makes a request to another Ceph daemon and
-              does not drop an unused connection, the ``ms tcp read timeout`` 
-              defines the connection as idle after the specified number 
-              of seconds.
-
-:Type: Unsigned 64-bit Integer
-:Required: No
-:Default: ``900`` 15 minutes.
-
 
 
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability

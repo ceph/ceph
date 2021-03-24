@@ -40,6 +40,7 @@ public:
                                           real_time *pmtime,
                                           map<string, bufferlist> *pattrs,
                                           optional_yield y,
+                                          const DoutPrefixProvider *dpp,
                                           rgw_cache_entry_info *cache_info = nullptr,
                                           boost::optional<obj_version> refresh_version = boost::none) = 0;
 
@@ -50,12 +51,14 @@ public:
                                    real_time mtime,
                                    map<string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
-                                   optional_yield y) = 0;
+                                   optional_yield y,
+                                   const DoutPrefixProvider *dpp) = 0;
 
   virtual int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                     const string& key,
                                     RGWObjVersionTracker *objv_tracker,
-                                    optional_yield y) = 0;
+                                    optional_yield y,
+                                    const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                 const string& key,
@@ -63,6 +66,7 @@ public:
                                 real_time *pmtime,
                                 map<string, bufferlist> *pattrs,
                                 optional_yield y,
+                                const DoutPrefixProvider *dpp,
                                 rgw_cache_entry_info *cache_info = nullptr,
                                 boost::optional<obj_version> refresh_version = boost::none) = 0;
 
@@ -72,7 +76,8 @@ public:
                        real_time *pmtime,
                        map<string, bufferlist> *pattrs,
                        boost::optional<obj_version> refresh_version,
-                       optional_yield y) = 0;
+                       optional_yield y,
+                       const DoutPrefixProvider *dpp) = 0;
 
   virtual int store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                  const string& key,
@@ -82,21 +87,25 @@ public:
                                  bool exclusive,
                                  real_time mtime,
                                  map<string, bufferlist> *pattrs,
-                                 optional_yield y) = 0;
+                                 optional_yield y,
+                                 const DoutPrefixProvider *dpp) = 0;
 
   virtual int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                   const string& key,
 				  const RGWBucketInfo& bucket_info,
                                   RGWObjVersionTracker *objv_tracker,
-                                  optional_yield y) = 0;
+                                  optional_yield y,
+                                  const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
                         const rgw_bucket& bucket,
                         RGWBucketEnt *ent,
-                        optional_yield y) = 0;
+                        optional_yield y,
+                        const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
                                  map<string, RGWBucketEnt>& m,
-                                 optional_yield y) = 0;
+                                 optional_yield y,
+                                 const DoutPrefixProvider *dpp) = 0;
 };
 

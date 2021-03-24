@@ -8,9 +8,9 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { ConfigurationService } from '../../../../shared/api/configuration.service';
-import { SharedModule } from '../../../../shared/shared.module';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdRecvSpeedModalComponent } from './osd-recv-speed-modal.component';
 
 describe('OsdRecvSpeedModalComponent', () => {

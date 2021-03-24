@@ -10,6 +10,7 @@
 #include "common/ceph_json.h"
 #include "common/environment.h"
 #include "common/hostname.h"
+#include "librbd/plugin/Api.h"
 
 #undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_pwl
@@ -33,17 +34,20 @@ bool get_json_format(const std::string& s, JSONFormattable *f) {
 } // namespace
 
 template <typename I>
-ImageCacheState<I>::ImageCacheState(I *image_ctx) : m_image_ctx(image_ctx) {
+ImageCacheState<I>::ImageCacheState(I *image_ctx, plugin::Api<I>& plugin_api) :
+    m_image_ctx(image_ctx), m_plugin_api(plugin_api) {
   ldout(image_ctx->cct, 20) << "Initialize RWL cache state with config data. "
                             << dendl;
 
   ConfigProxy &config = image_ctx->config;
-  log_periodic_stats = config.get_val<bool>("rbd_rwl_log_periodic_stats");
+  log_periodic_stats = config.get_val<bool>("rbd_persistent_cache_log_periodic_stats");
+  cache_type = config.get_val<std::string>("rbd_persistent_cache_mode");
 }
 
 template <typename I>
 ImageCacheState<I>::ImageCacheState(
-    I *image_ctx, JSONFormattable &f) : m_image_ctx(image_ctx) {
+    I *image_ctx, JSONFormattable &f, plugin::Api<I>& plugin_api) :
+    m_image_ctx(image_ctx), m_plugin_api(plugin_api) {
   ldout(image_ctx->cct, 20) << "Initialize RWL cache state with data from "
                             << "server side"<< dendl;
 
@@ -59,7 +63,7 @@ ImageCacheState<I>::ImageCacheState(
 
   // Others from config
   ConfigProxy &config = image_ctx->config;
-  log_periodic_stats = config.get_val<bool>("rbd_rwl_log_periodic_stats");
+  log_periodic_stats = config.get_val<bool>("rbd_persistent_cache_log_periodic_stats");
 }
 
 template <typename I>
@@ -73,15 +77,16 @@ void ImageCacheState<I>::write_image_cache_state(Context *on_finish) {
 
   ldout(m_image_ctx->cct, 20) << __func__ << " Store state: "
                               << image_state_json << dendl;
-  m_image_ctx->operations->execute_metadata_set(IMAGE_CACHE_STATE,
-                                                image_state_json, on_finish);
+  m_plugin_api.execute_image_metadata_set(m_image_ctx, IMAGE_CACHE_STATE,
+                                          image_state_json, on_finish);
 }
 
 template <typename I>
 void ImageCacheState<I>::clear_image_cache_state(Context *on_finish) {
   std::shared_lock owner_lock{m_image_ctx->owner_lock};
   ldout(m_image_ctx->cct, 20) << __func__ << " Remove state: " << dendl;
-  m_image_ctx->operations->execute_metadata_remove(IMAGE_CACHE_STATE, on_finish);
+  m_plugin_api.execute_image_metadata_remove(
+    m_image_ctx, IMAGE_CACHE_STATE, on_finish);
 }
 
 template <typename I>
@@ -89,21 +94,21 @@ void ImageCacheState<I>::dump(ceph::Formatter *f) const {
   ::encode_json("present", present, f);
   ::encode_json("empty", empty, f);
   ::encode_json("clean", clean, f);
-  ::encode_json("cache_type", (int)get_image_cache_type(), f);
+  ::encode_json("cache_type", cache_type, f);
   ::encode_json("pwl_host", host, f);
   ::encode_json("pwl_path", path, f);
   ::encode_json("pwl_size", size, f);
 }
 
 template <typename I>
-ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
-    I* image_ctx, int &r) {
+ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
+    I* image_ctx, plugin::Api<I>& plugin_api, int &r) {
   std::string cache_state_str;
   ImageCacheState<I>* cache_state = nullptr;
   ldout(image_ctx->cct, 20) << "image_cache_state:" << cache_state_str << dendl;
 
   r = 0;
-  bool dirty_cache = image_ctx->test_features(RBD_FEATURE_DIRTY_CACHE);
+  bool dirty_cache = plugin_api.test_image_features(image_ctx, RBD_FEATURE_DIRTY_CACHE);
   if (dirty_cache) {
     cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
                              IMAGE_CACHE_STATE, &cache_state_str);
@@ -112,8 +117,8 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
   bool pwl_enabled = cache::util::is_pwl_enabled(*image_ctx);
   bool cache_desired = pwl_enabled;
   cache_desired &= !image_ctx->read_only;
-  cache_desired &= !image_ctx->test_features(RBD_FEATURE_MIGRATING);
-  cache_desired &= !image_ctx->test_features(RBD_FEATURE_JOURNALING);
+  cache_desired &= !plugin_api.test_image_features(image_ctx, RBD_FEATURE_MIGRATING);
+  cache_desired &= !plugin_api.test_image_features(image_ctx, RBD_FEATURE_JOURNALING);
   cache_desired &= !image_ctx->old_format;
 
   if (!dirty_cache && !cache_desired) {
@@ -123,7 +128,7 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
                           << dendl;
     r = -EINVAL;
   }else if ((!dirty_cache || cache_state_str.empty()) && cache_desired) {
-    cache_state = new ImageCacheState<I>(image_ctx);
+    cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
   } else {
     ceph_assert(!cache_state_str.empty());
     JSONFormattable f;
@@ -139,15 +144,35 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
     int cache_type = (int)f["cache_type"];
 
     switch (cache_type) {
+      case IMAGE_CACHE_TYPE_SSD:
       case IMAGE_CACHE_TYPE_RWL:
         if (!cache_exists) {
-          cache_state = new ImageCacheState<I>(image_ctx);
+          cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
         } else {
-          cache_state = new ImageCacheState<I>(image_ctx, f);
+          cache_state = new ImageCacheState<I>(image_ctx, f, plugin_api);
         }
         break;
       default:
 	r = -EINVAL;
+    }
+  }
+  return cache_state;
+}
+
+template <typename I>
+ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
+    I* image_ctx, plugin::Api<I>& plugin_api) {
+  ImageCacheState<I>* cache_state = nullptr;
+  string cache_state_str;
+  cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
+			   IMAGE_CACHE_STATE, &cache_state_str);
+  if (!cache_state_str.empty()) {
+    JSONFormattable f;
+    bool success = get_json_format(cache_state_str, &f);
+    if (!success) {
+      cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
+    } else {
+      cache_state = new ImageCacheState<I>(image_ctx, f, plugin_api);
     }
   }
   return cache_state;

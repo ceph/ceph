@@ -19,10 +19,10 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDPGInfo : public Message {
+class MOSDPGInfo final : public Message {
 private:
   static constexpr int HEAD_VERSION = 6;
-  static constexpr int COMPAT_VERSION = 5;
+  static constexpr int COMPAT_VERSION = 6;
 
   epoch_t epoch = 0;
 
@@ -46,7 +46,7 @@ public:
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGInfo() override {}
+  ~MOSDPGInfo() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_info"; }
@@ -67,33 +67,13 @@ public:
     using ceph::encode;
     header.version = HEAD_VERSION;
     encode(epoch, payload);
-    if (!HAVE_FEATURE(features, SERVER_OCTOPUS)) {
-      // pretend to be vector<pair<pg_notify_t,PastIntervals>>
-      header.version = 5;
-      encode((uint32_t)pg_list.size(), payload);
-      for (auto& i : pg_list) {
-	encode(i, payload);   // this embeds a dup (ignored) PastIntervals
-	encode(i.past_intervals, payload);
-      }
-      return;
-    }
+    assert(HAVE_FEATURE(features, SERVER_OCTOPUS));
     encode(pg_list, payload);
   }
   void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
-    if (header.version == 5) {
-      // decode legacy vector<pair<pg_notify_t,PastIntervals>>
-      uint32_t num;
-      decode(num, p);
-      pg_list.resize(num);
-      for (unsigned i = 0; i < num; ++i) {
-	decode(pg_list[i], p);
-	decode(pg_list[i].past_intervals, p);
-      }
-      return;
-    }
     decode(pg_list, p);
   }
 private:

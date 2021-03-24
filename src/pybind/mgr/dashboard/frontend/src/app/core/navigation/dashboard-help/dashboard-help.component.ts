@@ -2,10 +2,9 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { DocService } from '../../../shared/services/doc.service';
-import { ModalService } from '../../../shared/services/modal.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { DocService } from '~/app/shared/services/doc.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { AboutComponent } from '../about/about.component';
 
 @Component({
@@ -20,11 +19,7 @@ export class DashboardHelpComponent implements OnInit {
   modalRef: NgbModalRef;
   icons = Icons;
 
-  constructor(
-    private modalService: ModalService,
-    private authStorageService: AuthStorageService,
-    private docService: DocService
-  ) {}
+  constructor(private modalService: ModalService, private docService: DocService) {}
 
   ngOnInit() {
     this.docService.subscribeOnce('dashboard', (url: string) => {
@@ -37,8 +32,6 @@ export class DashboardHelpComponent implements OnInit {
   }
 
   goToApiDocs() {
-    const tokenInput = this.docsFormElement.nativeElement.children[0];
-    tokenInput.value = this.authStorageService.getToken();
     this.docsFormElement.nativeElement.submit();
   }
 }

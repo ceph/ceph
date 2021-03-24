@@ -87,14 +87,11 @@ struct C_AssembleSnapshotDeltas : public C_AioRequest {
       uint64_t object_no, const SnapshotDelta& object_snapshot_delta,
       SnapshotDelta* image_snapshot_delta,
       SnapshotDelta* assembled_image_snapshot_delta) {
-    auto cct = image_ctx->cct;
     for (auto& [key, object_extents] : object_snapshot_delta) {
       for (auto& object_extent : object_extents) {
         Extents image_extents;
-        Striper::extent_to_file(cct, &image_ctx->layout, object_no,
-                                object_extent.get_off(),
-                                object_extent.get_len(),
-                                image_extents);
+        io::util::extent_to_file(image_ctx, object_no, object_extent.get_off(),
+                                 object_extent.get_len(), image_extents);
 
         auto& intervals = (*image_snapshot_delta)[key];
         auto& assembled_intervals = (*assembled_image_snapshot_delta)[key];
@@ -148,7 +145,7 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
     return;
   }
 
-  uint64_t image_size = ictx->get_image_size(ictx->snap_id);
+  uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
   ictx->image_lock.unlock_shared();
 
   auto readahead_extent = ictx->readahead.update(image_extents, image_size);
@@ -159,9 +156,8 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
     ldout(ictx->cct, 20) << "(readahead logical) " << readahead_offset << "~"
                          << readahead_length << dendl;
     LightweightObjectExtents readahead_object_extents;
-    Striper::file_to_extents(ictx->cct, &ictx->layout,
-                             readahead_offset, readahead_length, 0, 0,
-                             &readahead_object_extents);
+    io::util::file_to_extents(ictx, readahead_offset, readahead_length, 0,
+                              &readahead_object_extents);
     for (auto& object_extent : readahead_object_extents) {
       ldout(ictx->cct, 20) << "(readahead) "
                            << data_object_name(ictx,
@@ -397,8 +393,8 @@ void ImageReadRequest<I>::send_request() {
       continue;
     }
 
-    Striper::file_to_extents(cct, &image_ctx.layout, extent.first,
-                             extent.second, 0, buffer_ofs, &object_extents);
+    util::file_to_extents(&image_ctx, extent.first, extent.second, buffer_ofs,
+                          &object_extents);
     buffer_ofs += extent.second;
   }
 
@@ -428,7 +424,6 @@ void ImageReadRequest<I>::send_request() {
 template <typename I>
 void AbstractImageWriteRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
-  CephContext *cct = image_ctx.cct;
 
   bool journaling = false;
 
@@ -449,8 +444,8 @@ void AbstractImageWriteRequest<I>::send_request() {
     }
 
     // map to object extents
-    Striper::file_to_extents(cct, &image_ctx.layout, extent.first,
-                             extent.second, 0, clip_len, &object_extents);
+    io::util::file_to_extents(&image_ctx, extent.first, extent.second, clip_len,
+                              &object_extents);
     clip_len += extent.second;
   }
 
@@ -532,7 +527,8 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
   I &image_ctx = this->m_image_ctx;
 
   bufferlist bl;
-  if (single_extent && object_extent.buffer_extents.size() == 1) {
+  if (single_extent && object_extent.buffer_extents.size() == 1 &&
+      m_bl.length() == object_extent.length) {
     // optimization for single object/buffer extent writes
     bl = std::move(m_bl);
   } else {
@@ -840,8 +836,8 @@ void ImageListSnapsRequest<I>::send_request() {
     }
 
     striper::LightweightObjectExtents object_extents;
-    Striper::file_to_extents(cct, &image_ctx.layout, image_extent.first,
-                             image_extent.second, 0, 0, &object_extents);
+    io::util::file_to_extents(&image_ctx, image_extent.first,
+                              image_extent.second, 0, &object_extents);
     for (auto& object_extent : object_extents) {
       object_number_extents[object_extent.object_no].emplace_back(
         object_extent.offset, object_extent.length);

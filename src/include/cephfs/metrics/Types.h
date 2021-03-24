@@ -21,6 +21,10 @@ enum ClientMetricType {
   CLIENT_METRIC_TYPE_READ_LATENCY,
   CLIENT_METRIC_TYPE_WRITE_LATENCY,
   CLIENT_METRIC_TYPE_METADATA_LATENCY,
+  CLIENT_METRIC_TYPE_DENTRY_LEASE,
+  CLIENT_METRIC_TYPE_OPENED_FILES,
+  CLIENT_METRIC_TYPE_PINNED_ICAPS,
+  CLIENT_METRIC_TYPE_OPENED_INODES,
 };
 inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) {
   switch(type) {
@@ -35,6 +39,18 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     break;
   case ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY:
     os << "METADATA_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE:
+    os << "DENTRY_LEASE";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_FILES:
+    os << "OPENED_FILES";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_PINNED_ICAPS:
+    os << "PINNED_ICAPS";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
+    os << "OPENED_INODES";
     break;
   default:
     ceph_abort();
@@ -78,6 +94,12 @@ struct CapInfoPayload {
     f->dump_int("cap_misses", cap_misses);
     f->dump_int("num_caps", nr_caps);
   }
+
+  void print(ostream *out) const {
+    *out << "cap_hits: " << cap_hits << " "
+	 << "cap_misses: " << cap_misses << " "
+	 << "num_caps: " << nr_caps;
+  }
 };
 
 struct ReadLatencyPayload {
@@ -106,6 +128,10 @@ struct ReadLatencyPayload {
 
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
+  }
+
+  void print(ostream *out) const {
+    *out << "latency: " << lat;
   }
 };
 
@@ -136,6 +162,10 @@ struct WriteLatencyPayload {
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
   }
+
+  void print(ostream *out) const {
+    *out << "latency: " << lat;
+  }
 };
 
 struct MetadataLatencyPayload {
@@ -165,6 +195,167 @@ struct MetadataLatencyPayload {
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
   }
+
+  void print(ostream *out) const {
+    *out << "latency: " << lat;
+  }
+};
+
+struct DentryLeasePayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE;
+
+  uint64_t dlease_hits = 0;
+  uint64_t dlease_misses = 0;
+  uint64_t nr_dentries = 0;
+
+  DentryLeasePayload() { }
+  DentryLeasePayload(uint64_t dlease_hits, uint64_t dlease_misses, uint64_t nr_dentries)
+    : dlease_hits(dlease_hits), dlease_misses(dlease_misses), nr_dentries(nr_dentries) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(dlease_hits, bl);
+    encode(dlease_misses, bl);
+    encode(nr_dentries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(dlease_hits, iter);
+    decode(dlease_misses, iter);
+    decode(nr_dentries, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("dlease_hits", dlease_hits);
+    f->dump_int("dlease_misses", dlease_misses);
+    f->dump_int("num_dentries", nr_dentries);
+  }
+
+  void print(ostream *out) const {
+    *out << "dlease_hits: " << dlease_hits << " "
+	 << "dlease_misses: " << dlease_misses << " "
+	 << "num_dentries: " << nr_dentries;
+  }
+};
+
+struct OpenedFilesPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_OPENED_FILES;
+
+  uint64_t opened_files = 0;
+  uint64_t total_inodes = 0;
+
+  OpenedFilesPayload() { }
+  OpenedFilesPayload(uint64_t opened_files, uint64_t total_inodes)
+    : opened_files(opened_files), total_inodes(total_inodes) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(opened_files, bl);
+    encode(total_inodes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(opened_files, iter);
+    decode(total_inodes, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("opened_files", opened_files);
+    f->dump_int("total_inodes", total_inodes);
+  }
+
+  void print(ostream *out) const {
+    *out << "opened_files: " << opened_files << " "
+	 << "total_inodes: " << total_inodes;
+  }
+};
+
+struct PinnedIcapsPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_PINNED_ICAPS;
+
+  uint64_t pinned_icaps = 0;
+  uint64_t total_inodes = 0;
+
+  PinnedIcapsPayload() { }
+  PinnedIcapsPayload(uint64_t pinned_icaps, uint64_t total_inodes)
+    : pinned_icaps(pinned_icaps), total_inodes(total_inodes) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(pinned_icaps, bl);
+    encode(total_inodes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(pinned_icaps, iter);
+    decode(total_inodes, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("pinned_icaps", pinned_icaps);
+    f->dump_int("total_inodes", total_inodes);
+  }
+
+  void print(ostream *out) const {
+    *out << "pinned_icaps: " << pinned_icaps << " "
+	 << "total_inodes: " << total_inodes;
+  }
+};
+
+struct OpenedInodesPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES;
+
+  uint64_t opened_inodes = 0;
+  uint64_t total_inodes = 0;
+
+  OpenedInodesPayload() { }
+  OpenedInodesPayload(uint64_t opened_inodes, uint64_t total_inodes)
+    : opened_inodes(opened_inodes), total_inodes(total_inodes) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(opened_inodes, bl);
+    encode(total_inodes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(opened_inodes, iter);
+    decode(total_inodes, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("opened_inodes", opened_inodes);
+    f->dump_int("total_inodes", total_inodes);
+  }
+
+  void print(ostream *out) const {
+    *out << "opened_inodes: " << opened_inodes << " "
+	 << "total_inodes: " << total_inodes;
+  }
 };
 
 struct UnknownPayload {
@@ -180,12 +371,19 @@ struct UnknownPayload {
 
   void dump(Formatter *f) const {
   }
+
+  void print(ostream *out) const {
+  }
 };
 
 typedef boost::variant<CapInfoPayload,
                        ReadLatencyPayload,
                        WriteLatencyPayload,
                        MetadataLatencyPayload,
+		       DentryLeasePayload,
+		       OpenedFilesPayload,
+		       PinnedIcapsPayload,
+		       OpenedInodesPayload,
                        UnknownPayload> ClientMetricPayload;
 
 // metric update message sent by clients
@@ -242,6 +440,23 @@ public:
     Formatter *m_formatter;
   };
 
+  class PrintPayloadVisitor : public boost::static_visitor<void> {
+  public:
+    explicit PrintPayloadVisitor(ostream *out) : _out(out) {
+    }
+
+    template <typename ClientMetricPayload>
+    inline void operator()(const ClientMetricPayload &payload) const {
+      ClientMetricType metric_type = ClientMetricPayload::METRIC_TYPE;
+      *_out << "[client_metric_type: " << metric_type;
+      payload.print(_out);
+      *_out << "]";
+    }
+
+  private:
+    ostream *_out;
+  };
+
   void encode(bufferlist &bl) const {
     boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   }
@@ -265,6 +480,18 @@ public:
     case ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY:
       payload = MetadataLatencyPayload();
       break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE:
+      payload = DentryLeasePayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_FILES:
+      payload = OpenedFilesPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_PINNED_ICAPS:
+      payload = PinnedIcapsPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
+      payload = OpenedInodesPayload();
+      break;
     default:
       payload = UnknownPayload();
       break;
@@ -275,6 +502,10 @@ public:
 
   void dump(Formatter *f) const {
     apply_visitor(DumpPayloadVisitor(f), payload);
+  }
+
+  void print(ostream *out) const {
+    apply_visitor(PrintPayloadVisitor(out), payload);
   }
 
   ClientMetricPayload payload;

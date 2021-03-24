@@ -38,11 +38,11 @@ namespace PriorityCache
     // shrink it to 1/256 of the rounded up cache size
     chunk /= 256;
 
-    // bound the chunk size to be between 4MB and 32MB
+    // bound the chunk size to be between 4MB and 64MB
     chunk = (chunk > 4ul*1024*1024) ? chunk : 4ul*1024*1024;
-    chunk = (chunk < 16ul*1024*1024) ? chunk : 16ul*1024*1024;
+    chunk = (chunk < 64ul*1024*1024) ? chunk : 64ul*1024*1024;
 
-    /* Add 16 chunks of headroom and round up to the near chunk.  Note that
+    /* FIXME: Hardcoded to force get_chunk to never drop below 64MB. 
      * if RocksDB is used, it's a good idea to have N MB of headroom where
      * N is the target_file_size_base value.  RocksDB will read SST files
      * into the block cache during compaction which potentially can force out
@@ -51,7 +51,7 @@ namespace PriorityCache
      * compaction reads allows the kv cache grow even during extremely heavy
      * compaction workloads.
      */
-    uint64_t val = usage + (16 * chunk);
+    uint64_t val = usage + 64*1024*1024;
     uint64_t r = (val) % chunk;
     if (r > 0)
       val = val + chunk - r;

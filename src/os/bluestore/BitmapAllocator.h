@@ -15,13 +15,16 @@
 class BitmapAllocator : public Allocator,
   public AllocatorLevel02<AllocatorLevel01Loose> {
   CephContext* cct;
-
 public:
   BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit, const std::string& name);
   ~BitmapAllocator() override
   {
   }
 
+  const char* get_type() const override
+  {
+    return "bitmap";
+  }
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
     int64_t hint, PExtentVector *extents) override;

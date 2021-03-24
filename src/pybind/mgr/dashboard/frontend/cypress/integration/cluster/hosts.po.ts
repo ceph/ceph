@@ -10,7 +10,9 @@ export class HostsPageHelper extends PageHelper {
 
   columnIndex = {
     hostname: 2,
-    labels: 4
+    services: 3,
+    labels: 4,
+    status: 5
   };
 
   check_for_host() {
@@ -104,9 +106,9 @@ export class HostsPageHelper extends PageHelper {
     // First find row with hostname, then find labels in the row
     this.getTableCell(this.columnIndex.hostname, hostname)
       .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.labels})`)
+      .find(`datatable-body-cell:nth-child(${this.columnIndex.labels}) .badge`)
       .should(($ele) => {
-        const newLabels = $ele.text().split(', ');
+        const newLabels = $ele.toArray().map((v) => v.innerText);
         for (const label of labels) {
           if (add) {
             expect(newLabels).to.include(label);
@@ -115,5 +117,44 @@ export class HostsPageHelper extends PageHelper {
           }
         }
       });
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  maintenance(hostname: string, exit = false) {
+    let services: string[];
+    let runTest = false;
+    this.getTableCell(this.columnIndex.hostname, hostname)
+      .parent()
+      .find(`datatable-body-cell:nth-child(${this.columnIndex.services}) a`)
+      .should(($el) => {
+        services = $el.text().split(', ');
+        if (services.length < 2 && services[0].includes('osd')) {
+          runTest = true;
+        }
+      });
+    if (runTest) {
+      this.getTableCell(this.columnIndex.hostname, hostname).click();
+      if (exit) {
+        this.clickActionButton('exit-maintenance');
+
+        this.getTableCell(this.columnIndex.hostname, hostname)
+          .parent()
+          .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+          .should(($ele) => {
+            const status = $ele.toArray().map((v) => v.innerText);
+            expect(status).to.not.include('maintenance');
+          });
+      } else {
+        this.clickActionButton('enter-maintenance');
+
+        this.getTableCell(this.columnIndex.hostname, hostname)
+          .parent()
+          .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+          .should(($ele) => {
+            const status = $ele.toArray().map((v) => v.innerText);
+            expect(status).to.include('maintenance');
+          });
+      }
+    }
   }
 }

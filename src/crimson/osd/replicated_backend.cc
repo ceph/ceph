@@ -27,7 +27,7 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
     shard_services{shard_services}
 {}
 
-ReplicatedBackend::ll_read_errorator::future<ceph::bufferlist>
+ReplicatedBackend::ll_read_ierrorator::future<ceph::bufferlist>
 ReplicatedBackend::_read(const hobject_t& hoid,
                          const uint64_t off,
                          const uint64_t len,
@@ -39,11 +39,11 @@ ReplicatedBackend::_read(const hobject_t& hoid,
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
-seastar::future<crimson::osd::acked_peers_t>
+ReplicatedBackend::interruptible_future<crimson::osd::acked_peers_t>
 ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        const hobject_t& hoid,
                                        ceph::os::Transaction&& txn,
-                                       const osd_op_params_t& osd_op_p,
+                                       osd_op_params_t&& osd_op_p,
                                        epoch_t min_epoch, epoch_t map_epoch,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {
@@ -57,11 +57,11 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   const ceph_tid_t tid = next_txn_id++;
   auto req_id = osd_op_p.req->get_reqid();
   auto pending_txn =
-    pending_trans.emplace(tid, pg_shards.size()).first;
+    pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
-  return seastar::parallel_for_each(std::move(pg_shards),
+  return interruptor::parallel_for_each(std::move(pg_shards),
     [=, encoded_txn=std::move(encoded_txn), txn=std::move(txn)]
     (auto pg_shard) mutable {
       if (pg_shard == whoami) {
@@ -81,7 +81,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
         // TODO: set more stuff. e.g., pg_states
         return shard_services.send_to_osd(pg_shard.osd, std::move(m), map_epoch);
       }
-    }).then([this, peers=pending_txn->second.weak_from_this()] {
+    }).then_interruptible([this, peers=pending_txn->second.weak_from_this()] {
       if (!peers) {
 	// for now, only actingset_changed can cause peers
 	// to be nullptr
@@ -90,10 +90,11 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       }
       if (--peers->pending == 0) {
         peers->all_committed.set_value();
+	peers->all_committed = {};
+	return seastar::now();
       }
-      return peers->all_committed.get_future();
-    }).then([pending_txn, this] {
-      pending_txn->second.all_committed = {};
+      return peers->all_committed.get_shared_future();
+    }).then_interruptible([pending_txn, this] {
       auto acked_peers = std::move(pending_txn->second.acked_peers);
       pending_trans.erase(pending_txn);
       return seastar::make_ready_future<crimson::osd::acked_peers_t>(std::move(acked_peers));
@@ -107,6 +108,7 @@ void ReplicatedBackend::on_actingset_changed(peering_info_t pi)
   for (auto& [tid, pending_txn] : pending_trans) {
     pending_txn.all_committed.set_exception(e_actingset_changed);
   }
+  pending_trans.clear();
 }
 
 void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
@@ -121,7 +123,8 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
     if (peer.shard == reply.from) {
       peer.last_complete_ondisk = reply.get_last_complete_ondisk();
       if (--peers.pending == 0) {
-        peers.all_committed.set_value();    
+        peers.all_committed.set_value();
+        peers.all_committed = {};
       }
       return;
     }
@@ -138,4 +141,35 @@ seastar::future<> ReplicatedBackend::stop()
   }
   pending_trans.clear();
   return seastar::now();
+}
+
+seastar::future<>
+ReplicatedBackend::request_committed(const osd_reqid_t& reqid,
+				    const eversion_t& at_version)
+{
+  if (std::empty(pending_trans)) {
+    return seastar::now();
+  }
+  auto iter = pending_trans.begin();
+  auto& pending_txn = iter->second;
+  if (pending_txn.at_version > at_version) {
+    return seastar::now();
+  }
+  for (; iter->second.at_version < at_version; ++iter);
+  // As for now, the previous client_request with the same reqid
+  // mustn't have finished, as that would mean later client_requests
+  // has finished before earlier ones.
+  //
+  // The following line of code should be "assert(pending_txn.at_version == at_version)",
+  // as there can be only one transaction at any time in pending_trans due to
+  // PG::client_request_pg_pipeline. But there's a high possibility that we will
+  // improve the parallelism here in the future, which means there may be multiple
+  // client requests in flight, so we loosed the restriction to as follows. Correct
+  // me if I'm wrong:-)
+  assert(iter != pending_trans.end() && iter->second.at_version == at_version);
+  if (iter->second.pending) {
+    return iter->second.all_committed.get_shared_future();
+  } else {
+    return seastar::now();
+  }
 }

@@ -21,9 +21,9 @@
 #include "mon/health_check.h"
 #include "mon/PGMap.h"
 
-class MMonMgrReport : public PaxosServiceMessage {
+class MMonMgrReport final : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -31,18 +31,20 @@ public:
   health_check_map_t health_checks;
   ceph::buffer::list service_map_bl;  // encoded ServiceMap
   std::map<std::string,ProgressEvent> progress_events;
+  uint64_t gid = 0;
 
   MMonMgrReport()
     : PaxosServiceMessage{MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MMonMgrReport() override {}
+  ~MMonMgrReport() final {}
 
 public:
   std::string_view get_type_name() const override { return "monmgrreport"; }
 
   void print(std::ostream& out) const override {
-    out << get_type_name() << "(" << health_checks.checks.size() << " checks, "
+    out << get_type_name() << "(gid " << gid
+	<< ", " << health_checks.checks.size() << " checks, "
 	<< progress_events.size() << " progress events)";
   }
 
@@ -52,6 +54,7 @@ public:
     encode(health_checks, payload);
     encode(service_map_bl, payload);
     encode(progress_events, payload);
+    encode(gid, payload);
 
     if (!HAVE_FEATURE(features, SERVER_NAUTILUS) ||
 	!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -78,6 +81,9 @@ public:
     decode(service_map_bl, p);
     if (header.version >= 2) {
       decode(progress_events, p);
+    }
+    if (header.version >= 3) {
+      decode(gid, p);
     }
   }
 private:

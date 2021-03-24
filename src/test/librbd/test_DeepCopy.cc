@@ -122,8 +122,8 @@ struct TestDeepCopy : public TestFixture {
           std::cout << "snap: " << (src_snap_name ? src_snap_name : "null")
                     << ", block " << offset << "~" << read_size << " differs"
                     << std::endl;
-          // std::cout << "src block: " << std::endl; src_bl.hexdump(std::cout);
-          // std::cout << "dst block: " << std::endl; dst_bl.hexdump(std::cout);
+          std::cout << "src block: " << std::endl; src_bl.hexdump(std::cout);
+          std::cout << "dst block: " << std::endl; dst_bl.hexdump(std::cout);
         }
         EXPECT_TRUE(src_bl.contents_equal(dst_bl));
         offset += read_size;
@@ -410,7 +410,6 @@ struct TestDeepCopy : public TestFixture {
         int order = m_src_ictx->order;
         uint64_t features;
         ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
-        features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
 
         std::cout << "clone " << m_src_ictx->name << " -> " << clone_name
                   << std::endl;

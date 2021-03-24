@@ -22,7 +22,7 @@ set -e
 
 full_path="$0"
 
-SCRIPT_VERSION="15.1.1.389"
+SCRIPT_VERSION="16.0.0.6848"
 active_milestones=""
 backport_pr_labels=""
 backport_pr_number=""
@@ -1083,7 +1083,7 @@ function try_known_milestones {
         mimic) mn="11" ;;
         nautilus) mn="12" ;;
         octopus) mn="13" ;;
-        pacific) mn="TBD" ;;
+        pacific) mn="14" ;;
     esac
     echo "$mn"
 }
@@ -1400,6 +1400,16 @@ else
     abort_due_to_setup_problem
 fi
 
+#
+# do we have jq available?
+#
+
+if type jq >/dev/null 2>&1 ; then
+    debug "jq is available. Good."
+else
+    error "This script uses jq, but it does not seem to be installed"
+    abort_due_to_setup_problem
+fi
 
 #
 # is jq available?

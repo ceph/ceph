@@ -440,6 +440,10 @@ finish:
 template <typename I>
 void notify_unquiesce(std::vector<I*> &ictxs,
                       const std::vector<uint64_t> &requests) {
+  if (requests.empty()) {
+    return;
+  }
+
   ceph_assert(requests.size() == ictxs.size());
   int image_count = ictxs.size();
   std::vector<C_SaferCond> on_finishes(image_count);
@@ -635,9 +639,6 @@ int Group<I>::list(IoCtx& io_ctx, vector<string> *names)
     map<string, string> groups;
     r = cls_client::group_dir_list(&io_ctx, RBD_GROUP_DIRECTORY, last_read,
                                    max_read, &groups);
-    if (r == -ENOENT) {
-      return 0; // Ignore missing rbd group directory. It means we don't have any groups yet.
-    }
     if (r < 0) {
       if (r != -ENOENT) {
         lderr(cct) << "error listing group in directory: "
@@ -878,8 +879,8 @@ int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
 
 template <typename I>
 int Group<I>::snap_create(librados::IoCtx& group_ioctx,
-    const char *group_name, const char *snap_name)
-{
+                          const char *group_name, const char *snap_name,
+                          uint32_t flags) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
   string group_id;
@@ -891,9 +892,17 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   std::vector<C_SaferCond*> on_finishes;
   std::vector<uint64_t> quiesce_requests;
   NoOpProgressContext prog_ctx;
+  uint64_t internal_flags = 0;
 
-  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
-				 group_name, &group_id);
+  int r = util::snap_create_flags_api_to_internal(cct, flags, &internal_flags);
+  if (r < 0) {
+    return r;
+  }
+  internal_flags &= ~(SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE |
+                      SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR);
+
+  r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
+                             &group_id);
   if (r < 0) {
     lderr(cct) << "error reading group id object: "
 	       << cpp_strerror(r)
@@ -979,10 +988,12 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     goto remove_record;
   }
 
-  ldout(cct, 20) << "Sending quiesce notification" << dendl;
-  ret_code = notify_quiesce(ictxs, prog_ctx, &quiesce_requests);
-  if (ret_code != 0) {
-    goto remove_record;
+  if ((flags & RBD_SNAP_CREATE_SKIP_QUIESCE) == 0) {
+    ldout(cct, 20) << "Sending quiesce notification" << dendl;
+    ret_code = notify_quiesce(ictxs, prog_ctx, &quiesce_requests);
+    if (ret_code != 0 && (flags & RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR) == 0) {
+      goto remove_record;
+    }
   }
 
   ldout(cct, 20) << "Requesting exclusive locks for images" << dendl;

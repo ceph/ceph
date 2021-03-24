@@ -1,7 +1,7 @@
 import { Directive, OnInit } from '@angular/core';
 
-import { PrometheusService } from '../../../shared/api/prometheus.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 
 @Directive()
 // tslint:disable-next-line: directive-class-suffix

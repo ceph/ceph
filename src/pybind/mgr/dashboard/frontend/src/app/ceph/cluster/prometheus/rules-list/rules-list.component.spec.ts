@@ -5,10 +5,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { PrometheusService } from '../../../../shared/api/prometheus.service';
-import { SettingsService } from '../../../../shared/api/settings.service';
-import { SharedModule } from '../../../../shared/shared.module';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { SettingsService } from '~/app/shared/api/settings.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
 import { RulesListComponent } from './rules-list.component';
 

@@ -53,7 +53,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 
   if (cct->_conf->throttler_perf_counter) {
     PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
-    b.add_u64(l_throttle_val, "val", "Currently available throttle");
+    b.add_u64(l_throttle_val, "val", "Currently taken slots");
     b.add_u64(l_throttle_max, "max", "Max value for throttle");
     b.add_u64_counter(l_throttle_get_started, "get_started", "Number of get calls, increased before wait");
     b.add_u64_counter(l_throttle_get, "get", "Gets");
@@ -191,25 +191,31 @@ bool Throttle::get_or_fail(int64_t c)
   }
 
   assert (c >= 0);
-  std::lock_guard l(lock);
-  if (_should_wait(c) || !conds.empty()) {
-    ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
-    if (logger) {
-      logger->inc(l_throttle_get_or_fail_fail);
+  bool result = false;
+  {
+    std::lock_guard l(lock);
+    if (_should_wait(c) || !conds.empty()) {
+      ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
+      result = false;
+    } else {
+      ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
+	<< " -> " << (count.load() + c) << ")" << dendl;
+      count += c;
+      result = true;
     }
-    return false;
-  } else {
-    ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
-		   << " -> " << (count.load() + c) << ")" << dendl;
-    count += c;
-    if (logger) {
+  }
+
+  if (logger) {
+    if (result) {
       logger->inc(l_throttle_get_or_fail_success);
       logger->inc(l_throttle_get);
       logger->inc(l_throttle_get_sum, c);
       logger->set(l_throttle_val, count);
+    } else {
+      logger->inc(l_throttle_get_or_fail_fail);
     }
-    return true;
   }
+  return result;
 }
 
 int64_t Throttle::put(int64_t c)
@@ -222,20 +228,25 @@ int64_t Throttle::put(int64_t c)
   ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
-  std::lock_guard l(lock);
-  if (c) {
-    if (!conds.empty())
-      conds.front().notify_one();
-    // if count goes negative, we failed somewhere!
-    ceph_assert(count >= c);
-    count -= c;
-    if (logger) {
-      logger->inc(l_throttle_put);
-      logger->inc(l_throttle_put_sum, c);
-      logger->set(l_throttle_val, count);
+  int64_t new_count;
+  {
+    std::lock_guard l(lock);
+    new_count = count;
+    if (c) {
+      if (!conds.empty())
+	conds.front().notify_one();
+      // if count goes negative, we failed somewhere!
+      ceph_assert(count >= c);
+      new_count = count -= c;
     }
   }
-  return count;
+  if (logger) {
+    logger->inc(l_throttle_put);
+    logger->inc(l_throttle_put_sum, c);
+    logger->set(l_throttle_val, count);
+  }
+
+  return new_count;
 }
 
 void Throttle::reset()

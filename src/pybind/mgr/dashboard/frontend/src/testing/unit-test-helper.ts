@@ -9,24 +9,26 @@ import _ from 'lodash';
 import { configureTestSuite } from 'ng-bullet';
 import { of } from 'rxjs';
 
-import { InventoryDevice } from '../app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
-import { Pool } from '../app/ceph/pool/pool';
-import { OrchestratorService } from '../app/shared/api/orchestrator.service';
-import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
-import { Icons } from '../app/shared/enum/icons.enum';
-import { CdFormGroup } from '../app/shared/forms/cd-form-group';
-import { CdTableAction } from '../app/shared/models/cd-table-action';
-import { CdTableSelection } from '../app/shared/models/cd-table-selection';
-import { CrushNode } from '../app/shared/models/crush-node';
-import { CrushRule, CrushRuleConfig } from '../app/shared/models/crush-rule';
-import { OrchestratorFeature } from '../app/shared/models/orchestrator.enum';
-import { Permission } from '../app/shared/models/permissions';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { Pool } from '~/app/ceph/pool/pool';
+import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { CrushNode } from '~/app/shared/models/crush-node';
+import { CrushRule, CrushRuleConfig } from '~/app/shared/models/crush-rule';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { Permission } from '~/app/shared/models/permissions';
 import {
   AlertmanagerAlert,
   AlertmanagerNotification,
   AlertmanagerNotificationAlert,
   PrometheusRule
-} from '../app/shared/models/prometheus-alerts';
+} from '~/app/shared/models/prometheus-alerts';
 
 export function configureTestBed(configuration: any, entryComponents?: any) {
   configureTestSuite(() => {
@@ -45,9 +47,18 @@ export function configureTestBed(configuration: any, entryComponents?: any) {
 export class PermissionHelper {
   tac: TableActionsComponent;
   permission: Permission;
+  selection: { single: object; multiple: object[] };
 
-  constructor(permission: Permission) {
+  /**
+   * @param permission The permissions used by this test.
+   * @param selection The selection used by this test. Configure this if
+   *   the table actions require a more complex selection object to perform
+   *   a correct test run.
+   *   Defaults to `{ single: {}, multiple: [{}, {}] }`.
+   */
+  constructor(permission: Permission, selection?: { single: object; multiple: object[] }) {
     this.permission = permission;
+    this.selection = _.defaultTo(selection, { single: {}, multiple: [{}, {}] });
   }
 
   setPermissionsAndGetActions(tableActions: CdTableAction[]): any {
@@ -91,11 +102,13 @@ export class PermissionHelper {
   testScenarios() {
     const result: any = {};
     // 'multiple selections'
-    result.multiple = this.testScenario([{}, {}]);
+    result.multiple = this.testScenario(this.selection.multiple);
     // 'select executing item'
-    result.executing = this.testScenario([{ cdExecuting: 'someAction' }]);
+    result.executing = this.testScenario([
+      _.merge({ cdExecuting: 'someAction' }, this.selection.single)
+    ]);
     // 'select non-executing item'
-    result.single = this.testScenario([{}]);
+    result.single = this.testScenario([this.selection.single]);
     // 'no selection'
     result.no = this.testScenario([]);
 
@@ -104,12 +117,13 @@ export class PermissionHelper {
 
   private testScenario(selection: object[]) {
     this.setSelection(selection);
-    const btn = this.tac.getCurrentButton();
-    return btn ? btn.name : '';
+    const action: CdTableAction = this.tac.currentAction;
+    return action ? action.name : '';
   }
 
   setSelection(selection: object[]) {
     this.tac.selection.selected = selection;
+    this.tac.onSelectionChange();
   }
 }
 
@@ -373,6 +387,28 @@ export class IscsiHelper {
   }
 }
 
+export class RgwHelper {
+  static readonly daemons = RgwHelper.getDaemonList();
+  static readonly DAEMON_QUERY_PARAM = `daemon_name=${RgwHelper.daemons[0].id}`;
+
+  static getDaemonList() {
+    const daemonList: RgwDaemon[] = [];
+    for (let daemonIndex = 1; daemonIndex <= 3; daemonIndex++) {
+      const rgwDaemon = new RgwDaemon();
+      rgwDaemon.id = `daemon${daemonIndex}`;
+      rgwDaemon.default = daemonIndex === 2;
+      rgwDaemon.zonegroup_name = `zonegroup${daemonIndex}`;
+      daemonList.push(rgwDaemon);
+    }
+    return daemonList;
+  }
+
+  static selectDaemon() {
+    const service = TestBed.inject(RgwDaemonService);
+    service.selectDaemon(this.daemons[0]);
+  }
+}
+
 export class Mocks {
   static getCrushNode(
     name: string,
@@ -392,7 +428,8 @@ export class Mocks {
       pg_num: 256,
       pg_placement_num: 256,
       pg_num_target: 256,
-      pg_placement_num_target: 256
+      pg_placement_num_target: 256,
+      size: 3
     });
   };
 
@@ -638,7 +675,7 @@ export class TableActionHelper {
     const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
     const toClassName = TestBed.inject(TableActionsComponent).toClassName;
     const getActionElement = (action: CdTableAction) =>
-      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action.name)}`));
+      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action)}`));
 
     const actions = {};
     tableActions.forEach((action) => {

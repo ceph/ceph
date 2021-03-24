@@ -14,6 +14,7 @@
 
 #include "mdstypes.h"
 #include "MDSContext.h"
+#include "include/elist.h"
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
 //#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
@@ -75,6 +76,7 @@ class MDSCacheObject {
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
   static const int PIN_CLIENTLEASE = 1009;
   static const int PIN_DISCOVERBASE = 1010;
+  static const int PIN_SCRUBQUEUE = 1011;     // for scrub of inode and dir
 
   // -- state --
   const static int STATE_AUTH      = (1<<30);
@@ -87,6 +89,8 @@ class MDSCacheObject {
   const static uint64_t WAIT_ORDERED	 = (1ull<<61);
   const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
   const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
+
+  elist<MDSCacheObject*>::item item_scrub;   // for scrub inode or dir
 
   MDSCacheObject() {}
   virtual ~MDSCacheObject() {}

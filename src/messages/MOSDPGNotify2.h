@@ -6,7 +6,7 @@
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPGNotify2 : public MOSDPeeringOp {
+class MOSDPGNotify2 final : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -57,7 +57,7 @@ public:
   }
 
 private:
-  ~MOSDPGNotify2() override {}
+  ~MOSDPGNotify2() final {}
 
 public:
   std::string_view get_type_name() const override {

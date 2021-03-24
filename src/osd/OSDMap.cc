@@ -238,8 +238,8 @@ int OSDMap::Incremental::identify_osd(uuid_d u) const
   return -1;
 }
 
-int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
-						  const OSDMap& osdmap)
+int OSDMap::Incremental::propagate_base_properties_to_tiers(CephContext *cct,
+							    const OSDMap& osdmap)
 {
   ceph_assert(epoch == osdmap.get_epoch() + 1);
 
@@ -279,6 +279,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 	if (new_rem_it != new_removed_snaps.end()) {
 	  new_removed_snaps[tier_pool] = new_rem_it->second;
 	}
+
+	tier->application_metadata = base.application_metadata;
       }
     }
   }
@@ -647,7 +649,6 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
 
   {
     uint8_t target_v = 9; // if bumping this, be aware of stretch_mode target_v 10!
-    uint8_t new_compat_v = 0;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -656,7 +657,6 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     if (change_stretch_mode) {
       ceph_assert(target_v >= 9);
       target_v = std::max((uint8_t)10, target_v);
-      new_compat_v = std::max((uint8_t)10, std::max(new_compat_v, struct_compat));
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -707,7 +707,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
       encode(new_stretch_mode_bucket, bl);
       encode(stretch_mode_enabled, bl);
     }
-    ENCODE_FINISH_NEW_COMPAT(bl, new_compat_v); // osd-only data
+    ENCODE_FINISH(bl); // osd-only data
   }
 
   crc_offset = bl.length();
@@ -3027,7 +3027,6 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
     uint8_t target_v = 9; // when bumping this, be aware of stretch_mode target_v 10!
-    uint8_t new_compat_v = 0;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3036,9 +3035,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       target_v = 6;
     }
     if (stretch_mode_enabled) {
-      ceph_assert(target_v >= 9);
       target_v = std::max((uint8_t)10, target_v);
-      new_compat_v = std::max((uint8_t)10, std::max(new_compat_v, struct_compat));
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3095,7 +3092,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       encode(recovering_stretch_mode, bl);
       encode(stretch_mode_bucket, bl);
     }
-    ENCODE_FINISH_NEW_COMPAT(bl, new_compat_v); // osd-only data
+    ENCODE_FINISH(bl); // osd-only data
   }
 
   crc_offset = bl.length();
@@ -3877,6 +3874,13 @@ void OSDMap::print(ostream& out) const
   if (require_osd_release > ceph_release_t::unknown) {
     out << "require_osd_release " << require_osd_release
 	<< "\n";
+  }
+  out << "stretch_mode_enabled " << (stretch_mode_enabled ? "true" : "false") << "\n";
+  if (stretch_mode_enabled) {
+    out << "stretch_bucket_count " << stretch_bucket_count << "\n";
+    out << "degraded_stretch_mode " << degraded_stretch_mode << "\n";
+    out << "recovering_stretch_mode " << recovering_stretch_mode << "\n";
+    out << "stretch_mode_bucket " << stretch_mode_bucket << "\n";
   }
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
@@ -5225,7 +5229,7 @@ protected:
   }
 
   void dump_item(const CrushTreeDumper::Item &qi, F *f) override {
-    if (!tree && qi.is_bucket())
+    if (!tree && (qi.is_bucket() || dumped_osds.count(qi.id)))
       return;
     if (!should_dump(qi.id))
       return;
@@ -5313,7 +5317,7 @@ protected:
     *kb_used_meta = p->statfs.kb_used_internal_metadata();
     *kb_avail = p->statfs.kb_avail();
     
-    return *kb > 0;
+    return true;
   }
 
   bool get_bucket_utilization(int id, int64_t* kb, int64_t* kb_used,
@@ -5357,7 +5361,7 @@ protected:
       *kb_used_meta += kb_used_meta_i;
       *kb_avail += kb_avail_i;
     }
-    return *kb > 0;
+    return true;
   }
 
 protected:
@@ -5638,7 +5642,7 @@ void OSDMap::check_health(CephContext *cct,
         }
 	continue;
       }
-      if (is_out(i))
+      if (is_out(i) || (osd_state[i] & CEPH_OSD_NEW))
         continue;
       ++num_in_osds;
       if (down_in_osds.count(i) || up_in_osds.count(i))
@@ -5948,7 +5952,7 @@ void OSDMap::check_health(CephContext *cct,
       ss << "crush map has legacy tunables (require " << min
 	 << ", min is " << cct->_conf->mon_crush_min_required_version << ")";
       auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str(), 0);
-      d.detail.push_back("see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
+      d.detail.push_back("see http://docs.ceph.com/en/latest/rados/operations/crush-map/#tunables");
     }
   }
 
@@ -5959,7 +5963,7 @@ void OSDMap::check_health(CephContext *cct,
       ss << "crush map has straw_calc_version=0";
       auto& d = checks->add("OLD_CRUSH_STRAW_CALC_VERSION", HEALTH_WARN, ss.str(), 0);
       d.detail.push_back(
-	"see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
+	"see http://docs.ceph.com/en/latest/rados/operations/crush-map/#tunables");
     }
   }
 

@@ -13,7 +13,6 @@
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 
-#include "osd/PeeringState.h"
 #include "osd/recovery_types.h"
 
 namespace crimson::osd {
@@ -170,6 +169,9 @@ public:
 
     // these methods take BackfillIntervals instead of extracting them from
     // the state to emphasize the relationships across the main loop.
+    bool all_emptied(
+      const BackfillInterval& local_backfill_info,
+      const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const;
     hobject_t earliest_peer_backfill(
       const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const;
     bool should_rescan_replicas(
@@ -261,6 +263,9 @@ public:
     backfill_machine.process_event(*std::move(evt));
   }
 
+  hobject_t get_last_backfill_started() const {
+    return last_backfill_started;
+  }
 private:
   hobject_t last_backfill_started;
   BackfillInterval backfill_info;
@@ -285,7 +290,6 @@ struct BackfillState::BackfillListener {
     const hobject_t& begin) = 0;
 
   virtual void enqueue_push(
-    const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) = 0;
 
@@ -293,6 +297,8 @@ struct BackfillState::BackfillListener {
     const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) = 0;
+
+  virtual void maybe_flush() = 0;
 
   virtual void update_peers_last_backfill(
     const hobject_t& new_last_backfill) = 0;
@@ -302,6 +308,37 @@ struct BackfillState::BackfillListener {
   virtual void backfilled() = 0;
 
   virtual ~BackfillListener() = default;
+};
+
+// PeeringFacade -- a facade (in the GoF-defined meaning) simplifying
+// the interface of PeeringState. The motivation is to have an inventory
+// of behaviour that must be provided by a unit test's mock.
+struct BackfillState::PeeringFacade {
+  virtual hobject_t earliest_backfill() const = 0;
+  virtual const std::set<pg_shard_t>& get_backfill_targets() const = 0;
+  virtual const hobject_t& get_peer_last_backfill(pg_shard_t peer) const = 0;
+  virtual const eversion_t& get_last_update() const = 0;
+  virtual const eversion_t& get_log_tail() const = 0;
+
+  // the performance impact of `std::function` has not been considered yet.
+  // If there is any proof (from e.g. profiling) about its significance, we
+  // can switch back to the template variant.
+  using scan_log_func_t = std::function<void(const pg_log_entry_t&)>;
+  virtual void scan_log_after(eversion_t, scan_log_func_t) const = 0;
+
+  virtual bool is_backfill_target(pg_shard_t peer) const = 0;
+  virtual void update_complete_backfill_object_stats(const hobject_t &hoid,
+                                             const pg_stat_t &stats) = 0;
+  virtual bool is_backfilling() const = 0;
+  virtual ~PeeringFacade() {}
+};
+
+// PGFacade -- a facade (in the GoF-defined meaning) simplifying the huge
+// interface of crimson's PG class. The motivation is to have an inventory
+// of behaviour that must be provided by a unit test's mock.
+struct BackfillState::PGFacade {
+  virtual const eversion_t& get_projected_last_update() const = 0;
+  virtual ~PGFacade() {}
 };
 
 class BackfillState::ProgressTracker {
@@ -337,7 +374,7 @@ public:
 
   bool tracked_objects_completed() const;
 
-  void enqueue_push(const hobject_t&);
+  bool enqueue_push(const hobject_t&);
   void enqueue_drop(const hobject_t&);
   void complete_to(const hobject_t&, const pg_stat_t&);
 };

@@ -34,6 +34,7 @@
                                         previous snap, or image creation.
       disk-usage (du)                   Show disk usage stats for pool, image or
                                         snapshot.
+      encryption format                 Format image to an encrypted format.
       export                            Export image to file.
       export-diff                       Export incremental diff to file.
       feature disable                   Disable the specified image feature.
@@ -52,6 +53,7 @@
       group snap remove (... rm)        Remove a snapshot from a group.
       group snap rename                 Rename group's snapshot.
       group snap rollback               Rollback group to snapshot.
+      image-cache invalidate            Discard existing / dirty image cache
       image-meta get                    Image metadata get the value associated
                                         with the key.
       image-meta list (image-meta ls)   Image metadata list keys with values.
@@ -673,6 +675,27 @@
     --exact               compute exact disk usage (slow)
     --merge-snapshots     merge snapshot sizes with its image
   
+  rbd help encryption format
+  usage: rbd encryption format [--pool <pool>] [--namespace <namespace>] 
+                               [--image <image>] [--cipher-alg <cipher-alg>] 
+                               <image-spec> <format> <passphrase-file> 
+  
+  Format image to an encrypted format.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <format>             encryption format [possible values: luks1, luks2]
+    <passphrase-file>    path of file containing passphrase for unlocking the
+                         image
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --cipher-alg arg     encryption algorithm [possible values: aes-128, aes-256
+                         (default)]
+  
   rbd help export
   usage: rbd export [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                     [--snap <snap>] [--path <path>] [--no-progress] 
@@ -726,7 +749,7 @@
   rbd help feature disable
   usage: rbd feature disable [--pool <pool>] [--namespace <namespace>] 
                              [--image <image>] 
-                             <image-spec> <features> [<features> ...]
+                             <image-spec> <features> [<features> ...] 
   
   Disable the specified image feature.
   
@@ -747,7 +770,7 @@
                             [--journal-splay-width <journal-splay-width>] 
                             [--journal-object-size <journal-object-size>] 
                             [--journal-pool <journal-pool>] 
-                            <image-spec> <features> [<features> ...]
+                            <image-spec> <features> [<features> ...] 
   
   Enable the specified image feature.
   
@@ -928,20 +951,23 @@
   rbd help group snap create
   usage: rbd group snap create [--pool <pool>] [--namespace <namespace>] 
                                [--group <group>] [--snap <snap>] 
+                               [--skip-quiesce] [--ignore-quiesce-error] 
                                <group-snap-spec> 
   
   Make a snapshot of a group.
   
   Positional arguments
-    <group-snap-spec>    group specification
-                         (example:
-                         [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
+    <group-snap-spec>       group specification
+                            (example:
+                            [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --group arg          group name
-    --snap arg           snapshot name
+    -p [ --pool ] arg       pool name
+    --namespace arg         namespace name
+    --group arg             group name
+    --snap arg              snapshot name
+    --skip-quiesce          do not run quiesce hooks
+    --ignore-quiesce-error  ignore quiesce hook error
   
   rbd help group snap list
   usage: rbd group snap list [--format <format>] [--pretty-format] 
@@ -1021,6 +1047,23 @@
     --namespace arg      namespace name
     --group arg          group name
     --snap arg           snapshot name
+  
+  rbd help image-cache invalidate
+  usage: rbd image-cache invalidate [--pool <pool>] [--namespace <namespace>] 
+                                    [--image <image>] [--image-id <image-id>] 
+                                    <image-spec> 
+  
+  Discard existing / dirty image cache
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--namespace <namespace>] 
@@ -1466,8 +1509,11 @@
     --no-progress        disable progress output
   
   rbd help migration prepare
-  usage: rbd migration prepare [--pool <pool>] [--namespace <namespace>] 
-                               [--image <image>] [--dest-pool <dest-pool>] 
+  usage: rbd migration prepare [--import-only] 
+                               [--source-spec-path <source-spec-path>] 
+                               [--source-spec <source-spec>] [--pool <pool>] 
+                               [--namespace <namespace>] [--image <image>] 
+                               [--snap <snap>] [--dest-pool <dest-pool>] 
                                [--dest-namespace <dest-namespace>] 
                                [--dest <dest>] [--image-format <image-format>] 
                                [--new-format] [--order <order>] 
@@ -1480,37 +1526,44 @@
                                [--journal-splay-width <journal-splay-width>] 
                                [--journal-object-size <journal-object-size>] 
                                [--journal-pool <journal-pool>] [--flatten] 
-                               <source-image-spec> <dest-image-spec> 
+                               <source-image-or-snap-spec> <dest-image-spec> 
   
   Prepare image migration.
   
   Positional arguments
-    <source-image-spec>       source image specification
-                              (example: [<pool-name>/[<namespace>/]]<image-name>)
-    <dest-image-spec>         destination image specification
-                              (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <source-image-or-snap-spec>  source image or snapshot specification
+                                 (example:
+                                 [<pool-name>/[<namespace>/]]<image-name>[@<snap-n
+                                 ame>])
+    <dest-image-spec>            destination image specification
+                                 (example:
+                                 [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
-    -p [ --pool ] arg         source pool name
-    --namespace arg           source namespace name
-    --image arg               source image name
-    --dest-pool arg           destination pool name
-    --dest-namespace arg      destination namespace name
-    --dest arg                destination image name
-    --image-format arg        image format [default: 2]
-    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
-    --image-feature arg       image features
-                              [layering(+), exclusive-lock(+*), object-map(+*),
-                              deep-flatten(+-), journaling(*)]
-    --image-shared            shared image
-    --stripe-unit arg         stripe unit in B/K/M
-    --stripe-count arg        stripe count
-    --data-pool arg           data pool
-    --mirror-image-mode arg   mirror image mode [journal or snapshot]
-    --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects [4K <= size <= 64M]
-    --journal-pool arg        pool for journal objects
-    --flatten                 fill clone with parent data (make it independent)
+    --import-only                only import data from source
+    --source-spec-path arg       source-spec file (or '-' for stdin)
+    --source-spec arg            source-spec
+    -p [ --pool ] arg            source pool name
+    --namespace arg              source namespace name
+    --image arg                  source image name
+    --snap arg                   source snapshot name
+    --dest-pool arg              destination pool name
+    --dest-namespace arg         destination namespace name
+    --dest arg                   destination image name
+    --image-format arg           image format [default: 2]
+    --object-size arg            object size in B/K/M [4K <= object size <= 32M]
+    --image-feature arg          image features
+                                 [layering(+), exclusive-lock(+*),
+                                 object-map(+*), deep-flatten(+-), journaling(*)]
+    --image-shared               shared image
+    --stripe-unit arg            stripe unit in B/K/M
+    --stripe-count arg           stripe count
+    --data-pool arg              data pool
+    --mirror-image-mode arg      mirror image mode [journal or snapshot]
+    --journal-splay-width arg    number of active journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
+    --journal-pool arg           pool for journal objects
+    --flatten                    fill clone with parent data (make it independent)
   
   Image Features:
     (*) supports enabling/disabling on existing images

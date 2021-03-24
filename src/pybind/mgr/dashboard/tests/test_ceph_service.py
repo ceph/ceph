@@ -2,12 +2,12 @@
 # pylint: disable=dangerous-default-value,too-many-public-methods
 from __future__ import absolute_import
 
+import logging
 import unittest
+from contextlib import contextmanager
+from unittest import mock
 
-try:
-    import mock
-except ImportError:
-    import unittest.mock as mock
+import pytest
 
 from ..services.ceph_service import CephService
 
@@ -66,3 +66,44 @@ class CephServiceTest(unittest.TestCase):
 
     def test_get_pg_status_without_match(self):
         self.assertEqual(self.service.get_pool_pg_status('no-pool'), {})
+
+
+@contextmanager
+def mock_smart_data(data):
+    devices = [{'devid': devid} for devid in data]
+
+    def _get_smart_data(d):
+        return {d['devid']: data[d['devid']]}
+
+    with mock.patch.object(CephService, '_get_smart_data_by_device', side_effect=_get_smart_data), \
+            mock.patch.object(CephService, 'get_devices_by_host', return_value=devices), \
+            mock.patch.object(CephService, 'get_devices_by_daemon', return_value=devices):
+        yield
+
+
+@pytest.mark.parametrize(
+    "by,args,log",
+    [
+        ('host', ('osd0',), 'from host osd0'),
+        ('daemon', ('osd', '1'), 'with ID 1')
+    ]
+)
+def test_get_smart_data(caplog, by, args, log):
+    # pylint: disable=protected-access
+    expected_data = {
+        'aaa': {'device': {'name': '/dev/sda'}},
+        'bbb': {'device': {'name': '/dev/sdb'}},
+    }
+    with mock_smart_data(expected_data):
+        smart_data = getattr(CephService, 'get_smart_data_by_{}'.format(by))(*args)
+        getattr(CephService, 'get_devices_by_{}'.format(by)).assert_called_with(*args)
+        CephService._get_smart_data_by_device.assert_called()
+        assert smart_data == expected_data
+
+    with caplog.at_level(logging.DEBUG):
+        with mock_smart_data([]):
+            smart_data = getattr(CephService, 'get_smart_data_by_{}'.format(by))(*args)
+            getattr(CephService, 'get_devices_by_{}'.format(by)).assert_called_with(*args)
+            CephService._get_smart_data_by_device.assert_not_called()
+            assert smart_data == {}
+            assert log in caplog.text

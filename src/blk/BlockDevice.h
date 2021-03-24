@@ -263,22 +263,13 @@ public:
   virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
   virtual void discard_drain() { return; }
 
-  void queue_reap_ioc(IOContext *ioc);
-  void reap_ioc();
-
   // for managing buffered readers/writers
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
   virtual int open(const std::string& path) = 0;
   virtual void close() = 0;
 
 protected:
-  bool is_valid_io(uint64_t off, uint64_t len) const {
-    return (off % block_size == 0 &&
-            len % block_size == 0 &&
-            len > 0 &&
-            off < size &&
-            off + len <= size);
-  }
+  bool is_valid_io(uint64_t off, uint64_t len) const;
 };
 
 #endif //CEPH_BLK_BLOCKDEVICE_H

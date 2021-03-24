@@ -23,7 +23,7 @@ versions
 versions are represented with a single `unsigned int`. By default, the value
 zero represents the absence of a formal upgraded format. The first format
 version was introduced in Dumpling; clusters upgrading to Dumpling saw their
-format version being increased from zero to one.::
+format version being increased from zero to one::
 
   0 to 1 - introduced in v0.65, dev release for v0.67 dumpling
   1 to 2 - introduced in v12.0.2, dev release for luminous
@@ -41,13 +41,13 @@ format version being increased from zero to one.::
 callstack
 ---------
 
-format_version set on `PaxosService::refresh()`:::
+format_version set on `PaxosService::refresh()`::
 
   - initially called from Monitor::refresh_from_paxos
     - initially called from Monitor::init_paxos()
       - initially called from Monitor::preinit()
 
-AuthMonitor::upgrade_format() called by `PaxosService::_active()`:::
+AuthMonitor::upgrade_format() called by `PaxosService::_active()`::
 
   - called from C_Committed callback, from PaxosService::propose_pending()
   - called from C_Active callback, from PaxosService::_active()
@@ -69,14 +69,14 @@ boil down
 * else if `features doesn't contain MIMIC` then `current_version = 2`
 * else `current_version = 3`
 
-if `format_version == 0`:::
+if `format_version == 0`::
 
   - upgrade to format version 1
     - move to new-style monitor caps (i.e., profiles):
       - set daemon profiles for existing entities
       - set profile for existing bootstrap keys
 
-if `format_version == 1`:::
+if `format_version == 1`::
 
   - upgrade to format version 2
     - for existing entities:
@@ -85,7 +85,7 @@ if `format_version == 1`:::
       setting 'allow \*', and set 'allow profile mgr' instead.
     - add bootstrap-mgr key.
 
-if `format_version == 2`:::
+if `format_version == 2`::
 
   - upgrade to format version 3
     - create all bootstrap keys if they don't currently exist

@@ -3,10 +3,11 @@ import { FormControl } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { FinishedTask } from '../../../../shared/models/finished-task';
-import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-edit-site-mode-modal',
@@ -20,6 +21,7 @@ export class EditSiteNameModalComponent implements OnInit {
 
   constructor(
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {

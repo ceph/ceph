@@ -8,6 +8,7 @@
 #include "common/bit_vector.hpp"
 #include "common/ceph_mutex.h"
 #include "librbd/object_map/Types.h"
+#include <set>
 
 struct Context;
 
@@ -60,15 +61,14 @@ private:
   BitVector<2>* m_object_diff_state;
   Context* m_on_finish;
 
-  bool m_diff_from_start = false;
+  std::set<uint64_t> m_snap_ids;
   uint64_t m_current_snap_id = 0;
-  uint64_t m_next_snap_id = 0;
+  bool m_ignore_enoent = false;
 
   uint64_t m_current_size = 0;
 
   BitVector<2> m_object_map;
-  BitVector<2> m_prev_object_map;
-  bool m_prev_object_map_valid = false;
+  bool m_object_diff_state_valid = false;
 
   bufferlist m_out_bl;
 

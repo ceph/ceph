@@ -27,10 +27,10 @@ class Devices(object):
     A container for Device instances with reporting
     """
 
-    def __init__(self, filter_for_batch=False):
+    def __init__(self, filter_for_batch=False, with_lsm=False):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
-        self.devices = [Device(k) for k in
+        self.devices = [Device(k, with_lsm) for k in
                             sys_info.devices.keys()]
         if filter_for_batch:
             self.devices = [d for d in self.devices if d.available_lvm_batch]
@@ -83,7 +83,7 @@ class Device(object):
     # unittests
     lvs = []
 
-    def __init__(self, path):
+    def __init__(self, path, with_lsm=False):
         self.path = path
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
@@ -98,7 +98,7 @@ class Device(object):
         self._exists = None
         self._is_lvm_member = None
         self._parse()
-        self.lsm_data = self.fetch_lsm()
+        self.lsm_data = self.fetch_lsm(with_lsm)
 
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()
         self.available_raw, self.rejected_reasons_raw = self._check_raw_reject_reasons()
@@ -108,7 +108,7 @@ class Device(object):
 
         self.device_id = self._get_device_id()
 
-    def fetch_lsm(self):
+    def fetch_lsm(self, with_lsm):
         '''
         Attempt to fetch libstoragemgmt (LSM) metadata, and return to the caller
         as a dict. An empty dict is passed back to the caller if the target path
@@ -116,11 +116,11 @@ class Device(object):
         json returned will provide LSM attributes, and any associated errors that
         lsm encountered when probing the device.
         '''
-        if not self.exists or not self.is_device:
+        if not with_lsm or not self.exists or not self.is_device:
             return {}
 
         lsm_disk = LSMDisk(self.path)
-        
+
         return  lsm_disk.json_report()
 
     def __lt__(self, other):
@@ -454,7 +454,7 @@ class Device(object):
             # assuming 4M extents here
             extent_size = 4194304
             vg_free = int(self.size / extent_size) * extent_size
-            if self.size % 4194304 == 0:
+            if self.size % extent_size == 0:
                 # If the extent size divides size exactly, deduct on extent for
                 # LVM metadata
                 vg_free -= extent_size
@@ -478,6 +478,8 @@ class Device(object):
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
             rejected.append('Has BlueStore device label')
+        if self.has_gpt_headers:
+            rejected.append('Has GPT headers')
         return rejected
 
     def _check_lvm_reject_reasons(self):

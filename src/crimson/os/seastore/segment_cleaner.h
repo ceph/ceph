@@ -35,6 +35,10 @@ struct segment_info_t {
     return state == Segment::segment_state_t::CLOSED;
   }
 
+  bool is_releasing() const {
+    return state == Segment::segment_state_t::RELEASING;
+  }
+
   bool is_open() const {
     return state == Segment::segment_state_t::OPEN;
   }
@@ -252,6 +256,10 @@ public:
       journal_seq_t bound ///< [in] return extents with dirty_from < bound
     ) = 0;
 
+    using extent_mapping_ertr = crimson::errorator<
+      crimson::ct_error::input_output_error,
+      crimson::ct_error::eagain>;
+
     /**
      * rewrite_extent
      *
@@ -260,8 +268,7 @@ public:
      * handle finding the current instance if it is still alive and
      * otherwise ignore it.
      */
-    using rewrite_extent_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
+    using rewrite_extent_ertr = extent_mapping_ertr;
     using rewrite_extent_ret = rewrite_extent_ertr::future<>;
     virtual rewrite_extent_ret rewrite_extent(
       Transaction &t,
@@ -276,8 +283,7 @@ public:
      * See TransactionManager::get_extent_if_live and
      * LBAManager::get_physical_extent_if_live.
      */
-    using get_extent_if_live_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
+    using get_extent_if_live_ertr = extent_mapping_ertr;
     using get_extent_if_live_ret = get_extent_if_live_ertr::future<
       CachedExtentRef>;
     virtual get_extent_if_live_ret get_extent_if_live(
@@ -292,9 +298,11 @@ public:
      *
      * Interface shim for Journal::scan_extents
      */
+    using scan_extents_cursor = Journal::scan_valid_records_cursor;
+    using scan_extents_ertr = Journal::scan_extents_ertr;
     using scan_extents_ret = Journal::scan_extents_ret;
     virtual scan_extents_ret scan_extents(
-      paddr_t addr,
+      scan_extents_cursor &cursor,
       extent_len_t bytes_to_read) = 0;
 
     /**
@@ -391,12 +399,8 @@ public:
     if (!init_scan && !init_complete)
       return;
 
-    if (!init_scan) {
-      assert(segments[addr.segment].state == Segment::segment_state_t::OPEN);
-    }
-
     used_bytes += len;
-    auto ret = space_tracker->allocate(
+    [[maybe_unused]] auto ret = space_tracker->allocate(
       addr.segment,
       addr.offset,
       len);
@@ -412,7 +416,7 @@ public:
     used_bytes -= len;
     assert(addr.segment < segments.size());
 
-    auto ret = space_tracker->release(
+    [[maybe_unused]] auto ret = space_tracker->release(
       addr.segment,
       addr.offset,
       len);
@@ -453,6 +457,8 @@ public:
     return space_tracker->equals(tracker);
   }
 
+  using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
+
   /**
    * do_immediate_work
    *
@@ -460,8 +466,7 @@ public:
    * will piggy-back work required to maintain deferred work
    * constraints.
    */
-  using do_immediate_work_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
+  using do_immediate_work_ertr = work_ertr;
   using do_immediate_work_ret = do_immediate_work_ertr::future<>;
   do_immediate_work_ret do_immediate_work(
     Transaction &t);
@@ -477,8 +482,7 @@ public:
    * back into do_deferred_work before returned timespan has elapsed,
    * or a foreground operation occurs.
    */
-  using do_deferred_work_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
+  using do_deferred_work_ertr = work_ertr;
   using do_deferred_work_ret = do_deferred_work_ertr::future<
     ceph::timespan
     >;
@@ -494,8 +498,7 @@ private:
    *
    * Writes out dirty blocks dirtied earlier than limit.
    */
-  using rewrite_dirty_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
+  using rewrite_dirty_ertr = ExtentCallbackInterface::extent_mapping_ertr;
   using rewrite_dirty_ret = rewrite_dirty_ertr::future<>;
   rewrite_dirty_ret rewrite_dirty(
     Transaction &t,
@@ -518,14 +521,15 @@ private:
   }
 
   // GC status helpers
-  paddr_t gc_current_pos = P_ADDR_NULL;
+  std::unique_ptr<ExtentCallbackInterface::scan_extents_cursor> scan_cursor;
 
   /**
    * do_gc
    *
    * Performs bytes worth of gc work on t.
    */
-  using do_gc_ertr = SegmentManager::read_ertr;
+  using do_gc_ertr = ExtentCallbackInterface::extent_mapping_ertr::extend_ertr<
+    ExtentCallbackInterface::scan_extents_ertr>;
   using do_gc_ret = do_gc_ertr::future<>;
   do_gc_ret do_gc(
     Transaction &t,
@@ -547,10 +551,10 @@ private:
    * have been scanned.
    */
   size_t get_bytes_scanned_current_segment() const {
-    if (gc_current_pos == P_ADDR_NULL)
+    if (!scan_cursor)
       return 0;
 
-    return gc_current_pos.offset;
+    return scan_cursor->get_offset().offset;
   }
 
   size_t get_available_bytes() const {
@@ -665,9 +669,16 @@ private:
     segments[segment].state = Segment::segment_state_t::CLOSED;
   }
 
-  void mark_empty(segment_id_t segment) {
+  void mark_releasing(segment_id_t segment) {
     assert(segments.size() > segment);
     assert(segments[segment].is_closed());
+    segments[segment].state = Segment::segment_state_t::RELEASING;
+  }
+
+
+  void mark_empty(segment_id_t segment) {
+    assert(segments.size() > segment);
+    assert(segments[segment].is_releasing());
     assert(segments.size() > empty_segments);
     ++empty_segments;
     if (space_tracker->get_usage(segment) != 0) {
@@ -685,5 +696,6 @@ private:
     segments[segment].state = Segment::segment_state_t::OPEN;
   }
 };
+using SegmentCleanerRef = std::unique_ptr<SegmentCleaner>;
 
 }

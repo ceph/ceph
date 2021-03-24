@@ -5,14 +5,15 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { ToastrModule } from 'ngx-toastr';
-import { of as observableOf } from 'rxjs';
+import { of as observableOf, throwError } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
@@ -32,7 +33,8 @@ describe('RgwUserFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      NgbTooltipModule
+      NgbTooltipModule,
+      NgxPipeFunctionModule
     ]
   });
 
@@ -153,24 +155,22 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('username validation', () => {
-    beforeEach(() => {
-      spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
-    });
-
     it('should validate that username is required', () => {
-      formHelper.expectErrorChange('uid', '', 'required', true);
+      formHelper.expectErrorChange('user_id', '', 'required', true);
     });
 
     it('should validate that username is valid', fakeAsync(() => {
-      formHelper.setValue('uid', 'ab', true);
+      spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
+      formHelper.setValue('user_id', 'ab', true);
       tick(500);
-      formHelper.expectValid('uid');
+      formHelper.expectValid('user_id');
     }));
 
     it('should validate that username is invalid', fakeAsync(() => {
-      formHelper.setValue('uid', 'abc', true);
+      spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
+      formHelper.setValue('user_id', 'abc', true);
       tick(500);
-      formHelper.expectError('uid', 'notUnique');
+      formHelper.expectError('user_id', 'notUnique');
     }));
   });
 
@@ -322,7 +322,7 @@ describe('RgwUserFormComponent', () => {
 
       fixture.detectChanges();
 
-      expect(component.hasAllCapabilities()).toBeTruthy();
+      expect(component.hasAllCapabilities(component.capabilities)).toBeTruthy();
       const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
       expect(capabilityButton.disabled).toBeTruthy();
     });

@@ -581,13 +581,13 @@ int RGWAsyncGetBucketInstanceInfo::_send_request()
   int r;
   if (!bucket.bucket_id.empty()) {
     RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
-    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, &attrs, null_yield);
+    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, &attrs, null_yield, dpp);
   } else {
-    r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield,
+    r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp,
                                                RGWBucketCtl::BucketInstance::GetParams().set_attrs(&attrs));
   }
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
+    ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info for "
         << bucket << dendl;
     return r;
   }
@@ -635,7 +635,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
 
   rgw::sal::RGWRadosBucket bucket(store, src_bucket);
   rgw::sal::RGWRadosObject src_obj(store, key, &bucket);
@@ -738,15 +738,15 @@ int RGWAsyncRemoveObj::_send_request()
 
   RGWObjState *state;
 
-  int ret = store->getRados()->get_obj_state(&obj_ctx, bucket_info, obj, &state, null_yield);
+  int ret = store->getRados()->get_obj_state(dpp, &obj_ctx, bucket_info, obj, &state, null_yield);
   if (ret < 0) {
-    ldout(store->ctx(), 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
   }
 
   /* has there been any racing object write? */
   if (del_if_older && (state->mtime > timestamp)) {
-    ldout(store->ctx(), 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << state->mtime << ", request timestamp=" << timestamp << ")" << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << state->mtime << ", request timestamp=" << timestamp << ")" << dendl;
     return 0;
   }
 
@@ -759,7 +759,7 @@ int RGWAsyncRemoveObj::_send_request()
     try {
       policy.decode(bliter);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
       return -EIO;
     }
   }
@@ -783,9 +783,9 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.high_precision_time = true;
   del_op.params.zones_trace = &zones_trace;
 
-  ret = del_op.delete_obj(null_yield);
+  ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
-    ldout(store->ctx(), 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }
   return ret;
 }

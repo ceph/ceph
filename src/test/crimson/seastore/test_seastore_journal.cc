@@ -7,7 +7,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/journal.h"
-#include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/segment_manager/ephemeral.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -63,7 +63,8 @@ struct record_validator_t {
 };
 
 struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
-  std::unique_ptr<SegmentManager> segment_manager;
+  segment_manager::EphemeralSegmentManagerRef segment_manager;
+  WritePipeline pipeline;
   std::unique_ptr<Journal> journal;
 
   std::vector<record_validator_t> records;
@@ -73,7 +74,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   const segment_off_t block_size;
 
   journal_test_t()
-    : segment_manager(create_ephemeral(segment_manager::DEFAULT_TEST_EPHEMERAL)),
+    : segment_manager(segment_manager::create_test_ephemeral()),
       block_size(segment_manager->get_block_size())
   {
   }
@@ -91,6 +92,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   seastar::future<> set_up_fut() final {
     journal.reset(new Journal(*segment_manager));
     journal->set_segment_provider(this);
+    journal->set_write_pipeline(&pipeline);
     return segment_manager->init(
     ).safe_then([this] {
       return journal->open_for_write();
@@ -107,6 +109,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     ).safe_then([this, f=std::move(f)]() mutable {
       journal.reset(new Journal(*segment_manager));
       journal->set_segment_provider(this);
+      journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {
       return journal->open_for_write();
@@ -151,7 +154,10 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   auto submit_record(T&&... _record) {
     auto record{std::forward<T>(_record)...};
     records.push_back(record);
-    auto [addr, _] = journal->submit_record(std::move(record)).unsafe_get0();
+    OrderingHandle handle = get_dummy_ordering_handle();
+    auto [addr, _] = journal->submit_record(
+      std::move(record),
+      handle).unsafe_get0();
     records.back().record_final_offset = addr;
     return addr;
   }

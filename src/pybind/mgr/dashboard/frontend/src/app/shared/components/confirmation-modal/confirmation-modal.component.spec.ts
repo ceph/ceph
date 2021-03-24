@@ -1,14 +1,14 @@
 import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, FixtureHelper } from '../../../../testing/unit-test-helper';
-import { ModalService } from '../../services/modal.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { configureTestBed, FixtureHelper } from '~/testing/unit-test-helper';
 import { BackButtonComponent } from '../back-button/back-button.component';
+import { FormButtonPanelComponent } from '../form-button-panel/form-button-panel.component';
 import { ModalComponent } from '../modal/modal.component';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { ConfirmationModalComponent } from './confirmation-modal.component';
@@ -72,11 +72,12 @@ describe('ConfirmationModalComponent', () => {
       BackButtonComponent,
       MockComponent,
       ModalComponent,
-      SubmitButtonComponent
+      SubmitButtonComponent,
+      FormButtonPanelComponent
     ],
     schemas: [NO_ERRORS_SCHEMA],
     imports: [ReactiveFormsModule, MockModule, RouterTestingModule, NgbModalModule],
-    providers: [NgbActiveModal, SubmitButtonComponent]
+    providers: [NgbActiveModal, SubmitButtonComponent, FormButtonPanelComponent]
   });
 
   beforeEach(() => {
@@ -161,10 +162,7 @@ describe('ConfirmationModalComponent', () => {
 
     it('should use the correct submit action', () => {
       // In order to ignore the `ElementRef` usage of `SubmitButtonComponent`
-      spyOn(
-        fixture.debugElement.query(By.directive(SubmitButtonComponent)).componentInstance,
-        'focusButton'
-      );
+      spyOn(fh.getElementByCss('.tc_submitButton').componentInstance, 'focusButton');
       fh.clickElement('.tc_submitButton');
       expect(component.onSubmit).toHaveBeenCalledTimes(1);
       expect(component.activeModal.close).toHaveBeenCalledTimes(0);

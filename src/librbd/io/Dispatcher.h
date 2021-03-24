@@ -10,6 +10,7 @@
 #include "common/dout.h"
 #include "common/AsyncOpTracker.h"
 #include "librbd/Utils.h"
+#include "librbd/io/DispatcherInterface.h"
 #include "librbd/io/Types.h"
 #include <map>
 
@@ -32,7 +33,7 @@ public:
     : m_image_ctx(image_ctx),
       m_lock(ceph::make_shared_mutex(
         librbd::util::unique_lock_name("librbd::io::Dispatcher::lock",
-				       this))) {
+                                       this))) {
   }
 
   virtual ~Dispatcher() {
@@ -65,6 +66,11 @@ public:
     auto result = m_dispatches.insert(
       {type, {dispatch, new AsyncOpTracker()}});
     ceph_assert(result.second);
+  }
+
+  bool exists(DispatchLayer dispatch_layer) override {
+    std::unique_lock locker{m_lock};
+    return m_dispatches.find(dispatch_layer) != m_dispatches.end();
   }
 
   void shut_down_dispatch(DispatchLayer dispatch_layer,
@@ -152,6 +158,65 @@ protected:
 
   virtual bool send_dispatch(Dispatch* dispatch,
                              DispatchSpec* dispatch_spec) = 0;
+
+protected:
+  struct C_LayerIterator : public Context {
+    Dispatcher* dispatcher;
+    Context* on_finish;
+    DispatchLayer dispatch_layer;
+
+    C_LayerIterator(Dispatcher* dispatcher,
+                    DispatchLayer start_layer,
+                    Context* on_finish)
+    : dispatcher(dispatcher), on_finish(on_finish), dispatch_layer(start_layer) {
+    }
+
+    void complete(int r) override {
+      while (true) {
+        dispatcher->m_lock.lock_shared();
+        auto it = dispatcher->m_dispatches.upper_bound(dispatch_layer);
+        if (it == dispatcher->m_dispatches.end()) {
+          dispatcher->m_lock.unlock_shared();
+          Context::complete(r);
+          return;
+        }
+
+        auto& dispatch_meta = it->second;
+        auto dispatch = dispatch_meta.dispatch;
+
+        // prevent recursive locking back into the dispatcher while handling IO
+        dispatch_meta.async_op_tracker->start_op();
+        dispatcher->m_lock.unlock_shared();
+
+        // next loop should start after current layer
+        dispatch_layer = dispatch->get_dispatch_layer();
+
+        auto handled = execute(dispatch, this);
+        dispatch_meta.async_op_tracker->finish_op();
+
+        if (handled) {
+          break;
+        }
+      }
+    }
+
+    void finish(int r) override {
+      on_finish->complete(0);
+    }
+    virtual bool execute(Dispatch* dispatch,
+                         Context* on_finish) = 0;
+  };
+
+  struct C_InvalidateCache : public C_LayerIterator {
+    C_InvalidateCache(Dispatcher* dispatcher, DispatchLayer start_layer, Context* on_finish)
+      : C_LayerIterator(dispatcher, start_layer, on_finish) {
+    }
+
+    bool execute(Dispatch* dispatch,
+                 Context* on_finish) override {
+      return dispatch->invalidate_cache(on_finish);
+    }
+  };
 
 private:
   void shut_down_dispatch(DispatchMeta& dispatch_meta,

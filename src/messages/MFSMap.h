@@ -20,7 +20,7 @@
 #include "mds/FSMap.h"
 #include "include/ceph_features.h"
 
-class MFSMap : public Message {
+class MFSMap final : public Message {
 public:
   epoch_t epoch;
 
@@ -37,7 +37,7 @@ public:
 private:
   FSMap fsmap;
 
-  ~MFSMap() override {}
+  ~MFSMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "fsmap"; }

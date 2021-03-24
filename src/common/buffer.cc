@@ -33,7 +33,6 @@
 #include "common/likely.h"
 #include "common/valgrind.h"
 #include "common/deleter.h"
-#include "common/RWLock.h"
 #include "common/error_code.h"
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
@@ -47,6 +46,10 @@ using namespace ceph;
 
 #define CEPH_BUFFER_ALLOC_UNIT  4096u
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
+
+// 256K is the maximum "small" object size in tcmalloc above which allocations come from
+// the central heap.  For now let's keep this below that threshold.
+#define CEPH_BUFFER_ALLOC_UNIT_MAX std::size_t { 256*1024 }
 
 #ifdef BUFFER_DEBUG
 static ceph::spinlock debug_lock;
@@ -1269,7 +1272,7 @@ static ceph::spinlock debug_lock;
   void buffer::list::reserve(size_t prealloc)
   {
     if (get_append_buffer_unused_tail_length() < prealloc) {
-      auto ptr = ptr_node::create(buffer::create_page_aligned(prealloc));
+      auto ptr = ptr_node::create(buffer::create_small_page_aligned(prealloc));
       ptr->set_length(0);   // unused, so far.
       _carriage = ptr.get();
       _buffers.push_back(*ptr.release());
@@ -1315,8 +1318,14 @@ static ceph::spinlock debug_lock;
     // make a new buffer.  fill out a complete page, factoring in the
     // raw_combined overhead.
     size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
-    size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
-      sizeof(raw_combined);
+    size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT);
+    if (_carriage == &_buffers.back()) {
+      size_t nlen = round_up_to(_carriage->raw_length(), CEPH_BUFFER_ALLOC_UNIT) * 2;
+      nlen = std::min(nlen, CEPH_BUFFER_ALLOC_UNIT_MAX);
+      alen = std::max(alen, nlen);
+    }
+    alen -= sizeof(raw_combined);
+
     auto new_back = \
       ptr_node::create(raw_combined::create(alen, 0, get_mempool()));
     new_back->set_length(0);   // unused, so far.
@@ -1683,7 +1692,7 @@ void buffer::list::decode_base64(buffer::list& e)
 
 ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1743,7 +1752,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1797,9 +1806,20 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
   return ret;
 }
 
+ssize_t buffer::list::recv_fd(int fd, size_t len)
+{
+  auto bp = ptr_node::create(buffer::create(len));
+  ssize_t ret = safe_recv(fd, (void*)bp->c_str(), len);
+  if (ret >= 0) {
+    bp->set_length(ret);
+    push_back(std::move(bp));
+  }
+  return ret;
+}
+
 int buffer::list::write_file(const char *fn, int mode)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, mode));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC|O_BINARY, mode));
   if (fd < 0) {
     int err = errno;
     cerr << "bufferlist::write_file(" << fn << "): failed to open file: "
@@ -1914,6 +1934,10 @@ int buffer::list::write_fd(int fd) const
   return 0;
 }
 
+int buffer::list::send_fd(int fd) const {
+  return buffer::list::write_fd(fd);
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   iovec iov[IOV_MAX];
@@ -1957,11 +1981,37 @@ int buffer::list::write_fd(int fd) const
 
       written += r;
     }
+
+    left_pbrs--;
+    p++;
   }
 
   return 0;
-
 }
+
+int buffer::list::send_fd(int fd) const
+{
+  // There's no writev on Windows. WriteFileGather may be an option,
+  // but it has strict requirements in terms of buffer size and alignment.
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
+  while (left_pbrs) {
+    int written = 0;
+    while (written < p->length()) {
+      int r = ::send(fd, p->c_str(), p->length() - written, 0);
+      if (r < 0)
+        return -ceph_sock_errno();
+
+      written += r;
+    }
+
+    left_pbrs--;
+    p++;
+  }
+
+  return 0;
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   int r = ::lseek64(fd, offset, SEEK_SET);

@@ -103,6 +103,7 @@ class TestClusterAffinity(CephFSTestCase):
         """
         That a vanilla standby is preferred over others with mds_join_fs set to another fs.
         """
+        # After Octopus is EOL, we can remove this setting:
         self.fs.set_allow_multifs()
         fs2 = self.mds_cluster.newfs(name="cephfs2")
         status, target = self._verify_init()
@@ -128,6 +129,7 @@ class TestClusterAffinity(CephFSTestCase):
         standbys = [info['name'] for info in status.get_standbys()]
         for mds in standbys:
             self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
+        # After Octopus is EOL, we can remove this setting:
         self.fs.set_allow_multifs()
         fs2 = self.mds_cluster.newfs(name="cephfs2")
         for mds in standbys:
@@ -169,7 +171,7 @@ class TestClusterAffinity(CephFSTestCase):
         self._reach_target(target)
 
 class TestClusterResize(CephFSTestCase):
-    CLIENTS_REQUIRED = 1
+    CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 3
 
     def test_grow(self):
@@ -209,8 +211,6 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down does not generate a health warning
         """
 
-        self.mount_a.umount_wait()
-
         self.fs.set_down()
         try:
             self.wait_for_health("", 30)
@@ -226,8 +226,6 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down twice does not wipe old_max_mds.
         """
 
-        self.mount_a.umount_wait()
-
         self.fs.grow(2)
         self.fs.set_down()
         self.fs.wait_for_daemons()
@@ -240,8 +238,6 @@ class TestClusterResize(CephFSTestCase):
         That setting max_mds undoes down.
         """
 
-        self.mount_a.umount_wait()
-
         self.fs.set_down()
         self.fs.wait_for_daemons()
         self.fs.grow(2)
@@ -251,8 +247,6 @@ class TestClusterResize(CephFSTestCase):
         """
         That down setting toggles and sets max_mds appropriately.
         """
-
-        self.mount_a.umount_wait()
 
         self.fs.set_down()
         self.fs.wait_for_daemons()
@@ -271,26 +265,23 @@ class TestClusterResize(CephFSTestCase):
 
         self.fs.grow(2)
 
+        # Now add a delay which should slow down how quickly rank 1 stops
+        self.config_set('mds', 'ms_inject_delay_max', '5.0')
+        self.config_set('mds', 'ms_inject_delay_probability', '1.0')
         self.fs.set_max_mds(1)
         log.info("status = {0}".format(self.fs.status()))
 
-        self.fs.set_max_mds(3)
         # Don't wait for rank 1 to stop
+        self.fs.set_max_mds(3)
+        log.info("status = {0}".format(self.fs.status()))
 
+        # Now check that the mons didn't try to promote a standby to rank 2
         self.fs.set_max_mds(2)
-        # Prevent another MDS from taking rank 1
-        # XXX This is a little racy because rank 1 may have stopped and a
-        #     standby assigned to rank 1 before joinable=0 is set.
-        self.fs.set_joinable(False) # XXX keep in mind changing max_mds clears this flag
-
+        status = self.fs.status()
         try:
             status = self.fs.wait_for_daemons(timeout=90)
-            raise RuntimeError("should not be able to successfully shrink cluster!")
-        except:
-            # could not shrink to max_mds=2 and reach 2 actives (because joinable=False)
-            status = self.fs.status()
             ranks = set([info['rank'] for info in status.get_ranks(fscid)])
-            self.assertTrue(ranks == set([0]))
+            self.assertEqual(ranks, set([0, 1]))
         finally:
             log.info("status = {0}".format(status))
 
@@ -469,6 +460,7 @@ class TestFailover(CephFSTestCase):
         self.fs.rank_freeze(False, rank=0)
 
 class TestStandbyReplay(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 4
 
     def _confirm_no_replay(self):
@@ -525,6 +517,18 @@ class TestStandbyReplay(CephFSTestCase):
         self.fs.set_allow_standby_replay(True)
         time.sleep(30)
         self._confirm_single_replay()
+
+    def test_standby_replay_disable(self):
+        """
+        That turning off allow_standby_replay fails all standby-replay daemons.
+        """
+
+        self._confirm_no_replay()
+        self.fs.set_allow_standby_replay(True)
+        time.sleep(30)
+        self._confirm_single_replay()
+        self.fs.set_allow_standby_replay(False)
+        self._confirm_no_replay()
 
     def test_standby_replay_singleton_fail(self):
         """

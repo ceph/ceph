@@ -122,14 +122,12 @@
         </fieldset>
       </div>
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button #previewButton
-                            (submitAction)="submit()"
-                            i18n
-                            [form]="formDir"
-                            [disabled]="dataDeviceSelectionGroups.devices.length === 0">Preview</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel #previewButtonPanel
+                              (submitActionEvent)="submit()"
+                              [form]="form"
+                              [disabled]="dataDeviceSelectionGroups.devices.length === 0"
+                              [submitText]="actionLabels.PREVIEW"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

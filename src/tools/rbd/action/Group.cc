@@ -47,7 +47,7 @@ void add_group_option(po::options_description *opt,
 }
 
 void add_prefixed_pool_option(po::options_description *opt,
-                            const std::string &prefix) {
+                              const std::string &prefix) {
   std::string name = prefix + "-" + at::POOL_NAME;
   std::string description = prefix + " pool name";
 
@@ -505,6 +505,12 @@ int execute_group_snap_create(const po::variables_map &vm,
     return r;
   }
 
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
+  if (r < 0) {
+    return r;
+  }
+
   librados::IoCtx io_ctx;
   librados::Rados rados;
 
@@ -514,7 +520,8 @@ int execute_group_snap_create(const po::variables_map &vm,
   }
 
   librbd::RBD rbd;
-  r = rbd.group_snap_create(io_ctx, group_name.c_str(), snap_name.c_str());
+  r = rbd.group_snap_create2(io_ctx, group_name.c_str(), snap_name.c_str(),
+                             flags);
   if (r < 0) {
     return r;
   }
@@ -821,9 +828,10 @@ void get_list_images_arguments(po::options_description *positional,
 }
 
 void get_group_snap_create_arguments(po::options_description *positional,
-				  po::options_description *options) {
+                                     po::options_description *options) {
   add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
                          true);
+  at::add_snap_create_options(options);
 }
 
 void get_group_snap_remove_arguments(po::options_description *positional,

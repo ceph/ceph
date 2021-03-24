@@ -119,8 +119,8 @@ struct health_check_map_t {
   }
 
   void dump(ceph::Formatter *f) const {
-    for (auto& p : checks) {
-      f->dump_object(p.first.c_str(), p.second);
+    for (auto& [code, check] : checks) {
+      f->dump_object(code, check);
     }
   }
 
@@ -173,18 +173,15 @@ struct health_check_map_t {
   }
 
   void merge(const health_check_map_t& o) {
-    for (auto& p : o.checks) {
-      auto q = checks.find(p.first);
-      if (q == checks.end()) {
-	// new check
-	checks[p.first] = p.second;
-      } else {
-	// merge details, and hope the summary matches!
-	q->second.detail.insert(
-	  q->second.detail.end(),
-	  p.second.detail.begin(),
-	  p.second.detail.end());
-	q->second.count += p.second.count;
+    for (auto& [code, check] : o.checks) {
+      auto [it, new_check] = checks.try_emplace(code, check);
+      if (!new_check) {
+        // merge details, and hope the summary matches!
+        it->second.detail.insert(
+          it->second.detail.end(),
+          check.detail.begin(),
+          check.detail.end());
+        it->second.count += check.count;
       }
     }
   }

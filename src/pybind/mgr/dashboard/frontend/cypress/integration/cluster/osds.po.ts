@@ -9,7 +9,7 @@ export class OSDsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    id: 4,
+    id: 3,
     status: 5
   };
 
@@ -34,30 +34,23 @@ export class OSDsPageHelper extends PageHelper {
     cy.get(`cd-osd-creation-preview-modal .modal-footer .tc_submitButton`).click();
   }
 
-  getRowByID(id: number) {
-    return this.getTableCell(this.columnIndex.id, `${id}`).parent();
-  }
-
   @PageHelper.restrictTo(pages.index.url)
   checkStatus(id: number, status: string[]) {
-    this.getRowByID(id)
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
-      .should(($ele) => {
-        const allStatus = $ele.toArray().map((v) => v.innerText);
-        for (const s of status) {
-          expect(allStatus).to.include(s);
-        }
-      });
+    this.seachTable(`id:${id}`);
+    this.expectTableCount('found', 1);
+    cy.get(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`).should(($ele) => {
+      const allStatus = $ele.toArray().map((v) => v.innerText);
+      for (const s of status) {
+        expect(allStatus).to.include(s);
+      }
+    });
   }
 
   @PageHelper.restrictTo(pages.index.url)
   ensureNoOsd(id: number) {
-    cy.get(`datatable-body-row datatable-body-cell:nth-child(${this.columnIndex.id})`).should(
-      ($ele) => {
-        const osdIds = $ele.toArray().map((v) => v.innerText);
-        expect(osdIds).to.not.include(`${id}`);
-      }
-    );
+    this.seachTable(`id:${id}`);
+    this.expectTableCount('found', 0);
+    this.clearTableSearchInput();
   }
 
   @PageHelper.restrictTo(pages.index.url)

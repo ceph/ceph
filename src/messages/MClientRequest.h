@@ -45,12 +45,29 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+struct SnapPayload {
+  std::map<std::string, std::string> metadata;
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(metadata, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &iter) {
+    DECODE_START(1, iter);
+    decode(metadata, iter);
+    DECODE_FINISH(iter);
+  }
+};
+
+WRITE_CLASS_ENCODER(SnapPayload)
 
 // metadata ops.
 
-class MClientRequest : public MMDSOp {
+class MClientRequest final : public MMDSOp {
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -81,6 +98,7 @@ public:
 
   // path arguments
   filepath path, path2;
+  std::string alternate_name;
   std::vector<uint64_t> gid_list;
 
   /* XXX HACK */
@@ -95,7 +113,7 @@ protected:
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
-  ~MClientRequest() override {}
+  ~MClientRequest() final {}
 
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -162,6 +180,13 @@ public:
     head.flags = head.flags | CEPH_MDS_FLAG_ASYNC;
   }
 
+  void set_alternate_name(std::string _alternate_name) {
+    alternate_name = std::move(_alternate_name);
+  }
+  void set_alternate_name(bufferptr&& cipher) {
+    alternate_name = std::move(cipher.c_str());
+  }
+
   utime_t get_stamp() const { return stamp; }
   ceph_tid_t get_oldest_client_tid() const { return head.oldest_client_tid; }
   int get_num_fwd() const { return head.num_fwd; }
@@ -175,6 +200,7 @@ public:
   const filepath& get_filepath() const { return path; }
   const std::string& get_path2() const { return path2.get_path(); }
   const filepath& get_filepath2() const { return path2; }
+  std::string_view get_alternate_name() const { return std::string_view(alternate_name); }
 
   int get_dentry_wanted() const { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
@@ -200,7 +226,7 @@ public:
 
 	localmask &= ~CEPH_SETATTR_BTIME;
 
-	head.args.setattr.btime = { init_le32(0), init_le32(0) };
+	head.args.setattr.btime = { ceph_le32(0), ceph_le32(0) };
 	head.args.setattr.mask = localmask;
       }
     }
@@ -212,6 +238,8 @@ public:
       decode(stamp, p);
     if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
       decode(gid_list, p);
+    if (header.version >= 5)
+      decode(alternate_name, p);
   }
 
   void encode_payload(uint64_t features) override {
@@ -233,6 +261,7 @@ public:
     ceph::encode_nohead(releases, payload);
     encode(stamp, payload);
     encode(gid_list, payload);
+    encode(alternate_name, payload);
   }
 
   std::string_view get_type_name() const override { return "creq"; }
@@ -268,6 +297,8 @@ public:
     }
     //if (!get_filepath().empty()) 
     out << " " << get_filepath();
+    if (alternate_name.size())
+      out << " (" << alternate_name << ") ";
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
     if (stamp != utime_t())

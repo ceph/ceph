@@ -13,8 +13,9 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
-import { SharedModule } from '../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
@@ -47,6 +48,7 @@ import { RulesListComponent } from './prometheus/rules-list/rules-list.component
 import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
 import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
+import { PlacementPipe } from './services/placement.pipe';
 import { ServiceDaemonListComponent } from './services/service-daemon-list/service-daemon-list.component';
 import { ServiceDetailsComponent } from './services/service-details/service-details.component';
 import { ServiceFormComponent } from './services/service-form/service-form.component';
@@ -70,7 +72,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     CephSharedModule,
     NgbDatepickerModule,
     NgbPopoverModule,
-    NgbDropdownModule
+    NgbDropdownModule,
+    NgxPipeFunctionModule
   ],
   declarations: [
     HostsComponent,
@@ -108,7 +111,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     TelemetryComponent,
     PrometheusTabsComponent,
     ServiceFormComponent,
-    OsdFlagsIndivModalComponent
+    OsdFlagsIndivModalComponent,
+    PlacementPipe
   ]
 })
 export class ClusterModule {}

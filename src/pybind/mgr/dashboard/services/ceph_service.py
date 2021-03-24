@@ -12,7 +12,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 
 try:
-    from typing import Any, Dict, Union
+    from typing import Any, Dict, Optional, Union
 except ImportError:
     pass  # For typing only
 
@@ -67,22 +67,29 @@ class CephService(object):
         return [svc for _, svcs in service_map.items() for svc in svcs['services']]
 
     @classmethod
-    def get_service(cls, service_name, service_id):
+    def get_service_data_by_metadata_id(cls,
+                                        service_type: str,
+                                        metadata_id: str) -> Optional[Dict[str, Any]]:
         for server in mgr.list_servers():
             for service in server['services']:
-                if service['type'] == service_name:
-                    inst_id = service['id']
-                    if inst_id == service_id:
-                        metadata = mgr.get_metadata(service_name, inst_id)
-                        status = mgr.get_daemon_status(service_name, inst_id)
+                if service['type'] == service_type:
+                    metadata = mgr.get_metadata(service_type, service['id'])
+                    if metadata_id == metadata['id']:
                         return {
-                            'id': inst_id,
-                            'type': service_name,
+                            'id': metadata['id'],
+                            'service_map_id': str(service['id']),
+                            'type': service_type,
                             'hostname': server['hostname'],
-                            'metadata': metadata,
-                            'status': status
+                            'metadata': metadata
                         }
         return None
+
+    @classmethod
+    def get_service(cls, service_type: str, metadata_id: str) -> Optional[Dict[str, Any]]:
+        svc_data = cls.get_service_data_by_metadata_id(service_type, metadata_id)
+        if svc_data:
+            svc_data['status'] = mgr.get_daemon_status(svc_data['type'], svc_data['service_map_id'])
+        return svc_data
 
     @classmethod
     def get_pool_list(cls, application=None):
@@ -158,8 +165,9 @@ class CephService(object):
             return {}
         return mgr.get("pg_summary")['by_pool'][pool['pool'].__str__()]
 
-    @classmethod
-    def send_command(cls, srv_type, prefix, srv_spec='', **kwargs):
+    @staticmethod
+    def send_command(srv_type, prefix, srv_spec='', **kwargs):
+        # type: (str, str, Optional[str], Any) -> Any
         """
         :type prefix: str
         :param srv_type: mon |
@@ -247,14 +255,14 @@ class CephService(object):
 
     @staticmethod
     def get_devices_by_host(hostname):
-        # (str) -> dict
+        # type: (str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-host',
                                         host=hostname)
 
     @staticmethod
     def get_devices_by_daemon(daemon_type, daemon_id):
-        # (str, str) -> dict
+        # type: (str, str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-daemon',
                                         who='{}.{}'.format(
@@ -278,6 +286,8 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            logger.debug('[SMART] could not retrieve device list from host %s', hostname)
         return smart_data
 
     @staticmethod
@@ -298,6 +308,10 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            msg = '[SMART] could not retrieve device list from daemon with type %s and ' +\
+                'with ID %s'
+            logger.debug(msg, daemon_type, daemon_id)
         return smart_data
 
     @classmethod

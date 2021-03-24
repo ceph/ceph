@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 import { RgwBucketService } from './rgw-bucket.service';
 
 describe('RgwBucketService', () => {
@@ -16,6 +16,7 @@ describe('RgwBucketService', () => {
   beforeEach(() => {
     service = TestBed.inject(RgwBucketService);
     httpTesting = TestBed.inject(HttpTestingController);
+    RgwHelper.selectDaemon();
   });
 
   afterEach(() => {
@@ -28,13 +29,13 @@ describe('RgwBucketService', () => {
 
   it('should call list', () => {
     service.list().subscribe();
-    const req = httpTesting.expectOne('api/rgw/bucket?stats=true');
+    const req = httpTesting.expectOne(`api/rgw/bucket?${RgwHelper.DAEMON_QUERY_PARAM}&stats=true`);
     expect(req.request.method).toBe('GET');
   });
 
   it('should call get', () => {
     service.get('foo').subscribe();
-    const req = httpTesting.expectOne('api/rgw/bucket/foo');
+    const req = httpTesting.expectOne(`api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
   });
 
@@ -43,7 +44,7 @@ describe('RgwBucketService', () => {
       .create('foo', 'bar', 'default', 'default-placement', false, 'COMPLIANCE', '10', '0')
       .subscribe();
     const req = httpTesting.expectOne(
-      'api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=10&lock_retention_period_years=0'
+      `api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=10&lock_retention_period_years=0&${RgwHelper.DAEMON_QUERY_PARAM}`
     );
     expect(req.request.method).toBe('POST');
   });
@@ -53,20 +54,24 @@ describe('RgwBucketService', () => {
       .update('foo', 'bar', 'baz', 'Enabled', 'Enabled', '1', '223344', 'GOVERNANCE', '0', '1')
       .subscribe();
     const req = httpTesting.expectOne(
-      'api/rgw/bucket/foo?bucket_id=bar&uid=baz&versioning_state=Enabled&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=0&lock_retention_period_years=1'
+      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&bucket_id=bar&uid=baz&versioning_state=Enabled&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=0&lock_retention_period_years=1`
     );
     expect(req.request.method).toBe('PUT');
   });
 
   it('should call delete, with purgeObjects = true', () => {
     service.delete('foo').subscribe();
-    const req = httpTesting.expectOne('api/rgw/bucket/foo?purge_objects=true');
+    const req = httpTesting.expectOne(
+      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&purge_objects=true`
+    );
     expect(req.request.method).toBe('DELETE');
   });
 
   it('should call delete, with purgeObjects = false', () => {
     service.delete('foo', false).subscribe();
-    const req = httpTesting.expectOne('api/rgw/bucket/foo?purge_objects=false');
+    const req = httpTesting.expectOne(
+      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&purge_objects=false`
+    );
     expect(req.request.method).toBe('DELETE');
   });
 
@@ -75,7 +80,7 @@ describe('RgwBucketService', () => {
     service.exists('foo').subscribe((resp) => {
       result = resp;
     });
-    const req = httpTesting.expectOne('api/rgw/bucket');
+    const req = httpTesting.expectOne(`api/rgw/bucket?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
     expect(result).toBe(true);

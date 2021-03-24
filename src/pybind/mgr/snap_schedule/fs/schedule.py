@@ -6,16 +6,11 @@ LGPL2.1.  See file COPYING.
 from datetime import datetime, timezone
 import json
 import logging
-from os import environ
 import re
 import sqlite3
-from typing import Tuple, Any
+from typing import cast, Any, Dict, List, Tuple, Optional, Union
 
 log = logging.getLogger(__name__)
-
-
-TESTING = 'SNAP_SCHED_TESTING' in environ
-
 
 # Work around missing datetime.fromisoformat for < python3.7
 SNAP_DB_TS_FORMAT = '%Y-%m-%dT%H:%M:%S'
@@ -34,12 +29,12 @@ except AttributeError:
     log.info(('Couldn\'t find datetime.fromisoformat, falling back to '
               f'static timestamp parsing ({SNAP_DB_TS_FORMAT}'))
 
-    def ts_parser(ts):
+    def ts_parser(data_string: str) -> datetime: # type: ignore
         try:
-            date = datetime.strptime(ts, SNAP_DB_TS_FORMAT)
+            date = datetime.strptime(data_string, SNAP_DB_TS_FORMAT)
             return date
         except ValueError:
-            msg = f'''The date string {ts} does not match the required format
+            msg = f'''The date string {data_string} does not match the required format
             {SNAP_DB_TS_FORMAT}. For more flexibel date parsing upgrade to
             python3.7 or install
             https://github.com/movermeyer/backports.datetime_fromisoformat'''
@@ -47,7 +42,7 @@ except AttributeError:
             raise ValueError(msg)
 
 
-def parse_timestamp(ts):
+def parse_timestamp(ts: str) -> datetime:
     date = ts_parser(ts)
     # normalize any non utc timezone to utc. If no tzinfo is supplied, assume
     # its already utc
@@ -57,7 +52,7 @@ def parse_timestamp(ts):
     return date
 
 
-def parse_retention(retention):
+def parse_retention(retention: str) -> Dict[str, int]:
     ret = {}
     log.debug(f'parse_retention({retention})')
     matches = re.findall(r'\d+[a-z]', retention)
@@ -72,8 +67,10 @@ def parse_retention(retention):
 
 RETENTION_MULTIPLIERS = ['n', 'M', 'h', 'd', 'w', 'm', 'y']
 
+TableRowT = Dict[str, Union[int, str]]
 
-def dump_retention(retention):
+
+def dump_retention(retention: Dict[str, str]) -> str:
     ret = ''
     for mult in RETENTION_MULTIPLIERS:
         if mult in retention:
@@ -86,21 +83,21 @@ class Schedule(object):
     Wrapper to work with schedules stored in sqlite
     '''
     def __init__(self,
-                 path,
-                 schedule,
-                 fs_name,
-                 rel_path,
-                 start=None,
-                 subvol=None,
-                 retention_policy='{}',
-                 created=None,
-                 first=None,
-                 last=None,
-                 last_pruned=None,
-                 created_count=0,
-                 pruned_count=0,
-                 active=True,
-                 ):
+                 path: str,
+                 schedule: str,
+                 fs_name: str,
+                 rel_path: str,
+                 start: Optional[str] = None,
+                 subvol: Optional[str] = None,
+                 retention_policy: str = '{}',
+                 created: Optional[str] = None,
+                 first: Optional[str] = None,
+                 last: Optional[str] = None,
+                 last_pruned: Optional[str] = None,
+                 created_count: int = 0,
+                 pruned_count: int = 0,
+                 active: bool = True,
+                 ) -> None:
         self.fs = fs_name
         self.subvol = subvol
         self.path = path
@@ -116,57 +113,58 @@ class Schedule(object):
         else:
             self.start = parse_timestamp(start)
         if created is None:
-            self.created = datetime.now(timezone.utc)
+            self.created: Optional[datetime] = datetime.now(timezone.utc)
         else:
             self.created = parse_timestamp(created)
         if first:
-            self.first = parse_timestamp(first)
+            self.first: Optional[datetime] = parse_timestamp(first)
         else:
-            self.first = first
+            self.first = None
         if last:
-            self.last = parse_timestamp(last)
+            self.last: Optional[datetime] = parse_timestamp(last)
         else:
-            self.last = last
+            self.last = None
         if last_pruned:
-            self.last_pruned = parse_timestamp(last_pruned)
+            self.last_pruned: Optional[datetime] = parse_timestamp(last_pruned)
         else:
-            self.last_pruned = last_pruned
+            self.last_pruned = None
         self.created_count = created_count
         self.pruned_count = pruned_count
         self.active = bool(active)
 
     @classmethod
-    def _from_db_row(cls, table_row, fs):
-        return cls(table_row['path'],
-                   table_row['schedule'],
+    def _from_db_row(cls, table_row: TableRowT, fs: str) -> 'Schedule':
+        return cls(cast(str, table_row['path']),
+                   cast(str, table_row['schedule']),
                    fs,
-                   table_row['rel_path'],
-                   table_row['start'],
-                   table_row['subvol'],
-                   table_row['retention'],
-                   table_row['created'],
-                   table_row['first'],
-                   table_row['last'],
-                   table_row['last_pruned'],
-                   table_row['created_count'],
-                   table_row['pruned_count'],
-                   table_row['active'])
+                   cast(str, table_row['rel_path']),
+                   cast(str, table_row['start']),
+                   cast(str, table_row['subvol']),
+                   cast(str, table_row['retention']),
+                   cast(str, table_row['created']),
+                   cast(str, table_row['first']),
+                   cast(str, table_row['last']),
+                   cast(str, table_row['last_pruned']),
+                   cast(int, table_row['created_count']),
+                   cast(int, table_row['pruned_count']),
+                   cast(bool, table_row['active']),
+                   )
 
-    def __str__(self):
-        return f'''{self.path} {self.schedule} {dump_retention(self.retention)}'''
+    def __str__(self) -> str:
+        return f'{self.path} {self.schedule} {dump_retention(self.retention)}'
 
-    def json_list(self):
+    def json_list(self) -> str:
         return json.dumps({'path': self.path, 'schedule': self.schedule,
                            'retention': dump_retention(self.retention)})
 
-    CREATE_TABLES = '''CREATE TABLE schedules(
+    CREATE_TABLES = '''CREATE TABLE IF NOT EXISTS schedules(
         id INTEGER PRIMARY KEY ASC,
         path TEXT NOT NULL UNIQUE,
         subvol TEXT,
         retention TEXT DEFAULT '{}',
         rel_path TEXT NOT NULL
     );
-    CREATE TABLE schedules_meta(
+    CREATE TABLE IF NOT EXISTS schedules_meta(
         id INTEGER PRIMARY KEY ASC,
         schedule_id INT,
         start TEXT NOT NULL,
@@ -187,7 +185,7 @@ class Schedule(object):
         s.retention,
         sm.repeat - (strftime("%s", "now") - strftime("%s", sm.start)) %
         sm.repeat "until",
-        sm.start, sm.repeat
+        sm.start, sm.repeat, sm.schedule
         FROM schedules s
             INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
         WHERE
@@ -204,13 +202,16 @@ class Schedule(object):
               INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
           WHERE'''
 
-    GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'''
+    GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'
 
     @classmethod
-    def get_db_schedules(cls, path, db, fs,
-                         schedule=None,
-                         start=None,
-                         repeat=None):
+    def get_db_schedules(cls,
+                         path: str,
+                         db: sqlite3.Connection,
+                         fs: str,
+                         schedule: Optional[str] = None,
+                         start: Optional[str] = None,
+                         repeat: Optional[str] = None) -> List['Schedule']:
         query = cls.GET_SCHEDULES
         data: Tuple[Any, ...] = (path,)
         if repeat:
@@ -227,7 +228,10 @@ class Schedule(object):
         return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     @classmethod
-    def list_schedules(cls, path, db, fs, recursive):
+    def list_schedules(cls,
+                       path: str,
+                       db: sqlite3.Connection,
+                       fs: str, recursive: bool) -> List['Schedule']:
         with db:
             if recursive:
                 c = db.execute(cls.PROTO_GET_SCHEDULES + ' path LIKE ?',
@@ -245,7 +249,7 @@ class Schedule(object):
         active)
         SELECT ?, ?, ?, ?, ?, ?'''
 
-    def store_schedule(self, db):
+    def store_schedule(self, db: sqlite3.Connection) -> None:
         sched_id = None
         with db:
             try:
@@ -258,11 +262,13 @@ class Schedule(object):
                 sched_id = c.lastrowid
             except sqlite3.IntegrityError:
                 # might be adding another schedule, retrieve sched id
-                log.debug(f'found schedule entry for {self.path}, trying to add meta')
+                log.debug((f'found schedule entry for {self.path}, '
+                           'trying to add meta'))
                 c = db.execute('SELECT id FROM schedules where path = ?',
                                (self.path,))
                 sched_id = c.fetchone()[0]
                 pass
+            assert self.created, "self.created should be set"
             db.execute(self.INSERT_SCHEDULE_META,
                        (sched_id,
                         self.start.strftime(SNAP_DB_TS_FORMAT),
@@ -272,7 +278,11 @@ class Schedule(object):
                         1))
 
     @classmethod
-    def rm_schedule(cls, db, path, repeat, start):
+    def rm_schedule(cls,
+                    db: sqlite3.Connection,
+                    path: str,
+                    repeat: Optional[str],
+                    start: Optional[str]) -> None:
         with db:
             cur = db.execute('SELECT id FROM schedules WHERE path = ?',
                              (path,))
@@ -285,7 +295,8 @@ class Schedule(object):
             id_ = tuple(row)
 
             if repeat or start:
-                meta_delete = 'DELETE FROM schedules_meta WHERE schedule_id = ?'
+                meta_delete = ('DELETE FROM schedules_meta '
+                               'WHERE schedule_id = ?')
                 delete_param = id_
                 if repeat:
                     meta_delete += ' AND schedule = ?'
@@ -306,7 +317,7 @@ class Schedule(object):
                     id_)
                 if meta_count.fetchone() == (0,):
                     log.debug(
-                        f'no more schedules left, cleaning up schedules table')
+                        'no more schedules left, cleaning up schedules table')
                     db.execute('DELETE FROM schedules WHERE id = ?;', id_)
             else:
                 # just delete the schedule CASCADE DELETE takes care of the
@@ -320,24 +331,34 @@ class Schedule(object):
     WHERE path = ?'''
 
     @classmethod
-    def add_retention(cls, db, path, retention_spec):
+    def add_retention(cls,
+                      db: sqlite3.Connection,
+                      path: str,
+                      retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
             if not row:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
+            if not retention:
+                raise ValueError(f'Retention spec {retention_spec} is invalid')
             log.debug(f'db result is {tuple(row)}')
             current = row['retention']
             current_retention = json.loads(current)
             for r, v in retention.items():
                 if r in current_retention:
-                    raise ValueError((f'Retention for {r} is already present '
-                                     'with value {current_retention[r]}. Please remove first'))
+                    msg = (f'Retention for {r} is already present with value'
+                           f'{current_retention[r]}. Please remove first')
+                    raise ValueError(msg)
             current_retention.update(retention)
-            db.execute(cls.UPDATE_RETENTION, (json.dumps(current_retention), path))
+            db.execute(cls.UPDATE_RETENTION,
+                       (json.dumps(current_retention), path))
 
     @classmethod
-    def rm_retention(cls, db, path, retention_spec):
+    def rm_retention(cls,
+                     db: sqlite3.Connection,
+                     path: str,
+                     retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
             if not row:
@@ -347,23 +368,28 @@ class Schedule(object):
             current_retention = json.loads(current)
             for r, v in retention.items():
                 if r not in current_retention or current_retention[r] != v:
-                    raise ValueError((f'Retention for {r}: {v} was not set for {path} '
-                                     'can\'t remove'))
+                    msg = (f'Retention for {r}: {v} was not set for {path} '
+                           'can\'t remove')
+                    raise ValueError(msg)
                 current_retention.pop(r)
-            db.execute(cls.UPDATE_RETENTION, (json.dumps(current_retention), path))
+            db.execute(cls.UPDATE_RETENTION,
+                       (json.dumps(current_retention), path))
 
-    def report(self):
+    def report(self) -> str:
         return self.report_json()
 
-    def report_json(self):
+    def report_json(self) -> str:
         return json.dumps(dict(self.__dict__),
                           default=lambda o: o.strftime(SNAP_DB_TS_FORMAT))
 
+    @classmethod
+    def parse_schedule(cls, schedule: str) -> Tuple[int, str]:
+        return int(schedule[0:-1]), schedule[-1]
+
     @property
-    def repeat(self):
-        mult = self.schedule[-1]
-        period = int(self.schedule[0:-1])
-        if TESTING and mult == 'M':
+    def repeat(self) -> int:
+        period, mult = self.parse_schedule(self.schedule)
+        if mult == 'M':
             return period * 60
         elif mult == 'h':
             return period * 60 * 60
@@ -387,13 +413,14 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def update_last(self, time, db):
+    def update_last(self, time: datetime, db: sqlite3.Connection) -> None:
         with db:
-            db.execute(self.UPDATE_LAST, (time.strftime(SNAP_DB_TS_FORMAT),
-                                          time.strftime(SNAP_DB_TS_FORMAT),
-                                          self.path,
-                                          self.start.strftime(SNAP_DB_TS_FORMAT),
-                                          self.repeat))
+            db.execute(self.UPDATE_LAST,
+                       (time.strftime(SNAP_DB_TS_FORMAT),
+                        time.strftime(SNAP_DB_TS_FORMAT),
+                        self.path,
+                        self.start.strftime(SNAP_DB_TS_FORMAT),
+                        self.repeat))
         self.created_count += 1
         self.last = time
         if not self.first:
@@ -410,12 +437,14 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def set_inactive(self, db):
+    def set_inactive(self, db: sqlite3.Connection) -> None:
         with db:
-            log.debug(f'Deactivating schedule ({self.repeat}, {self.start}) on path {self.path}')
-            db.execute(self.UPDATE_INACTIVE, (self.path,
-                                              self.start.strftime(SNAP_DB_TS_FORMAT),
-                                              self.repeat))
+            log.debug((f'Deactivating schedule ({self.repeat}, '
+                       f'{self.start}) on path {self.path}'))
+            db.execute(self.UPDATE_INACTIVE,
+                       (self.path,
+                        self.start.strftime(SNAP_DB_TS_FORMAT),
+                        self.repeat))
         self.active = False
 
     UPDATE_ACTIVE = '''UPDATE schedules_meta
@@ -429,12 +458,14 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def set_active(self, db):
+    def set_active(self, db: sqlite3.Connection) -> None:
         with db:
-            log.debug(f'Activating schedule ({self.repeat}, {self.start}) on path {self.path}')
-            db.execute(self.UPDATE_ACTIVE, (self.path,
-                                            self.start.strftime(SNAP_DB_TS_FORMAT),
-                                            self.repeat))
+            log.debug(f'Activating schedule ({self.repeat}, {self.start}) '
+                      f'on path {self.path}')
+            db.execute(self.UPDATE_ACTIVE,
+                       (self.path,
+                        self.start.strftime(SNAP_DB_TS_FORMAT),
+                        self.repeat))
         self.active = True
 
     UPDATE_PRUNED = '''UPDATE schedules_meta
@@ -449,11 +480,15 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def update_pruned(self, time, db, pruned):
+    def update_pruned(self,
+                      time: datetime,
+                      db: sqlite3.Connection,
+                      pruned: int) -> None:
         with db:
-            db.execute(self.UPDATE_PRUNED, (time.strftime(SNAP_DB_TS_FORMAT), pruned,
-                                            self.path,
-                                            self.start.strftime(SNAP_DB_TS_FORMAT),
-                                            self.repeat))
+            db.execute(self.UPDATE_PRUNED,
+                       (time.strftime(SNAP_DB_TS_FORMAT), pruned,
+                        self.path,
+                        self.start.strftime(SNAP_DB_TS_FORMAT),
+                        self.repeat))
         self.pruned_count += pruned
         self.last_pruned = time

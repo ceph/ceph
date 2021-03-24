@@ -274,6 +274,12 @@ SnapContext get_snap_context(
       std::pair<std::uint64_t,
                 std::vector<std::uint64_t>>>& write_snap_context);
 
+uint64_t reserve_async_request_id();
+
+bool is_config_key_uri(const std::string& uri);
+int get_config_key(librados::Rados& rados, const std::string& uri,
+                   std::string* value);
+
 } // namespace util
 } // namespace librbd
 

@@ -7,6 +7,7 @@ import traceback
 
 from datetime import datetime
 from threading import Condition, Lock, Thread
+from typing import Any, Dict, List, Optional, Tuple
 
 from .common import get_rbd_pools
 from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
@@ -20,7 +21,7 @@ class TrashPurgeScheduleHandler:
     condition = Condition(lock)
     thread = None
 
-    def __init__(self, module):
+    def __init__(self, module: Any) -> None:
         self.module = module
         self.log = module.log
         self.last_refresh_pools = datetime(1970, 1, 1)
@@ -30,7 +31,7 @@ class TrashPurgeScheduleHandler:
         self.thread = Thread(target=self.run)
         self.thread.start()
 
-    def run(self):
+    def run(self) -> None:
         try:
             self.log.info("TrashPurgeScheduleHandler: starting")
             while True:
@@ -49,7 +50,7 @@ class TrashPurgeScheduleHandler:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
 
-    def trash_purge(self, pool_id, namespace):
+    def trash_purge(self, pool_id: str, namespace: str) -> None:
         try:
             with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                 ioctx.set_namespace(namespace)
@@ -58,14 +59,14 @@ class TrashPurgeScheduleHandler:
             self.log.error("exception when purgin {}/{}: {}".format(
                 pool_id, namespace, e))
 
-
-    def init_schedule_queue(self):
-        self.queue = {}
-        self.pools = {}
+    def init_schedule_queue(self) -> None:
+        self.queue: Dict[str, List[Tuple[str, str]]] = {}
+        # pool_id => {namespace => pool_name}
+        self.pools: Dict[str, Dict[str, str]] = {}
         self.refresh_pools()
         self.log.debug("scheduler queue is initialized")
 
-    def load_schedules(self):
+    def load_schedules(self) -> None:
         self.log.info("TrashPurgeScheduleHandler: load_schedules")
 
         schedules = Schedules(self)
@@ -73,7 +74,7 @@ class TrashPurgeScheduleHandler:
         with self.lock:
             self.schedules = schedules
 
-    def refresh_pools(self):
+    def refresh_pools(self) -> None:
         if (datetime.now() - self.last_refresh_pools).seconds < 60:
             return
 
@@ -81,7 +82,7 @@ class TrashPurgeScheduleHandler:
 
         self.load_schedules()
 
-        pools = {}
+        pools: Dict[str, Dict[str, str]] = {}
 
         for pool_id, pool_name in get_rbd_pools(self.module).items():
             if not self.schedules.intersects(
@@ -96,7 +97,7 @@ class TrashPurgeScheduleHandler:
 
         self.last_refresh_pools = datetime.now()
 
-    def load_pool(self, ioctx, pools):
+    def load_pool(self, ioctx: rados.Ioctx, pools: Dict[str, Dict[str, str]]) -> None:
         pool_id = str(ioctx.get_pool_id())
         pool_name = ioctx.get_pool_name()
         pools[pool_id] = {}
@@ -115,7 +116,7 @@ class TrashPurgeScheduleHandler:
         for namespace in pool_namespaces:
             pools[pool_id][namespace] = pool_name
 
-    def rebuild_queue(self):
+    def rebuild_queue(self) -> None:
         with self.lock:
             now = datetime.now()
 
@@ -135,7 +136,7 @@ class TrashPurgeScheduleHandler:
 
             self.condition.notify()
 
-    def refresh_queue(self, current_pools):
+    def refresh_queue(self, current_pools: Dict[str, Dict[str, str]]) -> None:
         now = datetime.now()
 
         for pool_id, namespaces in self.pools.items():
@@ -152,7 +153,7 @@ class TrashPurgeScheduleHandler:
 
         self.condition.notify()
 
-    def enqueue(self, now, pool_id, namespace):
+    def enqueue(self, now: datetime, pool_id: str, namespace: str) -> None:
 
         schedule = self.schedules.find(pool_id, namespace)
         if not schedule:
@@ -167,9 +168,9 @@ class TrashPurgeScheduleHandler:
         if ns_spec not in self.queue[schedule_time]:
             self.queue[schedule_time].append((pool_id, namespace))
 
-    def dequeue(self):
+    def dequeue(self) -> Tuple[Optional[Tuple[str, str]], float]:
         if not self.queue:
-            return None, 1000
+            return None, 1000.0
 
         now = datetime.now()
         schedule_time = sorted(self.queue)[0]
@@ -183,9 +184,9 @@ class TrashPurgeScheduleHandler:
         namespace = namespaces.pop(0)
         if not namespaces:
             del self.queue[schedule_time]
-        return namespace, 0
+        return namespace, 0.0
 
-    def remove_from_queue(self, pool_id, namespace):
+    def remove_from_queue(self, pool_id: str, namespace: str) -> None:
         empty_slots = []
         for schedule_time, namespaces in self.queue.items():
             if (pool_id, namespace) in namespaces:
@@ -195,7 +196,10 @@ class TrashPurgeScheduleHandler:
         for schedule_time in empty_slots:
             del self.queue[schedule_time]
 
-    def add_schedule(self, level_spec, interval, start_time):
+    def add_schedule(self,
+                     level_spec: LevelSpec,
+                     interval: str,
+                     start_time: Optional[str]) -> Tuple[int, str, str]:
         self.log.debug(
             "add_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
@@ -207,7 +211,10 @@ class TrashPurgeScheduleHandler:
         self.rebuild_queue()
         return 0, "", ""
 
-    def remove_schedule(self, level_spec, interval, start_time):
+    def remove_schedule(self,
+                        level_spec: LevelSpec,
+                        interval: Optional[str],
+                        start_time: Optional[str]) -> Tuple[int, str, str]:
         self.log.debug(
             "remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
@@ -219,7 +226,7 @@ class TrashPurgeScheduleHandler:
         self.rebuild_queue()
         return 0, "", ""
 
-    def list(self, level_spec):
+    def list(self, level_spec: LevelSpec) -> Tuple[int, str, str]:
         self.log.debug("list: level_spec={}".format(level_spec.name))
 
         with self.lock:
@@ -227,7 +234,7 @@ class TrashPurgeScheduleHandler:
 
         return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
-    def status(self, level_spec):
+    def status(self, level_spec: LevelSpec) -> Tuple[int, str, str]:
         self.log.debug("status: level_spec={}".format(level_spec.name))
 
         scheduled = []
@@ -245,26 +252,3 @@ class TrashPurgeScheduleHandler:
                     })
         return 0, json.dumps({'scheduled' : scheduled}, indent=4,
                              sort_keys=True), ""
-
-    def handle_command(self, inbuf, prefix, cmd):
-        level_spec_name = cmd.get('level_spec', "")
-
-        try:
-            level_spec = LevelSpec.from_name(self, level_spec_name,
-                                             allow_image_level=False)
-        except ValueError as e:
-            return -errno.EINVAL, '', "Invalid level spec {}: {}".format(
-                level_spec_name, e)
-
-        if prefix == 'add':
-            return self.add_schedule(level_spec, cmd['interval'],
-                                     cmd.get('start_time'))
-        elif prefix == 'remove':
-            return self.remove_schedule(level_spec, cmd.get('interval'),
-                                        cmd.get('start_time'))
-        elif prefix == 'list':
-            return self.list(level_spec)
-        elif prefix == 'status':
-            return self.status(level_spec)
-
-        raise NotImplementedError(cmd['prefix'])

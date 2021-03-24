@@ -55,7 +55,8 @@ int get_meta(lr::IoCtx& ioctx, const std::string& oid,
 	     std::optional<fifo::objv> objv, fifo::info* info,
 	     std::uint32_t* part_header_size,
 	     std::uint32_t* part_entry_overhead,
-	     std::uint64_t tid, optional_yield y);
+	     std::uint64_t tid, optional_yield y,
+	     bool probe = false);
 void update_meta(lr::ObjectWriteOperation* op, const fifo::objv& objv,
 		 const fifo::update& update);
 void part_init(lr::ObjectWriteOperation* op, std::string_view tag,
@@ -183,7 +184,10 @@ public:
 		  std::unique_ptr<FIFO>* fifo, //< OUT: Pointer to FIFO object
 		  optional_yield y, //< Optional yield context
 		  /// Operation will fail if FIFO is not at this version
-		  std::optional<fifo::objv> objv = std::nullopt);
+		  std::optional<fifo::objv> objv = std::nullopt,
+		  /// Probing for existence, don't print errors if we
+		  /// can't find it.
+		  bool probe = false);
   /// Create a new or open an existing FIFO.
   static int create(lr::IoCtx ioctx, //< IO Context
 		    std::string oid, //< OID for metadata object

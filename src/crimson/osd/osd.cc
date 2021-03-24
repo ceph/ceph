@@ -89,7 +89,10 @@ OSD::OSD(int id, uint32_t nonce,
     shard_services{*this, whoami, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
-    heartbeat_timer{[this] { update_heartbeat_peers(); }},
+    tick_timer{[this] {
+      update_heartbeat_peers();
+      update_stats();
+    }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
@@ -262,23 +265,28 @@ seastar::future<> OSD::start()
     cluster_msgr->set_policy(entity_name_t::TYPE_CLIENT,
                              SocketPolicy::stateless_server(0));
 
-    auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
-    chained_dispatchers->push_front(*mgrc);
-    chained_dispatchers->push_front(*monc);
-    chained_dispatchers->push_front(*this);
+    crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
     return seastar::when_all_succeed(
       cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
                              local_conf()->ms_bind_port_min,
                              local_conf()->ms_bind_port_max)
-        .then([this, chained_dispatchers]() mutable {
-	  return cluster_msgr->start(chained_dispatchers);
-	}),
+        .safe_then([this, dispatchers]() mutable {
+	  return cluster_msgr->start(dispatchers);
+        }, crimson::net::Messenger::bind_ertr::all_same_way(
+            [] (const std::error_code& e) {
+          logger().error("cluster messenger try_bind(): address range is unavailable.");
+          ceph_abort();
+        })),
       public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             local_conf()->ms_bind_port_min,
                             local_conf()->ms_bind_port_max)
-        .then([this, chained_dispatchers]() mutable {
-	  return public_msgr->start(chained_dispatchers);
-	}));
+        .safe_then([this, dispatchers]() mutable {
+	  return public_msgr->start(dispatchers);
+        }, crimson::net::Messenger::bind_ertr::all_same_way(
+            [] (const std::error_code& e) {
+          logger().error("public messenger try_bind(): address range is unavailable.");
+          ceph_abort();
+        })));
   }).then_unpack([this] {
     return seastar::when_all_succeed(monc->start(),
                                      mgrc->start());
@@ -396,7 +404,7 @@ seastar::future<> OSD::_add_me_to_crush()
       "weight": {:.4f},
       "args": [{}]
     }})", whoami, weight, loc);
-    return monc->run_command({cmd}, {});
+    return monc->run_command(std::move(cmd), {});
   }).then([](auto&& command_result) {
     [[maybe_unused]] auto [code, message, out] = std::move(command_result);
     if (code) {
@@ -409,7 +417,7 @@ seastar::future<> OSD::_add_me_to_crush()
   });
 }
 
-seastar::future<> OSD::handle_command(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_command(crimson::net::ConnectionRef conn,
 				      Ref<MCommand> m)
 {
   return asok->handle_command(conn, std::move(m));
@@ -449,16 +457,8 @@ seastar::future<> OSD::stop()
   return prepare_to_stop().then([this] {
     state.set_stopping();
     logger().debug("prepared to stop");
-    if (!public_msgr->dispatcher_chain_empty()) {
-      public_msgr->remove_dispatcher(*this);
-      public_msgr->remove_dispatcher(*mgrc);
-      public_msgr->remove_dispatcher(*monc);
-    }
-    if (!cluster_msgr->dispatcher_chain_empty()) {
-      cluster_msgr->remove_dispatcher(*this);
-      cluster_msgr->remove_dispatcher(*mgrc);
-      cluster_msgr->remove_dispatcher(*monc);
-    }
+    public_msgr->stop();
+    cluster_msgr->stop();
     auto gate_close_fut = gate.close();
     return asok->stop().then([this] {
       return heartbeat->stop();
@@ -614,12 +614,14 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   });
 }
 
-seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
+std::optional<seastar::future<>>
+OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
-  return gate.dispatch(__func__, *this, [this, conn, &m] {
-    if (state.is_stopping()) {
-      return seastar::now();
-    }
+  if (state.is_stopping()) {
+    return {};
+  }
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
       return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
@@ -628,7 +630,7 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
     case MSG_OSD_PG_CREATE2:
       shard_services.start_operation<CompoundPeeringRequest>(
 	*this,
-	conn->get_shared(),
+	conn,
 	m);
       return seastar::now();
     case MSG_COMMAND:
@@ -648,6 +650,8 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
     case MSG_OSD_PG_SCAN:
       [[fallthrough]];
     case MSG_OSD_PG_BACKFILL:
+      [[fallthrough]];
+    case MSG_OSD_PG_BACKFILL_REMOVE:
       return handle_recovery_subreq(conn, boost::static_pointer_cast<MOSDFastDispatchOp>(m));
     case MSG_OSD_PG_LEASE:
       [[fallthrough]];
@@ -672,10 +676,11 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
     case MSG_OSD_SCRUB2:
       return handle_scrub(conn, boost::static_pointer_cast<MOSDScrub2>(m));
     default:
-      logger().info("ms_dispatch unhandled message {}", *m);
+      dispatched = false;
       return seastar::now();
     }
   });
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
 void OSD::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
@@ -721,6 +726,11 @@ void OSD::update_stats()
   osd_stat.up_from = get_up_epoch();
   osd_stat.hb_peers = heartbeat->get_peers();
   osd_stat.seq = (static_cast<uint64_t>(get_up_epoch()) << 32) | osd_stat_seq;
+  gate.dispatch_in_background("statfs", *this, [this] {
+    (void) store->stat().then([this](store_statfs_t&& st) {
+      osd_stat.statfs = st;
+    });
+  });
 }
 
 MessageRef OSD::get_stats() const
@@ -901,7 +911,6 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
         auto [pg, startmap] = std::move(ret);
         if (!pg)
           return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
-        PeeringCtx rctx{ceph_release_t::octopus};
         const pg_pool_t* pp = startmap->get_pg_pool(info->pgid.pool());
 
         int up_primary, acting_primary;
@@ -912,6 +921,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
         int role = startmap->calc_pg_role(pg_shard_t(whoami, info->pgid.shard),
                                           acting);
 
+        PeeringCtx rctx;
         create_pg_collection(
           rctx.transaction,
           info->pgid,
@@ -941,7 +951,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
   });
 }
 
-seastar::future<> OSD::handle_osd_map(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
                                       Ref<MOSDMap> m)
 {
   logger().info("handle_osd_map {}", *m);
@@ -1038,7 +1048,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         state.set_active();
         beacon_timer.arm_periodic(
           std::chrono::seconds(local_conf()->osd_beacon_report_interval));
-        heartbeat_timer.arm_periodic(
+        tick_timer.arm_periodic(
           std::chrono::seconds(TICK_INTERVAL));
       }
     } else if (!osdmap->is_up(whoami)) {
@@ -1078,17 +1088,17 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   });
 }
 
-seastar::future<> OSD::handle_osd_op(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
                                      Ref<MOSDOp> m)
 {
   (void) shard_services.start_operation<ClientRequest>(
     *this,
-    conn->get_shared(),
+    conn,
     std::move(m));
   return seastar::now();
 }
 
-seastar::future<> OSD::send_incremental_map(crimson::net::Connection* conn,
+seastar::future<> OSD::send_incremental_map(crimson::net::ConnectionRef conn,
 					    epoch_t first)
 {
   if (first >= superblock.oldest_map) {
@@ -1114,18 +1124,18 @@ seastar::future<> OSD::send_incremental_map(crimson::net::Connection* conn,
   }
 }
 
-seastar::future<> OSD::handle_rep_op(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 				     Ref<MOSDRepOp> m)
 {
   m->finish_decode();
   (void) shard_services.start_operation<RepRequest>(
     *this,
-    conn->get_shared(),
+    std::move(conn),
     std::move(m));
   return seastar::now();
 }
 
-seastar::future<> OSD::handle_rep_op_reply(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_rep_op_reply(crimson::net::ConnectionRef conn,
 					   Ref<MOSDRepOpReply> m)
 {
   const auto& pgs = pg_map.get_pgs();
@@ -1138,7 +1148,7 @@ seastar::future<> OSD::handle_rep_op_reply(crimson::net::Connection* conn,
   return seastar::now();
 }
 
-seastar::future<> OSD::handle_scrub(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_scrub(crimson::net::ConnectionRef conn,
 				    Ref<MOSDScrub2> m)
 {
   if (m->fsid != superblock.cluster_fsid) {
@@ -1146,7 +1156,7 @@ seastar::future<> OSD::handle_scrub(crimson::net::Connection* conn,
     return seastar::now();
   }
   return seastar::parallel_for_each(std::move(m->scrub_pgs),
-    [m, conn=conn->get_shared(), this](spg_t pgid) {
+    [m, conn, this](spg_t pgid) {
     pg_shard_t from_shard{static_cast<int>(m->get_source().num()),
                           pgid.shard};
     PeeringState::RequestScrub scrub_request{m->deep, m->repair};
@@ -1160,7 +1170,7 @@ seastar::future<> OSD::handle_scrub(crimson::net::Connection* conn,
   });
 }
 
-seastar::future<> OSD::handle_mark_me_down(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_mark_me_down(crimson::net::ConnectionRef conn,
 					   Ref<MOSDMarkMeDown> m)
 {
   if (state.is_prestop()) {
@@ -1169,12 +1179,12 @@ seastar::future<> OSD::handle_mark_me_down(crimson::net::Connection* conn,
   return seastar::now();
 }
 
-seastar::future<> OSD::handle_recovery_subreq(crimson::net::Connection* conn,
+seastar::future<> OSD::handle_recovery_subreq(crimson::net::ConnectionRef conn,
 				   Ref<MOSDFastDispatchOp> m)
 {
   (void) shard_services.start_operation<RecoverySubRequest>(
     *this,
-    conn->get_shared(),
+    conn,
     std::move(m));
   return seastar::now();
 }
@@ -1205,7 +1215,7 @@ bool OSD::should_restart() const
 seastar::future<> OSD::restart()
 {
   beacon_timer.cancel();
-  heartbeat_timer.cancel();
+  tick_timer.cancel();
   up_epoch = 0;
   bind_epoch = osdmap->get_epoch();
   // TODO: promote to shutdown if being marked down for multiple times
@@ -1258,7 +1268,7 @@ void OSD::update_heartbeat_peers()
 }
 
 seastar::future<> OSD::handle_peering_op(
-  crimson::net::Connection* conn,
+  crimson::net::ConnectionRef conn,
   Ref<MOSDPeeringOp> m)
 {
   const int from = m->get_source().num();
@@ -1266,7 +1276,7 @@ seastar::future<> OSD::handle_peering_op(
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
   (void) shard_services.start_operation<RemotePeeringEvent>(
     *this,
-    conn->get_shared(),
+    conn,
     shard_services,
     pg_shard_t{from, m->get_spg().shard},
     m->get_spg(),
@@ -1286,7 +1296,7 @@ seastar::future<> OSD::consume_map(epoch_t epoch)
   return seastar::parallel_for_each(pgs.begin(), pgs.end(), [=](auto& pg) {
     return shard_services.start_operation<PGAdvanceMap>(
       *this, pg.second, pg.second->get_osdmap_epoch(), epoch,
-      PeeringCtx{ceph_release_t::octopus}, false).second;
+      PeeringCtx{}, false).second;
   }).then([epoch, this] {
     osdmap_gate.got_map(epoch);
     return seastar::make_ready_future();

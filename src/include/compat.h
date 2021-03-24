@@ -15,6 +15,7 @@
 #include "acconfig.h"
 #include <sys/types.h>
 #include <errno.h>
+#include <unistd.h>
 
 #if defined(__linux__)
 #define PROCPREFIX
@@ -149,6 +150,9 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 #define LOG_AUTHPRIV    (10<<3)
 #define LOG_FTP         (11<<3)
 #define __STRING(x)     "x"
+#endif
+
+#if defined(__sun) || defined(_AIX) || defined(_WIN32)
 #define IFTODT(mode)   (((mode) & 0170000) >> 12)
 #endif
 
@@ -200,6 +204,12 @@ extern "C" {
 
 int pipe_cloexec(int pipefd[2], int flags);
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
+unsigned get_page_size();
+// On success, returns the number of bytes written to the buffer. On
+// failure, returns -1.
+ssize_t get_self_exe_path(char* path, int buff_length);
+
+int ceph_memzero_s(void *dest, size_t destsz, size_t count);
 
 #ifdef __cplusplus
 }
@@ -210,6 +220,10 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 #include "include/win32/winsock_compat.h"
 
 #include <windows.h>
+#include <time.h>
+
+#include "include/win32/win32_errno.h"
+#include "include/win32/fs_compat.h"
 
 // There are a few name collisions between Windows headers and Ceph.
 // Updating Ceph definitions would be the prefferable fix in order to avoid
@@ -221,14 +235,18 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 #define WIN32_ERROR 0
 #undef ERROR
 
+#ifndef uint
+typedef unsigned int uint;
+#endif
+
 typedef _sigset_t sigset_t;
 
-typedef int uid_t;
-typedef int gid_t;
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;
 
-typedef long blksize_t;
-typedef long blkcnt_t;
-typedef long nlink_t;
+typedef unsigned int blksize_t;
+typedef unsigned __int64 blkcnt_t;
+typedef unsigned short nlink_t;
 
 typedef long long loff_t;
 
@@ -257,15 +275,6 @@ struct iovec {
 #define SIGKILL 9
 #endif
 
-#ifndef ENODATA
-// mingw doesn't define this, the Windows SDK does.
-#define ENODATA 120
-#endif
-
-#define ESHUTDOWN ECONNABORTED
-#define ESTALE 256
-#define EREMOTEIO 257
-
 #define IOV_MAX 1024
 
 #ifdef __cplusplus
@@ -280,6 +289,7 @@ ssize_t pread(int fd, void *buf, size_t count, off_t offset);
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
 
 long int lrand48(void);
+int random();
 
 int pipe(int pipefd[2]);
 
@@ -290,13 +300,44 @@ char *strptime(const char *s, const char *format, struct tm *tm);
 int chown(const char *path, uid_t owner, gid_t group);
 int fchown(int fd, uid_t owner, gid_t group);
 int lchown(const char *path, uid_t owner, gid_t group);
+int setenv(const char *name, const char *value, int overwrite);
+
+int geteuid();
+int getegid();
+int getuid();
+int getgid();
+
+#define unsetenv(name) _putenv_s(name, "")
 
 int win_socketpair(int socks[2]);
+
+#ifdef __MINGW32__
+extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
+
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#define htobe16(x) __builtin_bswap16(x)
+#define htole16(x) (x)
+#define be16toh(x) __builtin_bswap16(x)
+#define le16toh(x) (x)
+
+#define htobe32(x) __builtin_bswap32(x)
+#define htole32(x) (x)
+#define be32toh(x) __builtin_bswap32(x)
+#define le32toh(x) (x)
+
+#define htobe64(x) __builtin_bswap64(x)
+#define htole64(x) (x)
+#define be64toh(x) __builtin_bswap64(x)
+#define le64toh(x) (x)
+#endif // defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+
+#endif // __MINGW32__
 
 #ifdef __cplusplus
 }
 #endif
 
+#define compat_closesocket closesocket
 // Use "aligned_free" when freeing memory allocated using posix_memalign or
 // _aligned_malloc. Using "free" will crash.
 #define aligned_free(ptr) _aligned_free(ptr)
@@ -307,11 +348,18 @@ int win_socketpair(int socks[2]);
 #define O_CLOEXEC 0
 #define SOCKOPT_VAL_TYPE char*
 
+#define DEV_NULL "nul"
+
 #else /* WIN32 */
 
 #define SOCKOPT_VAL_TYPE void*
 
 #define aligned_free(ptr) free(ptr)
+static inline int compat_closesocket(int fildes) {
+  return close(fildes);
+}
+
+#define DEV_NULL "/dev/null"
 
 #endif /* WIN32 */
 
@@ -342,5 +390,12 @@ static inline int ceph_sock_errno() {
   return errno;
 #endif
 }
+
+// Needed on Windows when handling binary files. Without it, line
+// endings will be replaced and certain characters can be treated as
+// EOF.
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
 
 #endif /* !CEPH_COMPAT_H */

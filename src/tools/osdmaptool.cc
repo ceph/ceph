@@ -18,6 +18,7 @@
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "include/random.h"
 #include "mon/health_check.h"
 #include <time.h>
 #include <algorithm>
@@ -471,7 +472,7 @@ int main(int argc, const char **argv)
     int r = clock_gettime(CLOCK_MONOTONIC, &round_start);
     assert(r == 0);
     do {
-      std::random_device rd;
+      random_device_t rd;
       std::shuffle(pools.begin(), pools.end(), std::mt19937{rd()});
       cout << "pools ";
       for (auto& i: pools)

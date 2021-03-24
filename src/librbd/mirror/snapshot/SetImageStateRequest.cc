@@ -27,13 +27,52 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void SetImageStateRequest<I>::send() {
+  get_name();
+}
+
+template <typename I>
+void SetImageStateRequest<I>::get_name() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::dir_get_name_start(&op, m_image_ctx->id);
+
+  librados::AioCompletion *comp = create_rados_callback<
+    SetImageStateRequest<I>,
+    &SetImageStateRequest<I>::handle_get_name>(this);
+  m_bl.clear();
+  int r = m_image_ctx->md_ctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void SetImageStateRequest<I>::handle_get_name(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << "r=" << r << dendl;
+
+  if (r == 0) {
+    auto it = m_bl.cbegin();
+    r = cls_client::dir_get_name_finish(&it, &m_image_state.name);
+  }
+
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve image name: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+  ldout(cct, 15) << "name=" << m_image_state.name << dendl;
+
   get_snap_limit();
 }
 
 template <typename I>
 void SetImageStateRequest<I>::get_snap_limit() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   librados::ObjectReadOperation op;
   cls_client::snapshot_get_limit_start(&op);
@@ -51,7 +90,7 @@ void SetImageStateRequest<I>::get_snap_limit() {
 template <typename I>
 void SetImageStateRequest<I>::handle_get_snap_limit(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r == 0) {
     auto it = m_bl.cbegin();
@@ -65,7 +104,7 @@ void SetImageStateRequest<I>::handle_get_snap_limit(int r) {
     return;
   }
 
-  ldout(cct, 20) << "snap_limit=" << m_image_state.snap_limit << dendl;
+  ldout(cct, 15) << "snap_limit=" << m_image_state.snap_limit << dendl;
 
   get_metadata();
 }
@@ -73,7 +112,7 @@ void SetImageStateRequest<I>::handle_get_snap_limit(int r) {
 template <typename I>
 void SetImageStateRequest<I>::get_metadata() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
      SetImageStateRequest<I>,
@@ -87,7 +126,7 @@ void SetImageStateRequest<I>::get_metadata() {
 template <typename I>
 void SetImageStateRequest<I>::handle_get_metadata(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to retrieve metadata: " << cpp_strerror(r)
@@ -99,7 +138,6 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
 
-    m_image_state.name = m_image_ctx->name;
     m_image_state.features =
       m_image_ctx->features & ~RBD_FEATURES_IMPLICIT_ENABLE;
 
@@ -122,7 +160,7 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
 template <typename I>
 void SetImageStateRequest<I>::write_image_state() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     SetImageStateRequest<I>,
@@ -136,7 +174,7 @@ void SetImageStateRequest<I>::write_image_state() {
 template <typename I>
 void SetImageStateRequest<I>::handle_write_image_state(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to write image state: " << cpp_strerror(r)
@@ -151,7 +189,7 @@ void SetImageStateRequest<I>::handle_write_image_state(int r) {
 template <typename I>
 void SetImageStateRequest<I>::update_primary_snapshot() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_snapshot_set_copy_progress(
@@ -169,7 +207,7 @@ void SetImageStateRequest<I>::update_primary_snapshot() {
 template <typename I>
 void SetImageStateRequest<I>::handle_update_primary_snapshot(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to update primary snapshot: " << cpp_strerror(r)
@@ -184,7 +222,7 @@ void SetImageStateRequest<I>::handle_update_primary_snapshot(int r) {
 template <typename I>
 void SetImageStateRequest<I>::finish(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

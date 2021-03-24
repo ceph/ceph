@@ -32,11 +32,6 @@
 [submodule "src/isa-l"]
 	path = src/isa-l
 	url = https://github.com/ceph/isa-l
-[submodule "src/lua"]
-	path = src/lua
-	url = https://github.com/ceph/lua.git
-	branch = lua-5.3-ceph
-	ignore = dirty
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
@@ -70,3 +65,19 @@
 [submodule "s3select"]
 	path = src/s3select
 	url = https://github.com/ceph/s3select.git
+[submodule "src/jaegertracing/opentracing-cpp"]
+	path = src/jaegertracing/opentracing-cpp
+	url = https://github.com/opentracing/opentracing-cpp.git
+	branch = v1.6.0
+[submodule "src/jaegertracing/jaeger-client-cpp"]
+	path = src/jaegertracing/jaeger-client-cpp
+	url = https://github.com/ceph/jaeger-client-cpp.git
+	branch = hunter-disabled
+[submodule "src/jaegertracing/thrift"]
+	path = src/jaegertracing/thrift
+	url = https://github.com/apache/thrift.git
+	branch = 0.13.0
+[submodule "src/libkmip"]
+	path = src/libkmip
+	url = https://github.com/ceph/libkmip
+	branch = ceph-master

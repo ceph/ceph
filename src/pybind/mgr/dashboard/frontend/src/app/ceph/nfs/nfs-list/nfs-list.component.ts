@@ -4,24 +4,24 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
-import { NfsService } from '../../../shared/api/nfs.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permission } from '../../../shared/models/permissions';
-import { Task } from '../../../shared/models/task';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { NfsService } from '~/app/shared/api/nfs.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Permission } from '~/app/shared/models/permissions';
+import { Task } from '~/app/shared/models/task';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-nfs-list',

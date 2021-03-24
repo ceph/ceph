@@ -34,17 +34,19 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       uint64_t journal_tid, uint64_t new_journal_tid) override;
 
-  void prepare_copyup(
+  int prepare_copyup(
       uint64_t object_no,
       SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override;
+
+  using typename Dispatcher<ImageCtxT, ObjectDispatcherInterface>::C_LayerIterator;
+
+  using typename Dispatcher<ImageCtxT, ObjectDispatcherInterface>::C_InvalidateCache;
 
 protected:
   bool send_dispatch(ObjectDispatchInterface* object_dispatch,
                      ObjectDispatchSpec* object_dispatch_spec) override;
 
 private:
-  struct C_LayerIterator;
-  struct C_InvalidateCache;
   struct C_ResetExistenceCache;
   struct SendVisitor;
 

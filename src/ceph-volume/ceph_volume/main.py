@@ -121,6 +121,7 @@ Ceph Conf: {ceph_path}
         parser.add_argument(
             '--log-level',
             default='debug',
+            choices=['debug', 'info', 'warning', 'error', 'critical'],
             help='Change the file log level (defaults to debug)',
         )
         parser.add_argument(
@@ -132,7 +133,7 @@ Ceph Conf: {ceph_path}
         conf.log_path = args.log_path
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
-        log.setup()
+        log.setup(log_level=args.log_level)
         log.setup_console()
         logger = logging.getLogger(__name__)
         logger.info("Running command: ceph-volume %s %s", " ".join(main_args), " ".join(subcommand_args))

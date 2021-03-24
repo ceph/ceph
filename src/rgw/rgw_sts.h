@@ -15,11 +15,11 @@ protected:
   static constexpr uint64_t MIN_POLICY_SIZE = 1;
   static constexpr uint64_t MAX_POLICY_SIZE = 2048;
   static constexpr uint64_t DEFAULT_DURATION_IN_SECS = 3600;
-  static constexpr uint64_t MIN_DURATION_IN_SECS = 900;
   static constexpr uint64_t MIN_ROLE_ARN_SIZE = 2;
   static constexpr uint64_t MAX_ROLE_ARN_SIZE = 2048;
   static constexpr uint64_t MIN_ROLE_SESSION_SIZE = 2;
   static constexpr uint64_t MAX_ROLE_SESSION_SIZE = 64;
+  uint64_t MIN_DURATION_IN_SECS;
   uint64_t MAX_DURATION_IN_SECS;
   CephContext* cct;
   uint64_t duration;
@@ -112,7 +112,7 @@ class AssumedRoleUser {
   string assumeRoleId;
 public:
   int generateAssumedRoleUser( CephContext* cct,
-                                rgw::sal::RGWRadosStore *store,
+                                rgw::sal::RGWStore *store,
                                 const string& roleId,
                                 const rgw::ARN& roleArn,
                                 const string& roleSessionName);
@@ -134,11 +134,12 @@ struct SessionToken {
   uint32_t acct_type;
   string role_session;
   std::vector<string> token_claims;
+  string issued_at;
 
   SessionToken() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(access_key_id, bl);
     encode(secret_access_key, bl);
     encode(expiration, bl);
@@ -151,11 +152,12 @@ struct SessionToken {
     encode(acct_type, bl);
     encode(role_session, bl);
     encode(token_claims, bl);
+    encode(issued_at, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(access_key_id, bl);
     decode(secret_access_key, bl);
     decode(expiration, bl);
@@ -171,6 +173,9 @@ struct SessionToken {
     }
     if (struct_v >= 3) {
       decode(token_claims, bl);
+    }
+    if (struct_v >= 4) {
+      decode(issued_at, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -220,19 +225,20 @@ using AssumeRoleWithWebIdentityResponse = struct AssumeRoleWithWebIdentityRespon
 
 class STSService {
   CephContext* cct;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   rgw_user user_id;
   RGWRole role;
   rgw::auth::Identity* identity;
-  int storeARN(string& arn);
+  int storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y);
 public:
   STSService() = default;
-  STSService(CephContext* cct, rgw::sal::RGWRadosStore *store, rgw_user user_id, rgw::auth::Identity* identity) : cct(cct), store(store), user_id(user_id), identity(identity) {}
-  std::tuple<int, RGWRole> getRoleInfo(const string& arn);
-  AssumeRoleResponse assumeRole(AssumeRoleRequest& req);
+  STSService(CephContext* cct, rgw::sal::RGWStore *store, rgw_user user_id,
+	     rgw::auth::Identity* identity)
+    : cct(cct), store(store), user_id(user_id), identity(identity) {}
+  std::tuple<int, RGWRole> getRoleInfo(const DoutPrefixProvider *dpp, const string& arn, optional_yield y);
+  AssumeRoleResponse assumeRole(const DoutPrefixProvider *dpp, AssumeRoleRequest& req, optional_yield y);
   GetSessionTokenResponse getSessionToken(GetSessionTokenRequest& req);
   AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req);
 };
 }
 #endif /* CEPH_RGW_STS_H */
-

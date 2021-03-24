@@ -3,6 +3,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "include/rados.h"
 #include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -47,11 +48,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
   uint8_t v = 4;
-  if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
-    v = 1;
-  } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-    v = 3;
-  }
+  assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
   encode(num_pg_active, bl);
@@ -60,16 +57,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(pg_pool_sum, bl, features);
   encode(pg_sum, bl, features);
   encode(osd_sum, bl, features);
-  if (v >= 2) {
-    encode(num_pg_by_state, bl);
-  } else {
-    uint32_t n = num_pg_by_state.size();
-    encode(n, bl);
-    for (auto p : num_pg_by_state) {
-      encode((int32_t)p.first, bl);
-      encode(p.second, bl);
-    }
-  }
+  encode(num_pg_by_state, bl);
   encode(num_pg_by_osd, bl);
   encode(num_pg_by_pool, bl);
   encode(osd_last_seq, bl);
@@ -78,18 +66,15 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(pg_sum_delta, bl, features);
   encode(stamp_delta, bl);
   encode(avail_space_by_rule, bl);
-  if (struct_v >= 3) {
-    encode(purged_snaps, bl);
-  }
-  if (struct_v >= 4) {
-    encode(osd_sum_by_class, bl, features);
-  }
+  encode(purged_snaps, bl);
+  encode(osd_sum_by_class, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(4, p);
+  assert(struct_v >= 4);
   decode(num_pg, p);
   decode(num_pg_active, p);
   decode(num_pg_unknown, p);
@@ -97,16 +82,7 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(pg_pool_sum, p);
   decode(pg_sum, p);
   decode(osd_sum, p);
-  if (struct_v >= 2) {
-    decode(num_pg_by_state, p);
-  } else {
-    map<int32_t, int32_t> nps;
-    decode(nps, p);
-    num_pg_by_state.clear();
-    for (auto i : nps) {
-      num_pg_by_state[i.first] = i.second;
-    }
-  }
+  decode(num_pg_by_state, p);
   decode(num_pg_by_osd, p);
   decode(num_pg_by_pool, p);
   decode(osd_last_seq, p);
@@ -115,12 +91,8 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(pg_sum_delta, p);
   decode(stamp_delta, p);
   decode(avail_space_by_rule, p);
-  if (struct_v >= 3) {
-    decode(purged_snaps, p);
-  }
-  if (struct_v >= 4) {
-    decode(osd_sum_by_class, p);
-  }
+  decode(purged_snaps, p);
+  decode(osd_sum_by_class, p);
   DECODE_FINISH(p);
 }
 
@@ -761,28 +733,28 @@ void PGMapDigest::dump_pool_stats_full(
     f->open_array_section("pools");
   } else {
     tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("ID", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("ID", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("PGS", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("STORED", TextTable::RIGHT, TextTable::RIGHT);
     if (verbose) {
-      tbl.define_column("(DATA)", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("(OMAP)", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("(DATA)", TextTable::RIGHT, TextTable::RIGHT);
+      tbl.define_column("(OMAP)", TextTable::RIGHT, TextTable::RIGHT);
     }
-    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("OBJECTS", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
     if (verbose) {
-      tbl.define_column("(DATA)", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("(OMAP)", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("(DATA)", TextTable::RIGHT, TextTable::RIGHT);
+      tbl.define_column("(OMAP)", TextTable::RIGHT, TextTable::RIGHT);
     }
-    tbl.define_column("%USED", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("MAX AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("%USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("MAX AVAIL", TextTable::RIGHT, TextTable::RIGHT);
 
     if (verbose) {
-      tbl.define_column("QUOTA OBJECTS", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("QUOTA BYTES", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("DIRTY", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("USED COMPR", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("UNDER COMPR", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("QUOTA OBJECTS", TextTable::RIGHT, TextTable::RIGHT);
+      tbl.define_column("QUOTA BYTES", TextTable::RIGHT, TextTable::RIGHT);
+      tbl.define_column("DIRTY", TextTable::RIGHT, TextTable::RIGHT);
+      tbl.define_column("USED COMPR", TextTable::RIGHT, TextTable::RIGHT);
+      tbl.define_column("UNDER COMPR", TextTable::RIGHT, TextTable::RIGHT);
     }
   }
 
@@ -873,11 +845,11 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     ceph_assert(ss != nullptr);
     TextTable tbl;
     tbl.define_column("CLASS", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("RAW USED", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("%RAW USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("AVAIL", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("RAW USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("%RAW USED", TextTable::RIGHT, TextTable::RIGHT);
 
 
     for (auto& i : osd_sum_by_class) {
@@ -1618,6 +1590,16 @@ void PGMap::dump_osd_stats(ceph::Formatter *f, bool with_net) const
     f->open_object_section("osd_stat");
     f->dump_int("osd", q->first);
     q->second.dump(f, with_net);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("pool_statfs");
+  for (auto& p : pool_statfs) {
+    f->open_object_section("item");
+    f->dump_int("poolid", p.first.first);
+    f->dump_int("osd", p.first.second);
+    p.second.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -2571,11 +2553,11 @@ void PGMap::get_health_checks(
             ss << " for " << utimespan_str(dur);
           }
           ss << ", current state " << pg_state_string(pg_info.state)
-             << ", last acting " << pg_info.acting;
+             << ", last acting " << pg_vector_string(pg_info.acting);
         } else {
           ss << "pg " << pg_id << " is "
              << pg_state_string(pg_info.state);
-          ss << ", acting " << pg_info.acting;
+          ss << ", acting " << pg_vector_string(pg_info.acting);
           if (pg_info.stats.sum.num_objects_unfound) {
             ss << ", " << pg_info.stats.sum.num_objects_unfound
                << " unfound";
@@ -3261,8 +3243,8 @@ void PGMap::get_health_checks(
 	summary += " reporting legacy (not per-pool) BlueStore stats";
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
 	summary += " have dangerous mismatch between BlueStore block device and free list sizes";
-      } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
-	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
+      } else if (asum.first == "BLUESTORE_NO_PER_PG_OMAP") {
+	summary += " reporting legacy (not per-pg) BlueStore omap usage stats";
       } else if (asum.first == "BLUESTORE_SPURIOUS_READ_ERRORS") {
         summary += " have spurious read errors";
       }
@@ -3487,7 +3469,7 @@ int process_pg_map_command(
   string omap_stats_note =
       "\n* NOTE: Omap statistics are gathered during deep scrub and "
       "may be inaccurate soon afterwards depending on utilization. See "
-      "http://docs.ceph.com/docs/master/dev/placement-group/#omap-statistics "
+      "http://docs.ceph.com/en/latest/dev/placement-group/#omap-statistics "
       "for further details.\n";
   bool omap_stats_note_required = false;
 
@@ -3496,13 +3478,11 @@ int process_pg_map_command(
   if (prefix == "pg dump_json") {
     vector<string> v;
     v.push_back(string("all"));
-    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   } else if (prefix == "pg dump_pools_json") {
     vector<string> v;
     v.push_back(string("pools"));
-    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   } else if (prefix == "pg ls-by-primary") {
@@ -4011,7 +3991,7 @@ int reweight::by_utilization(
   // but aggressively adjust weights up whenever possible.
   const double underload_util = average_util;
 
-  const unsigned max_change = (unsigned)(max_changef * (double)0x10000);
+  const unsigned max_change = (unsigned)(max_changef * (double)CEPH_OSD_IN);
 
   ostringstream oss;
   if (f) {
@@ -4088,13 +4068,13 @@ int reweight::by_utilization(
       if (f) {
 	f->open_object_section("osd");
 	f->dump_int("osd", p.first);
-	f->dump_float("weight", (float)weight / (float)0x10000);
-	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
+	f->dump_float("weight", (float)weight / (float)CEPH_OSD_IN);
+	f->dump_float("new_weight", (float)new_weight / (float)CEPH_OSD_IN);
 	f->close_section();
       } else {
         oss << "osd." << p.first << " weight "
-            << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000 << "\n";
+            << (float)weight / (float)CEPH_OSD_IN << " -> "
+            << (float)new_weight / (float)CEPH_OSD_IN << "\n";
       }
       if (++num_changed >= max_osds)
 	break;
@@ -4103,13 +4083,13 @@ int reweight::by_utilization(
       // assign a higher weight.. if we can.
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       new_weight = std::min(new_weight, weight + max_change);
-      if (new_weight > 0x10000)
-	new_weight = 0x10000;
+      if (new_weight > CEPH_OSD_IN)
+	new_weight = CEPH_OSD_IN;
       if (new_weight > weight) {
 	new_weights->insert({p.first, new_weight});
         oss << "osd." << p.first << " weight "
-            << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000 << "\n";
+            << (float)weight / (float)CEPH_OSD_IN << " -> "
+            << (float)new_weight / (float)CEPH_OSD_IN << "\n";
 	if (++num_changed >= max_osds)
 	  break;
       }

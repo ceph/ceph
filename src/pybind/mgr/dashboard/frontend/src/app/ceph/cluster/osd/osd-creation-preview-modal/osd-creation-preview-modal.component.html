@@ -11,9 +11,9 @@
         <pre>{{ driveGroups | json}}</pre>
       </div>
       <div class="modal-footer">
-        <cd-submit-button (submitAction)="onSubmit()"
-                          [form]="formGroup">{{ action | titlecase }}</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"></cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="formGroup"
+                              [submitText]="action | titlecase"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

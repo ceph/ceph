@@ -10,9 +10,8 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/Types.h"
 
-#if defined(WITH_RBD_RWL)
 #include "librbd/cache/pwl/AbstractWriteLog.h"
-#endif // WITH_RBD_RWL
+#include "librbd/plugin/Api.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
@@ -30,31 +29,29 @@ template <typename I>
 ShutdownRequest<I>* ShutdownRequest<I>::create(
     I &image_ctx,
     AbstractWriteLog<I> *image_cache,
+    plugin::Api<I>& plugin_api,
     Context *on_finish) {
-  return new ShutdownRequest(image_ctx, image_cache, on_finish);
+  return new ShutdownRequest(image_ctx, image_cache, plugin_api, on_finish);
 }
 
 template <typename I>
 ShutdownRequest<I>::ShutdownRequest(
     I &image_ctx,
     AbstractWriteLog<I> *image_cache,
+    plugin::Api<I>& plugin_api,
     Context *on_finish)
   : m_image_ctx(image_ctx),
     m_image_cache(image_cache),
+    m_plugin_api(plugin_api),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_error_result(0) {
 }
 
 template <typename I>
 void ShutdownRequest<I>::send() {
-#if defined(WITH_RBD_RWL)
   send_shutdown_image_cache();
-#else
-  finish();
-#endif // WITH_RBD_RWL
 }
 
-#if defined(WITH_RBD_RWL)
 template <typename I>
 void ShutdownRequest<I>::send_shutdown_image_cache() {
   CephContext *cct = m_image_ctx.cct;
@@ -135,7 +132,7 @@ void ShutdownRequest<I>::send_remove_image_cache_state() {
   Context *ctx = create_context_callback<klass, &klass::handle_remove_image_cache_state>(
     this);
   std::shared_lock owner_lock{m_image_ctx.owner_lock};
-  m_image_ctx.operations->execute_metadata_remove(IMAGE_CACHE_STATE, ctx);
+  m_plugin_api.execute_image_metadata_remove(&m_image_ctx, IMAGE_CACHE_STATE, ctx);
 }
 
 template <typename I>
@@ -150,8 +147,6 @@ void ShutdownRequest<I>::handle_remove_image_cache_state(int r) {
   }
   finish();
 }
-
-#endif // WITH_RBD_RWL
 
 template <typename I>
 void ShutdownRequest<I>::finish() {

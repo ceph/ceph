@@ -10,8 +10,9 @@ namespace librbd {
 
 class ImageCtx;
 
-namespace cache {
+namespace plugin { template <typename> struct Api; }
 
+namespace cache {
 namespace pwl {
 
 template<typename>
@@ -26,6 +27,7 @@ public:
   static ShutdownRequest* create(
       ImageCtxT &image_ctx,
       AbstractWriteLog<ImageCtxT> *image_cache,
+      plugin::Api<ImageCtxT>& plugin_api,
       Context *on_finish);
 
   void send();
@@ -56,10 +58,12 @@ private:
 
   ShutdownRequest(ImageCtxT &image_ctx,
     AbstractWriteLog<ImageCtxT> *image_cache,
+    plugin::Api<ImageCtxT>& plugin_api,
     Context *on_finish);
 
   ImageCtxT &m_image_ctx;
   AbstractWriteLog<ImageCtxT> *m_image_cache;
+  plugin::Api<ImageCtxT>& m_plugin_api;
   Context *m_on_finish;
 
   int m_error_result;

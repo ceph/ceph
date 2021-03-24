@@ -17,6 +17,14 @@
 #include "gtest/gtest.h"
 #include "include/buffer.h"
 
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
+
 #include <errno.h>
 #include <iostream>
 #include <stdlib.h>
@@ -47,10 +55,14 @@ static std::string get_temp_dir()
     ostringstream oss;
     oss << tmpdir << "/confutils_test_dir." << rand() << "." << getpid();
     umask(022);
-    int res = mkdir(oss.str().c_str(), 01777);
-    if (res) {
-      cerr << "failed to create temp directory '" << temp_dir << "'" << std::endl;
-      return "";
+    if (!fs::exists(oss.str())) {
+      std::error_code ec;
+      if (!fs::create_directory(oss.str(), ec)) {
+        cerr << "failed to create temp directory '" << temp_dir << "' "
+             << ec.message() << std::endl;
+        return "";
+      }
+      fs::permissions(oss.str(), fs::perms::sticky_bit | fs::perms::all);
     }
     temp_dir = oss.str();
   }
@@ -231,17 +243,6 @@ const char illegal_conf4[] = "\
         keyring = osd_keyring          ; osd's keyring\n\
 ";
 
-#if BOOST_VERSION < 107200
-// Boost::spirit > 1.72 asserts on chars that are not < 0x7f
-// unicode config file
-const char unicode_config_1[] = "\
-[global]\n\
-        log file =           \x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae     \n\
-        pid file =           foo-bar\n\
-[osd0]\n\
-";
-#endif
-
 const char override_config_1[] = "\
 [global]\n\
         log file =           global_log\n\
@@ -365,15 +366,6 @@ TEST(ConfUtils, ReadFiles2) {
   ASSERT_EQ(val, "/quite/a/long/path/for/a/log/file");
   ASSERT_EQ(cf1.read("global", "pid file", val), 0);
   ASSERT_EQ(val, "spork");
-
-#if BOOST_VERSION < 107200
-  std::string unicode_config_1f(next_tempfile(unicode_config_1));
-  ConfFile cf2;
-  ASSERT_EQ(cf2.parse_file(unicode_config_1f.c_str(), &err), 0);
-  ASSERT_EQ(err.tellp(), 0U);
-  ASSERT_EQ(cf2.read("global", "log file", val), 0);
-  ASSERT_EQ(val, "\x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae");
-#endif
 }
 
 TEST(ConfUtils, IllegalFiles) {

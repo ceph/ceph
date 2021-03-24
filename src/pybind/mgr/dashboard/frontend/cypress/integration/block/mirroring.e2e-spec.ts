@@ -7,6 +7,7 @@ describe('Mirroring page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     mirroring.navigateTo();
   });
 

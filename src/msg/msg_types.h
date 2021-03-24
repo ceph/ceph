@@ -77,7 +77,7 @@ public:
   bool is_mgr() const { return type() == TYPE_MGR; }
 
   operator ceph_entity_name() const {
-    ceph_entity_name n = { _type, init_le64(_num) };
+    ceph_entity_name n = { _type, ceph_le64(_num) };
     return n;
   }
 

@@ -425,7 +425,31 @@ function TEST_recovery_pool_priority() {
 
     ceph osd pool set $pool1 size 2
     ceph osd pool set $pool2 size 2
-    sleep 10
+
+    # Wait for both PGs to be in recovering state
+    ceph pg dump pgs
+
+    # Wait for recovery to start
+    set -o pipefail
+    count=0
+    while(true)
+    do
+      if test $(ceph --format json pg dump pgs |
+	      jq '.pg_stats | .[] | .state | contains("recovering")' | grep -c true) == "2"
+      then
+        break
+      fi
+      sleep 2
+      if test "$count" -eq "10"
+      then
+        echo "Recovery never started on both PGs"
+        return 1
+      fi
+      count=$(expr $count + 1)
+    done
+    set +o pipefail
+    ceph pg dump pgs
+
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/dump.${chk_osd1_1}.out
     echo osd.${chk_osd1_1}
     cat $dir/dump.${chk_osd1_1}.out

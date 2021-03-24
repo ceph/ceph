@@ -50,7 +50,7 @@ class Protocol {
   virtual void print(std::ostream&) const = 0;
  protected:
   Protocol(proto_t type,
-           ChainedDispatchersRef& dispatcher,
+           ChainedDispatchers& dispatchers,
            SocketConnection& conn);
 
   virtual void trigger_close() = 0;
@@ -71,7 +71,7 @@ class Protocol {
   SocketRef socket;
 
  protected:
-  ChainedDispatchersRef dispatcher;
+  ChainedDispatchers& dispatchers;
   SocketConnection &conn;
 
   AuthConnectionMetaRef auth_meta;

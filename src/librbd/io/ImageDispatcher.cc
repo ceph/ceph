@@ -6,8 +6,6 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Utils.h"
-#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatch.h"
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -197,6 +195,17 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
 }
 
 template <typename I>
+void ImageDispatcher<I>::invalidate_cache(Context* on_finish) {
+  auto image_ctx = this->m_image_ctx;
+  auto cct = image_ctx->cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = new C_InvalidateCache(
+      this, IMAGE_DISPATCH_LAYER_NONE, on_finish);
+  ctx->complete(0);
+}
+
+template <typename I>
 void ImageDispatcher<I>::shut_down(Context* on_finish) {
   // TODO ensure all IOs are executed via a dispatcher
   // ensure read-ahead / copy-on-read ops are finished since they are
@@ -208,11 +217,11 @@ void ImageDispatcher<I>::shut_down(Context* on_finish) {
       delete async_op;
       on_finish->complete(0);
     });
-  on_finish = new LambdaContext([this, async_op, on_finish](int r) {
-      async_op->start_op(*this->m_image_ctx);
-      async_op->flush(on_finish);
+  on_finish = new LambdaContext([this, on_finish](int r) {
+      Dispatcher<I, ImageDispatcherInterface>::shut_down(on_finish);
     });
-  Dispatcher<I, ImageDispatcherInterface>::shut_down(on_finish);
+  async_op->start_op(*this->m_image_ctx);
+  async_op->flush(on_finish);
 }
 
 template <typename I>
@@ -224,6 +233,11 @@ template <typename I>
 void ImageDispatcher<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
                                          uint64_t burst, uint64_t burst_seconds) {
   m_qos_image_dispatch->apply_qos_limit(flag, limit, burst, burst_seconds);
+}
+
+template <typename I>
+void ImageDispatcher<I>::apply_qos_exclude_ops(uint64_t exclude_ops) {
+  m_qos_image_dispatch->apply_qos_exclude_ops(exclude_ops);
 }
 
 template <typename I>
@@ -249,6 +263,25 @@ void ImageDispatcher<I>::unblock_writes() {
 template <typename I>
 void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
   m_write_block_dispatch->wait_on_writes_unblocked(on_unblocked);
+}
+
+template <typename I>
+void ImageDispatcher<I>::remap_extents(Extents& image_extents,
+                                       ImageExtentsMapType type) {
+  auto loop = [&image_extents, type](auto begin, auto end) {
+      for (auto it = begin; it != end; ++it) {
+        auto& image_dispatch_meta = it->second;
+        auto image_dispatch = image_dispatch_meta.dispatch;
+        image_dispatch->remap_extents(image_extents, type);
+      }
+  };
+
+  std::shared_lock locker{this->m_lock};
+  if (type == IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL) {
+    loop(this->m_dispatches.cbegin(), this->m_dispatches.cend());
+  } else if (type == IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL) {
+    loop(this->m_dispatches.crbegin(), this->m_dispatches.crend());
+  }
 }
 
 template <typename I>

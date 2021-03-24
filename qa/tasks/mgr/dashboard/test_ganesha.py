@@ -3,25 +3,12 @@
 
 from __future__ import absolute_import
 
-
 from .helper import DashboardTestCase, JList, JObj
 
 
 class GaneshaTest(DashboardTestCase):
     CEPHFS = True
     AUTH_ROLES = ['pool-manager', 'ganesha-manager']
-
-    @classmethod
-    def create_pool(cls, name, pg_num, pool_type, application='rbd'):
-        data = {
-            'pool': name,
-            'pg_num': pg_num,
-            'pool_type': pool_type,
-            'application_metadata': [application]
-        }
-        if pool_type == 'erasure':
-            data['flags'] = ['ec_overwrites']
-        cls._task_post("/api/pool", data)
 
     @classmethod
     def setUpClass(cls):
@@ -33,21 +20,23 @@ class GaneshaTest(DashboardTestCase):
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha2', 'create', 'conf-node1'])
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha2', 'create', 'conf-node2'])
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha2', 'create', 'conf-node3'])
-        cls._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace', 'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
+        cls._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace',
+                       'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
 
         # RGW setup
         cls._radosgw_admin_cmd([
             'user', 'create', '--uid', 'admin', '--display-name', 'admin',
             '--system', '--access-key', 'admin', '--secret', 'admin'
         ])
-        cls._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        cls._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+        cls._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
+        cls._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
 
     @classmethod
     def tearDownClass(cls):
         super(GaneshaTest, cls).tearDownClass()
         cls._radosgw_admin_cmd(['user', 'rm', '--uid', 'admin', '--purge-data'])
-        cls._ceph_cmd(['osd', 'pool', 'delete', 'ganesha', 'ganesha', '--yes-i-really-really-mean-it'])
+        cls._ceph_cmd(['osd', 'pool', 'delete', 'ganesha', 'ganesha',
+                       '--yes-i-really-really-mean-it'])
 
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
@@ -68,7 +57,8 @@ class GaneshaTest(DashboardTestCase):
     @classmethod
     def create_export(cls, path, cluster_id, daemons, fsal, sec_label_xattr=None):
         if fsal == 'CEPH':
-            fsal = {"name": "CEPH", "user_id": "admin", "fs_name": None, "sec_label_xattr": sec_label_xattr}
+            fsal = {"name": "CEPH", "user_id": "admin", "fs_name": None,
+                    "sec_label_xattr": sec_label_xattr}
             pseudo = "/cephfs{}".format(path)
         else:
             fsal = {"name": "RGW", "rgw_user_id": "admin"}
@@ -107,7 +97,8 @@ class GaneshaTest(DashboardTestCase):
         exports = self._get("/api/nfs-ganesha/export")
         self.assertEqual(len(exports), 0)
 
-        data = self.create_export(cephfs_path, 'cluster1', ['node1', 'node2'], 'CEPH', "security.selinux")
+        data = self.create_export(cephfs_path, 'cluster1', ['node1', 'node2'], 'CEPH',
+                                  "security.selinux")
 
         exports = self._get("/api/nfs-ganesha/export")
         self.assertEqual(len(exports), 1)
@@ -166,7 +157,8 @@ class GaneshaTest(DashboardTestCase):
                        "setting or deploy an NFS-Ganesha cluster with the Orchestrator."),
                       data['message'])
 
-        self._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace', 'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
+        self._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace',
+                        'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
 
     def test_valid_status(self):
         data = self._get('/api/nfs-ganesha/status')

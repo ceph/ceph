@@ -5,23 +5,11 @@ from __future__ import absolute_import
 
 import time
 
-from .helper import DashboardTestCase, JObj, JLeaf, JList
+from .helper import DashboardTestCase, JLeaf, JList, JObj
 
 
 class RbdTest(DashboardTestCase):
     AUTH_ROLES = ['pool-manager', 'block-manager', 'cluster-manager']
-
-    @classmethod
-    def create_pool(cls, name, pg_num, pool_type, application='rbd'):
-        data = {
-            'pool': name,
-            'pg_num': pg_num,
-            'pool_type': pool_type,
-            'application_metadata': [application]
-        }
-        if pool_type == 'erasure':
-            data['flags'] = ['ec_overwrites']
-        cls._task_post("/api/pool", data)
 
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
@@ -178,7 +166,7 @@ class RbdTest(DashboardTestCase):
         img = self._get('/api/block/image/{}%2F{}'.format(pool, name))
 
         self._task_post("/api/block/image/{}%2F{}/move_trash".format(pool, name),
-                       {'delay': delay})
+                        {'delay': delay})
         self.assertStatus([200, 201])
         return img['id']
 
@@ -203,8 +191,8 @@ class RbdTest(DashboardTestCase):
     def get_trash(cls, pool, image_id):
         trash = cls._get('/api/block/image/trash/?pool_name={}'.format(pool))
         if isinstance(trash, list):
-            for pool in trash:
-                for image in pool['value']:
+            for trash_pool in trash:
+                for image in trash_pool['value']:
                     if image['id'] == image_id:
                         return image
 
@@ -403,7 +391,8 @@ class RbdTest(DashboardTestCase):
         res = self.create_image('rbd', None, 'test_rbd_twice', 10240)
         self.assertStatus(400)
         self.assertEqual(res, {"code": '17', 'status': 400, "component": "rbd",
-                               "detail": "[errno 17] RBD image already exists (error creating image)",
+                               "detail": "[errno 17] RBD image already exists (error creating "
+                                         "image)",
                                'task': {'name': 'rbd/create',
                                         'metadata': {'pool_name': 'rbd', 'namespace': None,
                                                      'image_name': 'test_rbd_twice'}}})
@@ -756,6 +745,7 @@ class RbdTest(DashboardTestCase):
 
     def test_clone_format_version(self):
         config_name = 'rbd_default_clone_format'
+
         def _get_config_by_name(conf_name):
             data = self._get('/api/cluster_conf/{}'.format(conf_name))
             if 'value' in data:
@@ -774,9 +764,9 @@ class RbdTest(DashboardTestCase):
             'value': value
         })
         self.wait_until_equal(
-                    lambda: _get_config_by_name(config_name),
-                    value,
-                    timeout=60)
+            lambda: _get_config_by_name(config_name),
+            value,
+            timeout=60)
         clone_format_version = self._get('/api/block/image/clone_format_version')
         self.assertEqual(clone_format_version, 1)
         self.assertStatus(200)
@@ -788,9 +778,9 @@ class RbdTest(DashboardTestCase):
             'value': value
         })
         self.wait_until_equal(
-                    lambda: _get_config_by_name(config_name),
-                    value,
-                    timeout=60)
+            lambda: _get_config_by_name(config_name),
+            value,
+            timeout=60)
         clone_format_version = self._get('/api/block/image/clone_format_version')
         self.assertEqual(clone_format_version, 2)
         self.assertStatus(200)
@@ -801,9 +791,9 @@ class RbdTest(DashboardTestCase):
             'value': value
         })
         self.wait_until_equal(
-                    lambda: _get_config_by_name(config_name),
-                    None,
-                    timeout=60)
+            lambda: _get_config_by_name(config_name),
+            None,
+            timeout=60)
 
     def test_image_with_namespace(self):
         self.create_namespace('rbd', 'ns')
@@ -825,67 +815,67 @@ class RbdTest(DashboardTestCase):
         self.remove_namespace('rbd', 'ns')
 
     def test_move_image_to_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd')
+        img_id = self.create_image_in_trash('rbd', 'test_rbd')
 
         self.get_image('rbd', None, 'test_rbd')
         self.assertStatus(404)
 
         time.sleep(1)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNotNone(image)
 
-        self.remove_trash('rbd', id)
+        self.remove_trash('rbd', img_id)
 
     def test_list_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 0)
         data = self._get('/api/block/image/trash/?pool_name={}'.format('rbd'))
         self.assertStatus(200)
         self.assertIsInstance(data, list)
         self.assertIsNotNone(data)
 
-        self.remove_trash('rbd', id)
+        self.remove_trash('rbd', img_id)
         self.assertStatus(204)
 
     def test_restore_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd')
+        img_id = self.create_image_in_trash('rbd', 'test_rbd')
 
-        self.restore_trash('rbd', None, id, 'test_rbd')
+        self.restore_trash('rbd', None, img_id, 'test_rbd')
 
         self.get_image('rbd', None, 'test_rbd')
         self.assertStatus(200)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNone(image)
 
         self.remove_image('rbd', None, 'test_rbd')
 
     def test_remove_expired_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
-        self.remove_trash('rbd', id, False)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        self.remove_trash('rbd', img_id, False)
         self.assertStatus(204)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNone(image)
 
     def test_remove_not_expired_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
-        self.remove_trash('rbd', id, False)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', img_id, False)
         self.assertStatus(400)
 
         time.sleep(1)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNotNone(image)
 
-        self.remove_trash('rbd', id, True)
+        self.remove_trash('rbd', img_id, True)
 
     def test_remove_not_expired_trash_with_force(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
-        self.remove_trash('rbd', id, True)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', img_id, True)
         self.assertStatus(204)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNone(image)
 
     def test_purge_trash(self):

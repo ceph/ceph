@@ -24,7 +24,7 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 
-class MForward : public Message {
+class MForward final : public Message {
 public:
   uint64_t tid;
   uint8_t client_type;
@@ -55,7 +55,7 @@ public:
     msg = (PaxosServiceMessage*)m->get();
   }
 private:
-  ~MForward() override {
+  ~MForward() final {
     if (msg) {
       // message was unclaimed
       msg->put();

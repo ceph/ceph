@@ -26,7 +26,7 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(rgw::sal::RGWRadosStore*& store, std::map<std::string, std::string>& service_map_meta,
+RGWRealmReloader::RGWRealmReloader(rgw::sal::RGWStore*& store, std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends)
   : store(store),
     service_map_meta(service_map_meta),
@@ -101,10 +101,13 @@ void RGWRealmReloader::reload()
     reload_scheduled = nullptr;
   }
 
+  const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
+
   while (!store) {
     // recreate and initialize a new store
     store =
-      RGWStoreManager::get_storage(cct,
+      RGWStoreManager::get_storage(&dp, cct,
+				   "rados",
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
 				   cct->_conf->rgw_enable_quota_threads,
@@ -114,7 +117,7 @@ void RGWRealmReloader::reload()
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
-    rgw::sal::RGWRadosStore* store_cleanup = nullptr;
+    rgw::sal::RGWStore* store_cleanup = nullptr;
     {
       std::unique_lock lock{mutex};
 
@@ -151,7 +154,7 @@ void RGWRealmReloader::reload()
     }
   }
 
-  int r = store->getRados()->register_to_service_map("rgw", service_map_meta);
+  int r = store->register_to_service_map("rgw", service_map_meta);
   if (r < 0) {
     lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
@@ -161,9 +164,9 @@ void RGWRealmReloader::reload()
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
   ldout(cct, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, store->svc()->zone->get_zonegroup());
+  rgw_rest_init(cct, store->get_zone()->get_zonegroup());
   ldout(cct, 1) << " - usage subsystem init" << dendl;
-  rgw_log_usage_init(cct, store->getRados());
+  rgw_log_usage_init(cct, store);
 
   ldout(cct, 1) << "Resuming frontends with new realm configuration." << dendl;
 

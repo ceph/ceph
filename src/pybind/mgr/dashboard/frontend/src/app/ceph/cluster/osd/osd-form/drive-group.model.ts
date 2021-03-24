@@ -1,7 +1,7 @@
 import _ from 'lodash';
 
-import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
-import { FormatterService } from '../../../../shared/services/formatter.service';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 export class DriveGroup {
   spec: Object;

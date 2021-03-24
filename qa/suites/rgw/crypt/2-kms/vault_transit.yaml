@@ -5,7 +5,7 @@ overrides:
         rgw crypt s3 kms backend: vault
         rgw crypt vault auth: token
         rgw crypt vault secret engine: transit
-        rgw crypt vault prefix: /v1/transit/export/encryption-key/
+        rgw crypt vault prefix: /v1/transit/
   rgw:
     client.0:
       use-vault-role: client.0

@@ -19,18 +19,20 @@
 #include "crimson/osd/object_context.h"
 
 #include "crimson/common/errorator.h"
+#include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
 
-#include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/exceptions.h"
 
 #include "messages/MOSDOp.h"
 
+class PG;
 class PGLSFilter;
 class OSDOp;
 
@@ -55,6 +57,33 @@ class OpsExecuter {
     crimson::ct_error::not_connected,
     crimson::ct_error::timed_out>;
 
+  using call_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, call_errorator>;
+  using read_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, read_errorator>;
+  using write_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, write_ertr>;
+  using get_attr_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, get_attr_errorator>;
+  using watch_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, watch_errorator>;
+
+  template <typename Errorator, typename T = void>
+  using interruptible_errorated_future =
+    ::crimson::interruptible::interruptible_errorated_future<
+      IOInterruptCondition, Errorator, T>;
+  using interruptor =
+    ::crimson::interruptible::interruptor<IOInterruptCondition>;
+  template <typename T = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      IOInterruptCondition, T>;
+
 public:
   // because OpsExecuter is pretty heavy-weight object we want to ensure
   // it's not copied nor even moved by accident. Performance is the sole
@@ -69,6 +98,9 @@ public:
     get_attr_errorator,
     watch_errorator,
     PGBackend::stat_errorator>;
+  using osd_op_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, osd_op_errorator>;
 
 private:
   // an operation can be divided into two stages: main and effect-exposing
@@ -85,9 +117,9 @@ private:
 
   ObjectContextRef obc;
   const OpInfo& op_info;
-  PG& pg;
+  const pg_pool_t& pool_info;  // for the sake of the ObjClass API
   PGBackend& backend;
-  Ref<MOSDOp> msg;
+  const MOSDOp& msg;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -106,31 +138,31 @@ private:
     MainFunc&& main_func,
     EffectFunc&& effect_func);
 
-  call_errorator::future<> do_op_call(class OSDOp& osd_op);
-  watch_errorator::future<> do_op_watch(
+  call_ierrorator::future<> do_op_call(class OSDOp& osd_op);
+  watch_ierrorator::future<> do_op_watch(
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);
-  watch_errorator::future<> do_op_watch_subop_watch(
+  watch_ierrorator::future<> do_op_watch_subop_watch(
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);
-  watch_errorator::future<> do_op_watch_subop_reconnect(
+  watch_ierrorator::future<> do_op_watch_subop_reconnect(
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);
-  watch_errorator::future<> do_op_watch_subop_unwatch(
+  watch_ierrorator::future<> do_op_watch_subop_unwatch(
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);
-  watch_errorator::future<> do_op_watch_subop_ping(
+  watch_ierrorator::future<> do_op_watch_subop_ping(
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);
-  watch_errorator::future<> do_op_notify(
+  watch_ierrorator::future<> do_op_notify(
     class OSDOp& osd_op,
     const class ObjectState& os);
-  watch_errorator::future<> do_op_notify_ack(
+  watch_ierrorator::future<> do_op_notify_ack(
     class OSDOp& osd_op,
     const class ObjectState& os);
 
@@ -166,21 +198,26 @@ private:
   }
 
 public:
-  OpsExecuter(ObjectContextRef obc, const OpInfo& op_info, PG& pg, Ref<MOSDOp> msg)
+  OpsExecuter(ObjectContextRef obc,
+              const OpInfo& op_info,
+              const pg_pool_t& pool_info,
+              PGBackend& backend,
+              const MOSDOp& msg)
     : obc(std::move(obc)),
       op_info(op_info),
-      pg(pg),
-      backend(pg.get_backend()),
-      msg(std::move(msg)) {
+      pool_info(pool_info),
+      backend(backend),
+      msg(msg) {
   }
 
-  osd_op_errorator::future<> execute_op(class OSDOp& osd_op);
+  interruptible_errorated_future<osd_op_errorator>
+  execute_op(class OSDOp& osd_op);
 
-  template <typename Func, typename MutFunc>
-  osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
+  template <typename MutFunc>
+  osd_op_ierrorator::future<> flush_changes(MutFunc&& mut_func) &&;
 
   const auto& get_message() const {
-    return *msg;
+    return msg;
   }
 
   size_t get_processed_rw_ops_num() const {
@@ -188,7 +225,11 @@ public:
   }
 
   uint32_t get_pool_stripe_width() const {
-    return pg.get_pool().info.get_stripe_width();
+    return pool_info.get_stripe_width();
+  }
+
+  bool has_seen_write() const {
+    return num_write > 0;
   }
 };
 
@@ -227,39 +268,27 @@ auto OpsExecuter::with_effect_on_obc(
   return std::forward<MainFunc>(main_func)(ctx_ref);
 }
 
-template <typename Func,
-          typename MutFunc>
-OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
-  Func&& func,
+template <typename MutFunc>
+OpsExecuter::osd_op_ierrorator::future<> OpsExecuter::flush_changes(
   MutFunc&& mut_func) &&
 {
-  assert(obc);
   const bool want_mutate = !txn.empty();
+  // osd_op_params are instantiated by every wr-like operation.
+  assert(osd_op_params || !want_mutate);
+  assert(obc);
+  auto maybe_mutated = interruptor::make_interruptible(osd_op_errorator::now());
   if (want_mutate) {
-    // osd_op_params are instantiated by every wr-like operation.
-    assert(osd_op_params);
-    osd_op_params->req = std::move(msg);
-    osd_op_params->at_version = pg.next_version();
-    osd_op_params->pg_trim_to = pg.get_pg_trim_to();
-    osd_op_params->min_last_complete_ondisk = pg.get_min_last_complete_ondisk();
-    osd_op_params->last_complete = pg.get_info().last_complete;
-    if (user_modify) {
-      osd_op_params->user_at_version = osd_op_params->at_version.version;
-    }
+    maybe_mutated = std::forward<MutFunc>(mut_func)(std::move(txn),
+                                                    std::move(obc),
+                                                    std::move(*osd_op_params),
+                                                    user_modify);
   }
   if (__builtin_expect(op_effects.empty(), true)) {
-    return want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
-                                                         std::move(obc),
-                                                         std::move(*osd_op_params))
-                       : std::forward<Func>(func)(std::move(obc));
+    return maybe_mutated;
   } else {
-    return (want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
-                                                          std::move(obc),
-                                                          std::move(*osd_op_params))
-                        : std::forward<Func>(func)(std::move(obc))
-    ).safe_then([this] {
+    return maybe_mutated.safe_then_interruptible([this] {
       // let's do the cleaning of `op_effects` in destructor
-      return crimson::do_for_each(op_effects, [] (auto& op_effect) {
+      return interruptor::do_for_each(op_effects, [] (auto& op_effect) {
         return op_effect->execute();
       });
     });
@@ -268,12 +297,17 @@ OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
 
 // PgOpsExecuter -- a class for executing ops targeting a certain PG.
 class PgOpsExecuter {
+  template <typename T = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      IOInterruptCondition, T>;
+
 public:
   PgOpsExecuter(const PG& pg, const MOSDOp& msg)
     : pg(pg), nspace(msg.get_hobj().nspace) {
   }
 
-  seastar::future<> execute_op(class OSDOp& osd_op);
+  interruptible_future<> execute_op(class OSDOp& osd_op);
 
 private:
   const PG& pg;

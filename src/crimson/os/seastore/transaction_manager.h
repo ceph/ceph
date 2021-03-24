@@ -10,6 +10,7 @@
 #include <functional>
 
 #include <boost/intrusive_ptr.hpp>
+#include <boost/iterator/counting_iterator.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include <seastar/core/future.hh>
@@ -29,6 +30,26 @@
 namespace crimson::os::seastore {
 class Journal;
 
+template <typename F>
+auto repeat_eagain(F &&f) {
+  return seastar::do_with(
+    std::forward<F>(f),
+    [](auto &f) {
+      return crimson::do_until(
+	[&f] {
+	  return std::invoke(f
+	  ).safe_then([] {
+	    return true;
+	  }).handle_error(
+	    [](const crimson::ct_error::eagain &e) {
+	      return seastar::make_ready_future<bool>(false);
+	    },
+	    crimson::ct_error::pass_further_all{}
+	  );
+	});
+    });
+}
+
 /**
  * TransactionManager
  *
@@ -37,12 +58,14 @@ class Journal;
  */
 class TransactionManager : public SegmentCleaner::ExtentCallbackInterface {
 public:
+  using base_ertr = Cache::base_ertr;
+
   TransactionManager(
     SegmentManager &segment_manager,
-    SegmentCleaner &segment_cleaner,
-    Journal &journal,
-    Cache &cache,
-    LBAManager &lba_manager);
+    SegmentCleanerRef segment_cleaner,
+    JournalRef journal,
+    CacheRef cache,
+    LBAManagerRef lba_manager);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = crimson::errorator<
@@ -75,7 +98,8 @@ public:
   /**
    * Read extents corresponding to specified lba range
    */
-  using read_extent_ertr = SegmentManager::read_ertr;
+  using read_extent_ertr = LBAManager::get_mapping_ertr::extend_ertr<
+    SegmentManager::read_ertr>;
   template <typename T>
   using read_extent_ret = read_extent_ertr::future<lextent_list_t<T>>;
   template <typename T>
@@ -90,7 +114,7 @@ public:
     std::unique_ptr<lba_pin_list_t> pin_list =
       std::make_unique<lba_pin_list_t>();
     auto &pin_list_ref = *pin_list;
-    return lba_manager.get_mapping(
+    return lba_manager->get_mapping(
       t, offset, length
     ).safe_then([this, &t, &pin_list_ref, &ret_ref](auto pins) {
       crimson::get_logger(ceph_subsys_filestore).debug(
@@ -105,14 +129,19 @@ public:
 	    "read_extents: get_extent {}~{}",
 	    pin->get_paddr(),
 	    pin->get_length());
-	  return cache.get_extent<T>(
+	  return cache->get_extent<T>(
 	    t,
 	    pin->get_paddr(),
 	    pin->get_length()
-	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable {
+	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable
+		      -> read_extent_ertr::future<> {
 	    if (!ref->has_pin()) {
-	      ref->set_pin(std::move(pin));
-	      lba_manager.add_pin(ref->get_pin());
+	      if (pin->has_been_invalidated() || ref->has_been_invalidated()) {
+		return crimson::ct_error::eagain::make();
+	      } else {
+		ref->set_pin(std::move(pin));
+		lba_manager->add_pin(ref->get_pin());
+	      }
 	    }
 	    ret_ref.push_back(std::make_pair(ref->get_laddr(), ref));
 	    crimson::get_logger(ceph_subsys_filestore).debug(
@@ -131,7 +160,7 @@ public:
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
     auto &logger = crimson::get_logger(ceph_subsys_filestore);
-    auto ret = cache.duplicate_for_write(
+    auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
     if (!ret->has_pin()) {
@@ -176,13 +205,19 @@ public:
     Transaction &t,
     laddr_t offset);
 
+  /// remove refcount for list of offset
+  using refs_ret = ref_ertr::future<std::vector<unsigned>>;
+  refs_ret dec_ref(
+    Transaction &t,
+    std::vector<laddr_t> offsets);
+
   /**
    * alloc_extent
    *
    * Allocates a new block of type T with the minimum lba range of size len
    * greater than hint.
    */
-  using alloc_extent_ertr = SegmentManager::read_ertr;
+  using alloc_extent_ertr = LBAManager::alloc_extent_ertr;
   template <typename T>
   using alloc_extent_ret = alloc_extent_ertr::future<TCachedExtentRef<T>>;
   template <typename T>
@@ -190,10 +225,10 @@ public:
     Transaction &t,
     laddr_t hint,
     extent_len_t len) {
-    auto ext = cache.alloc_new_extent<T>(
+    auto ext = cache->alloc_new_extent<T>(
       t,
       len);
-    return lba_manager.alloc_extent(
+    return lba_manager->alloc_extent(
       t,
       hint,
       len,
@@ -203,6 +238,35 @@ public:
       return alloc_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
+  }
+
+  /* alloc_extents
+   *
+   * allocates more than one new blocks of type T.
+   */
+   using alloc_extents_ertr = alloc_extent_ertr;
+   template<class T>
+   alloc_extents_ertr::future<std::vector<TCachedExtentRef<T>>>
+   alloc_extents(
+     Transaction &t,
+     laddr_t hint,
+     extent_len_t len,
+     int num) {
+     return seastar::do_with(std::vector<TCachedExtentRef<T>>(),
+       [this, &t, hint, len, num] (auto &extents) {
+       return crimson::do_for_each(
+                       boost::make_counting_iterator(0),
+                       boost::make_counting_iterator(num),
+         [this, &t, len, hint, &extents] (auto i) {
+         return alloc_extent<T>(t, hint, len).safe_then(
+           [&extents](auto &&node) {
+           extents.push_back(node);
+         });
+       }).safe_then([&extents] {
+         return alloc_extents_ertr::make_ready_future
+                <std::vector<TCachedExtentRef<T>>>(std::move(extents));
+       });
+     });
   }
 
   /**
@@ -235,19 +299,73 @@ public:
     laddr_t laddr,
     segment_off_t len) final;
 
+  using scan_extents_cursor =
+    SegmentCleaner::ExtentCallbackInterface::scan_extents_cursor;
+  using scan_extents_ertr =
+    SegmentCleaner::ExtentCallbackInterface::scan_extents_ertr;
   using scan_extents_ret =
     SegmentCleaner::ExtentCallbackInterface::scan_extents_ret;
   scan_extents_ret scan_extents(
-    paddr_t addr,
+    scan_extents_cursor &cursor,
     extent_len_t bytes_to_read) final {
-    return journal.scan_extents(addr, bytes_to_read);
+    return journal->scan_extents(cursor, bytes_to_read);
   }
 
   using release_segment_ret =
     SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
   release_segment_ret release_segment(
-    segment_id_t id) {
+    segment_id_t id) final {
     return segment_manager.release(id);
+  }
+
+  /**
+   * read_onode_root
+   *
+   * Get onode-tree root logical address
+   */
+  using read_onode_root_ertr = base_ertr;
+  using read_onode_root_ret = read_onode_root_ertr::future<laddr_t>;
+  read_onode_root_ret read_onode_root(Transaction &t) {
+    return cache->get_root(t).safe_then([](auto croot) {
+      laddr_t ret = croot->get_root().onode_root;
+      return ret;
+    });
+  }
+
+  /**
+   * write_onode_root
+   *
+   * Write onode-tree root logical address, must be called after read.
+   */
+  void write_onode_root(Transaction &t, laddr_t addr) {
+    auto croot = cache->get_root_fast(t);
+    croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
+    croot->get_root().onode_root = addr;
+  }
+
+  /**
+   * read_collection_root
+   *
+   * Get collection root addr
+   */
+  using read_collection_root_ertr = base_ertr;
+  using read_collection_root_ret = read_collection_root_ertr::future<
+    coll_root_t>;
+  read_collection_root_ret read_collection_root(Transaction &t) {
+    return cache->get_root(t).safe_then([](auto croot) {
+      return croot->get_root().collection_root.get();
+    });
+  }
+
+  /**
+   * write_collection_root
+   *
+   * Update collection root addr
+   */
+  void write_collection_root(Transaction &t, coll_root_t cmroot) {
+    auto croot = cache->get_root_fast(t);
+    croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
+    croot->get_root().collection_root.update(cmroot);
   }
 
   ~TransactionManager();
@@ -256,10 +374,22 @@ private:
   friend class Transaction;
 
   SegmentManager &segment_manager;
-  SegmentCleaner &segment_cleaner;
-  Cache &cache;
-  LBAManager &lba_manager;
-  Journal &journal;
+  SegmentCleanerRef segment_cleaner;
+  CacheRef cache;
+  LBAManagerRef lba_manager;
+  JournalRef journal;
+
+  WritePipeline write_pipeline;
+
+public:
+  // Testing interfaces
+  auto get_segment_cleaner() {
+    return segment_cleaner.get();
+  }
+
+  auto get_lba_manager() {
+    return lba_manager.get();
+  }
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 

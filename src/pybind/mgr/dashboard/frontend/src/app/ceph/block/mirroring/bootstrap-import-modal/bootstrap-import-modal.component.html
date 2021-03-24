@@ -87,13 +87,9 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button i18n
-                          [form]="importBootstrapForm"
-                          (submitAction)="import()">Import</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Close"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="import()"
+                              [form]="importBootstrapForm"
+                              [submitText]="actionLabels.SUBMIT"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

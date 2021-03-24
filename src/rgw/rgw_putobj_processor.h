@@ -21,6 +21,7 @@
 #include "services/svc_rados.h"
 #include "services/svc_tier_rados.h"
 #include "rgw_sal.h"
+#include "rgw_obj_manifest.h"
 
 namespace rgw {
 
@@ -74,59 +75,18 @@ class HeadObjectProcessor : public ObjectProcessor {
 };
 
 
-using RawObjSet = std::set<rgw_raw_obj>;
-
-// a data sink that writes to rados objects and deletes them on cancelation
-class RadosWriter : public DataProcessor {
-  Aio *const aio;
-  rgw::sal::RGWRadosStore *const store;
-  rgw::sal::RGWBucket* bucket;
-  RGWObjectCtx& obj_ctx;
-  const rgw_obj head_obj;
-  RGWSI_RADOS::Obj stripe_obj; // current stripe object
-  RawObjSet written; // set of written objects for deletion
-  const DoutPrefixProvider *dpp;
-  optional_yield y;
-
- public:
-  RadosWriter(Aio *aio, rgw::sal::RGWRadosStore *store,
-	      rgw::sal::RGWBucket* bucket,
-              RGWObjectCtx& obj_ctx, const rgw_obj& head_obj,
-              const DoutPrefixProvider *dpp, optional_yield y)
-    : aio(aio), store(store), bucket(bucket),
-      obj_ctx(obj_ctx), head_obj(head_obj), dpp(dpp), y(y)
-  {}
-  ~RadosWriter();
-
-  // change the current stripe object
-  int set_stripe_obj(const rgw_raw_obj& obj);
-
-  // write the data at the given offset of the current stripe object
-  int process(bufferlist&& data, uint64_t stripe_offset) override;
-
-  // write the data as an exclusive create and wait for it to complete
-  int write_exclusive(const bufferlist& data);
-
-  int drain();
-
-  // when the operation completes successfully, clear the set of written objects
-  // so they aren't deleted on destruction
-  void clear_written() { written.clear(); }
-
-};
-
 // a rados object processor that stripes according to RGWObjManifest
 class ManifestObjectProcessor : public HeadObjectProcessor,
                                 public StripeGenerator {
  protected:
-  rgw::sal::RGWRadosStore *const store;
+  rgw::sal::RGWStore *const store;
   rgw::sal::RGWBucket* bucket;
   rgw_placement_rule tail_placement_rule;
   rgw_user owner;
   RGWObjectCtx& obj_ctx;
-  rgw_obj head_obj;
+  std::unique_ptr<rgw::sal::RGWObject> head_obj;
 
-  RadosWriter writer;
+  std::unique_ptr<rgw::sal::Writer> writer;
   RGWObjManifest manifest;
   RGWObjManifest::generator manifest_gen;
   ChunkProcessor chunk;
@@ -137,18 +97,20 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   int next(uint64_t offset, uint64_t *stripe_size) override;
 
  public:
-  ManifestObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
+  ManifestObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
 			  rgw::sal::RGWBucket* bucket,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
-                          rgw_obj& head_obj,
+                          std::unique_ptr<rgw::sal::RGWObject> _head_obj,
                           const DoutPrefixProvider* dpp, optional_yield y)
     : HeadObjectProcessor(0),
       store(store), bucket(bucket),
       owner(owner),
-      obj_ctx(obj_ctx), head_obj(head_obj),
-      writer(aio, store, bucket, obj_ctx, head_obj, dpp, y),
-      chunk(&writer, 0), stripe(&chunk, this, 0), dpp(dpp) {
+      obj_ctx(obj_ctx), head_obj(std::move(_head_obj)),
+      dpp(dpp) {
+	writer = store->get_writer(aio, bucket, obj_ctx, head_obj->clone(), dpp, y);
+	chunk = ChunkProcessor(writer.get(), 0);
+	stripe = StripeProcessor(&chunk, this, 0);
         if (ptail_placement_rule) {
           tail_placement_rule = *ptail_placement_rule;
         }
@@ -177,16 +139,17 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
-  AtomicObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
+  AtomicObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
 			rgw::sal::RGWBucket* bucket,
                         const rgw_placement_rule *ptail_placement_rule,
                         const rgw_user& owner,
-                        RGWObjectCtx& obj_ctx, rgw_obj head_obj,
+                        RGWObjectCtx& obj_ctx,
+			std::unique_ptr<rgw::sal::RGWObject> _head_obj,
                         std::optional<uint64_t> olh_epoch,
                         const std::string& unique_tag,
                         const DoutPrefixProvider *dpp, optional_yield y)
     : ManifestObjectProcessor(aio, store, bucket, ptail_placement_rule,
-                              owner, obj_ctx, head_obj, dpp, y),
+                              owner, obj_ctx, std::move(_head_obj), dpp, y),
       olh_epoch(olh_epoch), unique_tag(unique_tag)
   {}
 
@@ -209,7 +172,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 // part's head is written with an exclusive create to detect racing uploads of
 // the same part/upload id, which are restarted with a random oid prefix
 class MultipartObjectProcessor : public ManifestObjectProcessor {
-  const rgw_obj target_obj; // target multipart object
+  std::unique_ptr<rgw::sal::RGWObject> target_obj; // target multipart object
   const std::string upload_id;
   const int part_num;
   const std::string part_num_str;
@@ -221,19 +184,19 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // prepare the head stripe and manifest
   int prepare_head();
  public:
-  MultipartObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
+  MultipartObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
 			   rgw::sal::RGWBucket* bucket,
                            const rgw_placement_rule *ptail_placement_rule,
                            const rgw_user& owner, RGWObjectCtx& obj_ctx,
-                           rgw_obj head_obj,
+                           std::unique_ptr<rgw::sal::RGWObject> _head_obj,
                            const std::string& upload_id, uint64_t part_num,
                            const std::string& part_num_str,
                            const DoutPrefixProvider *dpp, optional_yield y)
     : ManifestObjectProcessor(aio, store, bucket, ptail_placement_rule,
-                              owner, obj_ctx, head_obj, dpp, y),
-      target_obj(head_obj), upload_id(upload_id),
+                              owner, obj_ctx, std::move(_head_obj), dpp, y),
+      target_obj(head_obj->clone()), upload_id(upload_id),
       part_num(part_num), part_num_str(part_num_str),
-      mp(head_obj.key.name, upload_id)
+      mp(head_obj->get_name(), upload_id)
   {}
 
   // prepare a multipart manifest
@@ -264,16 +227,16 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
 
   public:
-    AppendObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
+    AppendObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
 			  rgw::sal::RGWBucket* bucket,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
-			  rgw_obj head_obj,
+			  std::unique_ptr<rgw::sal::RGWObject> _head_obj,
                           const std::string& unique_tag, uint64_t position,
                           uint64_t *cur_accounted_size,
                           const DoutPrefixProvider *dpp, optional_yield y)
             : ManifestObjectProcessor(aio, store, bucket, ptail_placement_rule,
-                                      owner, obj_ctx, head_obj, dpp, y),
+                                      owner, obj_ctx, std::move(_head_obj), dpp, y),
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
               unique_tag(unique_tag), cur_manifest(nullptr)
     {}

@@ -29,7 +29,8 @@ class TestMultiFS(CapsHelper):
         self.run_cluster_cmd(f'auth rm {self.client_name}')
 
         self.fs1 = self.fs
-        self.fs1.enable_multifs()
+        # After Octopus is EOL, we can remove this setting:
+        self.fs1.set_allow_multifs()
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
         # we'll reassign caps to client.1 so that it can operate with cephfs2
@@ -237,7 +238,8 @@ class TestClientsWithoutAuth(TestMultiFS):
         #  laggy" to "permission denied".
         self.kernel_errmsgs = ('permission denied', 'no mds server is up or '
                                'the cluster is laggy', 'no such file or '
-                               'directory')
+                               'directory',
+                               'input/output error')
 
         # TODO: When MON and OSD caps are assigned for a Ceph FS to a
         # client but MDS caps are not, ceph-fuse prints "operation not

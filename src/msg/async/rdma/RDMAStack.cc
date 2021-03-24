@@ -23,7 +23,6 @@
 #include "include/compat.h"
 #include "common/Cycles.h"
 #include "common/deleter.h"
-#include "common/Tub.h"
 #include "RDMAStack.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -778,18 +777,11 @@ void RDMAWorker::handle_pending_message()
   dispatcher->notify_pending_workers();
 }
 
-RDMAStack::RDMAStack(CephContext *cct, const std::string &t)
-  : NetworkStack(cct, t), ib(std::make_shared<Infiniband>(cct)),
+RDMAStack::RDMAStack(CephContext *cct)
+  : NetworkStack(cct), ib(std::make_shared<Infiniband>(cct)),
     rdma_dispatcher(std::make_shared<RDMADispatcher>(cct, ib))
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
-
-  unsigned num = get_num_worker();
-  for (unsigned i = 0; i < num; ++i) {
-    RDMAWorker* w = dynamic_cast<RDMAWorker*>(get_worker(i));
-    w->set_dispatcher(rdma_dispatcher);
-    w->set_ib(ib);
-  }
   ldout(cct, 20) << " creating RDMAStack:" << this << " with dispatcher:" << rdma_dispatcher.get() << dendl;
 }
 
@@ -800,10 +792,17 @@ RDMAStack::~RDMAStack()
   }
 }
 
-void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)
+Worker* RDMAStack::create_worker(CephContext *c, unsigned worker_id)
 {
-  threads.resize(i+1);
-  threads[i] = std::thread(func);
+  auto w = new RDMAWorker(c, worker_id);
+  w->set_dispatcher(rdma_dispatcher);
+  w->set_ib(ib);
+  return w;
+}
+
+void RDMAStack::spawn_worker(std::function<void ()> &&func)
+{
+  threads.emplace_back(std::move(func));
 }
 
 void RDMAStack::join_worker(unsigned i)

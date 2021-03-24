@@ -32,7 +32,7 @@
 #include "osd/osd_types.h"
 
 
-class MOSDPing : public Message {
+class MOSDPing final : public Message {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;
@@ -89,7 +89,7 @@ private:
     : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MOSDPing() override {}
+  ~MOSDPing() final {}
 
 public:
   void decode_payload() override {

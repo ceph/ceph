@@ -105,7 +105,7 @@ public:
   int get_reshard_status(const RGWBucketInfo& bucket_info,
                          std::list<cls_rgw_bucket_instance_entry> *status);
 
-  int handle_overwrite(const RGWBucketInfo& info,
+  int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info) override;
 
   int open_bucket_index_shard(const RGWBucketInfo& bucket_info,

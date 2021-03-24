@@ -61,13 +61,10 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-  ceph_release_t require_osd_release;
   std::map<int, std::vector<MessageRef>> message_map;
 
-  BufferedRecoveryMessages(ceph_release_t r)
-    : require_osd_release(r) {
-  }
-  BufferedRecoveryMessages(ceph_release_t r, PeeringCtx &ctx);
+  BufferedRecoveryMessages() = default;
+  BufferedRecoveryMessages(PeeringCtx &ctx);
 
   void accept_buffered_messages(BufferedRecoveryMessages &m) {
     for (auto &[target, ls] : m.message_map) {
@@ -190,8 +187,7 @@ struct PeeringCtx : BufferedRecoveryMessages {
   ObjectStore::Transaction transaction;
   HBHandle* handle = nullptr;
 
-  PeeringCtx(ceph_release_t r)
-    : BufferedRecoveryMessages(r) {}
+  PeeringCtx() = default;
 
   PeeringCtx(const PeeringCtx &) = delete;
   PeeringCtx &operator=(const PeeringCtx &) = delete;
@@ -263,7 +259,7 @@ public:
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
     /// Notify that a scrub has been requested
-    virtual void scrub_requested(bool deep, bool repair, bool need_auto = false) = 0;
+    virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 
     /// Return current snap_trimq size
     virtual uint64_t get_snap_trimq_size() const = 0;
@@ -377,7 +373,8 @@ public:
     /// Notification of removal complete, t must be populated to complete removal
     virtual void on_removal(ObjectStore::Transaction &t) = 0;
     /// Perform incremental removal work
-    virtual void do_delete_work(ObjectStore::Transaction &t) = 0;
+    virtual std::pair<ghobject_t, bool> do_delete_work(
+      ObjectStore::Transaction &t, ghobject_t _next) = 0;
 
     // ======================= PG Merge =========================
     virtual void clear_ready_to_merge() = 0;
@@ -501,12 +498,12 @@ public:
   };
 
   struct RequestScrub : boost::statechart::event<RequestScrub> {
-    bool deep;
-    bool repair;
-    explicit RequestScrub(bool d, bool r) : deep(d), repair(r) {}
+    scrub_level_t deep;
+    scrub_type_t repair;
+    explicit RequestScrub(bool d, bool r) : deep(scrub_level_t(d)), repair(scrub_type_t(r)) {}
     void print(std::ostream *out) const {
-      *out << "RequestScrub(" << (deep ? "deep" : "shallow")
-	   << (repair ? " repair" : "");
+      *out << "RequestScrub(" << ((deep==scrub_level_t::deep) ? "deep" : "shallow")
+	   << ((repair==scrub_type_t::do_repair) ? " repair)" : ")");
     }
   };
 
@@ -1242,6 +1239,7 @@ public:
       boost::statechart::custom_reaction< DeleteSome >,
       boost::statechart::transition<DeleteInterrupted, WaitDeleteReserved>
       > reactions;
+    ghobject_t next;
     explicit Deleting(my_context ctx);
     boost::statechart::result react(const DeleteSome &evt);
     void exit();
@@ -1823,10 +1821,15 @@ public:
    *
    * Returns updated pg_stat_t if stats have changed since
    * pg_stats_publish adding in unstable_stats.
+   *
+   * @param pg_stats_publish the latest pg_stat possessed by caller
+   * @param unstable_stats additional stats which should be included in the
+   *        returned stats
+   * @return the up to date stats if it is different from the specfied
+   *         @c pg_stats_publish
    */
   std::optional<pg_stat_t> prepare_stats_for_publish(
-    bool pg_stats_publish_valid,
-    const pg_stat_t &pg_stats_publish,
+    const std::optional<pg_stat_t> &pg_stats_publish,
     const object_stat_collection_t &unstable_stats);
 
   /**
@@ -2303,6 +2306,16 @@ public:
     ceph_assert(!is_primary());
     return !pg_log.get_log().has_write_since(
       hoid, get_min_last_complete_ondisk());
+  }
+
+  /**
+   * Returns whether the current acting set is able to go active
+   * and serve writes. It needs to satisfy min_size and any
+   * applicable stretch cluster constraints.
+   */
+  bool acting_set_writeable() {
+    return (acting.size() >= pool.info.min_size) &&
+      (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
   }
 
   /**

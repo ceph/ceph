@@ -102,6 +102,7 @@ bool ParentCacheObjectDispatch<I>::read(
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
                                 m_image_ctx->data_ctx.get_id(),
                                 io_context->read_snap().value_or(CEPH_NOSNAP),
+                                m_image_ctx->layout.object_size,
                                 oid, std::move(ctx));
   return true;
 }

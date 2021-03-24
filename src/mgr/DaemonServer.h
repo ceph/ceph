@@ -45,6 +45,78 @@ class CommandContext;
 struct OSDPerfMetricQuery;
 struct MDSPerfMetricQuery;
 
+
+struct offline_pg_report {
+  set<int> osds;
+  set<pg_t> ok, not_ok, unknown;
+  set<pg_t> ok_become_degraded, ok_become_more_degraded;             // ok
+  set<pg_t> bad_no_pool, bad_already_inactive, bad_become_inactive;  // not ok
+
+  bool ok_to_stop() const {
+    return not_ok.empty() && unknown.empty();
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_bool("ok_to_stop", ok_to_stop());
+    f->open_array_section("osds");
+    for (auto o : osds) {
+      f->dump_int("osd", o);
+    }
+    f->close_section();
+    f->dump_unsigned("num_ok_pgs", ok.size());
+    f->dump_unsigned("num_not_ok_pgs", not_ok.size());
+
+    // ambiguous
+    if (!unknown.empty()) {
+      f->open_array_section("unknown_pgs");
+      for (auto pg : unknown) {
+	f->dump_stream("pg") << pg;
+      }
+      f->close_section();
+    }
+
+    // bad news
+    if (!bad_no_pool.empty()) {
+      f->open_array_section("bad_no_pool_pgs");
+      for (auto pg : bad_no_pool) {
+	f->dump_stream("pg") << pg;
+      }
+      f->close_section();
+    }
+    if (!bad_already_inactive.empty()) {
+      f->open_array_section("bad_already_inactive");
+      for (auto pg : bad_already_inactive) {
+	f->dump_stream("pg") << pg;
+      }
+      f->close_section();
+    }
+    if (!bad_become_inactive.empty()) {
+      f->open_array_section("bad_become_inactive");
+      for (auto pg : bad_become_inactive) {
+	f->dump_stream("pg") << pg;
+      }
+      f->close_section();
+    }
+
+    // informative
+    if (!ok_become_degraded.empty()) {
+      f->open_array_section("ok_become_degraded");
+      for (auto pg : ok_become_degraded) {
+	f->dump_stream("pg") << pg;
+      }
+      f->close_section();
+    }
+    if (!ok_become_more_degraded.empty()) {
+      f->open_array_section("ok_become_more_degraded");
+      for (auto pg : ok_become_more_degraded) {
+	f->dump_stream("pg") << pg;
+      }
+      f->close_section();
+    }
+  }
+};
+
+
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
  * MDSs and OSDs.
@@ -98,6 +170,18 @@ private:
 	      int ret, const std::string& s, const bufferlist& payload);
 
   void _prune_pending_service_map();
+
+  void _check_offlines_pgs(
+    const set<int>& osds,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    offline_pg_report *report);
+  void _maximize_ok_to_stop_set(
+    const set<int>& orig_osds,
+    unsigned max,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    offline_pg_report *report);
 
   utime_t started_at;
   std::atomic<bool> pgmap_ready;

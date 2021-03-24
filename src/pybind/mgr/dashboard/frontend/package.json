@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "license": "MIT",
   "config": {
-    "locale": "en"
+    "locale": "en-US"
   },
   "scripts": {
     "ng": "ng",
-    "start": "npm run env_build && ng serve --host 0.0.0.0",
+    "start": "npm run env_build && ng serve --host 0.0.0.0 --ssl",
     "build": "npm run env_build && ng build --configuration=$npm_package_config_locale",
     "build:localize": "node cd --env --pre && ng build --localize",
     "postbuild:localize": "node cd --res",
@@ -28,7 +28,7 @@
     "lint:prettier": "prettier --list-different \"{src,cypress}/**/*.{ts,scss}\"",
     "lint:html": "htmllint src/app/**/*.html && html-linter --config html-linter.config.json",
     "prelint:tsc": "npm run postinstall",
-    "lint:tsc": "tsc -p src/tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit && tsc -p cypress/tsconfig.json --noEmit",
+    "lint:tsc": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit && tsc -p cypress/tsconfig.json --noEmit",
     "lint:scss": "stylelint '**/*.scss'",
     "lint": "run-p -csl --aggregate-output lint:*",
     "fix:prettier": "prettier --write \"{src,cypress}/**/*.{ts,scss}\"",
@@ -38,14 +38,15 @@
     "fix": "run-p -csl --aggregate-output fix:*",
     "fix:audit": "npx npm-force-resolutions",
     "compodoc": "compodoc",
-    "doc-build": "compodoc -p src/tsconfig.app.json",
-    "doc-serve": "compodoc --port 8444 -s src/tsconfig.app.json",
-    "postinstall": "ngcc --properties es2015 browser module main --async false --first-only --tsconfig './src/tsconfig.app.json'"
+    "doc-build": "compodoc -p tsconfig.app.json",
+    "doc-serve": "compodoc --port 8444 -s tsconfig.app.json",
+    "postinstall": "ngcc --properties es2015 browser module main --async false --first-only --tsconfig 'tsconfig.app.json'"
   },
   "private": true,
   "jest": {
     "moduleNameMapper": {
-      "\\.scss$": "identity-obj-proxy"
+      "\\.scss$": "identity-obj-proxy",
+      "~/(.*)$": "<rootDir>/src/$1"
     },
     "preset": "jest-preset-angular",
     "setupFilesAfterEnv": [
@@ -83,7 +84,6 @@
     "@angular/platform-browser": "10.1.5",
     "@angular/platform-browser-dynamic": "10.1.5",
     "@angular/router": "10.1.5",
-    "@auth0/angular-jwt": "5.0.1",
     "@circlon/angular-tree-component": "10.0.0",
     "@ng-bootstrap/ng-bootstrap": "7.0.0",
     "@swimlane/ngx-datatable": "18.0.0",
@@ -99,6 +99,7 @@
     "ng-block-ui": "3.0.2",
     "ng-click-outside": "7.0.0",
     "ng2-charts": "2.3.0",
+    "ngx-pipe-function": "^1.0.0",
     "ngx-toastr": "13.1.0",
     "rxjs": "6.6.3",
     "simplebar-angular": "2.3.0",

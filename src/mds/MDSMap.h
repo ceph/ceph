@@ -305,6 +305,15 @@ public:
   int get_num_failed_mds() const {
     return failed.size();
   }
+  unsigned get_num_standby_replay_mds() const {
+    unsigned num = 0;
+    for (auto& i : mds_info) {
+      if (i.second.state == MDSMap::STATE_STANDBY_REPLAY) {
+	++num;
+      }
+    }
+    return num;
+  }
   unsigned get_num_mds(int state) const;
   // data pools
   void add_data_pool(int64_t poolid) {
@@ -313,7 +322,7 @@ public:
   int remove_data_pool(int64_t poolid) {
     std::vector<int64_t>::iterator p = std::find(data_pools.begin(), data_pools.end(), poolid);
     if (p == data_pools.end())
-      return -ENOENT;
+      return -CEPHFS_ENOENT;
     data_pools.erase(p);
     return 0;
   }
@@ -331,6 +340,9 @@ public:
   }
   void get_failed_mds_set(std::set<mds_rank_t>& s) const {
     s = failed;
+  }
+  void get_damaged_mds_set(std::set<mds_rank_t>& s) const {
+    s = damaged;
   }
 
   // features
@@ -473,7 +485,10 @@ public:
   // recovery_set.
   bool is_degraded() const;
   bool is_any_failed() const {
-    return failed.size();
+    return !failed.empty();
+  }
+  bool is_any_damaged() const {
+    return !damaged.empty();
   }
   bool is_resolving() const {
     return

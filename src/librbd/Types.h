@@ -115,6 +115,7 @@ struct MigrationInfo {
   std::string pool_namespace;
   std::string image_name;
   std::string image_id;
+  std::string source_spec;
   deep_copy::SnapMap snap_map;
   uint64_t overlap = 0;
   bool flatten = false;
@@ -123,15 +124,16 @@ struct MigrationInfo {
   }
   MigrationInfo(int64_t pool_id, const std::string& pool_namespace,
                 const std::string& image_name, const std::string& image_id,
+                const std::string& source_spec,
                 const deep_copy::SnapMap &snap_map, uint64_t overlap,
                 bool flatten)
     : pool_id(pool_id), pool_namespace(pool_namespace), image_name(image_name),
-      image_id(image_id), snap_map(snap_map), overlap(overlap),
-      flatten(flatten) {
+      image_id(image_id), source_spec(source_spec), snap_map(snap_map),
+      overlap(overlap), flatten(flatten) {
   }
 
   bool empty() const {
-    return pool_id == -1;
+    return (pool_id == -1 && source_spec.empty());
   }
 };
 

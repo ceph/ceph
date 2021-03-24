@@ -5,9 +5,10 @@ function(add_ceph_test test_name test_path)
   add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN})
   if(TARGET ${test_name})
     add_dependencies(tests ${test_name})
+    set_property(TARGET ${test_name}
+      PROPERTY EXCLUDE_FROM_ALL TRUE)
   endif()
-  set_property(TEST
-    ${test_name}
+  set_property(TEST ${test_name}
     PROPERTY ENVIRONMENT 
     CEPH_ROOT=${CMAKE_SOURCE_DIR}
     CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
@@ -18,8 +19,7 @@ function(add_ceph_test test_name test_path)
     PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.3:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
   # none of the tests should take more than 1 hour to complete
-  set_property(TEST
-    ${test_name}
+  set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
 endfunction()
 
@@ -32,6 +32,7 @@ if(WITH_GTEST_PARALLEL)
       SOURCE_DIR "${gtest_parallel_source_dir}"
       GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
       GIT_TAG "master"
+      GIT_SHALLOW TRUE
       CONFIGURE_COMMAND ""
       BUILD_COMMAND ""
       INSTALL_COMMAND "")

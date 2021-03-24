@@ -10,8 +10,6 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
-#include "common/RWLock.h"
-#include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"
@@ -48,10 +46,10 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
-int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id)
+int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
+			    rgw::sal::RGWUser* user, optional_yield y)
 {
   rgw::sal::RGWBucketList user_buckets;
-  rgw::sal::RGWRadosUser user(store, user_id);
 
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
@@ -59,9 +57,9 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
   int ret;
 
   do {
-    ret = user.list_buckets(marker, string(), max_entries, false, user_buckets);
+    ret = user->list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
     if (ret < 0) {
-      ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
     auto& buckets = user_buckets.get_buckets();
@@ -70,24 +68,24 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
 
       auto& bucket = i->second;
 
-      ret = bucket->get_bucket_info(null_yield);
+      ret = bucket->get_bucket_info(dpp, y);
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = bucket->sync_user_stats();
+      ret = bucket->sync_user_stats(y);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      ret = bucket->check_bucket_shards();
+      ret = bucket->check_bucket_shards(dpp);
       if (ret < 0) {
-	ldout(cct, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
+	ldpp_dout(dpp, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }
     }
   } while (user_buckets.is_truncated());
 
-  ret = store->ctl()->user->complete_flush_stats(user.get_user());
+  ret = user->complete_flush_stats(y);
   if (ret < 0) {
     cerr << "ERROR: failed to complete syncing user stats: ret=" << ret << std::endl;
     return ret;
@@ -96,7 +94,11 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
   return 0;
 }
 
-int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>& buckets_usage_map)
+int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
+				   rgw::sal::RGWStore *store,
+				   rgw::sal::RGWUser* user,
+				   map<string, cls_user_bucket_entry>& buckets_usage_map,
+				   optional_yield y)
 {
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
@@ -106,10 +108,9 @@ int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_use
 
   do {
     rgw::sal::RGWBucketList buckets;
-    ret = rgw_read_user_buckets(store, user_id, buckets, marker,
-				string(), max_entries, false);
+    ret = user->list_buckets(dpp, marker, string(), max_entries, false, buckets, y);
     if (ret < 0) {
-      ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
     auto& m = buckets.get_buckets();
@@ -117,9 +118,9 @@ int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_use
       marker = i.first;
 
       auto& bucket_ent = i.second;
-      ret = bucket_ent->read_bucket_stats(null_yield);
+      ret = bucket_ent->read_bucket_stats(dpp, y);
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
       }
       cls_user_bucket_entry entry;
@@ -130,92 +131,6 @@ int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_use
   } while (!done);
 
   return 0;
-}
-
-/**
- * Save the given user information to storage.
- * Returns: 0 on success, -ERR# on failure.
- */
-int rgw_store_user_info(RGWUserCtl *user_ctl,
-                        RGWUserInfo& info,
-                        RGWUserInfo *old_info,
-                        RGWObjVersionTracker *objv_tracker,
-                        real_time mtime,
-                        bool exclusive,
-                        map<string, bufferlist> *pattrs)
-{
-  return user_ctl->store_info(info, null_yield,
-                              RGWUserCtl::PutParams()
-                              .set_old_info(old_info)
-                              .set_objv_tracker(objv_tracker)
-                              .set_mtime(mtime)
-                              .set_exclusive(exclusive)
-                              .set_attrs(pattrs));
-}
-
-/**
- * Given a uid, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
-                             const rgw_user& uid,
-                             RGWUserInfo& info,
-                             RGWObjVersionTracker * const objv_tracker,
-                             real_time * const pmtime,
-                             rgw_cache_entry_info * const cache_info,
-                             map<string, bufferlist> * const pattrs)
-{
-  return user_ctl->get_info_by_uid(uid, &info, null_yield,
-                                   RGWUserCtl::GetParams()
-                                   .set_objv_tracker(objv_tracker)
-                                   .set_mtime(pmtime)
-                                   .set_cache_info(cache_info)
-                                   .set_attrs(pattrs));
-}
-
-/**
- * Given an email, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-int rgw_get_user_info_by_email(RGWUserCtl *user_ctl, string& email, RGWUserInfo& info,
-                               RGWObjVersionTracker *objv_tracker, real_time *pmtime)
-{
-  return user_ctl->get_info_by_email(email, &info, null_yield,
-                                     RGWUserCtl::GetParams()
-                                     .set_objv_tracker(objv_tracker)
-                                     .set_mtime(pmtime));
-}
-
-/**
- * Given an swift username, finds the user_info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
-                                      const string& swift_name,
-                                      RGWUserInfo& info,        /* out */
-                                      RGWObjVersionTracker * const objv_tracker,
-                                      real_time * const pmtime)
-{
-  return user_ctl->get_info_by_swift(swift_name, &info, null_yield,
-                                     RGWUserCtl::GetParams()
-                                     .set_objv_tracker(objv_tracker)
-                                     .set_mtime(pmtime));
-}
-
-/**
- * Given an access key, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
-                                           const std::string& access_key,
-                                           RGWUserInfo& info,
-                                           RGWObjVersionTracker* objv_tracker,
-                                           real_time *pmtime)
-{
-  return user_ctl->get_info_by_access_key(access_key, &info, null_yield,
-                                          RGWUserCtl::GetParams()
-                                          .set_objv_tracker(objv_tracker)
-                                          .set_mtime(pmtime));
 }
 
 static bool char_is_unreserved_url(char c)
@@ -449,7 +364,6 @@ RGWAccessKeyPool::RGWAccessKeyPool(RGWUser* usr)
   user = usr;
 
   store = user->get_store();
-  user_ctl = user->get_user_ctl();
 }
 
 int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
@@ -459,7 +373,7 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
     return -EINVAL;
   }
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     keys_allowed = false;
     return -EACCES;
@@ -471,6 +385,112 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   keys_allowed = true;
 
   return 0;
+}
+
+RGWUserAdminOpState::RGWUserAdminOpState(rgw::sal::RGWStore* store)
+{
+  user = store->get_user(rgw_user(RGW_USER_ANON_ID));
+}
+
+void RGWUserAdminOpState::set_user_id(const rgw_user& id)
+{
+  if (id.empty())
+    return;
+
+  user->get_info().user_id = id;
+}
+
+void RGWUserAdminOpState::set_subuser(std::string& _subuser)
+{
+  if (_subuser.empty())
+    return;
+
+  size_t pos = _subuser.find(":");
+  if (pos != string::npos) {
+    rgw_user tmp_id;
+    tmp_id.from_str(_subuser.substr(0, pos));
+    if (tmp_id.tenant.empty()) {
+      user->get_info().user_id.id = tmp_id.id;
+    } else {
+      user->get_info().user_id = tmp_id;
+    }
+    subuser = _subuser.substr(pos+1);
+  } else {
+    subuser = _subuser;
+  }
+
+  subuser_specified = true;
+}
+
+void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
+{
+  user->get_info() = user_info;
+}
+
+const rgw_user& RGWUserAdminOpState::get_user_id()
+{
+  return user->get_id();
+}
+
+RGWUserInfo& RGWUserAdminOpState::get_user_info()
+{
+  return user->get_info();
+}
+
+map<std::string, RGWAccessKey>* RGWUserAdminOpState::get_swift_keys()
+{
+  return &user->get_info().swift_keys;
+}
+
+map<std::string, RGWAccessKey>* RGWUserAdminOpState::get_access_keys()
+{
+  return &user->get_info().access_keys;
+}
+
+map<std::string, RGWSubUser>* RGWUserAdminOpState::get_subusers()
+{
+  return &user->get_info().subusers;
+}
+
+RGWUserCaps *RGWUserAdminOpState::get_caps_obj()
+{
+  return &user->get_info().caps;
+}
+
+std::string RGWUserAdminOpState::build_default_swift_kid()
+{
+  if (user->get_id().empty() || subuser.empty())
+    return "";
+
+  std::string kid;
+  user->get_id().to_str(kid);
+  kid.append(":");
+  kid.append(subuser);
+
+  return kid;
+}
+
+std::string RGWUserAdminOpState::generate_subuser() {
+  if (user->get_id().empty())
+    return "";
+
+  std::string generated_subuser;
+  user->get_id().to_str(generated_subuser);
+  std::string rand_suffix;
+
+  int sub_buf_size = RAND_SUBUSER_LEN + 1;
+  char sub_buf[RAND_SUBUSER_LEN + 1];
+
+  gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size);
+
+  rand_suffix = sub_buf;
+  if (rand_suffix.empty())
+    return "";
+
+  generated_subuser.append(rand_suffix);
+  subuser = generated_subuser;
+
+  return generated_subuser;
 }
 
 /*
@@ -585,14 +605,15 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 }
 
 // Generate a new random key
-int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state,
+				   optional_yield y, std::string *err_msg)
 {
   std::string id;
   std::string key;
 
   std::pair<std::string, RGWAccessKey> key_pair;
   RGWAccessKey new_key;
-  RGWUserInfo duplicate_check;
+  std::unique_ptr<rgw::sal::RGWUser> duplicate_check;
 
   int key_type = op_state.get_key_type();
   bool gen_access = op_state.will_gen_access();
@@ -615,13 +636,13 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   if (!id.empty()) {
     switch (key_type) {
     case KEY_TYPE_SWIFT:
-      if (rgw_get_user_info_by_swift(user_ctl, id, duplicate_check) >= 0) {
+      if (store->get_user_by_swift(dpp, id, y, &duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing swift key in RGW system:" + id);
         return -ERR_KEY_EXIST;
       }
       break;
     case KEY_TYPE_S3:
-      if (rgw_get_user_info_by_access_key(user_ctl, id, duplicate_check) >= 0) {
+      if (store->get_user_by_access_key(dpp, id, y, &duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing S3 key in RGW system:" + id);
         return -ERR_KEY_EXIST;
       }
@@ -642,7 +663,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
       set_err_msg(err_msg, "empty secret key");
       return -ERR_INVALID_SECRET_KEY;
     }
-  
+
     key = op_state.get_secret_key();
   } else {
     char secret_key_buf[SECRET_KEY_LEN + 1];
@@ -661,7 +682,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
       if (!validate_access_key(id))
         continue;
 
-    } while (!rgw_get_user_info_by_access_key(user_ctl, id, duplicate_check));
+    } while (!store->get_user_by_access_key(dpp, id, y, &duplicate_check));
   }
 
   if (key_type == KEY_TYPE_SWIFT) {
@@ -672,7 +693,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     }
 
     // check that the access key doesn't exist
-    if (rgw_get_user_info_by_swift(user_ctl, id, duplicate_check) >= 0) {
+    if (store->get_user_by_swift(dpp, id, y, &duplicate_check) >= 0) {
       set_err_msg(err_msg, "cannot create existing swift key");
       return -ERR_KEY_EXIST;
     }
@@ -770,8 +791,10 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
   return 0;
 }
 
-int RGWAccessKeyPool::execute_add(RGWUserAdminOpState& op_state,
-         std::string *err_msg, bool defer_user_update)
+int RGWAccessKeyPool::execute_add(const DoutPrefixProvider *dpp, 
+                                  RGWUserAdminOpState& op_state,
+				  std::string *err_msg, bool defer_user_update,
+				  optional_yield y)
 {
   int ret = 0;
 
@@ -784,7 +807,7 @@ int RGWAccessKeyPool::execute_add(RGWUserAdminOpState& op_state,
 
   switch (key_op) {
   case GENERATE_KEY:
-    ret = generate_key(op_state, &subprocess_msg);
+    ret = generate_key(dpp, op_state, y, &subprocess_msg);
     break;
   case MODIFY_KEY:
     ret = modify_key(op_state, &subprocess_msg);
@@ -798,7 +821,7 @@ int RGWAccessKeyPool::execute_add(RGWUserAdminOpState& op_state,
 
   // store the updated info
   if (!defer_user_update)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -806,14 +829,18 @@ int RGWAccessKeyPool::execute_add(RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWAccessKeyPool::add(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWAccessKeyPool::add(const DoutPrefixProvider *dpp, 
+                          RGWUserAdminOpState& op_state, optional_yield y,
+			  std::string *err_msg)
 {
-  return add(op_state, err_msg, false);
+  return add(dpp, op_state, err_msg, false, y);
 }
 
-int RGWAccessKeyPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update)
+int RGWAccessKeyPool::add(const DoutPrefixProvider *dpp, 
+                          RGWUserAdminOpState& op_state, std::string *err_msg,
+			  bool defer_user_update, optional_yield y)
 {
-  int ret; 
+  int ret;
   std::string subprocess_msg;
 
   ret = check_op(op_state, &subprocess_msg);
@@ -822,7 +849,7 @@ int RGWAccessKeyPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, b
     return ret;
   }
 
-  ret = execute_add(op_state, &subprocess_msg, defer_user_update);
+  ret = execute_add(dpp, op_state, &subprocess_msg, defer_user_update, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to add access key, " + subprocess_msg);
     return ret;
@@ -831,7 +858,11 @@ int RGWAccessKeyPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, b
   return 0;
 }
 
-int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update)
+int RGWAccessKeyPool::execute_remove(const DoutPrefixProvider *dpp, 
+                                     RGWUserAdminOpState& op_state,
+				     std::string *err_msg,
+				     bool defer_user_update,
+				     optional_yield y)
 {
   int ret = 0;
 
@@ -864,7 +895,7 @@ int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string 
   keys_map->erase(kiter);
 
   if (!defer_user_update)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -872,12 +903,16 @@ int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string 
   return 0;
 }
 
-int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWAccessKeyPool::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
+			     std::string *err_msg)
 {
-  return remove(op_state, err_msg, false);
+  return remove(dpp, op_state, err_msg, false, y);
 }
 
-int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update)
+int RGWAccessKeyPool::remove(const DoutPrefixProvider *dpp, 
+                             RGWUserAdminOpState& op_state,
+			     std::string *err_msg, bool defer_user_update,
+			     optional_yield y)
 {
   int ret;
 
@@ -889,7 +924,7 @@ int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg
     return ret;
   }
 
-  ret = execute_remove(op_state, &subprocess_msg, defer_user_update);
+  ret = execute_remove(dpp, op_state, &subprocess_msg, defer_user_update, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove access key, " + subprocess_msg);
     return ret;
@@ -899,8 +934,11 @@ int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg
 }
 
 // remove all keys associated with a subuser
-int RGWAccessKeyPool::remove_subuser_keys(RGWUserAdminOpState& op_state,
-        std::string *err_msg, bool defer_user_update)
+int RGWAccessKeyPool::remove_subuser_keys(const DoutPrefixProvider *dpp, 
+                                          RGWUserAdminOpState& op_state,
+					  std::string *err_msg,
+					  bool defer_user_update,
+					  optional_yield y)
 {
   int ret = 0;
 
@@ -945,7 +983,7 @@ int RGWAccessKeyPool::remove_subuser_keys(RGWUserAdminOpState& op_state,
   }
 
   if (!defer_user_update)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -963,7 +1001,6 @@ RGWSubUserPool::RGWSubUserPool(RGWUser *usr)
 
   subusers_allowed = true;
   store = user->get_store();
-  user_ctl = user->get_user_ctl();
 }
 
 int RGWSubUserPool::init(RGWUserAdminOpState& op_state)
@@ -973,7 +1010,7 @@ int RGWSubUserPool::init(RGWUserAdminOpState& op_state)
     return -EINVAL;
   }
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     subusers_allowed = false;
     return -EACCES;
@@ -1045,8 +1082,10 @@ int RGWSubUserPool::check_op(RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWSubUserPool::execute_add(RGWUserAdminOpState& op_state,
-        std::string *err_msg, bool defer_user_update)
+int RGWSubUserPool::execute_add(const DoutPrefixProvider *dpp, 
+                                RGWUserAdminOpState& op_state,
+				std::string *err_msg, bool defer_user_update,
+				optional_yield y)
 {
   int ret = 0;
   std::string subprocess_msg;
@@ -1059,7 +1098,7 @@ int RGWSubUserPool::execute_add(RGWUserAdminOpState& op_state,
 
   // assumes key should be created
   if (op_state.has_key_op()) {
-    ret = user->keys.add(op_state, &subprocess_msg, true);
+    ret = user->keys.add(dpp, op_state, &subprocess_msg, true, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to create subuser key, " + subprocess_msg);
       return ret;
@@ -1078,7 +1117,7 @@ int RGWSubUserPool::execute_add(RGWUserAdminOpState& op_state,
 
   // attempt to save the subuser
   if (!defer_user_update)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -1086,12 +1125,13 @@ int RGWSubUserPool::execute_add(RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWSubUserPool::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
+			std::string *err_msg)
 {
-  return add(op_state, err_msg, false);
+  return add(dpp, op_state, err_msg, false, y);
 }
 
-int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update)
+int RGWSubUserPool::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update, optional_yield y)
 {
   std::string subprocess_msg;
   int ret;
@@ -1106,12 +1146,12 @@ int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
   if (key_type == KEY_TYPE_S3 && op_state.get_access_key().empty()) {
     op_state.set_gen_access();
   }
-  
+
   if (op_state.get_secret_key().empty()) {
     op_state.set_gen_secret();
   }
 
-  ret = execute_add(op_state, &subprocess_msg, defer_user_update);
+  ret = execute_add(dpp, op_state, &subprocess_msg, defer_user_update, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to create subuser, " + subprocess_msg);
     return ret;
@@ -1120,8 +1160,10 @@ int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
   return 0;
 }
 
-int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
-        std::string *err_msg, bool defer_user_update)
+int RGWSubUserPool::execute_remove(const DoutPrefixProvider *dpp, 
+                                   RGWUserAdminOpState& op_state,
+				   std::string *err_msg, bool defer_user_update,
+				   optional_yield y)
 {
   int ret = 0;
   std::string subprocess_msg;
@@ -1140,14 +1182,14 @@ int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
   }
 
   // always purge all associate keys
-  user->keys.remove_subuser_keys(op_state, &subprocess_msg, true);
+  user->keys.remove_subuser_keys(dpp, op_state, &subprocess_msg, true, y);
 
   // remove the subuser from the user info
   subuser_map->erase(siter);
 
   // attempt to save the subuser
   if (!defer_user_update)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -1155,12 +1197,14 @@ int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWSubUserPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWSubUserPool::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
+			   std::string *err_msg)
 {
-  return remove(op_state, err_msg, false);
+  return remove(dpp, op_state, err_msg, false, y);
 }
 
-int RGWSubUserPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update)
+int RGWSubUserPool::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
+			   bool defer_user_update, optional_yield y)
 {
   std::string subprocess_msg;
   int ret;
@@ -1171,7 +1215,7 @@ int RGWSubUserPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
     return ret;
   }
 
-  ret = execute_remove(op_state, &subprocess_msg, defer_user_update);
+  ret = execute_remove(dpp, op_state, &subprocess_msg, defer_user_update, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove subuser, " + subprocess_msg);
     return ret;
@@ -1180,7 +1224,7 @@ int RGWSubUserPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
   return 0;
 }
 
-int RGWSubUserPool::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update)
+int RGWSubUserPool::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update, optional_yield y)
 {
   int ret = 0;
   std::string subprocess_msg;
@@ -1201,7 +1245,7 @@ int RGWSubUserPool::execute_modify(RGWUserAdminOpState& op_state, std::string *e
   subuser = siter->second;
 
   if (op_state.has_key_op()) {
-    ret = user->keys.add(op_state, &subprocess_msg, true);
+    ret = user->keys.add(dpp, op_state, &subprocess_msg, true, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to create subuser keys, " + subprocess_msg);
       return ret;
@@ -1218,7 +1262,7 @@ int RGWSubUserPool::execute_modify(RGWUserAdminOpState& op_state, std::string *e
 
   // attempt to save the subuser
   if (!defer_user_update)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -1226,12 +1270,12 @@ int RGWSubUserPool::execute_modify(RGWUserAdminOpState& op_state, std::string *e
   return 0;
 }
 
-int RGWSubUserPool::modify(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWSubUserPool::modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
 {
-  return RGWSubUserPool::modify(op_state, err_msg, false);
+  return RGWSubUserPool::modify(dpp, op_state, y, err_msg, false);
 }
 
-int RGWSubUserPool::modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_user_update)
+int RGWSubUserPool::modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg, bool defer_user_update)
 {
   std::string subprocess_msg;
   int ret;
@@ -1244,7 +1288,7 @@ int RGWSubUserPool::modify(RGWUserAdminOpState& op_state, std::string *err_msg, 
     return ret;
   }
 
-  ret = execute_modify(op_state, &subprocess_msg, defer_user_update);
+  ret = execute_modify(dpp, op_state, &subprocess_msg, defer_user_update, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to modify subuser, " + subprocess_msg);
     return ret;
@@ -1269,7 +1313,7 @@ int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
     return -EINVAL;
   }
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     caps_allowed = false;
     return -EACCES;
@@ -1286,12 +1330,14 @@ int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
   return 0;
 }
 
-int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUserCapPool::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
+			std::string *err_msg)
 {
-  return add(op_state, err_msg, false);
+  return add(dpp, op_state, err_msg, false, y);
 }
 
-int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save)
+int RGWUserCapPool::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
+			bool defer_save, optional_yield y)
 {
   int ret = 0;
   std::string caps_str = op_state.get_caps();
@@ -1318,7 +1364,7 @@ int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
   }
 
   if (!defer_save)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -1326,12 +1372,14 @@ int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
   return 0;
 }
 
-int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUserCapPool::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
+			   std::string *err_msg)
 {
-  return remove(op_state, err_msg, false);
+  return remove(dpp, op_state, err_msg, false, y);
 }
 
-int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save)
+int RGWUserCapPool::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
+			   bool defer_save, optional_yield y)
 {
   int ret = 0;
 
@@ -1359,7 +1407,7 @@ int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
   }
 
   if (!defer_save)
-    ret = user->update(op_state, err_msg);
+    ret = user->update(dpp, op_state, err_msg, y);
 
   if (ret < 0)
     return ret;
@@ -1372,14 +1420,15 @@ RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
   init_default();
 }
 
-int RGWUser::init(rgw::sal::RGWRadosStore *storage, RGWUserAdminOpState& op_state)
+int RGWUser::init(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *storage,
+		  RGWUserAdminOpState& op_state, optional_yield y)
 {
   init_default();
   int ret = init_storage(storage);
   if (ret < 0)
     return ret;
 
-  ret = init(op_state);
+  ret = init(dpp, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -1395,14 +1444,13 @@ void RGWUser::init_default()
   clear_populated();
 }
 
-int RGWUser::init_storage(rgw::sal::RGWRadosStore *storage)
+int RGWUser::init_storage(rgw::sal::RGWStore *storage)
 {
   if (!storage) {
     return -EINVAL;
   }
 
   store = storage;
-  user_ctl = store->ctl()->user;
 
   clear_populated();
 
@@ -1414,7 +1462,7 @@ int RGWUser::init_storage(rgw::sal::RGWRadosStore *storage)
   return 0;
 }
 
-int RGWUser::init(RGWUserAdminOpState& op_state)
+int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y)
 {
   bool found = false;
   std::string swift_user;
@@ -1429,7 +1477,7 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     access_key.clear();
   }
 
-  RGWUserInfo user_info;
+  std::unique_ptr<rgw::sal::RGWUser> user;
 
   clear_populated();
 
@@ -1442,35 +1490,37 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
   }
 
   if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
-    found = (rgw_get_user_info_by_uid(user_ctl, user_id, user_info, &op_state.objv) >= 0);
+    user = store->get_user(user_id);
+    found = (user->load_by_id(dpp, y) >= 0);
     op_state.found_by_uid = found;
   }
   if (store->ctx()->_conf.get_val<bool>("rgw_user_unique_email")) {
     if (!user_email.empty() && !found) {
-      found = (rgw_get_user_info_by_email(user_ctl, user_email, user_info, &op_state.objv) >= 0);
+      found = (store->get_user_by_email(dpp, user_email, y, &user) >= 0);
       op_state.found_by_email = found;
     }
   }
   if (!swift_user.empty() && !found) {
-    found = (rgw_get_user_info_by_swift(user_ctl, swift_user, user_info, &op_state.objv) >= 0);
+    found = (store->get_user_by_swift(dpp, swift_user, y, &user) >= 0);
     op_state.found_by_key = found;
   }
   if (!access_key.empty() && !found) {
-    found = (rgw_get_user_info_by_access_key(user_ctl, access_key, user_info, &op_state.objv) >= 0);
+    found = (store->get_user_by_access_key(dpp, access_key, y, &user) >= 0);
     op_state.found_by_key = found;
   }
   
   op_state.set_existing_user(found);
   if (found) {
-    op_state.set_user_info(user_info);
+    op_state.set_user_info(user->get_info());
     op_state.set_populated();
+    op_state.objv = user->get_version_tracker();
 
-    old_info = user_info;
+    old_info = user->get_info();
     set_populated();
   }
 
   if (user_id.empty()) {
-    user_id = user_info.user_id;
+    user_id = user->get_id();
   }
   op_state.set_initialized();
 
@@ -1501,11 +1551,12 @@ int RGWUser::init_members(RGWUserAdminOpState& op_state)
   return 0;
 }
 
-int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
+		    optional_yield y)
 {
   int ret;
   std::string subprocess_msg;
-  RGWUserInfo user_info = op_state.get_user_info();
+  rgw::sal::RGWUser* user = op_state.get_user();
 
   if (!store) {
     set_err_msg(err_msg, "couldn't initialize storage");
@@ -1514,13 +1565,15 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   RGWUserInfo *pold_info = (is_populated() ? &old_info : nullptr);
 
-  ret = rgw_store_user_info(user_ctl, user_info, pold_info, &op_state.objv, real_time(), false);
+  ret = user->store_info(dpp, y, RGWUserCtl::PutParams()
+			 .set_old_info(pold_info)
+			 .set_objv_tracker(&op_state.objv));
   if (ret < 0) {
     set_err_msg(err_msg, "unable to store user info");
     return ret;
   }
 
-  old_info = user_info;
+  old_info = user->get_info();
   set_populated();
 
   return 0;
@@ -1530,7 +1583,7 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
   bool same_id;
   bool populated;
-  rgw_user& op_id = op_state.get_user_id();
+  const rgw_user& op_id = op_state.get_user_id();
 
   RGWUserInfo user_info;
 
@@ -1580,7 +1633,7 @@ static void rename_swift_keys(const rgw_user& user,
   }
 }
 
-int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
 {
   int ret;
   bool populated = op_state.is_populated();
@@ -1591,32 +1644,31 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   if (!populated) {
-    ret = init(op_state);
+    ret = init(dpp, op_state, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to retrieve user info");
       return ret;
     }
   }
 
-  rgw::sal::RGWRadosUser old_user(store, op_state.get_user_info());
-  rgw::sal::RGWRadosUser new_user(store, op_state.get_new_uid());
-  if (old_user.get_tenant() != new_user.get_tenant()) {
+  std::unique_ptr<rgw::sal::RGWUser> old_user = store->get_user(op_state.get_user_info().user_id);
+  std::unique_ptr<rgw::sal::RGWUser> new_user = store->get_user(op_state.get_new_uid());
+  if (old_user->get_tenant() != new_user->get_tenant()) {
     set_err_msg(err_msg, "users have to be under the same tenant namespace "
-                + old_user.get_tenant() + " != " + new_user.get_tenant());
+                + old_user->get_tenant() + " != " + new_user->get_tenant());
     return -EINVAL;
   }
 
   // create a stub user and write only the uid index and buckets object
-  RGWUserInfo stub_user_info;
-  stub_user_info.user_id = new_user.get_user();
+  std::unique_ptr<rgw::sal::RGWUser> user;
+  user = store->get_user(new_user->get_id());
 
   RGWObjVersionTracker objv;
   const bool exclusive = !op_state.get_overwrite_new_user(); // overwrite if requested
 
-  ret = user_ctl->store_info(stub_user_info, null_yield,
-                             RGWUserCtl::PutParams()
-                             .set_objv_tracker(&objv)
-                             .set_exclusive(exclusive));
+  ret = user->store_info(dpp, y, RGWUserCtl::PutParams()
+			    .set_objv_tracker(&objv)
+			    .set_exclusive(exclusive));
   if (ret == -EEXIST) {
     set_err_msg(err_msg, "user name given by --new-uid already exists");
     return ret;
@@ -1627,7 +1679,7 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   RGWAccessControlPolicy policy_instance;
-  policy_instance.create_default(new_user.get_user(), old_user.get_display_name());
+  policy_instance.create_default(new_user->get_id(), old_user->get_display_name());
 
   //unlink and link buckets to new user
   string marker;
@@ -1636,7 +1688,7 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   rgw::sal::RGWBucketList buckets;
 
   do {
-    ret = old_user.list_buckets(marker, "", max_buckets, false, buckets);
+    ret = old_user->list_buckets(dpp, marker, "", max_buckets, false, buckets, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to list user buckets");
       return ret;
@@ -1648,25 +1700,25 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
       auto& bucket = it->second;
       marker = it->first;
 
-      ret = bucket->get_bucket_info(null_yield);
+      ret = bucket->get_bucket_info(dpp, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket->get_name());
         return ret;
       }
 
-      ret = bucket->set_acl(policy_instance, null_yield);
+      ret = bucket->set_acl(dpp, policy_instance, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to set acl on bucket " + bucket->get_name());
         return ret;
       }
 
-      ret = bucket->link(&new_user, null_yield);
+      ret = bucket->link(dpp, new_user.get(), y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to link bucket " + bucket->get_name());
         return ret;
       }
 
-      ret = bucket->chown(&new_user, &old_user, null_yield);
+      ret = bucket->chown(dpp, new_user.get(), old_user.get(), y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to run bucket chown" + cpp_strerror(-ret));
         return ret;
@@ -1678,15 +1730,16 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   // update the 'stub user' with all of the other fields and rewrite all of the
   // associated index objects
   RGWUserInfo& user_info = op_state.get_user_info();
-  user_info.user_id = new_user.get_user();
+  user_info.user_id = new_user->get_id();
   op_state.objv = objv;
 
-  rename_swift_keys(new_user.get_user(), user_info.swift_keys);
+  rename_swift_keys(new_user->get_id(), user_info.swift_keys);
 
-  return update(op_state, err_msg);
+  return update(dpp, op_state, err_msg, y);
 }
 
-int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
+			 optional_yield y)
 {
   std::string subprocess_msg;
   int ret = 0;
@@ -1694,7 +1747,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   RGWUserInfo user_info;
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   std::string user_email = op_state.get_user_email();
   std::string display_name = op_state.get_display_name();
 
@@ -1708,7 +1761,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
       set_err_msg(err_msg, "duplicate key provided");
       ret = -ERR_KEY_EXIST;
     } else {
-      set_err_msg(err_msg, "user: " + op_state.user_id.to_str() + " exists");
+      set_err_msg(err_msg, "user: " + uid.to_str() + " exists");
       ret = -EEXIST;
     }
     return ret;
@@ -1792,7 +1845,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   // see if we need to add an access key
   if (op_state.has_key_op()) {
-    ret = keys.add(op_state, &subprocess_msg, defer_user_update);
+    ret = keys.add(dpp, op_state, &subprocess_msg, defer_user_update, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to create access key, " + subprocess_msg);
       return ret;
@@ -1801,14 +1854,14 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   // see if we need to add some caps
   if (op_state.has_caps_op()) {
-    ret = caps.add(op_state, &subprocess_msg, defer_user_update);
+    ret = caps.add(dpp, op_state, &subprocess_msg, defer_user_update, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to add user capabilities, " + subprocess_msg);
       return ret;
     }
   }
 
-  ret = update(op_state, err_msg);
+  ret = update(dpp, op_state, err_msg, y);
   if (ret < 0)
     return ret;
 
@@ -1816,7 +1869,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 }
 
 
-int RGWUser::add(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
@@ -1827,7 +1880,7 @@ int RGWUser::add(RGWUserAdminOpState& op_state, std::string *err_msg)
     return ret;
   }
 
-  ret = execute_add(op_state, &subprocess_msg);
+  ret = execute_add(dpp, op_state, &subprocess_msg, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to create user, " + subprocess_msg);
     return ret;
@@ -1836,7 +1889,7 @@ int RGWUser::add(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::rename(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
@@ -1847,7 +1900,7 @@ int RGWUser::rename(RGWUserAdminOpState& op_state, std::string *err_msg)
     return ret;
   }
 
-  ret = execute_rename(op_state, &subprocess_msg);
+  ret = execute_rename(dpp, op_state, &subprocess_msg, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to rename user, " + subprocess_msg);
     return ret;
@@ -1856,13 +1909,12 @@ int RGWUser::rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
+int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
 {
   int ret;
 
   bool purge_data = op_state.will_purge_data();
-  rgw_user& uid = op_state.get_user_id();
-  RGWUserInfo user_info = op_state.get_user_info();
+  rgw::sal::RGWUser* user = op_state.get_user();
 
   if (!op_state.has_existing_user()) {
     set_err_msg(err_msg, "user does not exist");
@@ -1874,8 +1926,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
   CephContext *cct = store->ctx();
   size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
   do {
-    ret = rgw_read_user_buckets(store, uid, buckets, marker, string(),
-				max_buckets, false);
+    ret = user->list_buckets(dpp, marker, string(), max_buckets, false, buckets, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to read user bucket info");
       return ret;
@@ -1889,7 +1940,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
 
     std::string prefix, delimiter;
     for (auto it = m.begin(); it != m.end(); ++it) {
-      ret = it->second->remove_bucket(true, prefix, delimiter, false, nullptr, y);
+      ret = it->second->remove_bucket(dpp, true, prefix, delimiter, false, nullptr, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -1900,8 +1951,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
 
   } while (buckets.is_truncated());
 
-  ret = user_ctl->remove_info(user_info, y, RGWUserCtl::RemoveParams()
-                                            .set_objv_tracker(&op_state.objv));
+  ret = user->remove_info(dpp, y, RGWUserCtl::RemoveParams().set_objv_tracker(&op_state.objv));
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user from RADOS");
     return ret;
@@ -1913,7 +1963,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
   return 0;
 }
 
-int RGWUser::remove(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
+int RGWUser::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
@@ -1924,7 +1974,7 @@ int RGWUser::remove(RGWUserAdminOpState& op_state, optional_yield y, std::string
     return ret;
   }
 
-  ret = execute_remove(op_state, &subprocess_msg, y);
+  ret = execute_remove(dpp, op_state, &subprocess_msg, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user, " + subprocess_msg);
     return ret;
@@ -1933,7 +1983,7 @@ int RGWUser::remove(RGWUserAdminOpState& op_state, optional_yield y, std::string
   return 0;
 }
 
-int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
 {
   bool populated = op_state.is_populated();
   int ret = 0;
@@ -1942,7 +1992,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   std::string display_name = op_state.get_display_name();
 
   RGWUserInfo user_info;
-  RGWUserInfo duplicate_check;
+  std::unique_ptr<rgw::sal::RGWUser> duplicate_check;
 
   // ensure that the user info has been populated or is populate-able
   if (!op_state.has_existing_user() && !populated) {
@@ -1952,7 +2002,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   // if the user hasn't already been populated...attempt to
   if (!populated) {
-    ret = init(op_state);
+    ret = init(dpp, op_state, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to retrieve user info");
       return ret;
@@ -1971,15 +2021,15 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (!op_email.empty()) {
     // make sure we are not adding a duplicate email
     if (old_email != op_email) {
-      ret = rgw_get_user_info_by_email(user_ctl, op_email, duplicate_check);
-      if (ret >= 0 && duplicate_check.user_id.compare(user_id) != 0) {
+      ret = store->get_user_by_email(dpp, op_email, y, &duplicate_check);
+      if (ret >= 0 && duplicate_check->get_id().compare(user_id) != 0) {
         set_err_msg(err_msg, "cannot add duplicate email");
         return -ERR_EMAIL_EXIST;
       }
     }
     user_info.user_email = op_email;
   } else if (op_email.empty() && op_state.user_email_specified) {
-    ldout(store->ctx(), 10) << "removing email index: " << user_info.user_email << dendl;
+    ldpp_dout(dpp, 10) << "removing email index: " << user_info.user_email << dendl;
     /* will be physically removed later when calling update() */
     user_info.user_email.clear();
   }
@@ -2028,9 +2078,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
     string marker;
     CephContext *cct = store->ctx();
     size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+    std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(user_id);
     do {
-      ret = rgw_read_user_buckets(store, user_id, buckets, marker, string(),
-				  max_buckets, false);
+      ret = user->list_buckets(dpp, marker, string(), max_buckets, false, buckets, y);
       if (ret < 0) {
         set_err_msg(err_msg, "could not get buckets for uid:  " + user_id.to_str());
         return ret;
@@ -2046,7 +2096,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
         marker = iter->first;
       }
 
-      ret = store->getRados()->set_buckets_enabled(bucket_names, !suspended);
+      ret = store->set_buckets_enabled(dpp, bucket_names, !suspended);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to modify bucket");
         return ret;
@@ -2071,32 +2121,39 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   // if we're supposed to modify keys, do so
   if (op_state.has_key_op()) {
-    ret = keys.add(op_state, &subprocess_msg, true);
+    ret = keys.add(dpp, op_state, &subprocess_msg, true, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to create or modify keys, " + subprocess_msg);
       return ret;
     }
   }
 
-  ret = update(op_state, err_msg);
+  ret = update(dpp, op_state, err_msg, y);
   if (ret < 0)
     return ret;
 
   return 0;
 }
 
-int RGWUser::modify(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
 
   ret = check_op(op_state, &subprocess_msg);
   if (ret < 0) {
-    set_err_msg(err_msg, "unable to parse parameters, " + subprocess_msg);
+    if (is_populated() && (user_id.compare(op_state.get_user_id()) != 0)) {
+      set_err_msg(err_msg, "unable to create user " + user_id.to_str()
+		  + " because user id " + op_state.get_user_id().to_str()
+		  + " already exists with email "
+		  + op_state.get_user_email());
+    } else {
+      set_err_msg(err_msg, "unable to parse parameters, " + subprocess_msg);
+    }
     return ret;
   }
 
-  ret = execute_modify(op_state, &subprocess_msg);
+  ret = execute_modify(dpp, op_state, &subprocess_msg, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to modify user, " + subprocess_msg);
     return ret;
@@ -2105,9 +2162,10 @@ int RGWUser::modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::info(RGWUserAdminOpState& op_state, RGWUserInfo& fetched_info, std::string *err_msg)
+int RGWUser::info(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, RGWUserInfo& fetched_info,
+		  optional_yield y, std::string *err_msg)
 {
-  int ret = init(op_state);
+  int ret = init(dpp, op_state, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to fetch user info");
     return ret;
@@ -2139,9 +2197,7 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
     op_state.max_entries = 1000;
   }
 
-  auto meta_mgr = store->ctl()->meta.mgr;
-
-  int ret = meta_mgr->list_keys_init(metadata_key, op_state.marker, &handle);
+  int ret = store->meta_list_keys_init(metadata_key, op_state.marker, &handle);
   if (ret < 0) {
     return ret;
   }
@@ -2159,7 +2215,7 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
   do {
     std::list<std::string> keys;
     left = op_state.max_entries - count;
-    ret = meta_mgr->list_keys_next(handle, left, keys, &truncated);
+    ret = store->meta_list_keys_next(handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     } if (ret != -ENOENT) {
@@ -2175,19 +2231,19 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
   formatter->dump_bool("truncated", truncated);
   formatter->dump_int("count", count);
   if (truncated) {
-    formatter->dump_string("marker", meta_mgr->get_marker(handle));
+    formatter->dump_string("marker", store->meta_get_marker(handle));
   }
 
   // close result object section
   formatter->close_section();
 
-  meta_mgr->list_keys_complete(handle);
+  store->meta_list_keys_complete(handle);
 
   flusher.flush();
   return 0;
 }
 
-int RGWUserAdminOp_User::list(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::list(rgw::sal::RGWStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUser user;
@@ -2203,13 +2259,16 @@ int RGWUserAdminOp_User::list(rgw::sal::RGWRadosStore *store, RGWUserAdminOpStat
   return 0;
 }
 
-int RGWUserAdminOp_User::info(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
+			      rgw::sal::RGWStore *store, RGWUserAdminOpState& op_state,
+			      RGWFormatterFlusher& flusher,
+			      optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
+  std::unique_ptr<rgw::sal::RGWUser> ruser;
 
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2222,8 +2281,10 @@ int RGWUserAdminOp_User::info(rgw::sal::RGWRadosStore *store, RGWUserAdminOpStat
   if (ret < 0)
     return ret;
 
+  ruser = store->get_user(info.user_id);
+
   if (op_state.sync_stats) {
-    ret = rgw_user_sync_all_stats(store, info.user_id);
+    ret = rgw_user_sync_all_stats(dpp, store, ruser.get(), y);
     if (ret < 0) {
       return ret;
     }
@@ -2232,7 +2293,7 @@ int RGWUserAdminOp_User::info(rgw::sal::RGWRadosStore *store, RGWUserAdminOpStat
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
-    int ret = store->ctl()->user->read_stats(info.user_id, &stats);
+    int ret = ruser->read_stats(y, &stats);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
@@ -2250,18 +2311,20 @@ int RGWUserAdminOp_User::info(rgw::sal::RGWRadosStore *store, RGWUserAdminOpStat
   return 0;
 }
 
-int RGWUserAdminOp_User::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
+				rgw::sal::RGWStore *store,
+				RGWUserAdminOpState& op_state,
+				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
   Formatter *formatter = flusher.get_formatter();
 
-  ret = user.add(op_state, NULL);
+  ret = user.add(dpp, op_state, y, NULL);
   if (ret < 0) {
     if (ret == -EEXIST)
       ret = -ERR_USER_EXIST;
@@ -2282,17 +2345,19 @@ int RGWUserAdminOp_User::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpSt
   return 0;
 }
 
-int RGWUserAdminOp_User::modify(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_User::modify(const DoutPrefixProvider *dpp,
+				rgw::sal::RGWStore *store,
+				RGWUserAdminOpState& op_state,
+				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
   Formatter *formatter = flusher.get_formatter();
 
-  ret = user.modify(op_state, NULL);
+  ret = user.modify(dpp, op_state, y, NULL);
   if (ret < 0) {
     if (ret == -ENOENT)
       ret = -ERR_NO_SUCH_USER;
@@ -2313,29 +2378,33 @@ int RGWUserAdminOp_User::modify(rgw::sal::RGWRadosStore *store, RGWUserAdminOpSt
   return 0;
 }
 
-int RGWUserAdminOp_User::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher, optional_yield y)
+int RGWUserAdminOp_User::remove(const DoutPrefixProvider *dpp,
+				rgw::sal::RGWStore *store, RGWUserAdminOpState& op_state,
+				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
 
-  ret = user.remove(op_state, y, NULL);
+  ret = user.remove(dpp, op_state, y, NULL);
 
   if (ret == -ENOENT)
     ret = -ERR_NO_SUCH_USER;
   return ret;
 }
 
-int RGWUserAdminOp_Subuser::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_Subuser::create(const DoutPrefixProvider *dpp,
+				   rgw::sal::RGWStore *store,
+				   RGWUserAdminOpState& op_state,
+				   RGWFormatterFlusher& flusher,
+				   optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2344,7 +2413,7 @@ int RGWUserAdminOp_Subuser::create(rgw::sal::RGWRadosStore *store, RGWUserAdminO
 
   Formatter *formatter = flusher.get_formatter();
 
-  ret = user.subusers.add(op_state, NULL);
+  ret = user.subusers.add(dpp, op_state, y, NULL);
   if (ret < 0)
     return ret;
 
@@ -2362,12 +2431,13 @@ int RGWUserAdminOp_Subuser::create(rgw::sal::RGWRadosStore *store, RGWUserAdminO
   return 0;
 }
 
-int RGWUserAdminOp_Subuser::modify(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_Subuser::modify(const DoutPrefixProvider *dpp,
+				   rgw::sal::RGWStore *store, RGWUserAdminOpState& op_state,
+				   RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2376,7 +2446,7 @@ int RGWUserAdminOp_Subuser::modify(rgw::sal::RGWRadosStore *store, RGWUserAdminO
 
   Formatter *formatter = flusher.get_formatter();
 
-  ret = user.subusers.modify(op_state, NULL);
+  ret = user.subusers.modify(dpp, op_state, y, NULL);
   if (ret < 0)
     return ret;
 
@@ -2394,12 +2464,15 @@ int RGWUserAdminOp_Subuser::modify(rgw::sal::RGWRadosStore *store, RGWUserAdminO
   return 0;
 }
 
-int RGWUserAdminOp_Subuser::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_Subuser::remove(const DoutPrefixProvider *dpp,
+				   rgw::sal::RGWStore *store,
+				   RGWUserAdminOpState& op_state,
+				   RGWFormatterFlusher& flusher,
+				   optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2407,19 +2480,21 @@ int RGWUserAdminOp_Subuser::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminO
   if (!op_state.has_existing_user())
     return -ERR_NO_SUCH_USER;
 
-  ret = user.subusers.remove(op_state, NULL);
+  ret = user.subusers.remove(dpp, op_state, y, NULL);
   if (ret < 0)
     return ret;
 
   return 0;
 }
 
-int RGWUserAdminOp_Key::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_Key::create(const DoutPrefixProvider *dpp,
+			       rgw::sal::RGWStore *store, RGWUserAdminOpState& op_state,
+			       RGWFormatterFlusher& flusher,
+			       optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2428,7 +2503,7 @@ int RGWUserAdminOp_Key::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpSta
 
   Formatter *formatter = flusher.get_formatter();
 
-  ret = user.keys.add(op_state, NULL);
+  ret = user.keys.add(dpp, op_state, y, NULL);
   if (ret < 0)
     return ret;
 
@@ -2453,12 +2528,15 @@ int RGWUserAdminOp_Key::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpSta
   return 0;
 }
 
-int RGWUserAdminOp_Key::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_Key::remove(const DoutPrefixProvider *dpp,
+			       rgw::sal::RGWStore *store,
+			       RGWUserAdminOpState& op_state,
+			       RGWFormatterFlusher& flusher,
+			       optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2466,19 +2544,21 @@ int RGWUserAdminOp_Key::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpSta
     return -ERR_NO_SUCH_USER;
 
 
-  ret = user.keys.remove(op_state, NULL);
+  ret = user.keys.remove(dpp, op_state, y, NULL);
   if (ret < 0)
     return ret;
 
   return 0;
 }
 
-int RGWUserAdminOp_Caps::add(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_Caps::add(const DoutPrefixProvider *dpp,
+			     rgw::sal::RGWStore *store,
+			     RGWUserAdminOpState& op_state,
+			     RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2487,7 +2567,7 @@ int RGWUserAdminOp_Caps::add(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState
 
   Formatter *formatter = flusher.get_formatter();
 
-  ret = user.caps.add(op_state, NULL);
+  ret = user.caps.add(dpp, op_state, y, NULL);
   if (ret < 0)
     return ret;
 
@@ -2506,12 +2586,14 @@ int RGWUserAdminOp_Caps::add(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState
 }
 
 
-int RGWUserAdminOp_Caps::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWUserAdminOp_Caps::remove(const DoutPrefixProvider *dpp,
+				rgw::sal::RGWStore *store,
+				RGWUserAdminOpState& op_state,
+				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(store, op_state);
+  int ret = user.init(dpp, store, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2520,7 +2602,7 @@ int RGWUserAdminOp_Caps::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpSt
 
   Formatter *formatter = flusher.get_formatter();
 
-  ret = user.caps.remove(op_state, NULL);
+  ret = user.caps.remove(dpp, op_state, y, NULL);
   if (ret < 0)
     return ret;
 
@@ -2551,7 +2633,7 @@ public:
 
   string get_type() override { return "user"; }
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y) override {
+  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
     RGWUserCompleteInfo uci;
     RGWObjVersionTracker objv_tracker;
     real_time mtime;
@@ -2560,7 +2642,7 @@ public:
 
     int ret = svc.user->read_user_info(op->ctx(), user, &uci.info, &objv_tracker,
                                        &mtime, nullptr, &uci.attrs,
-                                       y);
+                                       y, dpp);
     if (ret < 0) {
       return ret;
     }
@@ -2586,24 +2668,24 @@ public:
   int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
              RGWMetadataObject *obj,
              RGWObjVersionTracker& objv_tracker,
-             optional_yield y,
-             RGWMDLogSyncType type) override;
+             optional_yield y, const DoutPrefixProvider *dpp,
+             RGWMDLogSyncType type, bool from_remote_zone) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
-                optional_yield y) override {
+                optional_yield y, const DoutPrefixProvider *dpp) override {
     RGWUserInfo info;
 
     rgw_user user = RGWSI_User::user_from_meta_key(entry);
 
     int ret = svc.user->read_user_info(op->ctx(), user, &info, nullptr,
                                        nullptr, nullptr, nullptr,
-                                       y);
+                                       y, dpp);
     if (ret < 0) {
       return ret;
     }
 
     return svc.user->remove_user_info(op->ctx(), info, &objv_tracker,
-                                      y);
+                                      y, dpp);
   }
 };
 
@@ -2616,25 +2698,25 @@ public:
                              RGWSI_MetaBackend_Handler::Op *op, string& entry,
                              RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
                              optional_yield y,
-                             RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type),
+                             RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type, from_remote_zone),
                                                                 uhandler(_handler) {
     uobj = static_cast<RGWUserMetadataObject *>(obj);
   }
 
-  int put_checked() override;
+  int put_checked(const DoutPrefixProvider *dpp) override;
 };
 
 int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
                                    RGWMetadataObject *obj,
                                    RGWObjVersionTracker& objv_tracker,
-                                   optional_yield y,
-                                   RGWMDLogSyncType type)
+                                   optional_yield y, const DoutPrefixProvider *dpp,
+                                   RGWMDLogSyncType type, bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_User put_op(this, op, entry, obj, objv_tracker, y, type);
-  return do_put_operate(&put_op);
+  RGWMetadataHandlerPut_User put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
+  return do_put_operate(&put_op, dpp);
 }
 
-int RGWMetadataHandlerPut_User::put_checked()
+int RGWMetadataHandlerPut_User::put_checked(const DoutPrefixProvider *dpp)
 {
   RGWUserMetadataObject *orig_obj = static_cast<RGWUserMetadataObject *>(old_obj);
   RGWUserCompleteInfo& uci = uobj->get_uci();
@@ -2650,7 +2732,7 @@ int RGWMetadataHandlerPut_User::put_checked()
 
   int ret = uhandler->svc.user->store_user_info(op->ctx(), uci.info, pold_info,
                                                &objv_tracker, mtime,
-                                               false, pattrs, y);
+                                               false, pattrs, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -2692,7 +2774,8 @@ public:
   }
 };
 
-int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
+int RGWUserCtl::get_info_by_uid(const DoutPrefixProvider *dpp, 
+                                const rgw_user& uid,
                                 RGWUserInfo *info,
                                 optional_yield y,
                                 const GetParams& params)
@@ -2706,11 +2789,13 @@ int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
                                     params.mtime,
                                     params.cache_info,
                                     params.attrs,
-                                    y);
+                                    y,
+                                    dpp);
   });
 }
 
-int RGWUserCtl::get_info_by_email(const string& email,
+int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp, 
+                                  const string& email,
                                   RGWUserInfo *info,
                                   optional_yield y,
                                   const GetParams& params)
@@ -2720,11 +2805,13 @@ int RGWUserCtl::get_info_by_email(const string& email,
                                             info,
                                             params.objv_tracker,
                                             params.mtime,
-                                            y);
+                                            y,
+                                            dpp);
   });
 }
 
-int RGWUserCtl::get_info_by_swift(const string& swift_name,
+int RGWUserCtl::get_info_by_swift(const DoutPrefixProvider *dpp, 
+                                  const string& swift_name,
                                   RGWUserInfo *info,
                                   optional_yield y,
                                   const GetParams& params)
@@ -2734,11 +2821,13 @@ int RGWUserCtl::get_info_by_swift(const string& swift_name,
                                             info,
                                             params.objv_tracker,
                                             params.mtime,
-                                            y);
+                                            y,
+                                            dpp);
   });
 }
 
-int RGWUserCtl::get_info_by_access_key(const string& access_key,
+int RGWUserCtl::get_info_by_access_key(const DoutPrefixProvider *dpp, 
+                                       const string& access_key,
                                        RGWUserInfo *info,
                                        optional_yield y,
                                        const GetParams& params)
@@ -2748,23 +2837,26 @@ int RGWUserCtl::get_info_by_access_key(const string& access_key,
                                                  info,
                                                  params.objv_tracker,
                                                  params.mtime,
-                                                 y);
+                                                 y,
+                                                 dpp);
   });
 }
 
-int RGWUserCtl::get_attrs_by_uid(const rgw_user& user_id,
+int RGWUserCtl::get_attrs_by_uid(const DoutPrefixProvider *dpp, 
+                                 const rgw_user& user_id,
                                  map<string, bufferlist> *pattrs,
                                  optional_yield y,
                                  RGWObjVersionTracker *objv_tracker)
 {
   RGWUserInfo user_info;
 
-  return get_info_by_uid(user_id, &user_info, y, RGWUserCtl::GetParams()
+  return get_info_by_uid(dpp, user_id, &user_info, y, RGWUserCtl::GetParams()
                          .set_attrs(pattrs)
                          .set_objv_tracker(objv_tracker));
 }
 
-int RGWUserCtl::store_info(const RGWUserInfo& info, optional_yield y,
+int RGWUserCtl::store_info(const DoutPrefixProvider *dpp, 
+                           const RGWUserInfo& info, optional_yield y,
                            const PutParams& params)
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
@@ -2776,11 +2868,13 @@ int RGWUserCtl::store_info(const RGWUserInfo& info, optional_yield y,
                                      params.mtime,
                                      params.exclusive,
                                      params.attrs,
-                                     y);
+                                     y,
+                                     dpp);
   });
 }
 
-int RGWUserCtl::remove_info(const RGWUserInfo& info, optional_yield y,
+int RGWUserCtl::remove_info(const DoutPrefixProvider *dpp, 
+                            const RGWUserInfo& info, optional_yield y,
                             const RemoveParams& params)
 
 {
@@ -2789,36 +2883,40 @@ int RGWUserCtl::remove_info(const RGWUserInfo& info, optional_yield y,
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->remove_user_info(op->ctx(), info,
                                       params.objv_tracker,
-                                      y);
+                                      y, dpp);
   });
 }
 
 int RGWUserCtl::add_bucket(const rgw_user& user,
                            const rgw_bucket& bucket,
-                           ceph::real_time creation_time)
+                           ceph::real_time creation_time,
+			   optional_yield y)
 
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->add_bucket(op->ctx(), user, bucket, creation_time);
+    return svc.user->add_bucket(op->ctx(), user, bucket, creation_time, y);
   });
 }
 
 int RGWUserCtl::remove_bucket(const rgw_user& user,
-                              const rgw_bucket& bucket)
+                              const rgw_bucket& bucket,
+			      optional_yield y)
 
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->remove_bucket(op->ctx(), user, bucket);
+    return svc.user->remove_bucket(op->ctx(), user, bucket, y);
   });
 }
 
-int RGWUserCtl::list_buckets(const rgw_user& user,
+int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp, 
+                             const rgw_user& user,
                              const string& marker,
                              const string& end_marker,
                              uint64_t max,
                              bool need_stats,
                              RGWUserBuckets *buckets,
                              bool *is_truncated,
+			     optional_yield y,
                              uint64_t default_max)
 {
   if (!max) {
@@ -2827,15 +2925,15 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
 
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     int ret = svc.user->list_buckets(op->ctx(), user, marker, end_marker,
-                                     max, buckets, is_truncated);
+                                     max, buckets, is_truncated, y);
     if (ret < 0) {
       return ret;
     }
     if (need_stats) {
       map<string, RGWBucketEnt>& m = buckets->get_buckets();
-      ret = ctl.bucket->read_buckets_stats(m, null_yield);
+      ret = ctl.bucket->read_buckets_stats(m, y, dpp);
       if (ret < 0 && ret != -ENOENT) {
-        ldout(svc.user->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
         return ret;
       }
     }
@@ -2844,34 +2942,36 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
 }
 
 int RGWUserCtl::flush_bucket_stats(const rgw_user& user,
-                                   const RGWBucketEnt& ent)
+                                   const RGWBucketEnt& ent,
+				   optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->flush_bucket_stats(op->ctx(), user, ent);
+    return svc.user->flush_bucket_stats(op->ctx(), user, ent, y);
   });
 }
 
-int RGWUserCtl::complete_flush_stats(const rgw_user& user)
+int RGWUserCtl::complete_flush_stats(const rgw_user& user, optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->complete_flush_stats(op->ctx(), user);
+    return svc.user->complete_flush_stats(op->ctx(), user, y);
   });
 }
 
-int RGWUserCtl::reset_stats(const rgw_user& user)
+int RGWUserCtl::reset_stats(const rgw_user& user, optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->reset_bucket_stats(op->ctx(), user);
+    return svc.user->reset_bucket_stats(op->ctx(), user, y);
   });
 }
 
 int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats,
+			   optional_yield y,
 			   ceph::real_time *last_stats_sync,
 			   ceph::real_time *last_stats_update)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->read_stats(op->ctx(), user, stats,
-				last_stats_sync, last_stats_update);
+				last_stats_sync, last_stats_update, y);
   });
 }
 

@@ -28,6 +28,7 @@ namespace po = boost::program_options;
 DECLARE_DEVICE_OPERATIONS(ggate);
 DECLARE_DEVICE_OPERATIONS(kernel);
 DECLARE_DEVICE_OPERATIONS(nbd);
+DECLARE_DEVICE_OPERATIONS(wnbd);
 
 namespace device {
 
@@ -60,10 +61,17 @@ const DeviceOperations nbd_operations = {
   nbd::execute_unmap,
 };
 
+const DeviceOperations wnbd_operations = {
+  wnbd::execute_list,
+  wnbd::execute_map,
+  wnbd::execute_unmap,
+};
+
 enum device_type_t {
   DEVICE_TYPE_GGATE,
   DEVICE_TYPE_KRBD,
   DEVICE_TYPE_NBD,
+  DEVICE_TYPE_WNBD,
 };
 
 struct DeviceType {};
@@ -72,12 +80,18 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               DeviceType *target_type, int) {
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
-  if (s == "ggate") {
+
+  #ifdef _WIN32
+  if (s == "wnbd") {
+    v = boost::any(DEVICE_TYPE_WNBD);
+  #else
+  if (s == "nbd") {
+     v = boost::any(DEVICE_TYPE_NBD);
+  } else if (s == "ggate") {
     v = boost::any(DEVICE_TYPE_GGATE);
   } else if (s == "krbd") {
     v = boost::any(DEVICE_TYPE_KRBD);
-  } else if (s == "nbd") {
-    v = boost::any(DEVICE_TYPE_NBD);
+  #endif /* _WIN32 */
   } else {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -86,7 +100,11 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 void add_device_type_option(po::options_description *options) {
   options->add_options()
     ("device-type,t", po::value<DeviceType>(),
+#ifdef _WIN32
+     "device type [wnbd]");
+#else
      "device type [ggate, krbd (default), nbd]");
+#endif
 }
 
 void add_device_specific_options(po::options_description *options) {
@@ -99,7 +117,11 @@ device_type_t get_device_type(const po::variables_map &vm) {
   if (vm.count("device-type")) {
     return vm["device-type"].as<device_type_t>();
   }
+  #ifndef _WIN32
   return DEVICE_TYPE_KRBD;
+  #else
+  return DEVICE_TYPE_WNBD;
+  #endif
 }
 
 const DeviceOperations *get_device_operations(const po::variables_map &vm) {
@@ -110,6 +132,8 @@ const DeviceOperations *get_device_operations(const po::variables_map &vm) {
     return &krbd_operations;
   case DEVICE_TYPE_NBD:
     return &nbd_operations;
+  case DEVICE_TYPE_WNBD:
+    return &wnbd_operations;
   default:
     ceph_abort();
     return nullptr;

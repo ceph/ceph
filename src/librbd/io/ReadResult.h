@@ -27,10 +27,13 @@ class ReadResult {
 public:
   struct C_ImageReadRequest : public Context {
     AioCompletion *aio_completion;
+    uint64_t buffer_offset = 0;
     Extents image_extents;
     bufferlist bl;
+    bool ignore_enoent = false;
 
     C_ImageReadRequest(AioCompletion *aio_completion,
+                       uint64_t buffer_offset,
                        const Extents image_extents);
 
     void finish(int r) override;

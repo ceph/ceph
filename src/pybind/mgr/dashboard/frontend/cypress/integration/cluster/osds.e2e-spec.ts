@@ -5,6 +5,7 @@ describe('OSDs page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     osds.navigateTo();
   });
 
@@ -35,10 +36,6 @@ describe('OSDs page', () => {
     describe('by selecting one row in OSDs List', () => {
       beforeEach(() => {
         osds.getExpandCollapseElement().click();
-      });
-
-      it('should verify that selected footer increases', () => {
-        osds.getTableCount('selected').should('equal', 1);
       });
 
       it('should show the correct text for the tab labels', () => {

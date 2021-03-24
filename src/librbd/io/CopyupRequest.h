@@ -132,7 +132,7 @@ private:
 
   void compute_deep_copy_snap_ids();
   void convert_copyup_extent_map();
-  void prepare_copyup_data();
+  int prepare_copyup_data();
 };
 
 } // namespace io

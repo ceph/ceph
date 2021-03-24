@@ -71,6 +71,20 @@ Basic
 :command:`mount_timeout`
     int (seconds), Default: 60
 
+:command:`ms_mode=<legacy|crc|secure|prefer-crc|prefer-secure>`
+    Set the connection mode that the client uses for transport. The available
+    modes are:
+
+    - ``legacy``: use messenger v1 protocol to talk to the cluster
+
+    - ``crc``: use messenger v2, without on-the-wire encryption
+
+    - ``secure``: use messenger v2, with on-the-wire encryption
+
+    - ``prefer-crc``: crc mode, if denied agree to secure mode
+
+    - ``prefer-secure``: secure mode, if denied agree to crc mode
+
 :command:`name`
     RADOS user to authenticate as when using CephX. Default: guest
 
@@ -86,8 +100,8 @@ Basic
     available modes are ``no`` and ``clean``. The default is ``no``.
 
     - ``no``: never attempt to reconnect when client detects that it has been
-       blocklisted. Blocklisted clients will not attempt to reconnect and
-       their operations will fail too.
+      blocklisted. Blocklisted clients will not attempt to reconnect and
+      their operations will fail too.
 
     - ``clean``: client reconnects to the Ceph cluster automatically when it
       detects that it has been blocklisted. During reconnect, client drops
@@ -128,9 +142,6 @@ Advanced
 
 :command:`osdkeepalive`
     int, Default: 5
-
-:command:`osdtimeout`
-    int (seconds), Default: 60
 
 :command:`osd_idle_ttl`
     int (seconds), Default: 60
@@ -193,6 +204,7 @@ Mount only part of the namespace/file system::
     mount.ceph :/some/directory/in/cephfs /mnt/mycephfs
 
 Mount non-default FS, in case cluster has multiple FSs::
+
     mount -t ceph :/ /mnt/mycephfs2 -o fs=mycephfs2
     
     or
@@ -229,7 +241,7 @@ Availability
 ============
 
 **mount.ceph** is part of Ceph, a massively scalable, open-source, distributed
-storage system. Please refer to the Ceph documentation at http://ceph.com/docs
+storage system. Please refer to the Ceph documentation at https://docs.ceph.com
 for more information.
 
 Feature Availability

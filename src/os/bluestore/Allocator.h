@@ -20,25 +20,32 @@
 
 class Allocator {
 public:
-  explicit Allocator(const std::string& name);
+  explicit Allocator(const std::string& name,
+                     int64_t _capacity,
+                     int64_t _block_size);
   virtual ~Allocator();
+
+  /*
+  * returns allocator type name as per names in config
+  */
+  virtual const char* get_type() const = 0;
 
   /*
    * Allocate required number of blocks in n number of extents.
    * Min and Max number of extents are limited by:
    * a. alloc unit
    * b. max_alloc_size.
-   * as no extent can be lesser than alloc_unit and greater than max_alloc size.
+   * as no extent can be lesser than block_size and greater than max_alloc size.
    * Apart from that extents can vary between these lower and higher limits according
    * to free block search algorithm and availability of contiguous space.
    */
-  virtual int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
+  virtual int64_t allocate(uint64_t want_size, uint64_t block_size,
 			   uint64_t max_alloc_size, int64_t hint,
 			   PExtentVector *extents) = 0;
 
-  int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
+  int64_t allocate(uint64_t want_size, uint64_t block_size,
 		   int64_t hint, PExtentVector *extents) {
-    return allocate(want_size, alloc_unit, want_size, hint, extents);
+    return allocate(want_size, block_size, want_size, hint, extents);
   }
 
   /* Bulk release. Implementations may override this method to handle the whole
@@ -49,7 +56,11 @@ public:
   virtual void dump() = 0;
   virtual void dump(std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
 
-  virtual void set_zone_states(std::vector<zone_state_t> &&_zone_states) {}
+  virtual void zoned_set_zone_states(std::vector<zone_state_t> &&_zone_states) {}
+  virtual bool zoned_get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) {
+    return false;
+  }
+
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
@@ -64,11 +75,23 @@ public:
   static Allocator *create(CephContext* cct, std::string type, int64_t size,
 			   int64_t block_size, const std::string& name = "");
 
+
   const string& get_name() const;
+  int64_t get_capacity() const
+  {
+    return device_size;
+  }
+  int64_t get_block_size() const
+  {
+    return block_size;
+  }
 
 private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;
+protected:
+  const int64_t device_size = 0;
+  const int64_t block_size = 0;
 };
 
 #endif

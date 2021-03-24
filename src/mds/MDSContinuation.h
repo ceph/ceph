@@ -21,7 +21,7 @@
 class MDSContinuation : public Continuation {
 protected:
   Server *server;
-  MDSContext *get_internal_callback(int stage) {
+  MDSInternalContext *get_internal_callback(int stage) {
     return new MDSInternalContextWrapper(server->mds, get_callback(stage));
   }
   MDSIOContextBase *get_io_callback(int stage) {

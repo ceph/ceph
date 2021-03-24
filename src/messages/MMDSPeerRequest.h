@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "messages/MMDSOp.h"
 
-class MMDSPeerRequest : public MMDSOp {
+class MMDSPeerRequest final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:
@@ -118,6 +118,7 @@ public:
   // for rename prep
   filepath srcdnpath;
   filepath destdnpath;
+  std::string alternate_name;
   std::set<mds_rank_t> witnesses;
   ceph::buffer::list inode_export;
   version_t inode_export_v;
@@ -170,7 +171,7 @@ protected:
     MMDSOp{MSG_MDS_PEER_REQUEST, HEAD_VERSION, COMPAT_VERSION},
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
-  ~MMDSPeerRequest() override {}
+  ~MMDSPeerRequest() final {}
 
 public:
   void encode_payload(uint64_t features) override {
@@ -192,6 +193,7 @@ public:
     encode(straybl, payload);
     encode(srci_snapbl, payload);
     encode(desti_snapbl, payload);
+    encode(alternate_name, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -213,6 +215,7 @@ public:
     decode(straybl, p);
     decode(srci_snapbl, p);
     decode(desti_snapbl, p);
+    decode(alternate_name, p);
   }
 
   std::string_view get_type_name() const override { return "peer_request"; }

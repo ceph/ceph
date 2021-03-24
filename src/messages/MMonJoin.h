@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MMonJoin : public PaxosServiceMessage {
+class MMonJoin final : public PaxosServiceMessage {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -33,7 +33,7 @@ public:
   { }
   
 private:
-  ~MMonJoin() override {}
+  ~MMonJoin() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_join"; }
@@ -46,15 +46,10 @@ public:
     paxos_encode();
     encode(fsid, payload);
     encode(name, payload);
-    if (HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-      header.version = HEAD_VERSION;
-      header.compat_version = COMPAT_VERSION;
-      encode(addrs, payload, features);
-    } else {
-      header.version = 1;
-      header.compat_version = 1;
-      encode(addrs.legacy_addr(), payload, features);
-    }
+    assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
+    encode(addrs, payload, features);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -62,13 +57,8 @@ public:
     paxos_decode(p);
     decode(fsid, p);
     decode(name, p);
-    if (header.version == 1) {
-      entity_addr_t addr;
-      decode(addr, p);
-      addrs = entity_addrvec_t(addr);
-    } else {
-      decode(addrs, p);
-    }
+    assert(header.version > 1);
+    decode(addrs, p);
   }
 };
 

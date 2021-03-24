@@ -7,17 +7,14 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  FormHelper
-} from '../../../../../testing/unit-test-helper';
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { SummaryService } from '../../../../shared/services/summary.service';
-import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
-import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FixtureHelper, FormHelper } from '~/testing/unit-test-helper';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
 import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
@@ -30,6 +27,7 @@ describe('OsdFormComponent', () => {
   let fixture: ComponentFixture<OsdFormComponent>;
   let fixtureHelper: FixtureHelper;
   let orchService: OrchestratorService;
+  let hostService: HostService;
   let summaryService: SummaryService;
   const devices: InventoryDevice[] = [
     {
@@ -53,7 +51,7 @@ describe('OsdFormComponent', () => {
   ];
 
   const expectPreviewButton = (enabled: boolean) => {
-    const debugElement = fixtureHelper.getElementByCss('.card-footer button');
+    const debugElement = fixtureHelper.getElementByCss('.tc_submitButton');
     expect(debugElement.nativeElement.disabled).toBe(!enabled);
   };
 
@@ -113,6 +111,7 @@ describe('OsdFormComponent', () => {
     form = component.form;
     formHelper = new FormHelper(form);
     orchService = TestBed.inject(OrchestratorService);
+    hostService = TestBed.inject(HostService);
     summaryService = TestBed.inject(SummaryService);
     summaryService['summaryDataSource'] = new BehaviorSubject(null);
     summaryService['summaryData$'] = summaryService['summaryDataSource'].asObservable();
@@ -126,7 +125,7 @@ describe('OsdFormComponent', () => {
   describe('without orchestrator', () => {
     beforeEach(() => {
       spyOn(orchService, 'status').and.returnValue(of({ available: false }));
-      spyOn(orchService, 'inventoryDeviceList').and.callThrough();
+      spyOn(hostService, 'inventoryDeviceList').and.callThrough();
       fixture.detectChanges();
     });
 
@@ -136,14 +135,14 @@ describe('OsdFormComponent', () => {
     });
 
     it('should not call inventoryDeviceList', () => {
-      expect(orchService.inventoryDeviceList).not.toHaveBeenCalled();
+      expect(hostService.inventoryDeviceList).not.toHaveBeenCalled();
     });
   });
 
   describe('with orchestrator', () => {
     beforeEach(() => {
       spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-      spyOn(orchService, 'inventoryDeviceList').and.returnValue(of([]));
+      spyOn(hostService, 'inventoryDeviceList').and.returnValue(of([]));
       fixture.detectChanges();
     });
 

@@ -7,6 +7,7 @@ describe('OSDs page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     osds.navigateTo();
   });
 
@@ -29,6 +30,7 @@ describe('OSDs page', () => {
           dashboard.infoCardBody('OSDs').should('contain.text', `${expectedCount} up`);
           dashboard.infoCardBody('OSDs').should('contain.text', `${expectedCount} in`);
 
+          cy.wait(30000);
           expect(Number(newCount)).to.be.gte(2);
           // Delete the first OSD we created
           osds.navigateTo();
@@ -36,10 +38,10 @@ describe('OSDs page', () => {
           osds.deleteByIDs([deleteOsdId], false);
           osds.ensureNoOsd(deleteOsdId);
 
+          cy.wait(30000);
           // Replace the second OSD we created
           const replaceID = Number(oldCount) + 1;
           osds.deleteByIDs([replaceID], true);
-          // deleting OSDs doesn't work in cephadm right now, skip checking
           osds.checkStatus(replaceID, ['destroyed']);
         });
       });

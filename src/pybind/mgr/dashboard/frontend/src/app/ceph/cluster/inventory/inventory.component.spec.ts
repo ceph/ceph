@@ -7,9 +7,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { OrchestratorService } from '../../../shared/api/orchestrator.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { InventoryDevicesComponent } from './inventory-devices/inventory-devices.component';
 import { InventoryComponent } from './inventory.component';
 
@@ -17,6 +18,7 @@ describe('InventoryComponent', () => {
   let component: InventoryComponent;
   let fixture: ComponentFixture<InventoryComponent>;
   let orchService: OrchestratorService;
+  let hostService: HostService;
 
   configureTestBed({
     imports: [
@@ -34,28 +36,33 @@ describe('InventoryComponent', () => {
     fixture = TestBed.createComponent(InventoryComponent);
     component = fixture.componentInstance;
     orchService = TestBed.inject(OrchestratorService);
+    hostService = TestBed.inject(HostService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-    spyOn(orchService, 'inventoryDeviceList').and.callThrough();
+    spyOn(hostService, 'inventoryDeviceList').and.callThrough();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should not display doc panel if orchestrator is available', () => {
+    expect(component.showDocPanel).toBeFalsy();
+  });
+
   describe('after ngOnInit', () => {
     it('should load devices', () => {
       fixture.detectChanges();
-      expect(orchService.inventoryDeviceList).toHaveBeenNthCalledWith(1, undefined, false);
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(1, undefined, false);
       component.refresh(); // click refresh button
-      expect(orchService.inventoryDeviceList).toHaveBeenNthCalledWith(2, undefined, true);
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(2, undefined, true);
 
       const newHost = 'host0';
       component.hostname = newHost;
       fixture.detectChanges();
       component.ngOnChanges();
-      expect(orchService.inventoryDeviceList).toHaveBeenNthCalledWith(3, newHost, false);
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(3, newHost, false);
       component.refresh(); // click refresh button
-      expect(orchService.inventoryDeviceList).toHaveBeenNthCalledWith(4, newHost, true);
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(4, newHost, true);
     });
   });
 });

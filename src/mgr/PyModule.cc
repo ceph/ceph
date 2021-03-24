@@ -28,13 +28,15 @@
 #define dout_prefix *_dout << "mgr[py] "
 
 // definition for non-const static member
-std::string PyModule::config_prefix = "mgr/";
+std::string PyModule::mgr_store_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 // Boost apparently can't be bothered to fix its own usage of its own
 // deprecated features.
-#include <boost/python.hpp>
+#include <boost/python/extract.hpp>
+#include <boost/python/import.hpp>
+#include <boost/python/object.hpp>
 #undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"  // boost clobbers this
@@ -143,13 +145,12 @@ PyModuleConfig::PyModuleConfig(PyModuleConfig &mconfig)
 PyModuleConfig::~PyModuleConfig() = default;
 
 
-void PyModuleConfig::set_config(
+std::pair<int, std::string> PyModuleConfig::set_config(
     MonClient *monc,
     const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = PyModule::config_prefix
-                                   + module_name + "/" + key;
+  const std::string global_key = "mgr/" + module_name + "/" + key;
   Command set_cmd;
   {
     std::ostringstream cmd_json;
@@ -176,6 +177,7 @@ void PyModuleConfig::set_config(
     } else {
       config.erase(global_key);
     }
+    return {0, ""};
   } else {
     if (val) {
       dout(0) << "`config set mgr " << global_key << " " << val << "` failed: "
@@ -185,6 +187,7 @@ void PyModuleConfig::set_config(
         << cpp_strerror(set_cmd.r) << dendl;
     }
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+    return {set_cmd.r, set_cmd.outs};
   }
 }
 
@@ -497,12 +500,9 @@ int PyModule::load_commands()
     command.perm = PyUnicode_AsUTF8(pPerm);
 
     command.polling = false;
-    PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
-    if (pPoll) {
-      std::string polling = PyUnicode_AsUTF8(pPoll);
-      if (boost::iequals(polling, "true")) {
-        command.polling = true;
-      }
+    if (PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
+	pPoll && PyObject_IsTrue(pPoll)) {
+      command.polling = true;
     }
 
     command.module_name = module_name;

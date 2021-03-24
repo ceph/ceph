@@ -32,7 +32,7 @@ struct ceph_config_info {
 };
 
 void mount_ceph_get_config_info(const char *config_file, const char *name,
-				struct ceph_config_info *cci);
+				bool v2_addrs, struct ceph_config_info *cci);
 
 #ifdef __cplusplus
 }

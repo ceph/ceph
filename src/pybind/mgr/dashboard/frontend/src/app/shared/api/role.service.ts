@@ -1,10 +1,10 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
-import { RoleFormModel } from '../../core/auth/role-form/role-form.model';
+import { RoleFormModel } from '~/app/core/auth/role-form/role-form.model';
 
 @Injectable({
   providedIn: 'root'
@@ -29,9 +29,7 @@ export class RoleService {
   }
 
   clone(name: string, newName: string) {
-    let params = new HttpParams();
-    params = params.append('new_name', newName);
-    return this.http.post(`api/role/${name}/clone`, null, { params });
+    return this.http.post(`api/role/${name}/clone`, { new_name: newName });
   }
 
   update(role: RoleFormModel) {

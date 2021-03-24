@@ -63,7 +63,7 @@
  * 
  */
 
-class MDiscoverReply : public MMDSOp {
+class MDiscoverReply final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -141,7 +141,7 @@ protected:
   {
     header.tid = 0;
   }
-  ~MDiscoverReply() override {}
+  ~MDiscoverReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "discover_reply"; }

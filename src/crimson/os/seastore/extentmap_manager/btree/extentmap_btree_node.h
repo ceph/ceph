@@ -81,6 +81,7 @@ struct ExtMapNode : LogicalCachedExtent {
 
   virtual bool at_max_capacity() const = 0;
   virtual bool at_min_capacity() const = 0;
+  virtual unsigned get_node_size() const = 0;
   virtual ~ExtMapNode() = default;
 
   using alloc_ertr = TransactionManager::alloc_extent_ertr;
@@ -97,7 +98,7 @@ struct ExtMapNode : LogicalCachedExtent {
   alloc_ertr::future<std::pair<TCachedExtentRef<T>, TCachedExtentRef<T>>>
   extmap_alloc_2extents(ext_context_t ec, extent_len_t len) {
     return seastar::do_with(std::pair<TCachedExtentRef<T>, TCachedExtentRef<T>>(),
-      [this, ec, len] (auto &extents) {
+      [ec, len] (auto &extents) {
       return crimson::do_for_each(boost::make_counting_iterator(0),
                                   boost::make_counting_iterator(2),
                                   [ec, len, &extents] (auto i) {
@@ -115,9 +116,7 @@ struct ExtMapNode : LogicalCachedExtent {
     });
   }
 
-  using retire_ertr = crimson::errorator<
-                      crimson::ct_error::enoent,
-                      crimson::ct_error::input_output_error>;
+  using retire_ertr = TransactionManager::ref_ertr;
   using retire_ret = retire_ertr::future<std::list<unsigned>>;
   retire_ret
   extmap_retire_node(ext_context_t ec, std::list<laddr_t> dec_laddrs) {

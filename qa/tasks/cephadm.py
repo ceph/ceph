@@ -4,7 +4,6 @@ Ceph cluster task, deployed via cephadm orchestrator
 import argparse
 import configobj
 import contextlib
-import errno
 import logging
 import os
 import json
@@ -13,7 +12,6 @@ import uuid
 import yaml
 
 from io import BytesIO, StringIO
-import toml
 from tarfile import ReadError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
@@ -66,6 +64,19 @@ def build_initial_config(ctx, config):
 
     return conf
 
+def update_archive_setting(ctx, key, value):
+    """
+    Add logs directory to job's info log file
+    """
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' in info_yaml:
+            info_yaml['archive'][key] = value
+        else:
+            info_yaml['archive'] = {key: value}
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
 @contextlib.contextmanager
 def normalize_hostnames(ctx):
     """
@@ -90,7 +101,7 @@ def download_cephadm(ctx, config, ref):
 
     if config.get('cephadm_mode') != 'cephadm-package':
         ref = config.get('cephadm_branch', ref)
-        git_url = teuth_config.get_ceph_git_url()
+        git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
         log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
         if git_url.startswith('https://github.com/'):
             # git archive doesn't like https:// URLs, which we use with github.
@@ -159,15 +170,8 @@ def ceph_log(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
-    # Add logs directory to job's info log file
-    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
-        info_yaml = yaml.safe_load(info_file)
-        info_file.seek(0)
-        if 'archive' not in info_yaml:
-            info_yaml['archive'] = {'log': '/var/log/ceph'}
-        else:
-            info_yaml['archive']['log'] = '/var/log/ceph'
-        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+    update_archive_setting(ctx, 'log', '/var/log/ceph')
+
 
     try:
         yield
@@ -277,15 +281,7 @@ def ceph_crash(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
-    # Add logs directory to job's info log file
-    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
-        info_yaml = yaml.safe_load(info_file)
-        info_file.seek(0)
-        if 'archive' not in info_yaml:
-            info_yaml['archive'] = {'crash': '/var/lib/ceph/%s/crash' % fsid}
-        else:
-            info_yaml['archive']['crash'] = '/var/lib/ceph/%s/crash' % fsid
-        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+    update_archive_setting(ctx, 'crash', '/var/lib/ceph/crash')
 
     try:
         yield
@@ -312,14 +308,12 @@ def ceph_crash(ctx, config):
                     pass
 
 @contextlib.contextmanager
-def ceph_bootstrap(ctx, config, registry):
+def ceph_bootstrap(ctx, config):
     """
-    Bootstrap ceph cluster, setup containers' registry mirror before
-    the bootstrap if the registry is provided.
+    Bootstrap ceph cluster.
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
-    :param registry: url to  containers' mirror registry
     """
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
@@ -336,8 +330,6 @@ def ceph_bootstrap(ctx, config, registry):
     ctx.cluster.run(args=[
         'sudo', 'chmod', '777', '/etc/ceph',
         ]);
-    if registry:
-        add_mirror_to_cluster(ctx, registry)
     try:
         # write seed config
         log.info('Writing seed config...')
@@ -434,8 +426,9 @@ def ceph_bootstrap(ctx, config, registry):
         ])
 
         # set options
-        _shell(ctx, cluster_name, bootstrap_remote,
-               ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
+        if config.get('allow_ptrace', True):
+            _shell(ctx, cluster_name, bootstrap_remote,
+                   ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
 
         # add other hosts
         for remote in ctx.cluster.remotes.keys():
@@ -498,21 +491,70 @@ def ceph_mons(ctx, config):
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
-    num_mons = 1
 
     try:
-        for remote, roles in ctx.cluster.remotes.items():
-            for mon in [r for r in roles
-                        if teuthology.is_type('mon', cluster_name)(r)]:
-                c_, _, id_ = teuthology.split_role(mon)
-                if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mon:
-                    continue
-                log.info('Adding %s on %s' % (mon, remote.shortname))
-                num_mons += 1
-                _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'daemon', 'add', 'mon',
-                    remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
-                ])
+        daemons = {}
+        if config.get('add_mons_via_daemon_add'):
+            # This is the old way of adding mons that works with the (early) octopus
+            # cephadm scheduler.
+            num_mons = 1
+            for remote, roles in ctx.cluster.remotes.items():
+                for mon in [r for r in roles
+                            if teuthology.is_type('mon', cluster_name)(r)]:
+                    c_, _, id_ = teuthology.split_role(mon)
+                    if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mon:
+                        continue
+                    log.info('Adding %s on %s' % (mon, remote.shortname))
+                    num_mons += 1
+                    _shell(ctx, cluster_name, remote, [
+                        'ceph', 'orch', 'daemon', 'add', 'mon',
+                        remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
+                    ])
+                    ctx.daemons.register_daemon(
+                        remote, 'mon', id_,
+                        cluster=cluster_name,
+                        fsid=fsid,
+                        logger=log.getChild(mon),
+                        wait=False,
+                        started=True,
+                    )
+                    daemons[mon] = (remote, id_)
+
+                    with contextutil.safe_while(sleep=1, tries=180) as proceed:
+                        while proceed():
+                            log.info('Waiting for %d mons in monmap...' % (num_mons))
+                            r = _shell(
+                                ctx=ctx,
+                                cluster_name=cluster_name,
+                                remote=remote,
+                                args=[
+                                    'ceph', 'mon', 'dump', '-f', 'json',
+                                ],
+                                stdout=StringIO(),
+                            )
+                            j = json.loads(r.stdout.getvalue())
+                            if len(j['mons']) == num_mons:
+                                break
+        else:
+            nodes = []
+            for remote, roles in ctx.cluster.remotes.items():
+                for mon in [r for r in roles
+                            if teuthology.is_type('mon', cluster_name)(r)]:
+                    c_, _, id_ = teuthology.split_role(mon)
+                    log.info('Adding %s on %s' % (mon, remote.shortname))
+                    nodes.append(remote.shortname
+                                 + ':' + ctx.ceph[cluster_name].mons[mon]
+                                 + '=' + id_)
+                    if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mon:
+                        continue
+                    daemons[mon] = (remote, id_)
+
+            _shell(ctx, cluster_name, remote, [
+                'ceph', 'orch', 'apply', 'mon',
+                str(len(nodes)) + ';' + ';'.join(nodes)]
+                   )
+            for mgr, i in daemons.items():
+                remote, id_ = i
                 ctx.daemons.register_daemon(
                     remote, 'mon', id_,
                     cluster=cluster_name,
@@ -522,28 +564,29 @@ def ceph_mons(ctx, config):
                     started=True,
                 )
 
-                with contextutil.safe_while(sleep=1, tries=180) as proceed:
-                    while proceed():
-                        log.info('Waiting for %d mons in monmap...' % (num_mons))
-                        r = _shell(
-                            ctx=ctx,
-                            cluster_name=cluster_name,
-                            remote=remote,
-                            args=[
-                                'ceph', 'mon', 'dump', '-f', 'json',
-                            ],
-                            stdout=StringIO(),
-                        )
-                        j = json.loads(r.stdout.getvalue())
-                        if len(j['mons']) == num_mons:
-                            break
+            with contextutil.safe_while(sleep=1, tries=180) as proceed:
+                while proceed():
+                    log.info('Waiting for %d mons in monmap...' % (len(nodes)))
+                    r = _shell(
+                        ctx=ctx,
+                        cluster_name=cluster_name,
+                        remote=remote,
+                        args=[
+                            'ceph', 'mon', 'dump', '-f', 'json',
+                        ],
+                        stdout=StringIO(),
+                    )
+                    j = json.loads(r.stdout.getvalue())
+                    if len(j['mons']) == len(nodes):
+                        break
 
         # refresh our (final) ceph.conf file
+        bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
         log.info('Generating final ceph.conf file...')
         r = _shell(
             ctx=ctx,
             cluster_name=cluster_name,
-            remote=remote,
+            remote=bootstrap_remote,
             args=[
                 'ceph', 'config', 'generate-minimal-conf',
             ],
@@ -571,15 +614,15 @@ def ceph_mgrs(ctx, config):
             for mgr in [r for r in roles
                         if teuthology.is_type('mgr', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mgr)
-                if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mgr:
-                    continue
                 log.info('Adding %s on %s' % (mgr, remote.shortname))
                 nodes.append(remote.shortname + '=' + id_)
+                if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mgr:
+                    continue
                 daemons[mgr] = (remote, id_)
         if nodes:
             _shell(ctx, cluster_name, remote, [
                 'ceph', 'orch', 'apply', 'mgr',
-                str(len(nodes) + 1) + ';' + ';'.join(nodes)]
+                str(len(nodes)) + ';' + ';'.join(nodes)]
             )
         for mgr, i in daemons.items():
             remote, id_ = i
@@ -738,30 +781,15 @@ def ceph_rgw(ctx, config):
                     if teuthology.is_type('rgw', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
-            realmzone = '.'.join(id_.split('.')[0:2])
-            if realmzone not in nodes:
-                nodes[realmzone] = []
-            nodes[realmzone].append(remote.shortname + '=' + id_)
+            svc = '.'.join(id_.split('.')[0:2])
+            if svc not in nodes:
+                nodes[svc] = []
+            nodes[svc].append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
 
-    for realmzone in nodes.keys():
-        (realm, zone) = realmzone.split('.', 1)
-
-        # TODO: those should be moved to mgr/cephadm
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'realm', 'create', '--rgw-realm', realm, '--default']
-        )
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'zonegroup', 'create', '--rgw-zonegroup=default', '--master', '--default']
-        )
-        _shell(ctx, cluster_name, remote,
-               ['radosgw-admin', 'zone', 'create', '--rgw-zonegroup=default', '--rgw-zone', zone,  '--master', '--default']
-        )
-
-    for realmzone, nodes in nodes.items():
-        (realm, zone) = realmzone.split('.', 1)
+    for svc, nodes in nodes.items():
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'orch', 'apply', 'rgw', realm, zone,
+            'ceph', 'orch', 'apply', 'rgw', svc,
              '--placement',
              str(len(nodes)) + ';' + ';'.join(nodes)]
         )
@@ -1049,6 +1077,28 @@ def crush_setup(ctx, config):
     yield
 
 @contextlib.contextmanager
+def create_rbd_pool(ctx, config):
+    if config.get('create_rbd_pool', False):
+      cluster_name = config['cluster']
+      log.info('Waiting for OSDs to come up')
+      teuthology.wait_until_osds_up(
+          ctx,
+          cluster=ctx.cluster,
+          remote=ctx.ceph[cluster_name].bootstrap_remote,
+          ceph_cluster=cluster_name,
+      )
+      log.info('Creating RBD pool')
+      _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+          args=['sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'pool', 'create', 'rbd', '8'])
+      _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+          args=['sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'pool', 'application', 'enable',
+                'rbd', 'rbd', '--yes-i-really-mean-it'
+          ])
+    yield
+
+@contextlib.contextmanager
 def _bypass():
     yield
 
@@ -1140,16 +1190,11 @@ def task(ctx, config):
     """
     Deploy ceph cluster using cephadm
 
-    Setup containers' mirrors before the bootstrap, if corresponding
-    config provided in teuthology server config yaml file.
-
     For example, teuthology.yaml can contain the 'defaults' section:
 
         defaults:
           cephadm:
             containers:
-              registry_mirrors:
-                docker.io: 'registry.mirror.example.com:5000'
               image: 'quay.io/ceph-ci/ceph'
 
     Using overrides makes it possible to customize it per run.
@@ -1158,8 +1203,6 @@ def task(ctx, config):
         overrides:
           cephadm:
             containers:
-              registry_mirrors:
-                docker.io: 'registry.mirror.example.com:5000'
               image: 'quay.io/ceph-ci/ceph'
 
     :param ctx: the argparse.Namespace object
@@ -1191,15 +1234,10 @@ def task(ctx, config):
     teuth_defaults = teuth_config.get('defaults', {})
     cephadm_defaults = teuth_defaults.get('cephadm', {})
     containers_defaults = cephadm_defaults.get('containers', {})
-    mirrors_defaults = containers_defaults.get('registry_mirrors', {})
-    container_registry_mirror = mirrors_defaults.get('docker.io', None)
     container_image_name = containers_defaults.get('image', None)
 
     containers = config.get('containers', {})
-    mirrors = containers.get('registry_mirrors', {})
     container_image_name = containers.get('image', container_image_name)
-    container_registry_mirror = mirrors.get('docker.io',
-                                            container_registry_mirror)
 
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
@@ -1240,8 +1278,7 @@ def task(ctx, config):
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
             lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
-                              else ceph_bootstrap(ctx, config,
-                                                  container_registry_mirror),
+                              else ceph_bootstrap(ctx, config),
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
@@ -1255,6 +1292,7 @@ def task(ctx, config):
             lambda: ceph_monitoring('alertmanager', ctx=ctx, config=config),
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
+            lambda: create_rbd_pool(ctx=ctx, config=config),
     ):
         ctx.managers[cluster_name] = CephManager(
             ctx.ceph[cluster_name].bootstrap_remote,
@@ -1274,51 +1312,3 @@ def task(ctx, config):
         finally:
             log.info('Teardown begin')
 
-
-def registries_add_mirror_to_docker_io(conf, mirror):
-    config = toml.loads(conf)
-    is_v1 = 'registries' in config
-    if is_v1:
-        search = config.get('registries', {}).get('search', {}).get('registries', [])
-        insecure = config.get('registries', {}).get('search', {}).get('insecure', [])
-        # v2: MutableMapping[str, Any] = { needs Python 3
-        v2 = {
-            'unqualified-search-registries': search,
-            'registry': [
-                {
-                    'prefix': reg,
-                    'location': reg,
-                    'insecure': reg in insecure,
-                    'blocked': False,
-                } for reg in search
-            ]
-        }
-    else:
-        v2 = config  # type: ignore
-    dockers = [r for r in v2['registry'] if r['prefix'] == 'docker.io']
-    if dockers:
-        docker = dockers[0]
-        docker['mirror'] = [{
-            "location": mirror,
-            "insecure": True,
-        }]
-    return v2
-
-
-def add_mirror_to_cluster(ctx, mirror):
-    log.info('Adding local image mirror %s' % mirror)
-
-    registries_conf = '/etc/containers/registries.conf'
-
-    for remote in ctx.cluster.remotes.keys():
-        try:
-            config = remote.read_file(registries_conf)
-            new_config = toml.dumps(registries_add_mirror_to_docker_io(config.decode('utf-8'), mirror))
-
-            remote.sudo_write_file(registries_conf, new_config)
-        except IOError as e:  # py3: use FileNotFoundError instead.
-            if e.errno != errno.ENOENT:
-                raise
-
-            # Docker doesn't ship a registries.conf
-            log.info('Failed to add mirror: %s' % str(e))

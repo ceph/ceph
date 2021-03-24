@@ -13,6 +13,7 @@
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
 #include "mds/InoTable.h"
+#include "mds/CDentry.h"
 
 #include "mds/events/ENoOp.h"
 #include "mds/events/EUpdate.h"
@@ -921,12 +922,14 @@ int MetaTool::show_child(std::string_view key,
   //    dn = lookup_exact_snap(dname, last);
   //else
   //    dn = lookup(dname, last);
-  if (type == 'L') {
+  if (type == 'L' || type == 'l') {
     // hard link
     inodeno_t ino;
     unsigned char d_type;
-    ::decode(ino, q);
-    ::decode(d_type, q);
+    mempool::mds_co::string alternate_name;
+
+    CDentry::decode_remote(type, ino, d_type, alternate_name, q);
+
     if (sp_ino > 0) {
       if (sp_ino == ino) {
         std::cout << "find hard link : " << ino << "," << d_type << std::endl;
@@ -935,11 +938,21 @@ int MetaTool::show_child(std::string_view key,
     }
 
     std::cout << "hard link : " << ino << "," << d_type << std::endl;
-  } else if (type == 'I') {
+  } else if (type == 'I' || type == 'i') {
     // inode
     // load inode data before lookuping up or constructing CInode
     InodeStore& inode_data = *(new InodeStore);
-    inode_data.decode_bare(q);
+    if (type == 'i') {
+      mempool::mds_co::string alternate_name;
+
+      DECODE_START(2, q);
+      if (struct_v >= 2)
+        decode(alternate_name, q);
+      inode_data.decode(q);
+      DECODE_FINISH(q);
+    } else {
+      inode_data.decode_bare(q);
+    }
 
     std::stringstream ds;
     std::string format = "json";

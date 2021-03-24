@@ -1,7 +1,12 @@
 import pytest
 import json
 import random
+
+from argparse import ArgumentError
+from mock import MagicMock, patch
+
 from ceph_volume.devices.lvm import batch
+from ceph_volume.util import arg_validators
 
 
 class TestBatch(object):
@@ -18,6 +23,15 @@ class TestBatch(object):
         with pytest.raises(Exception) as disjoint_ex:
             batch.ensure_disjoint_device_lists(devices, db_devices)
         assert 'Device lists are not disjoint' in str(disjoint_ex.value)
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    def test_reject_partition(self, mocked_device):
+        mocked_device.return_value = MagicMock(
+            is_partition=True,
+            has_gpt_headers=False,
+        )
+        with pytest.raises(ArgumentError):
+            arg_validators.ValidBatchDevice()('foo')
 
     @pytest.mark.parametrize('format_', ['pretty', 'json', 'json-pretty'])
     def test_report(self, format_, factory, conf_ceph_stub, mock_device_generator):
@@ -115,6 +129,40 @@ class TestBatch(object):
         b.args = args
         report = b._create_report(plan)
         json.loads(report)
+
+    @pytest.mark.parametrize('rota', [0, 1])
+    def test_batch_sort_full(self, factory, rota):
+        device1 = factory(used_by_ceph=False, available=True, rotational=rota, abspath="/dev/sda")
+        device2 = factory(used_by_ceph=False, available=True, rotational=rota, abspath="/dev/sdb")
+        device3 = factory(used_by_ceph=False, available=True, rotational=rota, abspath="/dev/sdc")
+        devices = [device1, device2, device3]
+        args = factory(report=True,
+                       devices=devices,
+                       filestore=False,
+                      )
+        b = batch.Batch([])
+        b.args = args
+        b._sort_rotational_disks()
+        assert len(b.args.devices) == 3
+
+    @pytest.mark.parametrize('objectstore', ['bluestore', 'filestore'])
+    def test_batch_sort_mixed(self, factory, objectstore):
+        device1 = factory(used_by_ceph=False, available=True, rotational=1, abspath="/dev/sda")
+        device2 = factory(used_by_ceph=False, available=True, rotational=1, abspath="/dev/sdb")
+        device3 = factory(used_by_ceph=False, available=True, rotational=0, abspath="/dev/sdc")
+        devices = [device1, device2, device3]
+        args = factory(report=True,
+                       devices=devices,
+                       filestore=False if objectstore == 'bluestore' else True,
+                      )
+        b = batch.Batch([])
+        b.args = args
+        b._sort_rotational_disks()
+        assert len(b.args.devices) == 2
+        if objectstore == 'bluestore':
+            assert len(b.args.db_devices) == 1
+        else:
+            assert len(b.args.journal_devices) == 1
 
     def test_get_physical_osds_return_len(self, factory,
                                           mock_devices_available,

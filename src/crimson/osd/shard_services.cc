@@ -4,6 +4,8 @@
 #include "crimson/osd/shard_services.h"
 
 #include "messages/MOSDAlive.h"
+#include "messages/MOSDPGCreated.h"
+#include "messages/MOSDPGTemp.h"
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
@@ -14,11 +16,6 @@
 #include "crimson/net/Connection.h"
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/osd/osdmap_service.h"
-#include "messages/MOSDPGTemp.h"
-#include "messages/MOSDPGCreated.h"
-#include "messages/MOSDPGNotify.h"
-#include "messages/MOSDPGInfo.h"
-#include "messages/MOSDPGQuery.h"
 
 namespace {
   seastar::logger& logger() {
@@ -136,7 +133,7 @@ seastar::future<> ShardServices::dispatch_context(
   ceph_assert(col || ctx.transaction.empty());
   return seastar::when_all_succeed(
     dispatch_context_messages(
-      BufferedRecoveryMessages{ceph_release_t::octopus, ctx}),
+      BufferedRecoveryMessages{ctx}),
     col ? dispatch_context_transaction(col, ctx) : seastar::now()
   ).then_unpack([] {
     return seastar::now();
@@ -161,23 +158,12 @@ void ShardServices::remove_want_pg_temp(pg_t pgid)
   pg_temp_pending.erase(pgid);
 }
 
-void ShardServices::_sent_pg_temp()
-{
-#ifdef HAVE_STDLIB_MAP_SPLICING
-  pg_temp_pending.merge(pg_temp_wanted);
-#else
-  pg_temp_pending.insert(make_move_iterator(begin(pg_temp_wanted)),
-			 make_move_iterator(end(pg_temp_wanted)));
-#endif
-  pg_temp_wanted.clear();
-}
-
 void ShardServices::requeue_pg_temp()
 {
   unsigned old_wanted = pg_temp_wanted.size();
   unsigned old_pending = pg_temp_pending.size();
-  _sent_pg_temp();
-  pg_temp_wanted.swap(pg_temp_pending);
+  pg_temp_wanted.merge(pg_temp_pending);
+  pg_temp_pending.clear();
   logger().debug(
     "{}: {} + {} -> {}",
     __func__ ,
@@ -211,6 +197,8 @@ seastar::future<> ShardServices::send_pg_temp()
     }
     m->pg_temp.emplace(pgid, pg_temp.acting);
   }
+  pg_temp_pending.merge(pg_temp_wanted);
+  pg_temp_wanted.clear();
   return seastar::parallel_for_each(std::begin(ms), std::end(ms),
     [this](auto m) {
       if (m) {
@@ -218,8 +206,6 @@ seastar::future<> ShardServices::send_pg_temp()
       } else {
 	return seastar::now();
       }
-    }).then([this] {
-      _sent_pg_temp();
     });
 }
 

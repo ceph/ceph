@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_CACHE_RWL_LOG_ENTRY_H
-#define CEPH_LIBRBD_CACHE_RWL_LOG_ENTRY_H
+#ifndef CEPH_LIBRBD_CACHE_PWL_LOG_ENTRY_H
+#define CEPH_LIBRBD_CACHE_PWL_LOG_ENTRY_H
 
 #include "common/ceph_mutex.h"
 #include "librbd/Utils.h"
@@ -23,11 +23,11 @@ typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
 
 class GenericLogEntry {
 public:
-  WriteLogPmemEntry ram_entry;
-  WriteLogPmemEntry *pmem_entry = nullptr;
+  WriteLogCacheEntry ram_entry;
+  WriteLogCacheEntry *cache_entry = nullptr;
   uint32_t log_entry_index = 0;
   bool completed = false;
-  GenericLogEntry(const uint64_t image_offset_bytes = 0, const uint64_t write_bytes = 0)
+  GenericLogEntry(uint64_t image_offset_bytes = 0, uint64_t write_bytes = 0)
     : ram_entry(image_offset_bytes, write_bytes) {
   };
   virtual ~GenericLogEntry() { };
@@ -55,6 +55,23 @@ public:
                          Context *ctx) {
     ceph_assert(false);
   };
+  virtual void writeback_bl(librbd::cache::ImageWritebackInterface &image_writeback,
+                 Context *ctx, ceph::bufferlist &&bl) {
+    ceph_assert(false);
+  }
+  virtual bool is_write_entry() const {
+    return false;
+  }
+  virtual bool is_writesame_entry() const {
+    return false;
+  }
+  virtual bool is_sync_point() const {
+    return false;
+  }
+  virtual unsigned int get_aligned_data_size() const {
+    return 0;
+  }
+  virtual void remove_cache_bl() {}
   virtual std::ostream& format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const GenericLogEntry &entry);
@@ -73,7 +90,7 @@ public:
   /* All writing entries using all prior sync gen numbers have been flushed */
   std::atomic<bool> prior_sync_point_flushed = {true};
   std::shared_ptr<SyncPointLogEntry> next_sync_point_entry = nullptr;
-  SyncPointLogEntry(const uint64_t sync_gen_number) {
+  SyncPointLogEntry(uint64_t sync_gen_number) {
     ram_entry.sync_gen_number = sync_gen_number;
     ram_entry.sync_point = 1;
   };
@@ -82,6 +99,9 @@ public:
   SyncPointLogEntry &operator=(const SyncPointLogEntry&) = delete;
   bool can_retire() const override {
     return this->completed;
+  }
+  bool is_sync_point() const override {
+    return true;
   }
   std::ostream& format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
@@ -93,9 +113,9 @@ public:
   uint32_t referring_map_entries = 0;
   std::shared_ptr<SyncPointLogEntry> sync_point_entry;
   GenericWriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
-                       const uint64_t image_offset_bytes, const uint64_t write_bytes)
+                       uint64_t image_offset_bytes, uint64_t write_bytes)
     : GenericLogEntry(image_offset_bytes, write_bytes), sync_point_entry(sync_point_entry) { }
-  GenericWriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
+  GenericWriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes)
     : GenericLogEntry(image_offset_bytes, write_bytes), sync_point_entry(nullptr) { }
   ~GenericWriteLogEntry() override {};
   GenericWriteLogEntry(const GenericWriteLogEntry&) = delete;
@@ -120,7 +140,7 @@ public:
   std::shared_ptr<SyncPointLogEntry> get_sync_point_entry() override {
     return sync_point_entry;
   }
-  virtual void copy_pmem_bl(bufferlist *out_bl) = 0;
+  virtual void copy_cache_bl(bufferlist *out_bl) = 0;
   void set_flushed(bool flushed) override {
     m_flushed = flushed;
   }
@@ -137,49 +157,77 @@ private:
 
 class WriteLogEntry : public GenericWriteLogEntry {
 protected:
-  buffer::ptr pmem_bp;
-  buffer::list pmem_bl;
-  std::atomic<int> bl_refs = {0}; /* The refs held on pmem_bp by pmem_bl */
-  /* Used in WriteLogEntry::get_pmem_bl() to syncronize between threads making entries readable */
+  bool is_writesame = false;
+  buffer::ptr cache_bp;
+  buffer::list cache_bl;
+  std::atomic<int> bl_refs = {0}; /* The refs held on cache_bp by cache_bl */
+  /* Used in WriteLogEntry::get_cache_bl() to syncronize between threads making entries readable */
   mutable ceph::mutex m_entry_bl_lock;
 
-  void init_pmem_bp();
+  virtual void init_cache_bp() {}
 
-  /* Write same will override */
-  virtual void init_bl(buffer::ptr &bp, buffer::list &bl) {
-    bl.append(bp);
-  }
-
-  void init_pmem_bl();
-
+  virtual void init_bl(buffer::ptr &bp, buffer::list &bl) {}
 public:
-  uint8_t *pmem_buffer = nullptr;
+  uint8_t *cache_buffer = nullptr;
   WriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
-                const uint64_t image_offset_bytes, const uint64_t write_bytes)
+                uint64_t image_offset_bytes, uint64_t write_bytes)
     : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
-      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+      m_entry_bl_lock(ceph::make_mutex(pwl::unique_lock_name(
         "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
-  WriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
+  WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes)
     : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes),
-      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+      m_entry_bl_lock(ceph::make_mutex(pwl::unique_lock_name(
         "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
-  ~WriteLogEntry() override {};
+  WriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
+                    uint64_t image_offset_bytes, uint64_t write_bytes,
+                    uint32_t data_length)
+    : WriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes) {
+    ram_entry.writesame = 1;
+    ram_entry.ws_datalen = data_length;
+    is_writesame = true;
+  };
+  WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes,
+                    uint32_t data_length)
+    : WriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
+    ram_entry.writesame = 1;
+    ram_entry.ws_datalen = data_length;
+    is_writesame = true;
+  };
+ ~WriteLogEntry() override {};
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
-  void init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
+  unsigned int write_bytes() const override {
+    // The valid bytes in this ops data buffer.
+    if(is_writesame) {
+      return ram_entry.ws_datalen;
+    }
+    return ram_entry.write_bytes;
+  };
+  unsigned int bytes_dirty() const override {
+    // The bytes in the image this op makes dirty.
+    return ram_entry.write_bytes;
+  };
+  void init(bool has_data,
             uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush);
+  virtual void init_cache_buffer(std::vector<WriteBufferAllocation>::iterator allocation) {}
+  virtual void init_cache_bl(bufferlist &src_bl, uint64_t off, uint64_t len) {}
+  /* Returns a ref to a bl containing bufferptrs to the entry cache buffer */
+  virtual buffer::list &get_cache_bl() = 0;
+
   BlockExtent block_extent();
   unsigned int reader_count() const;
-  /* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */
-  buffer::list &get_pmem_bl();
-  /* Constructs a new bl containing copies of pmem_bp */
-  void copy_pmem_bl(bufferlist *out_bl) override;
-  void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
-                 Context *ctx) override;
+  /* Constructs a new bl containing copies of cache_bp */
+  void copy_cache_bl(bufferlist *out_bl) override {};
   bool can_retire() const override {
     return (this->completed && this->get_flushed() && (0 == reader_count()));
+  }
+  bool is_write_entry() const override {
+    return true;
+  }
+  bool is_writesame_entry() const override {
+    return is_writesame;
   }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
@@ -189,13 +237,13 @@ public:
 class DiscardLogEntry : public GenericWriteLogEntry {
 public:
   DiscardLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
-                  const uint64_t image_offset_bytes, const uint64_t write_bytes,
+                  uint64_t image_offset_bytes, uint64_t write_bytes,
                   uint32_t discard_granularity_bytes)
     : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
       m_discard_granularity_bytes(discard_granularity_bytes) {
     ram_entry.discard = 1;
   };
-  DiscardLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
+  DiscardLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes)
     : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
     ram_entry.discard = 1;
   };
@@ -212,7 +260,7 @@ public:
   bool can_retire() const override {
     return this->completed;
   }
-  void copy_pmem_bl(bufferlist *out_bl) override {
+  void copy_cache_bl(bufferlist *out_bl) override {
     ceph_assert(false);
   }
   void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
@@ -225,43 +273,8 @@ private:
   uint32_t m_discard_granularity_bytes;
 };
 
-class WriteSameLogEntry : public WriteLogEntry {
-protected:
-  void init_bl(buffer::ptr &bp, buffer::list &bl) override;
-
-public:
-  WriteSameLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
-                    const uint64_t image_offset_bytes, const uint64_t write_bytes,
-                    const uint32_t data_length)
-    : WriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes) {
-    ram_entry.writesame = 1;
-    ram_entry.ws_datalen = data_length;
-  };
-  WriteSameLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes,
-                    const uint32_t data_length)
-    : WriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
-    ram_entry.writesame = 1;
-    ram_entry.ws_datalen = data_length;
-  };
-  WriteSameLogEntry(const WriteSameLogEntry&) = delete;
-  WriteSameLogEntry &operator=(const WriteSameLogEntry&) = delete;
-  unsigned int write_bytes() const override {
-    /* The valid bytes in this ops data buffer. */
-    return ram_entry.ws_datalen;
-  };
-  unsigned int bytes_dirty() const override {
-    /* The bytes in the image this op makes dirty. */
-    return ram_entry.write_bytes;
-  };
-  void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
-                 Context *ctx) override;
-  std::ostream &format(std::ostream &os) const;
-  friend std::ostream &operator<<(std::ostream &os,
-                                  const WriteSameLogEntry &entry);
-};
-
 } // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_CACHE_RWL_LOG_ENTRY_H
+#endif // CEPH_LIBRBD_CACHE_PWL_LOG_ENTRY_H

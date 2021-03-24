@@ -6,6 +6,7 @@
 
 #include <numeric>
 
+#include "include/compat.h"
 #include "include/ceph_assert.h"
 #include "include/types.h"
 #include "include/xlist.h"
@@ -159,10 +160,13 @@ struct Inode {
   version_t version;           // auth only
   version_t xattr_version;
   utime_t   snap_btime;        // snapshot creation (birth) time
+  std::map<std::string, std::string> snap_metadata;
 
   // inline data
   version_t  inline_version;
   bufferlist inline_data;
+
+  bool fscrypt = false; // fscrypt enabled ?
 
   bool is_root()    const { return ino == MDS_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }

@@ -20,14 +20,14 @@ namespace {
 }
 
 struct cache_test_t : public seastar_test_suite_t {
-  segment_manager::EphemeralSegmentManager segment_manager;
+  segment_manager::EphemeralSegmentManagerRef segment_manager;
   Cache cache;
   paddr_t current{0, 0};
   journal_seq_t seq;
 
   cache_test_t()
-    : segment_manager(segment_manager::DEFAULT_TEST_EPHEMERAL),
-      cache(segment_manager) {}
+    : segment_manager(segment_manager::create_test_ephemeral()),
+      cache(*segment_manager) {}
 
   seastar::future<std::optional<paddr_t>> submit_transaction(
     TransactionRef t) {
@@ -43,14 +43,14 @@ struct cache_test_t : public seastar_test_suite_t {
     }
 
     ceph_assert((segment_off_t)bl.length() <
-		segment_manager.get_segment_size());
+		segment_manager->get_segment_size());
     if (current.offset + (segment_off_t)bl.length() >
-	segment_manager.get_segment_size())
+	segment_manager->get_segment_size())
       current = paddr_t{current.segment + 1, 0};
 
     auto prev = current;
     current.offset += bl.length();
-    return segment_manager.segment_write(
+    return segment_manager->segment_write(
       prev,
       std::move(bl),
       true
@@ -70,7 +70,8 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   seastar::future<> set_up_fut() final {
-    return segment_manager.init().safe_then(
+    return segment_manager->init(
+    ).safe_then(
       [this] {
 	return seastar::do_with(
 	  make_transaction(),

@@ -17,7 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGBackfill : public MOSDFastDispatchOp {
+class MOSDPGBackfill final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
@@ -97,7 +97,7 @@ public:
       map_epoch(e), query_epoch(e),
       pgid(p) {}
 private:
-  ~MOSDPGBackfill() override {}
+  ~MOSDPGBackfill() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_backfill"; }

@@ -40,7 +40,7 @@ int validate_features(CephContext *cct, uint64_t features) {
     lderr(cct) << "librbd does not support requested features." << dendl;
     return -ENOSYS;
   }
-  if ((features & RBD_FEATURE_OPERATIONS) != 0) {
+  if ((features & RBD_FEATURES_INTERNAL) != 0) {
     lderr(cct) << "cannot use internally controlled features" << dendl;
     return -EINVAL;
   }
@@ -72,6 +72,9 @@ int validate_striping(CephContext *cct, uint8_t order, uint64_t stripe_unit,
     return -EINVAL;
   } else if (stripe_unit && ((1ull << order) % stripe_unit || stripe_unit > (1ull << order))) {
     lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
+    return -EINVAL;
+  } else if (stripe_unit != 0 && stripe_unit < 512) {
+    lderr(cct) << "stripe unit must be at least 512 bytes" << dendl;
     return -EINVAL;
   }
   return 0;
@@ -158,6 +161,7 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
   m_features |= features_set;
   m_features &= ~features_clear;
 
+  m_features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == RBD_FEATURE_OBJECT_MAP) {
       m_features |= RBD_FEATURE_FAST_DIFF;
   }
@@ -203,14 +207,11 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
     m_features |= RBD_FEATURE_DATA_POOL;
   } else {
     m_data_pool.clear();
-    m_features &= ~RBD_FEATURE_DATA_POOL;
   }
 
   if ((m_stripe_unit != 0 && m_stripe_unit != (1ULL << m_order)) ||
       (m_stripe_count != 0 && m_stripe_count != 1)) {
     m_features |= RBD_FEATURE_STRIPINGV2;
-  } else {
-    m_features &= ~RBD_FEATURE_STRIPINGV2;
   }
 
   ldout(m_cct, 10) << "name=" << m_image_name << ", "

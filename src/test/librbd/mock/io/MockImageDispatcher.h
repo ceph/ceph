@@ -22,13 +22,16 @@ public:
   MOCK_METHOD1(shut_down, void(Context*));
 
   MOCK_METHOD1(register_dispatch, void(ImageDispatchInterface*));
+  MOCK_METHOD1(exists, bool(ImageDispatchLayer));
   MOCK_METHOD2(shut_down_dispatch, void(ImageDispatchLayer, Context*));
+  MOCK_METHOD1(invalidate_cache, void(Context *));
 
   MOCK_METHOD1(send, void(ImageDispatchSpec*));
   MOCK_METHOD3(finish, void(int r, ImageDispatchLayer, uint64_t));
 
   MOCK_METHOD1(apply_qos_schedule_tick_min, void(uint64_t));
   MOCK_METHOD4(apply_qos_limit, void(uint64_t, uint64_t, uint64_t, uint64_t));
+  MOCK_METHOD1(apply_qos_exclude_ops, void(uint64_t));
 
   MOCK_CONST_METHOD0(writes_blocked, bool());
   MOCK_METHOD0(block_writes, int());
@@ -36,6 +39,8 @@ public:
 
   MOCK_METHOD0(unblock_writes, void());
   MOCK_METHOD1(wait_on_writes_unblocked, void(Context*));
+
+  MOCK_METHOD2(remap_extents, void(Extents&, ImageExtentsMapType));
 };
 
 } // namespace io

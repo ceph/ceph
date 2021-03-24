@@ -14,7 +14,7 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_sub_dest& dest, CephContext 
 // create a topic
 class RGWPSCreateTopicOp : public RGWDefaultResponseOp {
 protected:
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   std::string topic_name;
   rgw_pubsub_sub_dest dest;
   std::string topic_arn;
@@ -23,13 +23,13 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield) override;
 
   const char* name() const override { return "pubsub_topic_create"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_CREATE; }
@@ -39,17 +39,17 @@ public:
 // list all topics
 class RGWPSListTopicsOp : public RGWOp {
 protected:
-  std::optional<RGWUserPubSub> ups;
-  rgw_pubsub_user_topics result;
+  std::optional<RGWPubSub> ps;
+  rgw_pubsub_topics result;
 
 public:
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield) override;
 
   const char* name() const override { return "pubsub_topics_list"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPICS_LIST; }
@@ -60,19 +60,19 @@ public:
 class RGWPSGetTopicOp : public RGWOp {
 protected:
   std::string topic_name;
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   rgw_pubsub_topic_subs result;
   
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(optional_yield y) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_topic_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_GET; }
@@ -83,18 +83,18 @@ public:
 class RGWPSDeleteTopicOp : public RGWDefaultResponseOp {
 protected:
   string topic_name;
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_topic_delete"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_DELETE; }
@@ -106,19 +106,19 @@ class RGWPSCreateSubOp : public RGWDefaultResponseOp {
 protected:
   std::string sub_name;
   std::string topic_name;
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   rgw_pubsub_sub_dest dest;
   
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_create"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_CREATE; }
@@ -129,19 +129,19 @@ public:
 class RGWPSGetSubOp : public RGWOp {
 protected:
   std::string sub_name;
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   rgw_pubsub_sub_config result;
   
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_GET; }
@@ -153,18 +153,18 @@ class RGWPSDeleteSubOp : public RGWDefaultResponseOp {
 protected:
   std::string sub_name;
   std::string topic_name;
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_delete"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_DELETE; }
@@ -176,20 +176,20 @@ class RGWPSAckSubEventOp : public RGWDefaultResponseOp {
 protected:
   std::string sub_name;
   std::string event_id;
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   
   virtual int get_params() = 0;
 
 public:
   RGWPSAckSubEventOp() {}
 
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_ack"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_ACK; }
@@ -204,21 +204,21 @@ protected:
   int max_entries{0};
   std::string sub_name;
   std::string marker;
-  std::optional<RGWUserPubSub> ups;
-  RGWUserPubSub::SubRef sub; 
+  std::optional<RGWPubSub> ps;
+  RGWPubSub::SubRef sub; 
 
   virtual int get_params() = 0;
 
 public:
   RGWPSPullSubEventsOp() {}
 
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "pubsub_subscription_pull"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_PULL; }
@@ -228,14 +228,14 @@ public:
 // notification creation
 class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
 protected:
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   string bucket_name;
   RGWBucketInfo bucket_info;
 
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override;
+  int verify_permission(optional_yield y) override;
 
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
@@ -248,14 +248,14 @@ public:
 // delete a notification
 class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
 protected:
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
   std::string bucket_name;
   RGWBucketInfo bucket_info;
   
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override;
+  int verify_permission(optional_yield y) override;
 
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
@@ -270,12 +270,12 @@ class RGWPSListNotifsOp : public RGWOp {
 protected:
   std::string bucket_name;
   RGWBucketInfo bucket_info;
-  std::optional<RGWUserPubSub> ups;
+  std::optional<RGWPubSub> ps;
 
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override;
+  int verify_permission(optional_yield y) override;
 
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
@@ -284,4 +284,3 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_LIST; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
-

@@ -5,6 +5,7 @@ describe('Shared pages', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     shared.navigateTo();
   });
 

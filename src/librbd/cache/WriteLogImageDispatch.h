@@ -10,6 +10,7 @@
 #include "common/zipkin_trace.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
+#include "librbd/plugin/Api.h"
 
 struct Context;
 
@@ -25,8 +26,10 @@ template <typename ImageCtxT>
 class WriteLogImageDispatch : public io::ImageDispatchInterface {
 public:
   WriteLogImageDispatch(ImageCtxT* image_ctx,
-                        pwl::AbstractWriteLog<ImageCtx> *image_cache) :
-    m_image_ctx(image_ctx), m_image_cache(image_cache) {
+                        pwl::AbstractWriteLog<ImageCtx> *image_cache,
+			plugin::Api<ImageCtxT>& plugin_api) :
+    m_image_ctx(image_ctx), m_image_cache(image_cache),
+    m_plugin_api(plugin_api) {
   }
 
   io::ImageDispatchLayer get_dispatch_layer() const override {
@@ -86,9 +89,12 @@ public:
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) override;
 
+  bool invalidate_cache(Context* on_finish) override;
+
 private:
   ImageCtxT* m_image_ctx;
   pwl::AbstractWriteLog<ImageCtx> *m_image_cache;
+  plugin::Api<ImageCtxT>& m_plugin_api;
 
   bool preprocess_length(
       io::AioCompletion* aio_comp, io::Extents &image_extents) const;

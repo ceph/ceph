@@ -379,18 +379,17 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  std::shared_lock owner_lock{image_ctx.owner_lock};
   if(m_object_map != nullptr) {
     Context *ctx = create_context_callback<
       SnapshotRollbackRequest<I>,
       &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this, m_object_map);
-    image_ctx.io_object_dispatcher->invalidate_cache(ctx);
+    image_ctx.io_image_dispatcher->invalidate_cache(ctx);
   }
   else {
     Context *ctx = create_context_callback<
       SnapshotRollbackRequest<I>,
       &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this);
-    image_ctx.io_object_dispatcher->invalidate_cache(ctx);
+    image_ctx.io_image_dispatcher->invalidate_cache(ctx);
   }
   return nullptr;
 }

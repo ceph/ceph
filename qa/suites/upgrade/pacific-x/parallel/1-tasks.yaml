@@ -1,0 +1,27 @@
+tasks:
+- install:
+    branch: pacific
+- print: "**** done install task..."
+- print: "**** done start installing pacific cephadm ..."
+- cephadm:
+    image: docker.io/ceph/daemon-base:latest-pacific
+    cephadm_branch: pacific
+    cephadm_git_url: https://github.com/ceph/ceph
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing pacific cephadm ..."
+
+- print: "**** done start cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+
+- print: "**** done start parallel"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done end parallel"

@@ -11,6 +11,9 @@ endif()
 
 set(osd_srcs
   OSD.cc
+  pg_scrubber.cc
+  scrub_machine.cc
+  PrimaryLogScrub.cc
   Watch.cc
   ClassHandler.cc
   PG.cc

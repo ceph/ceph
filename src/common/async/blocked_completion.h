@@ -129,7 +129,6 @@ struct blocked_handler<void>
   bool* done = nullptr;
 };
 
-
 template<typename... Ts>
 class blocked_result
 {
@@ -138,6 +137,7 @@ public:
   using return_type = std::tuple<Ts...>;
 
   explicit blocked_result(completion_handler_type& h) noexcept {
+    std::scoped_lock l(m);
     out_ec = h.ec;
     if (!out_ec) h.ec = &ec;
     h.value = &value;
@@ -152,6 +152,11 @@ public:
     if (!out_ec && ec) throw bs::system_error(ec);
     return std::move(*value);
   }
+
+  blocked_result(const blocked_result&) = delete;
+  blocked_result& operator =(const blocked_result&) = delete;
+  blocked_result(blocked_result&&) = delete;
+  blocked_result& operator =(blocked_result&&) = delete;
 
 private:
   bs::error_code* out_ec;
@@ -170,6 +175,7 @@ public:
   using return_type = T;
 
   explicit blocked_result(completion_handler_type& h) noexcept {
+    std::scoped_lock l(m);
     out_ec = h.ec;
     if (!out_ec) h.ec = &ec;
     h.value = &value;
@@ -184,6 +190,11 @@ public:
     if (!out_ec && ec) throw bs::system_error(ec);
     return std::move(*value);
   }
+
+  blocked_result(const blocked_result&) = delete;
+  blocked_result& operator =(const blocked_result&) = delete;
+  blocked_result(blocked_result&&) = delete;
+  blocked_result& operator =(blocked_result&&) = delete;
 
 private:
   bs::error_code* out_ec;
@@ -202,6 +213,7 @@ public:
   using return_type = void;
 
   explicit blocked_result(completion_handler_type& h) noexcept {
+    std::scoped_lock l(m);
     out_ec = h.ec;
     if (!out_ec) h.ec = &ec;
     h.m = &m;
@@ -214,6 +226,11 @@ public:
     cv.wait(l, [this]() { return done; });
     if (!out_ec && ec) throw bs::system_error(ec);
   }
+
+  blocked_result(const blocked_result&) = delete;
+  blocked_result& operator =(const blocked_result&) = delete;
+  blocked_result(blocked_result&&) = delete;
+  blocked_result& operator =(blocked_result&&) = delete;
 
 private:
   bs::error_code* out_ec;

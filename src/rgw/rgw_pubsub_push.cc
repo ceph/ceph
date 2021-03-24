@@ -131,14 +131,14 @@ public:
     return new PostCR(json_format_pubsub_event(event), env, endpoint, ack_level, verify_ssl);
   }
 
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
-    return new PostCR(json_format_pubsub_event(record), env, endpoint, ack_level, verify_ssl);
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
+    return new PostCR(json_format_pubsub_event(event), env, endpoint, ack_level, verify_ssl);
   }
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
+  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
-    const auto post_data = json_format_pubsub_event(record);
+    const auto post_data = json_format_pubsub_event(event);
     request.set_post_data(post_data);
     request.set_send_length(post_data.length());
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
@@ -172,6 +172,23 @@ private:
   const std::string exchange;
   ack_level_t ack_level;
   amqp::connection_ptr_t conn;
+
+  bool get_verify_ssl(const RGWHTTPArgs& args) {
+    bool exists;
+    auto str_verify_ssl = args.get("verify-ssl", &exists);
+    if (!exists) {
+      // verify server certificate by default
+      return true;
+    }
+    boost::algorithm::to_lower(str_verify_ssl);
+    if (str_verify_ssl == "true") {
+      return true;
+    }
+    if (str_verify_ssl == "false") {
+      return false;
+    }
+    throw configuration_error("'verify-ssl' must be true/false, not: " + str_verify_ssl);
+  }
 
   std::string get_exchange(const RGWHTTPArgs& args) {
     bool exists;
@@ -297,7 +314,7 @@ public:
         topic(_topic),
         exchange(get_exchange(args)),
         ack_level(get_ack_level(args)),
-        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker))) {
+        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker), get_verify_ssl(args), args.get_optional("ca-location"))) {
     if (!conn) { 
       throw configuration_error("AMQP: failed to create connection to: " + endpoint);
     }
@@ -312,12 +329,12 @@ public:
     }
   }
   
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     } else {
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     }
   }
 
@@ -375,17 +392,17 @@ public:
     }
   };
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
+  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return amqp::publish(conn, topic, json_format_pubsub_event(record));
+      return amqp::publish(conn, topic, json_format_pubsub_event(event));
     } else {
       // TODO: currently broker and routable are the same - this will require different flags but the same mechanism
       // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
       auto w = std::unique_ptr<Waiter>(new Waiter);
       const auto rc = amqp::publish_with_confirm(conn, 
         topic,
-        json_format_pubsub_event(record),
+        json_format_pubsub_event(event),
         std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
       if (rc < 0) {
         // failed to publish, does not wait for reply
@@ -582,12 +599,12 @@ public:
     }
   }
   
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     } else {
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     }
   }
 
@@ -645,16 +662,16 @@ public:
     }
   };
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
+  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn, topic, json_format_pubsub_event(record));
+      return kafka::publish(conn, topic, json_format_pubsub_event(event));
     } else {
       // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
       auto w = std::unique_ptr<Waiter>(new Waiter);
       const auto rc = kafka::publish_with_confirm(conn, 
         topic,
-        json_format_pubsub_event(record),
+        json_format_pubsub_event(event),
         std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
       if (rc < 0) {
         // failed to publish, does not wait for reply
@@ -691,7 +708,7 @@ const std::string& get_schema(const std::string& endpoint) {
   if (schema == "http" || schema == "https") {
     return WEBHOOK_SCHEMA;
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  } else if (schema == "amqp") {
+  } else if (schema == "amqp" || schema == "amqps") {
     return AMQP_SCHEMA;
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
@@ -725,9 +742,6 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
       throw configuration_error("AMQP: unknown version: " + version);
       return nullptr;
     }
-  } else if (schema == "amqps") {
-    throw configuration_error("AMQP: ssl not supported");
-    return nullptr;
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   } else if (schema == KAFKA_SCHEMA) {

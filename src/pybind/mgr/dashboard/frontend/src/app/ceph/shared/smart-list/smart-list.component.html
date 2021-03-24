@@ -8,11 +8,11 @@
     dashboard.</cd-alert-panel>
 
   <ng-container *ngIf="!error && !incompatible">
-    <cd-alert-panel *ngIf="isEmpty(data)"
+    <cd-alert-panel *ngIf="data | pipeFunction:isEmpty"
                     type="info"
                     i18n>No SMART data available.</cd-alert-panel>
 
-    <ng-container *ngIf="!isEmpty(data)">
+    <ng-container *ngIf="!(data | pipeFunction:isEmpty)">
       <ul ngbNav
           #nav="ngbNav"
           class="nav-tabs">
@@ -26,7 +26,7 @@
             </ng-container>
 
             <ng-template #noError>
-              <cd-alert-panel *ngIf="isEmpty(device.value.info?.smart_status); else hasSmartStatus"
+              <cd-alert-panel *ngIf="device.value.info?.smart_status | pipeFunction:isEmpty; else hasSmartStatus"
                               id="alert-self-test-unknown"
                               size="slim"
                               type="warning"
@@ -54,7 +54,7 @@
               </ng-template>
             </ng-template>
 
-            <ng-container *ngIf="!isEmpty(device.value.info) || !isEmpty(device.value.smart)">
+            <ng-container *ngIf="!(device.value.info | pipeFunction:isEmpty) || !(device.value.smart | pipeFunction:isEmpty)">
               <ul ngbNav
                   #innerNav="ngbNav"
                   class="nav-tabs">
@@ -62,10 +62,10 @@
                   <a ngbNavLink
                      i18n>Device Information</a>
                   <ng-template ngbNavContent>
-                    <cd-table-key-value *ngIf="!isEmpty(device.value.info)"
+                    <cd-table-key-value *ngIf="!(device.value.info | pipeFunction:isEmpty)"
                                         [renderObjects]="true"
                                         [data]="device.value.info"></cd-table-key-value>
-                    <cd-alert-panel *ngIf="isEmpty(device.value.info)"
+                    <cd-alert-panel *ngIf="device.value.info | pipeFunction:isEmpty"
                                     id="alert-device-info-unavailable"
                                     type="info"
                                     i18n>No device information available for this device.</cd-alert-panel>

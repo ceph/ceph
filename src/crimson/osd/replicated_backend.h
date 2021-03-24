@@ -26,15 +26,14 @@ public:
   seastar::future<> stop() final;
   void on_actingset_changed(peering_info_t pi) final;
 private:
-  ll_read_errorator::future<ceph::bufferlist> _read(const hobject_t& hoid,
-					            uint64_t off,
-					            uint64_t len,
-					            uint32_t flags) override;
-  seastar::future<crimson::osd::acked_peers_t>
+  ll_read_ierrorator::future<ceph::bufferlist>
+    _read(const hobject_t& hoid, uint64_t off,
+	  uint64_t len, uint32_t flags) override;
+  interruptible_future<crimson::osd::acked_peers_t>
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
 		      const hobject_t& hoid,
 		      ceph::os::Transaction&& txn,
-		      const osd_op_params_t& osd_op_p,
+		      osd_op_params_t&& osd_op_p,
 		      epoch_t min_epoch, epoch_t max_epoch,
 		      std::vector<pg_log_entry_t>&& log_entries) final;
   const pg_t pgid;
@@ -43,13 +42,22 @@ private:
   ceph_tid_t next_txn_id = 0;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
-    pending_on_t(size_t pending)
-      : pending{static_cast<unsigned>(pending)}
+    pending_on_t(size_t pending, const eversion_t& at_version)
+      : pending{static_cast<unsigned>(pending)}, at_version(at_version)
     {}
     unsigned pending;
+    // The order of pending_txns' at_version must be the same as their
+    // corresponding ceph_tid_t, as we rely on this condition for checking
+    // whether a client request is already completed. To put it another
+    // way, client requests at_version must be updated synchorously/simultaneously
+    // with ceph_tid_t.
+    const eversion_t at_version;
     crimson::osd::acked_peers_t acked_peers;
-    seastar::promise<> all_committed;
+    seastar::shared_promise<> all_committed;
   };
   using pending_transactions_t = std::map<ceph_tid_t, pending_on_t>;
   pending_transactions_t pending_trans;
+
+  seastar::future<> request_committed(
+    const osd_reqid_t& reqid, const eversion_t& at_version) final;
 };

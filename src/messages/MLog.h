@@ -20,7 +20,7 @@
 
 #include <deque>
 
-class MLog : public PaxosServiceMessage {
+class MLog final : public PaxosServiceMessage {
 public:
   uuid_d fsid;
   std::deque<LogEntry> entries;
@@ -30,7 +30,7 @@ public:
     : PaxosServiceMessage{MSG_LOG, 0}, fsid(f), entries{std::move(e)} { }
   MLog(const uuid_d& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) { }
 private:
-  ~MLog() override {}
+  ~MLog() final {}
 
 public:
   std::string_view get_type_name() const override { return "log"; }

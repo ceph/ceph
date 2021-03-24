@@ -1,18 +1,18 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 
 import _ from 'lodash';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../models/cd-table-action';
-import { CdTableSelection } from '../../models/cd-table-selection';
-import { Permission } from '../../models/permissions';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
 
 @Component({
   selector: 'cd-table-actions',
   templateUrl: './table-actions.component.html',
   styleUrls: ['./table-actions.component.scss']
 })
-export class TableActionsComponent implements OnInit {
+export class TableActionsComponent implements OnChanges, OnInit {
   @Input()
   permission: Permission;
   @Input()
@@ -28,6 +28,7 @@ export class TableActionsComponent implements OnInit {
   @Input()
   dropDownOnly?: string;
 
+  currentAction?: CdTableAction;
   // Array with all visible actions
   dropDownActions: CdTableAction[] = [];
 
@@ -35,11 +36,22 @@ export class TableActionsComponent implements OnInit {
 
   ngOnInit() {
     this.removeActionsWithNoPermissions();
-    this.updateDropDownActions();
+    this.onSelectionChange();
   }
 
-  toClassName(name: string): string {
-    return name
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes.selection) {
+      this.onSelectionChange();
+    }
+  }
+
+  onSelectionChange(): void {
+    this.updateDropDownActions();
+    this.updateCurrentAction();
+  }
+
+  toClassName(action: CdTableAction): string {
+    return action.name
       .replace(/ /g, '-')
       .replace(/[^a-z-]/gi, '')
       .toLowerCase();
@@ -59,7 +71,7 @@ export class TableActionsComponent implements OnInit {
     );
   }
 
-  private updateDropDownActions() {
+  private updateDropDownActions(): void {
     this.dropDownActions = this.tableActions.filter((action) =>
       action.visible ? action.visible(this.selection) : action
     );
@@ -73,18 +85,17 @@ export class TableActionsComponent implements OnInit {
    * Default button conditions of actions:
    * - 'create' actions can be used with no or multiple selections
    * - 'update' and 'delete' actions can be used with one selection
-   *
-   * @returns {CdTableAction}
    */
-  getCurrentButton(): CdTableAction {
+  private updateCurrentAction(): void {
     if (this.dropDownOnly) {
-      return undefined;
+      this.currentAction = undefined;
+      return;
     }
     let buttonAction = this.dropDownActions.find((tableAction) => this.showableAction(tableAction));
     if (!buttonAction && this.dropDownActions.length > 0) {
       buttonAction = this.dropDownActions[0];
     }
-    return buttonAction;
+    this.currentAction = buttonAction;
   }
 
   /**
@@ -129,11 +140,6 @@ export class TableActionsComponent implements OnInit {
     );
   }
 
-  showDropDownActions() {
-    this.updateDropDownActions();
-    return this.dropDownActions.length > 1;
-  }
-
   useClickAction(action: CdTableAction) {
     /**
      * In order to show tooltips for deactivated menu items, the class
@@ -150,7 +156,6 @@ export class TableActionsComponent implements OnInit {
       const result = action.disable(this.selection);
       return _.isString(result) ? result : undefined;
     }
-
     return undefined;
   }
 }

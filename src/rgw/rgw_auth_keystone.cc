@@ -534,7 +534,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
   /* Passthorugh only! */
-  const req_state* s) const
+  const req_state* s,
+  optional_yield y) const
 {
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */

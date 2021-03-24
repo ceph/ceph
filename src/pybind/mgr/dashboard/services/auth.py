@@ -16,7 +16,10 @@ from .. import mgr
 from .access_control import LocalAuthenticator, UserDoesNotExist
 
 cherrypy.config.update({
-    'response.headers.server': 'Ceph-Dashboard'
+    'response.headers.server': 'Ceph-Dashboard',
+    'response.headers.content-security-policy': "frame-ancestors 'self';",
+    'response.headers.x-content-type-options': 'nosniff',
+    'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
 })
 
 
@@ -67,12 +70,20 @@ class JwtManager(object):
 
     @classmethod
     def get_token_from_header(cls):
-        auth_header = cherrypy.request.headers.get('authorization')
-        if auth_header is not None:
-            scheme, params = auth_header.split(' ', 1)
-            if scheme.lower() == 'bearer':
-                return params
-        return None
+        auth_cookie_name = 'token'
+        try:
+            # use cookie
+            return cherrypy.request.cookie[auth_cookie_name].value
+        except KeyError:
+            try:
+                # fall-back: use Authorization header
+                auth_header = cherrypy.request.headers.get('authorization')
+                if auth_header is not None:
+                    scheme, params = auth_header.split(' ', 1)
+                    if scheme.lower() == 'bearer':
+                        return params
+            except IndexError:
+                return None
 
     @classmethod
     def set_user(cls, username):
@@ -112,7 +123,7 @@ class JwtManager(object):
 
     @classmethod
     def blocklist_token(cls, token):
-        token = jwt.decode(token, verify=False)
+        token = cls.decode_token(token)
         blocklist_json = mgr.get_store(cls.JWT_TOKEN_BLOCKLIST_KEY)
         if not blocklist_json:
             blocklist_json = "{}"

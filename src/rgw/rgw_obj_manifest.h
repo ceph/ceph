@@ -17,6 +17,7 @@
 
 #include "rgw_common.h"
 #include "rgw_compression_types.h"
+#include "rgw_sal.h"
 
 class RGWSI_Zone;
 struct RGWZoneGroup;
@@ -44,7 +45,7 @@ public:
   }
 
   rgw_raw_obj get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const;
-  rgw_raw_obj get_raw_obj(RGWRados *store) const;
+  rgw_raw_obj get_raw_obj(rgw::sal::RGWStore* store) const;
 
   rgw_obj_select& operator=(const rgw_obj& rhs) {
     obj = rhs;
@@ -326,7 +327,7 @@ public:
 
   int append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
-  int append(RGWObjManifest& m, RGWSI_Zone *zone_svc);
+  int append(RGWObjManifest& m, rgw::sal::Zone* zone);
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
 
@@ -548,7 +549,7 @@ public:
     int create_next(uint64_t ofs);
 
     rgw_raw_obj get_cur_obj(RGWZoneGroup& zonegroup, RGWZoneParams& zone_params) { return cur_obj.get_raw_obj(zonegroup, zone_params); }
-    rgw_raw_obj get_cur_obj(RGWRados *store) const { return cur_obj.get_raw_obj(store); }
+    rgw_raw_obj get_cur_obj(rgw::sal::RGWStore* store) const { return cur_obj.get_raw_obj(store); }
 
     /* total max size of current stripe (including head obj) */
     uint64_t cur_stripe_max_size() const {

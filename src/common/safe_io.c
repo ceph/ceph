@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <sys/socket.h>
 
 ssize_t safe_read(int fd, void *buf, size_t count)
 {
@@ -43,6 +44,39 @@ ssize_t safe_read(int fd, void *buf, size_t count)
 	return cnt;
 }
 
+#ifdef _WIN32
+// "read" doesn't work with Windows sockets.
+ssize_t safe_recv(int fd, void *buf, size_t count)
+{
+  size_t cnt = 0;
+
+  while (cnt < count) {
+    ssize_t r = recv(fd, (SOCKOPT_VAL_TYPE)buf, count - cnt, 0);
+    if (r <= 0) {
+      if (r == 0) {
+        // EOF
+        return cnt;
+      }
+      int err = ceph_sock_errno();
+      if (err == EAGAIN || err == EINTR) {
+        continue;
+      }
+      return -err;
+    }
+    cnt += r;
+    buf = (char *)buf + r;
+  }
+  return cnt;
+}
+#else
+ssize_t safe_recv(int fd, void *buf, size_t count)
+{
+  // We'll use "safe_read" so that this can work with any type of
+  // file descriptor.
+  return safe_read(fd, buf, count);
+}
+#endif /* _WIN32 */
+
 ssize_t safe_read_exact(int fd, void *buf, size_t count)
 {
         ssize_t ret = safe_read(fd, buf, count);
@@ -52,7 +86,17 @@ ssize_t safe_read_exact(int fd, void *buf, size_t count)
 		return -EDOM;
 	return 0;
 }
- 
+
+ssize_t safe_recv_exact(int fd, void *buf, size_t count)
+{
+        ssize_t ret = safe_recv(fd, buf, count);
+  if (ret < 0)
+    return ret;
+  if ((size_t)ret != count)
+    return -EDOM;
+  return 0;
+}
+
 ssize_t safe_write(int fd, const void *buf, size_t count)
 {
 	while (count > 0) {
@@ -67,6 +111,30 @@ ssize_t safe_write(int fd, const void *buf, size_t count)
 	}
 	return 0;
 }
+
+#ifdef _WIN32
+ssize_t safe_send(int fd, const void *buf, size_t count)
+{
+  while (count > 0) {
+    ssize_t r = send(fd, (SOCKOPT_VAL_TYPE)buf, count, 0);
+    if (r < 0) {
+      int err = ceph_sock_errno();
+      if (err == EINTR || err == EAGAIN) {
+        continue;
+      }
+      return -err;
+    }
+    count -= r;
+    buf = (char *)buf + r;
+  }
+  return 0;
+}
+#else
+ssize_t safe_send(int fd, const void *buf, size_t count)
+{
+  return safe_write(fd, buf, count);
+}
+#endif /* _WIN32 */
 
 ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
 {
@@ -169,7 +237,7 @@ int safe_write_file(const char *base, const char *file,
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
   snprintf(tmp, sizeof(tmp), "%s/%s.tmp", base, file);
-  fd = open(tmp, O_WRONLY|O_CREAT|O_TRUNC, mode);
+  fd = open(tmp, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, mode);
   if (fd < 0) {
     ret = errno;
     return -ret;
@@ -194,7 +262,7 @@ int safe_write_file(const char *base, const char *file,
     return ret;
   }
 
-  fd = open(base, O_RDONLY);
+  fd = open(base, O_RDONLY|O_BINARY);
   if (fd < 0) {
     ret = -errno;
     return ret;
@@ -213,7 +281,7 @@ int safe_read_file(const char *base, const char *file,
   int fd, len;
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
-  fd = open(fn, O_RDONLY);
+  fd = open(fn, O_RDONLY|O_BINARY);
   if (fd < 0) {
     return -errno;
   }

@@ -9,10 +9,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
-IMAGE_MASTER=${IMAGE_MASTER:-'docker.io/ceph/daemon-base:latest-master-devel'}
-IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'docker.io/ceph/daemon-base:latest-octopus'}
-IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
-IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
+IMAGE_MASTER=${IMAGE_MASTER:-'quay.ceph.io/ceph-ci/ceph:master'}
+IMAGE_PACIFIC=${IMAGE_PACIFIC:-'quay.ceph.io/ceph-ci/ceph:pacific'}
+#IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -33,36 +32,6 @@ fi
 if ! [ -x "$CEPHADM" ]; then
     echo "cephadm not found. Please set \$CEPHADM"
     exit 1
-fi
-
-# respawn ourselves with a shebang
-if [ -z "$PYTHON_KLUDGE" ]; then
-    # see which pythons we should test with
-    PYTHONS=""
-    which python3 && PYTHONS="$PYTHONS python3"
-    echo "PYTHONS $PYTHONS"
-    if [ -z "$PYTHONS" ]; then
-	echo "No PYTHONS found!"
-	exit 1
-    fi
-
-    TMPBINDIR=$(mktemp -d)
-    trap "rm -rf $TMPBINDIR" EXIT
-    ORIG_CEPHADM="$CEPHADM"
-    CEPHADM="$TMPBINDIR/cephadm"
-    for p in $PYTHONS; do
-	echo "=== re-running with $p ==="
-	ln -s `which $p` $TMPBINDIR/python
-	echo "#!$TMPBINDIR/python" > $CEPHADM
-	cat $ORIG_CEPHADM >> $CEPHADM
-	chmod 700 $CEPHADM
-	$TMPBINDIR/python --version
-	PYTHON_KLUDGE=1 CEPHADM=$CEPHADM $0
-	rm $TMPBINDIR/python
-    done
-    rm -rf $TMPBINDIR
-    echo "PASS with all of: $PYTHONS"
-    exit 0
 fi
 
 # add image to args
@@ -160,7 +129,7 @@ function nfs_stop()
     # stop the running nfs server
     local units="nfs-server nfs-kernel-server"
     for unit in $units; do
-        if systemctl status $unit; then
+        if systemctl status $unit < /dev/null; then
             $SUDO systemctl stop $unit
         fi
     done
@@ -176,19 +145,16 @@ $SUDO $CEPHADM check-host
 $SUDO $CEPHADM gather-facts
 
 ## version + --image
-$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
-$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
-    | grep 'ceph version 15'
-$SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version
-$SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version \
-    | grep 'ceph version 14'
-$SUDO $CEPHADM_BIN --image $IMAGE_MIMIC version
-$SUDO $CEPHADM_BIN --image $IMAGE_MIMIC version \
-    | grep 'ceph version 13'
+$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version
+$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version \
+    | grep 'ceph version 16'
+#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
+#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
+#    | grep 'ceph version 15'
 $SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
-systemctl status docker && ( $CEPHADM --docker version | grep 'ceph version' )
+systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph version' ) || echo "docker not installed"
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
@@ -216,7 +182,8 @@ $CEPHADM bootstrap \
       --output-pub-ssh-key $TMPDIR/ceph.pub \
       --allow-overwrite \
       --skip-mon-network \
-      --skip-monitoring-stack
+      --skip-monitoring-stack \
+      --with-exporter
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
@@ -388,6 +355,21 @@ cond="$CEPHADM enter --fsid $FSID --name container.alertmanager.a -- test -f \
 is_available "alertmanager.yml" "$cond" 10
 cond="curl 'http://localhost:9093' | grep -q 'Alertmanager'"
 is_available "alertmanager" "$cond" 10
+
+# Fetch the token we need to access the exporter API
+token=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph cephadm get-exporter-config | jq -r '.token')
+[[ ! -z "$token" ]]
+
+# check all exporter threads active
+cond="curl -k -s -H \"Authorization: Bearer $token\" \
+      https://localhost:9443/v1/metadata/health | \
+      jq -r '.tasks | select(.disks == \"active\" and .daemons == \"active\" and .host == \"active\")'"
+is_available "exporter_threads_active" "$cond" 3
+
+# check we deployed for all hosts
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json
+host_pattern=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json | jq -r '.[0].placement.host_pattern')
+[[ "$host_pattern" = "*" ]]
 
 ## run
 # WRITE ME

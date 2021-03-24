@@ -5,6 +5,7 @@
 #include <openssl/err.h>
 #include <string.h>
 #include "include/ceph_assert.h"
+#include "include/compat.h"
 
 namespace librbd {
 namespace crypto {
@@ -46,8 +47,9 @@ int DataCryptor::init(const char* cipher_name, const unsigned char* key,
 
 DataCryptor::~DataCryptor() {
   if (m_key != nullptr) {
-    explicit_bzero(m_key, EVP_CIPHER_key_length(m_cipher));
-    delete m_key;
+    ceph_memzero_s(m_key, EVP_CIPHER_key_length(m_cipher),
+                   EVP_CIPHER_key_length(m_cipher));
+    delete [] m_key;
     m_key = nullptr;
   }
 }
@@ -58,6 +60,14 @@ uint32_t DataCryptor::get_block_size() const {
 
 uint32_t DataCryptor::get_iv_size() const {
   return m_iv_size;
+}
+
+const unsigned char* DataCryptor::get_key() const {
+  return m_key;
+}
+
+int DataCryptor::get_key_length() const {
+  return EVP_CIPHER_key_length(m_cipher);
 }
 
 EVP_CIPHER_CTX* DataCryptor::get_context(CipherMode mode) {
@@ -128,7 +138,8 @@ void DataCryptor::log_errors() const {
     if (error == 0) {
       break;
     }
-    lderr(m_cct) << "OpenSSL error: " << error << dendl;
+    lderr(m_cct) << "OpenSSL error: " << ERR_error_string(error, nullptr)
+                 << dendl;
   }
 }
 

@@ -4,6 +4,9 @@ ElasticSearch Sync Module
 
 .. versionadded:: Kraken
 
+.. note::
+     As of 31 May 2020, only Elasticsearch 6 and lower are supported. ElasticSearch 7 is not supported.
+
 This sync module writes the metadata from other zones to `ElasticSearch`_. As of
 luminous this is a json of data fields we currently store in ElasticSearch.
 
@@ -121,9 +124,6 @@ op is one of the following:
 For example ::
 
   GET /?query=name==foo
-
-Will return all the indexed keys that user has read permission to, and
-are named 'foo'.
 
 Will return all the indexed keys that user has read permission to, and
 are named 'foo'.

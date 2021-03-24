@@ -79,6 +79,7 @@ enum {
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
+  l_mdss_cap_acquisition_throttle,
   l_mdss_last,
 };
 
@@ -117,9 +118,9 @@ public:
   }
 
   void handle_client_session(const cref_t<MClientSession> &m);
-  void _session_logged(Session *session, uint64_t state_seq, 
-		       bool open, version_t pv, const interval_set<inodeno_t>& inos,version_t piv,
-		       const interval_set<inodeno_t>& purge_inos, LogSegment *ls);
+  void _session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
+		       const interval_set<inodeno_t>& inos_to_free, version_t piv,
+		       const interval_set<inodeno_t>& inos_to_purge, LogSegment *ls);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
 					map<client_t,client_metadata_t>& cmm,
 					map<client_t,pair<Session*,uint64_t> >& smap);
@@ -129,9 +130,10 @@ public:
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
-  void kill_session(Session *session, Context *on_safe, bool need_purge_inos = false);
+
+  void kill_session(Session *session, Context *on_safe);
   size_t apply_blocklist(const std::set<entity_addr_t> &blocklist);
-  void journal_close_session(Session *session, int state, Context *on_safe, bool need_purge_inos = false);
+  void journal_close_session(Session *session, int state, Context *on_safe);
 
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
   Session *find_session_by_uuid(std::string_view uuid);
@@ -288,7 +290,8 @@ public:
   bool _need_force_journal(CInode *diri, bool empty);
   void _rename_prepare(MDRequestRef& mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
-		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+		       CDentry *srcdn, CDentry *destdn, std::string_view alternate_name,
+                       CDentry *straydn);
   /* set not_journaling=true if you're going to discard the results --
    * this bypasses the asserts to make sure we're journaling the right
    * things on the right nodes */
@@ -434,7 +437,7 @@ private:
   MDLog *mdlog;
   PerfCounters *logger = nullptr;
 
-  // OSDMap full status, used to generate ENOSPC on some operations
+  // OSDMap full status, used to generate CEPHFS_ENOSPC on some operations
   bool is_full = false;
 
   // State for while in reconnect
@@ -460,6 +463,14 @@ private:
   time last_recall_state;
 
   MetricsHandler *metrics_handler;
+
+  // Cache cap acquisition throttle configs
+  uint64_t max_caps_per_client;
+  uint64_t cap_acquisition_throttle;
+  double max_caps_throttle_ratio;
+  double caps_throttle_retry_request_timeout;
+
+  size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {

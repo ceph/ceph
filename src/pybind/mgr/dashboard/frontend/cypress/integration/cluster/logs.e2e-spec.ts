@@ -1,14 +1,11 @@
 import { PoolPageHelper } from '../pools/pools.po';
-import { ConfigurationPageHelper } from './configuration.po';
 import { LogsPageHelper } from './logs.po';
 
 describe('Logs page', () => {
   const logs = new LogsPageHelper();
   const pools = new PoolPageHelper();
-  const configuration = new ConfigurationPageHelper();
 
   const poolname = 'e2e_logs_test_pool';
-  const configname = 'log_graylog_port';
   const today = new Date();
   let hour = today.getHours();
   if (hour > 12) {
@@ -18,6 +15,7 @@ describe('Logs page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
   });
 
   describe('breadcrumb and tab tests', () => {
@@ -55,19 +53,6 @@ describe('Logs page', () => {
       pools.navigateTo();
       pools.delete(poolname);
       logs.checkAuditForPoolFunction(poolname, 'delete', hour, minute);
-    });
-  });
-
-  describe('audit logs respond to editing configuration setting test', () => {
-    it('should change config settings and check audit logs reacted', () => {
-      configuration.navigateTo();
-      configuration.edit(configname, ['global', '5']);
-
-      logs.navigateTo();
-      logs.checkAuditForConfigChange(configname, 'global', hour, minute);
-
-      configuration.navigateTo();
-      configuration.configClear(configname);
     });
   });
 });

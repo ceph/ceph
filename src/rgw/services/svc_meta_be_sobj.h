@@ -148,7 +148,8 @@ public:
                 const string& key,
                 RGWSI_MetaBackend::GetParams& params,
                 RGWObjVersionTracker *objv_tracker,
-                optional_yield y) override;
+                optional_yield y,
+                const DoutPrefixProvider *dpp) override;
   int put_entry(RGWSI_MetaBackend::Context *ctx,
                 const string& key,
                 RGWSI_MetaBackend::PutParams& params,

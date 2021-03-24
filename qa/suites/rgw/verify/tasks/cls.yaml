@@ -1,7 +1,3 @@
-overrides:
-  ceph:
-    log-ignorelist:
-    - \(PG_AVAILABILITY\)
 tasks:
 - workunit:
     clients:
@@ -15,3 +11,4 @@ tasks:
         - rgw/test_rgw_gc_log.sh
         - rgw/test_rgw_obj.sh
         - rgw/test_rgw_throttle.sh
+        - rgw/test_librgw_file.sh

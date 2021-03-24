@@ -30,6 +30,8 @@ class SlowOps final : public DaemonHealthMetricCollector {
     if (daemons.empty()) {
       return;
     }
+    // Note this message format is used in mgr/prometheus, so any change in format
+    // requires a corresponding change in the mgr/prometheus module.
     ostringstream ss;
     if (daemons.size() > 1) {
       if (daemons.size() > 10) {

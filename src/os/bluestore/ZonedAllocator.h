@@ -30,7 +30,7 @@ class ZonedAllocator : public Allocator {
   // atomic_alloc_and_submit_lock will be removed.
   ceph::mutex lock = ceph::make_mutex("ZonedAllocator::lock");
 
-  int64_t num_free;     ///< total bytes in freelist
+  std::atomic<int64_t> num_free;     ///< total bytes in freelist
   uint64_t size;
   uint64_t block_size;
   uint64_t zone_size;
@@ -63,6 +63,10 @@ public:
                  const std::string& name);
   ~ZonedAllocator() override;
 
+  const char *get_type() const override {
+    return "zoned";
+  }
+
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
     int64_t hint, PExtentVector *extents) override;
@@ -75,7 +79,9 @@ public:
   void dump(std::function<void(uint64_t offset,
                                uint64_t length)> notify) override;
 
-  void set_zone_states(std::vector<zone_state_t> &&_zone_states) override;
+  void zoned_set_zone_states(std::vector<zone_state_t> &&_zone_states) override;
+  bool zoned_get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) override;
+
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
 

@@ -7,7 +7,6 @@
 
 #include "include/rados/librados.hpp"
 #include "common/async/yield_context.h"
-#include "common/RWLock.h"
 
 class RGWAsyncRadosProcessor;
 
@@ -31,7 +30,7 @@ class RGWSI_RADOS : public RGWServiceInstance
   librados::Rados rados;
   std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
-  int do_start() override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
 public:
   struct OpenParams {

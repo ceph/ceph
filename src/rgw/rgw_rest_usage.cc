@@ -4,7 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 #include "include/str_list.h"
 
@@ -18,12 +18,12 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_READ);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_usage"; }
 };
 
-void RGWOp_Usage_Get::execute() {
+void RGWOp_Usage_Get::execute(optional_yield y) {
   map<std::string, bool> categories;
 
   string uid_str;
@@ -34,7 +34,12 @@ void RGWOp_Usage_Get::execute() {
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
-  rgw_user uid(uid_str);
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(uid_str));
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+
+  if (!bucket_name.empty()) {
+    store->get_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
+  }
 
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
@@ -53,7 +58,7 @@ void RGWOp_Usage_Get::execute() {
     }
   }
 
-  op_ret = RGWUsage::show(store->getRados(), uid, bucket_name, start, end, show_entries, show_summary, &categories, flusher);
+  op_ret = RGWUsage::show(this, store, user.get(), bucket.get(), start, end, show_entries, show_summary, &categories, flusher);
 }
 
 class RGWOp_Usage_Delete : public RGWRESTOp {
@@ -64,24 +69,29 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "trim_usage"; }
 };
 
-void RGWOp_Usage_Delete::execute() {
+void RGWOp_Usage_Delete::execute(optional_yield y) {
   string uid_str;
   string bucket_name;
   uint64_t start, end;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
-  rgw_user uid(uid_str);
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(uid_str));
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+
+  if (!bucket_name.empty()) {
+    store->get_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
+  }
 
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
 
-  if (uid.empty() &&
+  if (rgw::sal::RGWUser::empty(user.get()) &&
       !bucket_name.empty() &&
       !start &&
       end == (uint64_t)-1) {
@@ -93,7 +103,7 @@ void RGWOp_Usage_Delete::execute() {
     }
   }
 
-  op_ret = RGWUsage::trim(store->getRados(), uid, bucket_name, start, end);
+  op_ret = RGWUsage::trim(this, store, user.get(), bucket.get(), start, end);
 }
 
 RGWOp *RGWHandler_Usage::op_get()

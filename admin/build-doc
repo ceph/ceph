@@ -48,117 +48,58 @@ fi
 # for availability of commands
 set -e
 
-cat $TOPDIR/src/osd/PeeringState.h $TOPDIR/src/osd/PeeringState.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
-
-cd build-doc
-
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
     virtualenv --python=python3 $vdir
 fi
 
-# be compatible with pip shipped by distro older v20.2
-if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
-    PIP_INSTALL="$vdir/bin/pip install --use-feature=2020-resolver"
-else
-    PIP_INSTALL="$vdir/bin/pip install"
-fi
-$PIP_INSTALL --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
+$vdir/bin/pip install --quiet \
+              -r $TOPDIR/admin/doc-requirements.txt \
+              -r $TOPDIR/admin/doc-python-common-requirements.txt
+BUILD_DOC=1 $vdir/bin/pip install --quiet \
+         -r $TOPDIR/admin/doc-pybind.txt
 
 install -d -m0755 \
     $TOPDIR/build-doc/output/html \
     $TOPDIR/build-doc/output/man
 
-# To avoid having to build librbd to build the Python bindings to build the docs,
-# create a dummy librbd.so that allows the module to be imported by sphinx.
-# the module are imported by the "automodule::" directive.
-mkdir -p $vdir/lib
-export LD_LIBRARY_PATH="$vdir/lib"
-export PYTHONPATH=$TOPDIR/src/pybind
-
-
-$vdir/bin/python $TOPDIR/doc/scripts/gen_mon_command_api.py > $TOPDIR/doc/api/mon_command_api.rst
-
-
-# FIXME(sileht): I dunno how to pass the include-dirs correctly with pip
-# for build_ext step, it should be:
-# --global-option=build_ext --global-option="--cython-include-dirs $TOPDIR/src/pybind/rados/"
-# but that doesn't work, so copying the file in the rbd module directly, that's ok for docs
-for bind in rados rbd cephfs rgw; do
-    if [ ${bind} != rados ]; then
-        cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/${bind}/
-    fi
-    ln -sf lib${bind}.so.1 $vdir/lib/lib${bind}.so
-    gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc /dev/null
-    ld_flags="-Wl,-rpath,$vdir/lib"
-    if [ $(uname) != Darwin ]; then
-        ld_flags="${ld_flags},--no-as-needed"
-    fi
-    BUILD_DOC=1 \
-        CFLAGS="-iquote$TOPDIR/src/include" \
-        CPPFLAGS="-iquote$TOPDIR/src/include" \
-        LDFLAGS="-L$vdir/lib ${ld_flags}" \
-        $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
-    # rgwfile_version(), librgw_create(), rgw_mount()
-    # since py3.5, distutils adds postfix in between ${bind} and so
-    lib_fn=$vdir/lib/python*/*-packages/${bind}.*.so
-    if [ ! -e $lib_fn ]; then
-       lib_fn=$vdir/lib/python*/*-packages/${bind}.so
-    fi
-    if [ ${bind} = "cephfs" ]; then
-        func_prefix="ceph"
-    else
-        func_prefix="(lib)?${bind}"
-    fi
-    nm $lib_fn | grep -E "U (_)?${func_prefix}" | \
-        awk '{ gsub(/^_/,"",$2); print "void "$2"(void) {}" }' | \
-        gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc -
-    if [ ${bind} != rados ]; then
-        rm -f $TOPDIR/src/pybind/${bind}/rados.pxd
-    fi
+for opt in "$@"; do
+    case $opt in
+        html|man|livehtml)
+            sphinx_targets="$sphinx_targets $opt"
+            shift
+            ;;
+        --)
+            shift
+            break
+    esac
 done
 
-if [ -z "$@" ]; then
+if [ -z "$sphinx_targets" ]; then
     sphinx_targets="html man"
-else
-    sphinx_targets=$@
 fi
+
+cd build-doc
+
 for target in $sphinx_targets; do
-    builder=$target
+    # Build with -W so that warnings are treated as errors and this fails
     case $target in
         html)
-            builder=dirhtml
-            extra_opt="-D graphviz_output_format=svg"
+            $vdir/bin/sphinx-build -W --keep-going -a -b dirhtml -d doctrees \
+                                   $TOPDIR/doc $TOPDIR/build-doc/output/$target
             ;;
         man)
-            extra_opt="-t man"
+            $vdir/bin/sphinx-build -W --keep-going -a -b man -t man -d doctrees \
+                                   $TOPDIR/doc $TOPDIR/build-doc/output/$target
+            ;;
+        livehtml)
+            $vdir/bin/pip install --quiet sphinx-autobuild
+            $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' "$@" \
+                                       $TOPDIR/doc $TOPDIR/build-doc/output/html
             ;;
     esac
-    # Build with -W so that warnings are treated as errors and this fails
-    $vdir/bin/sphinx-build -W --keep-going -a -b $builder $extra_opt -d doctrees \
-                           $TOPDIR/doc $TOPDIR/build-doc/output/$target
-
-
 done
-
-# build the releases.json. this reads in the yaml version and dumps
-# out the json representation of the same file. the resulting releases.json
-# should be served from the root of hosted site.
-$vdir/bin/python << EOF > $TOPDIR/build-doc/output/html/releases.json
-from __future__ import print_function
-import datetime
-import json
-import yaml
-
-def json_serialize(obj):
-    if isinstance(obj, datetime.date):
-        return obj.isoformat()
-
-with open("$TOPDIR/doc/releases/releases.yml", 'r') as fp:
-    releases = yaml.safe_load(fp)
-    print(json.dumps(releases, indent=2, default=json_serialize))
-EOF
 
 #
 # Build and install JavaDocs

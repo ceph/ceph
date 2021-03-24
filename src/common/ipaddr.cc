@@ -60,7 +60,7 @@ const struct ifaddrs *find_ipv4_in_subnet(const struct ifaddrs *addrs,
     if (addrs->ifa_addr == NULL)
       continue;
 
-    if (boost::starts_with(addrs->ifa_name, "lo"))
+    if (boost::starts_with(addrs->ifa_name, "lo:"))
       continue;
 
     if (numa_node >= 0 && !match_numa_node(addrs->ifa_name, numa_node))
@@ -107,7 +107,7 @@ const struct ifaddrs *find_ipv6_in_subnet(const struct ifaddrs *addrs,
     if (addrs->ifa_addr == NULL)
       continue;
 
-    if (boost::starts_with(addrs->ifa_name, "lo"))
+    if (boost::starts_with(addrs->ifa_name, "lo:"))
       continue;
 
     if (numa_node >= 0 && !match_numa_node(addrs->ifa_name, numa_node))

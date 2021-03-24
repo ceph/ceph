@@ -249,7 +249,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   get_windows_version(&ver);
 
   char version_str[64];
-  snprintf(version_str, 64, "%d.%d (%d)",
+  snprintf(version_str, 64, "%lu.%lu (%lu)",
            ver.dwMajorVersion, ver.dwMinorVersion, ver.dwBuildNumber);
 
   char hostname[64];
@@ -257,7 +257,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   GetComputerNameA(hostname, &hostname_sz);
 
   SYSTEM_INFO sys_info;
-  char* arch_str;
+  const char* arch_str;
   GetNativeSystemInfo(&sys_info);
 
   switch (sys_info.wProcessorArchitecture) {

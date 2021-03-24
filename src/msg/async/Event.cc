@@ -148,16 +148,14 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
   int fds[2];
 
   #ifdef _WIN32
-  r = win_socketpair(fds);
-  if (r != 0)
-    return -r;
+  if (win_socketpair(fds) < 0) {
   #else
   if (pipe_cloexec(fds, 0) < 0) {
+  #endif
     int e = ceph_sock_errno();
     lderr(cct) << __func__ << " can't create notify pipe: " << cpp_strerror(e) << dendl;
     return -e;
   }
-  #endif
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
@@ -189,9 +187,9 @@ EventCenter::~EventCenter()
   //assert(time_events.empty());
 
   if (notify_receive_fd >= 0)
-    ::close(notify_receive_fd);
+    compat_closesocket(notify_receive_fd);
   if (notify_send_fd >= 0)
-    ::close(notify_send_fd);
+    compat_closesocket(notify_send_fd);
 
   delete driver;
   if (notify_handler)

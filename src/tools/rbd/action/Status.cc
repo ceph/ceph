@@ -75,6 +75,7 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
   }
 
   librbd::image_migration_status_t migration_status;
+  std::string source_spec;
   std::string source_pool_name;
   std::string dest_pool_name;
   std::string migration_state;
@@ -87,12 +88,20 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
                 << std::endl;
       // not fatal
     } else {
-      librados::IoCtx src_io_ctx;
-      r = librados::Rados(io_ctx).ioctx_create2(migration_status.source_pool_id, src_io_ctx);
-      if (r < 0) {
-        source_pool_name = stringify(migration_status.source_pool_id);
+      if (migration_status.source_pool_id >= 0) {
+        librados::IoCtx src_io_ctx;
+        r = librados::Rados(io_ctx).ioctx_create2(migration_status.source_pool_id, src_io_ctx);
+        if (r < 0) {
+          source_pool_name = stringify(migration_status.source_pool_id);
+        } else {
+          source_pool_name = src_io_ctx.get_pool_name();
+        }
       } else {
-        source_pool_name = src_io_ctx.get_pool_name();
+        r = image.get_migration_source_spec(&source_spec);
+        if (r < 0) {
+          std::cerr << "rbd: getting migration source spec failed: "
+                    << cpp_strerror(r) << std::endl;
+        }
       }
 
       librados::IoCtx dst_io_ctx;
@@ -159,11 +168,15 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     f->close_section(); // watchers
     if (!migration_state.empty()) {
       f->open_object_section("migration");
-      f->dump_string("source_pool_name", source_pool_name);
-      f->dump_string("source_pool_namespace",
-                     migration_status.source_pool_namespace);
-      f->dump_string("source_image_name", migration_status.source_image_name);
-      f->dump_string("source_image_id", migration_status.source_image_id);
+      if (!source_spec.empty()) {
+        f->dump_string("source_spec", source_spec);
+      } else {
+        f->dump_string("source_pool_name", source_pool_name);
+        f->dump_string("source_pool_namespace",
+                       migration_status.source_pool_namespace);
+        f->dump_string("source_image_name", migration_status.source_image_name);
+        f->dump_string("source_image_id", migration_status.source_image_id);
+      }
       f->dump_string("dest_pool_name", dest_pool_name);
       f->dump_string("dest_pool_namespace",
                      migration_status.dest_pool_namespace);
@@ -200,10 +213,15 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       }
 
       std::cout << "Migration:" << std::endl;
-      std::cout << "\tsource: " << source_pool_name << "/"
-                << migration_status.source_image_name;
-      if (!migration_status.source_image_id.empty()) {
-        std::cout << " (" << migration_status.source_image_id <<  ")";
+      std::cout << "\tsource: ";
+      if (!source_spec.empty()) {
+        std::cout << source_spec;
+      } else {
+        std::cout << source_pool_name << "/"
+                  << migration_status.source_image_name;
+        if (!migration_status.source_image_id.empty()) {
+          std::cout << " (" << migration_status.source_image_id <<  ")";
+        }
       }
       std::cout << std::endl;
       std::cout << "\tdestination: " << dest_pool_name << "/"

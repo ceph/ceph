@@ -69,6 +69,8 @@ private:
   std::string m_mirror_peer_uuid;
   Context *m_on_finish;
 
+  bool m_newer_mirror_snapshots = false;
+
   void refresh_image();
   void handle_refresh_image(int r);
 

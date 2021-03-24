@@ -39,14 +39,9 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button id="purgeFormButton"
-                          [form]="purgeForm"
-                          (submitAction)="purge()"
-                          i18n>Purge Trash</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="purge()"
+                              [form]="purgeForm"
+                              [submitText]="actionLabels.PURGE"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

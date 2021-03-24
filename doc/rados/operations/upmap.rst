@@ -34,7 +34,7 @@ Balancer module
 -----------------
 
 The `balancer` module for ceph-mgr will automatically balance
-the number of PGs per OSD.  See ``Balancer``
+the number of PGs per OSD.  See :ref:`balancer`
 
 
 Offline optimization

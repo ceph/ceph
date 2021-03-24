@@ -70,7 +70,7 @@ Thread::~Thread()
 {
 }
 
-void *Thread::_entry_func(void *arg) {
+void *Thread::_entry_func(void *arg) noexcept {
   void *r = ((Thread*)arg)->entry_wrapper();
   return r;
 }
@@ -84,9 +84,6 @@ void *Thread::entry_wrapper()
     _set_affinity(cpuid);
 
   ceph_pthread_setname(pthread_self(), thread_name.c_str());
-#ifdef WITH_SEASTAR
-  crimson::os::AlienStore::configure_thread_memory();
-#endif
   return entry();
 }
 

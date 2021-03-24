@@ -6,9 +6,14 @@
 
 #include <string>
 
+#include "common/async/yield_context.h"
+
+#include "common/ceph_json.h"
 #include "common/ceph_context.h"
 
-class RGWCtl;
+#include "rgw/rgw_rados.h"
+
+namespace rgw { namespace sal { class RGWStore; } }
 
 class RGWRole
 {
@@ -23,7 +28,7 @@ class RGWRole
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 
   CephContext *cct;
-  RGWCtl *ctl;
+  rgw::sal::RGWStore* store;
   string id;
   string name;
   string path;
@@ -34,25 +39,25 @@ class RGWRole
   string tenant;
   uint64_t max_session_duration;
 
-  int store_info(bool exclusive);
-  int store_name(bool exclusive);
-  int store_path(bool exclusive);
-  int read_id(const string& role_name, const string& tenant, string& role_id);
-  int read_name();
-  int read_info();
+  int store_info(bool exclusive, optional_yield y);
+  int store_name(bool exclusive, optional_yield y);
+  int store_path(bool exclusive, optional_yield y);
+  int read_id(const DoutPrefixProvider *dpp, const string& role_name, const string& tenant, string& role_id, optional_yield y);
+  int read_name(const DoutPrefixProvider *dpp, optional_yield y);
+  int read_info(const DoutPrefixProvider *dpp, optional_yield y);
   bool validate_input();
   void extract_name_tenant(const std::string& str);
 
 public:
   RGWRole(CephContext *cct,
-          RGWCtl *ctl,
+          rgw::sal::RGWStore* store,
           string name,
           string path,
           string trust_policy,
           string tenant,
           string max_session_duration_str="")
   : cct(cct),
-    ctl(ctl),
+    store(store),
     name(std::move(name)),
     path(std::move(path)),
     trust_policy(std::move(trust_policy)),
@@ -68,27 +73,27 @@ public:
   }
 
   RGWRole(CephContext *cct,
-          RGWCtl *ctl,
+          rgw::sal::RGWStore* store,
           string name,
           string tenant)
   : cct(cct),
-    ctl(ctl),
+    store(store),
     name(std::move(name)),
     tenant(std::move(tenant)) {
     extract_name_tenant(this->name);
   }
 
   RGWRole(CephContext *cct,
-          RGWCtl *ctl,
+          rgw::sal::RGWStore* store,
           string id)
   : cct(cct),
-    ctl(ctl),
+    store(store),
     id(std::move(id)) {}
 
   RGWRole(CephContext *cct,
-          RGWCtl *ctl)
+          rgw::sal::RGWStore* store)
   : cct(cct),
-    ctl(ctl) {}
+    store(store) {}
 
   RGWRole() {}
 
@@ -136,11 +141,11 @@ public:
 
   void set_id(const string& id) { this->id = id; }
 
-  int create(bool exclusive);
-  int delete_obj();
-  int get();
-  int get_by_id();
-  int update();
+  int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
+  int get(const DoutPrefixProvider *dpp, optional_yield y);
+  int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
+  int update(optional_yield y);
   void update_trust_policy(string& trust_policy);
   void set_perm_policy(const string& policy_name, const string& perm_policy);
   vector<string> get_role_policy_names();
@@ -152,12 +157,13 @@ public:
   static const string& get_names_oid_prefix();
   static const string& get_info_oid_prefix();
   static const string& get_path_oid_prefix();
-  static int get_roles_by_path_prefix(RGWRados *store,
+  static int get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
+				      rgw::sal::RGWStore *store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,
-                                      vector<RGWRole>& roles);
+                                      vector<RGWRole>& roles,
+				      optional_yield y);
 };
 WRITE_CLASS_ENCODER(RGWRole)
 #endif /* CEPH_RGW_ROLE_H */
-

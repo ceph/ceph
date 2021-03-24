@@ -15,6 +15,10 @@
 #define CEPH_CEPH_LL_CLIENT_H
 #include <stdint.h>
 
+#ifdef _WIN32
+#include "include/win32/fs_compat.h"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 

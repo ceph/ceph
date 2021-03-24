@@ -20,6 +20,7 @@ public:
   virtual void apply_qos_schedule_tick_min(uint64_t tick) = 0;
   virtual void apply_qos_limit(uint64_t flag, uint64_t limit,
                                uint64_t burst, uint64_t burst_seconds) = 0;
+  virtual void apply_qos_exclude_ops(uint64_t exclude_ops) = 0;
 
   virtual bool writes_blocked() const = 0;
   virtual int block_writes() = 0;
@@ -27,6 +28,10 @@ public:
 
   virtual void unblock_writes() = 0;
   virtual void wait_on_writes_unblocked(Context *on_unblocked) = 0;
+
+  virtual void invalidate_cache(Context* on_finish) = 0;
+  virtual void remap_extents(Extents& image_extents,
+                             ImageExtentsMapType type) = 0;
 };
 
 } // namespace io

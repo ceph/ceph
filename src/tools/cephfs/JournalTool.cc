@@ -824,7 +824,7 @@ int JournalTool::recover_dentries(
         char dentry_type;
         decode(dentry_type, q);
 
-        if (dentry_type == 'L') {
+        if (dentry_type == 'L' || dentry_type == 'l') {
           // leave write_dentry false, we have no version to
           // compare with in a hardlink, so it's not safe to
           // squash over it with what's in this fullbit
@@ -833,10 +833,20 @@ int JournalTool::recover_dentries(
                << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
           write_dentry = old_fnode_version < lump.fnode->version;
-        } else if (dentry_type == 'I') {
+        } else if (dentry_type == 'I' || dentry_type == 'i') {
           // Read out inode version to compare with backing store
           InodeStore inode;
-          inode.decode_bare(q);
+          if (dentry_type == 'i') {
+            mempool::mds_co::string alternate_name;
+
+            DECODE_START(2, q);
+            if (struct_v >= 2)
+              decode(alternate_name, q);
+            inode.decode(q);
+            DECODE_FINISH(q);
+	  } else {
+            inode.decode_bare(q);
+	  }
           dout(4) << "decoded embedded inode version "
             << inode.inode->version << " vs fullbit version "
             << fb.inode->version << dendl;
@@ -890,13 +900,13 @@ int JournalTool::recover_dentries(
         char dentry_type;
         decode(dentry_type, q);
 
-        if (dentry_type == 'L') {
+        if (dentry_type == 'L' || dentry_type == 'l') {
           dout(10) << "Existing hardlink inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
                << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
           write_dentry = old_fnode_version < lump.fnode->version;
-        } else if (dentry_type == 'I') {
+        } else if (dentry_type == 'I' || dentry_type == 'i') {
           dout(10) << "Existing full inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
                << "' with lump fnode version " << lump.fnode->version
@@ -946,13 +956,13 @@ int JournalTool::recover_dentries(
 	decode(dentry_type, q);
 
 	bool remove_dentry = false;
-	if (dentry_type == 'L') {
+	if (dentry_type == 'L' || dentry_type == 'l') {
 	  dout(10) << "Existing hardlink inode in slot to be (maybe) removed "
 	    << "by null journal dn '" << nb.dn.c_str()
 	    << "' with lump fnode version " << lump.fnode->version
 	    << "vs existing fnode version " << old_fnode_version << dendl;
 	  remove_dentry = old_fnode_version < lump.fnode->version;
-	} else if (dentry_type == 'I') {
+	} else if (dentry_type == 'I' || dentry_type == 'i') {
 	  dout(10) << "Existing full inode in slot to be (maybe) removed "
 	    << "by null journal dn '" << nb.dn.c_str()
 	    << "' with lump fnode version " << lump.fnode->version

@@ -12,8 +12,8 @@ Currently, notifications could be sent to: HTTP, AMQP0.9.1 and Kafka endpoints.
 Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint,
 the `PubSub Module`_ should be used instead of the bucket notification mechanism.
 
-A user can create different topics. A topic entity is defined by its user and its name. A
-user can only manage its own topics, and can only associate them with buckets it owns.
+A user can create different topics. A topic entity is defined by its name and is per tenant. A
+user can only associate its topics (via notification configuration) with buckets it owns.
 
 In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
@@ -29,6 +29,7 @@ mechanism. This API is similar to the one defined as the S3-compatible API of th
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+.. note:: To enable bucket notifications API, the `rgw_enable_apis` configuration parameter should contain: "notifications".
 
 Notification Reliability
 ------------------------
@@ -50,25 +51,25 @@ In this case, the only latency added to the original operation is of committing 
 Topic Management via CLI
 ------------------------
 
-Configuration of all topics of a user could be fetched using the following command:
+Configuration of all topics, associated with a tenant, could be fetched using the following command:
 
 ::
 
-   # radosgw-admin topic list --uid={user-id}
+   # radosgw-admin topic list [--tenant={tenant}]
 
 
 Configuration of a specific topic could be fetched using:
 
 ::
 
-   # radosgw-admin topic get --uid={user-id} --topic={topic-name}
+   # radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
 And removed using:
 
 ::
 
-   # radosgw-admin topic rm --uid={user-id} --topic={topic-name}
+   # radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
 
 Notification Performance Stats
@@ -84,7 +85,7 @@ The same counters are shared between the pubsub sync module and the bucket notif
 .. note::
 
     ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, while:
-    ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per push action on each notification.
+    ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per push action on each notification
 
 Bucket Notification REST API
 ----------------------------
@@ -136,11 +137,13 @@ Request parameters:
 
 - AMQP0.9.1 endpoint
 
- - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
+ - URI: ``amqp[s]://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
  - user/password defaults to: guest/guest
  - user/password may only be provided over HTTPS. If not, topic creation request will be rejected.
- - port defaults to: 5672
+ - port defaults to: 5672/5671 for unencrypted/SSL-encrypted connections
  - vhost defaults to: "/"
+ - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+ - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
  - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
  - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
@@ -188,10 +191,68 @@ The topic ARN in the response will have the following format:
 
    arn:aws:sns:<zone-group>:<tenant>:<topic>
 
+Get Topic Attributes
+````````````````````
+
+Returns information about a specific topic. This includes push-endpoint information, if provided.
+
+::
+
+   POST
+
+   Action=GetTopicAttributes
+   &TopicArn=<topic-arn>
+
+Response will have the following format:
+
+::
+
+    <GetTopicAttributesResponse>
+        <GetTopicAttributesResult>
+            <Attributes>
+                <entry>
+                    <key>User</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>Name</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>EndPoint</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>TopicArn</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>OpaqueData</key>
+                    <value></value>
+                </entry> 
+            </Attributes>
+        </GetTopicAttributesResult>
+        <ResponseMetadata>
+            <RequestId></RequestId>
+        </ResponseMetadata>
+    </GetTopicAttributesResponse>
+
+- User: name of the user that created the topic
+- Name: name of the topic
+- EndPoint: JSON formatted endpoint parameters, including:
+   - EndpointAddress: the push-endpoint URL
+   - EndpointArgs: the push-endpoint args
+   - EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
+   - HasStoredSecret: "true" if if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
+   - Persistent: "true" is topic is persistent
+- TopicArn: topic ARN
+- OpaqueData: the opaque data set on the topic
+
 Get Topic Information
 `````````````````````
 
 Returns information about specific topic. This includes push-endpoint information, if provided.
+Note that this API is now deprecated in favor of the AWS compliant `GetTopicAttributes` API.
 
 ::
 
@@ -205,7 +266,7 @@ Response will have the following format:
 ::
 
     <GetTopicResponse>
-        <GetTopicRersult>
+        <GetTopicResult>
             <Topic>
                 <User></User>
                 <Name></Name>
@@ -213,6 +274,8 @@ Response will have the following format:
                     <EndpointAddress></EndpointAddress>
                     <EndpointArgs></EndpointArgs>
                     <EndpointTopic></EndpointTopic>
+                    <HasStoredSecret></HasStoredSecret>
+                    <Persistent></Persistent>
                 </EndPoint>
                 <TopicArn></TopicArn>
                 <OpaqueData></OpaqueData>
@@ -226,10 +289,12 @@ Response will have the following format:
 - User: name of the user that created the topic
 - Name: name of the topic
 - EndpointAddress: the push-endpoint URL
-- if endpoint URL contain user/password information, request must be made over HTTPS. If not, topic get request will be rejected.
 - EndpointArgs: the push-endpoint args
-- EndpointTopic: the topic name that should be sent to the endpoint (mat be different than the above topic name)
+- EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
+- HasStoredSecret: "true" if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
+- Persistent: "true" is topic is persistent
 - TopicArn: topic ARN
+- OpaqueData: the opaque data set on the topic
 
 Delete Topic
 ````````````
@@ -241,7 +306,12 @@ Delete Topic
    Action=DeleteTopic
    &TopicArn=<topic-arn>
 
-Delete the specified topic. Note that deleting a deleted topic should result with no-op and not a failure.
+Delete the specified topic.
+
+.. note::
+
+  - Deleting an unknown notification (e.g. double delete) is not considered an error
+  - Deleting a topic does not automatically delete all notifications associated with it
 
 The response will have the following format:
 
@@ -256,7 +326,7 @@ The response will have the following format:
 List Topics
 ```````````
 
-List all topics that user defined.
+List all topics associated with a tenant.
 
 ::
 
@@ -268,8 +338,8 @@ Response will have the following format:
 
 ::
 
-    <ListTopicdResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
-        <ListTopicsRersult>
+    <ListTopicsResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+        <ListTopicsResult>
             <Topics>
                 <member>
                     <User></User>
@@ -300,7 +370,6 @@ Detailed under: `Bucket Operations`_.
 
     - "Abort Multipart Upload" request does not emit a notification
     - Both "Initiate Multipart Upload" and "POST Object" requests will emit an ``s3:ObjectCreated:Post`` notification
-
 
 Events
 ~~~~~~

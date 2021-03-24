@@ -8,18 +8,20 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, expectItemTasks, Mocks } from '../../../../testing/unit-test-helper';
-import { ConfigurationService } from '../../../shared/api/configuration.service';
-import { PoolService } from '../../../shared/api/pool.service';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
-import { SharedModule } from '../../../shared/shared.module';
-import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
-import { PgCategoryService } from '../../shared/pg-category.service';
+import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
+import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-helper';
 import { Pool } from '../pool';
 import { PoolDetailsComponent } from '../pool-details/pool-details.component';
 import { PoolListComponent } from './pool-list.component';
@@ -28,9 +30,18 @@ describe('PoolListComponent', () => {
   let component: PoolListComponent;
   let fixture: ComponentFixture<PoolListComponent>;
   let poolService: PoolService;
+  let getECPList: jasmine.Spy;
 
   const getPoolList = (): Pool[] => {
     return [Mocks.getPool('a', 0), Mocks.getPool('b', 1), Mocks.getPool('c', 2)];
+  };
+  const getECPProfiles = (): ErasureCodeProfile[] => {
+    const ecpProfile = new ErasureCodeProfile();
+    ecpProfile.name = 'default';
+    ecpProfile.k = 2;
+    ecpProfile.m = 1;
+
+    return [ecpProfile];
   };
 
   configureTestBed({
@@ -52,6 +63,8 @@ describe('PoolListComponent', () => {
     component.permissions.pool.read = true;
     poolService = TestBed.inject(PoolService);
     spyOn(poolService, 'getList').and.callFake(() => of(getPoolList()));
+    getECPList = spyOn(TestBed.inject(ErasureCodeProfileService), 'list');
+    getECPList.and.returnValue(of(getECPProfiles()));
     fixture.detectChanges();
   });
 
@@ -305,7 +318,8 @@ describe('PoolListComponent', () => {
             wr: { latest: 0, rate: 0, rates: [] },
             wr_bytes: { latest: 0, rate: 0, rates: [] }
           },
-          usage: 0
+          usage: 0,
+          data_protection: 'replica: ×3'
         }),
         o
       )
@@ -315,7 +329,7 @@ describe('PoolListComponent', () => {
       pool = Mocks.getPool('a', 0);
     });
 
-    it('transforms pools data correctly', () => {
+    it('transforms replicated pools data correctly', () => {
       pool = _.merge(pool, {
         stats: {
           bytes_used: { latest: 5, rate: 0, rates: [] },
@@ -341,7 +355,22 @@ describe('PoolListComponent', () => {
             percent_used: { latest: 0.25, rate: 0, rates: [] },
             rd_bytes: { latest: 6, rate: 4, rates: [2, 6] }
           },
-          usage: 0.25
+          usage: 0.25,
+          data_protection: 'replica: ×3'
+        })
+      );
+    });
+
+    it('transforms erasure pools data correctly', () => {
+      pool.type = 'erasure';
+      pool.erasure_code_profile = 'default';
+      component.ecProfileList = getECPProfiles();
+
+      expect(component.transformPoolsData([pool])).toEqual(
+        getPoolData({
+          type: 'erasure',
+          erasure_code_profile: 'default',
+          data_protection: 'EC: 2+1'
         })
       );
     });
@@ -370,7 +399,8 @@ describe('PoolListComponent', () => {
           pg_num: 32,
           pg_num_target: 16,
           pg_placement_num: 32,
-          pg_placement_num_target: 16
+          pg_placement_num_target: 16,
+          data_protection: 'replica: ×3'
         })
       );
     });
@@ -391,7 +421,8 @@ describe('PoolListComponent', () => {
           pg_num: 32,
           pg_num_target: 16,
           pg_placement_num: 32,
-          pg_placement_num_target: 16
+          pg_placement_num_target: 16,
+          data_protection: 'replica: ×3'
         })
       );
     });

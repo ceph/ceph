@@ -22,6 +22,7 @@
 
 #include "common/config.h"
 #include "common/RefCountedObj.h"
+#include "include/compat.h"
 #include "include/counter.h"
 #include "include/elist.h"
 #include "include/types.h"
@@ -70,7 +71,7 @@ public:
       update_layout = true;
   }
 
-  void update(ObjectOperation &op, inode_backtrace_t *bt);
+  void update(ObjectOperation &op, inode_backtrace_t &bt);
   int64_t get_pool() { return pool; }
 
 private:
@@ -294,36 +295,17 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   friend class CDir;
   friend std::ostream& operator<<(std::ostream&, const CInode&);
 
-  class scrub_stamp_info_t {
-  public:
-    scrub_stamp_info_t() {}
-    void reset() {
-      scrub_start_version = last_scrub_version = 0;
-      scrub_start_stamp = last_scrub_stamp = utime_t();
-    }
-    /// version we started our latest scrub (whether in-progress or finished)
-    version_t scrub_start_version = 0;
-    /// time we started our latest scrub (whether in-progress or finished)
-    utime_t scrub_start_stamp;
-    /// version we started our most recent finished scrub
-    version_t last_scrub_version = 0;
-    /// time we started our most recent finished scrub
-    utime_t last_scrub_stamp;
-  };
-
-  class scrub_info_t : public scrub_stamp_info_t {
+  class scrub_info_t {
   public:
     scrub_info_t() {}
 
-    CDentry *scrub_parent = nullptr;
-    MDSContext *on_finish = nullptr;
+    version_t last_scrub_version = 0;
+    utime_t last_scrub_stamp;
 
     bool last_scrub_dirty = false; /// are our stamps dirty with respect to disk state?
     bool scrub_in_progress = false; /// are we currently scrubbing?
-    bool children_scrubbed = false;
 
-    /// my own (temporary) stamps and versions for each dirfrag we have
-    std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps; // XXX not part of mempool
+    fragset_t queued_frags;
 
     ScrubHeaderRef header;
   };
@@ -350,7 +332,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
-  static const int PIN_SCRUBQUEUE =       25;
 
   // -- dump flags --
   static const int DUMP_INODE_STORE_BASE = (1 << 0);
@@ -442,18 +423,15 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   std::ostream& print_db_line_prefix(std::ostream& out) override;
 
-  const scrub_info_t *scrub_info() const{
+  const scrub_info_t *scrub_info() const {
     if (!scrub_infop)
       scrub_info_create();
-    return scrub_infop;
+    return scrub_infop.get();
   }
 
-  ScrubHeaderRef get_scrub_header() {
-    if (scrub_infop == nullptr) {
-      return nullptr;
-    } else {
-      return scrub_infop->header;
-    }
+  const ScrubHeaderRef& get_scrub_header() {
+    static const ScrubHeaderRef nullref;
+    return scrub_infop ? scrub_infop->header : nullref;
   }
 
   bool scrub_is_in_progress() const {
@@ -467,32 +445,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @param scrub_version What version are we scrubbing at (usually, parent
    * directory's get_projected_version())
    */
-  void scrub_initialize(CDentry *scrub_parent,
-			ScrubHeaderRef& header,
-			MDSContext *f);
-  /**
-   * Get the next dirfrag to scrub. Gives you a frag_t in output param which
-   * you must convert to a CDir (and possibly load off disk).
-   * @param dir A pointer to frag_t, will be filled in with the next dirfrag to
-   * scrub if there is one.
-   * @returns 0 on success, you should scrub the passed-out frag_t right now;
-   * ENOENT: There are no remaining dirfrags to scrub
-   * <0 There was some other error (It will return -ENOTDIR if not a directory)
-   */
-  int scrub_dirfrag_next(frag_t* out_dirfrag);
-  /**
-   * Get the currently scrubbing dirfrags. When returned, the
-   * passed-in list will be filled in with all frag_ts which have
-   * been returned from scrub_dirfrag_next but not sent back
-   * via scrub_dirfrag_finished.
-   */
-  void scrub_dirfrags_scrubbing(frag_vec_t *out_dirfrags);
-  /**
-   * Report to the CInode that a dirfrag it owns has been scrubbed. Call
-   * this for every frag_t returned from scrub_dirfrag_next().
-   * @param dirfrag The frag_t that was scrubbed
-   */
-  void scrub_dirfrag_finished(frag_t dirfrag);
+  void scrub_initialize(ScrubHeaderRef& header);
   /**
    * Call this once the scrub has been completed, whether it's a full
    * recursive scrub on a directory or simply the data on a file (or
@@ -500,19 +453,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @param c An out param which is filled in with a Context* that must
    * be complete()ed.
    */
-  void scrub_finished(MDSContext **c);
+  void scrub_finished();
 
-  void scrub_aborted(MDSContext **c);
+  void scrub_aborted();
 
-  /**
-   * Report to the CInode that alldirfrags it owns have been scrubbed.
-   */
-  void scrub_children_finished() {
-    scrub_infop->children_scrubbed = true;
-  }
-  void scrub_set_finisher(MDSContext *c) {
-    ceph_assert(!scrub_infop->on_finish);
-    scrub_infop->on_finish = c;
+  fragset_t& scrub_queued_frags() {
+    ceph_assert(scrub_infop);
+    return scrub_infop->queued_frags;
   }
 
   bool is_multiversion() const {
@@ -791,9 +738,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void fetch(MDSContext *fin);
   void _fetched(ceph::buffer::list& bl, ceph::buffer::list& bl2, Context *fin);  
 
-  void _commit_ops(int r, version_t version, MDSContext *fin,
+  void _commit_ops(int r, C_GatherBuilder &gather_bld,
                    std::vector<CInodeCommitOperation> &ops_vec,
-                   inode_backtrace_t *bt);
+                   inode_backtrace_t &bt);
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void _store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
                         inode_backtrace_t &bt, int op_prio);
@@ -1131,7 +1078,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
-  elist<CInode*>::item item_scrub;
 
   // also update RecoveryQueue::RecoveryQueue() if you change this
   elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
@@ -1292,12 +1238,11 @@ private:
   int num_exporting_dirs = 0;
 
   int stickydir_ref = 0;
-  scrub_info_t *scrub_infop = nullptr;
+  std::unique_ptr<scrub_info_t> scrub_infop;
   /** @} Scrubbing and fsck */
 };
 
 std::ostream& operator<<(std::ostream& out, const CInode& in);
-std::ostream& operator<<(std::ostream& out, const CInode::scrub_stamp_info_t& si);
 
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;

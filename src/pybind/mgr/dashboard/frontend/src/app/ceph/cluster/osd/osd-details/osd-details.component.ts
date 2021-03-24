@@ -2,9 +2,9 @@ import { Component, Input, OnChanges } from '@angular/core';
 
 import _ from 'lodash';
 
-import { OsdService } from '../../../../shared/api/osd.service';
-import { Permission } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-osd-details',

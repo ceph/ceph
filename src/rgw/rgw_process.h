@@ -32,7 +32,7 @@ namespace rgw::dmclock {
 }
 
 struct RGWProcessEnv {
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;
@@ -47,7 +47,7 @@ class RGWProcess {
   deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
-  rgw::sal::RGWRadosStore* store;
+  rgw::sal::RGWStore* store;
   rgw_auth_registry_ptr_t auth_registry;
   OpsLogSocket* olog;
   ThreadPool m_tp;
@@ -117,7 +117,7 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
+  void unpause_with_new_config(rgw::sal::RGWStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) {
     this->store = store;
     this->auth_registry = std::move(auth_registry);
@@ -176,7 +176,7 @@ public:
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
 /* process stream request */
-extern int process_request(rgw::sal::RGWRadosStore* store,
+extern int process_request(rgw::sal::RGWStore* store,
                            RGWREST* rest,
                            RGWRequest* req,
                            const std::string& frontend_prefix,
@@ -185,12 +185,14 @@ extern int process_request(rgw::sal::RGWRadosStore* store,
                            OpsLogSocket* olog,
                            optional_yield y,
                            rgw::dmclock::Scheduler *scheduler,
+                           std::string* user,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
                                      RGWRequest* req,
                                      req_state* s,
+				     optional_yield y,
                                      bool skip_retarget = false);
 
 #if defined(def_dout_subsys)

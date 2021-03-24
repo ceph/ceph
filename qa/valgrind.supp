@@ -1,3 +1,17 @@
+
+{
+   <allthefrees, so we can behave with tcmalloc>
+   Memcheck:Free
+   fun:free
+   ...
+}
+{
+   operator delete[] in Rados::shutdown
+   Memcheck:Free
+   fun:_ZdaPvm
+   ...
+   fun:_ZN8librados7v14_2_05Rados8shutdownEv
+}
 {
    older boost mersenne twister uses uninitialized memory for randomness
    Memcheck:Cond
@@ -16,6 +30,7 @@
    apparent TLS leak in eglibc
    Memcheck:Leak
    fun:calloc
+   ...
    fun:_dl_allocate_tls
    fun:pthread_create*
    ...

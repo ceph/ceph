@@ -21,7 +21,7 @@
 #include "msg/MessageRef.h"
 #include "mon/MonMap.h"
 
-class MMonMap : public Message {
+class MMonMap final : public Message {
 public:
   ceph::buffer::list monmapbl;
 
@@ -30,7 +30,7 @@ public:
     monmapbl = std::move(bl);
   }
 private:
-  ~MMonMap() override {}
+  ~MMonMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_map"; }

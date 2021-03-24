@@ -29,6 +29,7 @@ public:
   utime_t  op_stamp;
   ceph_mds_request_head head;
   filepath path, path2;
+  std::string alternate_name;
   bufferlist data;
   int inode_drop; //the inode caps this operation will drop
   int inode_unless; //unless we have these caps already
@@ -169,6 +170,7 @@ public:
   void set_retry_attempt(int a) { head.num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
+  void set_alternate_name(std::string an) { alternate_name = an; }
   void set_string2(const char *s) { path2.set_path(std::string_view(s), 0); }
   void set_caller_perms(const UserPerm& _perms) {
     perms.shallow_copy(_perms);

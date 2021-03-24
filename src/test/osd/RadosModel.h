@@ -6,6 +6,7 @@
 #include "include/rados/librados.hpp"
 
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <map>
 #include <set>
@@ -32,14 +33,10 @@ class TestOpStat;
 
 template <typename T>
 typename T::iterator rand_choose(T &cont) {
-  if (cont.size() == 0) {
-    return cont.end();
+  if (std::empty(cont)) {
+    return std::end(cont);
   }
-  int index = rand() % cont.size();
-  typename T::iterator retval = cont.begin();
-
-  for (; index > 0; --index) ++retval;
-  return retval;
+  return std::next(std::begin(cont), rand() % cont.size());
 }
 
 enum TestOpType {

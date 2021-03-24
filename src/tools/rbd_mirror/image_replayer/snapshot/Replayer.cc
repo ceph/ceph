@@ -16,6 +16,7 @@
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
+#include "librbd/mirror/ImageStateUpdateRequest.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
@@ -403,6 +404,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
 
   std::set<uint64_t> prune_snap_ids;
 
+  bool completed_non_primary_snapshots_exist = false;
   auto local_image_ctx = m_state_builder->local_image_ctx;
   std::shared_lock image_locker{local_image_ctx->image_lock};
   for (auto snap_info_it = local_image_ctx->snap_info.begin();
@@ -424,24 +426,39 @@ void Replayer<I>::scan_local_mirror_snapshots(
         // if remote has new snapshots, we would sync from here
         m_local_snap_id_start = local_snap_id;
         m_local_snap_id_end = CEPH_NOSNAP;
+        completed_non_primary_snapshots_exist = true;
 
         if (mirror_ns->mirror_peer_uuids.empty()) {
           // no other peer will attempt to sync to this snapshot so store as
           // a candidate for removal
           prune_snap_ids.insert(local_snap_id);
         }
+      } else if (mirror_ns->last_copied_object_number == 0 &&
+                 m_local_snap_id_start > 0) {
+        // shouldn't be possible, but ensure that pruning this snapshot
+        // wouldn't leave this image w/o any non-primary snapshots
+        if (!completed_non_primary_snapshots_exist) {
+          derr << "incomplete local non-primary snapshot" << dendl;
+          handle_replay_complete(locker, -EINVAL,
+                                 "incomplete local non-primary snapshot");
+          return;
+        }
+
+        // snapshot might be missing image state, object-map, etc, so just
+        // delete and re-create it if we haven't started copying data
+        // objects. Also only prune this snapshot since we will need the
+        // previous mirror snapshot for syncing. Special case exception for
+        // the first non-primary snapshot since we know its snapshot is
+        // well-formed because otherwise the mirror-image-state would have
+        // forced an image deletion.
+        prune_snap_ids.clear();
+        prune_snap_ids.insert(local_snap_id);
+        break;
       } else {
         // start snap will be last complete mirror snapshot or initial
         // image revision
         m_local_snap_id_end = local_snap_id;
-
-        if (mirror_ns->last_copied_object_number == 0) {
-          // snapshot might be missing image state, object-map, etc, so just
-          // delete and re-create it if we haven't started copying data
-          // objects
-          prune_snap_ids.insert(local_snap_id);
-          break;
-        }
+        break;
       }
     } else if (mirror_ns->is_primary()) {
       if (mirror_ns->complete) {
@@ -552,7 +569,10 @@ void Replayer<I>::scan_remote_mirror_snapshots(
         ceph_assert(m_local_mirror_snap_ns.primary_mirror_uuid ==
                       m_state_builder->remote_mirror_uuid);
 
-        unlink_snap_ids.insert(remote_snap_id);
+        if (m_remote_snap_id_end == CEPH_NOSNAP) {
+          // haven't found the end snap so treat this as a candidate for unlink
+          unlink_snap_ids.insert(remote_snap_id);
+        }
         if (m_local_mirror_snap_ns.complete &&
             m_local_mirror_snap_ns.primary_snap_id >= remote_snap_id) {
           // skip past completed remote snapshot
@@ -610,43 +630,54 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     m_remote_snap_id_end = remote_snap_id;
     m_remote_mirror_snap_ns = *mirror_ns;
   }
-  image_locker.unlock();
 
-  unlink_snap_ids.erase(m_remote_snap_id_start);
-  unlink_snap_ids.erase(m_remote_snap_id_end);
-  if (!unlink_snap_ids.empty()) {
-    locker->unlock();
-
-    // retry the unlinking process for a remote snapshot that we do not
-    // need anymore
-    auto remote_snap_id = *unlink_snap_ids.begin();
-    dout(10) << "unlinking from remote snapshot " << remote_snap_id << dendl;
-    unlink_peer(remote_snap_id);
-    return;
+  if (m_remote_snap_id_start != 0 &&
+      remote_image_ctx->snap_info.count(m_remote_snap_id_start) == 0) {
+    // the remote start snapshot was deleted out from under us
+    derr << "failed to locate remote start snapshot: "
+         << "snap_id=" << m_remote_snap_id_start << dendl;
+    split_brain = true;
   }
 
-  if (m_remote_snap_id_end != CEPH_NOSNAP) {
-    dout(10) << "found remote mirror snapshot: "
-             << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
-             << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
-             << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
-    if (m_remote_mirror_snap_ns.complete) {
+  image_locker.unlock();
+
+  if (!split_brain) {
+    unlink_snap_ids.erase(m_remote_snap_id_start);
+    unlink_snap_ids.erase(m_remote_snap_id_end);
+    if (!unlink_snap_ids.empty()) {
       locker->unlock();
 
-      if (m_local_snap_id_end != CEPH_NOSNAP &&
-          !m_local_mirror_snap_ns.complete) {
-        // attempt to resume image-sync
-        dout(10) << "local image contains in-progress mirror snapshot"
-                 << dendl;
-        get_local_image_state();
-      } else {
-        copy_snapshots();
-      }
+      // retry the unlinking process for a remote snapshot that we do not
+      // need anymore
+      auto remote_snap_id = *unlink_snap_ids.begin();
+      dout(10) << "unlinking from remote snapshot " << remote_snap_id << dendl;
+      unlink_peer(remote_snap_id);
       return;
-    } else {
-      // might have raced with the creation of a remote mirror snapshot
-      // so we will need to refresh and rescan once it completes
-      dout(15) << "remote mirror snapshot not complete" << dendl;
+    }
+
+    if (m_remote_snap_id_end != CEPH_NOSNAP) {
+      dout(10) << "found remote mirror snapshot: "
+               << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
+               << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
+               << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
+      if (m_remote_mirror_snap_ns.complete) {
+        locker->unlock();
+
+        if (m_local_snap_id_end != CEPH_NOSNAP &&
+            !m_local_mirror_snap_ns.complete) {
+          // attempt to resume image-sync
+          dout(10) << "local image contains in-progress mirror snapshot"
+                   << dendl;
+          get_local_image_state();
+        } else {
+          copy_snapshots();
+        }
+        return;
+      } else {
+        // might have raced with the creation of a remote mirror snapshot
+        // so we will need to refresh and rescan once it completes
+        dout(15) << "remote mirror snapshot not complete" << dendl;
+      }
     }
   }
 
@@ -921,6 +952,40 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
   }
 
   dout(15) << "local_snap_id_end=" << m_local_snap_id_end << dendl;
+
+  update_mirror_image_state();
+}
+
+template <typename I>
+void Replayer<I>::update_mirror_image_state() {
+  if (m_local_snap_id_start > 0) {
+    request_sync();
+    return;
+  }
+
+  // a newly created non-primary image has a local mirror state of CREATING
+  // until this point so that we could avoid preserving the image until
+  // the first non-primary snapshot linked the two images together.
+  dout(10) << dendl;
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_update_mirror_image_state>(this);
+  auto req = librbd::mirror::ImageStateUpdateRequest<I>::create(
+    m_state_builder->local_image_ctx->md_ctx,
+    m_state_builder->local_image_ctx->id,
+    cls::rbd::MIRROR_IMAGE_STATE_ENABLED, {}, ctx);
+  req->send();
+}
+
+template <typename I>
+void Replayer<I>::handle_update_mirror_image_state(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to update local mirror image state: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(r, "failed to update local mirror image state");
+    return;
+  }
 
   request_sync();
 }

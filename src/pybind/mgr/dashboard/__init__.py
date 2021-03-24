@@ -9,6 +9,8 @@ import os
 
 import cherrypy
 
+DEFAULT_VERSION = '1.0'
+
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage  # pylint: disable=import-error
     __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),

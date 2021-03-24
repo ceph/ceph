@@ -1,9 +1,10 @@
 import { Component, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { Router, Routes } from '@angular/router';
+import { Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { DashboardUserDeniedError } from '~/app/core/error/error';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { AuthStorageService } from './auth-storage.service';
 import { NoSsoGuardService } from './no-sso-guard.service';
 
@@ -11,7 +12,6 @@ describe('NoSsoGuardService', () => {
   let service: NoSsoGuardService;
   let authStorageService: AuthStorageService;
   let ngZone: NgZone;
-  let router: Router;
 
   @Component({ selector: 'cd-404', template: '' })
   class NotFoundComponent {}
@@ -28,7 +28,6 @@ describe('NoSsoGuardService', () => {
     service = TestBed.inject(NoSsoGuardService);
     authStorageService = TestBed.inject(AuthStorageService);
     ngZone = TestBed.inject(NgZone);
-    router = TestBed.inject(Router);
   });
 
   it('should be created', () => {
@@ -43,9 +42,8 @@ describe('NoSsoGuardService', () => {
   it('should prevent if logged in via SSO', fakeAsync(() => {
     spyOn(authStorageService, 'isSSO').and.returnValue(true);
     ngZone.run(() => {
-      expect(service.canActivate()).toBe(false);
+      expect(() => service.canActivate()).toThrowError(DashboardUserDeniedError);
     });
     tick();
-    expect(router.url).toBe('/404');
   }));
 });

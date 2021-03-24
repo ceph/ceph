@@ -1,30 +1,40 @@
-import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  Input,
+  OnChanges,
+  OnInit,
+  TemplateRef,
+  ViewChild
+} from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
 import { of } from 'rxjs';
 
-import { RbdService } from '../../../shared/api/rbd.service';
-import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { ImageSpec } from '../../../shared/models/image-spec';
-import { Permission } from '../../../shared/models/permissions';
-import { Task } from '../../../shared/models/task';
-import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { TaskManagerService } from '../../../shared/services/task-manager.service';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ImageSpec } from '~/app/shared/models/image-spec';
+import { Permission } from '~/app/shared/models/permissions';
+import { Task } from '~/app/shared/models/task';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
@@ -33,7 +43,8 @@ import { RbdSnapshotModel } from './rbd-snapshot.model';
   selector: 'cd-rbd-snapshot-list',
   templateUrl: './rbd-snapshot-list.component.html',
   styleUrls: ['./rbd-snapshot-list.component.scss'],
-  providers: [TaskListService]
+  providers: [TaskListService],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RbdSnapshotListComponent implements OnInit, OnChanges {
   @Input()
@@ -54,6 +65,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   permission: Permission;
   selection = new CdTableSelection();
   tableActions: CdTableAction[];
+  rbdTableActions: RbdSnapshotActionsModel;
+  imageSpec: ImageSpec;
 
   data: RbdSnapshotModel[];
 
@@ -79,7 +92,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     private notificationService: NotificationService,
     private summaryService: SummaryService,
     private taskListService: TaskListService,
-    private actionLabels: ActionLabelsI18n
+    private actionLabels: ActionLabelsI18n,
+    private cdr: ChangeDetectorRef
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
   }
@@ -125,28 +139,26 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         pipe: this.cdDatePipe
       }
     ];
-  }
 
-  ngOnChanges() {
-    const imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName);
-
-    const actions = new RbdSnapshotActionsModel(
+    this.imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName);
+    this.rbdTableActions = new RbdSnapshotActionsModel(
       this.actionLabels,
       this.featuresName,
       this.rbdService
     );
-    actions.create.click = () => this.openCreateSnapshotModal();
-    actions.rename.click = () => this.openEditSnapshotModal();
-    actions.protect.click = () => this.toggleProtection();
-    actions.unprotect.click = () => this.toggleProtection();
+    this.rbdTableActions.create.click = () => this.openCreateSnapshotModal();
+    this.rbdTableActions.rename.click = () => this.openEditSnapshotModal();
+    this.rbdTableActions.protect.click = () => this.toggleProtection();
+    this.rbdTableActions.unprotect.click = () => this.toggleProtection();
     const getImageUri = () =>
       this.selection.first() &&
-      `${imageSpec.toStringEncoded()}/${encodeURIComponent(this.selection.first().name)}`;
-    actions.clone.routerLink = () => `/block/rbd/clone/${getImageUri()}`;
-    actions.copy.routerLink = () => `/block/rbd/copy/${getImageUri()}`;
-    actions.rollback.click = () => this.rollbackModal();
-    actions.deleteSnap.click = () => this.deleteSnapshotModal();
-    this.tableActions = actions.ordering;
+      `${this.imageSpec.toStringEncoded()}/${encodeURIComponent(this.selection.first().name)}`;
+    this.rbdTableActions.clone.routerLink = () => `/block/rbd/clone/${getImageUri()}`;
+    this.rbdTableActions.copy.routerLink = () => `/block/rbd/copy/${getImageUri()}`;
+    this.rbdTableActions.rollback.click = () => this.rollbackModal();
+    this.rbdTableActions.deleteSnap.click = () => this.deleteSnapshotModal();
+
+    this.tableActions = this.rbdTableActions.ordering;
 
     const itemFilter = (entry: any, task: Task) => {
       return entry.name === task.metadata['snapshot_name'];
@@ -156,19 +168,45 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
       return (
         ['rbd/snap/create', 'rbd/snap/delete', 'rbd/snap/edit', 'rbd/snap/rollback'].includes(
           task.name
-        ) && imageSpec.toString() === task.metadata['image_spec']
+        ) && this.imageSpec.toString() === task.metadata['image_spec']
       );
     };
 
     this.taskListService.init(
       () => of(this.snapshots),
       null,
-      (items) => (this.data = items),
-      () => (this.data = this.snapshots),
+      (items) => {
+        const hasChanges = CdHelperClass.updateChanged(this, {
+          data: items
+        });
+        if (hasChanges) {
+          this.cdr.detectChanges();
+          this.data = [...this.data];
+        }
+      },
+      () => {
+        const hasChanges = CdHelperClass.updateChanged(this, {
+          data: this.snapshots
+        });
+        if (hasChanges) {
+          this.cdr.detectChanges();
+          this.data = [...this.data];
+        }
+      },
       taskFilter,
       itemFilter,
       this.builders
     );
+  }
+
+  ngOnChanges() {
+    if (this.columns) {
+      this.imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName);
+      if (this.rbdTableActions) {
+        this.rbdTableActions.featuresName = this.featuresName;
+      }
+      this.taskListService.fetch();
+    }
   }
 
   private openSnapshotModal(taskName: string, snapName: string = null) {
@@ -188,12 +226,10 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
       const executingTask = new ExecutingTask();
       executingTask.name = taskName;
       executingTask.metadata = {
-        image_name: this.rbdName,
-        pool_name: this.poolName,
+        image_spec: this.imageSpec.toString(),
         snapshot_name: snapshotName
       };
       this.summaryService.addRunningTask(executingTask);
-      this.ngOnChanges();
     });
   }
 
@@ -223,7 +259,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         executingTask.name = finishedTask.name;
         executingTask.metadata = finishedTask.metadata;
         this.summaryService.addRunningTask(executingTask);
-        this.ngOnChanges();
         this.taskManagerService.subscribe(
           finishedTask.name,
           finishedTask.metadata,
@@ -250,7 +285,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         executingTask.metadata = finishedTask.metadata;
         this.summaryService.addRunningTask(executingTask);
         this.modalRef.close();
-        this.ngOnChanges();
         this.taskManagerService.subscribe(
           executingTask.name,
           executingTask.metadata,

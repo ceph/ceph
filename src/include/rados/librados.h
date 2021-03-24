@@ -55,7 +55,9 @@ extern "C" {
 /* RADOS lock flags
  * They are also defined in cls_lock_types.h. Keep them in sync!
  */
-#define LIBRADOS_LOCK_FLAG_RENEW 0x1
+#define LIBRADOS_LOCK_FLAG_RENEW       (1u<<0)
+#define LIBRADOS_LOCK_FLAG_MAY_RENEW   LIBRADOS_LOCK_FLAG_RENEW
+#define LIBRADOS_LOCK_FLAG_MUST_RENEW  (1u<<1)
 
 /*
  * Constants for rados_write_op_create().
@@ -222,7 +224,7 @@ typedef void *rados_ioctx_t;
  *
  * An iterator for listing the objects in a pool.
  * Used with rados_nobjects_list_open(),
- * rados_nobjects_list_next(), and
+ * rados_nobjects_list_next(), rados_nobjects_list_next2(), and
  * rados_nobjects_list_close().
  */
 typedef void *rados_list_ctx_t;
@@ -1136,6 +1138,32 @@ CEPH_RADOS_API int rados_nobjects_list_next(rados_list_ctx_t ctx,
                                             const char **entry,
 	                                    const char **key,
                                             const char **nspace);
+
+/**
+ * Get the next object name, locator and their sizes in the pool
+ *
+ * The sizes allow to list objects with \0 (the NUL character)
+ * in .e.g *entry. Is is unusual see such object names but a bug
+ * in a client has risen the need to handle them as well.
+ * *entry and *key are valid until next call to rados_nobjects_list_*
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param entry where to store the name of the entry
+ * @param key where to store the object locator (set to NULL to ignore)
+ * @param nspace where to store the object namespace (set to NULL to ignore)
+ * @param entry_size where to store the size of name of the entry
+ * @param key_size where to store the size of object locator (set to NULL to ignore)
+ * @param nspace_size where to store the size of object namespace (set to NULL to ignore)
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT when there are no more objects to list
+ */
+CEPH_RADOS_API int rados_nobjects_list_next2(rados_list_ctx_t ctx,
+                                             const char **entry,
+                                             const char **key,
+                                             const char **nspace,
+                                             size_t *entry_size,
+                                             size_t *key_size,
+                                             size_t *nspace_size);
 
 /**
  * Close the object listing handle.
@@ -2805,6 +2833,10 @@ CEPH_RADOS_API int rados_set_alloc_hint2(rados_ioctx_t io, const char *o,
  * to be performed atomically. You must call rados_release_write_op when you are
  * finished with it.
  *
+ * @note the ownership of a write operartion is passed to the function
+ *       performing the operation, so the same instance of @c rados_write_op_t
+ *       cannot be used again after being performed.
+ *
  * @returns non-NULL on success, NULL on memory allocation error.
  */
 CEPH_RADOS_API rados_write_op_t rados_create_write_op(void);
@@ -3188,10 +3220,14 @@ CEPH_RADOS_API int rados_aio_write_op_operate(rados_write_op_t write_op,
 			                      int flags);
 
 /**
- * Create a new rados_read_op_t write operation. This will store all
+ * Create a new rados_read_op_t read operation. This will store all
  * actions to be performed atomically. You must call
  * rados_release_read_op when you are finished with it (after it
  * completes, or you decide not to send it in the first place).
+ *
+ * @note the ownership of a read operartion is passed to the function
+ *       performing the operation, so the same instance of @c rados_read_op_t
+ *       cannot be used again after being performed.
  *
  * @returns non-NULL on success, NULL on memory allocation error.
  */

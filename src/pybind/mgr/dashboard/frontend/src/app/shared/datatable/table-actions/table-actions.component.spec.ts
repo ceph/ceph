@@ -1,11 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
-import { ComponentsModule } from '../../components/components.module';
-import { CdTableAction } from '../../models/cd-table-action';
-import { CdTableSelection } from '../../models/cd-table-selection';
-import { Permission } from '../../models/permissions';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { TableActionsComponent } from './table-actions.component';
 
 describe('TableActionsComponent', () => {
@@ -21,7 +23,7 @@ describe('TableActionsComponent', () => {
 
   configureTestBed({
     declarations: [TableActionsComponent],
-    imports: [ComponentsModule, RouterTestingModule]
+    imports: [ComponentsModule, NgxPipeFunctionModule, RouterTestingModule]
   });
 
   beforeEach(() => {
@@ -157,9 +159,9 @@ describe('TableActionsComponent', () => {
   });
 
   it('should convert any name to a proper CSS class', () => {
-    expect(component.toClassName('Create')).toBe('create');
-    expect(component.toClassName('Mark x down')).toBe('mark-x-down');
-    expect(component.toClassName('?Su*per!')).toBe('super');
+    expect(component.toClassName({ name: 'Create' } as CdTableAction)).toBe('create');
+    expect(component.toClassName({ name: 'Mark x down' } as CdTableAction)).toBe('mark-x-down');
+    expect(component.toClassName({ name: '?Su*per!' } as CdTableAction)).toBe('super');
   });
 
   describe('useDisableDesc', () => {

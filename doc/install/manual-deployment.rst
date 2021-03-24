@@ -244,14 +244,9 @@ The procedure is as follows:
 
 #. Start the monitor(s).
 
-   For most distributions, services are started via systemd now::
+   Start the service with systemd::
 
 	sudo systemctl start ceph-mon@node1
-
-   For older Debian/CentOS/RHEL, use sysvinit::
-
-	sudo /etc/init.d/ceph start mon.node1
-
 
 #. Verify that the monitor is running. ::
 
@@ -478,7 +473,7 @@ In the below instructions, ``{id}`` is an arbitrary name, such as the hostname o
 
 #. Import the keyring and set caps.::
 
-	ceph auth add mds.{id} osd "allow rwx" mds "allow" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
+	ceph auth add mds.{id} osd "allow rwx" mds "allow *" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
 
 #. Add to ceph.conf.::
 

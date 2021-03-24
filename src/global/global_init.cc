@@ -159,7 +159,8 @@ void global_pre_init(
   }
   else if (ret) {
     cct->_log->flush();
-    cerr << "global_init: error reading config file." << std::endl;
+    cerr << "global_init: error reading config file. "
+         << conf.get_parse_error() << std::endl;
     _exit(1);
   }
 
@@ -490,7 +491,7 @@ void global_init_daemonize(CephContext *cct)
 
 int reopen_as_null(CephContext *cct, int fd)
 {
-  int newfd = open("/dev/null", O_RDONLY|O_CLOEXEC);
+  int newfd = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
   if (newfd < 0) {
     int err = errno;
     lderr(cct) << __func__ << " failed to open /dev/null: " << cpp_strerror(err)
@@ -514,6 +515,9 @@ int reopen_as_null(CephContext *cct, int fd)
 
 void global_init_postfork_start(CephContext *cct)
 {
+  // reexpand the meta in child process
+  cct->_conf.finalize_reexpand_meta();
+
   // restart log thread
   cct->_log->start();
   cct->notify_post_fork();

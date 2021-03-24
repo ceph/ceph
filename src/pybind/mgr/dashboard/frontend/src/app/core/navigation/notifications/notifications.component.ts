@@ -2,10 +2,10 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { Subscription } from 'rxjs';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdNotification } from '../../../shared/models/cd-notification';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SummaryService } from '../../../shared/services/summary.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdNotification } from '~/app/shared/models/cd-notification';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({
   selector: 'cd-notifications',

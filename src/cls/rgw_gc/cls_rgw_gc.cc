@@ -502,6 +502,11 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
     return -ENOSPC;
   }
 
+  // Due to Tracker 47866 we are no longer executing this code, as it
+  // appears to possibly create a GC entry for an object that has not
+  // been deleted. Instead we will log at level 0 to perhaps confirm
+  // that when and how often this bug would otherwise be hit.
+#if 0
   cls_queue_enqueue_op enqueue_op;
   bufferlist bl_data;
   encode(op.info, bl_data);
@@ -512,6 +517,16 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
   if (ret < 0) {
     return ret;
   }
+#else
+  std::string first_chain = "<empty-chain>";
+  if (! op.info.chain.objs.empty()) {
+    first_chain = op.info.chain.objs.cbegin()->key.name;
+  }
+  CLS_LOG(0,
+	  "INFO: refrained from enqueueing GC entry during GC defer"
+	  " tag=%s, first_chain=%s\n",
+	  op.info.tag.c_str(), first_chain.c_str());
+#endif
 
   if (has_urgent_data) {
     head.bl_urgent_data.clear();

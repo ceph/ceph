@@ -7,10 +7,10 @@ import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, FormHelper } from '../../../../../testing/unit-test-helper';
-import { CephServiceService } from '../../../../shared/api/ceph-service.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { SharedModule } from '../../../../shared/shared.module';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 
 describe('ServiceFormComponent', () => {
@@ -270,7 +270,7 @@ describe('ServiceFormComponent', () => {
 
       it('should submit iscsi with trusted ips', () => {
         formHelper.setValue('ssl', true);
-        formHelper.setValue('trusted_ip_list', '  172.16.0.5,   192.1.1.10  ');
+        formHelper.setValue('trusted_ip_list', ' 172.16.0.5, 192.1.1.10  ');
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'iscsi',
@@ -282,7 +282,7 @@ describe('ServiceFormComponent', () => {
           api_secure: true,
           ssl_cert: '',
           ssl_key: '',
-          trusted_ip_list: ['172.16.0.5', '192.1.1.10']
+          trusted_ip_list: '172.16.0.5, 192.1.1.10'
         });
       });
 

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -6,24 +6,24 @@ import _ from 'lodash';
 import { forkJoin, Observable, ReplaySubject } from 'rxjs';
 import { first, switchMap } from 'rxjs/operators';
 
-import { PoolService } from '../../../shared/api/pool.service';
-import { RbdService } from '../../../shared/api/rbd.service';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdForm } from '../../../shared/forms/cd-form';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { Pool } from '~/app/ceph/pool/pool';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField
-} from '../../../shared/models/configuration';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { ImageSpec } from '../../../shared/models/image-spec';
-import { Permission } from '../../../shared/models/permissions';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
-import { Pool } from '../../pool/pool';
+} from '~/app/shared/models/configuration';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ImageSpec } from '~/app/shared/models/image-spec';
+import { Permission } from '~/app/shared/models/permissions';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { RBDImageFormat, RbdModel } from '../rbd-list/rbd-model';
 import { RbdImageFeature } from './rbd-feature.interface';
 import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
@@ -60,10 +60,10 @@ export class RbdFormComponent extends CdForm implements OnInit {
   allDataPools: Array<Pool> = [];
   features: { [key: string]: RbdImageFeature };
   featuresList: RbdImageFeature[] = [];
-  initializeConfigData = new EventEmitter<{
+  initializeConfigData = new ReplaySubject<{
     initialData: RbdConfigurationEntry[];
     sourceType: RbdConfigurationSourceField;
-  }>();
+  }>(1);
 
   pool: string;
 
@@ -559,7 +559,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
       .setValue(this.dimlessBinaryPipe.transform(response.stripe_unit));
     this.rbdForm.get('stripingCount').setValue(response.stripe_count);
     /* Configuration */
-    this.initializeConfigData.emit({
+    this.initializeConfigData.next({
       initialData: this.response.configuration,
       sourceType: RbdConfigurationSourceField.image
     });

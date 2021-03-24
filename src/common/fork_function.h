@@ -18,13 +18,12 @@
 #include "include/ceph_assert.h"
 #include "common/errno.h"
 
+#ifndef _WIN32
 static void _fork_function_dummy_sighandler(int sig) {}
 
 // Run a function post-fork, with a timeout.  Function can return
 // int8_t only due to unix exit code limitations.  Returns -ETIMEDOUT
 // if timeout is reached.
-
-#ifndef _WIN32
 static inline int fork_function(
   int timeout,
   std::ostream& errstr,

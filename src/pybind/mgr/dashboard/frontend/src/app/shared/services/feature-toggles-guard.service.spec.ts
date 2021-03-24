@@ -5,7 +5,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { DashboardNotFoundError } from '~/app/core/error/error';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { FeatureTogglesGuardService } from './feature-toggles-guard.service';
 import { FeatureTogglesService } from './feature-toggles.service';
 
@@ -65,8 +66,7 @@ describe('FeatureTogglesGuardService', () => {
     expect(router.url).toBe('/');
   }));
 
-  it('should redirect to 404 if disable', fakeAsync(() => {
-    expect(testCanActivate('cephfs', { cephfs: false })).toBe(false);
-    expect(router.url).toBe('/404');
+  it('should throw error if disable', fakeAsync(() => {
+    expect(() => testCanActivate('cephfs', { cephfs: false })).toThrowError(DashboardNotFoundError);
   }));
 });

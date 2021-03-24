@@ -23,6 +23,8 @@
 #include <thread>
 #ifndef _WIN32
 #include <sys/mount.h>
+#else
+#include <stdlib.h>
 #endif
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -230,6 +232,17 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen)
 #endif
 }
 
+int ceph_memzero_s(void *dest, size_t destsz, size_t count) {
+#ifdef __STDC_LIB_EXT1__
+    return memset_s(dest, destsz, 0, count);
+#elif defined(_WIN32)
+    SecureZeroMemory(dest, count);
+#else
+    explicit_bzero(dest, count);
+#endif
+    return 0;
+}
+
 #ifdef _WIN32
 
 #include <iomanip>
@@ -274,9 +287,13 @@ int pipe(int pipefd[2]) {
 long int lrand48(void) {
   long int val;
   val = (long int) rand();
-  val << 16;
+  val <<= 16;
   val += (long int) rand();
   return val;
+}
+
+int random() {
+  return rand();
 }
 
 int fsync(int fd) {
@@ -368,7 +385,7 @@ int &alloc_tls() {
   return tlsvar;
 }
 
-int apply_tls_workaround() {
+void apply_tls_workaround() {
   // Workaround for the following Mingw bugs:
   // https://sourceforge.net/p/mingw-w64/bugs/727/
   // https://sourceforge.net/p/mingw-w64/bugs/527/
@@ -398,63 +415,149 @@ CEPH_CONSTRUCTOR(ceph_windows_init) {
   }
 }
 
-int win_socketpair(int socks[2])
+int _win_socketpair(int socks[2])
 {
-    union {
-       struct sockaddr_in inaddr;
-       struct sockaddr addr;
-    } a;
-    int listener;
-    int e;
-    socklen_t addrlen = sizeof(a.inaddr);
-    int reuse = 1;
+  union {
+     struct sockaddr_in inaddr;
+     struct sockaddr addr;
+  } a;
+  SOCKET listener;
+  int e;
+  socklen_t addrlen = sizeof(a.inaddr);
+  int reuse = 1;
 
-    if (socks == 0) {
-      errno = -EINVAL;
-      return SOCKET_ERROR;
+  if (socks == 0) {
+    WSASetLastError(WSAEINVAL);
+    return -1;
+  }
+
+  listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (listener == INVALID_SOCKET) {
+    return -1;
+  }
+
+  memset(&a, 0, sizeof(a));
+  a.inaddr.sin_family = AF_INET;
+  a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  a.inaddr.sin_port = 0;
+
+  socks[0] = socks[1] = -1;
+  SOCKET s[2] = { INVALID_SOCKET, INVALID_SOCKET };
+
+  do {
+    if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+           (char*) &reuse, (socklen_t) sizeof(reuse)) == -1)
+      break;
+    if (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+      break;
+    if (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
+      break;
+    if (listen(listener, 1) == SOCKET_ERROR)
+      break;
+    s[0] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s[0] == INVALID_SOCKET)
+      break;
+    if (connect(s[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+      break;
+    s[1] = accept(listener, NULL, NULL);
+    if (s[1] == INVALID_SOCKET)
+      break;
+
+    closesocket(listener);
+
+    // The Windows socket API is mostly compatible with the Berkeley
+    // API, with a few exceptions. The Windows socket functions use
+    // SOCKET instead of int. The issue is that on x64 systems,
+    // SOCKET uses 64b while int uses 32b. There's been much debate
+    // whether casting a Windows socket to an int is safe or not.
+    // Worth noting that Windows kernel objects use 32b. For now,
+    // we're just adding a check.
+    //
+    // Ideally, we should update ceph to use the right type but this
+    // can be quite difficult, especially considering that there are
+    // a significant number of functions that accept both sockets and
+    // file descriptors.
+    if (s[0] >> 32 || s[1] >> 32) {
+      WSASetLastError(WSAENAMETOOLONG);
+      break;
     }
 
-    listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listener == INVALID_SOCKET)
-        return SOCKET_ERROR;
+    socks[0] = s[0];
+    socks[1] = s[1];
 
-    memset(&a, 0, sizeof(a));
-    a.inaddr.sin_family = AF_INET;
-    a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    a.inaddr.sin_port = 0;
+    return 0;
 
-    socks[0] = socks[1] = INVALID_SOCKET;
-    do {
-        if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
-               (char*) &reuse, (socklen_t) sizeof(reuse)) == -1)
-            break;
-        if  (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
-            break;
-        if  (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
-            break;
-        if (listen(listener, 1) == SOCKET_ERROR)
-            break;
-        socks[0] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (socks[0] == INVALID_SOCKET)
-            break;
-        if (connect(socks[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
-            break;
-        socks[1] = accept(listener, NULL, NULL);
-        if (socks[1] == INVALID_SOCKET)
-            break;
+  } while (0);
 
-        closesocket(listener);
+  e = WSAGetLastError();
+  closesocket(listener);
+  closesocket(s[0]);
+  closesocket(s[1]);
+  WSASetLastError(e);
+  return -1;
+}
 
-        return 0;
+int win_socketpair(int socks[2]) {
+  int r = 0;
+  for (int i = 0; i < 15; i++) {
+    r = _win_socketpair(socks);
+    if (r && WSAGetLastError() == WSAEADDRINUSE) {
+      sleep(2);
+      continue;
+    }
+    else {
+      break;
+    }
+  }
+  return r;
+}
 
-    } while (0);
+unsigned get_page_size() {
+  SYSTEM_INFO system_info;
+  GetSystemInfo(&system_info);
+  return system_info.dwPageSize;
+}
 
-    e = errno;
-    closesocket(listener);
-    closesocket(socks[0]);
-    closesocket(socks[1]);
-    errno = e;
-    return SOCKET_ERROR;
+int setenv(const char *name, const char *value, int overwrite) {
+  if (!overwrite && getenv(name)) {
+    return 0;
+  }
+  return _putenv_s(name, value);
+}
+
+ssize_t get_self_exe_path(char* path, int buff_length) {
+  return GetModuleFileName(NULL, path, buff_length - 1);
+}
+
+int geteuid()
+{
+  return 0;
+}
+
+int getegid()
+{
+  return 0;
+}
+
+int getuid()
+{
+  return 0;
+}
+
+int getgid()
+{
+  return 0;
+}
+
+#else
+
+unsigned get_page_size() {
+  return sysconf(_SC_PAGESIZE);
+}
+
+ssize_t get_self_exe_path(char* path, int buff_length) {
+  return readlink("/proc/self/exe", path,
+                  sizeof(buff_length) - 1);
 }
 
 #endif /* _WIN32 */

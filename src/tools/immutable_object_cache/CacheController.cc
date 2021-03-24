@@ -25,7 +25,6 @@ CacheController::~CacheController() {
 
 int CacheController::init() {
   ldout(m_cct, 20) << dendl;
-
   m_object_cache_store = new ObjectCacheStore(m_cct);
   // TODO(dehao): make this configurable
   int r = m_object_cache_store->init(true);
@@ -118,8 +117,8 @@ void CacheController::handle_request(CacheSession* session,
       bool return_dne_path = session->client_version().empty();
       int ret = m_object_cache_store->lookup_object(
         req_read_data->pool_namespace, req_read_data->pool_id,
-        req_read_data->snap_id, req_read_data->oid, return_dne_path,
-        cache_path);
+        req_read_data->snap_id, req_read_data->object_size,
+        req_read_data->oid, return_dne_path, cache_path);
       ObjectCacheRequest* reply = nullptr;
       if (ret != OBJ_CACHE_PROMOTED && ret != OBJ_CACHE_DNE) {
         reply = new ObjectCacheReadRadosData(RBDSC_READ_RADOS, req->seq);

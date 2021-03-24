@@ -12,6 +12,8 @@ from mgr_module import CommandResult
 from datetime import datetime, timedelta
 from threading import Lock, Condition, Thread
 
+PERF_STATS_VERSION = 1
+
 QUERY_IDS = "query_ids"
 GLOBAL_QUERY_ID = "global_query_id"
 QUERY_LAST_REQUEST = "last_time_stamp"
@@ -27,9 +29,13 @@ MDS_PERF_QUERY_REGEX_MATCH_CLIENTS = '^(client.{0}\s+{1}):.*'
 MDS_PERF_QUERY_COUNTERS_MAP = OrderedDict({'cap_hit': 0,
                                            'read_latency': 1,
                                            'write_latency': 2,
-                                           'metadata_latency': 3})
+                                           'metadata_latency': 3,
+                                           'dentry_lease': 4,
+                                           'opened_files': 5,
+                                           'pinned_icaps': 6,
+                                           'opened_inodes': 7})
 MDS_PERF_QUERY_COUNTERS = [] # type: List[str]
-MDS_GLOBAL_PERF_QUERY_COUNTERS = ['cap_hit', 'read_latency', 'write_latency', 'metadata_latency'] # type: List[str]
+MDS_GLOBAL_PERF_QUERY_COUNTERS = ['cap_hit', 'read_latency', 'write_latency', 'metadata_latency', 'dentry_lease', 'opened_files', 'pinned_icaps', 'opened_inodes'] # type: List[str]
 
 QUERY_EXPIRE_INTERVAL = timedelta(minutes=1)
 
@@ -138,6 +144,9 @@ class FSPerfStats(object):
                 metric_features = int(metadata[CLIENT_METADATA_KEY]["metric_spec"]["metric_flags"]["feature_bits"], 16)
                 supported_metrics = [metric for metric, bit in MDS_PERF_QUERY_COUNTERS_MAP.items() if metric_features & (1 << bit)]
                 self.set_client_metadata(client_id, "valid_metrics", supported_metrics)
+                kver = metadata[CLIENT_METADATA_KEY].get("kernel_version", None)
+                if kver:
+                    self.set_client_metadata(client_id, "kernel_version", kver)
             # when all async requests are done, purge clients metadata if any.
             if not self.client_metadata['in_progress']:
                 for client in self.client_metadata['to_purge']:
@@ -390,6 +399,7 @@ class FSPerfStats(object):
     def generate_report(self, user_query):
         result = {} # type: Dict
         # start with counter info -- metrics that are global and per mds
+        result["version"] = PERF_STATS_VERSION
         result["global_counters"] = MDS_GLOBAL_PERF_QUERY_COUNTERS
         result["counters"] = MDS_PERF_QUERY_COUNTERS
 

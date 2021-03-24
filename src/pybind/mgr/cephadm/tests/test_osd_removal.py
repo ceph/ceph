@@ -1,8 +1,7 @@
 import json
 
-from cephadm.services.osd import RemoveUtil, OSDQueue, OSD
+from cephadm.services.osd import OSDRemovalQueue, OSD
 import pytest
-from .fixtures import rm_util, osd_obj, cephadm_module
 from tests import mock
 from datetime import datetime
 
@@ -73,7 +72,7 @@ class TestOSDRemoval:
         rm_util._run_mon_cmd.assert_called_with(
             {'prefix': 'osd purge-actual', 'id': 1, 'yes_i_really_mean_it': True})
 
-    def test_load(self, cephadm_module):
+    def test_load(self, cephadm_module, rm_util):
         data = json.dumps([
             {
                 "osd_id": 35,
@@ -90,9 +89,11 @@ class TestOSDRemoval:
             }
         ])
         cephadm_module.set_store('osd_remove_queue', data)
-        cephadm_module.rm_util.load_from_store()
+        cephadm_module.to_remove_osds.load_from_store()
 
-        assert repr(cephadm_module.to_remove_osds) == 'OSDQueue({<OSD>(osd_id=35, draining=True)})'
+        expected = OSDRemovalQueue(cephadm_module)
+        expected.osds.add(OSD(osd_id=35, remove_util=rm_util, draining=True))
+        assert cephadm_module.to_remove_osds == expected
 
 
 class TestOSD:
@@ -103,13 +104,25 @@ class TestOSD:
         assert osd_obj.started is True
         assert osd_obj.stopped is False
 
-    def test_start_draining(self, osd_obj):
+    def test_start_draining_purge(self, osd_obj):
         assert osd_obj.draining is False
         assert osd_obj.drain_started_at is None
+        ret = osd_obj.start_draining()
+        osd_obj.rm_util.reweight_osd.assert_called_with(osd_obj, 0.0)
+        assert isinstance(osd_obj.drain_started_at, datetime)
+        assert osd_obj.draining is True
+        assert osd_obj.replace is False
+        assert ret is True
+
+    def test_start_draining_replace(self, osd_obj):
+        assert osd_obj.draining is False
+        assert osd_obj.drain_started_at is None
+        osd_obj.replace = True
         ret = osd_obj.start_draining()
         osd_obj.rm_util.set_osd_flag.assert_called_with([osd_obj], 'out')
         assert isinstance(osd_obj.drain_started_at, datetime)
         assert osd_obj.draining is True
+        assert osd_obj.replace is True
         assert ret is True
 
     def test_start_draining_stopped(self, osd_obj):
@@ -119,16 +132,25 @@ class TestOSD:
         assert ret is False
         assert osd_obj.draining is False
 
-    def test_stop_draining(self, osd_obj):
+    def test_stop_draining_replace(self, osd_obj):
+        osd_obj.replace = True
         ret = osd_obj.stop_draining()
         osd_obj.rm_util.set_osd_flag.assert_called_with([osd_obj], 'in')
         assert isinstance(osd_obj.drain_stopped_at, datetime)
         assert osd_obj.draining is False
         assert ret is True
 
+    def test_stop_draining_purge(self, osd_obj):
+        osd_obj.original_weight = 1.0
+        ret = osd_obj.stop_draining()
+        osd_obj.rm_util.reweight_osd.assert_called_with(osd_obj, 1.0)
+        assert isinstance(osd_obj.drain_stopped_at, datetime)
+        assert osd_obj.draining is False
+        assert ret is True
+
     @mock.patch('cephadm.services.osd.OSD.stop_draining')
     def test_stop(self, stop_draining_mock, osd_obj):
-        ret = osd_obj.stop()
+        osd_obj.stop()
         assert osd_obj.started is False
         assert osd_obj.stopped is True
         stop_draining_mock.assert_called_once()
@@ -153,7 +175,7 @@ class TestOSD:
 
     @mock.patch("cephadm.services.osd.RemoveUtil.ok_to_stop")
     def test_is_ok_to_stop(self, _, osd_obj):
-        ret = osd_obj.is_ok_to_stop
+        osd_obj.is_ok_to_stop
         osd_obj.rm_util.ok_to_stop.assert_called_once()
 
     @pytest.mark.parametrize(
@@ -171,27 +193,27 @@ class TestOSD:
 
     @mock.patch("cephadm.services.osd.RemoveUtil.safe_to_destroy")
     def test_safe_to_destroy(self, _, osd_obj):
-        ret = osd_obj.safe_to_destroy()
+        osd_obj.safe_to_destroy()
         osd_obj.rm_util.safe_to_destroy.assert_called_once()
 
     @mock.patch("cephadm.services.osd.RemoveUtil.set_osd_flag")
     def test_down(self, _, osd_obj):
-        ret = osd_obj.down()
+        osd_obj.down()
         osd_obj.rm_util.set_osd_flag.assert_called_with([osd_obj], 'down')
 
     @mock.patch("cephadm.services.osd.RemoveUtil.destroy_osd")
     def test_destroy_osd(self, _, osd_obj):
-        ret = osd_obj.destroy()
+        osd_obj.destroy()
         osd_obj.rm_util.destroy_osd.assert_called_once()
 
     @mock.patch("cephadm.services.osd.RemoveUtil.purge_osd")
     def test_purge(self, _, osd_obj):
-        ret = osd_obj.purge()
+        osd_obj.purge()
         osd_obj.rm_util.purge_osd.assert_called_once()
 
     @mock.patch("cephadm.services.osd.RemoveUtil.get_pg_count")
     def test_pg_count(self, _, osd_obj):
-        ret = osd_obj.get_pg_count()
+        osd_obj.get_pg_count()
         osd_obj.rm_util.get_pg_count.assert_called_once()
 
     def test_drain_status_human_not_started(self, osd_obj):
@@ -213,25 +235,25 @@ class TestOSD:
         assert osd_obj.drain_status_human() == 'done, waiting for purge'
 
 
-class TestOSDQueue:
+class TestOSDRemovalQueue:
 
     def test_queue_size(self, osd_obj):
-        q = OSDQueue()
+        q = OSDRemovalQueue(mock.Mock())
         assert q.queue_size() == 0
-        q.add(osd_obj)
+        q.osds.add(osd_obj)
         assert q.queue_size() == 1
 
     @mock.patch("cephadm.services.osd.OSD.start")
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_enqueue(self, exist, start, osd_obj):
-        q = OSDQueue()
+        q = OSDRemovalQueue(mock.Mock())
         q.enqueue(osd_obj)
         osd_obj.start.assert_called_once()
 
     @mock.patch("cephadm.services.osd.OSD.stop")
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_rm_raise(self, exist, stop, osd_obj):
-        q = OSDQueue()
+        q = OSDRemovalQueue(mock.Mock())
         with pytest.raises(KeyError):
             q.rm(osd_obj)
             osd_obj.stop.assert_called_once()
@@ -239,7 +261,7 @@ class TestOSDQueue:
     @mock.patch("cephadm.services.osd.OSD.stop")
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_rm(self, exist, stop, osd_obj):
-        q = OSDQueue()
-        q.add(osd_obj)
+        q = OSDRemovalQueue(mock.Mock())
+        q.osds.add(osd_obj)
         q.rm(osd_obj)
         osd_obj.stop.assert_called_once()

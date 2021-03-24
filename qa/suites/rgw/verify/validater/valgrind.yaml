@@ -5,8 +5,10 @@ os_version: "8.0"
 overrides:
   install:
     ceph:
-#      flavor: notcmalloc
       #debuginfo: true
+  rgw:
+    client.0:
+      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
   ceph:
     conf:
       global:

@@ -106,7 +106,7 @@ struct RWRefState {
      * Then the check_reader_state() should return truth if the
      * state is already in mouting or mounted state.
      */
-    virtual int check_reader_state(T require) = 0;
+    virtual int check_reader_state(T require) const = 0;
 
     /*
      * User defined method to check whether the "require" state
@@ -114,20 +114,20 @@ struct RWRefState {
      *
      * This will usually be the state migration check.
      */
-    virtual int check_writer_state(T require) = 0;
+    virtual int check_writer_state(T require) const = 0;
 
     /*
      * User defined method to check whether the "require"
      * state is valid or not.
      */
-    virtual bool is_valid_state(T require) = 0;
+    virtual bool is_valid_state(T require) const = 0;
 
-    int64_t get_state() {
+    int64_t get_state() const {
       std::scoped_lock l{lock};
       return state;
     }
 
-    bool check_current_state(T require) {
+    bool check_current_state(T require) const {
       ceph_assert(is_valid_state(require));
 
       std::scoped_lock l{lock};
@@ -139,7 +139,7 @@ struct RWRefState {
     virtual ~RWRefState() {}
 
   private:
-    ceph::mutex lock;
+    mutable ceph::mutex lock;
     ceph::condition_variable cond;
     uint64_t reader_cnt = 0;
 };
@@ -183,7 +183,7 @@ public:
    * Whether the "require" state is in the proper range of
    * the states.
    */
-  bool is_state_satisfied() {
+  bool is_state_satisfied() const {
     return satisfied;
   }
 
@@ -201,7 +201,7 @@ public:
   /*
    * For current state whether we are the first writer or not
    */
-  bool is_first_writer() {
+  bool is_first_writer() const {
     return first_writer;
   }
 

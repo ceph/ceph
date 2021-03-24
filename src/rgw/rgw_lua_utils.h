@@ -2,16 +2,17 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <ctime>
 #include <lua.hpp>
 
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace rgw::lua {
 
 // push ceph time in string format: "%Y-%m-%d %H:%M:%S"
 template <typename CephTime>
-void lua_pushtime(lua_State* L, const CephTime& tp) 
+void pushtime(lua_State* L, const CephTime& tp)
 {
   const auto tt = CephTime::clock::to_time_t(tp);
   const auto tm = *std::localtime(&tt);
@@ -20,8 +21,16 @@ void lua_pushtime(lua_State* L, const CephTime& tp)
   lua_pushstring(L, buff);
 }
 
-// push std::string
-void lua_pushstring(lua_State* L, const std::string& str);
+static inline void pushstring(lua_State* L, std::string_view str)
+{
+  lua_pushlstring(L, str.data(), str.size());
+}
+
+static inline void unsetglobal(lua_State* L, const char* name) 
+{
+  lua_pushnil(L);
+  lua_setglobal(L, name);
+}
 
 // dump the lua stack to stdout
 void stack_dump(lua_State* L);
@@ -40,6 +49,7 @@ constexpr auto THREE_UPVALS = 3;
 constexpr auto FOUR_UPVALS  = 4;
 constexpr auto FIVE_UPVALS  = 5;
 
+constexpr auto NO_RETURNVAL    = 0;
 constexpr auto ONE_RETURNVAL    = 1;
 constexpr auto TWO_RETURNVALS   = 2;
 constexpr auto THREE_RETURNVALS = 3;
@@ -95,25 +105,25 @@ void create_metatable(lua_State* L, bool toplevel, Upvalues... upvalues)
   }
   // create metatable
   [[maybe_unused]] const auto rc = luaL_newmetatable(L, MetaTable::Name().c_str());
-  lua_pushstring(L, "__index");
+  lua_pushliteral(L, "__index");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::IndexClosure, upvals_size);
   lua_rawset(L, -3);
-  lua_pushstring(L, "__newindex");
+  lua_pushliteral(L, "__newindex");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::NewIndexClosure, upvals_size);
   lua_rawset(L, -3);
-  lua_pushstring(L, "__pairs");
+  lua_pushliteral(L, "__pairs");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::PairsClosure, upvals_size);
   lua_rawset(L, -3);
-  lua_pushstring(L, "__len");
+  lua_pushliteral(L, "__len");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
@@ -140,21 +150,21 @@ struct EmptyMetaTable {
   // to change, overload this function in the derived
   static int NewIndexClosure(lua_State* L) {
     throw std::runtime_error("trying to write to readonly field");
-    return 1;
+    return NO_RETURNVAL;
   }
   
   // by default nothing is iterable
   // to change, overload this function in the derived
   static int PairsClosure(lua_State* L) {
     throw std::runtime_error("trying to iterate over non-iterable field");
-    return 1;
+    return ONE_RETURNVAL;
   }
   
   // by default nothing is iterable
   // to change, overload this function in the derived
   static int LenClosure(lua_State* L) {
     throw std::runtime_error("trying to get length of non-iterable field");
-    return 1;
+    return ONE_RETURNVAL;
   }
 
   static void throw_unknown_field(const std::string& index, const std::string& table) {
@@ -170,6 +180,20 @@ struct EmptyMetaTable {
 //    RGWDebugLog("hello world from lua")
 //
 void create_debug_action(lua_State* L, CephContext* cct);
+
+// set the packages search path according to:
+// package.path = "<install_dir>/share/lua/5.3/?.lua"                                                                         │                         LuaRocks.
+// package.cpath= "<install_dir>/lib/lua/5.3/?.so"
+void set_package_path(lua_State* L, const std::string& install_dir);
+
+// open standard lua libs and remove the following functions:
+// os.exit()
+// load()
+// loadfile()
+// loadstring()
+// dofile()
+// and the "debug" library
+void open_standard_libs(lua_State* L);
 
 }
 

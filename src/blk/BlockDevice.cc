@@ -176,23 +176,19 @@ BlockDevice *BlockDevice::create(
   return create_with_type(device_type, cct, path, cb, cbpriv, d_cb, d_cbpriv);
 }
 
-void BlockDevice::queue_reap_ioc(IOContext *ioc)
-{
-  std::lock_guard l(ioc_reap_lock);
-  if (ioc_reap_count.load() == 0)
-    ++ioc_reap_count;
-  ioc_reap_queue.push_back(ioc);
-}
+bool BlockDevice::is_valid_io(uint64_t off, uint64_t len) const {
+  bool ret = (off % block_size == 0 &&
+    len % block_size == 0 &&
+    len > 0 &&
+    off < size &&
+    off + len <= size);
 
-void BlockDevice::reap_ioc()
-{
-  if (ioc_reap_count.load()) {
-    std::lock_guard l(ioc_reap_lock);
-    for (auto p : ioc_reap_queue) {
-      dout(20) << __func__ << " reap ioc " << p << dendl;
-      delete p;
-    }
-    ioc_reap_queue.clear();
-    --ioc_reap_count;
+  if (!ret) {
+    derr << __func__ << " " << std::hex
+         << off << "~" << len
+         << " block_size " << block_size
+         << " size " << size
+         << std::dec << dendl;
   }
+  return ret;
 }

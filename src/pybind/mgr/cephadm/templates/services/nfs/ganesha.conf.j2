@@ -31,4 +31,9 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
+RGW {
+        cluster = "ceph";
+        name = "client.{{ rgw_user }}";
+}
+
 %url    {{ url }}

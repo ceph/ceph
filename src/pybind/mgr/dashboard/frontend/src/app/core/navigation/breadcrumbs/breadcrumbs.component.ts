@@ -28,7 +28,7 @@ import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '
 import { concat, from, Observable, of, Subscription } from 'rxjs';
 import { distinct, filter, first, mergeMap, toArray } from 'rxjs/operators';
 
-import { BreadcrumbsResolver, IBreadcrumb } from '../../../shared/models/breadcrumbs';
+import { BreadcrumbsResolver, IBreadcrumb } from '~/app/shared/models/breadcrumbs';
 
 @Component({
   selector: 'cd-breadcrumbs',

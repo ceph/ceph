@@ -14,6 +14,7 @@
 #include "rgw_acl.h"
 
 class RGWUserCtl;
+namespace rgw { namespace sal { class RGWStore; } }
 
 class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
@@ -83,17 +84,22 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
-  int rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
-              std::string &err_msg);
+  int rebuild(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, ACLOwner *owner,
+	      RGWAccessControlPolicy& dest, std::string &err_msg);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
   virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const string& canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    int ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
-    owner = _owner;
+    if (_owner.get_id() == rgw_user("anonymous")) {
+      owner = bucket_owner;
+    } else {
+      owner = _owner;
+    }
+    int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
     return ret;
   }
-  int create_from_headers(RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner);
+  int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
+			  const RGWEnv *env, ACLOwner& _owner);
 };
 
 /**

@@ -40,7 +40,7 @@ public:
     dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
-        store->svc()->zone->get_zonegroup().get_name(),
+        store->get_zone()->get_zonegroup().get_name(),
         s->user->get_tenant(), topic_name);
     topic_arn = arn.to_string();
     return 0;
@@ -120,11 +120,11 @@ public:
 // ceph specifc topics handler factory
 class RGWHandler_REST_PSTopic : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
@@ -171,7 +171,7 @@ public:
       return -EINVAL;
     }
 
-    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->getRados()->get_sync_module().get());
+    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
     const auto& conf = psmodule->get_effective_conf();
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
@@ -246,7 +246,7 @@ public:
     sub_name = s->object->get_name();
     marker = s->info.args.get("marker");
     const int ret = s->info.args.get_int("max-entries", &max_entries, 
-        RGWUserPubSub::Sub::DEFAULT_MAX_EVENTS);
+        RGWPubSub::Sub::DEFAULT_MAX_EVENTS);
     if (ret < 0) {
       ldout(s->cct, 1) << "failed to parse 'max-entries' param" << dendl;
       return -EINVAL;
@@ -273,11 +273,11 @@ public:
 // subscriptions handler factory
 class RGWHandler_REST_PSSub : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
   bool supports_quota() override {
@@ -369,15 +369,15 @@ private:
 
 public:
   const char* name() const override { return "pubsub_notification_create"; }
-  void execute() override;
+  void execute(optional_yield y) override;
 };
 
-void RGWPSCreateNotif_ObjStore::execute()
+void RGWPSCreateNotif_ObjStore::execute(optional_yield y)
 {
-  ups.emplace(store, s->owner.get_id());
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
 
-  auto b = ups->get_bucket(bucket_info.bucket);
-  op_ret = b->create_notification(topic_name, events);
+  auto b = ps->get_bucket(bucket_info.bucket);
+  op_ret = b->create_notification(topic_name, events, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create notification for topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -401,19 +401,19 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   const char* name() const override { return "pubsub_notification_delete"; }
 };
 
-void RGWPSDeleteNotif_ObjStore::execute() {
+void RGWPSDeleteNotif_ObjStore::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
 
-  ups.emplace(store, s->owner.get_id());
-  auto b = ups->get_bucket(bucket_info.bucket);
-  op_ret = b->remove_notification(topic_name);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  auto b = ps->get_bucket(bucket_info.bucket);
+  op_ret = b->remove_notification(topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove notification from topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -431,7 +431,7 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
@@ -448,10 +448,10 @@ public:
   const char* name() const override { return "pubsub_notifications_list"; }
 };
 
-void RGWPSListNotifs_ObjStore::execute()
+void RGWPSListNotifs_ObjStore::execute(optional_yield y)
 {
-  ups.emplace(store, s->owner.get_id());
-  auto b = ups->get_bucket(bucket_info.bucket);
+  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->get_topics(&result);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get topics, ret=" << op_ret << dendl;
@@ -462,11 +462,11 @@ void RGWPSListNotifs_ObjStore::execute()
 // ceph specific notification handler factory
 class RGWHandler_REST_PSNotifs : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
   bool supports_quota() override {
@@ -496,7 +496,7 @@ public:
 };
 
 // factory for ceph specific PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::RGWRadosStore *store,
+RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::RGWStore *store,
 						struct req_state* const s,
 						const rgw::auth::StrategyRegistry& auth_registry,
 						const std::string& frontend_prefix)

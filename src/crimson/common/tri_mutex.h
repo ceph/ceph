@@ -67,6 +67,7 @@ class tri_mutex : private read_lock,
 {
 public:
   tri_mutex() = default;
+  ~tri_mutex();
 
   read_lock& for_read() {
     return *this;
@@ -83,7 +84,7 @@ public:
   excl_lock_from_write& excl_from_write() {
     return *this;
   }
-  excl_lock_from_write& excl_from_excl() {
+  excl_lock_from_excl& excl_from_excl() {
     return *this;
   }
 
@@ -93,6 +94,9 @@ public:
   void unlock_for_read();
   void promote_from_read();
   void demote_to_read();
+  unsigned get_readers() const {
+    return readers;
+  }
 
   // for shared writers
   seastar::future<> lock_for_write(bool greedy);
@@ -100,11 +104,17 @@ public:
   void unlock_for_write();
   void promote_from_write();
   void demote_to_write();
+  unsigned get_writers() const {
+    return writers;
+  }
 
   // for exclusive users
   seastar::future<> lock_for_excl();
   bool try_lock_for_excl() noexcept;
   void unlock_for_excl();
+  bool is_excl_acquired() const {
+    return exclusively_used;
+  }
 
   bool is_acquired() const;
 
