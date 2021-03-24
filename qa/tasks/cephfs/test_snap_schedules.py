@@ -118,8 +118,11 @@ class TestSnapSchedules(CephFSTestCase):
         snap_path = "{0}/.snap".format(dir_path)
         while (len(self.create_cbks) or len(self.remove_cbks)) and trials < max_trials:
             snapshots = set(self.mount_a.ls(path=snap_path))
+            log.info(f"snapshots: {snapshots}")
             added = snapshots - self.snapshots
+            log.info(f"added: {added}")
             removed = self.snapshots - snapshots
+            log.info(f"removed: {removed}")
             if added:
                 for cbk in list(self.create_cbks):
                     res = cbk(list(added))
