@@ -510,7 +510,7 @@ void CDir::remove_dentry(CDentry *dn)
   dout(12) << __func__ << " " << *dn << dendl;
 
   // there should be no client leases at this point!
-  ceph_assert(dn->client_lease_map.empty());
+  ceph_assert(dn->client_leases.empty());
 
   if (state_test(CDir::STATE_DNPINNEDFRAG)) {
     dn->put(CDentry::PIN_FRAGMENTING);

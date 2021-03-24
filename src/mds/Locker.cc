@@ -4500,7 +4500,7 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
         ceph_assert(!in);
     }
     // issue a dentry lease
-    ClientLease *l = dn->add_client_lease(client, session);
+    ClientLease *l = dn->add_client_lease(session);
     session->touch_lease(l);
     
     int pool = 1;   // fixme.. do something smart!
@@ -4529,11 +4529,9 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
 void Locker::revoke_client_leases(SimpleLock *lock)
 {
   CDentry *dn = static_cast<CDentry*>(lock->get_parent());
-  for (map<client_t, ClientLease*>::iterator p = dn->client_lease_map.begin();
-       p != dn->client_lease_map.end();
-       ++p) {
-    ClientLease *l = p->second;
-
+  for (auto& p : dn->client_leases) {
+    ClientLease *l = &p.second;
+    
     ceph_assert(lock->get_type() == CEPH_LOCK_DN);
 
     CDentry *dn = static_cast<CDentry*>(lock->get_parent());
@@ -4542,7 +4540,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     // i should also revoke the dir ICONTENT lease, if they have it!
     CInode *diri = dn->get_dir()->get_inode();
     auto lease = make_message<MClientLease>(CEPH_MDS_LEASE_REVOKE, l->seq, mask, diri->ino(), diri->first, CEPH_NOSNAP, dn->get_name());
-    mds->send_message_client_counted(lease, l->client);
+    mds->send_message_client_counted(lease, l->session);
   }
 }
 
