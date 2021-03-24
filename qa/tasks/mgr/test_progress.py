@@ -165,8 +165,7 @@ class TestProgress(MgrTestCase):
 
         # Wait for a progress event to pop up
         self.wait_until_equal(lambda: self._osd_in_out_events_count('out'), 1,
-                              timeout=self.EVENT_CREATION_PERIOD*2,
-                              period=1)
+                              timeout=self.EVENT_CREATION_PERIOD*2)
         ev = self._get_osd_in_out_events('out')[0]
         log.info(json.dumps(ev, indent=1))
         self.assertIn("Rebalancing after osd.0 marked out", ev['message'])
@@ -181,13 +180,12 @@ class TestProgress(MgrTestCase):
         
         # First Event should complete promptly
         self.wait_until_true(lambda: self._is_complete(initial_event['id']),
-                             timeout=self.EVENT_CREATION_PERIOD)
+                             timeout=self.RECOVERY_PERIOD)
 
         try:
             # Wait for progress event marked in to pop up
             self.wait_until_equal(lambda: self._osd_in_out_events_count('in'), 1,
-                                  timeout=self.EVENT_CREATION_PERIOD*2,
-                                  period=1)
+                                  timeout=self.EVENT_CREATION_PERIOD*2)
         except RuntimeError as ex:
             if not "Timed out after" in str(ex):
                 raise ex
@@ -260,7 +258,7 @@ class TestProgress(MgrTestCase):
 
         # Event should complete promptly
         self.wait_until_true(lambda: self._is_complete(ev['id']),
-                             timeout=self.EVENT_CREATION_PERIOD)
+                             timeout=self.RECOVERY_PERIOD)
         self.assertTrue(self._is_quiet())
 
     def test_osd_came_back(self):
@@ -365,8 +363,7 @@ class TestProgress(MgrTestCase):
 
         # Wait for a progress event to pop up
         self.wait_until_equal(lambda: self._osd_in_out_events_count('out'), 1,
-                              timeout=self.EVENT_CREATION_PERIOD*2,
-                              period=1)
+                              timeout=self.RECOVERY_PERIOD)
 
         ev1 = self._get_osd_in_out_events('out')[0]
 
