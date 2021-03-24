@@ -91,7 +91,13 @@ information about interacting with these LEDs, refer to `device management`_.
 Deploy OSDs
 ===========
 
-An inventory of storage devices on all cluster hosts can be displayed with:
+Listing Storage Devices
+-----------------------
+
+In order to deploy an OSD, there must be a storage device that is *available* on
+which the OSD will be deployed.
+
+Run this command to display an inventory of storage devices on all cluster hosts:
 
 .. prompt:: bash #
 
@@ -107,7 +113,10 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph refuses to provision an OSD on a device that is not available.
+Ceph will not provision an OSD on a device that is not available.
+
+Creating New OSDs
+-----------------
 
 There are a few ways to create new OSDs:
 
@@ -129,9 +138,10 @@ There are a few ways to create new OSDs:
 
     ceph orch daemon add osd host1:/dev/sdb
 
-* Use :ref:`drivegroups` to describe device(s) to consume
-  based on their properties, such device type (SSD or HDD), device
-  model names, size, or the hosts on which the devices exist:
+* You can use :ref:`drivegroups` to categorize device(s) based on their
+  properties. This might be useful in forming a clearer picture of which
+  devices are available to consume. Properties include device type (SSD or
+  HDD), device model names, size, and the hosts on which the devices exist:
 
   .. prompt:: bash #
 
