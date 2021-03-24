@@ -60,6 +60,7 @@ Build-Depends: automake,
 # Crimson      libprotobuf-dev,
 # Crimson      libsctp-dev,
                libsnappy-dev,
+               libsqlite3-dev,
                libssl-dev,
                libtool,
                libudev-dev,
@@ -224,6 +225,7 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ceph-mgr-modules-core (= ${binary:Version}),
+         libsqlite3-mod-ceph,
          python3-bcrypt,
          python3-cherrypy3,
          python3-distutils,
@@ -733,6 +735,43 @@ Description: RADOS distributed object store client C++ library (development file
  .
  This package contains development files needed for building C++ applications that
  link against librados.
+
+Package: libsqlite3-mod-ceph
+Architecture: any
+Section: libs
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Description: SQLite3 VFS for Ceph
+ A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+ distributed object store.
+ .
+ This packages contains the loadable extension module for SQLite3.
+
+Package: libsqlite3-mod-ceph-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends: libsqlite3-mod-ceph (= ${binary:Version}),
+         libsqlite3-0-dbgsym
+         ${misc:Depends},
+Description: debugging symbols for libsqlite3-mod-ceph
+ A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+ distributed object store.
+ .
+ This package contains debugging symbols for libsqlite3-mod-ceph.
+
+Package: libsqlite3-mod-ceph-dev
+Architecture: any
+Section: libdevel
+Depends: libsqlite3-mod-ceph (= ${binary:Version}),
+         libsqlite3-dev,
+         ${misc:Depends},
+Description: SQLite3 VFS for Ceph (development files)
+ A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+ distributed object store.
+ .
+ This package contains development files needed for building applications that
+ link against libsqlite3-mod-ceph.
 
 Package: libradosstriper1
 Architecture: linux-any

@@ -295,6 +295,13 @@ The following entries describe valid capability profiles:
 :Description: Gives a user read-only permissions for monitor, OSD, and PG data.
               Intended for use by direct librados client applications.
 
+``profile simple-rados-client-with-blocklist`` (Monitor only)
+
+:Description: Gives a user read-only permissions for monitor, OSD, and PG data.
+              Intended for use by direct librados client applications. Also
+              includes permission to add blocklist entries to build HA
+              applications.
+
 ``profile fs-client`` (Monitor only)
 
 :Description: Gives a user read-only permissions for monitor, OSD, PG, and MDS
