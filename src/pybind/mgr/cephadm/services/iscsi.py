@@ -2,6 +2,7 @@ import errno
 import json
 import logging
 from typing import List, cast, Optional
+from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import IscsiServiceSpec
@@ -95,6 +96,9 @@ class IscsiService(CephService):
                     logger.warning('No ServiceSpec found for %s', dd)
                     continue
                 ip = utils.resolve_ip(dd.hostname)
+                # IPv6 URL encoding requires square brackets enclosing the ip
+                if type(ip_address(ip)) is IPv6Address:
+                    ip = f'[{ip}]'
                 protocol = "http"
                 if spec.api_secure and spec.ssl_cert and spec.ssl_key:
                     protocol = "https"
