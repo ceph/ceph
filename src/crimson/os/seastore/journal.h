@@ -13,6 +13,7 @@
 #include "include/buffer.h"
 #include "include/denc.h"
 
+#include "crimson/common/log.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
@@ -180,6 +181,12 @@ public:
     auto rsize = get_encoded_record_length(record);
     auto total = rsize.mdlength + rsize.dlength;
     if (total > max_record_length) {
+      auto &logger = crimson::get_logger(ceph_subsys_filestore);
+      logger.error(
+	"Journal::submit_record: record size {} exceeds max {}",
+	total,
+	max_record_length
+      );
       return crimson::ct_error::erange::make();
     }
     auto roll = needs_roll(total)
