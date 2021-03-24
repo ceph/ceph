@@ -447,10 +447,14 @@ Cache::replay_delta(
 }
 
 Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
-  journal_seq_t seq)
+  journal_seq_t seq,
+  size_t max_bytes)
 {
   std::vector<CachedExtentRef> ret;
-  for (auto i = dirty.begin(); i != dirty.end(); ++i) {
+  size_t bytes_so_far = 0;
+  for (auto i = dirty.begin();
+       i != dirty.end() && bytes_so_far < max_bytes;
+       ++i) {
     CachedExtentRef cand;
     if (i->dirty_from != journal_seq_t() && i->dirty_from < seq) {
       logger().debug(
@@ -463,6 +467,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	  *i);
       }
       assert(ret.empty() || ret.back()->dirty_from <= i->dirty_from);
+      bytes_so_far += i->get_length();
       ret.push_back(&*i);
     } else {
       break;
