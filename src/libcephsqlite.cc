@@ -690,7 +690,7 @@ static int CurrentTime(sqlite3_vfs* vfs, sqlite3_int64* time)
   dv(5) << time << dendl;
 
   auto t = ceph_clock_now();
-  *time = t.to_msec() + 2440587.5;
+  *time = t.to_msec() + 2440587.5*86400000; /* julian days since 1970 converted to ms */
 
   auto end = ceph::coarse_mono_clock::now();
   getdata(vfs).logger->tinc(P_OP_CURRENTTIME, end-start);
