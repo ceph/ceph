@@ -59,7 +59,7 @@ from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
-from .utils import CEPH_TYPES, GATEWAY_TYPES, forall_hosts, cephadmNoImage
+from .utils import CEPH_TYPES, forall_hosts, cephadmNoImage
 from .configchecks import CephadmConfigChecks
 
 try:
@@ -1225,8 +1225,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         image: Optional[str] = None
-        if daemon_type in CEPH_TYPES or \
-                daemon_type in GATEWAY_TYPES:
+        if daemon_type in CEPH_TYPES:
             # get container image
             image = str(self.get_foreign_ceph_option(
                 utils.name_to_config_section(daemon_name),
@@ -1726,10 +1725,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if action != 'redeploy':
                 raise OrchestratorError(
                     f'Cannot execute {action} with new image. `action` needs to be `redeploy`')
-            if daemon_type not in CEPH_TYPES and daemon_type not in GATEWAY_TYPES:
+            if daemon_type not in CEPH_TYPES:
                 raise OrchestratorError(
                     f'Cannot redeploy {daemon_type}.{daemon_id} with a new image: Supported '
-                    f'types are: {", ".join(CEPH_TYPES + GATEWAY_TYPES)}')
+                    f'types are: {", ".join(CEPH_TYPES)}')
 
             self.check_mon_command({
                 'prefix': 'config set',
