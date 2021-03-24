@@ -204,7 +204,8 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
   journal_seq_t limit)
 {
   return ecb->get_next_dirty_extents(
-    limit
+    limit,
+    config.journal_rewrite_per_cycle
   ).then([=, &t](auto dirty_list) {
     return seastar::do_with(
       std::move(dirty_list),

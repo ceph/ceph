@@ -223,7 +223,11 @@ public:
 
     double available_ratio_hard_limit = 0;
 
-    size_t reclaim_bytes_stride = 0; // Number of bytes to reclaim on each cycle
+    /// Number of bytes to reclaim on each cycle
+    size_t reclaim_bytes_stride = 0;
+
+    /// Number of bytes of journal entries to rewrite per cycle
+    size_t journal_rewrite_per_cycle = 0;
 
     static config_t default_from_segment_manager(
       SegmentManager &manager) {
@@ -237,7 +241,8 @@ public:
 	  .6,   // reclaim_ratio_hard_limit
 	  .3,   // reclaim_ratio_gc_threshhold
 	  .1,   // available_ratio_hard_limit
-	  1<<20 // reclaim 1MB per gc cycle
+	  1<<20,// reclaim 1MB per gc cycle
+	  1<<20 // rewrite 1MB of journal entries per gc cycle
 	};
     }
   };
@@ -255,7 +260,8 @@ public:
     using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
       std::vector<CachedExtentRef>>;
     virtual get_next_dirty_extents_ret get_next_dirty_extents(
-      journal_seq_t bound ///< [in] return extents with dirty_from < bound
+      journal_seq_t bound,///< [in] return extents with dirty_from < bound
+      size_t max_bytes    ///< [in] return up to max_bytes of extents
     ) = 0;
 
     using extent_mapping_ertr = crimson::errorator<

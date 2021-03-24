@@ -482,7 +482,8 @@ public:
   using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
     std::vector<CachedExtentRef>>;
   get_next_dirty_extents_ret get_next_dirty_extents(
-    journal_seq_t seq);
+    journal_seq_t seq,
+    size_t max_bytes);
 
   /// returns std::nullopt if no dirty extents or dirty_from for oldest
   std::optional<journal_seq_t> get_oldest_dirty_from() const {

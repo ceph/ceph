@@ -251,9 +251,11 @@ TransactionManager::submit_transaction_direct(
 }
 
 TransactionManager::get_next_dirty_extents_ret
-TransactionManager::get_next_dirty_extents(journal_seq_t seq)
+TransactionManager::get_next_dirty_extents(
+  journal_seq_t seq,
+  size_t max_bytes)
 {
-  return cache->get_next_dirty_extents(seq);
+  return cache->get_next_dirty_extents(seq, max_bytes);
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
