@@ -15,7 +15,7 @@ except ImportError:
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, HA_RGWSpec, CustomContainerSpec, \
-    HaproxySpec
+    HaproxySpec, VIPSpec
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
@@ -847,9 +847,9 @@ class CephadmServe:
                         image = proxyspec.image
 
                 if daemon_spec.daemon_type == 'keepalived':
-                    haspec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-                    if haspec.keepalived_container_image:
-                        image = haspec.keepalived_container_image
+                    vip_spec = cast(VIPSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+                    if vip_spec.image:
+                        image = vip_spec.image
 
                 # TCP port to open in the host firewall
                 if len(ports) > 0:

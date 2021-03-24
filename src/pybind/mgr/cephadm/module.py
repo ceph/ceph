@@ -25,7 +25,7 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
-    HostPlacementSpec, HaproxySpec
+    HostPlacementSpec, HaproxySpec, VIPSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -51,6 +51,7 @@ from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.ha_rgw import HA_RGWService
 from .services.haproxy import HaproxyService
+from .services.vip import VIPService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -416,7 +417,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, CrashService, IscsiService,
             HA_RGWService, CustomContainerService, CephadmExporter, CephfsMirrorService,
-            HaproxyService,
+            HaproxyService, VIPService,
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -1975,10 +1976,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             # because cephadm creates new daemon instances whenever
             # port or ip changes, identifying daemons by name is
             # sufficient to detect changes.
-            assert spec
+            if not spec:
+                return []
             haproxy_spec = cast(HaproxySpec, spec)
             assert haproxy_spec.backend_service
             daemons = self.cache.get_daemons_by_service(haproxy_spec.backend_service)
+            deps = [d.name() for d in daemons]
+        elif daemon_type == 'keepalived':
+            # because cephadm creates new daemon instances whenever
+            # port or ip changes, identifying daemons by name is
+            # sufficient to detect changes.
+            if not spec:
+                return []
+            vip_spec = cast(VIPSpec, spec)
+            assert vip_spec.backend_service
+            daemons = self.cache.get_daemons_by_service(vip_spec.backend_service)
             deps = [d.name() for d in daemons]
         else:
             need = {
@@ -2134,6 +2146,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'rgw': PlacementSpec(count=2),
                 'ha-rgw': PlacementSpec(count=2),
                 'haproxy': PlacementSpec(count=2),
+                'vip': PlacementSpec(count=2),
                 'iscsi': PlacementSpec(count=1),
                 'rbd-mirror': PlacementSpec(count=2),
                 'cephfs-mirror': PlacementSpec(count=1),

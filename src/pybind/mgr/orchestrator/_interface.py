@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec, HaproxySpec
+    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec, HaproxySpec, VIPSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -452,6 +452,7 @@ class Orchestrator(object):
             'rgw': self.apply_rgw,
             'ha-rgw': self.apply_ha_rgw,
             'haproxy': self.apply_haproxy,
+            'vip': self.apply_vip,
             'host': self.add_host,
             'cephadm-exporter': self.apply_cephadm_exporter,
         }
@@ -605,6 +606,10 @@ class Orchestrator(object):
         """Update haproxy daemons"""
         raise NotImplementedError()
 
+    def apply_vip(self, spec: VIPSpec) -> OrchResult[str]:
+        """Update virtual IP service"""
+        raise NotImplementedError()
+
     def apply_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update rbd-mirror cluster"""
         raise NotImplementedError()
@@ -693,7 +698,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'rgw': 'rgw',
         'osd': 'osd',
         'haproxy': 'haproxy',
-        'keepalived': 'ha-rgw',
+        'keepalived': 'vip',
         'iscsi': 'iscsi',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
@@ -718,6 +723,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'rgw': ['rgw'],
         'osd': ['osd'],
         'haproxy': ['haproxy'],
+        'vip': ['keepalived'],
         'ha-rgw': ['keepalived'],
         'iscsi': ['iscsi'],
         'rbd-mirror': ['rbd-mirror'],

@@ -429,8 +429,8 @@ class ServiceSpec(object):
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
                           'container cephadm-exporter ha-rgw cephfs-mirror ' \
-                          'haproxy'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw haproxy '.split()
+                          'haproxy vip'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw haproxy vip'.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -446,6 +446,7 @@ class ServiceSpec(object):
             'iscsi': IscsiServiceSpec,
             'alertmanager': AlertManagerSpec,
             'haproxy': HaproxySpec,
+            'vip': VIPSpec,
             'ha-rgw': HA_RGWSpec,
             'container': CustomContainerSpec,
         }.get(service_type, cls)
@@ -909,6 +910,41 @@ class HaproxySpec(ServiceSpec):
         if not self.monitor_port:
             raise ServiceSpecValidationError(
                 'Cannot add haproxy: No monitor_port specified')
+
+
+class VIPSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'vip',
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 backend_service: Optional[str] = None,
+                 interface: Optional[str] = None,
+                 vip: Optional[str] = None,
+                 password: Optional[str] = None,
+                 image: Optional[str] = None,
+                 ):
+        assert service_type == 'vip'
+
+        super(VIPSpec, self).__init__('vip', service_id=service_id,
+                                      placement=placement, config=config,
+                                      networks=networks)
+        self.backend_service = backend_service
+        self.interface = interface
+        self.vip = vip
+        self.password = password
+        self.image = image
+
+    def validate(self) -> None:
+        super(VIPSpec, self).validate()
+
+        if not self.backend_service:
+            raise ServiceSpecValidationError(
+                'Cannot add vip: No backend_service specified')
+        if not self.vip:
+            raise ServiceSpecValidationError(
+                'Cannot add vip: No vip (virtual IP) specified')
 
 
 class HA_RGWSpec(ServiceSpec):
