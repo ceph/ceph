@@ -877,10 +877,10 @@ void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item,
   ldout(cct, 15) << "r=" << r << ", " << "req=" << item << dendl;
 
   std::lock_guard pool_locker{this->get_pool_lock()};
-  ceph_assert(m_io_throttled.load() > 0);
   item->set_throttled(flag);
   if (item->were_all_throttled()) {
     this->requeue_back(pool_locker, item);
+    ceph_assert(m_io_throttled.load() > 0);
     --m_io_throttled;
     this->signal(pool_locker);
   }
