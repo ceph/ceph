@@ -47,6 +47,7 @@ describe('NfsFormComponent', () => {
     component = fixture.componentInstance;
     httpTesting = TestBed.inject(HttpTestingController);
     activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
+    RgwHelper.selectDaemon();
     fixture.detectChanges();
 
     httpTesting.expectOne('api/nfs-ganesha/daemon').flush([
@@ -57,7 +58,6 @@ describe('NfsFormComponent', () => {
     httpTesting.expectOne('ui-api/nfs-ganesha/fsals').flush(['CEPH', 'RGW']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephx/clients').flush(['admin', 'fs', 'rgw']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    RgwHelper.getCurrentDaemon();
     httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`).flush(['test', 'dev']);
     const user_dev = {
       suspended: 0,
