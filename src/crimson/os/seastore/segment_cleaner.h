@@ -341,8 +341,13 @@ private:
   int64_t used_bytes = 0;
   bool init_complete = false;
 
+  /// target journal_tail for next fresh segment
   journal_seq_t journal_tail_target;
+
+  /// most recently committed journal_tail
   journal_seq_t journal_tail_committed;
+
+  /// head of journal
   journal_seq_t journal_head;
 
   ExtentCallbackInterface *ecb = nullptr;
@@ -653,16 +658,19 @@ private:
     return scan_cursor->get_offset().offset;
   }
 
+  /// Returns free space available for writes
   size_t get_available_bytes() const {
     return (empty_segments * config.segment_size) +
       get_bytes_available_current_segment() +
       get_bytes_scanned_current_segment();
   }
 
+  /// Returns total space available
   size_t get_total_bytes() const {
     return config.segment_size * config.num_segments;
   }
 
+  /// Returns total space not free
   size_t get_unavailable_bytes() const {
     return get_total_bytes() - get_available_bytes();
   }
@@ -696,7 +704,8 @@ private:
   /**
    * get_reclaim_ratio
    *
-   * Returns the ratio of unavailable space that is not currently used.
+   * Returns the ratio of space reclaimable unavailable space to
+   * total unavailable space.
    */
   double get_reclaim_ratio() const {
     if (get_unavailable_bytes() == 0) return 0;
