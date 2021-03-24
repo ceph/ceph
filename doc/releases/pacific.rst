@@ -7,6 +7,15 @@ This is the Release Candidate of the Pacific series.
 Notable Changes
 ---------------
 
+* A new library is available, libcephsqlite. It provides a SQLite Virtual File
+  System (VFS) on top of RADOS. The database and journals are striped over
+  RADOS across multiple objects for virtually unlimited scaling and throughput
+  only limited by the SQLite client. Applications using SQLite may change to
+  the Ceph VFS with minimal changes, usually just by specifying the alternate
+  VFS. We expect the library to be most impactful and useful for applications
+  that were storing state in RADOS omap, especially without striping which
+  limits scalability.
+
 * New ``bluestore_rocksdb_options_annex`` config parameter. Complements
   ``bluestore_rocksdb_options`` and allows setting rocksdb options without
   repeating the existing defaults.
