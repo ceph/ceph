@@ -11,6 +11,8 @@ tasks:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
+    # deploy additional mons the "old" (octopus) way
+    add_mons_via_daemon_add: true
 
 - cephadm.shell:
     mon.a:

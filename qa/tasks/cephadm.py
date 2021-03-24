@@ -491,21 +491,70 @@ def ceph_mons(ctx, config):
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
-    num_mons = 1
 
     try:
-        for remote, roles in ctx.cluster.remotes.items():
-            for mon in [r for r in roles
-                        if teuthology.is_type('mon', cluster_name)(r)]:
-                c_, _, id_ = teuthology.split_role(mon)
-                if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mon:
-                    continue
-                log.info('Adding %s on %s' % (mon, remote.shortname))
-                num_mons += 1
-                _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'daemon', 'add', 'mon',
-                    remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
-                ])
+        daemons = {}
+        if config.get('add_mons_via_daemon_add'):
+            # This is the old way of adding mons that works with the (early) octopus
+            # cephadm scheduler.
+            num_mons = 1
+            for remote, roles in ctx.cluster.remotes.items():
+                for mon in [r for r in roles
+                            if teuthology.is_type('mon', cluster_name)(r)]:
+                    c_, _, id_ = teuthology.split_role(mon)
+                    if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mon:
+                        continue
+                    log.info('Adding %s on %s' % (mon, remote.shortname))
+                    num_mons += 1
+                    _shell(ctx, cluster_name, remote, [
+                        'ceph', 'orch', 'daemon', 'add', 'mon',
+                        remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
+                    ])
+                    ctx.daemons.register_daemon(
+                        remote, 'mon', id_,
+                        cluster=cluster_name,
+                        fsid=fsid,
+                        logger=log.getChild(mon),
+                        wait=False,
+                        started=True,
+                    )
+                    daemons[mon] = (remote, id_)
+
+                    with contextutil.safe_while(sleep=1, tries=180) as proceed:
+                        while proceed():
+                            log.info('Waiting for %d mons in monmap...' % (num_mons))
+                            r = _shell(
+                                ctx=ctx,
+                                cluster_name=cluster_name,
+                                remote=remote,
+                                args=[
+                                    'ceph', 'mon', 'dump', '-f', 'json',
+                                ],
+                                stdout=StringIO(),
+                            )
+                            j = json.loads(r.stdout.getvalue())
+                            if len(j['mons']) == num_mons:
+                                break
+        else:
+            nodes = []
+            for remote, roles in ctx.cluster.remotes.items():
+                for mon in [r for r in roles
+                            if teuthology.is_type('mon', cluster_name)(r)]:
+                    c_, _, id_ = teuthology.split_role(mon)
+                    log.info('Adding %s on %s' % (mon, remote.shortname))
+                    nodes.append(remote.shortname
+                                 + ':' + ctx.ceph[cluster_name].mons[mon]
+                                 + '=' + id_)
+                    if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mon:
+                        continue
+                    daemons[mon] = (remote, id_)
+
+            _shell(ctx, cluster_name, remote, [
+                'ceph', 'orch', 'apply', 'mon',
+                str(len(nodes)) + ';' + ';'.join(nodes)]
+                   )
+            for mgr, i in daemons.items():
+                remote, id_ = i
                 ctx.daemons.register_daemon(
                     remote, 'mon', id_,
                     cluster=cluster_name,
@@ -515,21 +564,21 @@ def ceph_mons(ctx, config):
                     started=True,
                 )
 
-                with contextutil.safe_while(sleep=1, tries=180) as proceed:
-                    while proceed():
-                        log.info('Waiting for %d mons in monmap...' % (num_mons))
-                        r = _shell(
-                            ctx=ctx,
-                            cluster_name=cluster_name,
-                            remote=remote,
-                            args=[
-                                'ceph', 'mon', 'dump', '-f', 'json',
-                            ],
-                            stdout=StringIO(),
-                        )
-                        j = json.loads(r.stdout.getvalue())
-                        if len(j['mons']) == num_mons:
-                            break
+            with contextutil.safe_while(sleep=1, tries=180) as proceed:
+                while proceed():
+                    log.info('Waiting for %d mons in monmap...' % (len(nodes)))
+                    r = _shell(
+                        ctx=ctx,
+                        cluster_name=cluster_name,
+                        remote=remote,
+                        args=[
+                            'ceph', 'mon', 'dump', '-f', 'json',
+                        ],
+                        stdout=StringIO(),
+                    )
+                    j = json.loads(r.stdout.getvalue())
+                    if len(j['mons']) == len(nodes):
+                        break
 
         # refresh our (final) ceph.conf file
         bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
