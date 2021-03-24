@@ -148,11 +148,6 @@ Replayer<I>::Replayer(
     m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
       "rbd::mirror::image_replayer::journal::Replayer", this))) {
   dout(10) << dendl;
-
-  {
-    std::unique_lock locker{m_lock};
-    register_perf_counters();
-  }
 }
 
 template <typename I>
@@ -184,6 +179,11 @@ void Replayer<I>::init(Context* on_finish) {
     std::shared_lock image_locker{local_image_ctx->image_lock};
     m_image_spec = util::compute_image_spec(local_image_ctx->md_ctx,
                                             local_image_ctx->name);
+  }
+
+  {
+    std::unique_lock locker{m_lock};
+    register_perf_counters();
   }
 
   ceph_assert(m_on_init_shutdown == nullptr);
