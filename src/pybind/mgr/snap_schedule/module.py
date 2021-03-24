@@ -22,6 +22,14 @@ class Module(MgrModule):
             desc='allow minute scheduled snapshots',
             runtime=True,
         ),
+        Option(
+            'dump_on_update',
+            type='bool',
+            default=False,
+            desc='dump database to debug log on update',
+            runtime=True,
+        ),
+
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
