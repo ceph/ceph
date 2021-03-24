@@ -6188,14 +6188,6 @@ std::vector<Option> get_rgw_options() {
         "better concurrency of these messages, at the cost of more resource "
         "utilization."),
 
-    Option("rgw_num_rados_handles", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1)
-    .set_description("Number of librados handles that RGW uses.")
-    .set_long_description(
-        "This param affects the number of separate librados handles it uses to "
-        "connect to the RADOS backend, which directly affects the number of connections "
-        "RGW will have to each OSD. A higher number affects resource utilization."),
-
     Option("rgw_verify_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Should RGW verify SSL when connecing to a remote HTTP server")
