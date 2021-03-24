@@ -61,19 +61,50 @@ protected:
 TEST_F(TestAMQP, ConnectionOK)
 {
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("amqp://localhost", "ex1", false);
+  conn = amqp::connect("amqp://localhost", "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   auto rc = amqp::publish(conn, "topic", "message");
   EXPECT_EQ(rc, 0);
 }
 
+TEST_F(TestAMQP, SSLConnectionOK)
+{
+  const int port = 5671;
+  const auto connection_number = amqp::get_connection_count();
+  amqp_mock::set_valid_port(port);
+  conn = amqp::connect("amqps://localhost", "ex1", false, false, boost::none);
+  EXPECT_TRUE(conn);
+  EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
+  auto rc = amqp::publish(conn, "topic", "message");
+  EXPECT_EQ(rc, 0);
+  amqp_mock::set_valid_port(5672);
+}
+
+TEST_F(TestAMQP, PlainAndSSLConnectionsOK)
+{
+  const int port = 5671;
+  const auto connection_number = amqp::get_connection_count();
+  amqp_mock::set_valid_port(port);
+  amqp::connection_ptr_t conn1 = amqp::connect("amqps://localhost", "ex1", false, false, boost::none);
+  EXPECT_TRUE(conn1);
+  EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
+  auto rc = amqp::publish(conn1, "topic", "message");
+  EXPECT_EQ(rc, 0);
+  amqp_mock::set_valid_port(5672);
+  amqp::connection_ptr_t conn2 = amqp::connect("amqp://localhost", "ex1", false, false, boost::none);
+  EXPECT_TRUE(conn2);
+  EXPECT_EQ(amqp::get_connection_count(), connection_number + 2);
+  rc = amqp::publish(conn2, "topic", "message");
+  EXPECT_EQ(rc, 0);
+}
+
 TEST_F(TestAMQP, ConnectionReuse)
 {
-  amqp::connection_ptr_t conn1 = amqp::connect("amqp://localhost", "ex1", false);
+  amqp::connection_ptr_t conn1 = amqp::connect("amqp://localhost", "ex1", false, false, boost::none);
   EXPECT_TRUE(conn1);
   const auto connection_number = amqp::get_connection_count();
-  amqp::connection_ptr_t conn2 = amqp::connect("amqp://localhost", "ex1", false);
+  amqp::connection_ptr_t conn2 = amqp::connect("amqp://localhost", "ex1", false, false, boost::none);
   EXPECT_TRUE(conn2);
   EXPECT_EQ(amqp::get_connection_count(), connection_number);
   auto rc = amqp::publish(conn1, "topic", "message");
@@ -83,7 +114,7 @@ TEST_F(TestAMQP, ConnectionReuse)
 TEST_F(TestAMQP, NameResolutionFail)
 {
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("amqp://kaboom", "ex1", false);
+  conn = amqp::connect("amqp://kaboom", "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -93,7 +124,7 @@ TEST_F(TestAMQP, NameResolutionFail)
 TEST_F(TestAMQP, InvalidPort)
 {
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("amqp://localhost:1234", "ex1", false);
+  conn = amqp::connect("amqp://localhost:1234", "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -103,7 +134,7 @@ TEST_F(TestAMQP, InvalidPort)
 TEST_F(TestAMQP, InvalidHost)
 {
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("amqp://0.0.0.1", "ex1", false);
+  conn = amqp::connect("amqp://0.0.0.1", "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -113,7 +144,7 @@ TEST_F(TestAMQP, InvalidHost)
 TEST_F(TestAMQP, InvalidVhost)
 {
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("amqp://localhost/kaboom", "ex1", false);
+  conn = amqp::connect("amqp://localhost/kaboom", "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -125,7 +156,7 @@ TEST_F(TestAMQP, UserPassword)
   amqp_mock::set_valid_host("127.0.0.1");
   {
     const auto connection_number = amqp::get_connection_count();
-    conn = amqp::connect("amqp://foo:bar@127.0.0.1", "ex1", false);
+    conn = amqp::connect("amqp://foo:bar@127.0.0.1", "ex1", false, false, boost::none);
     EXPECT_TRUE(conn);
     EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
     auto rc = amqp::publish(conn, "topic", "message");
@@ -135,7 +166,7 @@ TEST_F(TestAMQP, UserPassword)
   amqp_mock::set_valid_host("127.0.0.2");
   {
     const auto connection_number = amqp::get_connection_count();
-    conn = amqp::connect("amqp://guest:guest@127.0.0.2", "ex1", false);
+    conn = amqp::connect("amqp://guest:guest@127.0.0.2", "ex1", false, false, boost::none);
     EXPECT_TRUE(conn);
     EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
     auto rc = amqp::publish(conn, "topic", "message");
@@ -147,7 +178,7 @@ TEST_F(TestAMQP, UserPassword)
 TEST_F(TestAMQP, URLParseError)
 {
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("http://localhost", "ex1", false);
+  conn = amqp::connect("http://localhost", "ex1", false, false, boost::none);
   EXPECT_FALSE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -157,7 +188,7 @@ TEST_F(TestAMQP, URLParseError)
 TEST_F(TestAMQP, ExchangeMismatch)
 {
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("http://localhost", "ex2", false);
+  conn = amqp::connect("http://localhost", "ex2", false, false, boost::none);
   EXPECT_FALSE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -172,7 +203,7 @@ TEST_F(TestAMQP, MaxConnections)
   while (remaining_connections > 0) {
     const auto host = "127.10.0." + std::to_string(remaining_connections);
     amqp_mock::set_valid_host(host);
-    amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1", false);
+    amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
     EXPECT_TRUE(conn);
     auto rc = amqp::publish(conn, "topic", "message");
     EXPECT_EQ(rc, 0);
@@ -184,7 +215,7 @@ TEST_F(TestAMQP, MaxConnections)
   {
     const std::string host = "toomany";
     amqp_mock::set_valid_host(host);
-    amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1", false);
+    amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
     EXPECT_FALSE(conn);
     auto rc = amqp::publish(conn, "topic", "message");
     EXPECT_LT(rc, 0);
@@ -246,7 +277,7 @@ TEST_F(TestAMQP, ReceiveAck)
   callback_invoked = false;
   const std::string host("localhost1");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_ack);
   EXPECT_EQ(rc, 0);
@@ -260,7 +291,7 @@ TEST_F(TestAMQP, ImplicitConnectionClose)
   callback_invoked = false;
   const std::string host("localhost1");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   const auto NUMBER_OF_CALLS = 2000;
   for (auto i = 0; i < NUMBER_OF_CALLS; ++i) {
@@ -278,7 +309,7 @@ TEST_F(TestAMQP, ReceiveMultipleAck)
   callbacks_invoked = 0;
   const std::string host("localhost1");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   const auto NUMBER_OF_CALLS = 100;
   for (auto i=0; i < NUMBER_OF_CALLS; ++i) {
@@ -296,7 +327,7 @@ TEST_F(TestAMQP, ReceiveAckForMultiple)
   callbacks_invoked = 0;
   const std::string host("localhost1");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   amqp_mock::set_multiple(59);
   const auto NUMBER_OF_CALLS = 100;
@@ -315,7 +346,7 @@ TEST_F(TestAMQP, DynamicCallback)
   callbacks_invoked = 0;
   const std::string host("localhost1");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   amqp_mock::set_multiple(59);
   const auto NUMBER_OF_CALLS = 100;
@@ -336,7 +367,7 @@ TEST_F(TestAMQP, ReceiveNack)
   amqp_mock::REPLY_ACK = false;
   const std::string host("localhost2");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
   EXPECT_EQ(rc, 0);
@@ -353,7 +384,7 @@ TEST_F(TestAMQP, FailWrite)
   amqp_mock::FAIL_NEXT_WRITE = true;
   const std::string host("localhost2");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
   EXPECT_EQ(rc, 0);
@@ -370,7 +401,7 @@ TEST_F(TestAMQP, ClosedConnection)
   const auto current_connections = amqp::get_connection_count();
   const std::string host("localhost3");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), current_connections + 1);
   EXPECT_TRUE(amqp::disconnect(conn));
@@ -389,7 +420,7 @@ TEST_F(TestAMQP, RetryInvalidHost)
 {
   const std::string host = "192.168.0.1";
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("amqp://"+host, "ex1", false);
+  conn = amqp::connect("amqp://"+host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -406,7 +437,7 @@ TEST_F(TestAMQP, RetryInvalidPort)
 {
   const int port = 9999;
   const auto connection_number = amqp::get_connection_count();
-  conn = amqp::connect("amqp://localhost:" + std::to_string(port), "ex1", false);
+  conn = amqp::connect("amqp://localhost:" + std::to_string(port), "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   auto rc = amqp::publish(conn, "topic", "message");
@@ -425,7 +456,7 @@ TEST_F(TestAMQP, RetryFailWrite)
   amqp_mock::FAIL_NEXT_WRITE = true;
   const std::string host("localhost4");
   amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false);
+  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
   EXPECT_TRUE(conn);
   auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
   EXPECT_EQ(rc, 0);

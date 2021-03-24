@@ -288,6 +288,7 @@ set(rgw_libs rgw_a)
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # used by rgw_amqp.cc
   list(APPEND rgw_libs RabbitMQ::RabbitMQ)
+  list(APPEND rgw_libs OpenSSL::SSL)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
@@ -429,6 +430,7 @@ target_link_libraries(rgw
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
+  target_link_libraries(rgw PRIVATE OpenSSL::SSL)
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
