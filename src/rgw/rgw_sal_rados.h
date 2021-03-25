@@ -52,7 +52,7 @@ class RadosUser : public User {
 		     uint64_t max, bool need_stats, BucketList& buckets,
 		     optional_yield y) override;
     virtual Bucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time) override;
-    virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs* uattrs, RGWObjVersionTracker* tracker) override;
+    virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int read_stats(optional_yield y, RGWStorageStats* stats,
 			   ceph::real_time* last_stats_sync = nullptr,
 			   ceph::real_time* last_stats_update = nullptr) override;
@@ -65,7 +65,7 @@ class RadosUser : public User {
 
     /* Placeholders */
     virtual int load_by_id(const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int store_info(const DoutPrefixProvider* dpp, optional_yield y, const RGWUserCtl::PutParams& params = {}) override;
+    virtual int store_info(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
     virtual int remove_info(const DoutPrefixProvider* dpp, optional_yield y, const RGWUserCtl::RemoveParams& params = {}) override;
 
     friend class RadosBucket;

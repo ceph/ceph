@@ -34,7 +34,7 @@ public:
     return nullptr;
   }
 
-  virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y, sal::Attrs* uattrs, RGWObjVersionTracker* tracker) override {
+  virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 

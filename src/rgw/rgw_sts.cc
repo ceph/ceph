@@ -322,9 +322,7 @@ int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yi
 
   user->get_info().assumed_role_arn = arn;
 
-  ret = user->store_info(dpp, y, RGWUserCtl::PutParams()
-			    .set_old_info(&user->get_info())
-			    .set_exclusive(false));
+  ret = user->store_info(dpp, y, false, &user->get_info());
   if (ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }

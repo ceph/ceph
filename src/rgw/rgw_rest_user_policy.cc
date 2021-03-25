@@ -126,8 +126,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
     return;
   }
 
-  rgw::sal::Attrs uattrs;
-  op_ret = user->read_attrs(s, s->yield, &uattrs);
+  op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -143,20 +142,16 @@ void RGWPutUserPolicy::execute(optional_yield y)
   try {
     const Policy p(s->cct, s->user->get_tenant(), bl);
     map<string, string> policies;
-    if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
-      bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];
+    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+      bufferlist out_bl = it->second;
       decode(policies, out_bl);
     }
     bufferlist in_bl;
     policies[policy_name] = policy;
     encode(policies, in_bl);
-    uattrs[RGW_ATTR_USER_POLICY] = in_bl;
+    user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
 
-    RGWObjVersionTracker objv_tracker;
-    op_ret = user->store_info(s, s->yield,
-			      RGWUserCtl::PutParams()
-			      .set_objv_tracker(&objv_tracker)
-			      .set_attrs(&uattrs));
+    op_ret = user->store_info(s, s->yield, false);
     if (op_ret < 0) {
       op_ret = -ERR_INTERNAL_ERROR;
     }
@@ -201,8 +196,7 @@ void RGWGetUserPolicy::execute(optional_yield y)
   }
 
   std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
-  rgw::sal::Attrs uattrs;
-  op_ret = user->read_attrs(s, s->yield, &uattrs);
+  op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -216,8 +210,8 @@ void RGWGetUserPolicy::execute(optional_yield y)
     s->formatter->close_section();
     s->formatter->open_object_section("GetUserPolicyResult");
     map<string, string> policies;
-    if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
-      bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
+    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+      bufferlist bl = it->second;
       decode(policies, bl);
       if (auto it = policies.find(policy_name); it != policies.end()) {
         policy = policies[policy_name];
@@ -265,8 +259,7 @@ void RGWListUserPolicies::execute(optional_yield y)
   }
 
   std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
-  rgw::sal::Attrs uattrs;
-  op_ret = user->read_attrs(s, s->yield, &uattrs);
+  op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -275,13 +268,13 @@ void RGWListUserPolicies::execute(optional_yield y)
 
   if (op_ret == 0) {
     map<string, string> policies;
-    if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       s->formatter->open_object_section("ListUserPoliciesResponse");
       s->formatter->open_object_section("ResponseMetadata");
       s->formatter->dump_string("RequestId", s->trans_id);
       s->formatter->close_section();
       s->formatter->open_object_section("ListUserPoliciesResult");
-      bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
+      bufferlist bl = it->second;
       decode(policies, bl);
       for (const auto& p : policies) {
         s->formatter->open_object_section("PolicyNames");
@@ -333,8 +326,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     return;
   }
 
-  rgw::sal::Attrs uattrs;
-  op_ret = user->read_attrs(this, s->yield, &uattrs);
+  op_ret = user->read_attrs(this, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -353,22 +345,17 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   }
 
   map<string, string> policies;
-  if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
-    bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];
+  if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+    bufferlist out_bl = it->second;
     decode(policies, out_bl);
 
     if (auto p = policies.find(policy_name); p != policies.end()) {
       bufferlist in_bl;
       policies.erase(p);
       encode(policies, in_bl);
-      uattrs[RGW_ATTR_USER_POLICY] = in_bl;
+      user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
 
-      RGWObjVersionTracker objv_tracker;
-      op_ret = user->store_info(s, s->yield,
-				RGWUserCtl::PutParams()
-				.set_old_info(&user->get_info())
-				.set_objv_tracker(&objv_tracker)
-				.set_attrs(&uattrs));
+      op_ret = user->store_info(s, s->yield, false);
       if (op_ret < 0) {
         op_ret = -ERR_INTERNAL_ERROR;
       }

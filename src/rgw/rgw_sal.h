@@ -242,6 +242,7 @@ class User {
   protected:
     RGWUserInfo info;
     RGWObjVersionTracker objv_tracker;
+    Attrs attrs;
 
   public:
     User() : info() {}
@@ -270,7 +271,7 @@ class User {
     const RGWUserCaps& get_caps() const { return info.caps; }
     static bool empty(User* u) { return (!u || u->info.user_id.id.empty()); }
     static bool empty(std::unique_ptr<User>& u) { return (!u || u->info.user_id.id.empty()); }
-    virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs* uattrs, RGWObjVersionTracker* tracker = nullptr) = 0;
+    virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     virtual int read_stats(optional_yield y, RGWStorageStats* stats,
 			   ceph::real_time* last_stats_sync = nullptr,
 			   ceph::real_time* last_stats_update = nullptr) = 0;
@@ -281,10 +282,12 @@ class User {
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual RGWObjVersionTracker& get_version_tracker() { return objv_tracker; }
+    virtual Attrs& get_attrs() { return attrs; }
+    virtual void set_attrs(Attrs& _attrs) { attrs = _attrs; }
 
     /* Placeholders */
     virtual int load_by_id(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-    virtual int store_info(const DoutPrefixProvider* dpp, optional_yield y, const RGWUserCtl::PutParams& params = {}) = 0;
+    virtual int store_info(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) = 0;
     virtual int remove_info(const DoutPrefixProvider* dpp, optional_yield y, const RGWUserCtl::RemoveParams& params = {}) = 0;
 
     /* dang temporary; will be removed when User is complete */
