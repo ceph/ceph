@@ -214,6 +214,15 @@ Upgrading non-cephadm clusters
 
      # ceph osd unset noout
 
+#. Consider transitioning your cluster to use the cephadm deployment
+   and orchestration framework to simplify cluster management and
+   future upgrades.  For more information on converting an existing
+   cluster to cephadm, see :ref:`cephadm-adoption`.
+
+
+Post-upgrade
+~~~~~~~~~~~~
+
 #. Verify the cluster is healthy with ``ceph health``.
 
    If your CRUSH tunables are older than Hammer, Ceph will now issue a
@@ -238,8 +247,7 @@ Upgrading non-cephadm clusters
    Moving to 'straw2' buckets will unlock a few recent features, like
    the `crush-compat` :ref:`balancer <balancer>` mode added back in Luminous.
 
-
-#. If you did you already do so when upgrading from Mimic, we
+#. If you did not already do so when upgrading from Mimic, we
    recommened you enable the new :ref:`v2 network protocol <msgr2>`,
    issue the following command::
 
@@ -272,11 +280,6 @@ Upgrading non-cephadm clusters
  
    For more information about the telemetry module, see :ref:`the
    documentation <telemetry>`.
-
-#. Consider transitioning your cluster to use the cephadm deployment
-   and orchestration framework to simplify cluster management and
-   future upgrades.  For more information on converting an existing
-   cluster to cephadm, see :ref:`cephadm-adoption`.
 
 
 Upgrade from pre-Nautilus releases (like Mimic or Luminous)
