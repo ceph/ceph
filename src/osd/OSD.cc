@@ -95,6 +95,7 @@
 #include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
+#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
@@ -7140,6 +7141,8 @@ void OSD::ms_fast_dispatch(Message *m)
     return handle_fast_pg_create(static_cast<MOSDPGCreate2*>(m));
   case MSG_OSD_PG_NOTIFY:
     return handle_fast_pg_notify(static_cast<MOSDPGNotify*>(m));
+  case MSG_OSD_PG_INFO:
+    return handle_fast_pg_info(static_cast<MOSDPGInfo*>(m));
   case MSG_OSD_PG_REMOVE:
     return handle_fast_pg_remove(static_cast<MOSDPGRemove*>(m));
     // these are single-pg messages that handle themselves
@@ -9372,6 +9375,29 @@ void OSD::handle_fast_pg_notify(MOSDPGNotify* m)
 	    p.past_intervals,
 	    false)
 	  )));
+  }
+  m->put();
+}
+
+void OSD::handle_fast_pg_info(MOSDPGInfo* m)
+{
+  dout(7) << __func__ << " " << *m << " from " << m->get_source() << dendl;
+  if (!require_osd_peer(m)) {
+    m->put();
+    return;
+  }
+  int from = m->get_source().num();
+  for (auto& p : m->pg_list) {
+    enqueue_peering_evt(
+      spg_t(p.info.pgid.pgid, p.to),
+      PGPeeringEventRef(
+       std::make_shared<PGPeeringEvent>(
+         p.epoch_sent, p.query_epoch,
+         MInfoRec(
+           pg_shard_t(from, p.from),
+           p.info,
+           p.epoch_sent)))
+      );
   }
   m->put();
 }

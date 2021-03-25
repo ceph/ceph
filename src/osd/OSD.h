@@ -86,6 +86,7 @@ class LogChannel;
 
 class MOSDPGCreate2;
 class MOSDPGNotify;
+class MOSDPGInfo;
 class MOSDPGRemove;
 class MOSDForceRecovery;
 class MMonGetPurgedSnapsReply;
@@ -1919,6 +1920,7 @@ protected:
   void handle_pg_query_nopg(const MQuery& q);
   void handle_fast_pg_notify(MOSDPGNotify *m);
   void handle_pg_notify_nopg(const MNotifyRec& q);
+  void handle_fast_pg_info(MOSDPGInfo *m);
   void handle_fast_pg_remove(MOSDPGRemove *m);
 
 public:
