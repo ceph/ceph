@@ -371,7 +371,7 @@ void FSMirror::add_peer(const Peer &peer) {
   }
 
   auto replayer = std::make_unique<PeerReplayer>(
-    m_cct, this, m_filesystem, peer, m_directories, m_mount, m_service_daemon);
+    m_cct, this, m_cluster, m_filesystem, peer, m_directories, m_mount, m_service_daemon);
   int r = init_replayer(replayer.get());
   if (r < 0) {
     m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, peer,

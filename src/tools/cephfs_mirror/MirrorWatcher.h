@@ -47,6 +47,11 @@ public:
     return m_blocklisted;
   }
 
+  bool is_failed() {
+    std::scoped_lock locker(m_lock);
+    return m_failed;
+  }
+
 private:
   librados::IoCtx &m_ioctx;
   FSMirror *m_fs_mirror;
@@ -59,6 +64,7 @@ private:
   Context *m_on_shutdown_finish = nullptr;
 
   bool m_blocklisted = false;
+  bool m_failed = false;
 
   void register_watcher();
   void handle_register_watcher(int r);
