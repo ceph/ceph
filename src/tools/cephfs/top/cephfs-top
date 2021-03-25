@@ -6,11 +6,11 @@ import curses
 import errno
 import json
 import signal
-import time
 
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum, unique
+from threading import Event
 
 import rados
 
@@ -37,6 +37,9 @@ FS_TOP_SUPPORTED_VER = 1
 
 ITEMS_PAD_LEN = 1
 ITEMS_PAD = "  " * ITEMS_PAD_LEN
+DEFAULT_REFRESH_INTERVAL = 1
+# min refresh interval allowed
+MIN_REFRESH_INTERVAL = 0.5
 
 # metadata provided by mgr/stats
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "CLIENT_ID"
@@ -94,14 +97,15 @@ def wrap(s, sl):
 class FSTop(object):
     def __init__(self, args):
         self.rados = None
-        self.stop = False
         self.stdscr = None  # curses instance
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
+        self.refresh_interval_secs = args.delay
+        self.exit_ev = Event()
 
     def handle_signal(self, signum, _):
-        self.stop = True
+        self.exit_ev.set()
 
     def init(self):
         try:
@@ -292,7 +296,7 @@ class FSTop(object):
     def display(self, _):
         x_coord_map = self.refresh_top_line_and_build_coord()
         self.topl.refresh()
-        while not self.stop:
+        while not self.exit_ev.is_set():
             stats_json = self.perf_stats_query()
             self.header.clear()
             self.mainw.clear()
@@ -300,10 +304,17 @@ class FSTop(object):
                 self.refresh_main_window(x_coord_map, stats_json)
             self.header.refresh()
             self.mainw.refresh()
-            time.sleep(1)
+            self.exit_ev.wait(timeout=self.refresh_interval_secs)
 
 
 if __name__ == '__main__':
+    def float_greater_than(x):
+        value = float(x)
+        if value < MIN_REFRESH_INTERVAL:
+            raise argparse.ArgumentTypeError(f'{value} should be greater than '
+                                             f'{MIN_REFRESH_INTERVAL}')
+        return value
+
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
     parser.add_argument('--cluster', nargs='?', const='ceph', default='ceph',
                         help='Ceph cluster to connect (defualt: ceph)')
@@ -313,6 +324,10 @@ if __name__ == '__main__':
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
                         help='run in selftest mode')
+    parser.add_argument('-d', '--delay', nargs='?', default=DEFAULT_REFRESH_INTERVAL,
+                        type=float_greater_than, help='Interval to refresh data '
+                        f'(default: {DEFAULT_REFRESH_INTERVAL})')
+
     args = parser.parse_args()
     err = False
     ft = FSTop(args)
