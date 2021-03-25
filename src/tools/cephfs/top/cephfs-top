@@ -56,6 +56,9 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
     ("WRITE_LATENCY", MetricType.METRIC_TYPE_LATENCY),
     ("METADATA_LATENCY", MetricType.METRIC_TYPE_LATENCY),
     ("DENTRY_LEASE", MetricType.METRIC_TYPE_PERCENTAGE),
+    ("OPENED_FILES", MetricType.METRIC_TYPE_NONE),
+    ("PINNED_ICAPS", MetricType.METRIC_TYPE_NONE),
+    ("OPENED_INODES", MetricType.METRIC_TYPE_NONE),
 ])
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
@@ -130,6 +133,9 @@ class FSTop(object):
         stats_json = self.perf_stats_query()
         if not stats_json['version'] == FS_TOP_SUPPORTED_VER:
             raise FSTopException('perf stats version mismatch!')
+        missing = [m for m in stats_json["global_counters"] if m.upper() not in MGR_STATS_COUNTERS]
+        if missing:
+            raise FSTopException(f'Cannot handle unknown metrics from \'ceph fs perf stats\': {missing}')
 
     def setup_curses(self):
         self.stdscr = curses.initscr()
@@ -173,6 +179,7 @@ class FSTop(object):
         elif typ == MetricType.METRIC_TYPE_LATENCY:
             return "(s)"
         else:
+            # return empty string for none type
             return ''
 
     def refresh_top_line_and_build_coord(self):
@@ -228,6 +235,9 @@ class FSTop(object):
                     self.mainw.addstr(y_coord, coord[0], f'{calc_perc(m)}')
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
                     self.mainw.addstr(y_coord, coord[0], f'{calc_lat(m)}')
+                else:
+                    # display 0th element from metric tuple
+                    self.mainw.addstr(y_coord, coord[0], f'{m[0]}')
             else:
                 self.mainw.addstr(y_coord, coord[0], "N/A")
             cidx += 1
