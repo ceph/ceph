@@ -640,12 +640,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 
   /* handle user ACL only for those APIs which support it */
   if (s->user_acl) {
-    rgw::sal::Attrs uattrs;
     std::unique_ptr<rgw::sal::User> acl_user = store->get_user(acct_acl_user.uid);
 
-    ret = acl_user->read_attrs(dpp, y, &uattrs);
+    ret = acl_user->read_attrs(dpp, y);
     if (!ret) {
-      ret = get_user_policy_from_attr(s->cct, uattrs, *s->user_acl);
+      ret = get_user_policy_from_attr(s->cct, acl_user->get_attrs(), *s->user_acl);
     }
     if (-ENOENT == ret) {
       /* In already existing clusters users won't have ACL. In such case
@@ -668,10 +667,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
   // hence the check for user type
   if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
     try {
-      rgw::sal::Attrs uattrs;
-      ret = s->user->read_attrs(dpp, y, &uattrs);
+      ret = s->user->read_attrs(dpp, y);
       if (ret == 0) {
-          auto user_policies = get_iam_user_policy_from_attr(s->cct, uattrs, s->user->get_tenant());
+	auto user_policies = get_iam_user_policy_from_attr(s->cct,
+							   s->user->get_attrs(),
+							   s->user->get_tenant());
           s->iam_user_policies.insert(s->iam_user_policies.end(),
                                       std::make_move_iterator(user_policies.begin()),
                                       std::make_move_iterator(user_policies.end()));
@@ -2288,7 +2288,7 @@ void RGWListBuckets::execute(optional_yield y)
   }
 
   if (supports_account_metadata()) {
-    op_ret = s->user->read_attrs(this, s->yield, &attrs);
+    op_ret = s->user->read_attrs(this, s->yield);
     if (op_ret < 0) {
       goto send_end;
     }
@@ -4347,10 +4347,11 @@ int RGWPutMetadataAccount::init_processing(optional_yield y)
     return op_ret;
   }
 
-  op_ret = s->user->read_attrs(this, y, &orig_attrs, &acct_op_tracker);
+  op_ret = s->user->read_attrs(this, y);
   if (op_ret < 0) {
     return op_ret;
   }
+  orig_attrs = s->user->get_attrs();
 
   if (has_policy) {
     bufferlist acl_bl;
@@ -4411,7 +4412,6 @@ void RGWPutMetadataAccount::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
-  acct_op_tracker = s->user->get_version_tracker();
 
   /* Handle the TempURL-related stuff. */
   if (!temp_url_keys.empty()) {
@@ -4427,10 +4427,8 @@ void RGWPutMetadataAccount::execute(optional_yield y)
 
   /* We are passing here the current (old) user info to allow the function
    * optimize-out some operations. */
-  op_ret = s->user->store_info(this, y, RGWUserCtl::PutParams()
-			     .set_old_info(&s->user->get_info())
-			     .set_objv_tracker(&acct_op_tracker)
-			     .set_attrs(&attrs));
+  s->user->set_attrs(attrs);
+  op_ret = s->user->store_info(this, y, false, &s->user->get_info());
 }
 
 int RGWPutMetadataBucket::verify_permission(optional_yield y)

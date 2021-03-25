@@ -376,8 +376,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
   rgw_apply_default_bucket_quota(user->get_info().bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
 
-  int ret = user->store_info(dpp, null_yield,
-			     RGWUserCtl::PutParams().set_exclusive(true));
+  int ret = user->store_info(dpp, null_yield, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;
@@ -603,8 +602,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
   user_info = user->get_info();
 
-  int ret = user->store_info(dpp, null_yield,
-			     RGWUserCtl::PutParams().set_exclusive(true));
+  int ret = user->store_info(dpp, null_yield, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;

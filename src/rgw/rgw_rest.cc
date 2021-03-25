@@ -1849,9 +1849,8 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
     // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
     if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
-	rgw::sal::Attrs uattrs;
-        if (auto ret = s->user->read_attrs(s, y, &uattrs); ! ret) {
-          auto user_policies = get_iam_user_policy_from_attr(s->cct, uattrs, s->user->get_tenant());
+        if (auto ret = s->user->read_attrs(s, y); ! ret) {
+          auto user_policies = get_iam_user_policy_from_attr(s->cct, s->user->get_attrs(), s->user->get_tenant());
           s->iam_user_policies.insert(s->iam_user_policies.end(),
                                       std::make_move_iterator(user_policies.begin()),
                                       std::make_move_iterator(user_policies.end()));

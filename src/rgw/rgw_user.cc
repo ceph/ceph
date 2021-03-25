@@ -1565,9 +1565,8 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
 
   RGWUserInfo *pold_info = (is_populated() ? &old_info : nullptr);
 
-  ret = user->store_info(dpp, y, RGWUserCtl::PutParams()
-			 .set_old_info(pold_info)
-			 .set_objv_tracker(&op_state.objv));
+  ret = user->store_info(dpp, y, false, pold_info);
+  op_state.objv = user->get_version_tracker();
   if (ret < 0) {
     set_err_msg(err_msg, "unable to store user info");
     return ret;
@@ -1663,12 +1662,9 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   std::unique_ptr<rgw::sal::User> user;
   user = store->get_user(new_user->get_id());
 
-  RGWObjVersionTracker objv;
   const bool exclusive = !op_state.get_overwrite_new_user(); // overwrite if requested
 
-  ret = user->store_info(dpp, y, RGWUserCtl::PutParams()
-			    .set_objv_tracker(&objv)
-			    .set_exclusive(exclusive));
+  ret = user->store_info(dpp, y, exclusive);
   if (ret == -EEXIST) {
     set_err_msg(err_msg, "user name given by --new-uid already exists");
     return ret;
@@ -1731,7 +1727,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   // associated index objects
   RGWUserInfo& user_info = op_state.get_user_info();
   user_info.user_id = new_user->get_id();
-  op_state.objv = objv;
+  op_state.objv = user->get_version_tracker();
 
   rename_swift_keys(new_user->get_id(), user_info.swift_keys);
 
