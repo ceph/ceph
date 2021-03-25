@@ -41,6 +41,9 @@ enum class global_id_status_t {
   RECLAIM_INSECURE
 };
 
+std::ostream& operator<<(std::ostream& os,
+			 global_id_status_t global_id_status);
+
 struct AuthServiceHandler {
 protected:
   CephContext *cct;
