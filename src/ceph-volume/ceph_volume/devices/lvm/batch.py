@@ -1,6 +1,7 @@
 import argparse
 from collections import namedtuple
 import json
+import math
 import logging
 from textwrap import dedent
 from ceph_volume import terminal, decorators
@@ -53,7 +54,7 @@ def get_physical_osds(devices, args):
     data_slots = args.osds_per_device
     if args.data_slots:
         data_slots = max(args.data_slots, args.osds_per_device)
-    rel_data_size = 1.0 / data_slots
+    rel_data_size = args.data_allocate_fraction / data_slots
     mlogger.debug('relative data size: {}'.format(rel_data_size))
     ret = []
     for dev in devices:
@@ -296,6 +297,17 @@ class Batch(object):
             help=('Provision more than 1 (the default) OSD slot per device'
                   ' if more slots then osds-per-device are specified, slots'
                   'will stay unoccupied'),
+        )
+        def data_allocate_fraction(pct):
+            pct_float = float(pct)
+            if math.isnan(pct_float) or pct_float == 0.0  or pct_float < 0.0 or pct_float > 1.0:
+                raise argparse.ArgumentTypeError('Percentage not in (0,1.0]')
+            return pct_float
+        parser.add_argument(
+            '--data-allocate-fraction',
+            type=data_allocate_fraction,
+            help='Fraction to allocate from data device (0,1.0]',
+            default=1.0
         )
         parser.add_argument(
             '--block-db-size',
