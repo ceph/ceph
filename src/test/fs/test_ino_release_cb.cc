@@ -75,5 +75,7 @@ int main(int argc, char *argv[])
     sleep(45);
 
 	assert(cb_done);
+	ceph_unmount(cmount);
+	ceph_release(cmount);
 	return 0;
 }
