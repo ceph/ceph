@@ -26,6 +26,9 @@ tasks:
 - cephadm.shell:
     mon.a:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
+
 - print: "**** done cephadm.shell ceph config set mgr..."
 
 - print: "**** done start parallel"
