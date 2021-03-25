@@ -120,6 +120,7 @@ PeeringState::PeeringState(
     pg_whoami(pg_whoami),
     info(spgid),
     pg_log(cct),
+    last_require_osd_release(curmap->require_osd_release),
     missing_loc(spgid, this, dpp, cct),
     machine(this, cct, spgid, dpp, pl, &state_history)
 {
