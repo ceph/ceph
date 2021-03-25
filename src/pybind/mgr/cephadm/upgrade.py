@@ -295,7 +295,9 @@ class CephadmUpgrade:
             self.upgrade_state.progress_id = str(uuid.uuid4())
             self._save_upgrade_state()
         self.mgr.remote('progress', 'update', self.upgrade_state.progress_id,
-                        ev_msg='Upgrade to %s' % self.target_image,
+                        ev_msg='Upgrade to %s' % (
+                            self.upgrade_state.target_version or self.target_image
+                        ),
                         ev_progress=progress,
                         add_to_ceph_s=True)
 
