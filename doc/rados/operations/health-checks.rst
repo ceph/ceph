@@ -134,6 +134,73 @@ The warning threshold may be adjusted with::
 
   ceph config set global mon_data_size_warn <size>
 
+AUTH_INSECURE_GLOBAL_ID_RECLAIM
+_______________________________
+
+One or more clients or daemons are connected to the cluster that are
+not securely reclaiming their global_id (a unique number identifying
+each entity in the cluster) when reconnecting to a monitor.  The
+client is being permitted to connect anyway because the
+``auth_allow_insecure_global_id_reclaim`` option is set to true (which may
+be necessary until all ceph clients have been upgraded), and the
+``auth_expose_insecure_global_id_reclaim`` option set to ``true`` (which
+allows monitors to detect clients with insecure reclaim early by forcing them to
+reconnect right after they first authenticate).
+
+You can identify which client(s) are using unpatched ceph client code with::
+
+  ceph health detail
+
+Clients global_id reclaim rehavior can also seen in the
+``global_id_status`` field in the dump of clients connected to an
+individual monitor (``reclaim_insecure`` means the client is
+unpatched and is contributing to this health alert)::
+
+  ceph tell mon.\* sessions
+
+We strongly recommend that all clients in the system are upgraded to a
+newer version of Ceph that correctly reclaims global_id values.  Once
+all clients have been updated, you can stop allowing insecure reconnections
+with::
+
+  ceph config set mon auth_allow_insecure_global_id_reclaim false
+
+If it is impractical to upgrade all clients immediately, you can silence
+this warning temporarily with::
+
+  ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM 1w   # 1 week
+
+Although we do NOT recommend doing so, you can also disable this warning indefinitely
+with::
+
+  ceph config set mon mon_warn_on_insecure_global_id_reclaim false
+
+AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED
+_______________________________________
+
+Ceph is currently configured to allow clients to reconnect to monitors using
+an insecure process to reclaim their previous global_id because the setting
+``auth_allow_insecure_global_id_reclaim`` is set to ``true``.  It may be necessary to
+leave this setting enabled while existing Ceph clients are upgraded to newer
+versions of Ceph that correctly and securely reclaim their global_id.
+
+If the ``AUTH_INSECURE_GLOBAL_ID_RECLAIM`` health alert has not also been raised and
+the ``auth_expose_insecure_global_id_reclaim`` setting has not been disabled (it is
+on by default), then there are currently no clients connected that need to be
+upgraded, and it is safe to disallow insecure global_id reclaim with::
+
+  ceph config set mon auth_allow_insecure_global_id_reclaim false
+
+If there are still clients that need to be upgraded, then this alert can be
+silenced temporarily with::
+
+  ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1w   # 1 week
+
+Although we do NOT recommend doing so, you can also disable this warning indefinitely
+with::
+
+  ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
+
 
 Manager
 -------
