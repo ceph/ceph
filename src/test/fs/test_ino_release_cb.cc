@@ -1,4 +1,5 @@
 #include <string>
+#include <unistd.h>
 #include <include/fs_types.h>
 #include <mds/mdstypes.h>
 #include <include/cephfs/libcephfs.h>
@@ -71,6 +72,7 @@ int main(int argc, char *argv[])
 		ret = ceph_ll_lookup_inode(cmount, inos[i], &inodes[i]);
 		assert(ret >= 0);
 	}
+    sleep(45);
 
 	assert(cb_done);
 	return 0;
