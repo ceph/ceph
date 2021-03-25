@@ -23,6 +23,29 @@
 #define dout_subsys ceph_subsys_auth
 
 
+std::ostream& operator<<(std::ostream& os,
+			 global_id_status_t global_id_status)
+{
+  switch (global_id_status) {
+  case global_id_status_t::NONE:
+    return os << "none";
+  case global_id_status_t::NEW_PENDING:
+    return os << "new_pending";
+  case global_id_status_t::NEW_OK:
+    return os << "new_ok";
+  case global_id_status_t::NEW_NOT_EXPOSED:
+    return os << "new_not_exposed";
+  case global_id_status_t::RECLAIM_PENDING:
+    return os << "reclaim_pending";
+  case global_id_status_t::RECLAIM_OK:
+    return os << "reclaim_ok";
+  case global_id_status_t::RECLAIM_INSECURE:
+    return os << "reclaim_insecure";
+  default:
+    ceph_abort();
+  }
+}
+
 int AuthServiceHandler::start_session(const EntityName& entity_name,
 				      uint64_t global_id,
 				      bool is_new_global_id,
