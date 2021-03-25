@@ -3222,22 +3222,32 @@ def _pull_image(ctx, image):
 ##################################
 
 
-@infer_image
 def command_inspect_image(ctx):
     # type: (CephadmContext) -> int
+    try:
+        info_from = _inspect_image(ctx)
+    except RuntimeError as e:
+        print(str(e))
+        return errno.ENOENT
+
+    print(json.dumps(info_from, indent=4, sort_keys=True))
+    return 0
+
+
+@infer_image
+def _inspect_image(ctx):
+    # type: (CephadmContext) -> Dict[str, Union[str,List[str]]]
     out, err, ret = call_throws(ctx, [
         ctx.container_path, 'inspect',
         '--format', '{{.ID}},{{.RepoDigests}}',
         ctx.image])
     if ret:
-        return errno.ENOENT
+        raise RuntimeError('inspect image command failed: %s' % err)
     info_from = get_image_info_from_inspect(out.strip(), ctx.image)
 
     ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
     info_from['ceph_version'] = ver
-
-    print(json.dumps(info_from, indent=4, sort_keys=True))
-    return 0
+    return info_from
 
 
 def get_image_info_from_inspect(out, image):
@@ -3525,7 +3535,9 @@ def create_mon(
     fsid: str, mon_id: str
 ) -> None:
     mon_c = get_container(ctx, fsid, 'mon', mon_id)
-    ctx.meta_json = json.dumps({'service_name': 'mon'})
+    container_info = _inspect_image(ctx)
+    ctx.meta_json = json.dumps({'service_name': 'mon',
+                                'deployed_by': container_info['repo_digests']})
     deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
 
@@ -3571,7 +3583,9 @@ def create_mgr(
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
     # Note:the default port used by the Prometheus node exporter is opened in fw
-    ctx.meta_json = json.dumps({'service_name': 'mgr'})
+    container_info = _inspect_image(ctx)
+    ctx.meta_json = json.dumps({'service_name': 'mgr',
+                                'deployed_by': container_info['repo_digests']})
     deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
                   config=config, keyring=mgr_keyring, ports=[9283])
 
