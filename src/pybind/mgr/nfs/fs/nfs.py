@@ -10,8 +10,6 @@ from rados import TimedOut, ObjectNotFound
 
 import orchestrator
 
-from .fs_util import create_pool
-
 log = logging.getLogger(__name__)
 POOL_NAME = 'nfs-ganesha'
 
@@ -874,11 +872,7 @@ class NFSCluster:
             pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
 
             if self.pool_name not in pool_list:
-                r, out, err = create_pool(self.mgr, self.pool_name)
-                if r != 0:
-                    return r, out, err
-                log.info(f"Pool Status: {out}")
-
+                self.mgr.check_mon_command({'prefix': 'osd pool create', 'pool': self.pool_name})
                 self.mgr.check_mon_command({'prefix': 'osd pool application enable',
                                             'pool': self.pool_name, 'app': 'nfs'})
 
