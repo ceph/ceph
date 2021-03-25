@@ -228,7 +228,7 @@ tests:
     - series: 'ceph_osd_stat_bytes_used{ceph_daemon="osd.2",instance="ceph:9283"
       ,job="ceph"}'
       values: '1076310016 1076310016 1076310016 1076310016 1076310016
-      106447810032'
+      100856561909.76'
     - series: 'ceph_osd_stat_bytes{ceph_daemon="osd.0",instance="ceph:9283"
       ,job="ceph"}'
       values: '108447916032 108447916032 108447916032 108447916032 108447916032
@@ -280,7 +280,7 @@ tests:
        exp_samples:
          - labels: '{ceph_daemon="osd.2",hostname="ceph",instance="ceph:9283",
            job="ceph"}'
-           value: 9.815569899986845E+01
+           value: 9.3E+01
    alert_rule_test:
      - eval_time: 10m
        alertname: OSDs near full
@@ -295,7 +295,7 @@ tests:
            severity: critical
          exp_annotations:
            description: >
-             OSD osd.2 on ceph is dangerously full: 98.16%
+             OSD osd.2 on ceph is dangerously full: 93%
 
  # flapping OSD
  - interval: 1s
@@ -361,13 +361,16 @@ tests:
    input_series:
     - series: 'ceph_osd_numpg{ceph_daemon="osd.0",instance="ceph:9283",
       job="ceph"}'
-      values: '169 169 169 169 169 169'
+      values: '100 100 100 100 100 160'
     - series: 'ceph_osd_numpg{ceph_daemon="osd.1",instance="ceph:9283",
       job="ceph"}'
-      values: '169 169 169 169 169 90'
+      values: '100 100 100 100 100 320'
     - series: 'ceph_osd_numpg{ceph_daemon="osd.2",instance="ceph:9283",
       job="ceph"}'
-      values: '169 169 169 169 169 169'
+      values: '100 100 100 100 100 160'
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.3",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 160'
     - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
       ceph_version="ceph version 17.0.0-189-g3558fd72
       (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
@@ -389,6 +392,13 @@ tests:
       hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
       public_addr="172.20.0.2"}'
       values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.3",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
    promql_expr_test:
      - expr: |
          abs(
@@ -402,7 +412,7 @@ tests:
        exp_samples:
          - labels: '{ceph_daemon="osd.1", hostname="ceph", instance="ceph:9283",
            job="ceph"}'
-           value: 3.691588785046729E-01
+           value: 6E-01
    alert_rule_test:
      - eval_time: 10m
        alertname: high pg count deviation
@@ -534,7 +544,7 @@ tests:
       --live-home",fstype="ext4",instance="node-exporter",job="node-exporter",
       mountpoint="/"}'
       values: '35336400896 35336400896 35336400896 35336400896 35336400896
-      3533640089 3533640089'
+      3525385519.104 3533640089'
     - series: 'node_filesystem_size_bytes{device="/dev/mapper/fedora_localhost
       --live-home",fstype="ext4",instance="node-exporter",job="node-exporter",
       mountpoint="/"}'
@@ -548,7 +558,7 @@ tests:
          - labels: '{device="/dev/mapper/fedora_localhost --live-home",
            fstype="ext4", instance="node-exporter", job="node-exporter",
            mountpoint="/"}'
-           value: 4.8112390362092565E+00
+           value: 4.8E+00
    alert_rule_test:
      - eval_time: 10m
        alertname: root volume full
@@ -702,7 +712,7 @@ tests:
     - series: 'ceph_pool_stored{instance="ceph:9283",job="ceph",pool_id="2"}'
       values: '1850 1850 1850 1850 1850 1850 1850'
     - series: 'ceph_pool_stored{instance="ceph:9283",job="ceph",pool_id="3"}'
-      values: '10628706304000 10628706304000 23524 23524 23524 23524 23524 23524
+      values: '900 900 23524 23524 23524 23524 23524 23524
       23524'
     - series: 'ceph_pool_max_avail{instance="ceph:9283",job="ceph",pool_id="1"}'
       values: '106287063040 106287063040 106287063040 106287063040 106287063040
@@ -711,8 +721,7 @@ tests:
       values: '106287063040 106287063040 106287063040 106287063040 106287063040
       106287063040 106287063040'
     - series: 'ceph_pool_max_avail{instance="ceph:9283",job="ceph",pool_id="3"}'
-      values: '106287063040 1 106287063040 106287063040 106287063040
-      106287063040 106287063040'
+      values: '37.5 37.5 37.5 37.5 37.5 37.5 37.5'
     - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
       name="device_health_metrics",pool_id="1"}'
       values: '1 1 1 1 1 1 1 1 1'
@@ -731,7 +740,7 @@ tests:
        exp_samples:
          - labels: '{instance="ceph:9283", job="ceph", name="default.rgw.log",
            pool_id="3"}'
-           value: 9.999999999999059E+01
+           value: 9.6E+01
    alert_rule_test:
      - eval_time: 2m
        alertname: pool full
@@ -745,7 +754,7 @@ tests:
            severity: critical
            type: ceph_default
          exp_annotations:
-           description: Pool default.rgw.log at 99.01% capacity.
+           description: Pool default.rgw.log at 96% capacity.
 
  # slow OSD ops
  - interval : 1m
