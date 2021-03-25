@@ -91,7 +91,8 @@ for target in $sphinx_targets; do
             ;;
         man)
             $vdir/bin/sphinx-build -W --keep-going -a -b man -t man -d doctrees \
-                                   $TOPDIR/doc $TOPDIR/build-doc/output/$target
+                                   -c $TOPDIR/man \
+                                   $TOPDIR/doc/man $TOPDIR/build-doc/output/$target
             ;;
         livehtml)
             $vdir/bin/pip install --quiet sphinx-autobuild
