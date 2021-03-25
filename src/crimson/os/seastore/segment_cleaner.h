@@ -238,8 +238,8 @@ public:
 	  2,    // target_journal_segments
 	  4,    // max_journal_segments
 	  .9,   // available_ratio_gc_max
-	  .6,   // reclaim_ratio_hard_limit
-	  .3,   // reclaim_ratio_gc_threshhold
+	  .8,   // reclaim_ratio_hard_limit
+	  .6,   // reclaim_ratio_gc_threshhold
 	  .1,   // available_ratio_hard_limit
 	  1<<20,// reclaim 1MB per gc cycle
 	  1<<20 // rewrite 1MB of journal entries per gc cycle
