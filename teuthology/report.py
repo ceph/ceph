@@ -4,11 +4,13 @@ import json
 import re
 import requests
 import logging
+import random
 import socket
 from datetime import datetime
 
 import teuthology
 from teuthology.config import config
+from teuthology.contextutil import safe_while
 from teuthology.job_status import get_status, set_status
 
 report_exceptions = (requests.exceptions.RequestException, socket.error)
@@ -289,37 +291,42 @@ class ResultsReporter(object):
             set_status(job_info, 'dead')
         job_json = json.dumps(job_info)
         headers = {'content-type': 'application/json'}
-        response = self.session.post(run_uri, data=job_json, headers=headers)
 
-        if response.status_code == 200:
-            return job_id
+        inc = random.uniform(0, 1)
+        with safe_while(
+                sleep=1, increment=inc, action=f'report job {job_id}') as proceed:
+            while proceed():
+                response = self.session.post(run_uri, data=job_json, headers=headers)
 
-        # This call is wrapped in a try/except because of:
-        #  http://tracker.ceph.com/issues/8166
-        try:
-            resp_json = response.json()
-        except ValueError:
-            resp_json = dict()
+                if response.status_code == 200:
+                    return
 
-        if resp_json:
-            msg = resp_json.get('message', '')
-        else:
-            msg = response.text
+                # This call is wrapped in a try/except because of:
+                #  http://tracker.ceph.com/issues/8166
+                try:
+                    resp_json = response.json()
+                except ValueError:
+                    resp_json = dict()
 
-        if msg and msg.endswith('already exists'):
-            job_uri = os.path.join(run_uri, job_id, '')
-            response = self.session.put(job_uri, data=job_json,
-                                        headers=headers)
-        elif msg:
-            self.log.error(
-                "POST to {uri} failed with status {status}: {msg}".format(
-                    uri=run_uri,
-                    status=response.status_code,
-                    msg=msg,
-                ))
+                if resp_json:
+                    msg = resp_json.get('message', '')
+                else:
+                    msg = response.text
+
+                if msg and msg.endswith('already exists'):
+                    job_uri = os.path.join(run_uri, job_id, '')
+                    response = self.session.put(job_uri, data=job_json,
+                                                headers=headers)
+                    if response.status_code == 200:
+                        return
+                elif msg:
+                    self.log.error(
+                        "POST to {uri} failed with status {status}: {msg}".format(
+                            uri=run_uri,
+                            status=response.status_code,
+                            msg=msg,
+                        ))
         response.raise_for_status()
-
-        return job_id
 
     @property
     def last_run(self):
