@@ -51,7 +51,40 @@ RGW object storage
 CephFS distributed file system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* cephfs-mirror...
+* The CephFS adds modifies on-RADOS metadata such that the new format is no
+  longer backwards compatible. It is not possible to downgrade a file system from
+  Pacific (or later) to an older release.
+
+* Multiple file systems in a single Ceph cluster is now stable. New Ceph clusters
+  enable support for multiple file systems by default. Existing clusters
+  must still set the "enable_multiple" flag on the fs. Please see the CephFS
+  documentation for more information.
+
+* A new ``mds_autoscaler`` plugin is available for automatically deploying
+  MDS daemons in response to changes to the ``max_mds`` configuration. Expect
+  further enhancements in the future to simplify MDS scaling.
+
+* cephfs-top is a new utility for looking at performance metrics from CephFS
+  clients. It is development preview quality and will have bugs. See the CephFS
+  documentation for more information.
+
+* A new ``snap_schedule`` module provides a command toolset for scheduling
+  snapshots on a CephFS file system.
+
+* First class NFS gateway support in Ceph is here! It's now possible to create
+  scale-out ("active-active") NFS gateway clusters that export CephFS using
+  a few commands. The gateways are deployed via cephadm (or Rook, in the future).
+
+* Multiple active MDS file system scrub is now stable. It is no longer necessary
+  to set ``max_mds`` to 1 and wait for non-zero ranks to stop. Scrub commands
+  can only be sent to rank 0: ``ceph tell mds.<fs_name>:0 scrub start /path ...``.
+
+* Ephemeral pinning -- policy based subtree pinning -- is considered stable.
+  ``mds_export_ephemeral_random`` and ``mds_export_ephemeral_distributed`` now
+  default to true.
+
+* A new cephfs-mirror daemon is available for mirror CephFS file systems to
+  remote Ceph cluster. See the CephFS documentation for details.
 
 
 Upgrading from Octopus or Nautilus
@@ -166,7 +199,11 @@ Upgrading non-cephadm clusters
         "ceph version 16.2.0 (...) pacific (stable)": 22,
      }
 
-#. Upgrade all CephFS MDS daemons.  For each CephFS file system,
+#. Upgrade all CephFS MDS daemons. For each CephFS file system,
+
+   #. Disable standby_replay:
+
+   # ceph fs set <fs_name> allow_standby_replay false
 
    #. Reduce the number of ranks to 1.  (Make note of the original
       number of MDS daemons first if you plan to restore it later.)::
@@ -305,10 +342,6 @@ Notable Changes
   ``bluestore_rocksdb_options`` and allows setting rocksdb options without
   repeating the existing defaults.
 
-* The cephfs addes two new CDentry tags, 'I' --> 'i' and 'L' --> 'l', and
-  on-RADOS metadata is no longer backwards compatible after upgraded to Pacific
-  or a later release.
-
 * $pid expansion in config paths like ``admin_socket`` will now properly expand
   to the daemon pid for commands like ``ceph-mds`` or ``ceph-osd``. Previously
   only ``ceph-fuse``/``rbd-nbd`` expanded ``$pid`` with the actual daemon pid.
@@ -335,11 +368,6 @@ Notable Changes
   hour to be allowed.  The legal values for ``osd_scrub_begin_week_day`` and
   ``osd_scrub_end_week_day`` are 0 - 6.  The use of 7 is now illegal.
   Specifying ``0`` for both values causes every day of the week to be allowed.
-
-* Multiple file systems in a single Ceph cluster is now stable. New Ceph clusters
-  enable support for multiple file systems by default. Existing clusters
-  must still set the "enable_multiple" flag on the fs. Please see the CephFS
-  documentation for more information.
 
 * volume/nfs: Recently "ganesha-" prefix from cluster id and nfs-ganesha common
   config object was removed, to ensure consistent namespace across different
