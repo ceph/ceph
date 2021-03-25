@@ -13,6 +13,9 @@ export class DurationPipe implements PipeTransform {
    * @return {string}         The phrase describing the the amount of time
    */
   transform(seconds: number): string {
+    if (seconds === null || seconds <= 0) {
+      return '';
+    }
     const levels = [
       [`${Math.floor(seconds / 31536000)}`, 'years'],
       [`${Math.floor((seconds % 31536000) / 86400)}`, 'days'],
