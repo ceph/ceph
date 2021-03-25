@@ -40,6 +40,9 @@ OpenRequest<I>::OpenRequest(I *image_ctx, uint64_t flags,
   if ((flags & OPEN_FLAG_IGNORE_MIGRATING) != 0) {
     m_image_ctx->ignore_migrating = true;
   }
+  if ((flags & OPEN_FLAG_REMOVE_IMAGE) != 0) {
+    m_image_ctx->removing_image = true;
+  }
 }
 
 template <typename I>

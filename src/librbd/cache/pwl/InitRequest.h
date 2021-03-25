@@ -76,6 +76,7 @@ private:
 
   bool is_pwl_enabled();
 
+  void handle_remove_request();
   void get_image_cache_state();
 
   void init_image_cache();

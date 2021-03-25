@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/cache/pwl/InitRequest.h"
+#include "librbd/cache/pwl/DiscardRequest.h"
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/Utils.h"
 #include "common/dout.h"
@@ -59,7 +60,25 @@ InitRequest<I>::InitRequest(
 
 template <typename I>
 void InitRequest<I>::send() {
-  get_image_cache_state();
+  /* If the request is remove, discard request and cleaned up
+   * else, start initializing
+   */
+  if (m_image_ctx.removing_image) {
+    handle_remove_request();
+  } else {
+    get_image_cache_state();
+  }
+}
+
+template <typename I>
+void InitRequest<I>::handle_remove_request() {
+  Context *ctx = new LambdaContext(
+    [this](int r) {
+      this->finish();
+    });
+  cache::pwl::DiscardRequest<I> *req = cache::pwl::DiscardRequest<I>::create(
+    m_image_ctx, m_plugin_api, ctx);
+  req->send();
 }
 
 template <typename I>

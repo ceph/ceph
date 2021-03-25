@@ -96,7 +96,8 @@ struct SnapInfo {
 enum {
   OPEN_FLAG_SKIP_OPEN_PARENT = 1 << 0,
   OPEN_FLAG_OLD_FORMAT       = 1 << 1,
-  OPEN_FLAG_IGNORE_MIGRATING = 1 << 2
+  OPEN_FLAG_IGNORE_MIGRATING = 1 << 2,
+  OPEN_FLAG_REMOVE_IMAGE     = 1 << 3
 };
 
 enum ImageReadOnlyFlag {

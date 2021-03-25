@@ -163,7 +163,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                  << dendl;
 
   auto ictx = new I("", image_id, nullptr, io_ctx, false);
-  int r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
+  int r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT | OPEN_FLAG_REMOVE_IMAGE);
 
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to open image: " << cpp_strerror(r) << dendl;

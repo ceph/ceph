@@ -210,6 +210,7 @@ namespace librbd {
     bool ignore_migrating = false;
     bool disable_zero_copy = false;
     bool enable_sparse_copyup = false;
+    bool removing_image = false;
 
     /// Cached latency-sensitive configuration settings
     bool non_blocking_aio;

@@ -70,7 +70,7 @@ bool compare(const librbd::linked_image_spec_t& lhs,
 template <typename I>
 int pre_remove_image(librados::IoCtx& io_ctx, const std::string& image_id) {
   I *image_ctx = I::create("", image_id, nullptr, io_ctx, false);
-  int r = image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
+  int r = image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT | OPEN_FLAG_REMOVE_IMAGE);
   if (r < 0) {
     return r;
   }
