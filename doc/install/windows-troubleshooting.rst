@@ -10,7 +10,9 @@ MSI installer
 The MSI source code can be consulted here:
 https://github.com/cloudbase/ceph-windows-installer
 
-The following command can be used to generate MSI logs::
+The following command can be used to generate MSI logs
+
+.. code:: PowerShell
 
     msiexec.exe /i $msi_full_path /l*v! $log_file
 
@@ -48,7 +50,7 @@ can be used.
 ``gdb`` can debug running Windows processes but it cannot open Windows minidumps.
 The following ``gdb`` fork may be used until this functionality is merged upstream:
 https://github.com/ssbssa/gdb/releases. As an alternative, ``DWARF`` symbols
-can be converted using ``cv2pdb`` but be aware that this tool has limitted C++
+can be converted using ``cv2pdb`` but be aware that this tool has limited C++
 support.
 
 ceph tool
