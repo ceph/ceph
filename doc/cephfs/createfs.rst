@@ -67,11 +67,13 @@ Once the file system is created and the MDS is active, you are ready to mount
 the file system.  If you have created more than one file system, you will
 choose which to use when mounting.
 
-	- `Mount CephFS`_
-	- `Mount CephFS as FUSE`_
+  - `Mount CephFS`_
+  - `Mount CephFS as FUSE`_
+  - `Mount CephFS on Windows`_
 
 .. _Mount CephFS: ../../cephfs/mount-using-kernel-driver
 .. _Mount CephFS as FUSE: ../../cephfs/mount-using-fuse
+.. _Mount CephFS on Windows: ../../cephfs/ceph-dokan
 
 If you have created more than one file system, and a client does not
 specify a file system when mounting, you can control which file system

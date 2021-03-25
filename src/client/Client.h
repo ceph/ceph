@@ -369,6 +369,7 @@ public:
   loff_t telldir(dir_result_t *dirp);
   void seekdir(dir_result_t *dirp, loff_t offset);
 
+  int may_delete(const char *relpath, const UserPerm& perms);
   int link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
   int unlink(const char *path, const UserPerm& perm);
   int rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
