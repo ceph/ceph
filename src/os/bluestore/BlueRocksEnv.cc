@@ -137,6 +137,10 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
       h->buf.max_prefetch = fs->cct->_conf->bluefs_max_prefetch;
   }
 
+  bool use_direct_io() const override {
+    return !fs->cct->_conf->bluefs_buffered_io;
+  }
+
   // Remove any kind of caching of data from the offset to offset+length
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
