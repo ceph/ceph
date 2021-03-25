@@ -6,6 +6,6 @@ tasks:
 - install.upgrade:
    exclude_packages: ['ceph-test', 'ceph-test-dbg','libcephfs1', 'python-ceph']
    client.1:
-- print: "**** done install.upgrade to -x on client.0"
+- print: "**** done install.upgrade to -x on client.1"
 - ceph:
 - print: "**** done ceph task"
