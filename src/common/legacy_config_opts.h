@@ -330,6 +330,7 @@ OPTION(cephx_sign_messages, OPT_BOOL)  // Default to signing session messages if
 OPTION(auth_mon_ticket_ttl, OPT_DOUBLE)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE)
 OPTION(auth_allow_insecure_global_id_reclaim, OPT_BOOL)
+OPTION(auth_expose_insecure_global_id_reclaim, OPT_BOOL)
 OPTION(auth_debug, OPT_BOOL)          // if true, assert when weird things happen
 OPTION(mon_client_hunt_parallel, OPT_U32)   // how many mons to try to connect to in parallel during hunt
 OPTION(mon_client_hunt_interval, OPT_DOUBLE)   // try new mon every N seconds until we connect
