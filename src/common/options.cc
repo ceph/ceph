@@ -1780,6 +1780,22 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("time before OSDs who do not report to the mons are marked down (seconds)"),
 
+    Option("mon_warn_on_insecure_global_id_reclaim", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("issue AUTH_INSECURE_GLOBAL_ID_RECLAIM health warning if any connected clients are insecurely reclaiming global_id")
+    .add_see_also("mon_warn_on_insecure_global_id_reclaim_allowed")
+    .add_see_also("auth_allow_insecure_global_id_reclaim")
+    .add_see_also("auth_expose_insecure_global_id_reclaim"),
+
+    Option("mon_warn_on_insecure_global_id_reclaim_allowed", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("issue AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED health warning if insecure global_id reclaim is allowed")
+    .add_see_also("mon_warn_on_insecure_global_id_reclaim")
+    .add_see_also("auth_allow_insecure_global_id_reclaim")
+    .add_see_also("auth_expose_insecure_global_id_reclaim"),
+
     Option("mon_warn_on_msgr2_not_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .add_service("mon")
@@ -2372,12 +2388,16 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Allow reclaiming global_id without presenting a valid ticket proving previous possession of that global_id")
     .set_long_description("Allowing unauthorized global_id (re)use poses a security risk.  Unfortunately, older clients may omit their ticket on reconnects and therefore rely on this being allowed for preserving their global_id for the lifetime of the client instance.  Setting this value to false would immediately prevent new connections from those clients (assuming auth_expose_insecure_global_id_reclaim set to true) and eventually break existing sessions as well (regardless of auth_expose_insecure_global_id_reclaim setting).")
+    .add_see_also("mon_warn_on_insecure_global_id_reclaim")
+    .add_see_also("mon_warn_on_insecure_global_id_reclaim_allowed")
     .add_see_also("auth_expose_insecure_global_id_reclaim"),
 
     Option("auth_expose_insecure_global_id_reclaim", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Force older clients that may omit their ticket on reconnects to reconnect as part of establishing a session")
     .set_long_description("In permissive mode (auth_allow_insecure_global_id_reclaim set to true), this helps with identifying clients that are not patched.  In enforcing mode (auth_allow_insecure_global_id_reclaim set to false), this is a fail-fast mechanism: don't establish a session that will almost inevitably be broken later.")
+    .add_see_also("mon_warn_on_insecure_global_id_reclaim")
+    .add_see_also("mon_warn_on_insecure_global_id_reclaim_allowed")
     .add_see_also("auth_allow_insecure_global_id_reclaim"),
 
     Option("auth_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
