@@ -1063,7 +1063,7 @@ public:
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
 
-    std::atomic_int nref;  ///< reference count
+    std::atomic<uint32_t> nref;  ///< reference count
     Collection *c;
     ghobject_t oid;
 
@@ -1077,7 +1077,6 @@ public:
     bool cached;              ///< Onode is logically in the cache
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
-    std::atomic_bool pinned;  ///< Onode is pinned
                               /// (or should be pinned when cached)
     ExtentMap extent_map;
 
@@ -1097,7 +1096,6 @@ public:
 	key(k),
 	exists(false),
         cached(false),
-        pinned(false),
 	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
@@ -1108,7 +1106,6 @@ public:
       key(k),
       exists(false),
       cached(false),
-      pinned(false),
       extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
@@ -1119,7 +1116,6 @@ public:
       key(k),
       exists(false),
       cached(false),
-      pinned(false),
       extent_map(this) {
     }
 
@@ -1135,15 +1131,18 @@ public:
     void get();
     void put();
 
+    inline bool pinned() const {
+      return !!(nref & 0x80000000);
+    }
     inline bool put_cache() {
       ceph_assert(!cached);
       cached = true;
-      return !pinned;
+      return !pinned();
     }
     inline bool pop_cache() {
       ceph_assert(cached);
       cached = false;
-      return !pinned;
+      return !pinned();
     }
 
     const std::string& get_omap_prefix();
