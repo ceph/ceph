@@ -806,6 +806,51 @@ def ceph_rgw(ctx, config):
 
     yield
 
+@contextlib.contextmanager
+def ceph_nfs(ctx, config):
+    """
+    Deploy NFS
+    """
+    cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
+
+    nodes = []
+    daemons = {}
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('nfs', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            nodes.append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    if nodes:
+        pool = 'nfs-ganesha'
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'pool', 'create',
+            pool]
+        )
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'pool', 'application', 'enable',
+            pool, 'nfs']
+        )
+
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'apply', 'nfs',
+            'foo', pool, 'bar',
+             '--placement', str(len(nodes)) + ';' + ';'.join(nodes)]
+        )
+    for role, i in daemons.items():
+        remote, id_ = i
+        ctx.daemons.register_daemon(
+            remote, 'nfs', id_,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild(role),
+            wait=False,
+            started=True,
+        )
+
+    yield
 
 @contextlib.contextmanager
 def ceph_iscsi(ctx, config):
@@ -1286,6 +1331,7 @@ def task(ctx, config):
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: ceph_rgw(ctx=ctx, config=config),
+            lambda: ceph_nfs(ctx=ctx, config=config),
             lambda: ceph_iscsi(ctx=ctx, config=config),
             lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),
             lambda: ceph_monitoring('node-exporter', ctx=ctx, config=config),

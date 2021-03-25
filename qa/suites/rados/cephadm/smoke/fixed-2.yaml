@@ -20,6 +20,7 @@ roles:
   - prometheus.a
   - grafana.a
   - node-exporter.b
+  - ceph.nfs.foo.a
   - ceph.iscsi.iscsi.a
 openstack:
 - volumes: # attached to each instance
