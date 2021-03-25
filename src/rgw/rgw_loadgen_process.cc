@@ -134,7 +134,7 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
 
   int ret = process_request(store, rest, req, uri_prefix,
                             *auth_registry, &client_io, olog,
-                            null_yield, nullptr, nullptr);
+                            null_yield, nullptr, nullptr, nullptr);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
