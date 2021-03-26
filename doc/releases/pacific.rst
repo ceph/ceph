@@ -463,4 +463,57 @@ Notable Changes
   and scrubs). Other built-in profiles include "high_recovery_ops" and "balanced". These
   built-in profiles optimize the QoS provided to clients of mclock scheduler.
 
+* The balancer is now on by default in upmap mode. Since upmap mode requires
+  ``require_min_compat_client`` luminous, new clusters will only support luminous
+  and newer clients by default. Existing clusters can enable upmap support by running
+  ``ceph osd set-require-min-compat-client luminous``. It is still possible to turn
+  the balancer off using the ``ceph balancer off`` command. In earlier versions,
+  the balancer was included in the ``always_on_modules`` list, but needed to be
+  turned on explicitly using the ``ceph balancer on`` command.
+
+* `blacklist` has been replaced with `blocklist` throughout.  The following commands have changed:
+
+  - ``ceph osd blacklist ...`` are now ``ceph osd blocklist ...``
+  - ``ceph <tell|daemon> osd.<NNN> dump_blacklist`` is now ``ceph <tell|daemon> osd.<NNN> dump_blocklist``
+
+* The following config options have changed:
+
+  - ``mon osd blacklist default expire`` is now ``mon osd blocklist default expire``
+  - ``mon mds blacklist interval`` is now ``mon mds blocklist interval``
+  - ``mon mgr blacklist interval`` is now ''mon mgr blocklist interval``
+  - ``rbd blacklist on break lock`` is now ``rbd blocklist on break lock``
+  - ``rbd blacklist expire seconds`` is now ``rbd blocklist expire seconds``
+  - ``mds session blacklist on timeout`` is now ``mds session blocklist on timeout``
+  - ``mds session blacklist on evict`` is now ``mds session blocklist on evict``
+
+* The following librados API calls have changed:
+
+  - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.
+  - ``rados.blacklist_add`` is now ``rados.blocklist_add`` in the C++ API.
+
+* The JSON output for the following commands now shows ``blocklist`` instead of ``blacklist``:
+
+  - ``ceph osd dump``
+  - ``ceph <tell|daemon> osd.<N> dump_blocklist``
+
+* Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
+  by default. However, if enabled, user now have to pass the
+  ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really
+  sure of configuring pool size 1.
+
+* ``ceph pg #.# list_unfound`` output has been enhanced to provide
+  might_have_unfound information which indicates which OSDs may
+  contain the unfound objects.
+
+* OSD: A new configuration option ``osd_compact_on_start`` has been added which triggers
+  an OSD compaction on start. Setting this option to ``true`` and restarting an OSD
+  will result in an offline compaction of the OSD prior to booting.
+
+* OSD: the option named ``bdev_nvme_retry_count`` has been removed. Because
+  in SPDK v20.07, there is no easy access to bdev_nvme options, and this
+  option is hardly used, so it was removed.
+
+* Alpine build related script, documentation and test have been removed since
+  the most updated APKBUILD script of Ceph is already included by Alpine Linux's
+  aports repository.
 
