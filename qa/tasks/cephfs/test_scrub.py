@@ -104,8 +104,10 @@ class DupInodeWorkload(Workload):
         self._filesystem.wait_for_daemons()
 
     def validate(self):
-        out_json = self._filesystem.rank_tell(["scrub", "start", "/", "recursive", "repair"])
+        out_json = self._filesystem.run_scrub(["start", "/", "recursive", "repair"])
         self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self._filesystem.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
         self.assertTrue(self._filesystem.are_daemons_healthy())
         return self._errors
 
@@ -133,8 +135,10 @@ class TestScrub(CephFSTestCase):
         # Apply any data damage the workload wants
         workload.damage()
 
-        out_json = self.fs.rank_tell(["scrub", "start", "/", "recursive", "repair"])
+        out_json = self.fs.run_scrub(["start", "/", "recursive", "repair"])
         self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
         # See that the files are present and correct
         errors = workload.validate()
@@ -162,7 +166,7 @@ class TestScrub(CephFSTestCase):
         That scrubbing new files does not lead to errors
         """
         workload.create_files(1000)
-        self._wait_until_scrub_complete()
+        self.fs.wait_until_scrub_complete()
         self.assertEqual(self._get_damage_count(), 0)
 
     def test_scrub_backtrace_for_new_files(self):
