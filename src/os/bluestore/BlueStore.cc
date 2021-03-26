@@ -4569,8 +4569,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_warn_on_legacy_statfs")) {
     _check_legacy_statfs_alert();
   }
-  if (changed.count("bluestore_warn_on_no_per_pool_omap")) {
-    _check_no_per_pg_omap_alert();
+  if (changed.count("bluestore_warn_on_no_per_pool_omap") ||
+      changed.count("bluestore_warn_on_no_per_pg_omap")) {
+    _check_no_per_pg_or_pool_omap_alert();
   }
 
   if (changed.count("bluestore_csum_type")) {
@@ -6246,7 +6247,7 @@ void BlueStore::_set_per_pool_omap()
   } else {
     dout(10) << __func__ << " per_pool_omap not present" << dendl;
   }
-  _check_no_per_pg_omap_alert();
+  _check_no_per_pg_or_pool_omap_alert();
 }
 
 void BlueStore::_open_statfs()
@@ -7759,7 +7760,31 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
   auto repairer = ctx.repairer;
 
   ceph_assert(o->onode.has_omap());
-  if (!o->onode.is_perpg_omap() && !o->onode.is_pgmeta_omap()) {
+  if (!o->onode.is_perpool_omap() && !o->onode.is_pgmeta_omap()) {
+    if (per_pool_omap == OMAP_PER_POOL) {
+      fsck_derr(errors, MAX_FSCK_ERROR_LINES)
+        << "fsck error: " << o->oid
+        << " has omap that is not per-pool or pgmeta"
+        << fsck_dendl;
+      ++errors;
+    } else {
+      const char* w;
+      int64_t num;
+      if (cct->_conf->bluestore_fsck_error_on_no_per_pool_omap) {
+        ++errors;
+        num = errors;
+        w = "error";
+      } else {
+        ++warnings;
+        num = warnings;
+        w = "warning";
+      }
+      fsck_derr(num, MAX_FSCK_ERROR_LINES)
+        << "fsck " << w << ": " << o->oid
+        << " has omap that is not per-pool or pgmeta"
+        << fsck_dendl;
+    }
+  } else if (!o->onode.is_perpg_omap() && !o->onode.is_pgmeta_omap()) {
     if (per_pool_omap == OMAP_PER_PG) {
       fsck_derr(errors, MAX_FSCK_ERROR_LINES)
         << "fsck error: " << o->oid
@@ -7769,7 +7794,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
     } else {
       const char* w;
       int64_t num;
-      if (cct->_conf->bluestore_fsck_error_on_no_per_pool_omap) {
+      if (cct->_conf->bluestore_fsck_error_on_no_per_pg_omap) {
         ++errors;
         num = errors;
         w = "error";
@@ -9271,16 +9296,24 @@ void BlueStore::_check_legacy_statfs_alert()
   legacy_statfs_alert = s;
 }
 
-void BlueStore::_check_no_per_pg_omap_alert()
+void BlueStore::_check_no_per_pg_or_pool_omap_alert()
 {
-  string s;
-  if (per_pool_omap != OMAP_PER_PG &&
-      cct->_conf->bluestore_warn_on_no_per_pool_omap) {
-    s = "legacy (not per-pg) omap detected, "
-      "suggest to run store repair to benefit from per-pool omap usage statistic and faster PG removal";
+  string per_pg, per_pool;
+  if (per_pool_omap != OMAP_PER_PG) {
+    if (cct->_conf->bluestore_warn_on_no_per_pg_omap) {
+      per_pg = "legacy (not per-pg) omap detected, "
+	"suggest to run store repair to benefit from faster PG removal";
+    }
+    if (per_pool_omap != OMAP_PER_POOL) {
+      if (cct->_conf->bluestore_warn_on_no_per_pool_omap) {
+	per_pool = "legacy (not per-pool) omap detected, "
+	  "suggest to run store repair to benefit from per-pool omap usage statistics";
+      }
+    }
   }
   std::lock_guard l(qlock);
-  no_per_pg_omap_alert = s;
+  no_per_pg_omap_alert = per_pg;
+  no_per_pool_omap_alert = per_pool;
 }
 
 // ---------------
@@ -15970,6 +16003,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUESTORE_NO_PER_PG_OMAP",
       no_per_pg_omap_alert);
+  }
+  if (!no_per_pool_omap_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_NO_PER_POOL_OMAP",
+      no_per_pool_omap_alert);
   }
   string s0(failed_cmode);
 
