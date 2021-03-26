@@ -229,20 +229,28 @@ class Remote(object):
 
         return self.sh(args).strip()
 
-    def mktemp(self, suffix=None, parentdir=None):
+    def mktemp(self, suffix=None, parentdir=None, data=None):
         """
-        Make a remote temporary file
+        Make a remote temporary file.
+
+        :param suffix:      suffix for the temporary file
+        :param parentdir:   parent dir where temp file should be created
+        :param data:        write data to the file if provided
 
         Returns: the path of the temp file created.
         """
         args = ['mktemp']
-
         if suffix:
             args.append('--suffix=%s' % suffix)
         if parentdir:
             args.append('--tmpdir=%s' % parentdir)
 
-        return self.sh(args).strip()
+        path = self.sh(args).strip()
+
+        if data:
+            self.write_file(path=path, data=data)
+
+        return path
 
     def sh(self, script, **kwargs):
         """
