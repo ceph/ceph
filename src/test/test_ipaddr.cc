@@ -183,6 +183,41 @@ TEST(CommonIPAddr, TestV4_PrefixZero)
   ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
+static char lo[] = "lo";
+static char lo0[] = "lo:0";
+
+TEST(CommonIPAddr, TestV4_SkipLoopback)
+{
+  struct ifaddrs one, two, three;
+  struct sockaddr_in a_one;
+  struct sockaddr_in a_two;
+  struct sockaddr_in a_three;
+  struct sockaddr_in net;
+  const struct ifaddrs *result;
+
+  memset(&net, 0, sizeof(net));
+
+  one.ifa_next = &two;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = lo;
+
+  two.ifa_next = &three;
+  two.ifa_addr = (struct sockaddr*)&a_two;
+  two.ifa_name = lo0;
+
+  three.ifa_next = NULL;
+  three.ifa_addr = (struct sockaddr*)&a_three;
+  three.ifa_name = eth0;
+
+  ipv4(&a_one, "127.0.0.1");
+  ipv4(&a_two, "127.0.0.1");
+  ipv4(&a_three, "10.1.2.3");
+  ipv4(&net, "255.0.0.0");
+
+  result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 0);
+  ASSERT_EQ((struct sockaddr*)&a_three, result->ifa_addr);
+}
+
 TEST(CommonIPAddr, TestV6_Simple)
 {
   struct ifaddrs one, two;
@@ -277,6 +312,38 @@ TEST(CommonIPAddr, TestV6_PrefixZero)
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 0);
   ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
+}
+
+TEST(CommonIPAddr, TestV6_SkipLoopback)
+{
+  struct ifaddrs one, two, three;
+  struct sockaddr_in6 a_one;
+  struct sockaddr_in6 a_two;
+  struct sockaddr_in6 a_three;
+  struct sockaddr_in6 net;
+  const struct ifaddrs *result;
+
+  memset(&net, 0, sizeof(net));
+
+  one.ifa_next = &two;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = lo;
+
+  two.ifa_next = &three;
+  two.ifa_addr = (struct sockaddr*)&a_two;
+  two.ifa_name = lo0;
+
+  three.ifa_next = NULL;
+  three.ifa_addr = (struct sockaddr*)&a_three;
+  three.ifa_name = eth0;
+
+  ipv6(&a_one, "::1");
+  ipv6(&a_two, "::1");
+  ipv6(&a_three, "2001:1234:5678:90ab::beef");
+  ipv6(&net, "ff00::1");
+
+  result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 0);
+  ASSERT_EQ((struct sockaddr*)&a_three, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, ParseNetwork_Empty)
