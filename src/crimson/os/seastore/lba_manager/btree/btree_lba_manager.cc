@@ -345,6 +345,19 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
+  if (extent->has_been_invalidated()) {
+    logger().debug(
+      "BTreeLBAManager::rewrite_extent: {} is invalid, returning eagain",
+      *extent
+    );
+    return crimson::ct_error::eagain::make();
+  }
+
+  logger().debug(
+    "{}: rewriting {}", 
+    __func__,
+    *extent);
+
   if (extent->is_logical()) {
     auto lextent = extent->cast<LogicalCachedExtent>();
     cache.retire_extent(t, extent);
@@ -374,7 +387,12 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
 	ceph_assert(in.paddr == prev_addr);
 	ret.paddr = addr;
 	return ret;
-      }).safe_then([nlextent](auto e) {}).handle_error(
+      }).safe_then(
+	[nlextent](auto) {},
+	crimson::ct_error::enoent::handle([extent]() -> rewrite_extent_ret {
+	  ceph_assert(extent->has_been_invalidated());
+	  return crimson::ct_error::eagain::make();
+	}),
 	rewrite_extent_ertr::pass_further{},
         /* ENOENT in particular should be impossible */
 	crimson::ct_error::assert_all{
@@ -406,13 +424,23 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
     nlba_extent->resolve_relative_addrs(
       make_record_relative_paddr(0) - nlba_extent->get_paddr());
 
+    logger().debug(
+      "{}: rewriting {} into {}",
+      __func__,
+      *lba_extent,
+      *nlba_extent);
+
     return update_internal_mapping(
       t,
       nlba_extent->get_node_meta().depth,
       nlba_extent->get_node_meta().begin,
       nlba_extent->get_paddr()).safe_then(
 	[](auto) {},
-	rewrite_extent_ertr::pass_further {},
+	crimson::ct_error::enoent::handle([extent]() -> rewrite_extent_ret {
+	  ceph_assert(extent->has_been_invalidated());
+	  return crimson::ct_error::eagain::make();
+	}),
+	rewrite_extent_ertr::pass_further{},
 	crimson::ct_error::assert_all{
 	  "Invalid error in BtreeLBAManager::rewrite_extent update_internal_mapping"
 	});
@@ -522,7 +550,11 @@ BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
       out.refcount += delta;
       return out;
     }).safe_then([](auto result) {
-      return ref_update_result_t{result.refcount, result.paddr};
+      return ref_update_result_t{
+	result.refcount,
+	result.paddr,
+	result.len
+       };
     });
 }
 

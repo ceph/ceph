@@ -102,6 +102,7 @@ struct fltree_onode_manager_test_t
     auto t = tm->create_transaction();
     std::invoke(f, *t);
     tm->submit_transaction(std::move(t)).unsafe_get0();
+    segment_cleaner->run_until_halt().get0();
   }
 
   template <typename F>
