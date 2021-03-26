@@ -140,7 +140,8 @@ class FSTop(object):
             raise FSTopException('perf stats version mismatch!')
         missing = [m for m in stats_json["global_counters"] if m.upper() not in MGR_STATS_COUNTERS]
         if missing:
-            raise FSTopException(f'Cannot handle unknown metrics from \'ceph fs perf stats\': {missing}')
+            raise FSTopException('Cannot handle unknown metrics from \'ceph fs perf stats\': '
+                                 f'{missing}')
 
     def setup_curses(self):
         self.stdscr = curses.initscr()
