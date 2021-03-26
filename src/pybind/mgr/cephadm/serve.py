@@ -369,6 +369,9 @@ class CephadmServe:
                         else:
                             self.log.debug(
                                 "Failed to find daemon id for rbd-mirror service %s" % (s.get('id')))
+                    elif s.get('type') == 'rgw-nfs':
+                        # https://tracker.ceph.com/issues/49573
+                        name = s.get('id').split('-rgw')[0]
 
                     if host not in self.mgr.inventory:
                         missing_names.append(name)
@@ -676,4 +679,3 @@ class CephadmServe:
             msg = f'host {host} `cephadm {command}` failed: Cannot decode JSON'
             self.log.exception(f'{msg}: {"".join(out)}')
             raise OrchestratorError(msg)
-
