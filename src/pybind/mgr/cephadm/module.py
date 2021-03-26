@@ -1104,22 +1104,27 @@ To check that the host is reachable:
 
             final_args = []
 
+            # global args
             if env_vars:
                 for env_var_pair in env_vars:
                     final_args.extend(['--env', env_var_pair])
 
             if image:
                 final_args.extend(['--image', image])
+
+            if not self.container_init:
+                final_args += ['--no-container-init']
+
+            # subcommand
             final_args.append(command)
 
+            # subcommand args
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
 
-            if self.container_init:
-                final_args += ['--container-init']
-
             final_args += args
 
+            # exec
             self.log.debug('args: %s' % (' '.join(final_args)))
             if self.mode == 'root':
                 if stdin:
