@@ -87,6 +87,7 @@ class Osd(RESTController):
     def _get_smart_data(osd_id):
         # type: (str) -> dict
         """Returns S.M.A.R.T data for the given OSD ID."""
+        logger.debug('[SMART] retrieving data from OSD with ID %s', osd_id)
         return CephService.get_smart_data_by_daemon('osd', osd_id)
 
     @RESTController.Resource('GET')
