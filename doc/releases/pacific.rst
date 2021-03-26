@@ -93,6 +93,16 @@ The :ref:`mgr-dashboard` brings improvements in the following management areas:
 RADOS
 ~~~~~
 
+* Pacific introduces RocksDB sharding, which reduces disk space requirements.
+* Ceph now provides QoS between client I/O and background operations via the
+  mclock scheduler.
+* The balancer is now on by default in upmap mode to improve distribution of
+  PGs across OSDs.
+* The output of ``ceph -s`` has been improved to show recovery progress in
+  one progress bar. More detailed progress bars are visible via the
+  ``ceph progress`` command.
+
+
 RBD block storage
 ~~~~~~~~~~~~~~~~~
 
