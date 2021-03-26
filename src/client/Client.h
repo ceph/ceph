@@ -1213,6 +1213,7 @@ private:
     MAY_READ = 4,
   };
 
+  std::unique_ptr<CephContext, std::function<void(CephContext*)>> cct_deleter;
 
   /* Flags for VXattr */
   static const unsigned VXATTR_RSTAT = 0x1;
