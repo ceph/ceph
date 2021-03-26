@@ -105,20 +105,20 @@ RGW object storage
 CephFS distributed file system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* The CephFS adds modifies on-RADOS metadata such that the new format is no
+* The CephFS MDS modifies on-RADOS metadata such that the new format is no
   longer backwards compatible. It is not possible to downgrade a file system from
   Pacific (or later) to an older release.
 
 * Multiple file systems in a single Ceph cluster is now stable. New Ceph clusters
   enable support for multiple file systems by default. Existing clusters
-  must still set the "enable_multiple" flag on the fs. Please see the CephFS
+  must still set the "enable_multiple" flag on the FS. Please see the CephFS
   documentation for more information.
 
 * A new ``mds_autoscaler`` plugin is available for automatically deploying
   MDS daemons in response to changes to the ``max_mds`` configuration. Expect
   further enhancements in the future to simplify MDS scaling.
 
-* cephfs-top is a new utility for looking at performance metrics from CephFS
+* ``cephfs-top`` is a new utility for looking at performance metrics from CephFS
   clients. It is development preview quality and will have bugs. See the CephFS
   documentation for more information.
 
@@ -137,8 +137,12 @@ CephFS distributed file system
   ``mds_export_ephemeral_random`` and ``mds_export_ephemeral_distributed`` now
   default to true.
 
-* A new cephfs-mirror daemon is available for mirror CephFS file systems to
-  remote Ceph cluster. See the CephFS documentation for details.
+* A new ``cephfs-mirror`` daemon is available to mirror CephFS file systems to
+  a remote Ceph cluster. See the CephFS documentation for details.
+
+* A Windows client is now available for connecting to CephFS. This is offered
+  through a new ``ceph-dokan`` utility which operates via the Dokan userspace
+  API, similar to FUSE.  See the CephFS documentation for details.
 
 
 Upgrading from Octopus or Nautilus
