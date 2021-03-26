@@ -3506,7 +3506,13 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 void BlueStore::Onode::get() {
   if (++nref >= 2 && !pinned) {
     OnodeCacheShard* ocs = c->get_onode_cache();
-    std::lock_guard l(ocs->lock);
+    ocs->lock.lock();
+    // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
+    while (ocs != c->get_onode_cache()) {
+      ocs->lock.unlock();
+      ocs = c->get_onode_cache();
+      ocs->lock.lock();
+    }
     bool was_pinned = pinned;
     pinned = nref >= 2;
     // additional increment for newly pinned instance
@@ -3517,13 +3523,20 @@ void BlueStore::Onode::get() {
     if (cached && r) {
       ocs->_pin(this);
     }
+    ocs->lock.unlock();
   }
 }
 void BlueStore::Onode::put() {
   int n = --nref;
   if (n == 2) {
     OnodeCacheShard* ocs = c->get_onode_cache();
-    std::lock_guard l(ocs->lock);
+    ocs->lock.lock();
+    // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
+    while (ocs != c->get_onode_cache()) {
+      ocs->lock.unlock();
+      ocs = c->get_onode_cache();
+      ocs->lock.lock();
+    }
     bool need_unpin = pinned;
     pinned = pinned && nref > 2; // intentionally use > not >= as we have
                                  // +1 due to pinned state
@@ -3543,6 +3556,7 @@ void BlueStore::Onode::put() {
     if (need_unpin) {
       n = --nref;
     }
+    ocs->lock.unlock();
   }
   if (n == 0) {
     delete this;
@@ -3990,10 +4004,15 @@ void BlueStore::Collection::split_cache(
 {
   ldout(store->cct, 10) << __func__ << " to " << dest << dendl;
 
-  // lock (one or both) cache shards
-  std::lock(cache->lock, dest->cache->lock);
-  std::lock_guard l(cache->lock, std::adopt_lock);
-  std::lock_guard l2(dest->cache->lock, std::adopt_lock);
+  auto *ocache = get_onode_cache();
+  auto *ocache_dest = dest->get_onode_cache();
+
+ // lock cache shards
+  std::lock(ocache->lock, ocache_dest->lock, cache->lock, dest->cache->lock);
+  std::lock_guard l(ocache->lock, std::adopt_lock);
+  std::lock_guard l2(ocache_dest->lock, std::adopt_lock);
+  std::lock_guard l3(cache->lock, std::adopt_lock);
+  std::lock_guard l4(dest->cache->lock, std::adopt_lock);
 
   int destbits = dest->cnode.bits;
   spg_t destpg;
