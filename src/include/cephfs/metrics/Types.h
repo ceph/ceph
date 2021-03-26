@@ -367,6 +367,10 @@ struct UnknownPayload {
   }
 
   void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(254, iter);
+    iter.seek(struct_len);
+    DECODE_FINISH(iter);
   }
 
   void dump(Formatter *f) const {
