@@ -515,8 +515,6 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
       return seastar::now();
     } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
       logger().warn("active conn reset {}", conn->get_peer_addr());
-      active_con->close();
-      active_con.reset();
       return reopen_session(-1).then([this](bool opened) {
         if (opened) {
           return on_session_opened();
@@ -929,6 +927,16 @@ static entity_addr_t choose_client_addr(
 seastar::future<bool> Client::reopen_session(int rank)
 {
   logger().info("{} to mon.{}", __func__, rank);
+  if (active_con) {
+    active_con->close();
+    active_con.reset();
+    ceph_assert(pending_conns.empty());
+  } else {
+    for (auto& pending_con : pending_conns) {
+      pending_con->close();
+    }
+    pending_conns.clear();
+  }
   vector<unsigned> mons;
   if (rank >= 0) {
     mons.push_back(rank);
