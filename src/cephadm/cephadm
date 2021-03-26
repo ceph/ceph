@@ -3755,8 +3755,15 @@ def prepare_bootstrap_config(
     if not cp.has_section('global'):
         cp.add_section('global')
     cp.set('global', 'fsid', fsid)
-    cp.set('global', 'mon host', mon_addr)
+    cp.set('global', 'mon_host', mon_addr)
     cp.set('global', 'container_image', image)
+    if not cp.has_section('mon'):
+        cp.add_section('mon')
+    if (
+            not cp.has_option('mon', 'auth_allow_insecure_global_id_reclaim')
+            and not cp.has_option('mon', 'auth allow insecure global id reclaim')
+    ):
+        cp.set('mon', 'auth_allow_insecure_global_id_reclaim', 'false')
     cpf = StringIO()
     cp.write(cpf)
     config = cpf.getvalue()
