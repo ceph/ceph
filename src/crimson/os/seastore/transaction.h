@@ -61,6 +61,10 @@ public:
     }
   }
 
+  void add_to_retired_uncached(paddr_t addr, extent_len_t length) {
+    retired_uncached.emplace_back(std::make_pair(addr, length));
+  }
+
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) return;
 
@@ -132,6 +136,8 @@ private:
 
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;
+
+  std::vector<std::pair<paddr_t, extent_len_t>> retired_uncached;
 
 public:
   Transaction(

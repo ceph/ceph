@@ -55,6 +55,9 @@ inline OrderingHandle get_dummy_ordering_handle() {
 }
 
 struct WritePipeline {
+  OrderedExclusivePhase wait_throttle{
+    "TransactionManager::wait_throttle"
+  };
   OrderedExclusivePhase prepare{
     "TransactionManager::prepare_phase"
   };

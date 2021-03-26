@@ -525,7 +525,7 @@ public:
     bufferptr ptr) final {
     logger().debug("Writing offset {}", offset);
     assert(offset % segment_manager->get_block_size() == 0);
-    assert(ptr.length() == (size_t)segment_manager->get_block_size());
+    assert((ptr.length() % (size_t)segment_manager->get_block_size()) == 0);
     return repeat_eagain([this, offset, ptr=std::move(ptr)] {
       return seastar::do_with(
 	tm->create_transaction(),
@@ -627,8 +627,11 @@ public:
       segment_manager::block::BlockSegmentManager
       >();
     logger().debug("mkfs");
-    return segment_manager->mkfs(
-      { *config.path, config.segment_size, config.total_device_size }
+    BlockSegmentManager::mkfs_config_t block_config{
+      *config.path, config.segment_size, config.total_device_size
+    };
+    block_config.meta.seastore_id.generate_random();
+    return segment_manager->mkfs(std::move(block_config)
     ).safe_then([this] {
       logger().debug("");
       return segment_manager->mount({ *config.path });
@@ -647,7 +650,9 @@ public:
       logger().debug("mkfs complete");
       return TransactionManager::mkfs_ertr::now();
     }).handle_error(
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all{
+	"Invalid errror during TMDriver::mkfs"
+      }
     );
   }
 
@@ -662,7 +667,9 @@ public:
       init();
       return tm->mount();
     }).handle_error(
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all{
+	"Invalid errror during TMDriver::mount"
+      }
     );
   };
 
@@ -674,7 +681,9 @@ public:
       clear();
       return seastar::now();
     }).handle_error(
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all{
+	"Invalid errror during TMDriver::close"
+      }
     );
   }
 };
