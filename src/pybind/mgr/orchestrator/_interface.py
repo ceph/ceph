@@ -793,6 +793,7 @@ class DaemonDescription(object):
                  service_name: Optional[str] = None,
                  ports: Optional[List[int]] = None,
                  ip: Optional[str] = None,
+                 deployed_by: Optional[List[str]] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -847,6 +848,8 @@ class DaemonDescription(object):
 
         self.ports: Optional[List[int]] = ports
         self.ip: Optional[str] = ip
+
+        self.deployed_by = deployed_by
 
         self.is_active = is_active
 

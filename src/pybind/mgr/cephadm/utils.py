@@ -23,7 +23,8 @@ class CephadmNoImage(Enum):
 # NOTE: order important here as these are used for upgrade order
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror', 'cephfs-mirror']
 GATEWAY_TYPES = ['iscsi', 'nfs']
-CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES
+MONITORING_STACK_TYPES = ['node-exporter', 'prometheus', 'alertmanager', 'grafana']
+CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES
 
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter

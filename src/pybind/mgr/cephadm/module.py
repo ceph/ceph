@@ -1757,6 +1757,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def daemon_is_self(self, daemon_type: str, daemon_id: str) -> bool:
         return daemon_type == 'mgr' and daemon_id == self.get_mgr_id()
 
+    def get_active_mgr_digests(self) -> List[str]:
+        digests = self.mgr_service.get_active_daemon(
+            self.cache.get_daemons_by_type('mgr')).container_image_digests
+        return digests if digests else []
+
     def _schedule_daemon_action(self, daemon_name: str, action: str) -> str:
         dd = self.cache.get_daemon(daemon_name)
         assert dd.daemon_type is not None
