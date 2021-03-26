@@ -1075,10 +1075,6 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
     bool cached;              ///< Onode is logically in the cache
-                              /// (it can be pinned and hence physically out
-                              /// of it at the moment though)
-    std::atomic_bool pinned;  ///< Onode is pinned
-                              /// (or should be pinned when cached)
     ExtentMap extent_map;
 
     // track txc's that have not been committed to kv store (and whose
@@ -1097,7 +1093,6 @@ public:
 	key(k),
 	exists(false),
         cached(false),
-        pinned(false),
 	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
@@ -1108,7 +1103,6 @@ public:
       key(k),
       exists(false),
       cached(false),
-      pinned(false),
       extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
@@ -1119,7 +1113,6 @@ public:
       key(k),
       exists(false),
       cached(false),
-      pinned(false),
       extent_map(this) {
     }
 
@@ -1135,15 +1128,10 @@ public:
     void get();
     void put();
 
-    inline bool put_cache() {
-      ceph_assert(!cached);
-      cached = true;
-      return !pinned;
-    }
-    inline bool pop_cache() {
+    // is_pinned only makes sense for cached onodes
+    inline bool is_pinned() {
       ceph_assert(cached);
-      cached = false;
-      return !pinned;
+      return nref > 1;
     }
 
     const std::string& get_omap_prefix();
@@ -1230,7 +1218,6 @@ public:
                                    PerfCounters *logger);
     virtual void _add(Onode* o, int level) = 0;
     virtual void _rm(Onode* o) = 0;
-    virtual void _unpin_and_rm(Onode* o) = 0;
 
     virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
     virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
