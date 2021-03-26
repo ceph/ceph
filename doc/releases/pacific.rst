@@ -36,6 +36,60 @@ General
 Dashboard
 ~~~~~~~~~
 
+The :ref:`mgr-dashboard` brings improvements in the following management areas:
+
+* Orchestrator/Cephadm:
+
+  - Host management: maintenance mode, labels.
+  - Services: display placement specification.
+  - OSD: disk replacement, display status of ongoing deletion, and improved
+    health/SMART diagnostics reporting.
+
+* Official :ref:`mgr ceph api`:
+
+  - OpenAPI v3 compliant.
+  - Stability commitment starting from Pacific release.
+  - Versioned via HTTP ``Accept`` header (starting with v1.0).
+  - Thoroughly tested (>90% coverage and per Pull Request validation).
+  - Fully documented.
+
+* RGW:
+
+  - Multi-site synchronization monitoring.
+  - Management of multiple RGW daemons and their resources (buckets and users).
+  - Bucket and user quota usage visualization.
+  - Improved configuration of S3 tenanted users.
+
+* Security (multiple enhancements and fixes resulting from a pen testing conducted by IBM):
+
+  - Account lock-out after a configurable number of failed log-in attempts.
+  - Improved cookie policies to mitigate XSS/CSRF attacks.
+  - Reviewed and improved security in HTTP headers.
+  - Sensitive information reviewed and removed from logs and error messages.
+  - TLS 1.0 and 1.1 support disabled.
+  - Debug mode when enabled triggers HEALTH_WARN.
+
+* Pools:
+
+  - Improved visualization of replication and erasure coding modes.
+  - CLAY erasure code plugin supported.
+
+* Alerts and notifications:
+
+  - Alert triggered on MTU mismatches in the cluster network.
+  - Favicon changes according cluster status.
+
+* Other:
+
+  - Landing page: improved charts and visualization.
+  - Telemetry configuration wizard.
+  - OSDs: management of individual OSD flags.
+  - RBD: per-RBD image Grafana dashboards.
+  - CephFS: Dirs and Caps displayed.
+  - NFS: v4 support only (v3 backward compatibility planned).
+  - Front-end: Angular 10 update.
+
+
 RADOS
 ~~~~~
 
