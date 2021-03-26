@@ -446,6 +446,24 @@ static int commit_reshard(rgw::sal::RadosStore* store,
 {
   auto& layout = bucket_info.layout;
   auto prev = layout; // make a copy for cleanup
+  const auto next_log_gen = layout.logs.back().gen + 1;
+
+  bool remove_index = true;
+
+  if (!store->svc()->zone->need_to_log_data()) {
+    // if we're not syncing data, we can drop any existing logs
+    layout.logs.clear();
+  } else {
+    const auto last_index_gen = prev.current_index.gen;
+    for (const auto& log : layout.logs) {
+      if (log.layout.type == rgw::BucketLogType::InIndex &&
+          log.layout.in_index.gen == last_index_gen) {
+        // we're storing logs in this index gen, we can't delete it yet
+        remove_index = false;
+        break;
+      }
+    }
+  }
 
   // use the new index layout as current
   ceph_assert(layout.target_index);
@@ -453,7 +471,6 @@ static int commit_reshard(rgw::sal::RadosStore* store,
   layout.target_index = std::nullopt;
   layout.resharding = rgw::BucketReshardState::None;
   // add the in-index log layout
-  const auto next_log_gen = layout.logs.back().gen + 1;
   layout.logs.push_back(log_layout_from_index(next_log_gen, layout.current_index));
 
   int ret = fault.check("commit_target_layout");
@@ -479,8 +496,9 @@ static int commit_reshard(rgw::sal::RadosStore* store,
   }
 
   // on success, delete index shard objects from the old layout (ignore errors)
-  store->svc()->bi->clean_index(dpp, bucket_info, prev.current_index);
-
+  if (remove_index) {
+    store->svc()->bi->clean_index(dpp, bucket_info, prev.current_index);
+  }
   return 0;
 } // commit_reshard
 
