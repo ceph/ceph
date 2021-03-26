@@ -44,21 +44,17 @@ namespace cache {
  */
 class C_ReadRequest : public Context {
 public:
-  C_ReadRequest(CephContext *cct, Context *c, ceph::mutex *cache_lock)
-    : m_cct(cct), m_ctx(c), m_cache_lock(cache_lock) {
+  C_ReadRequest(CephContext *cct, Context *c)
+    : m_cct(cct), m_ctx(c) {
   }
   void finish(int r) override {
     ldout(m_cct, 20) << "aio_cb completing " << dendl;
-    {
-      std::lock_guard cache_locker{*m_cache_lock};
-      m_ctx->complete(r);
-    }
+    m_ctx->complete(r);
     ldout(m_cct, 20) << "aio_cb finished" << dendl;
   }
 private:
   CephContext *m_cct;
   Context *m_ctx;
-  ceph::mutex *m_cache_lock;
 };
 
 class C_OrderedWrite : public Context {
@@ -71,7 +67,7 @@ public:
   void finish(int r) override {
     ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
     {
-      std::lock_guard l{m_wb_handler->m_lock};
+      std::scoped_lock l{m_wb_handler->m_lock};
       ceph_assert(!m_result->done);
       m_result->done = true;
       m_result->ret = r;
@@ -107,8 +103,8 @@ struct C_CommitIOEventExtent : public Context {
   }
 };
 
-ObjectCacherWriteback::ObjectCacherWriteback(ImageCtx *ictx, ceph::mutex& lock)
-  : m_tid(0), m_lock(lock), m_ictx(ictx) {
+ObjectCacherWriteback::ObjectCacherWriteback(ImageCtx *ictx)
+  : m_tid(0), m_ictx(ictx) {
 }
 
 void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
@@ -127,7 +123,7 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
   }
 
   // on completion, take the mutex and then call onfinish.
-  onfinish = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
+  onfinish = new C_ReadRequest(m_ictx->cct, onfinish);
 
   // re-use standard object read state machine
   auto aio_comp = io::AioCompletion::create_and_start(onfinish, m_ictx,
@@ -198,12 +194,15 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
   uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
   write_result_d *result = new write_result_d(oid.name, oncommit);
-  m_writes[oid.name].push(result);
-  ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
 
-  bufferlist bl_copy(bl);
+  Context *ctx;
+  {
+    std::scoped_lock l{m_lock};
+    m_writes[oid.name].push(result);
+    ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
 
-  Context *ctx = new C_OrderedWrite(m_ictx->cct, result, trace, this);
+    ctx = new C_OrderedWrite(m_ictx->cct, result, trace, this);
+  }
   ctx = util::create_async_context_callback(*m_ictx, ctx);
 
   auto io_context = m_ictx->duplicate_data_io_context();
@@ -212,6 +211,7 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
       {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
   }
 
+  bufferlist bl_copy(bl);
   auto req = io::ObjectDispatchSpec::create_write(
     m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, off, std::move(bl_copy),
     io_context, 0, 0, std::nullopt, journal_tid, trace, ctx);

@@ -12,6 +12,12 @@
 
 #include "mds/flock.h"
 
+void Cap::touch() {
+  // move to back of LRU
+  std::scoped_lock cl{client->client_lock};
+  session->caps.push_back(&cap_item);
+}
+
 Inode::~Inode()
 {
   delay_cap_item.remove_myself();
@@ -40,7 +46,7 @@ ostream& operator<<(ostream &out, const Inode &in)
 {
   out << in.vino() << "("
       << "faked_ino=" << in.faked_ino
-      << " ref=" << in._ref
+      << " nref=" << in.get_nref()
       << " ll_ref=" << in.ll_ref
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
@@ -57,7 +63,7 @@ ostream& operator<<(ostream &out, const Inode &in)
     for (const auto &pair : in.caps) {
       if (!first)
         out << ',';
-      out << pair.first << '=' << ccap_string(pair.second.issued);
+      out << pair.first << '=' << ccap_string(pair.second->issued);
       first = false;
     }
     out << ")";
@@ -197,14 +203,14 @@ bool Inode::is_any_caps()
   return !caps.empty() || snap_caps;
 }
 
-bool Inode::cap_is_valid(const Cap &cap) const
+bool Inode::cap_is_valid(const Cap *cap) const
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
-  if ((cap.session->cap_gen <= cap.gen)
-      && (ceph_clock_now() < cap.session->cap_ttl)) {
+  if ((cap->session->cap_gen <= cap->gen)
+      && (ceph_clock_now() < cap->session->cap_ttl)) {
     return true;
   }
   return false;
@@ -214,11 +220,10 @@ int Inode::caps_issued(int *implemented) const
 {
   int c = snap_caps;
   int i = 0;
-  for (const auto &pair : caps) {
-    const Cap &cap = pair.second;
+  for (const auto &[mds, cap] : caps) {
     if (cap_is_valid(cap)) {
-      c |= cap.issued;
-      i |= cap.implemented;
+      c |= cap->issued;
+      i |= cap->implemented;
     }
   }
   // exclude caps issued by non-auth MDS, but are been revoking by
@@ -236,7 +241,7 @@ void Inode::try_touch_cap(mds_rank_t mds)
 {
   auto it = caps.find(mds);
   if (it != caps.end()) {
-    it->second.touch();
+    it->second->touch();
   }
 }
 
@@ -266,7 +271,7 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
     return true;
   // prefer auth cap
   if (auth_cap &&
-      cap_is_valid(*auth_cap) &&
+      cap_is_valid(auth_cap.get()) &&
       (auth_cap->issued & mask) == mask) {
     auth_cap->touch();
     client->cap_hit();
@@ -274,15 +279,15 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
   }
   // try any cap
   for (auto &pair : caps) {
-    Cap &cap = pair.second;
+    Cap *cap = pair.second;
     if (cap_is_valid(cap)) {
-      if ((cap.issued & mask) == mask) {
-        cap.touch();
+      if ((cap->issued & mask) == mask) {
+        cap->touch();
 	client->cap_hit();
 	return true;
       }
-      c |= cap.issued;
-      i |= cap.implemented;
+      c |= cap->issued;
+      i |= cap->implemented;
     }
   }
 
@@ -292,7 +297,7 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
   if ((c & mask) == mask) {
     // bah.. touch them all
     for (auto &pair : caps) {
-      pair.second.touch();
+      pair.second->touch();
     }
     client->cap_hit();
     return true;
@@ -305,22 +310,18 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 int Inode::caps_used()
 {
   int w = 0;
-  for (map<int,int>::iterator p = cap_refs.begin();
-       p != cap_refs.end();
-       ++p)
-    if (p->second)
-      w |= p->first;
+  for (const auto &[cap, cnt] : cap_refs)
+    if (cnt)
+      w |= cap;
   return w;
 }
 
 int Inode::caps_file_wanted()
 {
   int want = 0;
-  for (map<int,int>::iterator p = open_by_mode.begin();
-       p != open_by_mode.end();
-       ++p)
-    if (p->second)
-      want |= ceph_caps_for_mode(p->first);
+  for (const auto &[mode, cnt] : open_by_mode)
+    if (cnt)
+      want |= ceph_caps_for_mode(mode);
   return want;
 }
 
@@ -336,7 +337,7 @@ int Inode::caps_mds_wanted()
 {
   int want = 0;
   for (const auto &pair : caps) {
-    want |= pair.second.wanted;
+    want |= pair.second->wanted;
   }
   return want;
 }
@@ -350,7 +351,7 @@ const UserPerm* Inode::get_best_perms()
 {
   const UserPerm *perms = NULL;
   for (const auto &pair : caps) {
-    const UserPerm& iperm = pair.second.latest_perms;
+    const UserPerm& iperm = pair.second->latest_perms;
     if (!perms) { // we don't have any, take what's present
       perms = &iperm;
     } else if (iperm.uid() == uid) {
@@ -384,7 +385,7 @@ Dir *Inode::open_dir()
     ceph_assert(dentries.size() < 2); // dirs can't be hard-linked
     if (!dentries.empty())
       get_first_parent()->get();      // pin dentry
-    get();                  // pin inode
+    iget();                  // pin inode
   }
   return dir;
 }
@@ -401,22 +402,6 @@ bool Inode::check_mode(const UserPerm& perms, unsigned want)
 
   return (mode & want) == want;
 }
-
-void Inode::get() {
-  _ref++;
-  lsubdout(client->cct, client, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-				    << " now " << _ref << dendl;
-}
-
-//private method to put a reference; see Client::put_inode()
-int Inode::_put(int n) {
-  _ref -= n;
-  lsubdout(client->cct, client, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-				    << " now " << _ref << dendl;
-  ceph_assert(_ref >= 0);
-  return _ref;
-}
-
 
 void Inode::dump(Formatter *f) const
 {
@@ -491,9 +476,9 @@ void Inode::dump(Formatter *f) const
   for (const auto &pair : caps) {
     f->open_object_section("cap");
     f->dump_int("mds", pair.first);
-    if (&pair.second == auth_cap)
+    if (pair.second == auth_cap)
       f->dump_int("auth", 1);
-    pair.second.dump(f);
+    pair.second->dump(f);
     f->close_section();
   }
   f->close_section();
@@ -563,7 +548,7 @@ void Inode::dump(Formatter *f) const
   if (requested_max_size != max_size)
     f->dump_unsigned("requested_max_size", requested_max_size);
 
-  f->dump_int("ref", _ref);
+  f->dump_int("nref", get_nref());
   f->dump_int("ll_ref", ll_ref);
 
   if (!dentries.empty()) {
@@ -678,7 +663,7 @@ void Inode::break_deleg(bool skip_read)
   recall_deleg(skip_read);
 
   while (!delegations_broken(skip_read))
-    client->wait_on_list(waitfor_deleg);
+    client->wait_on_list(waitfor_deleg, inode_lock);
 }
 
 /**
@@ -795,8 +780,10 @@ void Inode::mark_caps_dirty(int caps)
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << " " << ccap_string(dirty_caps) << " -> "
            << ccap_string(dirty_caps | caps) << dendl;
   if (caps && !caps_dirty())
-    get();
+    iget();
   dirty_caps |= caps;
+
+  std::scoped_lock cl(client->client_lock);
   client->get_dirty_list().push_back(&dirty_cap_item);
 }
 
@@ -807,7 +794,17 @@ void Inode::mark_caps_clean()
 {
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << dendl;
   dirty_caps = 0;
+
+  std::scoped_lock cl(client->client_lock);
   dirty_cap_item.remove_myself();
 }
 
+void intrusive_ptr_add_ref(Cap *cap)
+{
+  cap->get();
+}
 
+void intrusive_ptr_release(Cap *cap)
+{
+  cap->put();
+}

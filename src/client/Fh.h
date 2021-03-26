@@ -2,28 +2,34 @@
 #define CEPH_CLIENT_FH_H
 
 #include "common/Readahead.h"
+#include "common/RefCountedObj.h"
 #include "include/types.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
 #include "mds/flock.h"
+#include "FhRef.h"
 
+class Client;
 class Inode;
 
 // file handle for any open file state
 
-struct Fh {
+struct Fh : public RefCountedObject {
+  Client    *client;
   InodeRef  inode;
-  int	    _ref;
-  loff_t    pos;
-  int       mds;        // have to talk to mds we opened with (for now)
-  int       mode;       // the mode i opened the file with
+  int       flags;
   uint64_t  gen;
+  UserPerm  actor_perms; // perms I opened the file with
 
-  int flags;
-  bool pos_locked;           // pos is currently in use
+  // the members above once ininitalized in the constructor
+  // they won't change, and putting them under the client_lock
+  // makes no sense.
+
+  loff_t    pos = 0;
+  int       mode;       // the mode i opened the file with
+
+  bool pos_locked = false;           // pos is currently in use
   std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
-
-  UserPerm actor_perms; // perms I opened the file with
 
   Readahead readahead;
 
@@ -51,11 +57,8 @@ struct Fh {
   }
 
   Fh() = delete;
-  Fh(InodeRef in, int flags, int cmode, uint64_t gen, const UserPerm &perms);
+  Fh(Client *client, InodeRef in, int flags, int cmode, uint64_t gen, const UserPerm &perms);
   ~Fh();
-
-  void get() { ++_ref; }
-  int put() { return --_ref; }
 };
 
 

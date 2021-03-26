@@ -59,7 +59,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   ceph::mutex lock = ceph::make_mutex("object_cacher_stress::object_cacher");
   FakeWriteback writeback(g_ceph_context, &lock, delay_ns);
 
-  ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
+  ObjectCacher obc(g_ceph_context, "test", writeback, NULL, NULL,
 		   g_conf()->client_oc_size,
 		   g_conf()->client_oc_max_objects,
 		   g_conf()->client_oc_max_dirty,
@@ -70,7 +70,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 
   std::atomic<unsigned> outstanding_reads = { 0 };
   vector<std::shared_ptr<op_data> > ops;
-  ObjectCacher::ObjectSet object_set(NULL, 0, 0);
+  ObjectCacher::ObjectSet object_set(NULL, 0, 0, lock);
   SnapContext snapc;
   ceph::buffer::ptr bp(max_op_len);
   ceph::bufferlist bl;
@@ -179,7 +179,7 @@ int correctness_test(uint64_t delay_ns)
   ceph::mutex lock = ceph::make_mutex("object_cacher_stress::object_cacher");
   MemWriteback writeback(g_ceph_context, &lock, delay_ns);
 
-  ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
+  ObjectCacher obc(g_ceph_context, "test", writeback, NULL, NULL,
 		   1<<21, // max cache size, 2MB
 		   1, // max objects, just one
 		   1<<18, // max dirty, 256KB
@@ -192,7 +192,7 @@ int correctness_test(uint64_t delay_ns)
   SnapContext snapc;
   ceph_tid_t journal_tid = 0;
   std::string oid("correctness_test_obj");
-  ObjectCacher::ObjectSet object_set(NULL, 0, 0);
+  ObjectCacher::ObjectSet object_set(NULL, 0, 0, lock);
   ceph::bufferlist zeroes_bl;
   zeroes_bl.append_zero(1<<20);
 

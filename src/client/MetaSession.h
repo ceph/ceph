@@ -68,4 +68,5 @@ struct MetaSession {
       ceph_seq_t mseq, epoch_t osd_barrier);
 };
 
+using MetaSessionRef = std::shared_ptr<MetaSession>;
 #endif

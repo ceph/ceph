@@ -36,9 +36,11 @@
 #include "msg/MessageRef.h"
 #include "msg/Messenger.h"
 #include "osdc/ObjectCacher.h"
+#include "MetaRequestRef.h"
 
 #include "RWRef.h"
 #include "InodeRef.h"
+#include "Fh.h"
 #include "MetaSession.h"
 #include "UserPerm.h"
 
@@ -208,6 +210,10 @@ struct dir_result_t {
   }
 
   InodeRef inode;
+  UserPerm perms;
+
+  // the above members no need to be placed under the Clinet::client_lock
+
   int64_t offset;        // hash order:
 			 //   (0xff << 52) | ((24 bits hash) << 28) |
 			 //   (the nth entry has hash collision);
@@ -221,7 +227,6 @@ struct dir_result_t {
   uint64_t ordered_count;
   unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
-  UserPerm perms;
 
   frag_t buffer_frag;
 
@@ -241,6 +246,8 @@ public:
   friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
+  friend void intrusive_ptr_release(MetaRequest *request);
+  friend void intrusive_ptr_release(Fh *fh);
   template <typename T> friend struct RWRefState;
   template <typename T> friend class RWRef;
 
@@ -504,6 +511,7 @@ public:
   int rmsnap(const char *path, const char *name, const UserPerm& perm, bool check_perms=false);
 
   // Inode permission checking
+  int _inode_permission(Inode *in, const UserPerm& perms, unsigned want);
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
 
   // expose caps
@@ -634,6 +642,7 @@ public:
   int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
 
   entity_name_t get_myname() { return messenger->get_myname(); }
+  void wait_on_list(std::list<ceph::condition_variable*>& ls, ceph::mutex &lock);
   void wait_on_list(std::list<ceph::condition_variable*>& ls);
   void signal_cond_list(std::list<ceph::condition_variable*>& ls);
 
@@ -757,6 +766,7 @@ public:
   void update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,
 			      utime_t ctime, utime_t mtime, utime_t atime);
 
+  void get_inode_lock_name(std::string &name, vinodeno_t vino);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
 			  const UserPerm& request_perms);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease,
@@ -779,9 +789,11 @@ public:
   void start_tick_thread();
 
   void inc_dentry_nr() {
+    std::scoped_lock cl(client_lock);
     ++dentry_nr;
   }
   void dec_dentry_nr() {
+    std::scoped_lock cl{client_lock};
     --dentry_nr;
   }
   void dlease_hit() {
@@ -850,6 +862,10 @@ public:
 
   bool fuse_default_permissions;
 
+  // global client lock
+  //  - protects Client and buffer cache both!
+  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
+
 protected:
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
@@ -868,9 +884,9 @@ protected:
   void get_session_metadata(std::map<std::string, std::string> *meta) const;
   bool have_open_session(mds_rank_t mds);
   void got_mds_push(MetaSession *s);
-  MetaSession *_get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
-  MetaSession *_get_or_open_mds_session(mds_rank_t mds);
-  MetaSession *_open_mds_session(mds_rank_t mds);
+  MetaSessionRef _get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
+  MetaSessionRef _get_or_open_mds_session(mds_rank_t mds);
+  MetaSessionRef _open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s, int err=0, bool rejected=false);
   bool _any_stale_sessions() const;
@@ -883,11 +899,15 @@ protected:
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
-  int make_request(MetaRequest *req, const UserPerm& perms,
+  int make_request(MetaRequestRef &req, const UserPerm& perms,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
+  void _put_request(MetaRequest *request);
+  void delay_put_requests(bool wakeup=false);
   void put_request(MetaRequest *request);
-  void unregister_request(MetaRequest *request);
+  void unregister_request(MetaRequestRef &request);
+
+  void put_fh(Fh *fh);
 
   int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
 			 const MConstRef<MClientReply>& reply,
@@ -945,7 +965,8 @@ protected:
   /*
    * Resolve file descriptor, or return NULL.
    */
-  Fh *get_filehandle(int fd) {
+  FhRef get_filehandle(int fd) {
+    std::scoped_lock cl(client_lock);
     auto it = fd_map.find(fd);
     if (it == fd_map.end())
       return NULL;
@@ -1051,13 +1072,10 @@ protected:
    */
   void _finish_init();
 
-  // global client lock
-  //  - protects Client and buffer cache both!
-  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
-
+  ceph::spinlock ll_snap_ref_lock;
   std::map<snapid_t, int> ll_snap_ref;
 
-  Inode*                 root = nullptr;
+  InodeRef               root = nullptr;
   map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor = nullptr;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
@@ -1187,7 +1205,7 @@ private:
     void finish(int r) override;
 
     Client *client;
-    Fh *f;
+    FhRef f;
   };
 
   /*
@@ -1223,7 +1241,7 @@ private:
   static const VXattr _file_vxattrs[];
   static const VXattr _common_vxattrs[];
 
-
+  MetaRequestRef create_request(int op);
 
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
@@ -1245,8 +1263,8 @@ private:
   void _ll_drop_pins();
 
   Fh *_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms);
+  void delay_put_fh(bool wakeup=false);
   int _release_fh(Fh *fh);
-  void _put_fh(Fh *fh);
 
   int _do_remount(bool retry_on_error);
 
@@ -1320,8 +1338,7 @@ private:
           const struct iovec *iov, int iovcnt);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                  unsigned iovcnt, int64_t offset,
-                                 bool write, bool clamp_to_int,
-                                 std::unique_lock<ceph::mutex> &cl);
+                                 bool write, bool clamp_to_int);
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
@@ -1438,7 +1455,7 @@ private:
   epoch_t cap_epoch_barrier = 0;
 
   // mds sessions
-  map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
+  map<mds_rank_t, MetaSessionRef> mds_sessions;  // mds -> push seq
   std::set<mds_rank_t> mds_ranks_closing;  // mds ranks currently tearing down sessions
   std::list<ceph::condition_variable*> waiting_for_mdsmap;
 
@@ -1480,6 +1497,10 @@ private:
   ceph_tid_t last_tid = 0;
   ceph_tid_t oldest_tid = 0; // oldest incomplete mds request, excluding setfilelock requests
   map<ceph_tid_t, MetaRequest*> mds_requests;
+  ceph::spinlock delay_r_lock;
+  std::list<MetaRequest*> delay_r_release;
+  ceph::spinlock delay_fh_lock;
+  std::list<Fh*> delay_fh_release;
 
   // cap flushing
   ceph_tid_t last_flush_tid = 1;
