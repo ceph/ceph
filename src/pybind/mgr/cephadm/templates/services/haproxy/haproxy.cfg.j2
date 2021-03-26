@@ -62,5 +62,5 @@ backend rgw-backend
     balance static-rr
     option httpchk HEAD / HTTP/1.0
     {% for server in rgw_servers %}
-    server {{ server.name }} {{ server.ip }}:80 check weight 100
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100
     {% endfor %}
