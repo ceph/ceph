@@ -306,14 +306,23 @@ class LocalRemote(object):
         # None
         return mkdtemp(suffix=suffix, prefix='', dir=parentdir)
 
-    def mktemp(self, suffix=None, parentdir=None):
+    def mktemp(self, suffix='', parentdir='', path=None, data=None,
+               owner=None, mode=None):
         """
         Make a remote temporary file
 
         Returns: the path of the temp file created.
         """
         from tempfile import mktemp
-        return mktemp(suffix=suffix, dir=parentdir)
+        if not path:
+            path = mktemp(suffix=suffix, dir=parentdir)
+
+        if data:
+            # sudo is set to False since root user can't write files in /tmp
+            # owned by other users.
+            self.write_file(path=path, data=data, sudo=False)
+
+        return path
 
     def write_file(self, path, data, sudo=False, mode=None, owner=None,
                                      mkdir=False, append=False):
