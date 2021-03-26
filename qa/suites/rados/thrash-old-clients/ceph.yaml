@@ -1,2 +1,5 @@
 tasks:
 - cephadm:
+    conf:
+      mon:
+        auth allow insecure global id reclaim: true
