@@ -85,6 +85,7 @@ bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entit
  *        are accepted if it is empty.
  * @param interfaces a comma separated list of interfaces for the allow list.
  *        all addresses are accepted if it is empty
+ * @param exclude_lo_iface filter out network interface named "lo"
  */
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,
@@ -92,6 +93,7 @@ const struct sockaddr *find_ip_in_subnet_list(
   unsigned ipv,
   const std::string &networks,
   const std::string &interfaces,
+  bool exclude_lo_iface,
   int numa_node=-1);
 
 int get_iface_numa_node(
