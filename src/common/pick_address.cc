@@ -22,6 +22,7 @@
 #include <fmt/format.h>
 
 #include "include/ipaddr.h"
+#include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "common/ceph_context.h"
 #ifndef WITH_SEASTAR
@@ -190,8 +191,6 @@ static void fill_in_one_address(CephContext *cct,
 
 void pick_addresses(CephContext *cct, int needs)
 {
-  struct ifaddrs *ifa;
-  int r = getifaddrs(&ifa);
   auto public_addr = cct->_conf.get_val<entity_addr_t>("public_addr");
   auto public_network = cct->_conf.get_val<std::string>("public_network");
   auto public_network_interface =
@@ -201,11 +200,14 @@ void pick_addresses(CephContext *cct, int needs)
   auto cluster_network_interface =
     cct->_conf.get_val<std::string>("cluster_network_interface");
 
+  struct ifaddrs *ifa;
+  int r = getifaddrs(&ifa);
   if (r < 0) {
     string err = cpp_strerror(errno);
     lderr(cct) << "unable to fetch interfaces and addresses: " << err << dendl;
     exit(1);
   }
+  auto free_ifa = make_scope_guard([ifa] { freeifaddrs(ifa); });
 
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC) &&
     public_addr.is_blank_ip() && !public_network.empty()) {
@@ -226,8 +228,6 @@ void pick_addresses(CephContext *cct, int needs)
       }
     }
   }
-
-  freeifaddrs(ifa);
 }
 #endif	// !WITH_SEASTAR
 
@@ -489,8 +489,8 @@ bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_add
     lderr(cct) << "unable to fetch interfaces and addresses: " << cpp_strerror(errno) << dendl;
     exit(1);
   }
+  auto free_ifa = make_scope_guard([ifa] { freeifaddrs(ifa); });
 
-  bool found = false;
   for (struct ifaddrs *addrs = ifa; addrs != nullptr; addrs = addrs->ifa_next) {
     if (addrs->ifa_addr) {
       entity_addr_t a;
@@ -498,16 +498,12 @@ bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_add
       for (auto& p : ls) {
         if (a.is_same_host(p)) {
           *match = p;
-          found = true;
-          goto out;
+          return true;
         }
       }
     }
   }
-
- out:
-  freeifaddrs(ifa);
-  return found;
+  return false;
 }
 
 int get_iface_numa_node(
