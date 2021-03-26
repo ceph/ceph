@@ -41,7 +41,7 @@ multiple clients, it needs to acquire the lock specifically with
 ``RBD_LOCK_MODE_EXCLUSIVE``.
 
 
-Blacklisting
+Blocklisting
 ============
 
 Sometimes, a client process (or, in case of a krbd client, a client
