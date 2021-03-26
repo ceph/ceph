@@ -23,6 +23,9 @@ overrides:
         ms inject internal delays: 0.002
         ms inject socket failures: 2500
         mon client directed command retry: 5
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
 tasks:
 - ceph:
     fs: xfs
