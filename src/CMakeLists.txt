@@ -811,6 +811,13 @@ if(WITH_LIBCEPHSQLITE)
   set(cephsqlite_srcs libcephsqlite.cc SimpleRADOSStriper.cc)
   add_library(cephsqlite ${CEPH_SHARED} ${cephsqlite_srcs})
   target_link_libraries(cephsqlite PRIVATE cls_lock_client librados ceph-common SQLite3::SQLite3 ${EXTRALIBS})
+  set_target_properties(cephsqlite PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
+  if(NOT APPLE AND NOT WIN32)
+    set_property(TARGET cephsqlite APPEND_STRING PROPERTY
+      LINK_FLAGS " -Wl,--exclude-libs,ALL")
+  endif()
   install(TARGETS cephsqlite DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif(WITH_LIBCEPHSQLITE)
 
