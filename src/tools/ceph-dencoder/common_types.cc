@@ -25,7 +25,7 @@ using namespace std;
 
 #include "denc_registry.h"
 
-void register_common_dencoders()
+DENC_API void register_dencoders()
 {
 #include "common_types.h"
 }
