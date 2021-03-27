@@ -23,6 +23,7 @@ usr/bin/rbd-replay*
 usr/bin/ceph-post-file
 usr/sbin/mount.ceph sbin
 usr/lib/ceph/compressor/*
+usr/lib/ceph/denc/*
 usr/lib/ceph/crypto/* [amd64]
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
