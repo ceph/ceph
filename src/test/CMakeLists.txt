@@ -531,6 +531,7 @@ if(NOT WIN32)
   ceph-mon
   get_command_descriptions
   ceph-dencoder
+  ceph-dencoder-modules
   ceph-objectstore-tool
   ceph-kvstore-tool
   ceph-monstore-tool

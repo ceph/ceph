@@ -253,8 +253,4 @@ void make_and_register_dencoder(const char* name, Args&&...args)
 #define TYPE_NOCOPY(t) make_and_register_dencoder<DencoderImplNoFeatureNoCopy<t>>(#t, false, false);
 #define MESSAGE(t) make_and_register_dencoder<MessageDencoderImpl<t>>(#t);
 
-void register_common_dencoders();
-void register_mds_dencoders();
-void register_osd_dencoders();
-void register_rbd_dencoders();
-void register_rgw_dencoders();
+#define DENC_API extern "C" [[gnu::visibility("default")]]

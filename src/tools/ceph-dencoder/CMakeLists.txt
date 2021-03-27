@@ -11,67 +11,93 @@ endif()
 set(dencoder_srcs
   denc_registry.cc
   ceph_dencoder.cc
-  common_types.cc
-  mds_types.cc
-  osd_types.cc
-  rbd_types.cc
-  rgw_types.cc
   ../../include/uuid.cc
   ../../include/utime.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
-if(WITH_RADOSGW)
-  list(APPEND dencoder_srcs
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_dencoder.cc)
-endif()
-
 add_executable(ceph-dencoder ${dencoder_srcs})
 
+set(denc_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/denc)
+add_custom_target(ceph-dencoder-modules)
+
+function(add_denc_mod name)
+  add_library(${name} SHARED
+    ${ARGN})
+  set_target_properties(${name} PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME ${name}
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
+  install(
+    TARGETS ${name}
+    DESTINATION ${denc_plugin_dir})
+  add_dependencies(ceph-dencoder-modules
+    ${name})
+endfunction()
+
+add_denc_mod(denc-mod-common
+  common_types.cc)
+target_link_libraries(denc-mod-common
+  journal
+  cls_cas_internal
+  cls_lock_client
+  cls_refcount_client
+  cls_timeindex_client)
+add_denc_mod(denc-mod-osd
+  osd_types.cc)
+target_link_libraries(denc-mod-osd
+  os
+  osd
+  mon)
+
 if(WITH_RADOSGW)
-  list(APPEND DENCODER_EXTRALIBS
+  add_denc_mod(denc-mod-rgw
+    rgw_types.cc
+    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_dencoder.cc)
+  target_link_libraries(denc-mod-rgw
     rgw_a
-    cls_rgw_client)
+    cls_rgw_client
+    cls_journal_client)
   if(WITH_RADOSGW_AMQP_ENDPOINT)
-    list(APPEND DENCODER_EXTRALIBS
+    target_link_libraries(denc-mod-rgw
       rabbitmq ssl)
   endif()
   if(WITH_RADOSGW_KAFKA_ENDPOINT)
-    list(APPEND DENCODER_EXTRALIBS
+    target_link_libraries(denc-mod-rgw
       rdkafka)
   endif()
 endif()
 
 if(WITH_RBD)
-  list(APPEND DENCODER_EXTRALIBS
+  add_denc_mod(denc-mod-rbd
+    rbd_types.cc)
+  target_link_libraries(denc-mod-rbd
     cls_rbd_client
     rbd_mirror_types
     rbd_types
     rbd_replay_types)
   if(WITH_KRBD)
-    list(APPEND DENCODER_EXTRALIBS
+    target_link_libraries(denc-mod-rbd
       krbd)
   endif()
 endif()
 
 if(WITH_CEPHFS)
-  list(APPEND DENCODER_EXTRALIBS
+  add_denc_mod(denc-mod-cephfs
+    mds_types.cc)
+  target_link_libraries(denc-mod-cephfs
     mds)
 endif()
 
+target_compile_definitions(ceph-dencoder PRIVATE
+  "CEPH_DENC_MOD_DIR=\"${denc_plugin_dir}\"")
+
 target_link_libraries(ceph-dencoder
+  StdFilesystem::filesystem
   global
-  os
-  osd
-  mon
-  journal
   ${DENCODER_EXTRALIBS}
-  cls_lock_client
-  cls_refcount_client
   cls_log_client
   cls_version_client
   cls_user_client
-  cls_journal_client
-  cls_timeindex_client
-  cls_cas_internal
   cls_cas_client
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
