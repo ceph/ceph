@@ -424,13 +424,9 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
-    auto ret_list = tm->read_extents<TestBlock>(
+    auto ext = tm->read_extent<TestBlock>(
       *t.t, addr, len
     ).unsafe_get0();
-    EXPECT_EQ(ret_list.size(), 1);
-    auto &ext = ret_list.begin()->second;
-    auto &laddr = ret_list.begin()->first;
-    EXPECT_EQ(addr, laddr);
     EXPECT_EQ(addr, ext->get_laddr());
     return ext;
   }
