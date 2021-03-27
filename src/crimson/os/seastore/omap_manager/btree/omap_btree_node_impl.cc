@@ -603,25 +603,21 @@ omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth)
 {
   ceph_assert(depth > 0);
   if (depth > 1) {
-    return oc.tm.read_extents<OMapInnerNode>(oc.t, laddr, OMAP_BLOCK_SIZE
+    return oc.tm.read_extent<OMapInnerNode>(oc.t, laddr, OMAP_BLOCK_SIZE
     ).handle_error(
       omap_load_extent_ertr::pass_further{},
       crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
     ).safe_then(
-      [](auto&& extents) {
-      assert(extents.size() == 1);
-      [[maybe_unused]] auto [laddr, e] = extents.front();
+      [](auto&& e) {
       return seastar::make_ready_future<OMapNodeRef>(std::move(e));
     });
   } else {
-    return oc.tm.read_extents<OMapLeafNode>(oc.t, laddr, OMAP_BLOCK_SIZE
+    return oc.tm.read_extent<OMapLeafNode>(oc.t, laddr, OMAP_BLOCK_SIZE
     ).handle_error(
       omap_load_extent_ertr::pass_further{},
       crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
     ).safe_then(
-      [](auto&& extents) {
-      assert(extents.size() == 1);
-      [[maybe_unused]] auto [laddr, e] = extents.front();
+      [](auto&& e) {
       return seastar::make_ready_future<OMapNodeRef>(std::move(e));
     });
   }

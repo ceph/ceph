@@ -556,6 +556,44 @@ public:
     );
   }
 
+  auto read_extents(
+    Transaction &t,
+    laddr_t offset,
+    extent_len_t length) {
+    return seastar::do_with(
+      lba_pin_list_t(),
+      lextent_list_t<TestBlock>(),
+      [this, &t, offset, length](auto &pins, auto &ret) {
+	return tm->get_pins(
+	  t, offset, length
+	).safe_then([this, &t, &pins, &ret](auto _pins) {
+	  _pins.swap(pins);
+	  logger().debug("read_extents: mappings {}", pins);
+	  return crimson::do_for_each(
+	    pins.begin(),
+	    pins.end(),
+	    [this, &t, &ret](auto &&pin) {
+	      logger().debug(
+		"read_extents: get_extent {}~{}",
+		pin->get_paddr(),
+		pin->get_length());
+	      return tm->pin_to_extent<TestBlock>(
+		t,
+		std::move(pin)
+	      ).safe_then([this, &ret](auto ref) mutable {
+		ret.push_back(std::make_pair(ref->get_laddr(), ref));
+		logger().debug(
+		  "read_extents: got extent {}",
+		  *ref);
+		return seastar::now();
+	      });
+	    }).safe_then([&ret] {
+	      return std::move(ret);
+	    });
+	});
+      });
+  }
+
   seastar::future<bufferlist> read(
     off_t offset,
     size_t size) final {
@@ -568,7 +606,7 @@ public:
       return seastar::do_with(
 	tm->create_transaction(),
 	[=, &blret](auto &t) {
-	  return tm->read_extents<TestBlock>(*t, offset, size
+	  return read_extents(*t, offset, size
 	  ).safe_then([=, &blret](auto ext_list) mutable {
 	    size_t cur = offset;
 	    for (auto &i: ext_list) {
