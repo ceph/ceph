@@ -163,8 +163,8 @@ struct Observer : public md_config_obs_t {
 
 static void fill_in_one_address(CephContext *cct,
 				const struct ifaddrs *ifa,
-				const string networks,
-				const string interfaces,
+				const string &networks,
+				const string &interfaces,
 				const char *conf_var,
 				int numa_node = -1)
 {
@@ -253,8 +253,8 @@ static int fill_in_one_address(
   CephContext *cct,
   const struct ifaddrs *ifa,
   unsigned ipv,
-  const string networks,
-  const string interfaces,
+  const string &networks,
+  const string &interfaces,
   entity_addrvec_t *addrs,
   int numa_node = -1)
 {
