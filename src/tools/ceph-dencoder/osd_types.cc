@@ -28,7 +28,7 @@ using namespace std;
 // cannot initialize dencoders when initializing static variables, as some of
 // the types are allocated using mempool, and the mempools are initialized as
 // static variables.
-void register_osd_dencoders()
+DENC_API void register_dencoders()
 {
 #include "osd_types.h"
 }
