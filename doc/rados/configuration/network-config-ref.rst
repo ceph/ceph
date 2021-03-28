@@ -287,25 +287,24 @@ and subnets for the public network. You may specifically assign static IP
 addresses or override ``public_network`` settings using the ``public_addr``
 setting for a specific daemon.
 
-``public_network``
+.. confval:: public_network
 
-:Description: The IP address and netmask of the public (front-side) network 
-              (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
-              comma-separated subnets.
+   The IP address and netmask of the public (front-side) network
+   (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
+   comma-separated subnets.
 
-:Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
-:Required: No
-:Default: N/A
+   :type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
+   :required: No
+   :default: N/A
 
+.. confval:: public_addr
 
-``public_addr``
+   The IP address for the public (front-side) network.
+   Set for each daemon.
 
-:Description: The IP address for the public (front-side) network. 
-              Set for each daemon.
-
-:Type: IP Address
-:Required: No
-:Default: N/A
+   :type: IP Address
+   :required: No
+   :default: N/A
 
 
 
@@ -318,25 +317,25 @@ specifically assign static IP  addresses or override ``cluster_network``
 settings using the ``cluster_addr`` setting for specific OSD daemons.
 
 
-``cluster_network``
+.. confval:: cluster_network
 
-:Description: The IP address and netmask of the cluster (back-side) network 
-              (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
-              comma-separated subnets.
+   The IP address and netmask of the cluster (back-side) network
+   (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
+   comma-separated subnets.
 
-:Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
-:Required: No
-:Default: N/A
+   :type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
+   :required: No
+   :default: N/A
 
 
-``cluster_addr``
+.. confval:: cluster_addr
 
-:Description: The IP address for the cluster (back-side) network. 
-              Set for each daemon.
+   The IP address for the cluster (back-side) network.
+   Set for each daemon.
 
-:Type: Address
-:Required: No
-:Default: N/A
+   :type: Address
+   :required: No
+   :default: N/A
 
 
 Bind
@@ -350,48 +349,51 @@ You may also enable Ceph daemons to bind to IPv6 addresses instead of IPv4
 addresses.
 
 
-``ms_bind_port_min``
+.. confval:: ms_bind_port_min
 
-:Description: The minimum port number to which an OSD or MDS daemon will bind.
-:Type: 32-bit Integer
-:Default: ``6800``
-:Required: No
+   The minimum port number to which an OSD or MDS daemon will bind.
 
+   :type: 32-bit Integer
+   :default: ``6800``
+   :required: No
 
-``ms_bind_port_max``
+.. confval:: ms_bind_port_max
 
-:Description: The maximum port number to which an OSD or MDS daemon will bind.
-:Type: 32-bit Integer
-:Default: ``7300``
-:Required: No. 
+   The maximum port number to which an OSD or MDS daemon will bind.
 
-``ms_bind_ipv4``
+   :type: 32-bit Integer
+   :default: ``7300``
+   :required: No
 
-:Description: Enables Ceph daemons to bind to IPv4 addresses.
-:Type: Boolean
-:Default: ``true``
-:Required: No
+.. confval:: ms_bind_ipv4
 
-``ms_bind_ipv6``
+   Enables Ceph daemons to bind to IPv4 addresses.
 
-:Description: Enables Ceph daemons to bind to IPv6 addresses.
-:Type: Boolean
-:Default: ``false``
-:Required: No
+   :type: Boolean
+   :default: ``true``
+   :Required: No
 
-``public_bind_addr``
+.. confval:: ms_bind_ipv6
 
-:Description: In some dynamic deployments the Ceph MON daemon might bind
-              to an IP address locally that is different from the ``public_addr``
-              advertised to other peers in the network. The environment must ensure
-              that routing rules are set correctly. If ``public_bind_addr`` is set
-              the Ceph Monitor daemon will bind to it locally and use ``public_addr``
-              in the monmaps to advertise its address to peers. This behavior is limited
-              to the Monitor daemon.
+   Enables Ceph daemons to bind to IPv6 addresses.
 
-:Type: IP Address
-:Required: No
-:Default: N/A
+   :type: Boolean
+   :default: ``false``
+   :required: No
+
+.. confval:: public_bind_addr
+
+   In some dynamic deployments the Ceph MON daemon might bind
+   to an IP address locally that is different from the ``public_addr``
+   advertised to other peers in the network. The environment must ensure
+   that routing rules are set correctly. If ``public_bind_addr`` is set
+   the Ceph Monitor daemon will bind to it locally and use ``public_addr``
+   in the monmaps to advertise its address to peers. This behavior is limited
+   to the Monitor daemon.
+
+   :type: IP Address
+   :required: No
+   :default: N/A
 
 
 
@@ -401,27 +403,27 @@ TCP
 Ceph disables TCP buffering by default.
 
 
-``ms_tcp_nodelay``
+.. confval:: ms_tcp_nodelay
 
-:Description: Ceph enables ``ms_tcp_nodelay`` so that each request is sent 
-              immediately (no buffering). Disabling `Nagle's algorithm`_
-              increases network traffic, which can introduce latency. If you 
-              experience large numbers of small packets, you may try 
-              disabling ``ms_tcp_nodelay``. 
+   Ceph enables ``ms_tcp_nodelay`` so that each request is sent
+   immediately (no buffering). Disabling `Nagle's algorithm`_
+   increases network traffic, which can introduce latency. If you
+   experience large numbers of small packets, you may try
+   disabling ``ms_tcp_nodelay``.
 
-:Type: Boolean
-:Required: No
-:Default: ``true``
+   :type: Boolean
+   :required: No
+   :default: ``true``
 
 
-``ms_tcp_rcvbuf``
+.. confval:: ms_tcp_rcvbuf
 
-:Description: The size of the socket buffer on the receiving end of a network
-              connection. Disable by default.
+   The size of the socket buffer on the receiving end of a network
+   connection. Disable by default.
 
-:Type: 32-bit Integer
-:Required: No
-:Default: ``0``
+   :type: 32-bit Integer
+   :required: No
+   :default: ``0``
 
 
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
