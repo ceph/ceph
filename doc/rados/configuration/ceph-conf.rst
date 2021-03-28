@@ -119,53 +119,52 @@ they apply to.
 
 These sections include:
 
-``global``
+.. confval:: global
 
-:Description: Settings under ``global`` affect all daemons and clients
-              in a Ceph Storage Cluster.
+   Settings under ``global`` affect all daemons and clients
+   in a Ceph Storage Cluster.
 
-:Example: ``log_file = /var/log/ceph/$cluster-$type.$id.log``
+   :example: ``log_file = /var/log/ceph/$cluster-$type.$id.log``
 
-``mon``
+.. confval:: mon
 
-:Description: Settings under ``mon`` affect all ``ceph-mon`` daemons in
-              the Ceph Storage Cluster, and override the same setting in 
-              ``global``.
+   Settings under ``mon`` affect all ``ceph-mon`` daemons in
+   the Ceph Storage Cluster, and override the same setting in
+   ``global``.
 
-:Example: ``mon_cluster_log_to_syslog = true``
+   :example: ``mon_cluster_log_to_syslog = true``
 
+.. confval:: mgr
 
-``mgr``
+   Settings in the ``mgr`` section affect all ``ceph-mgr`` daemons in
+   the Ceph Storage Cluster, and override the same setting in
+   ``global``.
 
-:Description: Settings in the ``mgr`` section affect all ``ceph-mgr`` daemons in
-              the Ceph Storage Cluster, and override the same setting in 
-              ``global``.
+   :example: ``mgr_stats_period = 10``
 
-:Example: ``mgr_stats_period = 10``
+.. confval:: osd
 
-``osd``
+   Settings under ``osd`` affect all ``ceph-osd`` daemons in
+   the Ceph Storage Cluster, and override the same setting in
+   ``global``.
 
-:Description: Settings under ``osd`` affect all ``ceph-osd`` daemons in
-              the Ceph Storage Cluster, and override the same setting in
-              ``global``.
+   :example: ``osd_op_queue = wpq``
 
-:Example: ``osd_op_queue = wpq``
+.. confval:: mds
 
-``mds``
+   Settings in the ``mds`` section affect all ``ceph-mds`` daemons in
+   the Ceph Storage Cluster, and override the same setting in
+   ``global``.
 
-:Description: Settings in the ``mds`` section affect all ``ceph-mds`` daemons in
-              the Ceph Storage Cluster, and override the same setting in
-              ``global``.
+   :example: ``mds_cache_memory_limit = 10G``
 
-:Example: ``mds_cache_memory_limit = 10G``
+.. confval:: client
 
-``client``
+   Settings under ``client`` affect all Ceph Clients
+   (e.g., mounted Ceph File Systems, mounted Ceph Block Devices,
+   etc.) as well as Rados Gateway (RGW) daemons.
 
-:Description: Settings under ``client`` affect all Ceph Clients
-              (e.g., mounted Ceph File Systems, mounted Ceph Block Devices,
-              etc.) as well as Rados Gateway (RGW) daemons.
-
-:Example: ``objecter_inflight_ops = 512``
+   :example: ``objecter_inflight_ops = 512``
 
 
 Sections may also specify an individual daemon or client name.  For example,
@@ -199,45 +198,43 @@ configuration value is used. Ceph metavariables are similar to variable expansio
 
 Ceph supports the following metavariables: 
 
-``$cluster``
+.. confval:: $cluster
 
-:Description: Expands to the Ceph Storage Cluster name. Useful when running 
-              multiple Ceph Storage Clusters on the same hardware.
+   Expands to the Ceph Storage Cluster name. Useful when running
+   multiple Ceph Storage Clusters on the same hardware.
 
-:Example: ``/etc/ceph/$cluster.keyring``
-:Default: ``ceph``
+   :example: ``/etc/ceph/$cluster.keyring``
+   :default: ``ceph``
 
+.. confval:: $type
 
-``$type``
+   Expands to a daemon or process type (e.g., ``mds``, ``osd``, or ``mon``)
 
-:Description: Expands to a daemon or process type (e.g., ``mds``, ``osd``, or ``mon``)
+   :example: ``/var/lib/ceph/$type``
 
-:Example: ``/var/lib/ceph/$type``
+.. confval:: $id
 
+   Expands to the daemon or client identifier. For
+   ``osd.0``, this would be ``0``; for ``mds.a``, it would
+   be ``a``.
 
-``$id``
+   :example: ``/var/lib/ceph/$type/$cluster-$id``
 
-:Description: Expands to the daemon or client identifier. For
-              ``osd.0``, this would be ``0``; for ``mds.a``, it would
-              be ``a``.
+.. confval:: $host
 
-:Example: ``/var/lib/ceph/$type/$cluster-$id``
+   Expands to the host name where the process is running.
 
+.. confval:: $name
 
-``$host``
+   Expands to ``$type.$id``.
 
-:Description: Expands to the host name where the process is running.
+   :example: ``/var/run/ceph/$cluster-$name.asok``
 
+.. confval:: $pid
 
-``$name``
+   Expands to daemon pid.
 
-:Description: Expands to ``$type.$id``.
-:Example: ``/var/run/ceph/$cluster-$name.asok``
-
-``$pid``
-
-:Description: Expands to daemon pid.
-:Example: ``/var/run/ceph/$cluster-$name-$pid.asok``
+   :example: ``/var/run/ceph/$cluster-$name-$pid.asok``
 
 
 
