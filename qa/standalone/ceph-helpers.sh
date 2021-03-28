@@ -479,6 +479,7 @@ function run_mon() {
         --pid-file=$dir/\$name.pid \
 	--mon-allow-pool-delete \
 	--mon-osd-backfillfull-ratio .99 \
+	--mon-warn-on-insecure-global-id-reclaim-allowed=false \
         "$@" || return 1
 
     cat > $dir/ceph.conf <<EOF
