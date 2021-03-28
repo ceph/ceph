@@ -2156,9 +2156,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return "Scheduled %s update..." % spec.service_name()
 
     @handle_orch_error
-    def apply(self, specs: Sequence[GenericSpec]) -> List[str]:
+    def apply(self, specs: Sequence[GenericSpec], no_overwrite: bool = False) -> List[str]:
         results = []
         for spec in specs:
+            if no_overwrite:
+                if spec.service_type == 'host' and cast(HostSpec, spec).hostname in self.inventory:
+                    results.append('Skipped %s host spec. To change %s spec omit --no-overwrite flag'
+                                   % (cast(HostSpec, spec).hostname, spec.service_type))
+                    continue
+                elif cast(ServiceSpec, spec).service_name() in self.spec_store:
+                    results.append('Skipped %s service spec. To change %s spec omit --no-overwrite flag'
+                                   % (cast(ServiceSpec, spec).service_name(), cast(ServiceSpec, spec).service_name()))
+                    continue
             results.append(self._apply(spec))
         return results
 
