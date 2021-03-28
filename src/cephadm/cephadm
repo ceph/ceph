@@ -769,7 +769,7 @@ class Keepalived(object):
         envs = [
             'KEEPALIVED_AUTOCONF=false',
             'KEEPALIVED_CONF=/etc/keepalived/keepalived.conf',
-            'KEEPALIVED_CMD="/usr/sbin/keepalived -n -l -f /etc/keepalived/keepalived.conf"',
+            'KEEPALIVED_CMD=/usr/sbin/keepalived -n -l -f /etc/keepalived/keepalived.conf',
             'KEEPALIVED_DEBUG=false'
         ]
         return envs
@@ -2220,14 +2220,20 @@ def get_config_and_keyring(ctx):
         keyring = d.get('keyring')
 
     if 'config' in ctx and ctx.config:
-        with open(ctx.config, 'r') as f:
-            config = f.read()
+        try:
+            with open(ctx.config, 'r') as f:
+                config = f.read()
+        except FileNotFoundError:
+            raise Error('config file: %s does not exist' % ctx.config)
 
     if 'key' in ctx and ctx.key:
         keyring = '[%s]\n\tkey = %s\n' % (ctx.name, ctx.key)
     elif 'keyring' in ctx and ctx.keyring:
-        with open(ctx.keyring, 'r') as f:
-            keyring = f.read()
+        try:
+            with open(ctx.keyring, 'r') as f:
+                keyring = f.read()
+        except FileNotFoundError:
+            raise Error('keyring file: %s does not exist' % ctx.keyring)
 
     return config, keyring
 
@@ -2396,7 +2402,7 @@ def get_container(ctx: CephadmContext,
     elif daemon_type == Keepalived.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
         envs.extend(Keepalived.get_container_envs())
-        container_args.extend(['--cap-add NET_ADMIN'])
+        container_args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
     elif daemon_type == CephIscsi.daemon_type:
         entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
@@ -4261,11 +4267,25 @@ def command_run(ctx):
 ##################################
 
 
+def fsid_conf_mismatch(ctx):
+    # type: (CephadmContext) -> bool
+    (config, _) = get_config_and_keyring(ctx)
+    if config:
+        for c in config.split('\n'):
+            if 'fsid = ' in c.strip():
+                if 'fsid = ' + ctx.fsid != c.strip():
+                    return True
+    return False
+
+
 @infer_fsid
 @infer_config
 @infer_image
 def command_shell(ctx):
     # type: (CephadmContext) -> int
+    if fsid_conf_mismatch(ctx):
+        raise Error('fsid does not match ceph conf')
+
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
     if ctx.name:
@@ -4734,6 +4754,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     if not code and \
                                        err.startswith('Keepalived '):
                                         version = err.split(' ')[1]
+                                        if version[0] == 'v':
+                                            version = version[1:]
                                         seen_versions[image_id] = version
                                 elif daemon_type == CustomContainer.daemon_type:
                                     # Because a custom container can contain

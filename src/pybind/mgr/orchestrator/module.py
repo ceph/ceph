@@ -557,15 +557,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             now = datetime_now()
             table = PrettyTable(
                 ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
-                 'PLACEMENT',
-                 'IMAGE NAME', 'IMAGE ID'
+                 'PLACEMENT', 'IMAGE ID'
                  ],
                 border=False)
             table.align['NAME'] = 'l'
             table.align['RUNNING'] = 'r'
             table.align['REFRESHED'] = 'l'
             table.align['AGE'] = 'l'
-            table.align['IMAGE NAME'] = 'l'
             table.align['IMAGE ID'] = 'l'
             table.align['PLACEMENT'] = 'l'
             table.left_padding_width = 0
@@ -588,7 +586,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     refreshed,
                     nice_delta(now, s.created),
                     pl,
-                    ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
                 ))
 
@@ -627,7 +624,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             now = datetime_now()
             table = PrettyTable(
                 ['NAME', 'HOST', 'STATUS', 'REFRESHED', 'AGE', 'PORTS',
-                 'VERSION', 'IMAGE NAME', 'IMAGE ID', 'CONTAINER ID'],
+                 'VERSION', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
@@ -653,7 +650,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     nice_delta(now, s.created),
                     s.get_port_summary() or '-',
                     ukn(s.version),
-                    ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
 
@@ -677,6 +673,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                    format: Format = Format.plain,
                    unmanaged: Optional[bool] = None,
                    dry_run: bool = False,
+                   no_overwrite: bool = False,
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         """
         Create OSD daemon(s) using a drive group spec
@@ -747,7 +744,7 @@ Examples:
                     spec.preview_only = True
                 dg_specs.append(spec)
 
-            return self._apply_misc(dg_specs, dry_run, format)
+            return self._apply_misc(dg_specs, dry_run, format, no_overwrite)
 
         if all_available_devices:
             if unmanaged is None:
@@ -761,7 +758,7 @@ Examples:
                     preview_only=dry_run
                 )
             ]
-            return self._apply_misc(dg_specs, dry_run, format)
+            return self._apply_misc(dg_specs, dry_run, format, no_overwrite)
 
         return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
@@ -994,6 +991,7 @@ Usage:
                    dry_run: bool = False,
                    format: Format = Format.plain,
                    unmanaged: bool = False,
+                   no_overwrite: bool = False,
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         """Update the size or placement for a service or apply a large yaml spec"""
         usage = """Usage:
@@ -1025,10 +1023,10 @@ Usage:
                 raise OrchestratorValidationError(usage)
             specs = [ServiceSpec(service_type.value, placement=placementspec,
                                  unmanaged=unmanaged, preview_only=dry_run)]
-        return self._apply_misc(specs, dry_run, format)
+        return self._apply_misc(specs, dry_run, format, no_overwrite)
 
-    def _apply_misc(self, specs: Sequence[GenericSpec], dry_run: bool, format: Format) -> HandleCommandResult:
-        completion = self.apply(specs)
+    def _apply_misc(self, specs: Sequence[GenericSpec], dry_run: bool, format: Format, no_overwrite: bool = False) -> HandleCommandResult:
+        completion = self.apply(specs, no_overwrite)
         raise_if_exception(completion)
         out = completion.result_str()
         if dry_run:
@@ -1048,6 +1046,7 @@ Usage:
                    dry_run: bool = False,
                    unmanaged: bool = False,
                    format: Format = Format.plain,
+                   no_overwrite: bool = False,
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         """Update the number of MDS instances for the given fs_name"""
         if inbuf:
@@ -1059,19 +1058,20 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run)
-        return self._apply_misc([spec], dry_run, format)
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
                    svc_id: str,
-                   realm_name: Optional[str] = None,
-                   zone_name: Optional[str] = None,
+                   realm: Optional[str] = None,
+                   zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
                    placement: Optional[str] = None,
                    dry_run: bool = False,
                    format: Format = Format.plain,
                    unmanaged: bool = False,
+                   no_overwrite: bool = False,
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         """Update the number of RGW instances for the given zone"""
         if inbuf:
@@ -1079,8 +1079,8 @@ Usage:
 
         spec = RGWSpec(
             service_id=svc_id,
-            rgw_realm=realm_name,
-            rgw_zone=zone_name,
+            rgw_realm=realm,
+            rgw_zone=zone,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
@@ -1088,7 +1088,7 @@ Usage:
             preview_only=dry_run
         )
 
-        return self._apply_misc([spec], dry_run, format)
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply nfs')
     def _apply_nfs(self,
@@ -1099,6 +1099,7 @@ Usage:
                    format: Format = Format.plain,
                    dry_run: bool = False,
                    unmanaged: bool = False,
+                   no_overwrite: bool = False,
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         """Scale an NFS service"""
         if inbuf:
@@ -1113,7 +1114,7 @@ Usage:
             preview_only=dry_run
         )
 
-        return self._apply_misc([spec], dry_run, format)
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply iscsi')
     def _apply_iscsi(self,
@@ -1125,6 +1126,7 @@ Usage:
                      unmanaged: bool = False,
                      dry_run: bool = False,
                      format: Format = Format.plain,
+                     no_overwrite: bool = False,
                      inbuf: Optional[str] = None) -> HandleCommandResult:
         """Scale an iSCSI service"""
         if inbuf:
@@ -1141,7 +1143,7 @@ Usage:
             preview_only=dry_run
         )
 
-        return self._apply_misc([spec], dry_run, format)
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch set backend')
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:
