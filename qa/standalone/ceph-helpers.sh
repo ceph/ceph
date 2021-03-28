@@ -481,6 +481,7 @@ function run_mon() {
 	--mon-allow-pool-size-one \
 	--osd-pool-default-pg-autoscale-mode off \
 	--mon-osd-backfillfull-ratio .99 \
+	--mon-warn-on-insecure-global-id-reclaim-allowed=false \
         "$@" || return 1
 
     cat > $dir/ceph.conf <<EOF
