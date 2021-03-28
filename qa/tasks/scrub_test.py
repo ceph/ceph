@@ -285,8 +285,7 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
     pool = 'rbd'
     omap_key = 'key'
     omap_val = 'val'
-    manager.do_rados(mon, ['-p', pool, 'setomapval', obj_name,
-                           omap_key, omap_val])
+    manager.do_rados(['setomapval', obj_name, omap_key, omap_val], pool=pool)
     # Update missing digests, requires "osd deep scrub update digest min age: 0"
     pgnum = get_pgnum(pg)
     manager.do_pg_scrub(pool, pgnum, 'deep-scrub')
@@ -370,8 +369,7 @@ def task(ctx, config):
     manager.wait_for_clean()
 
     # write some data
-    p = manager.do_rados(mon, ['-p', 'rbd', 'bench', '--no-cleanup', '1',
-                               'write', '-b', '4096'])
+    p = manager.do_rados(['bench', '--no-cleanup', '1', 'write', '-b', '4096'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
 
     # wait for some PG to have data that we can mess with
@@ -379,9 +377,9 @@ def task(ctx, config):
     osd = acting[0]
 
     osd_remote, obj_path, obj_name = find_victim_object(ctx, pg, osd)
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapval', obj_name, 'key', 'val'])
+    manager.do_rados(['setomapval', obj_name, 'key', 'val'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapheader', obj_name, 'hdr'])
+    manager.do_rados(['setomapheader', obj_name, 'hdr'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
 
     # Update missing digests, requires "osd deep scrub update digest min age: 0"

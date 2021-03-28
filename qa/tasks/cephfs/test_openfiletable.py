@@ -42,7 +42,7 @@ class OpenFileTable(CephFSTestCase):
         mds0_openfiles.1 to hold the extra keys.
         """
 
-        self.fs.rados(["stat", "mds0_openfiles.1"])
+        self.fs.radosm(["stat", "mds0_openfiles.1"])
 
         # Now close the file
         self.mount_a.kill_background(p)
