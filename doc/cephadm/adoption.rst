@@ -189,7 +189,7 @@ Adoption process
 
    .. prompt:: bash #
 
-      ceph orch apply rgw <svc_id> [--rgw-realm=<realm>] [--rgw-zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>]
+      ceph orch apply rgw <svc_id> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>]
 
    where *<placement>* can be a simple daemon count, or a list of
    specific hosts (see :ref:`orchestrator-cli-placement-spec`), and the
