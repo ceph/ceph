@@ -533,7 +533,7 @@ std::string get_device_id(const std::string& devname,
   }
   if (err) {
     if (model.empty() && serial.empty()) {
-      *err = std::string("fallback method has no model nor serial'");
+      *err = std::string("fallback method has no model nor serial");
       return {};
     } else if (model.empty()) {
       *err = std::string("fallback method has serial '") + serial
