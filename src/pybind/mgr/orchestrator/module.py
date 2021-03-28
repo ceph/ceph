@@ -1064,8 +1064,8 @@ Usage:
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
                    svc_id: str,
-                   realm_name: Optional[str] = None,
-                   zone_name: Optional[str] = None,
+                   realm: Optional[str] = None,
+                   zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
                    placement: Optional[str] = None,
@@ -1080,8 +1080,8 @@ Usage:
 
         spec = RGWSpec(
             service_id=svc_id,
-            rgw_realm=realm_name,
-            rgw_zone=zone_name,
+            rgw_realm=realm,
+            rgw_zone=zone,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
