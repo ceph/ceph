@@ -56,10 +56,9 @@ class OverlayWorkload(object):
         Damage the filesystem pools in ways that will be interesting to recover from.  By
         default just wipe everything in the metadata pool
         """
-        # Delete every object in the metadata pool
-        objects = self._orig_fs.rados(["ls"]).split("\n")
-        for o in objects:
-            self._orig_fs.rados(["rm", o])
+
+        pool = self._orig_fs.get_metadata_pool_name()
+        self._orig_fs.rados(["purge", pool, '--yes-i-really-really-mean-it'])
 
     def flush(self):
         """
@@ -121,8 +120,8 @@ class TestRecoveryPool(CephFSTestCase):
         self.recovery_fs.table_tool([recovery_fs + ":0", "reset", "inode"])
 
         # Stop the MDS
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.mds_stop() # otherwise MDS will join once the fs is reset
+        self.fs.fail()
 
         # After recovery, we need the MDS to not be strict about stats (in production these options
         # are off by default, but in QA we need to explicitly disable them)
@@ -134,8 +133,7 @@ class TestRecoveryPool(CephFSTestCase):
 
         # Reset the MDS map in case multiple ranks were in play: recovery procedure
         # only understands how to rebuild metadata under rank 0
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
-                '--yes-i-really-mean-it')
+        self.fs.reset()
 
         self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
@@ -147,7 +145,6 @@ class TestRecoveryPool(CephFSTestCase):
                 # Normal reset should fail when no objects are present, we'll use --force instead
                 self.fs.journal_tool(["journal", "reset"], 0)
 
-        self.fs.mds_stop()
         self.fs.data_scan(['scan_extents', '--alternate-pool',
                            recovery_pool, '--filesystem', self.fs.name,
                            self.fs.get_data_pool_name()])
@@ -175,6 +172,7 @@ class TestRecoveryPool(CephFSTestCase):
 
         # Start the MDS
         self.fs.mds_restart()
+        self.fs.set_joinable()
         self.recovery_fs.mds_restart()
         self.fs.wait_for_daemons()
         self.recovery_fs.wait_for_daemons()
