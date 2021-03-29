@@ -729,7 +729,7 @@ MatchKindCMP compare_full_key(
   ret = toMatchKindCMP(l.pool(), r.pool());
   if (ret != MatchKindCMP::EQ)
     return ret;
-  ret = toMatchKindCMP(l.crush() != r.crush());
+  ret = toMatchKindCMP(l.crush(), r.crush());
   if (ret != MatchKindCMP::EQ)
     return ret;
   ret = toMatchKindCMP(l.nspace(), r.nspace());
