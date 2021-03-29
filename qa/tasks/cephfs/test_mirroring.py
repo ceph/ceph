@@ -751,7 +751,7 @@ class TestMirroring(CephFSTestCase):
         self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", self.primary_fs_name)
         # need safe_while since non-failed status pops up as mirroring is restarted
         # internally in mirror daemon.
-        with safe_while(sleep=5, tries=10, action='wait for failed state') as proceed:
+        with safe_while(sleep=5, tries=20, action='wait for failed state') as proceed:
             while proceed():
                 try:
                     # verify via asok
