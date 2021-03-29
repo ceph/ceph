@@ -106,7 +106,29 @@ RADOS
 RBD block storage
 ~~~~~~~~~~~~~~~~~
 
-* 
+* Image live-migration feature has been extended to support external data
+  sources.  Images can now be instantly imported from local files, remote
+  files served over HTTP(S) or remote S3 buckets in ``raw`` (``rbd export v1``)
+  or basic ``qcow`` and ``qcow2`` formats.  Support for ``rbd export v2``
+  format, advanced QCOW features and ``rbd export-diff`` snapshot differentials
+  is expected in future releases.
+
+* Initial support for client-side encryption has been added.  This is based
+  on LUKS and in future releases will allow using per-image encryption keys
+  while maintaining snapshot and clone functionality -- so that parent image
+  and potentially multiple clone images can be encrypted with different keys.
+
+* A new persistent write-back cache is available.  The cache operates in
+  a log-structured manner, providing full point-in-time consistency for the
+  backing image.  It should be particularly suitable for PMEM devices.
+
+* A Windows client is now available in the form of ``librbd.dll`` and
+  ``rbd-wnbd`` (Windows Network Block Device) daemon.  It allows mapping,
+  unmapping and manipulating images similar to ``rbd-nbd``.
+
+* librbd API now offers quiesce/unquiesce hooks, allowing for coordinated
+  snapshot creation.
+
 
 RGW object storage
 ~~~~~~~~~~~~~~~~~~
