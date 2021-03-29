@@ -115,7 +115,7 @@ Mirroring module provides a family of commands to control mirroring of directory
 snapshots. To add or remove directories, mirroring needs to be enabled for a given
 file system. To enable mirroring use::
 
-  $ ceph fs snapshot mirror enable <fs>
+  $ ceph fs snapshot mirror enable <fs_name>
 
 .. note:: Mirroring module commands use `fs snapshot mirror` prefix as compared to
           the monitor commands which `fs mirror` prefix. Make sure to use module
@@ -123,7 +123,7 @@ file system. To enable mirroring use::
 
 To disable mirroring, use::
 
-  $ ceph fs snapshot mirror disable <fs>
+  $ ceph fs snapshot mirror disable <fs_name>
 
 Once mirroring is enabled, add a peer to which directory snapshots are to be mirrored.
 Peers follow `<client>@<cluster>` specification and get assigned a unique-id (UUID)
@@ -131,9 +131,9 @@ when added. See `Creating Users` section on how to create Ceph users for mirrori
 
 To add a peer use::
 
-  $ ceph fs snapshot mirror peer_add <fs> <remote_cluster_spec> [<remote_fs_name>] [<remote_mon_host>] [<cephx_key>]
+  $ ceph fs snapshot mirror peer_add <fs_name> <remote_cluster_spec> [<remote_fs_name>] [<remote_mon_host>] [<cephx_key>]
 
-`<remote_fs_name>` is optional, and default to `<fs>` (on the remote cluster).
+`<remote_fs_name>` is optional, and default to `<fs_name>` (on the remote cluster).
 
 This requires the remote cluster ceph configuration and user keyring to be available in
 the primary cluster. See `Bootstrap Peers` section to avoid this. `peer_add` additionally
@@ -144,21 +144,21 @@ a peer is the recommended way to add a peer.
 
 To remove a peer use::
 
-  $ ceph fs snapshot mirror peer_remove <fs> <peer_uuid>
+  $ ceph fs snapshot mirror peer_remove <fs_name> <peer_uuid>
 
 .. note:: See `Mirror Daemon Status` section on how to figure out Peer UUID.
 
 To list file system mirror peers use::
 
-  $ ceph fs snapshot mirror peer_list <fs>
+  $ ceph fs snapshot mirror peer_list <fs_name>
 
 To configure a directory for mirroring, use::
 
-  $ ceph fs snapshot mirror add <fs> <path>
+  $ ceph fs snapshot mirror add <fs_name> <path>
 
 To stop a mirroring directory snapshots use::
 
-  $ ceph fs snapshot mirror remove <fs> <path>
+  $ ceph fs snapshot mirror remove <fs_name> <path>
 
 Only absolute directory paths are allowed. Also, paths are normalized by the mirroring
 module, therfore, `/a/b/../b` is equivalent to `/a/b`.
