@@ -218,6 +218,8 @@ TransactionManager::submit_transaction_direct(
 	 -> submit_transaction_ertr::future<> {
     auto record = cache->try_construct_record(tref);
     if (!record) {
+      logger().debug("TransactionManager::submit_transaction_direct: "
+                     "conflict detected, returning eagain.");
       return crimson::ct_error::eagain::make();
     }
 
