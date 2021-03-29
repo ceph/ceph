@@ -14370,6 +14370,10 @@ int Client::check_pool_perm(Inode *in, int need)
   if (!cct->_conf->client_check_pool_perm)
     return 0;
 
+  /* Only need to do this for regular files */
+  if (!in->is_file())
+    return 0;
+
   int64_t pool_id = in->layout.pool_id;
   std::string pool_ns = in->layout.pool_ns;
   std::pair<int64_t, std::string> perm_key(pool_id, pool_ns);
