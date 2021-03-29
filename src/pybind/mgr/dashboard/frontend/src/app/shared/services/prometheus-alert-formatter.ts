@@ -33,7 +33,7 @@ export class PrometheusAlertFormatter {
             : this.getPrometheusNotificationStatus(alert as AlertmanagerNotificationAlert),
           name: alert.labels.alertname,
           url: alert.generatorURL,
-          summary: alert.annotations.summary,
+          description: alert.annotations.description,
           fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint
         };
       }),
@@ -53,7 +53,7 @@ export class PrometheusAlertFormatter {
     return new CdNotificationConfig(
       this.formatType(alert.status),
       `${alert.name} (${alert.status})`,
-      this.appendSourceLink(alert, alert.summary),
+      this.appendSourceLink(alert, alert.description),
       undefined,
       'Prometheus'
     );
