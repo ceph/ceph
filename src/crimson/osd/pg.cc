@@ -857,13 +857,10 @@ std::optional<hobject_t> PG::resolve_oid(
 
 template<RWState::State State>
 PG::load_obc_iertr::future<>
-PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
+PG::with_head_obc(ObjectContextRef obc, bool existed, with_obc_func_t&& func)
 {
-  logger().debug("{} {}", __func__, oid);
-  boost::intrusive_ptr<PG> pgref{this};
-  assert(oid.is_head());
-  auto [obc, existed] =
-    shard_services.obc_registry.get_cached_obc(std::move(oid));
+  logger().debug("{} {}", __func__, obc->get_oid());
+  assert(obc->is_head());
   obc->append_to(obc_set_accessing);
   return obc->with_lock<State, IOInterruptCondition>(
     [existed=existed, obc=obc, func=std::move(func), this] {
@@ -879,10 +876,29 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
     return loaded.safe_then_interruptible([func = std::move(func)](auto obc) {
       return std::move(func)(std::move(obc));
     });
-  }).finally([this, pgref, obc=std::move(obc)] {
+  }).finally([this, pgref=boost::intrusive_ptr<PG>{this}, obc=std::move(obc)] {
     logger().debug("with_head_obc: released {}", obc->get_oid());
     obc->remove_from(obc_set_accessing);
   });
+}
+
+template<RWState::State State>
+PG::load_obc_iertr::future<>
+PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
+{
+  auto [obc, existed] =
+    shard_services.obc_registry.get_cached_obc(std::move(oid));
+  return with_head_obc<State>(std::move(obc), existed, std::move(func));
+}
+
+template<RWState::State State>
+PG::interruptible_future<>
+PG::with_existing_head_obc(ObjectContextRef obc, with_obc_func_t&& func)
+{
+  constexpr bool existed = true;
+  return with_head_obc<State>(
+    std::move(obc), existed, std::move(func)
+  ).handle_error_interruptible(load_obc_ertr::assert_all{"can't happen"});
 }
 
 template<RWState::State State>
@@ -927,6 +943,23 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
 // explicitly instantiate the used instantiations
 template PG::load_obc_iertr::future<>
 PG::with_head_obc<RWState::RWNONE>(hobject_t, with_obc_func_t&&);
+
+template<RWState::State State>
+PG::interruptible_future<>
+PG::with_existing_clone_obc(ObjectContextRef clone, with_obc_func_t&& func)
+{
+  assert(clone);
+  assert(clone->get_head_obc());
+  assert(!clone->get_oid().is_head());
+  return with_existing_head_obc<RWState::RWREAD>(clone->get_head_obc(),
+    [clone=std::move(clone), func=std::move(func)] ([[maybe_unused]] auto head) {
+    assert(head == clone->get_head_obc());
+    return clone->template with_lock<State>(
+      [clone=std::move(clone), func=std::move(func)] {
+      std::move(func)(std::move(clone));
+    });
+  });
+}
 
 PG::load_obc_iertr::future<crimson::osd::ObjectContextRef>
 PG::load_head_obc(ObjectContextRef obc)
@@ -1006,6 +1039,26 @@ PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
     ceph_abort();
   };
 }
+
+template <RWState::State State>
+PG::interruptible_future<>
+PG::with_locked_obc(ObjectContextRef obc, PG::with_obc_func_t &&f)
+{
+  // TODO: a question from rebase: do we really need such checks when
+  // the interruptible stuff is being used?
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  if (obc->is_head()) {
+    return with_existing_head_obc<State>(obc, std::move(f));
+  } else {
+    return with_existing_clone_obc<State>(obc, std::move(f));
+  }
+}
+
+// explicitly instantiate the used instantiations
+template PG::interruptible_future<>
+PG::with_locked_obc<RWState::RWEXCL>(ObjectContextRef, with_obc_func_t&&);
 
 PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 {
