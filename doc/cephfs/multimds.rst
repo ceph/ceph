@@ -136,6 +136,8 @@ directory's export pin. For example:
     # a/b is now pinned to rank 0 and a/ and the rest of its children are still pinned to rank 1
 
 
+.. _cephfs-ephemeral-pinning:
+
 Setting subtree partitioning policies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
