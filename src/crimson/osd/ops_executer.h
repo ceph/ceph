@@ -28,11 +28,10 @@
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/shard_services.h"
 
-class PG;
-class PGLSFilter;
 class OSDOp;
 
 namespace crimson::osd {
+class PG;
 
 // OpsExecuter -- a class for executing ops targeting a certain object.
 class OpsExecuter {
