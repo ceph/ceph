@@ -385,20 +385,22 @@ void PaxosService::maybe_trim()
   }
 
   version_t to_remove = trim_to - get_first_committed();
-  if (g_conf()->paxos_service_trim_min > 0 &&
-      to_remove < (version_t)g_conf()->paxos_service_trim_min) {
+  const version_t trim_min = g_conf().get_val<version_t>("paxos_service_trim_min");
+  if (trim_min > 0 &&
+      to_remove < trim_min) {
     dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
-	     << " < paxos_service_trim_min " << g_conf()->paxos_service_trim_min << dendl;
+	     << " < paxos_service_trim_min " << trim_min << dendl;
     return;
   }
 
-  if (g_conf()->paxos_service_trim_max > 0 &&
-      to_remove > (version_t)g_conf()->paxos_service_trim_max) {
+  const version_t trim_max = g_conf().get_val<version_t>("paxos_service_trim_max");
+  if (trim_max > 0 &&
+      to_remove > trim_max) {
     dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
-	     << " > paxos_service_trim_max, limiting to " << g_conf()->paxos_service_trim_max
+	     << " > paxos_service_trim_max, limiting to " << trim_max
 	     << dendl;
-    trim_to = get_first_committed() + g_conf()->paxos_service_trim_max;
-    to_remove = g_conf()->paxos_service_trim_max;
+    trim_to = get_first_committed() + trim_max;
+    to_remove = trim_max;
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
