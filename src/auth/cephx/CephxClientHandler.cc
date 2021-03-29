@@ -187,6 +187,22 @@ int CephxClientHandler::handle_response(
 	ldout(cct, 10) << " got connection bl " << cbl.length()
 		       << " and extra tickets " << extra_tickets.length()
 		       << dendl;
+	// for msgr1, both session_key and connection_secret are NULL
+	// so we skip extra_tickets and incur an additional round-trip
+	// to get service tickets via CEPHX_GET_PRINCIPAL_SESSION_KEY
+	// as if talking to a pre-nautilus mon
+	// this wasn't intended but turns out to be needed because in
+	// msgr1 case MonClient doesn't explicitly wait for the monmap
+	// (which is shared together with CEPHX_GET_AUTH_SESSION_KEY
+	// reply)
+	// instead, it waits for CEPHX_GET_PRINCIPAL_SESSION_KEY reply
+	// which comes after the monmap and hence the monmap is always
+	// handled by the time authentication is considered finished
+	// if we start to always process extra_tickets here, MonClient
+	// would have no reason to send CEPHX_GET_PRINCIPAL_SESSION_KEY
+	// and RadosClient::connect() or similar could return with no
+	// actual monmap but just an initial bootstrap stub, leading
+	// to mon commands going out with zero fsid and other issues
 	if (session_key && connection_secret) {
 	  CephXTicketHandler& ticket_handler =
 	    tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
