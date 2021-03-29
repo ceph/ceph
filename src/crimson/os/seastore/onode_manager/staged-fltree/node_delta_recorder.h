@@ -18,7 +18,10 @@ namespace crimson::os::seastore::onode {
 class DeltaRecorder {
  public:
   virtual ~DeltaRecorder() {
-    assert(is_empty());
+    /* May be non-empty if transaction is abandoned without
+     * being submitted -- conflicts are a particularly common
+     * example (denoted generally by returning crimson::ct_error::eagain).
+     */
   }
 
   bool is_empty() const {
