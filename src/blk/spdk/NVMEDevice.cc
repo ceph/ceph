@@ -180,18 +180,14 @@ struct Task {
   Task *next = nullptr;
   int64_t return_code;
   Task *primary = nullptr;
-  ceph::coarse_real_clock::time_point start;
   IORequest io_request = {};
-  ceph::mutex lock = ceph::make_mutex("Task::lock");
-  ceph::condition_variable cond;
   SharedDriverQueueData *queue = nullptr;
   // reference count by subtasks.
   int ref = 0;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0,
        Task *p = nullptr)
     : device(dev), command(c), offset(off), len(l),
-      return_code(rc), primary(p),
-      start(ceph::coarse_real_clock::now()) {
+      return_code(rc), primary(p) {
         if (primary) {
           primary->ref++;
           return_code = primary->return_code;
