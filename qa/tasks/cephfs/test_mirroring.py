@@ -746,7 +746,7 @@ class TestMirroring(CephFSTestCase):
         self.disable_mirroring_module()
 
         # enable mirroring through mon interface -- this should result in the mirror daemon
-        # failing to enable mirroring due to absence of `cephfs_mirorr` index object.
+        # failing to enable mirroring due to absence of `cephfs_mirror` index object.
 
         self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", self.primary_fs_name)
         # need safe_while since non-failed status pops up as mirroring is restarted
