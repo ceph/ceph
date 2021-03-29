@@ -12,7 +12,6 @@
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
-#include "crimson/osd/pg.h"
 #include "crimson/common/shared_lru.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
