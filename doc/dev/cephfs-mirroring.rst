@@ -210,8 +210,44 @@ Mirror Daemon Status
 --------------------
 
 Mirror daemons get asynchronously notified about changes in file system mirroring status
-and/or peer updates. CephFS mirror daemons provide admin socket commands for querying
-mirror status. To check available commands for mirror status use::
+and/or peer updates.
+
+CephFS mirroring module provides `mirror daemon status` interface to check mirror daemon
+status::
+
+  $ ceph fs snapshot mirror daemon status <fs_name>
+
+E.g::
+
+  $ ceph fs snapshot mirror daemon status a | jq
+  {
+  "14135": {
+    "1": {
+      "name": "a",
+      "directory_count": 0,
+      "peers": {
+        "ae3f22e6-1c72-4a81-8d5d-eebca3bfd29d": {
+          "remote": {
+            "client_name": "client.mirror_remote",
+            "cluster_name": "site-remote",
+            "fs_name": "backup_fs"
+          },
+          "stats": {
+            "failure_count": 0,
+            "recovery_count": 0
+            }
+          }
+        }
+      }
+    }
+  }
+
+An entry per mirror daemon instance is displayed along with information such as configured
+peers and basic stats. For more detailed stats, use the admin socket interface as detailed
+below.
+
+CephFS mirror daemons provide admin socket commands for querying mirror status. To check
+available commands for mirror status use::
 
   $ ceph --admin-daemon /path/to/mirror/daemon/admin/socket help
   {
