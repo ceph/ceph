@@ -466,9 +466,12 @@ class CephadmUpgrade:
 
             need_upgrade_self = False
             need_upgrade: List[Tuple[DaemonDescription, bool]] = []
+            need_upgrade_deployer: List[Tuple[DaemonDescription, bool]] = []
             for d in daemons:
                 if d.daemon_type != daemon_type:
                     continue
+                assert d.daemon_type is not None
+                assert d.daemon_id is not None
                 correct_digest = False
                 if (any(d in target_digests for d in (d.container_image_digests or []))
                         or d.daemon_type in MONITORING_STACK_TYPES):
@@ -481,24 +484,26 @@ class CephadmUpgrade:
                         done += 1
                         continue
 
-                if correct_digest:
-                    logger.debug('daemon %s.%s not deployed by correct version' % (
-                        d.daemon_type, d.daemon_id))
-                else:
-                    logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
-                        daemon_type, d.daemon_id,
-                        d.container_image_name, d.container_image_digests, d.version))
-
-                assert d.daemon_type is not None
-                assert d.daemon_id is not None
-
                 if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
                     logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                 self.mgr.get_mgr_id())
                     need_upgrade_self = True
                     continue
 
-                need_upgrade.append((d, correct_digest))
+                if correct_digest:
+                    logger.debug('daemon %s.%s not deployed by correct version' % (
+                        d.daemon_type, d.daemon_id))
+                    need_upgrade_deployer.append((d, True))
+                else:
+                    logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
+                        daemon_type, d.daemon_id,
+                        d.container_image_name, d.container_image_digests, d.version))
+                    need_upgrade.append((d, False))
+
+            if not need_upgrade_self:
+                # only after the mgr itself is upgraded can we expect daemons to have
+                # deployed_by == target_digests
+                need_upgrade += need_upgrade_deployer
 
             # prepare filesystems for daemon upgrades?
             if (
