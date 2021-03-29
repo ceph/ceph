@@ -24,6 +24,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/backfill_state.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
+#include "crimson/osd/ops_executer.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
@@ -577,6 +578,15 @@ private:
     Ref<MOSDOp> m,
     ObjectContextRef obc,
     const OpInfo &op_info);
+  template <class Ret, class SuccessFunc, class FailureFunc>
+  do_osd_ops_iertr::future<Ret> do_osd_ops_execute(
+    OpsExecuter&& ox,
+    std::vector<OSDOp> ops,
+    Ref<MOSDOp> m,
+    ObjectContextRef obc,
+    const OpInfo &op_info,
+    SuccessFunc&& success_func,
+    FailureFunc&& failure_func);
   interruptible_future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   interruptible_future<> submit_transaction(const OpInfo& op_info,
 				       ObjectContextRef&& obc,
