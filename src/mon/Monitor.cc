@@ -2086,16 +2086,25 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
              << " vs my version " << paxos->get_version()
              << " (ok)"
              << dendl;
-
-    if (monmap->contains(name) &&
-        !monmap->get_addrs(name).front().is_blank_ip()) {
+    bool in_map = false;
+    const auto my_info = monmap->mon_info.find(name);
+    const map<string,string> *map_crush_loc{nullptr};
+    if (my_info != monmap->mon_info.end()) {
+      in_map = true;
+      map_crush_loc = &my_info->second.crush_loc;
+    }
+    if (in_map &&
+	!monmap->get_addrs(name).front().is_blank_ip() &&
+	(!need_set_crush_loc || (*map_crush_loc == crush_loc))) {
       // i'm part of the cluster; just initiate a new election
       start_election();
     } else {
-      dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
-      send_mon_message(
-	new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
-	*m->quorum.begin());
+      dout(10) << " ready to join, but i'm not in the monmap/"
+	"my addr is blank/location is wrong, trying to join" << dendl;
+      send_mon_message(new MMonJoin(monmap->fsid, name,
+				    messenger->get_myaddrs(), crush_loc,
+				    need_set_crush_loc),
+		       *m->quorum.begin());
     }
   } else {
     if (monmap->contains(m->name)) {
@@ -2359,13 +2368,18 @@ void Monitor::finish_election()
     authmon()->_set_mon_num_rank(monmap->size(), rank);
   }
 
-  // am i named properly?
+  // am i named and located properly?
   string cur_name = monmap->get_name(messenger->get_myaddrs());
-  if (cur_name != name) {
-    dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
-    send_mon_message(
-      new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
-      *quorum.begin());
+  const auto my_infop = monmap->mon_info.find(cur_name);
+  const map<string,string>& map_crush_loc = my_infop->second.crush_loc;
+  
+  if (cur_name != name ||
+      (need_set_crush_loc && map_crush_loc != crush_loc)) {
+    dout(10) << " renaming/moving myself from " << cur_name << "/"
+	     << map_crush_loc <<" -> " << name << "/" << crush_loc << dendl;
+    send_mon_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddrs(),
+				  crush_loc, need_set_crush_loc),
+		     *quorum.begin());
     return;
   }
   do_stretch_mode_election_work();
@@ -6514,8 +6528,26 @@ int Monitor::ms_handle_authentication(Connection *con)
   return ret;
 }
 
+void Monitor::set_mon_crush_location(const string& loc)
+{
+  if (loc.empty()) {
+    return;
+  }
+  vector<string> loc_vec;
+  loc_vec.push_back(loc);
+  CrushWrapper::parse_loc_map(loc_vec, &crush_loc);
+  need_set_crush_loc = true;
+}
+
 void Monitor::notify_new_monmap(bool can_change_external_state)
 {
+  if (need_set_crush_loc) {
+    auto my_info_i = monmap->mon_info.find(name);
+    if (my_info_i != monmap->mon_info.end() &&
+	my_info_i->second.crush_loc == crush_loc) {
+      need_set_crush_loc = false;
+    }
+  }
   elector.notify_strategy_maybe_changed(monmap->strategy);
   dout(30) << __func__ << "we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
   for (auto i = monmap->removed_ranks.rbegin();

@@ -267,6 +267,9 @@ private:
   bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
   void disconnect_disallowed_stretch_sessions();
   void set_elector_disallowed_leaders(bool allow_election);
+
+  map <string,string> crush_loc;
+  bool need_set_crush_loc{false};
 public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
@@ -280,6 +283,7 @@ public:
   void trigger_healthy_stretch_mode();
   void set_healthy_stretch_mode();
   void enable_stretch_mode();
+  void set_mon_crush_location(const string& loc);
 
   
 private:
