@@ -44,7 +44,7 @@ Basic functionalities
     | **S3select** has a definite set of functionalities that should be implemented (if we wish to stay compliant with AWS), currently only a portion of it is implemented.
     
     | The implemented software architecture supports basic arithmetic expressions, logical and compare expressions, including nested function calls and casting operators, that alone enables the user reasonable flexibility. 
-    | review the below feature-table_.
+    | review the below s3-select-feature-table_.
 
 
 Error Handling
@@ -56,10 +56,10 @@ Error Handling
 
 
 
+.. _s3-select-feature-table:
 
 Features Support
 ----------------
-.. _feature-table:
 
   | Currently only part of `AWS select command <https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference-select.html>`_ is implemented, table below describes what is currently supported.
   | The following table describes the current implementation for s3-select functionalities:

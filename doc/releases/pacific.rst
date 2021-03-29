@@ -133,6 +133,20 @@ RBD block storage
 RGW object storage
 ~~~~~~~~~~~~~~~~~~
 
+* Initial support for S3 Select. See :ref:`s3-select-feature-table` for supported queries.
+
+* Bucket notification topics can be configured as ``persistent``, where events
+  are recorded in rados for reliable delivery.
+
+* Bucket notifications can be delivered to SSL-enabled AMQP endpoints.
+
+* Lua scripts can be run during requests and access their metadata.
+
+* SSE-KMS now supports KMIP as a key management service.
+
+* Multisite data logs can now be deployed on ``cls_fifo`` to avoid large omap
+  cluster warnings and make their trimming cheaper. See ``rgw_data_log_backing``.
+
 
 CephFS distributed file system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
