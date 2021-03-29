@@ -740,6 +740,11 @@ class TestMirroring(CephFSTestCase):
     def test_mirroring_init_failure_with_recovery(self):
         """Test if the mirror daemon can recover from a init failure"""
 
+        # disable mgr mirroring plugin as it would try to load dir map on
+        # on mirroring enabled for a filesystem (an throw up erorrs in
+        # the logs)
+        self.disable_mirroring_module()
+
         # enable mirroring through mon interface -- this should result in the mirror daemon
         # failing to enable mirroring due to absence of `cephfs_mirorr` index object.
 
