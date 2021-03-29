@@ -517,6 +517,10 @@ public:
   template<RWState::State State>
   load_obc_iertr::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
 
+  template<RWState::State State>
+  interruptible_future<> with_locked_obc(
+    ObjectContextRef obc,
+    with_obc_func_t&& f);
   load_obc_iertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
     const OpInfo &op_info,
@@ -531,7 +535,20 @@ public:
 
 private:
   template<RWState::State State>
+  load_obc_iertr::future<> with_head_obc(
+    ObjectContextRef obc,
+    bool existed,
+    with_obc_func_t&& func);
+  template<RWState::State State>
+  interruptible_future<> with_existing_head_obc(
+    ObjectContextRef head,
+    with_obc_func_t&& func);
+
+  template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
+  template<RWState::State State>
+  interruptible_future<> with_existing_clone_obc(
+    ObjectContextRef clone, with_obc_func_t&& func);
 
   load_obc_iertr::future<ObjectContextRef> get_locked_obc(
     Operation *op,

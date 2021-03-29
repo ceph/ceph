@@ -59,6 +59,14 @@ public:
     return get_oid().is_head();
   }
 
+  Ref get_head_obc() const {
+    return head;
+  }
+
+  hobject_t get_head_oid() const {
+    return get_oid().get_head();
+  }
+
   const SnapSet &get_ro_ss() const {
     if (is_head()) {
       ceph_assert(ss);
