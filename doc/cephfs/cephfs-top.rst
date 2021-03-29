@@ -1,3 +1,5 @@
+.. _cephfs-top:
+
 ==================
 CephFS Top Utility
 ==================

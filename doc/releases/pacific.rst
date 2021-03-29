@@ -119,40 +119,43 @@ CephFS distributed file system
   longer backwards compatible. It is not possible to downgrade a file system from
   Pacific (or later) to an older release.
 
-* Multiple file systems in a single Ceph cluster is now stable. New Ceph clusters
-  enable support for multiple file systems by default. Existing clusters
-  must still set the "enable_multiple" flag on the FS. Please see the CephFS
-  documentation for more information.
+* Multiple file systems in a single Ceph cluster is now stable. New Ceph
+  clusters enable support for multiple file systems by default. Existing clusters
+  must still set the "enable_multiple" flag on the FS. See also
+  :ref:`cephfs-multifs`.
 
-* A new ``mds_autoscaler`` plugin is available for automatically deploying
-  MDS daemons in response to changes to the ``max_mds`` configuration. Expect
-  further enhancements in the future to simplify MDS scaling.
+* A new ``mds_autoscaler`` ``ceph-mgr`` plugin is available for automatically
+  deploying MDS daemons in response to changes to the ``max_mds`` configuration.
+  Expect further enhancements in the future to simplify and automate MDS scaling.
 
 * ``cephfs-top`` is a new utility for looking at performance metrics from CephFS
-  clients. It is development preview quality and will have bugs. See the CephFS
-  documentation for more information.
+  clients. It is development preview quality and will have bugs. For more
+  information, see :ref:`cephfs-top`.
 
-* A new ``snap_schedule`` module provides a command toolset for scheduling
-  snapshots on a CephFS file system.
+* A new ``snap_schedule`` ``ceph-mgr`` plugin provides a command toolset for
+  scheduling snapshots on a CephFS file system. For more information, see
+  :ref:`snap-schedule`.
 
 * First class NFS gateway support in Ceph is here! It's now possible to create
   scale-out ("active-active") NFS gateway clusters that export CephFS using
   a few commands. The gateways are deployed via cephadm (or Rook, in the future).
+  For more information, see :ref:`cephfs-nfs`.
 
 * Multiple active MDS file system scrub is now stable. It is no longer necessary
   to set ``max_mds`` to 1 and wait for non-zero ranks to stop. Scrub commands
   can only be sent to rank 0: ``ceph tell mds.<fs_name>:0 scrub start /path ...``.
+  For more information, see :ref:`mds-scrub`.
 
 * Ephemeral pinning -- policy based subtree pinning -- is considered stable.
   ``mds_export_ephemeral_random`` and ``mds_export_ephemeral_distributed`` now
-  default to true.
+  default to true. For more information, see :ref:`cephfs-ephemeral-pinning`.
 
 * A new ``cephfs-mirror`` daemon is available to mirror CephFS file systems to
-  a remote Ceph cluster. See the CephFS documentation for details.
+  a remote Ceph cluster.
 
 * A Windows client is now available for connecting to CephFS. This is offered
   through a new ``ceph-dokan`` utility which operates via the Dokan userspace
-  API, similar to FUSE.  See the CephFS documentation for details.
+  API, similar to FUSE. For more information, see :ref:`ceph-dokan`.
 
 
 Upgrading from Octopus or Nautilus
