@@ -127,7 +127,7 @@ class CephadmUpgrade:
 
     def _check_target_version(self, version: str) -> Optional[str]:
         try:
-            (major, minor, patch) = version.split('.')
+            (major, minor, _) = version.split('.', 2)
             assert int(minor) >= 0
             # patch might be a number or {number}-g{sha1}
         except ValueError:
@@ -137,7 +137,7 @@ class CephadmUpgrade:
 
         # to far a jump?
         current_version = self.mgr.version.split('ceph version ')[1]
-        current_major, current_minor, current_patch = current_version.split('-')[0].split('.')
+        (current_major, current_minor, _) = current_version.split('-')[0].split('.', 2)
         if int(current_major) < int(major) - 2:
             return f'ceph can only upgrade 1 or 2 major versions at a time; {current_version} -> {version} is too big a jump'
         if int(current_major) > int(major):
@@ -436,7 +436,7 @@ class CephadmUpgrade:
             # tolerate/fix upgrade state from older version
             self.upgrade_state.target_version = target_version.split(' ')[2]
             target_version = self.upgrade_state.target_version
-        target_major, target_minor, target_patch = target_version.split('.')
+        (target_major, _) = target_version.split('.', 1)
         target_major_name = self.mgr.lookup_release_name(int(target_major))
 
         if first:
