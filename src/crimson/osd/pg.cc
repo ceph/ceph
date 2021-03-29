@@ -876,7 +876,7 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
       });
     }
     return loaded.safe_then_interruptible([func = std::move(func)](auto obc) {
-      return func(std::move(obc));
+      return std::move(func)(std::move(obc));
     });
   }).finally([this, pgref, obc=std::move(obc)] {
     logger().debug("with_head_obc: released {}", obc->get_oid());
@@ -917,7 +917,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
         });
       }
       return loaded.safe_then_interruptible([func = std::move(func)](auto clone) {
-        return func(std::move(clone));
+        return std::move(func)(std::move(clone));
       });
     });
   });
