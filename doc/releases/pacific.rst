@@ -481,6 +481,15 @@ Notable Changes
   the balancer was included in the ``always_on_modules`` list, but needed to be
   turned on explicitly using the ``ceph balancer on`` command.
 
+* Version 2 of the cephx authentication protocol (``CEPHX_V2`` feature bit) is
+  now required by default.  It was introduced in 2018, adding replay attack
+  protection for authorizers and making msgr v1 message signatures stronger
+  (CVE-2018-1128 and CVE-2018-1129).  Support is present in Jewel 10.2.11,
+  Luminous 12.2.6, Mimic 13.2.1, Nautilus 14.2.0 and later; upstream kernels
+  4.9.150, 4.14.86, 4.19 and later; various distribution kernels, in particular
+  CentOS 7.6 and later.  To enable older clients, set ``cephx_require_version``
+  and ``cephx_service_require_version`` config options to 1.
+
 * `blacklist` has been replaced with `blocklist` throughout.  The following commands have changed:
 
   - ``ceph osd blacklist ...`` are now ``ceph osd blocklist ...``
