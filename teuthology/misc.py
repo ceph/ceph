@@ -1336,6 +1336,8 @@ def add_remote_path(ctx, local_dir, remote_dir):
     Add key/value pair (local_dir: remote_dir) to job's info.yaml.
     These key/value pairs are read to archive them in case of job timeout.
     """
+    if ctx.archive is None:
+        return
     with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
@@ -1351,6 +1353,8 @@ def archive_logs(ctx, remote_path, log_path):
     Archive directories from all nodes in a cliuster. It pulls all files in
     remote_path dir to job's archive dir under log_path dir.
     """
+    if ctx.archive is None:
+        return
     path = os.path.join(ctx.archive, 'remote')
     os.makedirs(path, exist_ok=True)
     for remote in ctx.cluster.remotes.keys():
