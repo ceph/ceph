@@ -1045,6 +1045,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
   // Onodes from front of the list to trim_pos can be either pinned or unpinned state.
   // When onode makes transition from pinned to unpinned, its location on lru list changes;
   // onode is moved to top of the list, becoming least recently used element.
+  list_t::iterator trim_pos_ne = lru.end();
 
   explicit LruOnodeCacheShard(CephContext *cct) : BlueStore::OnodeCacheShard(cct) {}
 
@@ -1052,6 +1053,9 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
   {
     if (it == trim_pos) {
       ++trim_pos;
+    }
+    if (it == trim_pos_ne) {
+      ++trim_pos_ne;
     }
     lru.erase(it);
   }
@@ -1062,10 +1066,6 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     ceph_assert(!o->cached);
     o->cached = true;
     lru.push_front(*o);
-    // we expect OnodeSpace::add to be only place that adds new onodes,
-    // and we know it does it with nref >= 2
-    ceph_assert(o->is_pinned());
-    ++num_pinned;
     ++num; // we count both pinned and unpinned entries
     dout(20) << __func__ << " " << this << " " << o->oid << " added, num=" << num << dendl;
   }
@@ -1073,58 +1073,85 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
   {
     ceph_assert(o->cached); // substitute for check if o is in lru
     _erase(lru.iterator_to(*o));
-    if (o->is_pinned()) {
-      ceph_assert(num_pinned > 0);
-      --num_pinned;
-    }
     ceph_assert(num > 0);
     --num;
     dout(20) << __func__ << " " << this << " " << " " << o->oid << " removed, num=" << num << dendl;
   }
-  void _pin(BlueStore::Onode* o) override
+  void _touch(BlueStore::Onode* o) override
   {
-    ++num_pinned;
-  }
-  void _unpin(BlueStore::Onode* o) override
-  {
-    ceph_assert(o->cached); // substitute for check if o is in lru
+    ceph_assert(o->cached);
     _erase(lru.iterator_to(*o));
     if (o->exists) {
       lru.push_front(*o);
     } else {
-      /* it is the time to get rid of onode */
-      o->c->onode_map._remove(o->oid);
-      ceph_assert(num > 0);
-      --num;
+      lru.push_back(*o);
     }
-    ceph_assert(num_pinned > 0);
-    --num_pinned;
+    dout(20) << __func__ << " " << this << " " << " " << o->oid << " touched, num=" << num << dendl;
   }
+
   void _trim_to(uint64_t new_size) override
   {
+    const uint64_t max_inspect_ne = 32;
+    uint64_t trim_cnt = max_inspect_ne;
+
+    // start over
+    if (trim_pos_ne == lru.end()) {
+      trim_pos_ne = trim_pos;
+      if (trim_pos_ne != lru.end()) {
+        ++trim_pos_ne;
+      }
+    }
+    while (trim_cnt > 0 && trim_pos_ne != lru.end()) {
+      BlueStore::Onode *o = &*trim_pos_ne;
+      dout(20) << __func__ << " try rm pinned" << o->oid << " "
+	       << o->nref << " " << o->cached << " " << o->exists
+	       << dendl;
+      --trim_cnt;
+      if (!o->is_pinned()) {
+	trim_pos_ne = lru.erase(trim_pos_ne);
+        if (!o->exists) {
+	  // onode can be freed
+	  o->c->onode_map._remove(o->oid);
+	  ceph_assert(num > 0);
+	  --num;
+        } else {
+          // touch onode that has been unpinned, may be redundant
+          // as onode's owner might touch it explicitly
+          lru.push_front(*o);
+        }
+      } else {
+        ++trim_pos_ne;
+      }
+    }
+
     if (new_size >= lru.size()) {
       return; // don't even try
     }
-    uint64_t trim_cnt = lru.size() - new_size;
+    trim_cnt = lru.size() - new_size;
     while (trim_cnt > 0 && trim_pos != lru.begin()) {
       --trim_pos;
       BlueStore::Onode *o = &*trim_pos;
-      dout(20) << __func__ << " rm " << o->oid << " "
+      dout(20) << __func__ << " try rm " << o->oid << " "
 	       << o->nref << " " << o->cached << dendl;
+      --trim_cnt;
       if (!o->is_pinned()) {
 	// onode can be freed
 	trim_pos = lru.erase(trim_pos);
 	o->c->onode_map._remove(o->oid);
 	ceph_assert(num > 0);
 	--num;
-	--trim_cnt;
+      } else if (o->exists) {
+        // touch the pinned onode as it's rather to be touched anyway
+        // when unpinned
+        trim_pos = lru.erase(trim_pos);
+        lru.push_front(*o);
       }
     }
     if (trim_cnt > 0) {
       dout(10) << __func__ << " trim is short by " << trim_cnt << " onodes" << dendl;
     }
   }
-  void move_pinned(OnodeCacheShard *to, BlueStore::Onode *o) override
+  void move_cached(OnodeCacheShard *to, BlueStore::Onode *o) override
   {
     if (to == this) {
       return;
@@ -1132,16 +1159,13 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     ceph_assert(o->cached);
     ceph_assert(o->is_pinned());
     ceph_assert(num);
-    ceph_assert(num_pinned);
-    --num_pinned;
     --num;
-    ++to->num_pinned;
     ++to->num;
   }
   void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) override
   {
     *onodes += num;
-    *pinned_onodes += num_pinned;
+    //FIXME: remove pinned_onodes? *pinned_onodes += num_pinned;
   }
 };
 
@@ -1879,12 +1903,8 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
                             << " " << p->second->nref
                             << " " << p->second->cached
 			    << dendl;
-      // This will pin onode and implicitly touch the cache when Onode
-      // eventually will become unpinned
       o = p->second;
-      if (o->nref == 2) {
-	cache->_pin(&*o);
-      }
+      cache->_touch(o.get());
 
       hit = true;
     }
@@ -1942,13 +1962,11 @@ void BlueStore::OnodeSpace::rename(
   po->second = oldo;
   cache->_add(oldo.get(), 1);
   // add at new position and fix oid, key.
-  // This will pin 'o' and implicitly touch cache
-  // when it will eventually become unpinned
   onode_map.insert(make_pair(new_oid, o));
-  ceph_assert(o->is_pinned());
 
   o->oid = new_oid;
   o->key = new_okey;
+  cache->_touch(o.get());
   cache->_trim();
 }
 
@@ -3530,39 +3548,14 @@ destr      .       ^         <-put--             <-put--
                  Onode
 */
 
-void BlueStore::Onode::get() {
+void BlueStore::Onode::get()
+{
   ++nref;
 }
-void BlueStore::Onode::put() {
-  if (cached) {
-    int n = nref;
-    if (n >= 3 && nref.compare_exchange_weak(n, n - 1)) {
-      //done, n updated
-      ceph_assert(n >= 2);
-    } else {
-      OnodeCacheShard* ocs = c->get_onode_cache();
-      ocs->lock.lock();
-      // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
-      while (ocs != c->get_onode_cache()) {
-	ocs->lock.unlock();
-	ocs = c->get_onode_cache();
-	ocs->lock.lock();
-      }
-      n = --nref;
-      if (n == 1) {
-	// onode is now eligiable for eviction
-	ocs->_unpin(this);
-      }
-      ocs->lock.unlock();
-    }
-    if (n == 0) {
-      delete this;
-    }
-  } else {
-    // not cached
-    if (--nref == 0) {
-      delete this;
-    }
+void BlueStore::Onode::put()
+{
+  if (!--nref) {
+    delete this;
   }
 }
 
@@ -4042,7 +4035,7 @@ void BlueStore::Collection::split_cache(
       p = onode_map.onode_map.erase(p);
       dest->onode_map.onode_map[o->oid] = o;
       if (o->cached) {
-        get_onode_cache()->move_pinned(dest->get_onode_cache(), o.get());
+        get_onode_cache()->move_cached(dest->get_onode_cache(), o.get());
       }
       o->c = dest;
 
@@ -14750,6 +14743,7 @@ int BlueStore::_do_remove(
   o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
 
+  c->get_onode_cache()->touch(o.get());
   if (!is_gen || maybe_unshared_blobs.empty()) {
     return 0;
   }

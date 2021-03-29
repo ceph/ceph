@@ -1127,10 +1127,7 @@ public:
     void flush();
     void get();
     void put();
-
-    // is_pinned only makes sense for cached onodes
-    inline bool is_pinned() {
-      ceph_assert(cached);
+    inline bool is_pinned() const {
       return nref > 1;
     }
 
@@ -1205,12 +1202,8 @@ public:
 
   /// A Generic onode Cache Shard
   struct OnodeCacheShard : public CacheShard {
-    std::atomic<uint64_t> num_pinned = {0};
 
     std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
-
-    virtual void _pin(Onode* o) = 0;
-    virtual void _unpin(Onode* o) = 0;
 
   public:
     OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
@@ -1218,9 +1211,14 @@ public:
                                    PerfCounters *logger);
     virtual void _add(Onode* o, int level) = 0;
     virtual void _rm(Onode* o) = 0;
+    virtual void _touch(Onode* o) = 0;
 
-    virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
+    virtual void move_cached(OnodeCacheShard *to, Onode *o) = 0;
     virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
+    void touch(Onode* o){
+      std::lock_guard l(lock);
+      _touch(o);
+    }
     bool empty() {
       return _get_num() == 0;
     }
