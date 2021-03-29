@@ -12,6 +12,7 @@ FSID='00000000-0000-0000-0000-0000deadbeef'
 IMAGE_MASTER=${IMAGE_MASTER:-'quay.ceph.io/ceph-ci/ceph:master'}
 IMAGE_PACIFIC=${IMAGE_PACIFIC:-'quay.ceph.io/ceph-ci/ceph:pacific'}
 #IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
+IMAGE_DEFAULT=${IMAGE_MASTER}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -35,7 +36,7 @@ if ! [ -x "$CEPHADM" ]; then
 fi
 
 # add image to args
-CEPHADM_ARGS="$CEPHADM_ARGS --image $IMAGE_MASTER"
+CEPHADM_ARGS="$CEPHADM_ARGS --image $IMAGE_DEFAULT"
 
 # combine into a single var
 CEPHADM_BIN="$CEPHADM"
@@ -301,21 +302,21 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
 done
 
 # add node-exporter
-${CEPHADM//--image $IMAGE_MASTER/} deploy \
+${CEPHADM//--image $IMAGE_DEFAULT/} deploy \
     --name node-exporter.a --fsid $FSID
 cond="curl 'http://localhost:9100' | grep -q 'Node Exporter'"
 is_available "node-exporter" "$cond" 10
 
 # add prometheus
 cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
-        ${CEPHADM//--image $IMAGE_MASTER/} deploy \
+        ${CEPHADM//--image $IMAGE_DEFAULT/} deploy \
 	    --name prometheus.a --fsid $FSID --config-json -
 cond="curl 'localhost:9095/api/v1/query?query=up'"
 is_available "prometheus" "$cond" 10
 
 # add grafana
 cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
-        ${CEPHADM//--image $IMAGE_MASTER/} deploy \
+        ${CEPHADM//--image $IMAGE_DEFAULT/} deploy \
             --name grafana.a --fsid $FSID --config-json -
 cond="curl --insecure 'https://localhost:3000' | grep -q 'grafana'"
 is_available "grafana" "$cond" 50
@@ -343,7 +344,7 @@ $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
 alertmanager_image=$(cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | jq -r '.image')
 tcp_ports=$(cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | jq -r '.ports | map_values(.|tostring) | join(" ")')
 cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | \
-      ${CEPHADM//--image $IMAGE_MASTER/} \
+      ${CEPHADM//--image $IMAGE_DEFAULT/} \
       --image $alertmanager_image \
       deploy \
       --tcp-ports "$tcp_ports" \
