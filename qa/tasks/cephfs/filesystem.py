@@ -683,6 +683,9 @@ class Filesystem(MDSCluster):
             if max_mds > 1:
                 self.set_max_mds(max_mds)
 
+            standby_replay = self.fs_config.get('standby_replay', False)
+            self.set_allow_standby_replay(standby_replay)
+
             # If absent will use the default value (60 seconds)
             session_timeout = self.fs_config.get('session_timeout', 60)
             if session_timeout != 60:

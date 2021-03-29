@@ -1,0 +1,4 @@
+overrides:
+  ceph:
+    cephfs:
+      standby_replay: true
