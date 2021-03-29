@@ -150,6 +150,7 @@ fi
 # or circular), we'll have to stick to static linking.
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D CMAKE_TOOLCHAIN_FILE="$MINGW_CMAKE_FILE" \
+      -D WITH_LIBCEPHSQLITE=OFF \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
       -D WITH_GSSAPI=OFF -D WITH_XFS=OFF \
       -D WITH_FUSE=OFF -D WITH_DOKAN=ON \
