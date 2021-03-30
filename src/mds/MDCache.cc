@@ -301,10 +301,6 @@ void MDCache::add_inode(CInode *in)
     if (in->is_base())
       base_inodes.insert(in);
   }
-
-  if (cache_toofull()) {
-    exceeded_size_limit = true;
-  }
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -7665,20 +7661,6 @@ void MDCache::check_memory_usage()
 
   if (cache_toofull()) {
     mds->server->recall_client_state(nullptr, Server::RecallFlags::TRIM);
-  }
-
-  // If the cache size had exceeded its limit, but we're back in bounds
-  // now, free any unused pool memory so that our memory usage isn't
-  // permanently bloated.
-  if (exceeded_size_limit && !cache_toofull()) {
-    // Only do this once we are back in bounds: otherwise the releases would
-    // slow down whatever process caused us to exceed bounds to begin with
-    if (ceph_using_tcmalloc()) {
-      dout(5) << "check_memory_usage: releasing unused space from tcmalloc"
-	      << dendl;
-      ceph_heap_release_free_memory();
-    }
-    exceeded_size_limit = false;
   }
 }
 

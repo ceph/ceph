@@ -156,8 +156,6 @@ class MDCache {
 
   Filer filer;
 
-  bool exceeded_size_limit = false;
-
 private:
   uint64_t cache_inode_limit;
   uint64_t cache_memory_limit;
