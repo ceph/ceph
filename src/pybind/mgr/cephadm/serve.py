@@ -23,7 +23,7 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment, DaemonPlacement
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
+    CephadmNoImage, CEPH_TYPES, MONITORING_STACK_TYPES, ContainerInspectInfo
 from mgr_module import MonCommandFailed
 
 from . import utils
@@ -725,6 +725,11 @@ class CephadmServe:
                     dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
                 action = 'reconfig'
+            if not action and dd.daemon_type in MONITORING_STACK_TYPES and not self.mgr.spec_store[dd.service_name()].deleted:
+                if dd.container_image_name != self.mgr._get_container_image(dd.name()):
+                    self.log.info('Redeploying %s. Daemon\'s current image does not match mgr/cephadm/container_image_%s config setting.'
+                                  % (dd.name(), dd.daemon_type))
+                    action = 'redeploy'
             if action:
                 if self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
                         and action == 'reconfig':
