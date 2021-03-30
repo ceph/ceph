@@ -1304,6 +1304,8 @@ class MDCache {
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
+  void upkeep_main(void);
+
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;
