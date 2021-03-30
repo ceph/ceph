@@ -109,6 +109,10 @@ public:
   } availability_t;
 
   struct mds_info_t {
+    enum mds_flags : uint64_t {
+      FROZEN = 1 << 0,
+    };
+
     mds_info_t() = default;
 
     bool laggy() const { return !(laggy_since == utime_t()); }
@@ -151,9 +155,7 @@ public:
     fs_cluster_id_t join_fscid = FS_CLUSTER_ID_NONE;
     uint64_t mds_features = 0;
     uint64_t flags = 0;
-    enum mds_flags : uint64_t {
-      FROZEN = 1 << 0,
-    };
+    CompatSet compat;
   private:
     void encode_versioned(ceph::buffer::list& bl, uint64_t features) const;
     void encode_unversioned(ceph::buffer::list& bl) const;
