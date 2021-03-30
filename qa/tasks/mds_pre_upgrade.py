@@ -24,6 +24,7 @@ def task(ctx, config):
     fs = Filesystem(ctx)
     status = fs.getinfo()
 
+    fs.set_allow_standby_replay(False)
     fs.set_max_mds(1)
     fs.reach_max_mds()
 
