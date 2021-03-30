@@ -463,7 +463,6 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
-  fmt::fmt
   StdFilesystem::filesystem
   fmt::fmt
   ${BLKID_LIBRARIES}
