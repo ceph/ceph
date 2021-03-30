@@ -8365,6 +8365,9 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
     t->remove(soid);
     if (obs.oi.has_manifest()) {
       dec_all_refcount_manifest(obs.oi, ctx);
+      oi.manifest.clear();
+      oi.manifest.type = object_manifest_t::TYPE_NONE;
+      oi.clear_flag(object_info_t::FLAG_MANIFEST);
       ctx->delta_stats.num_objects_manifest--;
       ctx->cache_operation = true; // do not trigger to call ref function to calculate refcount
     }
