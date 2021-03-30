@@ -1819,6 +1819,18 @@ void OSDService::queue_scrub_pushes_update(PG* pg, Scrub::scrub_prio_t with_prio
   queue_scrub_event_msg<PGScrubPushesUpdate>(pg, with_priority);
 }
 
+void OSDService::queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  // Resulting scrub event: 'SelectedChunkFree'
+  queue_scrub_event_msg<PGScrubChunkIsFree>(pg, with_priority);
+}
+
+void OSDService::queue_scrub_chunk_busy(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  // Resulting scrub event: 'ChunkIsBusy'
+  queue_scrub_event_msg<PGScrubChunkIsBusy>(pg, with_priority);
+}
+
 void OSDService::queue_scrub_applied_update(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   queue_scrub_event_msg<PGScrubAppliedUpdate>(pg, with_priority);
@@ -1836,16 +1848,40 @@ void OSDService::queue_scrub_digest_update(PG* pg, Scrub::scrub_prio_t with_prio
   queue_scrub_event_msg<PGScrubDigestUpdate>(pg, with_priority);
 }
 
+void OSDService::queue_scrub_got_local_map(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  // Resulting scrub event: 'IntLocalMapDone'
+  queue_scrub_event_msg<PGScrubGotLocalMap>(pg, with_priority);
+}
+
 void OSDService::queue_scrub_got_repl_maps(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'GotReplicas'
   queue_scrub_event_msg<PGScrubGotReplMaps>(pg, with_priority);
 }
 
+void OSDService::queue_scrub_maps_compared(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  // Resulting scrub event: 'MapsCompared'
+  queue_scrub_event_msg<PGScrubMapsCompared>(pg, with_priority);
+}
+
 void OSDService::queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'ReplicaPushesUpd'
   queue_scrub_event_msg<PGScrubReplicaPushes>(pg, with_priority);
+}
+
+void OSDService::queue_scrub_is_finished(PG *pg)
+{
+  // Resulting scrub event: 'ScrubFinished'
+  queue_scrub_event_msg<PGScrubScrubFinished>(pg, Scrub::scrub_prio_t::high_priority);
+}
+
+void OSDService::queue_scrub_next_chunk(PG *pg, Scrub::scrub_prio_t with_priority)
+{
+  // Resulting scrub event: 'NextChunk'
+  queue_scrub_event_msg<PGScrubGetNextChunk>(pg, with_priority);
 }
 
 void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
