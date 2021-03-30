@@ -910,7 +910,7 @@ void FSMap::promote(
     ceph_assert(mds_map.mds_info.at(standby_gid).state == MDSMap::STATE_STANDBY_REPLAY);
     ceph_assert(mds_map.mds_info.at(standby_gid).rank == assigned_rank);
   }
-  auto& info = mds_map.mds_info[standby_gid];
+  auto& info = mds_map.mds_info.at(standby_gid);
 
   if (mds_map.stopped.erase(assigned_rank)) {
     // The cluster is being expanded with a stopped rank
@@ -925,7 +925,7 @@ void FSMap::promote(
   }
   info.rank = assigned_rank;
   info.inc = epoch;
-  mds_roles[standby_gid] = filesystem.fscid;
+  mds_roles.at(standby_gid) = filesystem.fscid;
 
   // Update the rank state in Filesystem
   mds_map.in.insert(assigned_rank);
