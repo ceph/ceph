@@ -896,7 +896,6 @@ Summary:	SQLite3 VFS for Ceph
 Group:		System/Libraries
 %endif
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
-Requires:	sqlite-libs
 %description -n libcephsqlite
 A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
 distributed object store.
