@@ -30,6 +30,8 @@
   using these re-authorized IDs may be disrupted, this command requires the
   "--yes-i-really-mean-it" flag. Also, mirroring is expected to be disabled
   on the file system.
+* MDS upgrades no longer require stopping all standby MDS daemons before
+  upgrading the sole active MDS for a file system.
 
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.
