@@ -428,10 +428,26 @@ class PGScrubDigestUpdate : public PGScrubItem {
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
+class PGScrubGotLocalMap : public PGScrubItem {
+ public:
+  PGScrubGotLocalMap(spg_t pg, epoch_t epoch_queued)
+    : PGScrubItem{pg, epoch_queued, "PGScrubGotLocalMap"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
 class PGScrubGotReplMaps : public PGScrubItem {
  public:
   PGScrubGotReplMaps(spg_t pg, epoch_t epoch_queued)
       : PGScrubItem{pg, epoch_queued, "PGScrubGotReplMaps"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+class PGScrubMapsCompared : public PGScrubItem {
+ public:
+  PGScrubMapsCompared(spg_t pg, epoch_t epoch_queued)
+    : PGScrubItem{pg, epoch_queued, "PGScrubMapsCompared"}
   {}
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
@@ -455,6 +471,38 @@ class PGScrubReplicaPushes : public PGScrubItem {
  public:
   PGScrubReplicaPushes(spg_t pg, epoch_t epoch_queued)
       : PGScrubItem{pg, epoch_queued, "PGScrubReplicaPushes"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+class PGScrubScrubFinished : public PGScrubItem {
+ public:
+  PGScrubScrubFinished(spg_t pg, epoch_t epoch_queued)
+    : PGScrubItem{pg, epoch_queued, "PGScrubScrubFinished"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+class PGScrubGetNextChunk : public PGScrubItem {
+ public:
+  PGScrubGetNextChunk(spg_t pg, epoch_t epoch_queued)
+    : PGScrubItem{pg, epoch_queued, "PGScrubGetNextChunk"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+class PGScrubChunkIsBusy : public PGScrubItem {
+ public:
+  PGScrubChunkIsBusy(spg_t pg, epoch_t epoch_queued)
+    : PGScrubItem{pg, epoch_queued, "PGScrubChunkIsBusy"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+class PGScrubChunkIsFree : public PGScrubItem {
+ public:
+  PGScrubChunkIsFree(spg_t pg, epoch_t epoch_queued)
+    : PGScrubItem{pg, epoch_queued, "PGScrubChunkIsFree"}
   {}
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
