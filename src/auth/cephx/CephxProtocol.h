@@ -415,7 +415,8 @@ WRITE_CLASS_ENCODER(CephXAuthorize)
  * Decode an extract ticket
  */
 bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
-			 uint32_t service_id, CephXTicketBlob& ticket_blob,
+			 uint32_t service_id,
+			 const CephXTicketBlob& ticket_blob,
 			 CephXServiceTicketInfo& ticket_info);
 
 /*
