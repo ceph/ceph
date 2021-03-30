@@ -660,7 +660,6 @@ public:
 
       for (const auto & i : result) {
 	auto oid = i.oid;
-	cout << oid << std::endl;
 	chunk_refs_t refs;
 	{
 	  bufferlist t;
