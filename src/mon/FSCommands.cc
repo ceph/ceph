@@ -27,12 +27,9 @@ using std::hex;
 using std::list;
 using std::map;
 using std::make_pair;
-using std::ostream;
-using std::ostringstream;
 using std::pair;
 using std::set;
 using std::string;
-using std::stringstream;
 using std::to_string;
 using std::vector;
 
@@ -60,7 +57,7 @@ class FlagSetHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     string flag_name;
     cmd_getval(cmdmap, "flag_name", flag_name);
@@ -101,7 +98,7 @@ class FailHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream& ss) override
+      std::ostream& ss) override
   {
     if (!mon->osdmon()->is_writeable()) {
       // not allowed to write yet, so retry when we can
@@ -158,7 +155,7 @@ class FsNewHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     ceph_assert(m_paxos->is_plugged());
 
@@ -312,7 +309,7 @@ public:
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
@@ -672,7 +669,7 @@ class RequiredClientFeaturesHandler : public FileSystemCommandHandler
 	FSMap &fsmap,
 	MonOpRequestRef op,
 	const cmdmap_t& cmdmap,
-	std::stringstream &ss) override
+	std::ostream &ss) override
     {
       std::string fs_name;
       if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
@@ -764,7 +761,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     ceph_assert(m_paxos->is_plugged());
 
@@ -838,7 +835,7 @@ class SetDefaultHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     std::string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
@@ -865,7 +862,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     /* We may need to blocklist ranks. */
     if (!mon->osdmon()->is_writeable()) {
@@ -939,7 +936,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
@@ -984,7 +981,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     string poolname;
     cmd_getval(cmdmap, "pool", poolname);
@@ -1059,7 +1056,7 @@ class AliasHandler : public T
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     return T::handle(mon, fsmap, op, cmdmap, ss);
   }
@@ -1074,7 +1071,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1109,7 +1106,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1156,7 +1153,7 @@ public:
   }
 
   bool peer_add(FSMap &fsmap, Filesystem::const_ref &&fs,
-                const cmdmap_t &cmdmap, std::stringstream &ss) {
+                const cmdmap_t &cmdmap, std::ostream &ss) {
     string peer_uuid;
     string remote_spec;
     string remote_fs_name;
@@ -1191,7 +1188,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1226,7 +1223,7 @@ public:
   {}
 
   bool peer_remove(FSMap &fsmap, Filesystem::const_ref &&fs,
-                   const cmdmap_t &cmdmap, std::stringstream &ss) {
+                   const cmdmap_t &cmdmap, std::ostream &ss) {
     string peer_uuid;
     cmd_getval(cmdmap, "uuid", peer_uuid);
 
@@ -1244,7 +1241,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1302,7 +1299,7 @@ int FileSystemCommandHandler::_check_pool(
     const int64_t pool_id,
     int type,
     bool force,
-    std::stringstream *ss) const
+    std::ostream *ss) const
 {
   ceph_assert(ss != NULL);
 
@@ -1372,7 +1369,7 @@ int FileSystemCommandHandler::_check_pool(
 
 int FileSystemCommandHandler::is_op_allowed(
     const MonOpRequestRef& op, const FSMap& fsmap, const cmdmap_t& cmdmap,
-    std::stringstream &ss) const
+    std::ostream &ss) const
 {
     string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
