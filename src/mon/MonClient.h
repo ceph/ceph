@@ -351,9 +351,9 @@ private:
   void _finish_hunting(int auth_err);
   void _finish_auth(int auth_err);
   void _reopen_session(int rank = -1);
-  void _add_conn(unsigned rank, uint64_t global_id);
+  void _add_conn(unsigned rank);
+  void _add_conns();
   void _un_backoff();
-  void _add_conns(uint64_t global_id);
   void _send_mon_message(MessageRef m);
 
   std::map<entity_addrvec_t, MonConnection>::iterator _find_pending_con(
