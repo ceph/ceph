@@ -12,16 +12,13 @@
 
 namespace Scrub {
 
-/// used when PgScrubber is called by the scrub-machine, to tell the FSM
-/// how to continue
-enum class FsmNext { do_discard, next_chunk, goto_notactive };
 enum class PreemptionNoted { no_preemption, preempted };
 
 /// the interface exposed by the PgScrubber into its internal
 /// preemption_data object
 struct preemption_t {
 
-  virtual ~preemption_t(){};
+  virtual ~preemption_t() = default;
 
   [[nodiscard]] virtual bool is_preemptable() const = 0;
 
@@ -47,11 +44,16 @@ struct preemption_t {
 
 struct ScrubMachineListener {
 
-  virtual ~ScrubMachineListener(){};
+  struct MsgAndEpoch {
+    MessageRef m_msg;
+    epoch_t m_epoch;
+  };
+
+  virtual ~ScrubMachineListener() = default;
+
+  virtual void select_range_n_notify() = 0;
 
   [[nodiscard]] virtual bool is_primary() const = 0;
-
-  virtual bool select_range() = 0;
 
   /// walk the log to find the latest update that affects our chunk
   virtual eversion_t search_log_for_updates() const = 0;
@@ -64,32 +66,48 @@ struct ScrubMachineListener {
 
   virtual int build_replica_map_chunk() = 0;
 
-  virtual void scrub_compare_maps() = 0;
-
   virtual void on_init() = 0;
 
   virtual void on_replica_init() = 0;
 
   virtual void replica_handling_done() = 0;
 
-  // no virtual void discard_reservation_by_primary() = 0;
-
   /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
   /// (thus can be called from FSM reactions)
   virtual void clear_pgscrub_state() = 0;
 
+  /*
+   * Send an 'InternalSchedScrub' FSM event either immediately, or - if 'm_need_sleep'
+   * is asserted - after a configuration-dependent timeout.
+   */
   virtual void add_delayed_scheduling() = 0;
 
   /**
-   * @returns have we asked at least one replica?
-   * 'false' means we are configured with no replicas, and
-   * should expect no maps to arrive.
+   * Ask all replicas for their scrub maps for the current chunk.
    */
-  virtual bool get_replicas_maps(bool replica_can_preempt) = 0;
+  virtual void get_replicas_maps(bool replica_can_preempt) = 0;
 
-  virtual Scrub::FsmNext on_digest_updates() = 0;
+  virtual void on_digest_updates() = 0;
 
-  virtual void send_replica_map(Scrub::PreemptionNoted was_preempted) = 0;
+  /**
+   * Prepare a MOSDRepScrubMap message carrying the requested scrub map
+   * @param was_preempted - were we preempted?
+   * @return the message, and the current value of 'm_replica_min_epoch' (which is
+   *     used when sending the message, but will be overwritten before that).
+   */
+  [[nodiscard]] virtual MsgAndEpoch prep_replica_map_msg(
+    Scrub::PreemptionNoted was_preempted) = 0;
+
+  /**
+   * Send to the primary the pre-prepared message containing the requested map
+   */
+  virtual void send_replica_map(const MsgAndEpoch& preprepared) = 0;
+
+  /**
+   * Let the primary know that we were preempted while trying to build the
+   * requested map.
+   */
+  virtual void send_preempted_replica() = 0;
 
   [[nodiscard]] virtual bool has_pg_marked_new_updates() const = 0;
 
@@ -104,7 +122,7 @@ struct ScrubMachineListener {
    *  rep maps are available:
    *  - the maps are compared
    *  - the scrub region markers (start_ & end_) are advanced
-   *  - callbacks and ops that were pending are free to run
+   *  - callbacks and ops that were pending are allowed to run
    */
   virtual void maps_compare_n_cleanup() = 0;
 
