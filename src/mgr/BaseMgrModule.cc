@@ -1488,13 +1488,13 @@ PyMethodDef BaseMgrModule_methods[] = {
     METH_VARARGS, "Get osd perf counters"},
 
   {"_ceph_add_mds_perf_query", (PyCFunction)ceph_add_mds_perf_query,
-    METH_VARARGS, "Add an osd perf query"},
+    METH_VARARGS, "Add an mds perf query"},
 
   {"_ceph_remove_mds_perf_query", (PyCFunction)ceph_remove_mds_perf_query,
-    METH_VARARGS, "Remove an osd perf query"},
+    METH_VARARGS, "Remove an mds perf query"},
 
   {"_ceph_get_mds_perf_counters", (PyCFunction)ceph_get_mds_perf_counters,
-    METH_VARARGS, "Get osd perf counters"},
+    METH_VARARGS, "Get mds perf counters"},
 
   {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized,
     METH_VARARGS, "Verify the current session caps are valid"},
