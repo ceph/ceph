@@ -20,4 +20,4 @@ tasks:
       tier_evict: 10
       snap_create: 10
       snap_remove: 10
-      roll_back: 10
+      rollback: 10
