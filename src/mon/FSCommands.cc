@@ -663,6 +663,111 @@ public:
   }
 };
 
+class CompatSetHandler : public FileSystemCommandHandler
+{
+  public:
+    CompatSetHandler()
+      : FileSystemCommandHandler("fs compat")
+    {
+    }
+
+    int handle(
+	Monitor *mon,
+	FSMap &fsmap,
+	MonOpRequestRef op,
+	const cmdmap_t& cmdmap,
+	std::ostream &ss) override
+    {
+      static const std::set<std::string> subops = {"rm_incompat", "rm_compat", "add_incompat", "add_compat"};
+
+      std::string fs_name;
+      if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+	ss << "Missing filesystem name";
+	return -EINVAL;
+      }
+      auto fs = fsmap.get_filesystem(fs_name);
+      if (fs == nullptr) {
+	ss << "Not found: '" << fs_name << "'";
+	return -ENOENT;
+      }
+
+      string subop;
+      if (!cmd_getval(cmdmap, "subop", subop) || subops.count(subop) == 0) {
+	ss << "subop `" << subop << "' not recognized. Must be one of: " << subops;
+	return -EINVAL;
+      }
+
+      int64_t feature;
+      if (!cmd_getval(cmdmap, "feature", feature) || feature <= 0) {
+        ss << "Invalid feature";
+        return -EINVAL;
+      }
+
+      if (fs->mds_map.get_num_up_mds() > 0) {
+        ss << "file system must be failed or down; use `ceph fs fail` to bring down";
+        return -EBUSY;
+      }
+
+      CompatSet cs = fs->mds_map.compat;
+      if (subop == "rm_compat") {
+        if (cs.compat.contains(feature)) {
+          ss << "removed compat feature " << feature;
+          cs.compat.remove(feature);
+        } else {
+          ss << "already removed compat feature " << feature;
+        }
+      } else if (subop == "rm_incompat") {
+        if (cs.incompat.contains(feature)) {
+          ss << "removed incompat feature " << feature;
+          cs.incompat.remove(feature);
+        } else {
+          ss << "already removed incompat feature " << feature;
+        }
+      } else if (subop == "add_compat" || subop == "add_incompat") {
+        string feature_str;
+        if (!cmd_getval(cmdmap, "feature_str", feature_str) || feature_str.empty()) {
+          ss << "adding a feature requires a feature string";
+          return -EINVAL;
+        }
+        auto f = CompatSet::Feature(feature, feature_str);
+        if (subop == "add_compat") {
+          if (cs.compat.contains(feature)) {
+            auto name = cs.compat.get_name(feature);
+            if (name == feature_str) {
+              ss << "feature already exists";
+            } else {
+              ss << "feature with differing name `" << name << "' exists";
+              return -EEXIST;
+            }
+          } else {
+            cs.compat.insert(f);
+            ss << "added compat feature " << f;
+          }
+        } else if (subop == "add_incompat") {
+          if (cs.incompat.contains(feature)) {
+            auto name = cs.incompat.get_name(feature);
+            if (name == feature_str) {
+              ss << "feature already exists";
+            } else {
+              ss << "feature with differing name `" << name << "' exists";
+              return -EEXIST;
+            }
+          } else {
+            cs.incompat.insert(f);
+            ss << "added incompat feature " << f;
+          }
+        } else ceph_assert(0);
+      } else ceph_assert(0);
+
+      auto modifyf = [cs = std::move(cs)](auto&& fs) {
+        fs->mds_map.compat = cs;
+      };
+
+      fsmap.modify_filesystem(fs->fscid, std::move(modifyf));
+      return 0;
+    }
+};
+
 class RequiredClientFeaturesHandler : public FileSystemCommandHandler
 {
   public:
@@ -1377,6 +1482,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
   handlers.push_back(std::make_shared<SetHandler>());
   handlers.push_back(std::make_shared<FailHandler>());
   handlers.push_back(std::make_shared<FlagSetHandler>());
+  handlers.push_back(std::make_shared<CompatSetHandler>());
   handlers.push_back(std::make_shared<RequiredClientFeaturesHandler>());
   handlers.push_back(std::make_shared<AddDataPoolHandler>(paxos));
   handlers.push_back(std::make_shared<RemoveDataPoolHandler>());

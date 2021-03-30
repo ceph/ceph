@@ -41,7 +41,8 @@ Beacon::Beacon(CephContext *cct, MonClient *monc, std::string_view name)
     Dispatcher(cct),
     beacon_interval(g_conf()->mds_beacon_interval),
     monc(monc),
-    name(name)
+    name(name),
+    compat(MDSMap::get_compat_set_all())
 {
 }
 
@@ -235,8 +236,6 @@ void Beacon::_notify_mdsmap(const MDSMap &mdsmap)
 
   if (mdsmap.get_epoch() >= epoch) {
     epoch = mdsmap.get_epoch();
-    compat = MDSMap::get_compat_set_default();
-    compat.merge(mdsmap.compat);
   }
 }
 
