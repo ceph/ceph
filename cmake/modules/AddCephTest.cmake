@@ -46,8 +46,8 @@ endif()
 #sets uniform compiler flags and link libraries
 function(add_ceph_unittest unittest_name)
   set(UNITTEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name}")
-  # If the second argument is "parallel", it means we want a parallel run
-  if(WITH_GTEST_PARALLEL AND "${ARGV1}" STREQUAL "parallel")
+  cmake_parse_arguments(UT "PARALLEL" "" "" ${ARGN})
+  if(WITH_GTEST_PARALLEL AND UT_PARALLEL)
     set(UNITTEST ${GTEST_PARALLEL_COMMAND} ${UNITTEST})
   endif()
   add_ceph_test(${unittest_name} "${UNITTEST}")
