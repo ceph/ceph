@@ -422,6 +422,7 @@ public:
       new_obj.attrs.erase(*i);
     }
     new_obj.dirty = true;
+    new_obj.flushed = false;
     pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
@@ -430,6 +431,7 @@ public:
     ObjectDesc new_obj = get_most_recent(oid);
     new_obj.header = bufferlist();
     new_obj.dirty = true;
+    new_obj.flushed = false;
     pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
@@ -440,6 +442,7 @@ public:
     new_obj.header = bl;
     new_obj.exists = true;
     new_obj.dirty = true;
+    new_obj.flushed = false;
     pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
@@ -453,6 +456,7 @@ public:
     }
     new_obj.exists = true;
     new_obj.dirty = true;
+    new_obj.flushed = false;
     pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
@@ -462,6 +466,7 @@ public:
     ObjectDesc new_obj = get_most_recent(oid);
     new_obj.exists = true;
     new_obj.dirty = true;
+    new_obj.flushed = false;
     new_obj.update(cont_gen,
 		   contents);
     pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
@@ -586,6 +591,7 @@ public:
     ObjectDesc contents;
     find_object(oid, &contents, snap);
     contents.dirty = true;
+    contents.flushed = false;
     pool_obj_cont.rbegin()->second.insert_or_assign(oid, contents);
   }
 
