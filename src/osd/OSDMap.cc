@@ -587,7 +587,6 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       target_v = 6;
     }
     if (change_stretch_mode) {
-      ceph_assert(target_v >= 9);
       target_v = std::max((uint8_t)10, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data

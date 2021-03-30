@@ -1199,8 +1199,10 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
     return true;
   }
 
-  if (pending_map.contains(join->name) &&
-      !pending_map.get_addrs(join->name).front().is_blank_ip()) {
+  const auto name_info_i = pending_map.mon_info.find(join->name);
+  if (name_info_i != pending_map.mon_info.end() &&
+      !name_info_i->second.public_addrs.front().is_blank_ip() &&
+      (!join->force_loc || join->crush_loc == name_info_i->second.crush_loc)) {
     dout(10) << " already have " << join->name << dendl;
     return true;
   }
@@ -1209,11 +1211,14 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
     addr_name = pending_map.get_name(join->addrs);
   }
   if (!addr_name.empty() &&
-      addr_name == join->name) {
+      addr_name == join->name &&
+      (!join->force_loc || join->crush_loc.empty() ||
+       pending_map.mon_info[addr_name].crush_loc == join->crush_loc)) {
     dout(10) << " already have " << join->addrs << dendl;
     return true;
   }
   if (pending_map.stretch_mode_enabled &&
+      join->crush_loc.empty() &&
       (addr_name.empty() ||
        pending_map.mon_info[addr_name].crush_loc.empty())) {
     dout(10) << "stretch mode engaged but no source of crush_loc" << dendl;
@@ -1239,7 +1244,9 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
   pending_map.add(join->name, join->addrs);
-  pending_map.mon_info[join->name].crush_loc = existing_loc;
+  pending_map.mon_info[join->name].crush_loc =
+    ((join->force_loc || existing_loc.empty()) ?
+     join->crush_loc : existing_loc);
   pending_map.last_changed = ceph_clock_now();
   return true;
 }
