@@ -577,6 +577,18 @@ private:
     Ref<MOSDOp> m,
     ObjectContextRef obc,
     const OpInfo &op_info);
+  using do_osd_ops_success_func_t =
+    std::function<do_osd_ops_iertr::future<>()>;
+  using do_osd_ops_failure_func_t =
+    std::function<do_osd_ops_iertr::future<>(const std::error_code&)>;
+  struct do_osd_ops_params_t;
+  do_osd_ops_iertr::future<> do_osd_ops(
+    ObjectContextRef obc,
+    std::vector<OSDOp> ops,
+    const OpInfo &op_info,
+    const do_osd_ops_params_t& params,
+    do_osd_ops_success_func_t success_func,
+    do_osd_ops_failure_func_t failure_func);
   template <class Ret, class SuccessFunc, class FailureFunc>
   do_osd_ops_iertr::future<Ret> do_osd_ops_execute(
     OpsExecuter&& ox,
@@ -748,6 +760,29 @@ private:
   BackfillRecovery::BackfillRecoveryPipeline backfill_pipeline;
 
   friend class IOInterruptCondition;
+};
+
+struct PG::do_osd_ops_params_t {
+  crimson::net::ConnectionRef get_connection() const {
+    return nullptr;
+  }
+  osd_reqid_t get_reqid() const {
+    return reqid;
+  }
+  epoch_t get_map_epoch() const {
+    return map_epoch;
+  }
+  entity_inst_t get_orig_source_inst() const {
+    return orig_source_inst;
+  }
+  uint64_t get_features() const {
+    return features;
+  }
+  crimson::net::ConnectionRef conn;
+  osd_reqid_t reqid;
+  epoch_t map_epoch;
+  entity_inst_t orig_source_inst;
+  uint64_t features;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
