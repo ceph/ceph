@@ -1147,7 +1147,6 @@ class MDCache {
   std::unique_ptr<PerfCounters> logger;
 
   Filer filer;
-  bool exceeded_size_limit = false;
   std::array<xlist<ClientLease*>, client_lease_pools> client_leases{};
 
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
