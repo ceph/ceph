@@ -31,89 +31,92 @@ Filestore is preferred for new deployments.
 Ceph OSD Daemons recognize the following journal settings: 
 
 
-``journal_dio``
+.. confval:: journal_dio
 
-:Description: Enables direct i/o to the journal. Requires ``journal block 
-              align`` set to ``true``.
-              
-:Type: Boolean
-:Required: Yes when using ``aio``.
-:Default: ``true``
+   Enables direct i/o to the journal. Requires ``journal block
+   align`` set to ``true``.
 
-
-
-``journal_aio``
-
-.. versionchanged:: 0.61 Cuttlefish
-
-:Description: Enables using ``libaio`` for asynchronous writes to the journal. 
-              Requires ``journal dio`` set to ``true``.
-
-:Type: Boolean 
-:Required: No.
-:Default: Version 0.61 and later, ``true``. Version 0.60 and earlier, ``false``.
+   :type: Boolean
+   :required: Yes when using ``aio``.
+   :default: ``true``
 
 
-``journal_block_align``
 
-:Description: Block aligns write operations. Required for ``dio`` and ``aio``.
-:Type: Boolean
-:Required: Yes when using ``dio`` and ``aio``.
-:Default: ``true``
+.. confval:: journal_aio
 
+   .. versionchanged:: 0.61 Cuttlefish
 
-``journal_max_write_bytes``
+   Enables using ``libaio`` for asynchronous writes to the journal.
+   Requires ``journal dio`` set to ``true``.
 
-:Description: The maximum number of bytes the journal will write at 
-              any one time.
-
-:Type: Integer
-:Required: No
-:Default: ``10 << 20``
+   :type: Boolean
+   :required: No.
+   :default: Version 0.61 and later, ``true``. Version 0.60 and earlier, ``false``.
 
 
-``journal_max_write_entries``
+.. confval:: journal_block_align
 
-:Description: The maximum number of entries the journal will write at 
-              any one time.
+   Block aligns write operations. Required for ``dio`` and ``aio``.
 
-:Type: Integer
-:Required: No
-:Default: ``100``
-
-
-``journal_queue_max_ops``
-
-:Description: The maximum number of operations allowed in the queue at 
-              any one time.
-
-:Type: Integer
-:Required: No
-:Default: ``500``
+   :type: Boolean
+   :required: Yes when using ``dio`` and ``aio``.
+   :default: ``true``
 
 
-``journal_queue_max_bytes``
+.. confval:: journal_max_write_bytes
 
-:Description: The maximum number of bytes allowed in the queue at 
-              any one time.
+   The maximum number of bytes the journal will write at
+   any one time.
 
-:Type: Integer
-:Required: No
-:Default: ``10 << 20``
-
-
-``journal_align_min_size``
-
-:Description: Align data payloads greater than the specified minimum.
-:Type: Integer
-:Required: No
-:Default: ``64 << 10``
+   :type: Integer
+   :required: No
+   :default: ``10 << 20``
 
 
-``journal_zero_on_create``
+.. confval:: journal_max_write_entries
 
-:Description: Causes the file store to overwrite the entire journal with 
-              ``0``'s during ``mkfs``.
-:Type: Boolean
-:Required: No
-:Default: ``false``
+   The maximum number of entries the journal will write at
+   any one time.
+
+   :type: Integer
+   :required: No
+   :default: ``100``
+
+
+.. confval:: journal_queue_max_ops
+
+   The maximum number of operations allowed in the queue at
+   any one time.
+
+   :type: Integer
+   :required: No
+   :default: ``500``
+
+
+.. confval:: journal_queue_max_bytes
+
+   The maximum number of bytes allowed in the queue at
+   any one time.
+
+   :type: Integer
+   :required: No
+   :default: ``10 << 20``
+
+
+.. confval:: journal_align_min_size
+
+   Align data payloads greater than the specified minimum.
+
+   :type: Integer
+   :required: No
+   :default: ``64 << 10``
+
+
+.. confval:: journal_zero_on_create
+
+   Causes the file store to overwrite the entire journal with
+   ``0``'s during ``mkfs``.
+
+   :type: Boolean
+   :required: No
+   :default: ``false``
