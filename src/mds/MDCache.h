@@ -157,6 +157,7 @@ class MDCache {
   Filer filer;
 
 private:
+  void upkeep_main(void);
   uint64_t cache_inode_limit;
   uint64_t cache_memory_limit;
   double cache_reservation;
