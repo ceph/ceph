@@ -50,7 +50,7 @@ function(add_ceph_unittest unittest_name)
   if(WITH_GTEST_PARALLEL AND UT_PARALLEL)
     set(UNITTEST ${GTEST_PARALLEL_COMMAND} ${UNITTEST})
   endif()
-  add_ceph_test(${unittest_name} "${UNITTEST}")
+  add_ceph_test(${unittest_name} "${UNITTEST}" ${UT_UNPARSED_ARGUMENTS})
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
 endfunction()
 

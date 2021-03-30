@@ -20,7 +20,7 @@ if(HAVE_BLKID AND LINUX)
   # unittest_blkdev
   add_executable(unittest_blkdev
     test_blkdev.cc)
-  add_ceph_unittest(unittest_blkdev ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_blkdev)
+  add_ceph_unittest(unittest_blkdev)
   target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
 endif()
 

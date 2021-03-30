@@ -2,7 +2,8 @@ add_executable(unittest-transaction-manager
   test_block.cc
   test_transaction_manager.cc
   ../gtest_seastar.cc)
-add_ceph_unittest(unittest-transaction-manager)
+add_ceph_unittest(unittest-transaction-manager
+  --memory 256M --smp 1)
 target_link_libraries(
   unittest-transaction-manager
   ${CMAKE_DL_LIBS}
@@ -11,7 +12,8 @@ target_link_libraries(
 add_executable(unittest-btree-lba-manager
   test_btree_lba_manager.cc
   ../gtest_seastar.cc)
-add_ceph_unittest(unittest-btree-lba-manager)
+add_ceph_unittest(unittest-btree-lba-manager
+  --memory 256M --smp 1)
 target_link_libraries(
   unittest-btree-lba-manager
   ${CMAKE_DL_LIBS}
@@ -39,7 +41,8 @@ target_link_libraries(
 add_executable(unittest-extmap-manager
   test_extmap_manager.cc
   ../gtest_seastar.cc)
-add_ceph_unittest(unittest-extmap-manager)
+add_ceph_unittest(unittest-extmap-manager
+  --memory 256M --smp 1)
 target_link_libraries(
   unittest-extmap-manager
   ${CMAKE_DL_LIBS}
