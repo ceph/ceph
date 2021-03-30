@@ -257,6 +257,11 @@ struct CompatSet {
 };
 WRITE_CLASS_ENCODER(CompatSet)
 
+inline std::ostream& operator<<(std::ostream& out, const CompatSet::Feature& f)
+{
+  return out << "F(" << f.id << ", \"" << f.name << "\")";
+}
+
 inline std::ostream& operator<<(std::ostream& out, const CompatSet::FeatureSet& fs)
 {
   return out << fs.names;
