@@ -326,6 +326,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None, maintenance: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
+
+        # split multiple labels passed in with --labels=label1,label2
+        if labels and len(labels) == 1:
+            labels = labels[0].split(',')
+
         s = HostSpec(hostname=hostname, addr=addr, labels=labels, status=_status)
 
         return self._apply_misc([s], False, Format.plain)
