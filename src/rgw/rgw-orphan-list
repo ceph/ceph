@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# version 2020-10-20
+# version 2021-02-04
 
 # IMPORTANT: affects order produced by 'sort' and 'ceph-diff-sorted'
 # relies on this ordering
-export LANG=C
+export LC_ALL=C
 
 out_dir="."
 temp_file=/tmp/temp.$$
@@ -83,7 +83,7 @@ fi
 # check for namespaces -- any line that does not begin with a tab
 # indicates a namespace; add those to "odd" file and set flag; note:
 # this also picks up entries with namespace and locator
-grep $'^[^\t]' "$rados_out" >"$rados_odd"
+grep --text $'^[^\t]' "$rados_out" >"$rados_odd"
 if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
     namespace_found=1
 fi
@@ -92,7 +92,7 @@ fi
 # past the empty namespace (i.e., one TAB), skipping past the oid,
 # then looking for a TAB; note we use egrep to get the '+' character
 # and the $ in front of the ' allows the \t to be interpreted as a TAB
-egrep $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
+egrep --text $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
 if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
     locator_found=1
 fi
@@ -101,7 +101,7 @@ fi
 # locator) for further processing; only look at lines that begin with
 # a TAB and do not contain a second TAB, and then grab everything
 # after the initial TAB
-grep $'^\t' "$rados_out" | grep -v $'^\t.*\t' | sed -E 's/^\t//' >"$temp_file"
+grep --text $'^\t' "$rados_out" | grep --text -v $'^\t.*\t' | sed -E 's/^\t//' >"$temp_file"
 mv -f "$temp_file" "$rados_out"
 
 sort -u "$rados_out" >"$temp_file"
@@ -116,7 +116,7 @@ sort -u "$rgwadmin_out" >"$temp_file"
 mv -f "$temp_file" "$rgwadmin_out"
 
 echo "computing delta at $(date)"
-ceph-diff-sorted "$rados_out" "$rgwadmin_out" | grep "^<" | sed 's/^< *//' >"$delta_out"
+ceph-diff-sorted "$rados_out" "$rgwadmin_out" | grep --text "^<" | sed 's/^< *//' >"$delta_out"
 # use PIPESTATUS to get at exit status of first process in above pipe;
 # 0 means same, 1 means different, >1 means error
 if [ "${PIPESTATUS[0]}" -gt 1 ] ;then
