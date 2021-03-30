@@ -71,6 +71,14 @@ Descriptions of fields
 
    number of opened inodes
 
+.. describe:: rtio
+
+   total size of read IOs
+
+.. describe:: wtio
+
+   total size of write IOs
+
 
 Availability
 ============

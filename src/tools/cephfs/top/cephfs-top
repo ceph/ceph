@@ -28,6 +28,7 @@ class MetricType(Enum):
     METRIC_TYPE_NONE = 0
     METRIC_TYPE_PERCENTAGE = 1
     METRIC_TYPE_LATENCY = 2
+    METRIC_TYPE_SIZE = 3
 
 
 FS_TOP_PROG_STR = 'cephfs-top'
@@ -62,6 +63,8 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
     ("OPENED_FILES", MetricType.METRIC_TYPE_NONE),
     ("PINNED_ICAPS", MetricType.METRIC_TYPE_NONE),
     ("OPENED_INODES", MetricType.METRIC_TYPE_NONE),
+    ("READ_IO_SIZES", MetricType.METRIC_TYPE_SIZE),
+    ("WRITE_IO_SIZES", MetricType.METRIC_TYPE_SIZE),
 ])
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
@@ -88,6 +91,11 @@ def calc_perc(c):
 
 def calc_lat(c):
     return round(c[0] + c[1] / 1000000000, 2)
+
+
+# in MB
+def calc_size(c):
+    return round(c[1] / (1024 * 1024), 2)
 
 
 def wrap(s, sl):
@@ -197,6 +205,10 @@ class FSTop(object):
             return "oicaps"
         if item == "OPENED_INODES":
             return "oinodes"
+        if item == "READ_IO_SIZES":
+            return "rtio"
+        if item == "WRITE_IO_SIZES":
+            return "wtio"
         else:
             # return empty string for none type
             return ''
@@ -206,6 +218,8 @@ class FSTop(object):
             return "(%)"
         elif typ == MetricType.METRIC_TYPE_LATENCY:
             return "(s)"
+        elif typ == MetricType.METRIC_TYPE_SIZE:
+            return "(MB)"
         else:
             # return empty string for none type
             return ''
@@ -294,6 +308,8 @@ class FSTop(object):
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_perc(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_lat(m)}', hlen)
+                elif typ == MetricType.METRIC_TYPE_SIZE:
+                    self.mainw.addnstr(y_coord, coord[0], f'{calc_size(m)}', hlen)
                 else:
                     # display 0th element from metric tuple
                     self.mainw.addnstr(y_coord, coord[0], f'{m[0]}', hlen)
