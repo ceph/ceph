@@ -808,6 +808,16 @@ public:
   void tick();
   void start_tick_thread();
 
+  void update_read_io_size(size_t size) {
+    total_read_ops++;
+    total_read_size += size;
+  }
+
+  void update_write_io_size(size_t size) {
+    total_write_ops++;
+    total_write_size += size;
+  }
+
   void inc_dentry_nr() {
     ++dentry_nr;
   }
@@ -1552,6 +1562,12 @@ private:
   uint64_t opened_files = 0;
   uint64_t pinned_icaps = 0;
   uint64_t opened_inodes = 0;
+
+  uint64_t total_read_ops = 0;
+  uint64_t total_read_size = 0;
+
+  uint64_t total_write_ops = 0;
+  uint64_t total_write_size = 0;
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;

@@ -6739,6 +6739,16 @@ void Client::collect_and_send_global_metrics() {
   }
   message.push_back(metric);
 
+  // read io sizes
+  metric = ClientMetricMessage(ReadIoSizesPayload(total_read_ops,
+                                                  total_read_size));
+  message.push_back(metric);
+
+  // write io sizes
+  metric = ClientMetricMessage(WriteIoSizesPayload(total_write_ops,
+                                                   total_write_size));
+  message.push_back(metric);
+
   session->con->send_message2(make_message<MClientMetrics>(std::move(message)));
 }
 
@@ -9971,6 +9981,7 @@ retry:
 
 success:
   ceph_assert(rc >= 0);
+  update_read_io_size(bl->length());
   if (movepos) {
     // adjust fd pos
     f->pos = start_pos + rc;
@@ -10018,6 +10029,9 @@ Client::C_Readahead::~C_Readahead() {
 void Client::C_Readahead::finish(int r) {
   lgeneric_subdout(client->cct, client, 20) << "client." << client->get_nodeid() << " " << "C_Readahead on " << f->inode << dendl;
   client->put_cap_ref(f->inode.get(), CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+  if (r > 0) {
+    client->update_read_io_size(r);
+  }
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
@@ -10053,6 +10067,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     r = onfinish.wait();
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+    update_read_io_size(bl->length());
   }
 
   if(f->readahead.get_min_readahead_size() > 0) {
@@ -10428,6 +10443,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // if we get here, write was successful, update client metadata
 success:
+  update_write_io_size(size);
   // time
   lat = ceph_clock_now();
   lat -= start;
