@@ -803,6 +803,26 @@ PG::do_osd_ops(
   ).finally([ox_deleter=std::move(ox)] {});
 }
 
+PG::do_osd_ops_iertr::future<>
+PG::do_osd_ops(
+  ObjectContextRef obc,
+  std::vector<OSDOp> ops,
+  const OpInfo &op_info,
+  const do_osd_ops_params_t& msg_params,
+  do_osd_ops_success_func_t success_func,
+  do_osd_ops_failure_func_t failure_func)
+{
+  auto ox = std::make_unique<OpsExecuter>(
+    std::move(obc), op_info, get_pool().info, get_backend(), msg_params);
+  return do_osd_ops_execute<void>(
+    std::move(*ox),
+    std::move(ops),
+    std::as_const(op_info),
+    std::move(success_func),
+    std::move(failure_func)
+  ).finally([ox_deleter=std::move(ox)] {});
+}
+
 PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
 {
   if (__builtin_expect(stopping, false)) {
