@@ -1,3 +1,17 @@
-::ng-deep .no-margin-bottom {
+@import 'defaults';
+
+::ng-deep cd-telemetry-notification .no-margin-bottom {
   margin-bottom: 0;
+}
+
+.activate-button {
+  background-color: $color-barley-white;
+  border: $gray-700 solid 0.5px;
+  border-radius: 10%;
+  padding: 0.1rem 0.4rem;
+}
+
+.activate-text {
+  color: $gray-700;
+  font-weight: bold;
 }
