@@ -33,6 +33,8 @@ void MDSPerformanceCounterDescriptor::pack_counter(
   case MDSPerformanceCounterType::OPENED_FILES_METRIC:
   case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
   case MDSPerformanceCounterType::OPENED_INODES_METRIC:
+  case MDSPerformanceCounterType::READ_IO_SIZES_METRIC:
+  case MDSPerformanceCounterType::WRITE_IO_SIZES_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -53,6 +55,8 @@ void MDSPerformanceCounterDescriptor::unpack_counter(
   case MDSPerformanceCounterType::OPENED_FILES_METRIC:
   case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
   case MDSPerformanceCounterType::OPENED_INODES_METRIC:
+  case MDSPerformanceCounterType::READ_IO_SIZES_METRIC:
+  case MDSPerformanceCounterType::WRITE_IO_SIZES_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -84,6 +88,12 @@ std::ostream& operator<<(std::ostream &os, const MDSPerformanceCounterDescriptor
      break;
    case MDSPerformanceCounterType::OPENED_INODES_METRIC:
      os << "opened_inodes_metric";
+     break;
+   case MDSPerformanceCounterType::READ_IO_SIZES_METRIC:
+     os << "read_io_sizes_metric";
+     break;
+   case MDSPerformanceCounterType::WRITE_IO_SIZES_METRIC:
+     os << "write_io_sizes_metric";
      break;
    }
 
