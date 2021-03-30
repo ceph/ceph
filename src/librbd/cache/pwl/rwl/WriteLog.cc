@@ -920,6 +920,12 @@ void WriteLog<I>::reserve_cache(C_BlockIORequestT *req,
                                 << *req << dendl;
       alloc_succeeds = false;
       no_space = true; /* Entries need to be retired */
+
+      if (this->m_free_log_entries == this->m_total_log_entries - 1) {
+        /* When the cache is empty, there is still no space to allocate.
+         * Defragment. */
+        pmemobj_defrag(m_log_pool, NULL, 0, NULL);
+      }
       break;
     } else {
       buffer.allocated = true;
