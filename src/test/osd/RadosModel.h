@@ -2954,6 +2954,8 @@ public:
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
       // sucess
+      context->update_object_tier_flushed(oid, snap);
+      context->update_object_version(oid, completion->get_version64(), snap);
     } else if (r == -EBUSY) {
       // could fail if snap is not oldest
       ceph_assert(!context->check_oldest_snap_flushed(oid, snap)); 
@@ -2971,8 +2973,6 @@ public:
       }	
       ceph_abort_msg("shouldn't happen");
     }
-    context->update_object_tier_flushed(oid, snap);
-    context->update_object_version(oid, completion->get_version64(), snap);
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
