@@ -725,9 +725,9 @@ void MonClient::_reopen_session(int rank)
   _start_hunting();
 
   if (rank >= 0) {
-    _add_conn(rank, global_id);
+    _add_conn(rank);
   } else {
-    _add_conns(global_id);
+    _add_conns();
   }
 
   // throw out old queued messages
@@ -749,7 +749,7 @@ void MonClient::_reopen_session(int rank)
   }
 }
 
-void MonClient::_add_conn(unsigned rank, uint64_t global_id)
+void MonClient::_add_conn(unsigned rank)
 {
   auto peer = monmap.get_addrs(rank);
   auto conn = messenger->connect_to_mon(peer);
@@ -764,7 +764,7 @@ void MonClient::_add_conn(unsigned rank, uint64_t global_id)
                  << dendl;
 }
 
-void MonClient::_add_conns(uint64_t global_id)
+void MonClient::_add_conns()
 {
   // collect the next batch of candidates who are listed right next to the ones
   // already tried
@@ -817,7 +817,7 @@ void MonClient::_add_conns(uint64_t global_id)
     n = ranks.size();
   }
   for (unsigned i = 0; i < n; i++) {
-    _add_conn(ranks[i], global_id);
+    _add_conn(ranks[i]);
     tried.insert(ranks[i]);
   }
 }
