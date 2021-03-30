@@ -294,8 +294,6 @@ COMMAND("mds count-metadata name=property,type=CephString",
 COMMAND("mds versions",
 	"check running versions of MDSs",
 	"mds", "r")
-COMMAND("mds compat show", "show mds compatibility settings",
-	"mds", "r")
 COMMAND("mds ok-to-stop name=ids,type=CephString,n=N",
 	"check whether stopping the specified MDS would reduce immediate availability",
 	"mds", "r")
@@ -320,12 +318,18 @@ COMMAND("mds rm "
 COMMAND_WITH_FLAG("mds rmfailed name=role,type=CephString "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"remove failed rank", "mds", "rw", FLAG(HIDDEN))
-COMMAND("mds compat rm_compat "
+COMMAND_WITH_FLAG("mds compat show", "show mds compatibility settings",
+	"mds", "r", FLAG(DEPRECATED))
+COMMAND("fs compat show "
+        "name=fs_name,type=CephString ",
+        "show fs compatibility settings",
+	"mds", "r")
+COMMAND_WITH_FLAG("mds compat rm_compat "
 	"name=feature,type=CephInt,range=0",
-	"remove compatible feature", "mds", "rw")
-COMMAND("mds compat rm_incompat "
+	"remove compatible feature", "mds", "rw", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("mds compat rm_incompat "
 	"name=feature,type=CephInt,range=0",
-	"remove incompatible feature", "mds", "rw")
+	"remove incompatible feature", "mds", "rw", FLAG(DEPRECATED))
 COMMAND("fs new "
 	"name=fs_name,type=CephString,goodchars=" FS_NAME_GOODCHARS
 	" name=metadata,type=CephString "
@@ -378,6 +382,13 @@ COMMAND("fs feature ls",
 COMMAND("fs lsflags name=fs_name,type=CephString",
 	"list the flags set on a ceph filesystem",
 	"fs", "r")
+
+COMMAND("fs compat "
+        "name=fs_name,type=CephString "
+        "name=subop,type=CephChoices,strings=rm_compat|rm_incompat|add_compat|add_incompat "
+        "name=feature,type=CephInt "
+        "name=feature_str,type=CephString,req=false ",
+        "manipulate compat settings", "fs", "rw")
 
 COMMAND("fs required_client_features "
         "name=fs_name,type=CephString "
