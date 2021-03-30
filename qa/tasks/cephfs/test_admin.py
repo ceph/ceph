@@ -340,6 +340,141 @@ class TestRequiredClientFeatures(CephFSTestCase):
         p = self.fs.required_client_features('rm', '1', stderr=StringIO())
         self.assertIn("removed feature 'reserved' from required_client_features", p.stderr.getvalue())
 
+class TestCompatCommands(CephFSTestCase):
+    """
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 3
+
+    def test_add_compat(self):
+        """
+        Test adding a compat.
+        """
+
+        self.fs.fail()
+        self.fs.add_compat(63, 'placeholder')
+        mdsmap = self.fs.get_mds_map()
+        self.assertIn("feature_63", mdsmap['compat']['compat'])
+
+    def test_add_incompat(self):
+        """
+        Test adding an incompat.
+        """
+
+        self.fs.fail()
+        self.fs.add_incompat(63, 'placeholder')
+        mdsmap = self.fs.get_mds_map()
+        log.info(f"{mdsmap}")
+        self.assertIn("feature_63", mdsmap['compat']['incompat'])
+
+    def test_rm_compat(self):
+        """
+        Test removing a compat.
+        """
+
+        self.fs.fail()
+        self.fs.add_compat(63, 'placeholder')
+        self.fs.rm_compat(63)
+        mdsmap = self.fs.get_mds_map()
+        self.assertNotIn("feature_63", mdsmap['compat']['compat'])
+
+    def test_rm_incompat(self):
+        """
+        Test removing an incompat.
+        """
+
+        self.fs.fail()
+        self.fs.add_incompat(63, 'placeholder')
+        self.fs.rm_incompat(63)
+        mdsmap = self.fs.get_mds_map()
+        self.assertNotIn("feature_63", mdsmap['compat']['incompat'])
+
+    def test_standby_compat(self):
+        """
+        That adding a compat does not prevent standbys from joining.
+        """
+
+        self.fs.fail()
+        self.fs.add_compat(63, "placeholder")
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        mdsmap = self.fs.get_mds_map()
+        self.assertIn("feature_63", mdsmap['compat']['compat'])
+
+    def test_standby_incompat_reject(self):
+        """
+        That adding an incompat feature prevents incompatible daemons from joining.
+        """
+
+        self.fs.fail()
+        self.fs.add_incompat(63, "placeholder")
+        self.fs.set_joinable()
+        try:
+            self.fs.wait_for_daemons(timeout=60)
+        except RuntimeError as e:
+            if "Timed out waiting for MDS daemons to become healthy" in str(e):
+                pass
+            else:
+                raise
+        else:
+            self.fail()
+
+    def test_standby_incompat_upgrade(self):
+        """
+        That an MDS can upgrade the compat of a fs.
+        """
+
+        self.fs.fail()
+        self.fs.rm_incompat(1)
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        mdsmap = self.fs.get_mds_map()
+        self.assertIn("feature_1", mdsmap['compat']['incompat'])
+
+    def test_standby_replay_not_upgradeable(self):
+        """
+        That the mons will not upgrade the MDSMap compat if standby-replay is
+        enabled.
+        """
+
+        self.fs.fail()
+        self.fs.rm_incompat(1)
+        self.fs.set_allow_standby_replay(True)
+        self.fs.set_joinable()
+        try:
+            self.fs.wait_for_daemons(timeout=60)
+        except RuntimeError as e:
+            if "Timed out waiting for MDS daemons to become healthy" in str(e):
+                pass
+            else:
+                raise
+        else:
+            self.fail()
+
+    def test_standby_incompat_reject_multifs(self):
+        """
+        Like test_standby_incompat_reject but with a second fs.
+        """
+
+        fs2 = self.mds_cluster.newfs(name="cephfs2", create=True)
+        fs2.fail()
+        fs2.add_incompat(63, 'placeholder')
+        fs2.set_joinable()
+        try:
+            fs2.wait_for_daemons(timeout=60)
+        except RuntimeError as e:
+            if "Timed out waiting for MDS daemons to become healthy" in str(e):
+                pass
+            else:
+                raise
+        else:
+            self.fail()
+        # did self.fs lose MDS or standbys suicide?
+        self.fs.wait_for_daemons()
+        mdsmap = fs2.get_mds_map()
+        self.assertIn("feature_63", mdsmap['compat']['incompat'])
+
 class TestConfigCommands(CephFSTestCase):
     """
     Test that daemons and clients respond to the otherwise rarely-used

@@ -614,6 +614,22 @@ class Filesystem(MDSCluster):
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", yes, '--yes-i-really-mean-it')
 
+    def compat(self, *args):
+        a = map(lambda x: str(x).lower(), args)
+        self.mon_manager.raw_cluster_cmd("fs", "compat", self.name, *a)
+
+    def add_compat(self, *args):
+        self.compat("add_compat", *args)
+
+    def add_incompat(self, *args):
+        self.compat("add_incompat", *args)
+
+    def rm_compat(self, *args):
+        self.compat("rm_compat", *args)
+
+    def rm_incompat(self, *args):
+        self.compat("rm_incompat", *args)
+
     def required_client_features(self, *args, **kwargs):
         c = ["fs", "required_client_features", self.name, *args]
         return self.mon_manager.run_cluster_cmd(args=c, **kwargs)
