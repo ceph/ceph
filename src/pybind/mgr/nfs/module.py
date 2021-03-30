@@ -7,7 +7,7 @@ from mgr_module import MgrModule
 from volumes.module import mgr_cmd_wrap
 import orchestrator
 
-from .fs.nfs import NFSCluster, FSExport
+from .export.nfs import NFSCluster, FSExport
 
 log = logging.getLogger(__name__)
 
