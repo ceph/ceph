@@ -6,13 +6,11 @@ flags to support seamless upgrades of the MDSs without potentially causing
 assertions or other faults due to incompatible messages or other functional
 differences. For this reason, it's necessary during any cluster upgrade to
 reduce the number of active MDS for a file system to one first so that two
-active MDS do not communicate with different versions.  Further, it's also
-necessary to take standbys offline as any new CompatSet flags will propagate
-via the MDSMap to all MDS and cause older MDS to suicide.
+active MDS do not communicate with different versions.
 
 The proper sequence for upgrading the MDS cluster is:
 
-1. Disable and stop standby-replay daemons.
+1. For each file system, disable and stop standby-replay daemons.
 
 ::
 
@@ -27,7 +25,7 @@ command. Older versions of Ceph require you to stop these daemons manually.
     ceph mds fail mds.<X>
 
 
-2. Reduce the number of ranks to 1:
+2. For each file system, reduce the number of ranks to 1:
 
 ::
 
@@ -39,37 +37,20 @@ command. Older versions of Ceph require you to stop these daemons manually.
 
     ceph status # wait for MDS to finish stopping
 
-4. Take all standbys offline, e.g. using systemctl:
-
-::
-
-    systemctl stop ceph-mds.target
-
-5. Confirm only one MDS is online and is rank 0 for your FS:
-
-::
-
-    ceph status
-
-6. Upgrade the single active MDS, e.g. using systemctl:
+4. For each MDS, upgrade packages and restart. Note: to reduce failovers, it is
+   recommended -- but not strictly necessary -- to first upgrade standby daemons.
 
 ::
 
     # use package manager to update cluster
     systemctl restart ceph-mds.target
 
-7. Upgrade/start the standby daemons.
-
-::
-
-    # use package manager to update cluster
-    systemctl restart ceph-mds.target
-
-8. Restore the previous max_mds for your cluster:
+5. For each file system, restore the previous max_mds and allow_standby_replay settings for your cluster:
 
 ::
 
     ceph fs set <fs_name> max_mds <old_max_mds>
+    ceph fs set <fs_name> allow_standby_replay <old_allow_standby_replay>
 
 
 Upgrading pre-Firefly file systems past Jewel
