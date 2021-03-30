@@ -212,7 +212,17 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
   auto c = static_cast<SeastoreCollection*>(ch.get());
   logger().debug("{} {} {}",
 		 __func__, c->get_cid(), oid);
-  return crimson::ct_error::enoent::make();
+  return repeat_with_onode<attrs_t>(
+    c, oid, [=](auto &t, auto& onode) {
+    auto& layout = onode.get_layout();
+    SeaStore::attrs_t attrs;
+    attrs[OI_ATTR] = ceph::bufferptr(&layout.oi[0], layout.oi_size);
+    attrs[SS_ATTR] = ceph::bufferptr(&layout.ss[0], layout.ss_size);
+    return attrs;
+  }).handle_error(crimson::ct_error::input_output_error::handle([this] {
+    logger().error("EIO when getting attrs");
+    abort();
+  }), crimson::ct_error::pass_further_all{});
 }
 
 seastar::future<struct stat> SeaStore::stat(
@@ -803,6 +813,31 @@ SeaStore::tm_ret SeaStore::_setattrs(
 {
   logger().debug("{} onode={}",
                 __func__, *onode);
+  auto& layout = onode->get_mutable_layout(*ctx.transaction);
+  for (auto& [key, val] : aset) {
+    if (key == OI_ATTR) {
+      if (__builtin_expect(
+          val.length() > onode_layout_t::MAX_OI_LENGTH,
+          false)) {
+        logger().error("{} onode={} oi attr too long!");
+        return crimson::ct_error::input_output_error::make();
+      }
+      layout.oi_size = val.length();
+      val.copy_out(0, val.length(), &layout.oi[0]);
+    } else if (key == SS_ATTR) {
+      if (__builtin_expect(
+          val.length() > onode_layout_t::MAX_SS_LENGTH,
+          false)) {
+        logger().error("{} onode={} oi attr too long!");
+        return crimson::ct_error::input_output_error::make();
+      }
+      layout.ss_size = val.length();
+      val.copy_out(0, val.length(), &layout.ss[0]);
+    } else {
+      //FIXME: right now, only OI_ATTR and SS_ATTR are supported
+      assert(0 == "only OI_ATTR and SS_ATTR are supported for now");
+    }
+  }
   return tm_ertr::now();
 }
 
