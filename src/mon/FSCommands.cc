@@ -385,11 +385,6 @@ public:
         {
           fs->mds_map.set_inline_data_enabled(true);
         });
-
-        // Update `compat`
-        CompatSet c = fsmap.get_compat();
-        c.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
-        fsmap.update_compat(c);
       } else {
 	ss << "inline data disabled";
         fsmap.modify_filesystem(
