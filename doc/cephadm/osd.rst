@@ -140,16 +140,21 @@ There are a few ways to create new OSDs:
 Dry Run
 -------
 
-``--dry-run`` will cause the orchestrator to present a preview of what will happen
-without actually creating the OSDs.
+The ``--dry-run`` flag causes the orchestrator to present a preview of what
+will happen without actually creating the OSDs.
 
-Example::
+For example:
 
-    # ceph orch apply osd --all-available-devices --dry-run
-    NAME                  HOST  DATA     DB WAL
-    all-available-devices node1 /dev/vdb -  -
-    all-available-devices node2 /dev/vdc -  -
-    all-available-devices node3 /dev/vdd -  -
+   .. prompt:: bash #
+
+     ceph orch apply osd --all-available-devices --dry-run
+
+   ::
+
+     NAME                  HOST  DATA      DB  WAL
+     all-available-devices node1 /dev/vdb  -   -
+     all-available-devices node2 /dev/vdc  -   -
+     all-available-devices node3 /dev/vdd  -   -
 
 .. _cephadm-osd-declarative:
 
