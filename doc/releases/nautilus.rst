@@ -8,7 +8,7 @@ nautilus users are advised to upgrade to this release.
 Notable Changes
 ---------------
 
-* This release fixes a regression introduced in v14.2.18 whereby in certain environments, OSDs will bind to 127.0.0.1.  See `issue#49938 <https://tracker.ceph.com/issues/49938>`_.
+* This release fixes a regression introduced in v14.2.17 whereby in certain environments, OSDs will bind to 127.0.0.1.  See `issue#49938 <https://tracker.ceph.com/issues/49938>`_.
 
 Changelog
 ---------
