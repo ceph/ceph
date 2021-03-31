@@ -523,7 +523,7 @@ public:
     ObjectContextRef obc,
     with_obc_func_t&& f);
   load_obc_iertr::future<> with_locked_obc(
-    Ref<MOSDOp> &m,
+    const hobject_t &hobj,
     const OpInfo &op_info,
     with_obc_func_t&& f);
 
