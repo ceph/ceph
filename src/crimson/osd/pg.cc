@@ -1052,13 +1052,14 @@ PG::reload_obc(crimson::osd::ObjectContext& obc) const
 }
 
 PG::load_obc_iertr::future<>
-PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
-		    with_obc_func_t &&f)
+PG::with_locked_obc(const hobject_t &hobj,
+                    const OpInfo &op_info,
+                    with_obc_func_t &&f)
 {
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-  const hobject_t oid = get_oid(m->get_hobj());
+  const hobject_t oid = get_oid(hobj);
   switch (get_lock_type(op_info)) {
   case RWState::RWREAD:
     if (oid.is_head()) {

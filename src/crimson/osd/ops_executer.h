@@ -86,6 +86,7 @@ public:
   struct ExecutableMessage {
     virtual crimson::net::ConnectionRef get_connection() const = 0;
     virtual osd_reqid_t get_reqid() const = 0;
+    virtual utime_t get_mtime() const = 0;
     virtual epoch_t get_map_epoch() const = 0;
     virtual entity_inst_t get_orig_source_inst() const = 0;
     virtual uint64_t get_features() const = 0;
@@ -103,6 +104,9 @@ public:
     osd_reqid_t get_reqid() const final {
       return pimpl->get_reqid();
     }
+    utime_t get_mtime() const final {
+      return pimpl->get_mtime();
+    };
     epoch_t get_map_epoch() const final {
       return pimpl->get_map_epoch();
     }
@@ -330,7 +334,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(Ref<PG> pg, MutFunc&& mut_func) &&
   auto maybe_mutated = interruptor::make_interruptible(osd_op_errorator::now());
   if (want_mutate) {
     osd_op_params->req_id = msg->get_reqid();
-    //osd_op_params->mtime = msg->get_mtime();
+    osd_op_params->mtime = msg->get_mtime();
     maybe_mutated = std::forward<MutFunc>(mut_func)(std::move(txn),
                                                     std::move(obc),
                                                     std::move(*osd_op_params),

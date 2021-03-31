@@ -523,7 +523,7 @@ public:
     ObjectContextRef obc,
     with_obc_func_t&& f);
   load_obc_iertr::future<> with_locked_obc(
-    Ref<MOSDOp> &m,
+    const hobject_t &hobj,
     const OpInfo &op_info,
     with_obc_func_t&& f);
 
@@ -769,6 +769,9 @@ struct PG::do_osd_ops_params_t {
   osd_reqid_t get_reqid() const {
     return reqid;
   }
+  utime_t get_mtime() const {
+    return mtime;
+  };
   epoch_t get_map_epoch() const {
     return map_epoch;
   }
@@ -780,6 +783,7 @@ struct PG::do_osd_ops_params_t {
   }
   crimson::net::ConnectionRef conn;
   osd_reqid_t reqid;
+  utime_t mtime;
   epoch_t map_epoch;
   entity_inst_t orig_source_inst;
   uint64_t features;
