@@ -13,14 +13,17 @@ from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
 from .op_sm import SubvolumeOpSm
+from .auth_metadata import AuthMetadataManager
 
 log = logging.getLogger(__name__)
 
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
 
-    def __init__(self, fs, vol_spec, group, subvolname, legacy=False):
+    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+        self.mgr = mgr
         self.fs = fs
+        self.auth_mdata_mgr = AuthMetadataManager(fs)
         self.cmode = None
         self.user_id = None
         self.group_id = None

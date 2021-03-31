@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(ceph CXX C ASM)
-set(VERSION 14.2.16)
+set(VERSION 14.2.19)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
@@ -123,6 +123,7 @@ cmake_pop_check_state()
 
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
 CHECK_FUNCTION_EXISTS(getprogname HAVE_GETPROGNAME)
+CHECK_FUNCTION_EXISTS(gettid HAVE_GETTID)
 
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
 CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)

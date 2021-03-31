@@ -1,0 +1,10 @@
+dashboard:
+  - /src/pybind/mgr/dashboard/**
+  - /qa/suites/rados/dashboard/**
+  - /qa/tasks/mgr/test_dashboard.py
+  - /qa/tasks/mgr/dashboard/**
+  - /monitoring/**
+  - /doc/mgr/dashboard.rst
+
+CI:
+  - /.github/**

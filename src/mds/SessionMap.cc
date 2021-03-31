@@ -589,6 +589,7 @@ void Session::dump(Formatter *f) const
   f->dump_object("recall_caps_throttle", recall_caps_throttle);
   f->dump_object("recall_caps_throttle2o", recall_caps_throttle2o);
   f->dump_object("session_cache_liveness", session_cache_liveness);
+  f->dump_object("cap_acquisition", cap_acquisition);
   info.dump(f);
 }
 
@@ -1074,6 +1075,13 @@ void SessionMap::handle_conf_change(const std::set<std::string>& changed)
     auto mut = [d](auto s) {
       s->session_cache_liveness = DecayCounter(d);
       s->session_cache_liveness.hit(s->caps.size()); /* so the MDS doesn't immediately start trimming a new session */
+    };
+    apply_to_open_sessions(mut);
+  }
+  if (changed.count("mds_session_cap_acquisition_decay_rate")) {
+    auto d = g_conf().get_val<double>("mds_session_cap_acquisition_decay_rate");
+    auto mut = [d](auto s) {
+      s->cap_acquisition = DecayCounter(d);
     };
     apply_to_open_sessions(mut);
   }

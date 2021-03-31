@@ -14,6 +14,7 @@ from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteComman
 
 from .. import mgr, logger
 from ..security import Scope, Permission
+from ..tools import ensure_str
 from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
                          PermissionNotValid, RoleIsAssociatedWithUser, \
                          UserAlreadyExists, UserDoesNotExist, ScopeNotInRole, \
@@ -24,6 +25,7 @@ from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
 def password_hash(password, salt_password=None):
     if not password:
         return None
+    password = ensure_str(password)
     if not salt_password:
         salt_password = bcrypt.gensalt()
     else:

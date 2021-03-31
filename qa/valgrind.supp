@@ -1,3 +1,17 @@
+
+{
+   <allthefrees, so we can behave with tcmalloc>
+   Memcheck:Free
+   fun:free
+   ...
+}
+{
+   tcmalloc leak, observed on nautlius
+   Memcheck:Leak
+   ...
+   fun:_dl_init
+   ...
+}
 {
    older boost mersenne twister uses uninitialized memory for randomness
    Memcheck:Cond

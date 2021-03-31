@@ -469,6 +469,7 @@ void Client::dump_status(Formatter *f)
     f->dump_int("osd_epoch", osd_epoch);
     f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
     f->dump_bool("blacklisted", blacklisted);
+    f->dump_string("fs_name", mdsmap->get_fs_name());
   }
 }
 
@@ -1907,6 +1908,7 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
     rel.item.dname_len = dn->name.length();
     rel.item.dname_seq = dn->lease_seq;
     rel.dname = dn->name;
+    dn->lease_mds = -1;
   }
   ldout(cct, 25) << __func__ << " exit(dn:"
 	   << dn << ")" << dendl;
@@ -9811,6 +9813,8 @@ int Client::ftruncate(int fd, loff_t length, const UserPerm& perms)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
+  if ((f->mode & CEPH_FILE_MODE_WR) == 0)
+    return -EBADF;
   struct stat attr;
   attr.st_size = length;
   return _setattr(f->inode, &attr, CEPH_SETATTR_SIZE, perms);
@@ -11949,6 +11953,17 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
       (long unsigned)in->snap_btime.nsec());
 }
 
+size_t Client::_vxattrcb_cluster_fsid(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%s", monclient->get_fsid().to_string().c_str());
+}
+
+size_t Client::_vxattrcb_client_id(Inode *in, char *val, size_t size)
+{
+  auto name = messenger->get_myname();
+  return snprintf(val, size, "%s%ld", name.type_str(), name.num());
+}
+
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
 #define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
 
@@ -12056,6 +12071,26 @@ const Client::VXattr Client::_file_vxattrs[] = {
   { name: "" }     /* Required table terminator */
 };
 
+const Client::VXattr Client::_common_vxattrs[] = {
+  {
+    name: "ceph.cluster_fsid",
+    getxattr_cb: &Client::_vxattrcb_cluster_fsid,
+    readonly: true,
+    hidden: false,
+    exists_cb: nullptr,
+    flags: 0,
+  },
+  {
+    name: "ceph.client_id",
+    getxattr_cb: &Client::_vxattrcb_client_id,
+    readonly: true,
+    hidden: false,
+    exists_cb: nullptr,
+    flags: 0,
+  },
+  { name: "" }     /* Required table terminator */
+};
+
 const Client::VXattr *Client::_get_vxattrs(Inode *in)
 {
   if (in->is_dir())
@@ -12076,7 +12111,16 @@ const Client::VXattr *Client::_match_vxattr(Inode *in, const char *name)
 	vxattr++;
       }
     }
+
+    // for common vxattrs
+    vxattr = _common_vxattrs;
+    while (!vxattr->name.empty()) {
+      if (vxattr->name == name)
+        return vxattr;
+      vxattr++;
+    }
   }
+
   return NULL;
 }
 

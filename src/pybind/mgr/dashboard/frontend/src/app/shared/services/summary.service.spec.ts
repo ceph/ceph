@@ -48,7 +48,7 @@ describe('SummaryService', () => {
 
   it('should call refresh', fakeAsync(() => {
     summaryService.enablePolling();
-    authStorageService.set('foobar', undefined, undefined);
+    authStorageService.set('foobar', undefined);
     const calledWith = [];
     summaryService.subscribe((data) => {
       calledWith.push(data);
@@ -65,7 +65,7 @@ describe('SummaryService', () => {
 
   describe('Should test methods after first refresh', () => {
     beforeEach(() => {
-      authStorageService.set('foobar', undefined, undefined);
+      authStorageService.set('foobar', undefined);
       summaryService.refresh();
     });
 

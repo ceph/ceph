@@ -147,13 +147,21 @@ function install_pkg_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
-    local codename=$1
-    if dpkg -s ceph-libboost1.67-dev &> /dev/null; then
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.67.*'
-	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.67.list
-    fi
-    local project=libboost
     local ver=1.72
+    local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
+                              grep -e 'libboost[0-9].[0-9]\+-dev' |
+                              cut -d' ' -f2 |
+                              cut -d'.' -f1,2)
+    if test -n "$installed_ver"; then
+        if echo "$installed_ver" | grep -q "^$ver"; then
+            return
+        else
+            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
+            $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost${installed_ver}.list
+        fi
+    fi
+    local codename=$1
+    local project=libboost
     local sha1=1d7c7a00cc3f37e340bae0360191a757b44ec80c
     install_pkg_on_ubuntu \
 	$project \
@@ -316,7 +324,6 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	install_seastar_deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
-	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         yumdnf="dnf"
@@ -379,8 +386,6 @@ else
             ensure_decent_gcc_on_rh $dts_ver
 	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
-        # for building python-saml and its dependencies
-        $SUDO $yumdnf install -y xmlsec1 xmlsec1-nss xmlsec1-openssl xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
@@ -392,7 +397,6 @@ else
         fi
         munge_ceph_spec_in $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
-        $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel
         ;;
     alpine)
         # for now we need the testing repo for leveldb

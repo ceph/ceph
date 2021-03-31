@@ -230,6 +230,7 @@ macro(build_boost version)
         INTERFACE_LINK_LIBRARIES "${dependencies}")
       unset(dependencies)
     endif()
+    set(Boost_${c}_FOUND "TRUE")
   endforeach()
 
   # for header-only libraries

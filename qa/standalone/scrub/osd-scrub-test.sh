@@ -260,6 +260,10 @@ function _scrub_abort() {
     fi
 
     ceph osd set $stopscrub
+    if [ "$type" = "deep_scrub" ];
+    then
+      ceph osd set noscrub
+    fi
 
     # Wait for scrubbing to end
     set -o pipefail
@@ -284,7 +288,13 @@ function _scrub_abort() {
     fi
 
     local last_scrub=$(get_last_scrub_stamp $pgid)
-    ceph osd unset noscrub
+    ceph config set osd "osd_scrub_sleep" "0.1"
+
+    ceph osd unset $stopscrub
+    if [ "$type" = "deep_scrub" ];
+    then
+      ceph osd unset noscrub
+    fi
     TIMEOUT=$(($objects / 2))
     wait_for_scrub $pgid "$last_scrub" || return 1
 

@@ -53,6 +53,11 @@ from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
 import six
 import logging
+try:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+except:
+    pass
 
 log = logging.getLogger(__name__)
 
@@ -144,8 +149,13 @@ class LocalRemoteProcess(object):
     def __init__(self, args, subproc, check_status, stdout, stderr):
         self.args = args
         self.subproc = subproc
-        self.stdout = stdout or BytesIO()
-        self.stderr = stderr or BytesIO()
+        self.stdout = stdout
+        self.stderr = stderr
+        # this variable is meant for instance of this class named fuse_daemon.
+        # child process of the command launched with sudo must be killed,
+        # since killing parent process alone has no impact on the child
+        # process.
+        self.fuse_pid = -1
 
         self.check_status = check_status
         self.exitstatus = self.returncode = None
@@ -162,10 +172,14 @@ class LocalRemoteProcess(object):
         out, err = self.subproc.communicate()
         if isinstance(self.stdout, StringIO):
             self.stdout.write(out.decode(errors='ignore'))
+        elif self.stdout is None:
+            pass
         else:
             self.stdout.write(out)
         if isinstance(self.stderr, StringIO):
             self.stderr.write(err.decode(errors='ignore'))
+        elif self.stderr is None:
+            pass
         else:
             self.stderr.write(err)
 
@@ -185,21 +199,31 @@ class LocalRemoteProcess(object):
 
         if self.subproc.poll() is not None:
             out, err = self.subproc.communicate()
-            self.stdout.write(out)
-            self.stderr.write(err)
+            if isinstance(self.stdout, StringIO):
+                self.stdout.write(out.decode(errors='ignore'))
+            elif self.stdout is None:
+                pass
+            else:
+                self.stdout.write(out)
+            if isinstance(self.stderr, StringIO):
+                self.stderr.write(err.decode(errors='ignore'))
+            elif self.stderr is None:
+                pass
+            else:
+                self.stderr.write(err)
             self.exitstatus = self.returncode = self.subproc.returncode
             return True
         else:
             return False
 
     def kill(self):
-        log.info("kill ")
+        log.debug("kill ")
         if self.subproc.pid and not self.finished:
-            log.info("kill: killing pid {0} ({1})".format(
+            log.debug("kill: killing pid {0} ({1})".format(
                 self.subproc.pid, self.args))
             safe_kill(self.subproc.pid)
         else:
-            log.info("kill: already terminated ({0})".format(self.args))
+            log.debug("kill: already terminated ({0})".format(self.args))
 
     @property
     def stdin(self):
@@ -266,7 +290,7 @@ class LocalRemote(object):
                     args[0]
                 ))
 
-        log.info("Running {0}".format(args))
+        log.debug("Running {0}".format(args))
 
         if shell:
             subproc = subprocess.Popen(quote(args),
@@ -347,16 +371,16 @@ class LocalDaemon(object):
         """
         Return PID as an integer or None if not found
         """
-        ps_txt = six.ensure_str(self.controller.run(
-            args=["ps", "ww", "-u"+str(os.getuid())]
-        ).stdout.getvalue()).strip()
+        ps_txt = self.controller.run(args=["ps", "ww", "-u"+str(os.getuid())],
+                                     stdout=StringIO()).\
+            stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
 
         for line in lines:
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
-                log.info("Found ps line for daemon: {0}".format(line))
+                log.debug("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[0])
-        log.info("No match for {0} {1}: {2}".format(
+        log.debug("No match for {0} {1}: {2}".format(
             self.daemon_type, self.daemon_id, ps_txt
             ))
         return None
@@ -375,14 +399,14 @@ class LocalDaemon(object):
             return
 
         pid = self._get_pid()
-        log.info("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
+        log.debug("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGTERM)
 
         waited = 0
         while pid is not None:
             new_pid = self._get_pid()
             if new_pid is not None and new_pid != pid:
-                log.info("Killing new PID {0}".format(new_pid))
+                log.debug("Killing new PID {0}".format(new_pid))
                 pid = new_pid
                 os.kill(pid, signal.SIGTERM)
 
@@ -410,7 +434,7 @@ class LocalDaemon(object):
 
         os.kill(self._get_pid(), sig)
         if not silent:
-            log.info("Sent signal {0} to {1}.{2}".format(sig, self.daemon_type, self.daemon_id))
+            log.debug("Sent signal {0} to {1}.{2}".format(sig, self.daemon_type, self.daemon_id))
 
 
 def safe_kill(pid):
@@ -453,9 +477,9 @@ class LocalFuseMount(FuseMount):
             # Previous mount existed, reuse the old name
             name = self.fs.name
         self.fs = LocalFilesystem(self.ctx, name=name)
-        log.info('Wait for MDS to reach steady state...')
+        log.debug('Wait for MDS to reach steady state...')
         self.fs.wait_for_daemons()
-        log.info('Ready to start {}...'.format(type(self).__name__))
+        log.debug('Ready to start {}...'.format(type(self).__name__))
 
     @property
     def _prefix(self):
@@ -494,15 +518,14 @@ class LocalFuseMount(FuseMount):
                 args=["mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
                 check_status=False
             )
-            p = self.client_remote.run(
-                args=["ls", "/sys/fs/fuse/connections"],
-                check_status=False
-            )
+
+            p = self.client_remote.run(args=["ls", "/sys/fs/fuse/connections"],
+                                       check_status=False, stdout=StringIO())
             if p.exitstatus != 0:
                 log.warning("ls conns failed with {0}, assuming none".format(p.exitstatus))
                 return []
 
-            ls_str = six.ensure_str(p.stdout.getvalue().strip())
+            ls_str = p.stdout.getvalue().strip()
             if ls_str:
                 return [int(n) for n in ls_str.split("\n")]
             else:
@@ -511,7 +534,7 @@ class LocalFuseMount(FuseMount):
         # Before starting ceph-fuse process, note the contents of
         # /sys/fs/fuse/connections
         pre_mount_conns = list_connections()
-        log.info("Pre-mount connections: {0}".format(pre_mount_conns))
+        log.debug("Pre-mount connections: {0}".format(pre_mount_conns))
 
         prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
@@ -531,7 +554,7 @@ class LocalFuseMount(FuseMount):
                                                 self.mountpoint
                                             ], wait=False)
 
-        log.info("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
+        log.debug("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
         # Wait for the connection reference to appear in /sys
         waited = 0
@@ -549,7 +572,7 @@ class LocalFuseMount(FuseMount):
                 ))
             post_mount_conns = list_connections()
 
-        log.info("Post-mount connections: {0}".format(post_mount_conns))
+        log.debug("Post-mount connections: {0}".format(post_mount_conns))
 
         # Record our fuse connection number so that we can use it when
         # forcing an unmount
@@ -571,7 +594,7 @@ class LocalFuseMount(FuseMount):
         to make the process killable.
         """
         return self.client_remote.run(args=[py_version, '-c', pyscript],
-                                      wait=False)
+                                      wait=False, stdout=StringIO())
 
 class LocalCephManager(CephManager):
     def __init__(self):
@@ -583,7 +606,7 @@ class LocalCephManager(CephManager):
         # certain teuthology tests want to run tasks in parallel
         self.lock = threading.RLock()
 
-        self.log = lambda x: log.info(x)
+        self.log = lambda x: log.debug(x)
 
         # Don't bother constructing a map of pools: it should be empty
         # at test cluster start, and in any case it would be out of date
@@ -616,9 +639,9 @@ class LocalCephManager(CephManager):
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
-                                        list(args), **kwargs)
-        return six.ensure_str(proc.stdout.getvalue())
+        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] +\
+                                   list(args), **kwargs, stdout=StringIO())
+        return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
@@ -628,12 +651,15 @@ class LocalCephManager(CephManager):
         proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
         return proc.exitstatus
 
-    def admin_socket(self, daemon_type, daemon_id, command, check_status=True, timeout=None):
+    def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
+                     timeout=None, stdout=None):
+        if stdout is None:
+            stdout = StringIO()
+
         return self.controller.run(
-            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command,
-            check_status=check_status,
-            timeout=timeout
-        )
+            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon",
+                  "{0}.{1}".format(daemon_type, daemon_id)] + command,
+            check_status=check_status, timeout=timeout, stdout=stdout)
 
 
 class LocalCephCluster(CephCluster):
@@ -677,7 +703,7 @@ class LocalCephCluster(CephCluster):
             existing_str += "\n[{0}]\n".format(subsys)
             for key, val in kvs.items():
                 # Comment out existing instance if it exists
-                log.info("Searching for existing instance {0}/{1}".format(
+                log.debug("Searching for existing instance {0}/{1}".format(
                     key, subsys
                 ))
                 existing_section = re.search("^\[{0}\]$([\n]|[^\[])+".format(
@@ -689,7 +715,7 @@ class LocalCephCluster(CephCluster):
                     existing_val = re.search("^\s*[^#]({0}) =".format(key), section_str, re.MULTILINE)
                     if existing_val:
                         start = existing_section.start() + existing_val.start(1)
-                        log.info("Found string to replace at {0}".format(
+                        log.debug("Found string to replace at {0}".format(
                             start
                         ))
                         existing_str = existing_str[0:start] + "#" + existing_str[start:]
@@ -756,7 +782,7 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
 
         self.mds_ids = list(self.mds_ids)
 
-        log.info("Discovered MDS IDs: {0}".format(self.mds_ids))
+        log.debug("Discovered MDS IDs: {0}".format(self.mds_ids))
 
         self.mon_manager = LocalCephManager()
 
@@ -813,7 +839,7 @@ class InteractiveFailureResult(unittest.TextTestResult):
 
 
 def enumerate_methods(s):
-    log.info("e: {0}".format(s))
+    log.debug("e: {0}".format(s))
     for t in s._tests:
         if isinstance(t, suite.BaseTestSuite):
             for sub in enumerate_methods(t):
@@ -824,15 +850,15 @@ def enumerate_methods(s):
 
 def load_tests(modules, loader):
     if modules:
-        log.info("Executing modules: {0}".format(modules))
+        log.debug("Executing modules: {0}".format(modules))
         module_suites = []
         for mod_name in modules:
             # Test names like cephfs.test_auto_repair
             module_suites.append(loader.loadTestsFromName(mod_name))
-        log.info("Loaded: {0}".format(list(module_suites)))
+        log.debug("Loaded: {0}".format(list(module_suites)))
         return suite.TestSuite(module_suites)
     else:
-        log.info("Executing all cephfs tests")
+        log.debug("Executing all cephfs tests")
         return loader.discover(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "cephfs")
         )
@@ -934,10 +960,8 @@ def exec_test():
     remote = LocalRemote()
 
     # Tolerate no MDSs or clients running at start
-    ps_txt = six.ensure_str(remote.run(
-        args=["ps", "-u"+str(os.getuid())],
-        stdout=StringIO()
-    ).stdout.getvalue().strip())
+    ps_txt = remote.run(args=["ps", "-u"+str(os.getuid())],
+                        stdout=StringIO()).stdout.getvalue().strip()
     lines = ps_txt.split("\n")[1:]
     for line in lines:
         if 'ceph-fuse' in line or 'ceph-mds' in line:
@@ -1000,9 +1024,9 @@ def exec_test():
             p = remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "auth", "get-or-create", client_name,
                                  "osd", "allow rw",
                                  "mds", "allow",
-                                 "mon", "allow r"])
+                                 "mon", "allow r"], stdout=StringIO())
 
-            open("./keyring", "ab").write(p.stdout.getvalue())
+            open("./keyring", "at").write(p.stdout.getvalue())
 
         mount = LocalFuseMount(ctx, test_dir, client_id)
         mounts.append(mount)
@@ -1091,7 +1115,7 @@ def exec_test():
             if not is_named:
                 victims.append((case, method))
 
-    log.info("Disabling {0} tests because of is_for_teuthology or needs_trimming".format(len(victims)))
+    log.debug("Disabling {0} tests because of is_for_teuthology or needs_trimming".format(len(victims)))
     for s, method in victims:
         s._tests.remove(method)
 

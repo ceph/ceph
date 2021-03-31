@@ -1002,10 +1002,18 @@ stress_write_image()
     local image=$3
     local duration=$(awk 'BEGIN {srand(); print int(10 * rand()) + 5}')
 
+    set +e
     timeout ${duration}s ceph_test_rbd_mirror_random_write \
-	--cluster ${cluster} ${pool} ${image} \
-	--debug-rbd=20 --debug-journaler=20 \
-	2> ${TEMPDIR}/rbd-mirror-random-write.log || true
+        --cluster ${cluster} ${pool} ${image} \
+        --debug-rbd=20 --debug-journaler=20 \
+        2> ${TEMPDIR}/rbd-mirror-random-write.log
+    error_code=$?
+    set -e
+
+    if [ $error_code -eq 124 ]; then
+        return 0
+    fi
+    return 1
 }
 
 compare_images()

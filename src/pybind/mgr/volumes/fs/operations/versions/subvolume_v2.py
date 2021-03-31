@@ -185,6 +185,9 @@ class SubvolumeV2(SubvolumeV1):
                 self.metadata_mgr.flush()
             else:
                 self.init_config(SubvolumeV2.VERSION, subvolume_type, qpath, initial_state)
+
+            # Create the subvolume metadata file which manages auth-ids if it doesn't exist
+            self.auth_mdata_mgr.create_subvolume_metadata_file(self.group.groupname, self.subvolname)
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
                 self._remove_on_failure(subvol_path, retained)
@@ -341,12 +344,16 @@ class SubvolumeV2(SubvolumeV1):
         else:
             if not self.has_pending_purges:
                 self.trash_base_dir()
+                # Delete the volume meta file, if it's not already deleted
+                self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
                 return
         if self.state != SubvolumeStates.STATE_RETAINED:
             self.trash_incarnation_dir()
             self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
             self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
             self.metadata_mgr.flush()
+            # Delete the volume meta file, if it's not already deleted
+            self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
 
     def info(self):
         if self.state != SubvolumeStates.STATE_RETAINED:

@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import errno
 import json
+import tempfile
 import time
 import unittest
 
@@ -555,6 +556,26 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.validate_persistent_user('admin', [], pass_hash, 'admin User',
                                       'admin@user.com')
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
+
+    def test_sanitize_password(self):
+        self.test_create_user()
+        password = 'myPass\\n\\r\\n'
+        with tempfile.TemporaryFile(mode='w+') as pwd_file:
+            # Add new line separators (like some text editors when a file is saved).
+            pwd_file.write('{}{}'.format(password, '\n\r\n\n'))
+            pwd_file.seek(0)
+            user = self.exec_cmd('ac-user-set-password', username='admin',
+                                 inbuf=pwd_file.read(), force_password=True)
+            pass_hash = password_hash(password, user['password'])
+            self.assertEqual(user['password'], pass_hash)
+
+    def test_unicode_password(self):
+        self.test_create_user()
+        password = '章鱼不是密码'
+        user = self.exec_cmd('ac-user-set-password', username='admin',
+                             inbuf=password.encode(), force_password=True)
+        pass_hash = password_hash(password, user['password'])
+        self.assertEqual(user['password'], pass_hash)
 
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:

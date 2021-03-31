@@ -547,7 +547,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
       return -EBUSY;
     }
 
-    features = (src->features & ~RBD_FEATURES_IMPLICIT_ENABLE);
+    features = src->features;
     src_size = src->get_image_size(src->snap_id);
   }
   uint64_t format = 2;

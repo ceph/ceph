@@ -2319,7 +2319,14 @@ int RGWUser::modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   ret = check_op(op_state, &subprocess_msg);
   if (ret < 0) {
-    set_err_msg(err_msg, "unable to parse parameters, " + subprocess_msg);
+    if (is_populated() && (user_id.compare(op_state.get_user_id()) != 0)) {
+      set_err_msg(err_msg, "unable to create user " + user_id.to_str()
+		  + " because user id " + op_state.get_user_id().to_str()
+		  + " already exists with email "
+		  + op_state.get_user_email());
+    } else {
+      set_err_msg(err_msg, "unable to parse parameters, " + subprocess_msg);
+    }
     return ret;
   }
 

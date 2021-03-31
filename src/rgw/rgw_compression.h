@@ -10,6 +10,13 @@
 #include "rgw_putobj.h"
 #include "rgw_op.h"
 
+int rgw_compression_info_from_attr(const bufferlist& attr,
+                                   bool& need_decompress,
+                                   RGWCompressionInfo& cs_info);
+int rgw_compression_info_from_attrset(const map<string, bufferlist>& attrs,
+                                      bool& need_decompress,
+                                      RGWCompressionInfo& cs_info);
+
 class RGWGetObj_Decompress : public RGWGetObj_Filter
 {
   CephContext* cct;

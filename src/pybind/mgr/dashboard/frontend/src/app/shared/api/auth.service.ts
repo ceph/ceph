@@ -26,14 +26,14 @@ export class AuthService {
       .post('api/auth', credentials)
       .toPromise()
       .then((resp: LoginResponse) => {
-        this.authStorageService.set(resp.username, resp.token, resp.permissions);
+        this.authStorageService.set(resp.username, resp.permissions);
       });
   }
 
   logout(callback: Function = null) {
     return this.http.post('api/auth/logout', null).subscribe((resp: any) => {
-      this.router.navigate(['/logout'], { skipLocationChange: true });
       this.authStorageService.remove();
+      this.router.navigate(['/logout'], { skipLocationChange: true });
       if (callback) {
         callback();
       }

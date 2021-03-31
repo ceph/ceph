@@ -291,8 +291,8 @@ static int testrados(void)
 	r = rados_nobjects_list_open(io_ctx, &h);
 	printf("rados_nobjects_list_open = %d, h = %p\n", r, h);
 	const char *poolname;
-	while (rados_nobjects_list_next(h, &poolname, NULL, NULL) == 0)
-		printf("rados_nobjects_list_next got object '%s'\n", poolname);
+	while (rados_nobjects_list_next2(h, &poolname, NULL, NULL, NULL, NULL, NULL) == 0)
+		printf("rados_nobjects_list_next2 got object '%s'\n", poolname);
 	rados_nobjects_list_close(h);
 
 	/* stat */

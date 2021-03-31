@@ -185,18 +185,41 @@ class TestCreateLV(object):
     def setup(self):
         self.foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
         self.foo_group = api.VolumeGroup(vg_name='foo_group',
-                                         vg_extent_size=4194304,
-                                         vg_extent_count=100,
-                                         vg_free_count=100)
+                                         vg_extent_size="4194304",
+                                         vg_extent_count="100",
+                                         vg_free_count="100")
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
     @patch('ceph_volume.api.lvm.get_first_lv')
     def test_uses_size(self, m_get_first_lv, m_call, m_run, monkeypatch):
         m_get_first_lv.return_value = self.foo_volume
-        api.create_lv('foo', 0, vg=self.foo_group, size=5368709120, tags={'ceph.type': 'data'})
-        expected = ['lvcreate', '--yes', '-l', '1280', '-n', 'foo-0', 'foo_group']
+        api.create_lv('foo', 0, vg=self.foo_group, size=419430400, tags={'ceph.type': 'data'})
+        expected = ['lvcreate', '--yes', '-l', '100', '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
+
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_uses_size_adjust_if_1percent_over(self, m_get_first_lv, m_call, m_run, monkeypatch):
+        foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
+        foo_group = api.VolumeGroup(vg_name='foo_group',
+                                    vg_extent_size="4194304",
+                                    vg_extent_count="1000",
+                                    vg_free_count="1000")
+        m_get_first_lv.return_value = foo_volume
+        # 423624704 should be just under 1% off of the available size 419430400
+        api.create_lv('foo', 0, vg=foo_group, size=4232052736, tags={'ceph.type': 'data'})
+        expected = ['lvcreate', '--yes', '-l', '1000', '-n', 'foo-0', 'foo_group']
+        m_run.assert_called_with(expected)
+
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_uses_size_too_large(self, m_get_first_lv, m_call, m_run, monkeypatch):
+        m_get_first_lv.return_value = self.foo_volume
+        with pytest.raises(RuntimeError):
+            api.create_lv('foo', 0, vg=self.foo_group, size=5368709120, tags={'ceph.type': 'data'})
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')

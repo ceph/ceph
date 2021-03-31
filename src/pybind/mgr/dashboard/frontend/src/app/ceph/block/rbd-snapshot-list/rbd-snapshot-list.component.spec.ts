@@ -88,7 +88,7 @@ describe('RbdSnapshotListComponent', () => {
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
       authStorageService = new AuthStorageService();
-      authStorageService.set('user', '', { 'rbd-image': ['create', 'read', 'update', 'delete'] });
+      authStorageService.set('user', { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(
         authStorageService,
         null,

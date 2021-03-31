@@ -6,7 +6,7 @@ if test -e build; then
     exit 1
 fi
 
-PYBUILD="2"
+PYBUILD="3"
 if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in

@@ -4477,6 +4477,14 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("bluefs_check_for_zeros", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Check data read for suspicious pages")
+    .set_long_description("Looks into data read to check if there is a 4K block entirely filled with zeros. "
+			  "If this happens, we re-read data. If there is difference, we print error to log.")
+    .add_see_also("bluestore_retry_disk_reads"),
+
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_flag(Option::FLAG_CREATE)
@@ -4977,7 +4985,11 @@ std::vector<Option> get_global_options() {
     Option("bluestore_debug_small_allocations", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
-
+    Option("bluestore_debug_max_cached_onodes", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("This allows to explicitly cap number of onode entries per cache shard "
+                     "effectively bypassing all the smart but indirect cache adjustment logic."
+                     " Intended for testing purposes only "),
     Option("bluestore_debug_too_many_blobs_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(24*1024)
     .set_description(""),
@@ -6706,6 +6718,15 @@ std::vector<Option> get_rgw_options() {
     .set_default(1_M)
     .set_description("Send copy-object progress info after these many bytes"),
 
+    Option("rgw_sync_obj_etag_verify", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Verify if the object copied from remote is identical to its source")
+    .set_long_description(
+        "If true, this option computes the MD5 checksum of the data which is written at the "
+	"destination and checks if it is identical to the ETAG stored in the source. "
+        "It ensures integrity of the objects fetched from a remote server over HTTP including "
+        "multisite sync."),
+
     Option("rgw_obj_tombstone_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description("Max number of entries to keep in tombstone cache")
@@ -7838,7 +7859,7 @@ std::vector<Option> get_mds_options() {
     .set_description("decay rate for trimming MDS cache throttle"),
 
     Option("mds_cache_trim_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(64_K)
+    .set_default(256_K)
     .set_description("threshold for number of dentries that can be trimmed"),
 
     Option("mds_max_file_recover", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -7886,23 +7907,23 @@ std::vector<Option> get_mds_options() {
     .set_description("number of omap keys to read from the SessionMap in one operation"),
 
     Option("mds_recall_max_caps", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(5000)
+    .set_default(30000)
     .set_description("maximum number of caps to recall from client session in single recall"),
 
     Option("mds_recall_max_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(2.5)
+    .set_default(1.5)
     .set_description("decay rate for throttle on recalled caps on a session"),
 
     Option("mds_recall_max_decay_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(16_K)
+    .set_default(128_K)
     .set_description("decay threshold for throttle on recalled caps on a session"),
 
     Option("mds_recall_global_max_decay_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(64_K)
+    .set_default(128_K)
     .set_description("decay threshold for throttle on recalled caps globally"),
 
     Option("mds_recall_warning_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(32_K)
+    .set_default(256_K)
     .set_description("decay threshold for warning on slow session cap recall"),
 
     Option("mds_recall_warning_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -7920,6 +7941,24 @@ std::vector<Option> get_mds_options() {
     .set_default(10)
     .set_description("decay magnitude for preemptively recalling caps on quiet client")
     .set_long_description("This is the order of magnitude difference (in base 2) of the internal liveness decay counter and the number of capabilities the session holds. When this difference occurs, the MDS treats the session as quiescent and begins recalling capabilities."),
+
+    Option("mds_session_cap_acquisition_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("decay rate for session readdir caps leading to readdir throttle")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_long_description("The half-life for the session cap acquisition counter of caps acquired by readdir. This is used for throttling readdir requests from clients slow to release caps."),
+
+    Option("mds_session_cap_acquisition_throttle", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(500000)
+    .set_description("throttle point for cap acquisition decay counter"),
+
+    Option("mds_session_max_caps_throttle_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1.1)
+    .set_description("ratio of mds_max_maps_per_client that client must exceed before readdir may be throttled by cap acquisition throttle"),
+
+    Option("mds_cap_acquisition_throttle_retry_request_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.5)
+    .set_description("timeout in seconds after which a client request is retried due to cap acquisition throttling"),
 
     Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(30)

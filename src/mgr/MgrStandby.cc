@@ -390,6 +390,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   // this MgrMap is changing its set of enabled modules
   bool need_respawn = py_module_registry.handle_mgr_map(map);
   if (need_respawn) {
+    dout(1) << "respawning because set of enabled modules changed!" << dendl;
     respawn();
   }
 

@@ -52,7 +52,7 @@ export class LoginComponent implements OnInit {
             window.location.replace(login.login_url);
           }
         } else {
-          this.authStorageService.set(login.username, token, login.permissions);
+          this.authStorageService.set(login.username, login.permissions);
           this.router.navigate(['']);
         }
       });

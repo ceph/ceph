@@ -4,7 +4,7 @@ import errno
 import json
 from collections import defaultdict
 from prettytable import PrettyTable
-from threading import Event
+from threading import Event, Lock
 
 
 DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
@@ -33,6 +33,7 @@ class Module(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.crashes = None
+        self.crashes_lock = Lock()
         self.run = True
         self.event = Event()
 
@@ -43,8 +44,9 @@ class Module(MgrModule):
     def serve(self):
         self.config_notify()
         while self.run:
-            self._refresh_health_checks()
-            self._prune(self.retain_interval)
+            with self.crashes_lock:
+                self._refresh_health_checks()
+                self._prune(self.retain_interval)
             wait = min(MAX_WAIT, max(self.warn_recent_interval / 100, MIN_WAIT))
             self.event.wait(wait)
             self.event.clear()
@@ -91,16 +93,17 @@ class Module(MgrModule):
         self.set_health_checks(health_checks)
 
     def handle_command(self, inbuf, command):
-        if not self.crashes:
-            self._load_crashes()
-        for cmd in self.COMMANDS:
-            if cmd['cmd'].startswith(command['prefix']):
-                handler = cmd['handler']
-                break
-        if handler is None:
-            return errno.EINVAL, '', 'unknown command %s' % command['prefix']
+        with self.crashes_lock:
+            if not self.crashes:
+                self._load_crashes()
+            for cmd in self.COMMANDS:
+                if cmd['cmd'].startswith(command['prefix']):
+                    handler = cmd['handler']
+                    break
+            if handler is None:
+                return errno.EINVAL, '', 'unknown command %s' % command['prefix']
 
-        return handler(self, command, inbuf)
+            return handler(self, command, inbuf)
 
     def time_from_string(self, timestr):
         # drop the 'Z' timezone indication, it's always UTC

@@ -1401,7 +1401,7 @@ cdef class LibCephFS(object):
                 ret = ceph_readlink(self.cluster, _path, buf, _size)
             if ret < 0:
                 raise make_ex(ret, "error in readlink")
-            return buf
+            return buf[:ret]
         finally:
             free(buf)
 

@@ -8,8 +8,9 @@ import time
 from six import StringIO
 from textwrap import dedent
 import os
+from teuthology.misc import sudo_write_file
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
+from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
 from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
@@ -142,6 +143,29 @@ class CephFSMount(object):
             if r.exitstatus != 0:
                 raise RuntimeError("Expected file {0} not found".format(suffix))
 
+    def write_file(self, path, data, perms=None):
+        """
+        Write the given data at the given path and set the given perms to the
+        file on the path.
+        """
+        if path.find(self.mountpoint) == -1:
+            path = os.path.join(self.mountpoint, path)
+
+        sudo_write_file(self.client_remote, path, data)
+
+        if perms:
+            self.run_shell(args=f'chmod {perms} {path}')
+
+    def read_file(self, path):
+        """
+        Return the data from the file on given path.
+        """
+        if path.find(self.mountpoint) == -1:
+            path = os.path.join(self.mountpoint, path)
+
+        return self.run_shell(args=['sudo', 'cat', path], omit_sudo=False).\
+            stdout.getvalue().strip()
+
     def create_destroy(self):
         assert(self.is_mounted())
 
@@ -175,6 +199,9 @@ class CephFSMount(object):
                                       stderr=StringIO(), wait=wait,
                                       check_status=check_status,
                                       omit_sudo=omit_sudo)
+
+    def run_shell_payload(self, payload, **kwargs):
+        return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
 
     def open_no_data(self, basename):
         """

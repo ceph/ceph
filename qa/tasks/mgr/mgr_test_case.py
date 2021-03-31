@@ -138,7 +138,7 @@ class MgrTestCase(CephTestCase):
             mgr_map = cls.mgr_cluster.get_mgr_map()
             done = mgr_map['active_gid'] != initial_gid and mgr_map['available']
             if done:
-                log.info("Restarted after module load (new active {0}/{1})".format(
+                log.debug("Restarted after module load (new active {0}/{1})".format(
                     mgr_map['active_name'] , mgr_map['active_gid']))
             return done
         cls.wait_until_true(has_restarted, timeout=30)
@@ -159,7 +159,7 @@ class MgrTestCase(CephTestCase):
 
         uri = mgr_map['x']['services'][service_name]
 
-        log.info("Found {0} at {1} (daemon {2}/{3})".format(
+        log.debug("Found {0} at {1} (daemon {2}/{3})".format(
             service_name, uri, mgr_map['x']['active_name'],
             mgr_map['x']['active_gid']))
 
@@ -183,7 +183,7 @@ class MgrTestCase(CephTestCase):
             cls.mgr_cluster.mgr_fail(mgr_id)
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
-            log.info("Using port {0} for {1} on mgr.{2}".format(
+            log.debug("Using port {0} for {1} on mgr.{2}".format(
                 assign_port, module_name, mgr_id
             ))
             cls.mgr_cluster.set_module_localized_conf(module_name, mgr_id,
@@ -198,7 +198,7 @@ class MgrTestCase(CephTestCase):
             mgr_map = cls.mgr_cluster.get_mgr_map()
             done = mgr_map['available']
             if done:
-                log.info("Available after assign ports (new active {0}/{1})".format(
+                log.debug("Available after assign ports (new active {0}/{1})".format(
                     mgr_map['active_name'], mgr_map['active_gid']))
             return done
         cls.wait_until_true(is_available, timeout=30)

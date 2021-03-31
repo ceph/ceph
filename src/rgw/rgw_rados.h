@@ -737,6 +737,11 @@ public:
       return location;
     }
 
+    /* where current part starts */
+    uint64_t get_part_ofs() const {
+      return part_ofs;
+    }
+
     /* start of current stripe */
     uint64_t get_stripe_ofs() const {
       if (manifest->explicit_objs) {

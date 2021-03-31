@@ -1,3 +1,4 @@
+import { APP_BASE_HREF } from '@angular/common';
 import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
 import {
   ErrorHandler,
@@ -9,7 +10,6 @@ import {
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BlockUIModule } from 'ng-block-ui';
 import { AccordionModule } from 'ngx-bootstrap/accordion';
@@ -26,10 +26,6 @@ import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
 
 import { environment } from '../environments/environment';
-
-export function jwtTokenGetter() {
-  return localStorage.getItem('access_token');
-}
 
 @NgModule({
   declarations: [AppComponent],
@@ -49,12 +45,7 @@ export function jwtTokenGetter() {
     CephModule,
     AccordionModule.forRoot(),
     BsDropdownModule.forRoot(),
-    TabsModule.forRoot(),
-    JwtModule.forRoot({
-      config: {
-        tokenGetter: jwtTokenGetter
-      }
-    })
+    TabsModule.forRoot()
   ],
   exports: [SharedModule],
   providers: [
@@ -66,6 +57,10 @@ export function jwtTokenGetter() {
       provide: HTTP_INTERCEPTORS,
       useClass: ApiInterceptorService,
       multi: true
+    },
+    {
+      provide: APP_BASE_HREF,
+      useValue: window['base-href']
     },
     {
       provide: TRANSLATIONS,

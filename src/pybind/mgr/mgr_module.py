@@ -398,8 +398,10 @@ def CLICheckNonemptyFileInput(func):
     def check(*args, **kwargs):
         if not 'inbuf' in kwargs:
             return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
-        if not kwargs['inbuf'] or (isinstance(kwargs['inbuf'], str)
-                                   and not kwargs['inbuf'].strip('\n')):
+        if isinstance(kwargs['inbuf'], str):
+            # Delete new line separator at EOF (it may have been added by a text editor).
+            kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
+        if not kwargs['inbuf']:
             return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
         return func(*args, **kwargs)
     return check
@@ -553,6 +555,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         :return: Byte string or None
         """
         return self._ceph_get_store(key)
+
+    def get_localized_store(self, key, default=None):
+        r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
+        if r is None:
+            r = self._ceph_get_store(key)
+            if r is None:
+                r = default
+        return r
 
     def get_active_uri(self):
         return self._ceph_get_active_uri()

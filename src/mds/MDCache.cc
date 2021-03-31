@@ -188,7 +188,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
       }
       since = now-upkeep_last_release;
       auto release_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_release_free_interval"));
-      if (since >= release_interval) {
+      if (since >= release_interval*.90) {
         /* XXX not necessary once MDCache uses PriorityCache */
         dout(10) << "releasing free memory" << dendl;
         ceph_heap_release_free_memory();
@@ -11676,6 +11676,7 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
     CDir *dir = *p;
     dout(10) << " storing result frag " << *dir << dendl;
 
+    dir->mark_dirty(dir->pre_dirty(), mdr->ls);
     dir->mark_new(mdr->ls);
 
     // freeze and store them too

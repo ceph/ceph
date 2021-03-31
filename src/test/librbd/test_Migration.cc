@@ -292,7 +292,6 @@ struct TestMigration : public TestFixture {
     int order = m_ref_ictx->order;
     uint64_t features;
     ASSERT_EQ(0, librbd::get_features(m_ref_ictx, &features));
-    features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
 
     std::string ref_clone_name = get_temp_image_name();
     std::string clone_name = get_temp_image_name();
@@ -405,7 +404,6 @@ struct TestMigration : public TestFixture {
     int order = m_ictx->order;
     uint64_t features;
     ASSERT_EQ(0, librbd::get_features(m_ictx, &features));
-    features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
 
     std::string clone_name = get_temp_image_name();
     ASSERT_EQ(0, librbd::clone(m_ictx->md_ctx, m_ictx->name.c_str(), "snap1",

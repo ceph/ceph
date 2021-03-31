@@ -374,8 +374,11 @@ class Docs(BaseController):
             spec_url = "{}/docs/api.json".format(base)
 
         auth_header = cherrypy.request.headers.get('authorization')
+        auth_cookie = cherrypy.request.cookie['token']
         jwt_token = ""
-        if auth_header is not None:
+        if auth_cookie is not None:
+            jwt_token = auth_cookie.value
+        elif auth_header is not None:
             scheme, params = auth_header.split(' ', 1)
             if scheme.lower() == 'bearer':
                 jwt_token = params
