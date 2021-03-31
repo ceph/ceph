@@ -12,6 +12,12 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  pacific:
+    target_eol: 2023-06-01
+    releases:
+      - version: 16.2.0
+        released: 2020-03-31
+
   octopus:
     target_eol: 2022-06-01
     releases:
