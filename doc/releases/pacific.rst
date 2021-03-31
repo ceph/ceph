@@ -94,10 +94,13 @@ RADOS
 ~~~~~
 
 * Pacific introduces RocksDB sharding, which reduces disk space requirements.
+
 * Ceph now provides QoS between client I/O and background operations via the
   mclock scheduler.
+
 * The balancer is now on by default in upmap mode to improve distribution of
   PGs across OSDs.
+
 * The output of ``ceph -s`` has been improved to show recovery progress in
   one progress bar. More detailed progress bars are visible via the
   ``ceph progress`` command.
@@ -492,6 +495,7 @@ Notable Changes
 
 * MGR: progress module can now be turned on/off, using the commands:
   ``ceph progress on`` and ``ceph progress off``.
+
 * An AWS-compliant API: "GetTopicAttributes" was added to replace the existing "GetTopic" API. The new API
   should be used to fetch information about topics used for bucket notifications.
 
