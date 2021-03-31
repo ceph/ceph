@@ -8178,14 +8178,6 @@ inline int PrimaryLogPG::_delete_oid(
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
     t->create(soid);
-    if (oi.has_manifest()) {
-      // make no references
-      dec_all_refcount_manifest(oi, ctx);
-      oi.manifest.clear();
-      oi.manifest.type = object_manifest_t::TYPE_NONE;
-      oi.clear_flag(object_info_t::FLAG_MANIFEST);
-      ctx->delta_stats.num_objects_manifest--;
-    }
     osd->logger->inc(l_osd_tier_whiteout);
     return 0;
   }
@@ -8868,7 +8860,6 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
   // Drop the reference if deduped chunk is modified
   if (ctx->new_obs.oi.is_dirty() &&
     (ctx->obs->oi.has_manifest() && ctx->obs->oi.manifest.is_chunked()) &&
-    ctx->new_obs.oi.size != 0 && // missing, redirect and delete
     !ctx->cache_operation &&
     log_op_type != pg_log_entry_t::PROMOTE) {
     update_chunk_map_by_dirty(ctx);
