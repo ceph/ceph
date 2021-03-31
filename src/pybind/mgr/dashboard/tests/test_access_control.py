@@ -572,13 +572,10 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_unicode_password(self):
         self.test_create_user()
         password = '章鱼不是密码'
-        with tempfile.TemporaryFile(mode='w+') as pwd_file:
-            pwd_file.write(password)
-            pwd_file.seek(0)
-            user = self.exec_cmd('ac-user-set-password', username='admin',
-                                 inbuf=pwd_file.read(), force_password=True)
-            pass_hash = password_hash(password, user['password'])
-            self.assertEqual(user['password'], pass_hash)
+        user = self.exec_cmd('ac-user-set-password', username='admin',
+                             inbuf=password.encode(), force_password=True)
+        pass_hash = password_hash(password, user['password'])
+        self.assertEqual(user['password'], pass_hash)
 
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
