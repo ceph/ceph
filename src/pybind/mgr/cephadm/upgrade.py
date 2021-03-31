@@ -438,7 +438,7 @@ class CephadmUpgrade:
             # tolerate/fix upgrade state from older version
             self.upgrade_state.target_version = target_version.split(' ')[2]
             target_version = self.upgrade_state.target_version
-        target_major, target_minor, target_patch = target_version.split('.')
+        target_major, target_minor, target_patch, *target_distrib = target_version.split('.')
         target_major_name = self.mgr.lookup_release_name(int(target_major))
 
         if first:
