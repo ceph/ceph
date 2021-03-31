@@ -36,6 +36,42 @@ Options
 
    Perform a selftest. This mode performs a sanity check of ``stats`` module.
 
+Descriptions of fields
+======================
+
+.. describe:: chit
+
+   cap hit rate
+
+.. describe:: rlat
+
+   read latency
+
+.. describe:: wlat
+
+   write latency
+
+.. describe:: mlat
+
+   metadata latency
+
+.. describe:: dlease
+
+   dentry lease rate
+
+.. describe:: ofiles
+
+   number of opened files
+
+.. describe:: oicaps
+
+   number of pinned caps
+
+.. describe:: oinodes
+
+   number of opened inodes
+
+
 Availability
 ============
 

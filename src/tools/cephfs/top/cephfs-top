@@ -36,15 +36,15 @@ FS_TOP_PROG_STR = 'cephfs-top'
 FS_TOP_SUPPORTED_VER = 1
 
 ITEMS_PAD_LEN = 1
-ITEMS_PAD = "  " * ITEMS_PAD_LEN
+ITEMS_PAD = " " * ITEMS_PAD_LEN
 DEFAULT_REFRESH_INTERVAL = 1
 # min refresh interval allowed
 MIN_REFRESH_INTERVAL = 0.5
 
 # metadata provided by mgr/stats
-FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "CLIENT_ID"
-FS_TOP_MAIN_WINDOW_COL_MNT_ROOT = "MOUNT_ROOT"
-FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR = "MOUNT_POINT@HOST/ADDR"
+FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "client_id"
+FS_TOP_MAIN_WINDOW_COL_MNT_ROOT = "mount_root"
+FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR = "mount_point@host/addr"
 
 MAIN_WINDOW_TOP_LINE_ITEMS_START = [ITEMS_PAD,
                                     FS_TOP_MAIN_WINDOW_COL_CLIENT_ID,
@@ -179,6 +179,27 @@ class FSTop(object):
             raise FSTopException(f'error in \'perf stats\' query: {out}')
         return json.loads(buf.decode('utf-8'))
 
+    def items(self, item):
+        if item == "CAP_HIT":
+            return "chit"
+        if item == "READ_LATENCY":
+            return "rlat"
+        if item == "WRITE_LATENCY":
+            return "wlat"
+        if item == "METADATA_LATENCY":
+            return "mlat"
+        if item == "DENTRY_LEASE":
+            return "dlease"
+        if item == "OPENED_FILES":
+            return "ofiles"
+        if item == "PINNED_ICAPS":
+            return "oicaps"
+        if item == "OPENED_INODES":
+            return "oinodes"
+        else:
+            # return empty string for none type
+            return ''
+
     def mtype(self, typ):
         if typ == MetricType.METRIC_TYPE_PERCENTAGE:
             return "(%)"
@@ -200,7 +221,7 @@ class FSTop(object):
             xp += nlen
 
         for item, typ in MAIN_WINDOW_TOP_LINE_METRICS.items():
-            it = f'{item}{self.mtype(typ)}'
+            it = f'{self.items(item)}{self.mtype(typ)}'
             heading.append(it)
             nlen = len(it) + len(ITEMS_PAD)
             x_coord_map[item] = (xp, nlen)
