@@ -569,8 +569,8 @@ Operations
 QoS Based on mClock
 -------------------
 
-Ceph's use of mClock is currently experimental and should
-be approached with an exploratory mindset.
+Ceph's use of mClock is now more refined and can be used by following the
+steps as described in `mClock Config Reference`_.
 
 Core Concepts
 `````````````
@@ -597,7 +597,7 @@ words, the share of each type of service is controlled by three tags:
 #. weight: the proportional share of capacity if extra capacity or system
    oversubscribed.
 
-In Ceph operations are graded with "cost". And the resources allocated
+In Ceph, operations are graded with "cost". And the resources allocated
 for serving various services are consumed by these "costs". So, for
 example, the more reservation a services has, the more resource it is
 guaranteed to possess, as long as it requires. Assuming there are 2
@@ -619,10 +619,9 @@ competitor "1". In the case of client ops, it is not clamped by the
 limit setting, so it can make use of all the resources if there is no
 recovery ongoing.
 
-CURRENT IMPLEMENTATION NOTE: the current experimental implementation
-does not enforce the limit values. As a first approximation we decided
-not to prevent operations that would otherwise enter the operation
-sequencer from doing so.
+CURRENT IMPLEMENTATION NOTE: the current implementation enforces the limit
+values. Therefore, if a service crosses the enforced limit, the op remains
+in the operation queue until the limit is restored.
 
 Subtleties of mClock
 ````````````````````
@@ -644,7 +643,7 @@ means if *W* is sufficiently large and therefore *1/W* is sufficiently
 small, the calculated tag may never be assigned as it will get a value
 of the current time. The ultimate lesson is that values for weight
 should not be too large. They should be under the number of requests
-one expects to ve serviced each second.
+one expects to be serviced each second.
 
 Caveats
 ```````
@@ -1125,3 +1124,4 @@ Miscellaneous
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
 .. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio
+.. _mClock Config Reference: ../mclock-config-ref
