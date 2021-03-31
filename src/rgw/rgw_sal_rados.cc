@@ -82,7 +82,7 @@ static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider* dpp,
   } else {
     ldout(store->ctx(), 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     /* object exists, but policy is broken */
-    int r = user.load_by_id(dpp, y);
+    int r = user.load_user(dpp, y);
     if (r < 0)
       return r;
 
@@ -188,12 +188,12 @@ int RadosUser::trim_usage(uint64_t start_epoch, uint64_t end_epoch)
   return store->getRados()->trim_usage(get_id(), bucket_name, start_epoch, end_epoch);
 }
 
-int RadosUser::load_by_id(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
     return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
 }
 
-int RadosUser::store_info(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
+int RadosUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
     return store->ctl()->user->store_info(dpp, info, y,
 					  RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker)
@@ -202,9 +202,10 @@ int RadosUser::store_info(const DoutPrefixProvider* dpp, optional_yield y, bool 
 					  .set_old_info(old_info));
 }
 
-int RadosUser::remove_info(const DoutPrefixProvider* dpp, optional_yield y, const RGWUserCtl::RemoveParams& params)
+int RadosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-    return store->ctl()->user->remove_info(dpp, info, y, params);
+    return store->ctl()->user->remove_info(dpp, info, y,
+					  RGWUserCtl::RemoveParams().set_objv_tracker(&objv_tracker));
 }
 
 /* Placeholder */

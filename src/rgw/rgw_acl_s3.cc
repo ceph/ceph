@@ -313,7 +313,7 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Store* sto
     grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
     std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(id_val));
-    ret = user->load_by_id(dpp, null_yield);
+    ret = user->load_user(dpp, null_yield);
     if (ret < 0)
       return ret;
 
@@ -492,7 +492,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
   }
 
   std::unique_ptr<rgw::sal::User> user = store->get_user(owner->get_id());
-  if (user->load_by_id(dpp, null_yield) < 0) {
+  if (user->load_user(dpp, null_yield) < 0) {
     ldout(cct, 10) << "owner info does not exist" << dendl;
     err_msg = "Invalid id";
     return -EINVAL;
@@ -546,7 +546,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
     
         if (grant_user.user_id.empty()) {
 	  user = store->get_user(uid);
-	  if (user->load_by_id(dpp, null_yield) < 0) {
+	  if (user->load_user(dpp, null_yield) < 0) {
 	    ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
 	    err_msg = "Invalid id";
 	    return -EINVAL;

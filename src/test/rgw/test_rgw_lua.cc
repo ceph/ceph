@@ -58,15 +58,15 @@ public:
     return 0;
   }
 
-  virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override {
+  virtual int load_user(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params) override {
+  virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info) override {
     return 0;
   }
 
-  virtual int remove_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::RemoveParams& params) override {
+  virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
 
