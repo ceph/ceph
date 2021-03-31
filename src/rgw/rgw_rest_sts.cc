@@ -134,6 +134,61 @@ WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& c
   return false;
 }
 
+void
+WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, std::unordered_multimap<string, string>& token) const
+{
+  string s_val;
+  jwt::claim::type t = c.get_type();
+  switch(t) {
+    case jwt::claim::type::null:
+      break;
+    case jwt::claim::type::boolean:
+    case jwt::claim::type::number:
+    case jwt::claim::type::int64:
+    {
+      s_val = c.to_json().serialize();
+      token.emplace(key, s_val);
+      break;
+    }
+    case jwt::claim::type::string:
+    {
+      s_val = c.to_json().to_str();
+      token.emplace(key, s_val);
+      break;
+    }
+    case jwt::claim::type::array:
+    {
+      const picojson::array& arr = c.as_array();
+      for (auto& a : arr) {
+        recurse_and_insert(key, jwt::claim(a), token);
+      }
+      break;
+    }
+    case jwt::claim::type::object:
+    {
+      const picojson::object& obj = c.as_object();
+      for (auto& m : obj) {
+        recurse_and_insert(m.first, jwt::claim(m.second), token);
+      }
+      break;
+    }
+  }
+  return;
+}
+
+//Extract all token claims so that they can be later used in the Condition element of Role's trust policy
+std::unordered_multimap<string,string>
+WebTokenEngine::get_token_claims(const jwt::decoded_jwt& decoded) const
+{
+  std::unordered_multimap<string, string> token;
+  const auto& claims = decoded.get_payload_claims();
+
+  for (auto& c : claims) {
+    recurse_and_insert(c.first, c.second, token);
+  }
+  return token;
+}
+
 //Offline validation of incoming Web Token which is a signed JWT (JSON Web Token)
 boost::optional<WebTokenEngine::token_t>
 WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s,
@@ -145,32 +200,47 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
 
     auto& payload = decoded.get_payload();
     ldpp_dout(dpp, 20) << " payload = " << payload << dendl;
+
+    t = get_token_claims(decoded);
+
+    string iss;
     if (decoded.has_issuer()) {
-      t.iss = decoded.get_issuer();
+      iss = decoded.get_issuer();
     }
+
+    set<string> aud;
     if (decoded.has_audience()) {
-      auto aud = decoded.get_audience();
-      t.aud = *(aud.begin());
+      aud = decoded.get_audience();
     }
-    if (decoded.has_subject()) {
-      t.sub = decoded.get_subject();
-    }
+
+    string client_id;
     if (decoded.has_payload_claim("client_id")) {
-      t.client_id = decoded.get_payload_claim("client_id").as_string();
+      client_id = decoded.get_payload_claim("client_id").as_string();
     }
-    if (t.client_id.empty() && decoded.has_payload_claim("clientId")) {
-      t.client_id = decoded.get_payload_claim("clientId").as_string();
+    if (client_id.empty() && decoded.has_payload_claim("clientId")) {
+      client_id = decoded.get_payload_claim("clientId").as_string();
+    }
+    string azp;
+    if (decoded.has_payload_claim("azp")) {
+      azp = decoded.get_payload_claim("azp").as_string();
     }
     string role_arn = s->info.args.get("RoleArn");
-    auto provider = get_provider(dpp, role_arn, t.iss);
+    auto provider = get_provider(dpp, role_arn, iss);
     if (! provider) {
-      ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << t.iss << dendl;
+      ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw -EACCES;
     }
     vector<string> client_ids = provider->get_client_ids();
     vector<string> thumbprints = provider->get_thumbprints();
     if (! client_ids.empty()) {
-      if (! is_client_id_valid(client_ids, t.client_id) && ! is_client_id_valid(client_ids, t.aud)) {
+      bool found = false;
+      for (auto& it : aud) {
+        if (is_client_id_valid(client_ids, it)) {
+          found = true;
+          break;
+        }
+      }
+      if (! found && ! is_client_id_valid(client_ids, client_id) && ! is_client_id_valid(client_ids, azp)) {
         ldpp_dout(dpp, 0) << "Client id in token doesn't match with that registered with oidc provider" << dendl;
         throw -EACCES;
       }
@@ -179,7 +249,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (decoded.has_algorithm()) {
       auto& algorithm = decoded.get_algorithm();
       try {
-        validate_signature(dpp, decoded, algorithm, t.iss, thumbprints, y);
+        validate_signature(dpp, decoded, algorithm, iss, thumbprints, y);
       } catch (...) {
         throw -EACCES;
       }

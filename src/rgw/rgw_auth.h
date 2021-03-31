@@ -364,12 +364,17 @@ protected:
 class StrategyRegistry;
 
 class WebIdentityApplier : public IdentityApplier {
+  std::string sub;
+  std::string iss;
+  std::string aud;
+  std::string client_id;
+  std::string user_name;
 protected:
   CephContext* const cct;
   rgw::sal::Store* store;
   std::string role_session;
   std::string role_tenant;
-  rgw::web_idp::WebTokenClaims token_claims;
+  std::unordered_multimap<std::string, std::string> token_claims;
 
   std::string get_idp_url() const;
 
@@ -382,12 +387,46 @@ public:
                       rgw::sal::Store* store,
                       const std::string& role_session,
                       const std::string& role_tenant,
-                      const rgw::web_idp::WebTokenClaims& token_claims)
-    : cct(cct),
+                      const std::unordered_multimap<std::string, std::string>& token_claims)
+      : cct(cct),
       store(store),
       role_session(role_session),
       role_tenant(role_tenant),
       token_claims(token_claims) {
+      const auto& sub = token_claims.find("sub");
+      if(sub != token_claims.end()) {
+        this->sub = sub->second;
+      }
+
+      const auto& iss = token_claims.find("iss");
+      if(iss != token_claims.end()) {
+        this->iss = iss->second;
+      }
+
+      const auto& aud = token_claims.find("aud");
+      if(aud != token_claims.end()) {
+        this->aud = aud->second;
+      }
+
+      const auto& client_id = token_claims.find("client_id");
+      if(client_id != token_claims.end()) {
+        this->client_id = client_id->second;
+      } else {
+        const auto& azp = token_claims.find("azp");
+        if (azp != token_claims.end()) {
+          this->client_id = azp->second;
+        }
+      }
+
+      const auto& user_name = token_claims.find("username");
+      if(user_name != token_claims.end()) {
+        this->user_name = user_name->second;
+      } else {
+        const auto& given_username = token_claims.find("given_username");
+        if (given_username != token_claims.end()) {
+          this->user_name = given_username->second;
+        }
+      }
   }
 
   void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
@@ -401,7 +440,7 @@ public:
   }
 
   bool is_owner_of(const rgw_user& uid) const override {
-    if (uid.id == token_claims.sub && uid.tenant == role_tenant && uid.ns == "oidc") {
+    if (uid.id == this->sub && uid.tenant == role_tenant && uid.ns == "oidc") {
       return true;
     }
     return false;
@@ -422,7 +461,7 @@ public:
   }
 
   std::string get_acct_name() const override {
-    return token_claims.user_name;
+    return this->user_name;
   }
 
   std::string get_subuser() const override {
@@ -436,7 +475,7 @@ public:
                                               const req_state* s,
                                               const std::string& role_session,
                                               const std::string& role_tenant,
-                                              const rgw::web_idp::WebTokenClaims& token) const = 0;
+                                              const std::unordered_multimap<std::string, std::string>& token) const = 0;
   };
 };
 

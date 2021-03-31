@@ -725,7 +725,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
     for (const auto& c: acl_header_conditionals){
       auto hdr = s->info.env->get(c.first);
       if(hdr) {
-	e[c.second] = hdr;
+        e.emplace(c.second, hdr);
       }
     }
   }
