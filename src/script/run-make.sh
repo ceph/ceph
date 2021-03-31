@@ -41,6 +41,14 @@ function detect_ceph_dev_pkgs() {
     else
         cmake_opts+=" -DBOOST_J=$(get_processors)"
     fi
+
+    source /etc/os-release
+    if [[ "$ID" == "ubuntu" ]]; then
+        case "$VERSION" in
+            *Focal*)
+                cmake_opts+=" -DWITH_SYSTEM_ZSTD=ON";;
+        esac
+    fi
     echo "$cmake_opts"
 }
 
