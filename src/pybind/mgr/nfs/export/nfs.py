@@ -11,6 +11,8 @@ from rados import TimedOut, ObjectNotFound
 import orchestrator
 
 from .export_utils import GaneshaConfParser, Export
+from .exception import NFSException, NFSInvalidOperation, NFSObjectNotFound, FSNotFound, \
+        ClusterNotFound
 
 log = logging.getLogger(__name__)
 POOL_NAME = 'nfs-ganesha'
@@ -61,13 +63,10 @@ def cluster_setter(func):
     return set_pool_ns_clusterid
 
 
-class FSExportError(Exception):
-    def __init__(self, err_msg, errno=-errno.EINVAL):
-        self.errno = errno
-        self.err_msg = err_msg
-
-    def __str__(self):
-        return self.err_msg
+def exception_handler(exception_obj, log_msg=""):
+    if log_msg:
+        log.exception(log_msg)
+    return getattr(exception_obj, 'errno', -1), "", str(exception_obj)
 
 
 class NFSRados:
@@ -241,8 +240,7 @@ class FSExport(object):
                 return 0, "Successfully deleted export", ""
             return 0, "", "Export does not exist"
         except Exception as e:
-            log.exception(f"Failed to delete {pseudo_path} export for {cluster_id}")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"Failed to delete {pseudo_path} export for {cluster_id}")
 
     def format_path(self, path):
         if path:
@@ -259,7 +257,7 @@ class FSExport(object):
     def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
         try:
             if not self.check_fs(fs_name):
-                return -errno.ENOENT, "", f"filesystem {fs_name} not found"
+                raise FSNotFound(fs_name)
 
             pseudo_path = self.format_path(pseudo_path)
             self._validate_pseudo_path(pseudo_path)
@@ -296,8 +294,7 @@ class FSExport(object):
                 return (0, json.dumps(result, indent=4), '')
             return 0, "", "Export already exists"
         except Exception as e:
-            log.exception(f"Failed to create {pseudo_path} export for {cluster_id}")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"Failed to create {pseudo_path} export for {cluster_id}")
 
     @export_cluster_checker
     def delete_export(self, cluster_id, pseudo_path):
@@ -314,7 +311,7 @@ class FSExport(object):
             ret, out, err = self._delete_export(cluster_id=cluster_id, pseudo_path=None,
                                                 export_obj=export)
             if ret != 0:
-                raise Exception(f"Failed to delete exports: {err} and {ret}")
+                raise NFSException(-1, f"Failed to delete exports: {err} and {ret}")
         log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
 
     @export_cluster_checker
@@ -329,8 +326,7 @@ class FSExport(object):
             log.warning(f"No exports to list for {cluster_id}")
             return 0, '', ''
         except Exception as e:
-            log.exception(f"Failed to list exports for {cluster_id}")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"Failed to list exports for {cluster_id}")
 
     @export_cluster_checker
     def get_export(self, cluster_id, pseudo_path):
@@ -341,29 +337,28 @@ class FSExport(object):
             log.warning(f"No {pseudo_path} export to show for {cluster_id}")
             return 0, '', ''
         except Exception as e:
-            log.exception(f"Failed to get {pseudo_path} export for {cluster_id}")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"Failed to get {pseudo_path} export for {cluster_id}")
 
     def _validate_pseudo_path(self, path):
         if not isabs(path) or path == "/":
-            raise FSExportError(f"pseudo path {path} is invalid. "\
-                    "It should be an absolute path and it cannot be just '/'.")
+            raise NFSInvalidOperation(f"pseudo path {path} is invalid. It should be an absolute "
+                                      "path and it cannot be just '/'.")
 
     def _validate_squash(self, squash):
         valid_squash_ls = ["root", "root_squash", "rootsquash", "rootid", "root_id_squash",
                 "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous", "allanonymous",
                 "no_root_squash", "none", "noidsquash"]
         if squash not in valid_squash_ls:
-            raise FSExportError(f"squash {squash} not in valid list {valid_squash_ls}")
+            raise NFSInvalidOperation(f"squash {squash} not in valid list {valid_squash_ls}")
 
     def _validate_security_label(self, label):
         if not isinstance(label, bool):
-            raise FSExportError('Only boolean values allowed')
+            raise NFSInvalidOperation('Only boolean values allowed')
 
     def _validate_protocols(self, proto):
         for p in proto:
             if p not in [3, 4]:
-                raise FSExportError(f"Invalid protocol {p}")
+                raise NFSInvalidOperation(f"Invalid protocol {p}")
         if 3 in proto:
             log.warning("NFS V3 is an old version, it might not work")
 
@@ -371,23 +366,24 @@ class FSExport(object):
         valid_transport = ["UDP", "TCP"]
         for trans in transport:
             if trans.upper() not in valid_transport:
-                raise FSExportError(f'{trans} is not a valid transport protocol')
+                raise NFSInvalidOperation(f'{trans} is not a valid transport protocol')
 
     def _validate_access_type(self, access_type):
         valid_ones = ['RW', 'RO']
         if access_type not in valid_ones:
-            raise FSExportError(f'{access_type} is invalid, valid access type are {valid_ones}')
+            raise NFSInvalidOperation(f'{access_type} is invalid, valid access type are'
+                                      f'{valid_ones}')
 
     def _validate_fsal(self, old, new):
         if old.name != new['name']:
-            raise FSExportError('FSAL name change not allowed')
+            raise NFSInvalidOperation('FSAL name change not allowed')
         if old.user_id != new['user_id']:
-            raise FSExportError('User ID modification is not allowed')
+            raise NFSInvalidOperation('User ID modification is not allowed')
         if new['sec_label_xattr']:
-            raise FSExportError('Security label xattr cannot be changed')
+            raise NFSInvalidOperation('Security label xattr cannot be changed')
         if old.fs_name != new['fs_name']:
             if not self.check_fs(new['fs_name']):
-                raise FSExportError(f"filesystem {new['fs_name']} not found")
+                raise FSNotFound(new['fs_name'])
             return 1
 
     def _validate_client(self, client):
@@ -410,19 +406,19 @@ class FSExport(object):
 
     def _validate_export(self, new_export_dict):
         if new_export_dict['cluster_id'] not in available_clusters(self.mgr):
-            raise FSExportError(f"Cluster {new_export_dict['cluster_id']} does not exists",
-                    -errno.ENOENT)
+            raise ClusterNotFound()
+
         export = self._fetch_export(new_export_dict['pseudo'])
         out_msg = ''
         if export:
             # Check if export id matches
             if export.export_id != new_export_dict['export_id']:
-                raise FSExportError('Export ID changed, Cannot update export')
+                raise NFSInvalidOperation('Export ID changed, Cannot update export')
         else:
             # Fetch export based on export id object
             export = self._fetch_export_obj(new_export_dict['export_id'])
             if not export:
-                raise FSExportError('Export does not exist')
+                raise NFSObjectNotFound('Export does not exist')
             else:
                 new_export_dict['pseudo'] = self.format_path(new_export_dict['pseudo'])
                 self._validate_pseudo_path(new_export_dict['pseudo'])
@@ -484,7 +480,7 @@ class FSExport(object):
     def update_export(self, export_config):
         try:
             if not export_config:
-                return -errno.EINVAL, "", "Empty Config!!"
+                raise NFSInvalidOperation("Empty Config!!")
             update_export = json.loads(export_config)
             old_export, update_user_caps = self._validate_export(update_export)
             if update_user_caps:
@@ -503,7 +499,7 @@ class FSExport(object):
         except NotImplementedError:
             return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
-            return getattr(e, 'errno', -1), '', f'Failed to update export: {e}'
+            return exception_handler(e, f'Failed to update export: {e}')
 
 
 class NFSCluster:
@@ -558,8 +554,7 @@ class NFSCluster:
                 return 0, "NFS Cluster Created Successfully", ""
             return 0, "", f"{cluster_id} cluster already exists"
         except Exception as e:
-            log.exception(f"NFS Cluster {cluster_id} could not be created")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"NFS Cluster {cluster_id} could not be created")
 
     @cluster_setter
     def update_nfs_cluster(self, cluster_id, placement):
@@ -567,10 +562,9 @@ class NFSCluster:
             if cluster_id in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(placement)
                 return 0, "NFS Cluster Updated Successfully", ""
-            return -errno.ENOENT, "", "Cluster does not exist"
+            raise ClusterNotFound()
         except Exception as e:
-            log.exception(f"NFS Cluster {cluster_id} could not be updated")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"NFS Cluster {cluster_id} could not be updated")
 
     @cluster_setter
     def delete_nfs_cluster(self, cluster_id):
@@ -584,15 +578,13 @@ class NFSCluster:
                 return 0, "NFS Cluster Deleted Successfully", ""
             return 0, "", "Cluster does not exist"
         except Exception as e:
-            log.exception(f"Failed to delete NFS Cluster {cluster_id}")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"Failed to delete NFS Cluster {cluster_id}")
 
     def list_nfs_cluster(self):
         try:
             return 0, '\n'.join(available_clusters(self.mgr)), ""
         except Exception as e:
-            log.exception("Failed to list NFS Cluster")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, "Failed to list NFS Cluster")
 
     def _show_nfs_cluster_info(self, cluster_id):
         self._set_cluster_id(cluster_id)
@@ -635,14 +627,13 @@ class NFSCluster:
                     info_res[cluster_id] = res
             return (0, json.dumps(info_res, indent=4), '')
         except Exception as e:
-            log.exception(f"Failed to show info for cluster")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, "Failed to show info for cluster")
 
     @cluster_setter
     def set_nfs_cluster_config(self, cluster_id, nfs_config):
         try:
             if not nfs_config:
-                return -errno.EINVAL, "", "Empty Config!!"
+                raise NFSInvalidOperation("Empty Config!!")
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = NFSRados(self.mgr, self.pool_ns)
                 if rados_obj.check_user_config():
@@ -651,12 +642,11 @@ class NFSCluster:
                                     self._get_common_conf_obj_name())
                 restart_nfs_service(self.mgr, cluster_id)
                 return 0, "NFS-Ganesha Config Set Successfully", ""
-            return -errno.ENOENT, "", "Cluster does not exist"
+            raise ClusterNotFound()
         except NotImplementedError:
             return 0, "NFS-Ganesha Config Added Successfully (Manual Restart of NFS PODS required)", ""
         except Exception as e:
-            log.exception(f"Setting NFS-Ganesha Config failed for {cluster_id}")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"Setting NFS-Ganesha Config failed for {cluster_id}")
 
     @cluster_setter
     def reset_nfs_cluster_config(self, cluster_id):
@@ -669,9 +659,8 @@ class NFSCluster:
                                      self._get_common_conf_obj_name())
                 restart_nfs_service(self.mgr, cluster_id)
                 return 0, "NFS-Ganesha Config Reset Successfully", ""
-            return -errno.ENOENT, "", "Cluster does not exist"
+            raise ClusterNotFound()
         except NotImplementedError:
             return 0, "NFS-Ganesha Config Removed Successfully (Manual Restart of NFS PODS required)", ""
         except Exception as e:
-            log.exception(f"Resetting NFS-Ganesha Config failed for {cluster_id}")
-            return getattr(e, 'errno', -1), "", str(e)
+            return exception_handler(e, f"Resetting NFS-Ganesha Config failed for {cluster_id}")
