@@ -636,7 +636,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       };
     } else {
       s->bucket_acl->create_default(s->user->user_id, s->user->display_name);
-      ret = -ERR_NO_SUCH_BUCKET;
+      return -ERR_NO_SUCH_BUCKET;
     }
 
     s->bucket_owner = s->bucket_acl->get_owner();
