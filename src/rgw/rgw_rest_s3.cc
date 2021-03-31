@@ -6042,7 +6042,7 @@ rgw::auth::s3::STSEngine::authenticate(
   user = store->get_user(token.user);
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
-    int ret = user->load_by_id(dpp, y);
+    int ret = user->load_user(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);

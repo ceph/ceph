@@ -120,7 +120,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
 
   std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
 
-  op_ret = user->load_by_id(s, s->yield);
+  op_ret = user->load_user(s, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -151,7 +151,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
     encode(policies, in_bl);
     user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
 
-    op_ret = user->store_info(s, s->yield, false);
+    op_ret = user->store_user(s, s->yield, false);
     if (op_ret < 0) {
       op_ret = -ERR_INTERNAL_ERROR;
     }
@@ -320,7 +320,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   }
 
   std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
-  op_ret = user->load_by_id(s, s->yield);
+  op_ret = user->load_user(s, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -355,7 +355,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
       encode(policies, in_bl);
       user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
 
-      op_ret = user->store_info(s, s->yield, false);
+      op_ret = user->store_user(s, s->yield, false);
       if (op_ret < 0) {
         op_ret = -ERR_INTERNAL_ERROR;
       }

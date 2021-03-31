@@ -227,7 +227,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
     /* object exists, but policy is broken */
-    int r = user->load_by_id(dpp, y);
+    int r = user->load_user(dpp, y);
     if (r < 0)
       return r;
 
@@ -261,7 +261,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
     /* object exists, but policy is broken */
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
     std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
-    ret = user->load_by_id(dpp, y);
+    ret = user->load_user(dpp, y);
     if (ret < 0)
       return ret;
 
@@ -1298,7 +1298,7 @@ int RGWOp::init_quota()
   if (s->user->get_id() == s->bucket_owner.get_id()) {
     user = s->user.get();
   } else {
-    int r = owner_user->load_by_id(this, s->yield);
+    int r = owner_user->load_user(this, s->yield);
     if (r < 0)
       return r;
     user = owner_user.get();
@@ -4408,7 +4408,7 @@ int RGWPutMetadataAccount::verify_permission(optional_yield y)
 void RGWPutMetadataAccount::execute(optional_yield y)
 {
   /* Params have been extracted earlier. See init_processing(). */
-  op_ret = s->user->load_by_id(this, y);
+  op_ret = s->user->load_user(this, y);
   if (op_ret < 0) {
     return;
   }
@@ -4428,7 +4428,7 @@ void RGWPutMetadataAccount::execute(optional_yield y)
   /* We are passing here the current (old) user info to allow the function
    * optimize-out some operations. */
   s->user->set_attrs(attrs);
-  op_ret = s->user->store_info(this, y, false, &s->user->get_info());
+  op_ret = s->user->store_user(this, y, false, &s->user->get_info());
 }
 
 int RGWPutMetadataBucket::verify_permission(optional_yield y)

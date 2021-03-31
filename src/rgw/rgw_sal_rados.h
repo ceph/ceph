@@ -63,10 +63,9 @@ class RadosUser : public User {
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) override;
 
-    /* Placeholders */
-    virtual int load_by_id(const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int store_info(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
-    virtual int remove_info(const DoutPrefixProvider* dpp, optional_yield y, const RGWUserCtl::RemoveParams& params = {}) override;
+    virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
+    virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
+    virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
 
     friend class RadosBucket;
 };

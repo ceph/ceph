@@ -376,7 +376,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
   rgw_apply_default_bucket_quota(user->get_info().bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
 
-  int ret = user->store_info(dpp, null_yield, true);
+  int ret = user->store_user(dpp, null_yield, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;
@@ -394,7 +394,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   std::unique_ptr<rgw::sal::User> user = store->get_user(federated_user);
 
   //Check in oidc namespace
-  if (user->load_by_id(dpp, null_yield) >= 0) {
+  if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
     user_info = user->get_info();
     return;
@@ -402,7 +402,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
 
   user->clear_ns();
   //Check for old users which wouldn't have been created in oidc namespace
-  if (user->load_by_id(dpp, null_yield) >= 0) {
+  if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
     user_info = user->get_info();
     return;
@@ -602,7 +602,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
   user_info = user->get_info();
 
-  int ret = user->store_info(dpp, null_yield, true);
+  int ret = user->store_user(dpp, null_yield, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;
@@ -645,7 +645,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
     user = store->get_user(tenanted_uid);
 
-    if (user->load_by_id(dpp, null_yield) >= 0) {
+    if (user->load_user(dpp, null_yield) >= 0) {
       /* Succeeded. */
       user_info = user->get_info();
       return;
@@ -656,7 +656,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
-  else if (user->load_by_id(dpp, null_yield) >= 0) {
+  else if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
     user_info = user->get_info();
     return;
