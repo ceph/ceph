@@ -1,3 +1,11 @@
+======
+Kraken
+======
+
+Kraken is the 11th stable release of Ceph.  It is named after the
+mythical kraken, a legendary sea monster in Scandinavian folklore with
+cephalopod-like appearance.
+
 v11.2.1 Kraken
 ==============
 
