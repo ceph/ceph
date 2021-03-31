@@ -182,7 +182,8 @@ ClientRequest::process_op(Ref<PG> &pg)
           [this, pg]() mutable -> PG::load_obc_iertr::future<> {
           logger().debug("{}: got obc lock", *this);
           op_info.set_from_op(&*m, *pg->get_osdmap());
-          return pg->with_locked_obc(m, op_info, [this, pg](auto obc) mutable {
+          return pg->with_locked_obc(m->get_hobj(), op_info,
+                                     [this, pg](auto obc) mutable {
             return with_blocking_future_interruptible<IOInterruptCondition>(
               handle.enter(pp(*pg).process)
             ).then_interruptible([this, pg, obc]() mutable {
