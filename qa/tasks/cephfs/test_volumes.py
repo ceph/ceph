@@ -698,7 +698,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
         group = "pinme"
         self._fs_cmd("subvolumegroup", "create", self.volname, group)
         self._fs_cmd("subvolumegroup", "pin", self.volname, group, "distributed", "True")
-        subvolumes = self._generate_random_subvolume_name(10)
+        subvolumes = self._generate_random_subvolume_name(50)
         for subvolume in subvolumes:
             self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
         self._wait_distributed_subtrees(2 * 2, status=status, rank="all")
