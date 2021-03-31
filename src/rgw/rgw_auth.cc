@@ -351,15 +351,14 @@ rgw::auth::Strategy::add_engine(const Control ctrl_flag,
 
 void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
 {
-  out << "rgw::auth::WebIdentityApplier(sub =" << token_claims.sub
-      << ", user_name=" << token_claims.user_name
-      << ", aud =" << token_claims.aud
-      << ", provider_id =" << token_claims.iss << ")";
+  out << "rgw::auth::WebIdentityApplier(sub =" << sub
+      << ", user_name=" << user_name
+      << ", provider_id =" << iss << ")";
 }
 
 string rgw::auth::WebIdentityApplier::get_idp_url() const
 {
-  string idp_url = token_claims.iss;
+  string idp_url = this->iss;
   idp_url = url_remove_prefix(idp_url);
   return idp_url;
 }
@@ -388,7 +387,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
 
 void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const {
   rgw_user federated_user;
-  federated_user.id = token_claims.sub;
+  federated_user.id = this->sub;
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
@@ -427,24 +426,28 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map oidc federated user " << federated_user << dendl;
-  create_account(dpp, federated_user, token_claims.user_name, user_info);
+  create_account(dpp, federated_user, this->user_name, user_info);
 }
 
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
-  s->info.args.append("sub", token_claims.sub);
-  s->info.args.append("aud", token_claims.aud);
-  s->info.args.append("provider_id", token_claims.iss);
-  s->info.args.append("client_id", token_claims.client_id);
+  s->info.args.append("sub", this->sub);
+  s->info.args.append("aud", this->aud);
+  s->info.args.append("provider_id", this->iss);
+  s->info.args.append("client_id", this->client_id);
 
+  string condition;
   string idp_url = get_idp_url();
-  string condition = idp_url + ":app_id";
-
-  s->env.emplace(condition, token_claims.aud);
-
-  condition.clear();
-  condition = idp_url + ":sub";
-  s->env.emplace(condition, token_claims.sub);
+  for (auto& claim : token_claims) {
+    if (claim.first == "aud") {
+      condition.clear();
+      condition = idp_url + ":app_id";
+      s->env.emplace(condition, claim.second);
+    }
+    condition.clear();
+    condition = idp_url + ":" + claim.first;
+    s->env.emplace(condition, claim.second);
+  }
 }
 
 bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
