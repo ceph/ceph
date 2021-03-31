@@ -6400,6 +6400,8 @@ class HostFacts():
                     security['description'] = 'AppArmor: Enabled'
                     try:
                         profiles = read_file(['/sys/kernel/security/apparmor/profiles'])
+                        if len(profiles) == 0:
+                            return {}
                     except OSError:
                         pass
                     else:
