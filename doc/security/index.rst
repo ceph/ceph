@@ -2,10 +2,11 @@
  Security
 ==========
 
-Supported versions
-==================
+.. toctree::
+   :maxdepth: 1
 
-Security updates are applied only to the current :ref:`active-releases`.
+   Past Vulnerabilities / CVEs <cves>
+   Vulnerability Management Process <process>
 
 Reporting a vulnerability
 =========================
@@ -28,142 +29,7 @@ the following GPG keys::
 
   ...
 
-Vulnerability Management Process
-================================
+Supported versions
+==================
 
-#. The report will be acknowledged within three business days or less.
-#. The team will investigate and update the email thread with relevant
-   information and may ask for additional information or guidance
-   surrounding the reported issue.
-#. If the team does not confirm the report, no further action will be
-   taken and the issue will be closed.
-#. If the team confirms the report, a unique CVE identifier will be
-   assigned and shared with the reporter. The team will take action to
-   fix the issue.
-#. If a reporter has no disclosure date in mind, a Ceph security team
-   member will coordinate a release date (CRD) with the list members
-   and share the mutually agreed disclosure date with the reporter.
-#. The vulnerability disclosure / release date is set excluding Friday and
-   holiday periods.
-#. Embargoes are preferred for Critical and High impact
-   issues. Embargo should not be held for more than 90 days from the
-   date of vulnerability confirmation, except under unusual
-   circumstances. For Low and Moderate issues with limited impact and
-   an easy workaround or where an issue that is already public, a
-   standard patch release process will be followed to fix the
-   vulnerability once CVE is assigned.
-#. Medium and Low severity issues will be released as part of the next
-   standard release cycle, with at least a 7 days advanced
-   notification to the list members prior to the release date. The CVE
-   fix details will be included in the release notes, which will be
-   linked in the public announcement.
-#. Commits will be handled in a private repository for review and
-   testing and a new patch version will be released from this private
-   repository.
-#. If a vulnerability is unintentionally already fixed in the public
-   repository, a few days are given to downstream stakeholders/vendors
-   to prepare for updating before the public disclosure.
-#. An announcement will be made disclosing the vulnerability. The
-   fastest place to receive security announcements is via the
-   `ceph-announce@ceph.io <ceph-announce@ceph.io>`_ or
-   `oss-security@lists.openwall.com <oss-security@lists.openwall.com>`_ mailing
-   lists.  (These lists are low-traffic).
-
-If the report is considered embargoed, we ask you to not disclose the
-vulnerability before it has been fixed and announced, unless you
-received a response from the Ceph security team that you can do
-so. This holds true until the public disclosure date that was agreed
-upon by the list. Thank you for improving the security of Ceph and its
-ecosystem. Your efforts and responsible disclosure are greatly
-appreciated and will be acknowledged.
-
-
-Past vulnerabilities
-====================
-
-+------------+-------------------+-------------+--------------------------------------------+
-| Published  | CVE               | Severity    | Summary                                    |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-12-18 | `CVE-2020-27781`_ | 7.1 High    | CephFS creds read/modified by Manila users |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2021-01-08 | `CVE-2020-25678`_ | 4.9 Medium  | mgr module passwords in clear text         |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-12-07 | `CVE-2020-25677`_ | 5.5 Medium  | ceph-ansible iscsi-gateway.conf perm       |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-11-23 | `CVE-2020-25660`_ | 8.8 High    | Cephx replay vulnerability                 |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-04-22 | `CVE-2020-12059`_ | 7.5 High    | malformed POST could crash RGW             |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-06-26 | `CVE-2020-10753`_ | 6.5 Medium  | HTTP header injects via CORS in RGW        |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-06-22 | `CVE-2020-10736`_ | 8.0 High    | authorization bypass in mon and mgr        |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-04-23 | `CVE-2020-1760`_  | 6.1 Medium  | potential RGW XSS attack                   |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-04-13 | `CVE-2020-1759`_  | 6.8 Medium  | Cephx nonce reuse in secure mode           |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-02-07 | `CVE-2020-1700`_  | 6.5 Medium  | RGW disconnects leak sockets, can DoS      |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2020-04-21 | `CVE-2020-1699`_  | 7.5 High    | Dashboard path traversal flaw              |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2019-12-23 | `CVE-2019-19337`_ | 6.5 Medium  | RGW DoS via malformed headers              |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2019-11-08 | `CVE-2019-10222`_ | 7.5 High    | Invalid HTTP headers could crash RGW       |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2019-03-27 | `CVE-2019-3821`_  | 7.5 High    | RGW file descriptors could be exhausted    |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2019-01-28 | `CVE-2018-16889`_ | 7.5 High    | encryption keys logged in plaintext        |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2019-01-15 | `CVE-2018-16846`_ | 6.5 Medium  | authenticated RGW users can cause DoS      |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2019-01-15 | `CVE-2018-14662`_ | 5.7 Medium  | read-only users could steal dm-crypt keys  |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2018-07-10 | `CVE-2018-10861`_ | 8.1 High    | authenticated user can create/delete pools |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2018-03-19 | `CVE-2018-7262`_  | 7.5 High    | malformed headers can cause RGW DoS        |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2018-07-10 | `CVE-2018-1129`_  | 6.5 Medium  | network MITM can tamper with messages      |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2018-07-10 | `CVE-2018-1128`_  | 7.5 High    | Cephx replay vulnerability                 |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2018-07-27 | `CVE-2017-7519`_  | 4.4 Medium  | libradosstriper unvaliated format string   |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2018-08-01 | `CVE-2016-9579`_  | 7.6 High    | potential RGW XSS attack                   |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2018-07-31 | `CVE-2016-8626`_  | 6.5 Medium  | malformed POST can DoS RGW                 |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2016-10-03 | `CVE-2016-7031`_  | 7.5 High    | RGW unauthorized bucket listing            |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2016-07-12 | `CVE-2016-5009`_  | 6.5 Medium  | mon command handler DoS                    |
-+------------+-------------------+-------------+--------------------------------------------+
-| 2016-12-03 | `CVE-2015-5245`_  |             | RGW header injection                       |
-+------------+-------------------+-------------+--------------------------------------------+
-
-
-.. _CVE-2020-27781: https://nvd.nist.gov/vuln/detail/CVE-2020-27781
-.. _CVE-2020-25678: https://nvd.nist.gov/vuln/detail/CVE-2020-25678
-.. _CVE-2020-25677: https://nvd.nist.gov/vuln/detail/CVE-2020-25677
-.. _CVE-2020-25660: https://nvd.nist.gov/vuln/detail/CVE-2020-25660
-.. _CVE-2020-12059: https://nvd.nist.gov/vuln/detail/CVE-2020-12059
-.. _CVE-2020-10753: https://nvd.nist.gov/vuln/detail/CVE-2020-10753
-.. _CVE-2020-10736: https://nvd.nist.gov/vuln/detail/CVE-2020-10736
-.. _CVE-2020-1760: https://nvd.nist.gov/vuln/detail/CVE-2020-1760
-.. _CVE-2020-1759: https://nvd.nist.gov/vuln/detail/CVE-2020-1759
-.. _CVE-2020-1700: https://nvd.nist.gov/vuln/detail/CVE-2020-1700
-.. _CVE-2020-1699: https://nvd.nist.gov/vuln/detail/CVE-2020-1699
-.. _CVE-2019-19337: https://nvd.nist.gov/vuln/detail/CVE-2019-19337
-.. _CVE-2019-10222: https://nvd.nist.gov/vuln/detail/CVE-2019-10222
-.. _CVE-2019-3821: https://nvd.nist.gov/vuln/detail/CVE-2019-3821
-.. _CVE-2018-16889: https://nvd.nist.gov/vuln/detail/CVE-2018-16889
-.. _CVE-2018-16846: https://nvd.nist.gov/vuln/detail/CVE-2018-16846
-.. _CVE-2018-14662: https://nvd.nist.gov/vuln/detail/CVE-2018-14662
-.. _CVE-2018-10861: https://nvd.nist.gov/vuln/detail/CVE-2018-10861
-.. _CVE-2018-7262: https://nvd.nist.gov/vuln/detail/CVE-2018-7262
-.. _CVE-2018-1129: https://nvd.nist.gov/vuln/detail/CVE-2018-1129
-.. _CVE-2018-1128: https://nvd.nist.gov/vuln/detail/CVE-2018-1128
-.. _CVE-2017-7519: https://nvd.nist.gov/vuln/detail/CVE-2017-7519
-.. _CVE-2016-9579: https://nvd.nist.gov/vuln/detail/CVE-2016-9579
-.. _CVE-2016-8626: https://nvd.nist.gov/vuln/detail/CVE-2016-8626
-.. _CVE-2016-7031: https://nvd.nist.gov/vuln/detail/CVE-2016-7031
-.. _CVE-2016-5009: https://nvd.nist.gov/vuln/detail/CVE-2016-5009
-.. _CVE-2015-5245: https://nvd.nist.gov/vuln/detail/CVE-2015-5245
+Security updates are applied only to the current :ref:`active-releases`.
