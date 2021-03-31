@@ -1,39 +1,18 @@
 # zstd
 
-# libzstd - build it statically
-set(ZSTD_C_FLAGS "-fPIC -Wno-unused-variable -O3")
+option(WITH_SYSTEM_ZSTD "use prebuilt libzstd in system" OFF)
 
-include(ExternalProject)
-ExternalProject_Add(zstd_ext
-  SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/zstd/build/cmake
-  CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-             -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-             -DCMAKE_C_FLAGS=${ZSTD_C_FLAGS}
-             -DCMAKE_AR=${CMAKE_AR}
-             -DCMAKE_POSITION_INDEPENDENT_CODE=${ENABLE_SHARED}
-  BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/libzstd
-  BUILD_COMMAND $(MAKE) libzstd_static
-  INSTALL_COMMAND "true")
-
-# force zstd make to be called on each time
-ExternalProject_Add_Step(zstd_ext forcebuild
-  DEPENDEES configure
-  DEPENDERS build
-  COMMAND "true"
-  ALWAYS 1)
-
-add_library(zstd STATIC IMPORTED)
-set_target_properties(zstd PROPERTIES
-  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/zstd/lib"
-  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a")
-add_dependencies(zstd zstd_ext)
+if(WITH_SYSTEM_ZSTD)
+  find_package(Zstd 1.4.4 REQUIRED)
+else()
+  include(BuildZstd)
+  build_Zstd()
+endif()
 
 set(zstd_sources
-  CompressionPluginZstd.cc
-)
-
+  CompressionPluginZstd.cc)
 add_library(ceph_zstd SHARED ${zstd_sources})
-target_link_libraries(ceph_zstd PRIVATE zstd)
+target_link_libraries(ceph_zstd PRIVATE Zstd::Zstd)
 set_target_properties(ceph_zstd PROPERTIES
   VERSION 2.0.0
   SOVERSION 2
