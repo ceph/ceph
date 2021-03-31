@@ -477,7 +477,7 @@ public:
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rctx);
 
-  static hobject_t get_oid(const MOSDOp &m);
+  static hobject_t get_oid(const hobject_t& hobj);
   static RWState::State get_lock_type(const OpInfo &op_info);
   static std::optional<hobject_t> resolve_oid(
     const SnapSet &snapset,
