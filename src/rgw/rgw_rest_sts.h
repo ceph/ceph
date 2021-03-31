@@ -18,7 +18,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   RGWCtl* const ctl;
 
   using result_t = rgw::auth::Engine::result_t;
-  using token_t = rgw::web_idp::WebTokenClaims;
+  using token_t = std::unordered_multimap<string,string>;
 
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::WebIdentityApplier::Factory* const apl_factory;
@@ -41,6 +41,9 @@ class WebTokenEngine : public rgw::auth::Engine {
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
                         const req_state* s, optional_yield y) const;
+
+  void recurse_and_insert(const string& key, const jwt::claim& c, std::unordered_multimap<string, string>& token) const;
+  std::unordered_multimap<string,string> get_token_claims(const jwt::decoded_jwt& decoded) const;
 
 public:
   WebTokenEngine(CephContext* const cct,
@@ -80,9 +83,9 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
-                                    const string& role_session,
-                                    const string& role_tenant,
-                                    const rgw::web_idp::WebTokenClaims& token) const override {
+                                    const std::string& role_session,
+                                    const std::string& role_tenant,
+                                    const std::unordered_multimap<string, string>& token) const override {
     auto apl = rgw::auth::add_sysreq(cct, ctl, s,
       rgw::auth::WebIdentityApplier(cct, ctl, role_session, role_tenant, token));
     return aplptr_t(new decltype(apl)(std::move(apl)));

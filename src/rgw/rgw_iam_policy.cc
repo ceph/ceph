@@ -681,26 +681,28 @@ bool Condition::eval(const Environment& env) const {
   }
   const auto& s = i->second;
 
+  const auto& itr = env.equal_range(key);
+
   switch (op) {
     // String!
   case TokenID::StringEquals:
-    return orrible(std::equal_to<std::string>(), s, vals);
+    return orrible(std::equal_to<std::string>(), itr, vals);
 
   case TokenID::StringNotEquals:
     return orrible(std::not_fn(std::equal_to<std::string>()),
-		   s, vals);
+		   itr, vals);
 
   case TokenID::StringEqualsIgnoreCase:
-    return orrible(ci_equal_to(), s, vals);
+    return orrible(ci_equal_to(), itr, vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return orrible(std::not_fn(ci_equal_to()), s, vals);
+    return orrible(std::not_fn(ci_equal_to()), itr, vals);
 
   case TokenID::StringLike:
-    return orrible(string_like(), s, vals);
+    return orrible(string_like(), itr, vals);
 
   case TokenID::StringNotLike:
-    return orrible(std::not_fn(string_like()), s, vals);
+    return orrible(std::not_fn(string_like()), itr, vals);
 
     // Numeric
   case TokenID::NumericEquals:

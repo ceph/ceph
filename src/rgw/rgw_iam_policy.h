@@ -248,7 +248,7 @@ enum class PolicyPrincipal {
   Other
 };
 
-using Environment = boost::container::flat_map<std::string, std::string>;
+using Environment = std::unordered_multimap<std::string, std::string>;
 
 using Address = std::bitset<128>;
 struct MaskedIP {
@@ -385,13 +385,16 @@ struct Condition {
     }
   };
 
+  using unordered_multimap_it_pair = std::pair <std::unordered_multimap<std::string,std::string>::const_iterator, std::unordered_multimap<std::string,std::string>::const_iterator>;
   template<typename F>
-  static bool orrible(F&& f, const std::string& c,
+  static bool orrible(F&& f, const unordered_multimap_it_pair& it,
 		      const std::vector<std::string>& v) {
-    for (const auto& d : v) {
-      if (std::forward<F>(f)(c, d)) {
-	return true;
+    for (auto itr = it.first; itr != it.second; itr++) {
+      for (const auto& d : v) {
+        if (std::forward<F>(f)(itr->second, d)) {
+	        return true;
       }
+     }
     }
     return false;
   }

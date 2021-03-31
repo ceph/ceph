@@ -338,10 +338,9 @@ TEST(TestRGWLua, Environment)
   )";
 
   DEFINE_REQ_STATE;
-  s.env[""] = "world";
-  s.env[""] = "bar";
-  s.env["goodbye"] = "cruel world";
-  s.env["ka"] = "boom";
+  s.env.emplace("", "bar");
+  s.env.emplace("goodbye", "cruel world");
+  s.env.emplace("ka", "boom");
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
   ASSERT_EQ(rc, 0);
