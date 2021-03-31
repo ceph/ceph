@@ -848,11 +848,9 @@ PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
   });
 }
 
-hobject_t PG::get_oid(const MOSDOp &m)
+hobject_t PG::get_oid(const hobject_t& hobj)
 {
-  return (m.get_snapid() == CEPH_SNAPDIR ?
-          m.get_hobj().get_head() :
-          m.get_hobj());
+  return hobj.snap == CEPH_SNAPDIR ? hobj.get_head() : hobj;
 }
 
 RWState::State PG::get_lock_type(const OpInfo &op_info)
@@ -1060,7 +1058,7 @@ PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-  const hobject_t oid = get_oid(*m);
+  const hobject_t oid = get_oid(m->get_hobj());
   switch (get_lock_type(op_info)) {
   case RWState::RWREAD:
     if (oid.is_head()) {
