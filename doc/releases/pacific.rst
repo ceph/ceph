@@ -198,7 +198,7 @@ CephFS distributed file system
   default to true. For more information, see :ref:`cephfs-ephemeral-pinning`.
 
 * A new ``cephfs-mirror`` daemon is available to mirror CephFS file systems to
-  a remote Ceph cluster.
+  a remote Ceph cluster. For more information, see :ref:`cephfs-mirroring`.
 
 * A Windows client is now available for connecting to CephFS. This is offered
   through a new ``ceph-dokan`` utility which operates via the Dokan userspace
