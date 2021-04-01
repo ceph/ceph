@@ -9,7 +9,7 @@ Ceph Releases (index)
 
 .. _active-releases:
 
-Active releases
+Active Releases
 ---------------
 
 The following Ceph releases are actively maintained and receive periodic backports and
