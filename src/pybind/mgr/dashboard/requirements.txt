@@ -7,4 +7,5 @@ requests
 Routes
 -e ../../../python-common
 prettytable
+pytest
 pyyaml
