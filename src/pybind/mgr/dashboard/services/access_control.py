@@ -208,67 +208,76 @@ class Role(object):
 # this roles cannot be deleted nor updated
 
 # admin role provides all permissions for all scopes
-ADMIN_ROLE = Role('administrator', 'Administrator', {
-    scope_name: Permission.all_permissions()
-    for scope_name in Scope.all_scopes()
-})
+ADMIN_ROLE = Role(
+    'administrator', 'allows full permissions for all security scopes', {
+        scope_name: Permission.all_permissions()
+        for scope_name in Scope.all_scopes()
+    })
 
 
 # read-only role provides read-only permission for all scopes
-READ_ONLY_ROLE = Role('read-only', 'Read-Only', {
-    scope_name: [_P.READ] for scope_name in Scope.all_scopes()
-    if scope_name != Scope.DASHBOARD_SETTINGS
-})
+READ_ONLY_ROLE = Role(
+    'read-only', 'allows read permission for all security scopes except dashboard settings', {
+        scope_name: [_P.READ] for scope_name in Scope.all_scopes()
+        if scope_name != Scope.DASHBOARD_SETTINGS
+    })
 
 
 # block manager role provides all permission for block related scopes
-BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
-    Scope.RBD_IMAGE: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.POOL: [_P.READ],
-    Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+BLOCK_MGR_ROLE = Role(
+    'block-manager', 'allows full permissions for rbd-image, rbd-mirroring, and iscsi scopes', {
+        Scope.RBD_IMAGE: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.POOL: [_P.READ],
+        Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 # RadosGW manager role provides all permissions for block related scopes
-RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
-    Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+RGW_MGR_ROLE = Role(
+    'rgw-manager', 'allows full permissions for the rgw scope', {
+        Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 # Cluster manager role provides all permission for OSDs, Monitors, and
 # Config options
-CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
-    Scope.HOSTS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.OSD: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.MONITOR: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+CLUSTER_MGR_ROLE = Role(
+    'cluster-manager', """allows full permissions for the hosts, osd, mon, mgr,
+    and config-opt scopes.""", {
+        Scope.HOSTS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.OSD: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.MONITOR: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 # Pool manager role provides all permissions for pool related scopes
-POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
-    Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+POOL_MGR_ROLE = Role(
+    'pool-manager', 'allows full permissions for the pool scope', {
+        Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 # CephFS manager role provides all permissions for CephFS related scopes
-CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
-    Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+CEPHFS_MGR_ROLE = Role(
+    'cephfs-manager', 'allows full permissions for the cephfs scope', {
+        Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
-GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
-    Scope.NFS_GANESHA: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+GANESHA_MGR_ROLE = Role(
+    'ganesha-manager', 'allows full permissions for the nfs-ganesha scope', {
+        Scope.NFS_GANESHA: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 SYSTEM_ROLES = {

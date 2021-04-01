@@ -9,12 +9,10 @@
           [formGroup]="restoreForm"
           novalidate>
       <div class="modal-body">
-        <p>
-          <ng-container i18n>To restore</ng-container>&nbsp;
+        <p i18n>To restore&nbsp;
           <kbd>{{ imageSpec }}@{{ imageId }}</kbd>,&nbsp;
-          <ng-container i18n>type the image's new name and click</ng-container>&nbsp;
-          <kbd i18n>Restore Image</kbd>.
-        </p>
+          type the image's new name and click&nbsp;
+          <kbd>Restore</kbd>.</p>
 
         <div class="form-group">
           <label class="col-form-label"
