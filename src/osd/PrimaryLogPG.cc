@@ -2468,7 +2468,11 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   bool write_ordered,
   ObjectContextRef obc)
 {
-  ceph_assert(obc);
+  if (!obc) {
+    dout(20) << __func__ << ": no obc " << dendl;
+    return cache_result_t::NOOP;
+  }
+
   if (!obc->obs.oi.has_manifest()) {
     dout(20) << __func__ << ": " << obc->obs.oi.soid 
 	     << " is not manifest object " << dendl;
