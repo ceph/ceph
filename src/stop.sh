@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# -*- mode:sh; tab-width:4; sh-basic-offset:4; indent-tabs-mode:nil -*-
+# vim: softtabstop=4 shiftwidth=4 expandtab
 #
 # Copyright (C) 2013 Inktank <info@inktank.com>
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
