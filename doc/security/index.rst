@@ -24,10 +24,6 @@ To report a vulnerability, please send email to `security@ceph.io
   disclosure date in mind, please share the same along with the
   report.
 
-Although you are not required to, you may encrypt your message using
-the following GPG keys::
-
-  ...
 
 Supported versions
 ==================
