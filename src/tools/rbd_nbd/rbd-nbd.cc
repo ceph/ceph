@@ -133,6 +133,8 @@ struct Config {
   std::string format;
   bool pretty_format = false;
 
+  std::vector<string> attach_vec;
+
   std::optional<librbd::encryption_format_t> encryption_format;
   std::optional<std::string> encryption_passphrase_file;
 
@@ -179,6 +181,10 @@ static void usage()
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
             << "  --try-netlink                 Use the nbd netlink interface\n"
+            << "\n"
+            << "Restore options:\n"
+            << "  --attach-list <nbd-device,image-spec,snap-spec,...>\n"
+            << "                                Specify comma-separated list that needs restore\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -1717,7 +1723,7 @@ static void remove_device_from_config(string dev_path)
   return;
 }
 
-static void restore_from_config()
+static void restore_from_config(vector<string> attach_vec)
 {
   json_spirit::Value input;
 
@@ -1775,7 +1781,25 @@ static void restore_from_config()
     cfgs.push_back(cfg);
   }
 
-  attach_multiple_devices(cfgs);
+  if (!attach_vec.empty()) {
+    vector<Config> sub_cfgs;
+    for (auto &item : attach_vec) {
+      bool match = false;
+      for (const Config &c: cfgs) {
+        if ((item == c.devpath) || (item == c.image_spec())) {
+          match = true;
+          sub_cfgs.push_back(c);
+          break;
+        }
+      }
+      if (!match)
+        std::cerr << "=> " << item << ": Not found in config" << std::endl;
+    }
+    if (!sub_cfgs.empty())
+      attach_multiple_devices(sub_cfgs);
+  } else {
+    attach_multiple_devices(cfgs);
+  }
 
   return;
 }
@@ -2415,6 +2439,17 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                                      "--encryption-passphrase-file",
                                      (char *)NULL)) {
       cfg->encryption_passphrase_file = std::make_optional(arg_value);
+    } else if (ceph_argparse_witharg(args, i, &arg_value, "--attach-list", (char *)NULL)) {
+      stringstream ss(arg_value);
+      while (ss.good()) {
+        string substr;
+        getline(ss, substr, ',');
+        if (substr.find("/") == std::string::npos) {
+          *err_msg << "the attach-list should only contain list of nbd devices (like: /dev/nbdX) and/or image spec (like: poolname/imagename) separated by comma";
+          return -EINVAL;
+        }
+        cfg->attach_vec.push_back(substr);
+      }
     } else {
       ++i;
     }
@@ -2580,7 +2615,7 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     case Restore:
       strncpy(rbd_nbd_path, argv[0], PATH_MAX-1);
-      restore_from_config();
+      restore_from_config(cfg.attach_vec);
       break;
     default:
       usage();
