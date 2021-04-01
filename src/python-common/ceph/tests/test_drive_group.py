@@ -5,9 +5,9 @@ import pytest
 import yaml
 
 from ceph.deployment import drive_selection, translate
-from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpecValidationError
+from ceph.deployment.service_spec import PlacementSpec
 from ceph.tests.utils import _mk_inventory, _mk_device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
     DriveGroupValidationError
@@ -76,7 +76,7 @@ spec:
     ),
 ])
 def test_DriveGroup_fail(match, test_input):
-    with pytest.raises(ServiceSpecValidationError, match=match):
+    with pytest.raises(SpecValidationError, match=match):
         osd_spec = DriveGroupSpec.from_json(yaml.safe_load(test_input))
         osd_spec.validate()
 

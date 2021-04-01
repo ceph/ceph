@@ -31,9 +31,9 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, IngressSpec
+    IscsiServiceSpec, IngressSpec
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult
@@ -94,7 +94,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
-        except (OrchestratorError, ServiceSpecValidationError) as e:
+        except (OrchestratorError, SpecValidationError) as e:
             # Do not print Traceback for expected errors.
             return HandleCommandResult(e.errno, stderr=str(e))
         except ImportError as e:
