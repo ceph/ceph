@@ -9,6 +9,9 @@
   that were storing state in RADOS omap, especially without striping which
   limits scalability.
 
+* RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
+  is consistent with the help message.
+
 >=16.0.0
 --------
 * mgr-pg_autoscaler: Autoscaler will now start out by scaling each

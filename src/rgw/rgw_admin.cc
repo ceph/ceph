@@ -931,7 +931,7 @@ static SimpleCmd::Commands all_cmds = {
   { "datalog autotrim", OPT::DATALOG_AUTOTRIM },
   { "datalog trim", OPT::DATALOG_TRIM },
   { "realm create", OPT::REALM_CREATE },
-  { "realm delete", OPT::REALM_DELETE },
+  { "realm rm", OPT::REALM_DELETE },
   { "realm get", OPT::REALM_GET },
   { "realm get default", OPT::REALM_GET_DEFAULT },
   { "realm get-default", OPT::REALM_GET_DEFAULT },
