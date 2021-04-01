@@ -143,8 +143,8 @@ class FSTop(object):
             raise FSTopException('Cannot handle unknown metrics from \'ceph fs perf stats\': '
                                  f'{missing}')
 
-    def setup_curses(self):
-        self.stdscr = curses.initscr()
+    def setup_curses(self, win):
+        self.stdscr = win
 
         # coordinate constants for windowing -- (height, width, y, x)
         # NOTE: requires initscr() call before accessing COLS, LINES.
@@ -155,7 +155,7 @@ class FSTop(object):
         self.header = curses.newwin(*HEADER_WINDOW_COORD)
         self.topl = curses.newwin(*TOPLINE_WINDOW_COORD)
         self.mainw = curses.newwin(*MAIN_WINDOW_COORD)
-        curses.wrapper(self.display)
+        self.display()
 
     def verify_perf_stats_support(self):
         mon_cmd = {'prefix': 'mgr module ls', 'format': 'json'}
@@ -325,7 +325,7 @@ class FSTop(object):
                                                                  num_libs=num_libs))
         return True
 
-    def display(self, _):
+    def display(self):
         x_coord_map = self.refresh_top_line_and_build_coord()
         self.topl.refresh()
         while not self.exit_ev.is_set():
@@ -369,7 +369,7 @@ if __name__ == '__main__':
             ft.selftest()
             sys.stdout.write("selftest ok\n")
         else:
-            ft.setup_curses()
+            curses.wrapper(ft.setup_curses)
     except FSTopException as fst:
         err = True
         sys.stderr.write(f'{fst.get_error_msg()}\n')
