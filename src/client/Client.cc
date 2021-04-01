@@ -9591,6 +9591,11 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
       *fhp = _create_fh(in, flags, cmode, perms);
   } else {
     in->put_open_ref(cmode);
+
+    if (in->snapid != CEPH_NOSNAP) {
+      ceph_assert(in->snap_cap_refs > 0);
+      in->snap_cap_refs--;
+    }
   }
 
   trim_cache();
