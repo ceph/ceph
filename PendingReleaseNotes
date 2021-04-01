@@ -1,3 +1,11 @@
+15.2.11
+-------
+
+* OSD: the option ``osd_fast_shutdown_notify_mon`` has been introduced to allow
+  the OSD to notify the monitor it is shutting down even if ``osd_fast_shutdown``
+  is enabled. This helps with the monitor logs on larger clusters, that may get
+  many 'osd.X reported immediately failed by osd.Y' messages, and confuse tools.
+
 15.2.9
 ------
 * MGR: progress module can now be turned on/off, using the commands:
