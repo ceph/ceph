@@ -492,7 +492,11 @@ void MonClient::shutdown()
 
   active_con.reset();
   pending_cons.clear();
+
   auth.reset();
+  global_id = 0;
+  authenticate_err = 0;
+  authenticated = false;
 
   monc_lock.Unlock();
 
