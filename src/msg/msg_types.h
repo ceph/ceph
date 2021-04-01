@@ -81,38 +81,8 @@ public:
     return n;
   }
 
-  bool parse(std::string_view s) {
-    const char *start = s.data();
-    char *end = nullptr;
-    bool got = parse(start, &end);
-    return got && end == start + s.size();
-  }
-  bool parse(const char *start, char **end) {
-    if (strstr(start, "mon.") == start) {
-      _type = TYPE_MON;
-      start += 4;
-    } else if (strstr(start, "osd.") == start) {
-      _type = TYPE_OSD;
-      start += 4;
-    } else if (strstr(start, "mds.") == start) {
-      _type = TYPE_MDS;
-      start += 4;
-    } else if (strstr(start, "client.") == start) {
-      _type = TYPE_CLIENT;
-      start += 7;
-    } else if (strstr(start, "mgr.") == start) {
-      _type = TYPE_MGR;
-      start += 4;
-    } else {
-      return false;
-    }
-    if (isspace(*start))
-      return false;
-    _num = strtoll(start, end, 10);
-    if (*end == NULL || *end == start)
-      return false;
-    return true;
-  }
+  bool parse(std::string_view s);
+  bool parse(const char *start, char **end);
 
   DENC(entity_name_t, v, p) {
     denc(v._type, p);
