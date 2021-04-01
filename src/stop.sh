@@ -165,33 +165,40 @@ if [ $stop_all -eq 1 ]; then
 
     # killing processes
     to_kill="$ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd"
-    for p in $to_kill ; do
-        if pkill -u $MYUID $p; then
-	    still_runs="$still_runs $p"
-	fi
-    done
-
-    # wait for processes to close
-    for try in 1 1 2 3 5 8 ; do
-        to_kill="$still_runs"
-	still_runs=""
-        for p in $to_kill ; do
-            if pkill -u $MYUID $p -0; then
-		still_runs="$still_runs $p"
-            fi
+    since_kill=0
+    for step in 0 1 1 2 3 5 8; do
+        sleep $step
+        since_kill=$((since_kill + step))
+        survivors=''
+        for p in $to_kill; do
+            case $step in
+                0)
+                    # killing processes
+                    pkill -SIGTERM -u $MYUID $p
+                    ;;
+                [1-5])
+                    # wait for processes to stop
+                    if pkill -0 -u $MYUID $p; then
+                        # $p is still alive
+                        survivors+=" $p"
+                    fi
+                    ;;
+                8)
+                    # kill and print if some left
+                    if pkill -0 -u $MYUID $p; then
+                       pkill -SIGKILL -u $MYUID $p
+                       echo "WARNING: $p did not orderly shutdown, killing it hard!" >&2
+                    fi
+                    ;;
+            esac
         done
-        if [ -z "$still_runs" ] ; then
+        if [ $since_kill -eq 0 ]; then
+            continue
+        elif [ -z "$survivors" ]; then
             break
         fi
-        sleep $try
-    done
-
-    # kill and print if some left
-    for p in $still_runs ; do
-        if pkill -u $MYUID $p -0; then
-            echo "TIMEOUT! $p did not orderly shutdown, killing it hard"
-            pkill -u $MYUID $p -SIGKILL
-        fi
+        to_kill=$survivors
+        echo "WARNING: $to_kill still alive after $since_kill seconds" >&2
     done
 
     pkill -u $MYUID -f valgrind.bin.\*ceph-mon
