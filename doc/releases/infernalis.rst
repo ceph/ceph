@@ -1,5 +1,13 @@
 .. _infernalis-release-notes:
 
+==========
+Infernalis
+==========
+
+Infernalis is the 9th stable release of Ceph.  It is named after the
+vampire squid (Vampyroteuthis infernalis, the "vampire squid from
+hell").
+
 v9.2.1 Infernalis
 =================
 

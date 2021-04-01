@@ -1,3 +1,10 @@
+========
+Luminous
+========
+
+Luminous is the 12th stable release of Ceph.  It is named after the
+luminous squid (watasenia scintillans, aka firefly squid).
+
 v12.2.13 Luminous
 =================
 

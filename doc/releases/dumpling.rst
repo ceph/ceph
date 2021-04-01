@@ -1,3 +1,10 @@
+========
+Dumpling
+========
+
+Dumpling is the 4th stable release of Ceph.  It is named after the
+dumpling squid (Euprymna tasmanica).
+
 v0.67.12 "Dumpling" (draft)
 ===========================
 

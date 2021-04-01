@@ -14,12 +14,13 @@ from sphinx.util import logging
 
 class CephReleases(Directive):
     has_content = False
-    required_arguments = 1
+    required_arguments = 2
     optional_arguments = 0
     option_spec = {}
 
     def run(self):
         filename = self.arguments[0]
+        current = self.arguments[1] == 'current'
         document = self.state.document
         env = document.settings.env
         rel_filename, filename = env.relfn2path(filename)
@@ -45,8 +46,10 @@ class CephReleases(Directive):
         tgroup += thead
         row_node = nodes.row()
         thead += row_node
-        row_node.extend(nodes.entry(h, nodes.paragraph(text=h))
-            for h in ["Version", "Initial release", "Latest", "End of life (estimated)"])
+        row_node.extend(
+            nodes.entry(h, nodes.paragraph(text=h))
+            for h in ["Name", "Initial release", "Latest",
+                      "End of life (estimated)" if current else "End of life"])
 
         releases = releases.items()
         releases = sorted(releases, key=lambda t: t[0], reverse=True)
@@ -57,12 +60,18 @@ class CephReleases(Directive):
         rows = []
         for code_name, info in releases:
             actual_eol = info.get("actual_eol", None)
-            if actual_eol and actual_eol <= datetime.datetime.now().date():
-                continue
+
+            if current:
+                if actual_eol and actual_eol <= datetime.datetime.now().date():
+                    continue
+            else:
+                if not actual_eol:
+                    continue
+
             trow = nodes.row()
 
             entry = nodes.entry()
-            para = nodes.paragraph(text="`{}`_".format(code_name))
+            para = nodes.paragraph(text=f"`{code_name.title()} <{code_name}>`_")
             sphinx.util.nodes.nested_parse_with_titles(
                     self.state, para, entry)
             #entry += para
@@ -75,7 +84,7 @@ class CephReleases(Directive):
 
             entry = nodes.entry()
             para = nodes.paragraph(text="{}".format(
-                oldest_release["released"].strftime("%b %Y")))
+                oldest_release["released"]))
             entry += para
             trow += entry
 
@@ -92,8 +101,10 @@ class CephReleases(Directive):
             trow += entry
 
             entry = nodes.entry()
-            para = nodes.paragraph(text="{}".format(
-                info.get("target_eol", "--")))
+            if current:
+                para = nodes.paragraph(text=info.get("target_eol", '--'))
+            else:
+                para = nodes.paragraph(text=info.get('actual_eol', '--'))
             entry += para
             trow += entry
 
@@ -105,7 +116,7 @@ class CephReleases(Directive):
 
 class CephTimeline(Directive):
     has_content = False
-    required_arguments = 12
+    required_arguments = 7
     optional_arguments = 0
     option_spec = {}
 
@@ -158,9 +169,9 @@ class CephTimeline(Directive):
         for col in columns:
             entry = nodes.entry()
             if col.lower() in ["date", "development"]:
-                para = nodes.paragraph(text=col)
+                para = nodes.paragraph(text=col.title())
             else:
-                para = nodes.paragraph(text="`{}`_".format(col))
+                para = nodes.paragraph(text=f"`{col.title()} <{col}>`_".format(col))
             sphinx.util.nodes.nested_parse_with_titles(
                     self.state, para, entry)
             row_node += entry
@@ -173,7 +184,7 @@ class CephTimeline(Directive):
             trow = nodes.row()
 
             entry = nodes.entry()
-            para = nodes.paragraph(text=row_info[0].strftime("%b %Y"))
+            para = nodes.paragraph(text=row_info[0])
             entry += para
             trow += entry
 

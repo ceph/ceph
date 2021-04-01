@@ -1,3 +1,11 @@
+=====
+Giant
+=====
+
+Giant is the 7th stable release of Ceph.  It is named after the giant
+squid (Architeuthis dux).
+
+
 v0.87.2 Giant
 =============
 

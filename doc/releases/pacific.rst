@@ -1,3 +1,11 @@
+=======
+Pacific
+=======
+
+Pacific is the 16th stable release of Ceph.  It is named after the
+giant pacific octopus (Enteroctopus dofleini).
+
+
 v16.2.0 Pacific
 ===============
 
