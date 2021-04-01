@@ -1,4 +1,3 @@
-import errno
 import fnmatch
 import re
 from collections import OrderedDict
@@ -9,23 +8,11 @@ from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, T
 
 import yaml
 
-from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
-
-
-class ServiceSpecValidationError(Exception):
-    """
-    Defining an exception here is a bit problematic, cause you cannot properly catch it,
-    if it was raised in a different mgr module.
-    """
-    def __init__(self,
-                 msg: str,
-                 errno: int = -errno.EINVAL):
-        super(ServiceSpecValidationError, self).__init__(msg)
-        self.errno = errno
 
 
 def assert_valid_host(name: str) -> None:
@@ -37,7 +24,7 @@ def assert_valid_host(name: str) -> None:
             assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
             assert p.match(part), 'name component must include only a-z, 0-9, and -'
     except AssertionError as e:
-        raise ServiceSpecValidationError(str(e))
+        raise SpecValidationError(str(e))
 
 
 def handle_type_error(method: FuncT) -> FuncT:
@@ -47,7 +34,7 @@ def handle_type_error(method: FuncT) -> FuncT:
             return method(cls, *args, **kwargs)
         except (TypeError, AttributeError) as e:
             error_msg = '{}: {}'.format(cls.__name__, e)
-            raise ServiceSpecValidationError(error_msg)
+            raise SpecValidationError(error_msg)
     return cast(FuncT, inner)
 
 
@@ -285,31 +272,31 @@ class PlacementSpec(object):
     def validate(self) -> None:
         if self.hosts and self.label:
             # TODO: a less generic Exception
-            raise ServiceSpecValidationError('Host and label are mutually exclusive')
+            raise SpecValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
-            raise ServiceSpecValidationError("num/count must be > 1")
+            raise SpecValidationError("num/count must be > 1")
         if self.count_per_host is not None and self.count_per_host < 1:
-            raise ServiceSpecValidationError("count-per-host must be >= 1")
+            raise SpecValidationError("count-per-host must be >= 1")
         if self.count_per_host is not None and not (
                 self.label
                 or self.hosts
                 or self.host_pattern
         ):
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 "count-per-host must be combined with label or hosts or host_pattern"
             )
         if self.count is not None and self.count_per_host is not None:
-            raise ServiceSpecValidationError("cannot combine count and count-per-host")
+            raise SpecValidationError("cannot combine count and count-per-host")
         if (
                 self.count_per_host is not None
                 and self.hosts
                 and any([hs.network or hs.name for hs in self.hosts])
         ):
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 "count-per-host cannot be combined explicit placement with names or networks"
             )
         if self.host_pattern and self.hosts:
-            raise ServiceSpecValidationError('cannot combine host patterns and hosts')
+            raise SpecValidationError('cannot combine host patterns and hosts')
         for h in self.hosts:
             h.validate()
 
@@ -362,7 +349,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
             else:
                 strings = [arg]
         else:
-            raise ServiceSpecValidationError('invalid placement %s' % arg)
+            raise SpecValidationError('invalid placement %s' % arg)
 
         count = None
         count_per_host = None
@@ -397,14 +384,14 @@ tPlacementSpec(hostname='host2', network='', name='')])
 
         labels = [x for x in strings if 'label:' in x]
         if len(labels) > 1:
-            raise ServiceSpecValidationError('more than one label provided: {}'.format(labels))
+            raise SpecValidationError('more than one label provided: {}'.format(labels))
         for l in labels:
             strings.remove(l)
         label = labels[0][6:] if labels else None
 
         host_patterns = strings
         if len(host_patterns) > 1:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'more than one host pattern provided: {}'.format(host_patterns))
 
         ps = PlacementSpec(count=count,
@@ -448,7 +435,7 @@ class ServiceSpec(object):
             'container': CustomContainerSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
-            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+            raise SpecValidationError('Spec needs a "service_type" key.')
         return ret
 
     def __new__(cls: Type[ServiceSpecT], *args: Any, **kwargs: Any) -> ServiceSpecT:
@@ -532,8 +519,10 @@ class ServiceSpec(object):
         """
 
         if not isinstance(json_spec, dict):
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 f'Service Spec is not an (JSON or YAML) object. got "{str(json_spec)}"')
+
+        json_spec = cls.normalize_json(json_spec)
 
         c = json_spec.copy()
 
@@ -555,6 +544,18 @@ class ServiceSpec(object):
             del c['status']  # kludge to make us compatible to `ServiceDescription.to_json()`
 
         return _cls._from_json_impl(c)  # type: ignore
+
+    @staticmethod
+    def normalize_json(json_spec: dict) -> dict:
+        networks = json_spec.get('networks')
+        if networks is None:
+            return json_spec
+        if isinstance(networks, list):
+            return json_spec
+        if not isinstance(networks, str):
+            raise SpecValidationError(f'Networks ({networks}) must be a string or list of strings')
+        json_spec['networks'] = [networks]
+        return json_spec
 
     @classmethod
     def _from_json_impl(cls: Type[ServiceSpecT], json_spec: dict) -> ServiceSpecT:
@@ -611,16 +612,16 @@ class ServiceSpec(object):
 
     def validate(self) -> None:
         if not self.service_type:
-            raise ServiceSpecValidationError('Cannot add Service: type required')
+            raise SpecValidationError('Cannot add Service: type required')
 
         if self.service_type in self.REQUIRES_SERVICE_ID:
             if not self.service_id:
-                raise ServiceSpecValidationError('Cannot add Service: id required')
+                raise SpecValidationError('Cannot add Service: id required')
             if not re.match('^[a-zA-Z0-9_.-]+$', self.service_id):
-                raise ServiceSpecValidationError('Service id contains invalid characters, '
-                                                 'only [a-zA-Z0-9_.-] allowed')
+                raise SpecValidationError('Service id contains invalid characters, '
+                                          'only [a-zA-Z0-9_.-] allowed')
         elif self.service_id:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                     f'Service of type \'{self.service_type}\' should not contain a service id')
 
         if self.placement is not None:
@@ -628,14 +629,14 @@ class ServiceSpec(object):
         if self.config:
             for k, v in self.config.items():
                 if k in self.MANAGED_CONFIG_OPTIONS:
-                    raise ServiceSpecValidationError(
+                    raise SpecValidationError(
                         f'Cannot set config option {k} in spec: it is managed by cephadm'
                     )
         for network in self.networks or []:
             try:
                 ip_network(network)
             except ValueError as e:
-                raise ServiceSpecValidationError(
+                raise SpecValidationError(
                     f'Cannot parse network {network}: {e}'
                 )
 
@@ -686,7 +687,7 @@ class NFSServiceSpec(ServiceSpec):
         super(NFSServiceSpec, self).validate()
 
         if not self.pool:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add NFS: No Pool specified')
 
     def rados_config_name(self):
@@ -767,10 +768,10 @@ class RGWSpec(ServiceSpec):
         super(RGWSpec, self).validate()
 
         if self.rgw_realm and not self.rgw_zone:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                     'Cannot add RGW: Realm specified but no zone specified')
         if self.rgw_zone and not self.rgw_realm:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                     'Cannot add RGW: Zone specified but no realm specified')
 
 
@@ -818,7 +819,7 @@ class IscsiServiceSpec(ServiceSpec):
         super(IscsiServiceSpec, self).validate()
 
         if not self.pool:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add ISCSI: No Pool specified')
 
         # Do not need to check for api_user and api_password as they
@@ -923,16 +924,16 @@ class IngressSpec(ServiceSpec):
         super(IngressSpec, self).validate()
 
         if not self.backend_service:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add ingress: No backend_service specified')
         if not self.frontend_port:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add ingress: No frontend_port specified')
         if not self.monitor_port:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add ingress: No monitor_port specified')
         if not self.virtual_ip:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add ingress: No virtual_ip provided')
 
 
