@@ -175,8 +175,11 @@ int MonClient::get_monmap_and_config()
       }
       while ((!bootstrap_config || monmap.get_epoch() == 0) && r == 0) {
 	ldout(cct,20) << __func__ << " waiting for monmap|config" << dendl;
-	map_cond.wait_for(l, ceph::make_timespan(
-          cct->_conf->mon_client_hunt_interval));
+	auto status = map_cond.wait_for(l, ceph::make_timespan(
+	    cct->_conf->mon_client_hunt_interval));
+	if (status == std::cv_status::timeout) {
+	  r = -ETIMEDOUT;
+	}
       }
 
       if (bootstrap_config) {
