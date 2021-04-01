@@ -100,10 +100,10 @@ Perform the followint steps on the Ansible installer node.
 
 #. As ``root``, execute the Ansible playbook:
 
-   ::
+   .. prompt:: bash #
 
-       # cd /usr/share/ceph-ansible
-       # ansible-playbook site.yml --limit iscsigws
+      cd /usr/share/ceph-ansible
+      ansible-playbook site.yml --limit iscsigws
 
    .. note::
     The Ansible playbook will handle RPM dependencies, setting up daemons,
@@ -114,9 +114,9 @@ Perform the followint steps on the Ansible installer node.
 
 #. Verify the configuration from an iSCSI gateway node:
 
-   ::
+   .. prompt:: bash #
 
-       # gwcli ls
+      gwcli ls
 
    .. note::
     See the `Configuring the iSCSI Target using the Command Line Interface`_
@@ -138,9 +138,9 @@ will restore the Linux IO state. The Ansible playbook disables the
 target service during the deployment. Below are the outcomes of when
 interacting with the ``rbd-target-api`` Systemd service.
 
-::
+.. prompt:: bash #
 
-    # systemctl <start|stop|restart|reload> rbd-target-api
+   systemctl <start|stop|restart|reload> rbd-target-api
 
 -  ``reload``
 
@@ -185,6 +185,8 @@ correct mode is chosen, this operation will delete data.
 .. warning::
   A purge operation will fail, if RBD images have snapshots or clones
   and are exported through the Ceph iSCSI gateway.
+
+.. highlight:: console
 
 ::
 
