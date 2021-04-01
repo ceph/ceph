@@ -45,6 +45,34 @@ do_killall() {
     $SUDO killall -u $MYNAME $1
 }
 
+maybe_kill() {
+    local p=$1
+    shift
+    local step=$1
+    shift
+    case $step in
+        0)
+            # killing processes
+            pkill -SIGTERM -u $MYUID $p
+            return 1
+            ;;
+        [1-5])
+            # wait for processes to stop
+            if pkill -0 -u $MYUID $p; then
+                # $p is still alive
+                return 1
+            fi
+            ;;
+        8)
+            # kill and print if some left
+            if pkill -0 -u $MYUID $p; then
+                echo "WARNING: $p did not orderly shutdown, killing it hard!" >&2
+                pkill -SIGKILL -u $MYUID $p
+            fi
+            ;;
+    esac
+}
+
 do_killcephadm() {
     FSID=$($CEPH_BIN/ceph -c $conf_fn fsid)
     sudo $CEPHADM_DIR_PATH/cephadm rm-cluster --fsid $FSID --force
@@ -171,34 +199,17 @@ if [ $stop_all -eq 1 ]; then
         since_kill=$((since_kill + step))
         survivors=''
         for p in $to_kill; do
-            case $step in
-                0)
-                    # killing processes
-                    pkill -SIGTERM -u $MYUID $p
-                    ;;
-                [1-5])
-                    # wait for processes to stop
-                    if pkill -0 -u $MYUID $p; then
-                        # $p is still alive
-                        survivors+=" $p"
-                    fi
-                    ;;
-                8)
-                    # kill and print if some left
-                    if pkill -0 -u $MYUID $p; then
-                       pkill -SIGKILL -u $MYUID $p
-                       echo "WARNING: $p did not orderly shutdown, killing it hard!" >&2
-                    fi
-                    ;;
-            esac
+            if ! maybe_kill "$p" $step; then
+                survivors+=" $p"
+            fi
         done
-        if [ $since_kill -eq 0 ]; then
-            continue
-        elif [ -z "$survivors" ]; then
+        if [ -z "$survivors" ]; then
             break
         fi
         to_kill=$survivors
-        echo "WARNING: $to_kill still alive after $since_kill seconds" >&2
+        if [ $since_kill -gt 0 ]; then
+            echo "WARNING: $to_kill still alive after $since_kill seconds" >&2
+        fi
     done
 
     pkill -u $MYUID -f valgrind.bin.\*ceph-mon
