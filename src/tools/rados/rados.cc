@@ -1306,7 +1306,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     usage_exit();
 
   if (cmd.compare("break") == 0) {
-    string locker(nargs[4]);
+    const char* locker = nargs[4];
     rados::cls::lock::Lock l(lock_name);
     l.set_cookie(lock_cookie);
     l.set_tag(lock_tag);

@@ -81,11 +81,11 @@ public:
     return n;
   }
 
-  bool parse(const std::string& s) {
-    const char *start = s.c_str();
-    char *end;
+  bool parse(std::string_view s) {
+    const char *start = s.data();
+    char *end = nullptr;
     bool got = parse(start, &end);
-    return got && end == start + s.length();
+    return got && end == start + s.size();
   }
   bool parse(const char *start, char **end) {
     if (strstr(start, "mon.") == start) {
