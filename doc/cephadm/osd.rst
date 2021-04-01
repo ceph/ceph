@@ -181,32 +181,52 @@ That is, after using::
 * If you add new disks to the cluster they will automatically be used to create new OSDs.
 * A new OSD will be created automatically if you remove an OSD and clean the LVM physical volume.
 
-If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter::
+If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
 
-    ceph orch apply osd --all-available-devices --unmanaged=true
+.. prompt:: bash #
+
+   ceph orch apply osd --all-available-devices --unmanaged=true
 
 * For cephadm, see also :ref:`cephadm-spec-unmanaged`.
 
 
 Remove an OSD
 =============
-::
 
-    ceph orch osd rm <osd_id(s)> [--replace] [--force]
+Removing an OSD from a cluster involves two steps:
 
-Evacuates PGs from an OSD and removes it from the cluster.
+#. evacuating all placement groups (PGs) from the cluster
+#. removing the PG-free OSD from the cluster
 
-Example::
+The following command performs these two steps:
 
-    # ceph orch osd rm 0
-    Scheduled OSD(s) for removal
+.. prompt:: bash #
 
+  ceph orch osd rm <osd_id(s)> [--replace] [--force]
 
-OSDs that are not safe-to-destroy will be rejected.
+Example:
 
-You can query the state of the operation with::
+.. prompt:: bash #
 
-    # ceph orch osd rm status
+  ceph orch osd rm 0
+
+Expected output::
+
+   Scheduled OSD(s) for removal
+
+OSDs that are not safe to destroy will be rejected.
+
+Monitoring OSD State
+--------------------
+
+You can query the state of OSD operation with the following command:
+
+.. prompt:: bash #
+
+   ceph orch osd rm status
+
+Expected output::
+
     OSD_ID  HOST         STATE                    PG_COUNT  REPLACE  FORCE  STARTED_AT
     2       cephadm-dev  done, waiting for purge  0         True     False  2020-07-17 13:01:43.147684
     3       cephadm-dev  draining                 17        False    True   2020-07-17 13:01:45.162158
@@ -217,78 +237,108 @@ When no PGs are left on the OSD, it will be decommissioned and removed from the 
 
 .. note::
     After removing an OSD, if you wipe the LVM physical volume in the device used by the removed OSD, a new OSD will be created.
-    Read information about the ``unmanaged`` parameter in :ref:`cephadm-osd-declarative`.
+    For more information on this, read about the ``unmanaged`` parameter in :ref:`cephadm-osd-declarative`.
 
 Stopping OSD Removal
 --------------------
 
-You can stop the queued OSD removal operation with
+It is possible to stop queued OSD removals by using the following command:
 
-::
+.. prompt:: bash #
 
-    ceph orch osd rm stop <svc_id(s)>
+  ceph orch osd rm stop <svc_id(s)>
 
-Example::
+Example:
 
-    # ceph orch osd rm stop 4
+.. prompt:: bash #
+
+    ceph orch osd rm stop 4
+
+Expected output::
+
     Stopped OSD(s) removal
 
-This will reset the initial state of the OSD and take it off the removal queue.
+This resets the initial state of the OSD and takes it off the removal queue.
 
 
-Replace an OSD
--------------------
-::
+Replacing an OSD
+----------------
 
-    orch osd rm <svc_id(s)> --replace [--force]
+.. prompt:: bash #
 
-Example::
+  orch osd rm <svc_id(s)> --replace [--force]
 
-    # ceph orch osd rm 4 --replace
-    Scheduled OSD(s) for replacement
+Example:
 
+.. prompt:: bash #
 
-This follows the same procedure as the "Remove OSD" part with the exception that the OSD is not permanently removed
-from the CRUSH hierarchy, but is assigned a 'destroyed' flag.
+  ceph orch osd rm 4 --replace
+
+Expected output::
+
+   Scheduled OSD(s) for replacement
+
+This follows the same procedure as the procedure in the "Remove OSD" section, with
+one exception: the OSD is not permanently removed from the CRUSH hierarchy, but is
+instead assigned a 'destroyed' flag.
 
 **Preserving the OSD ID**
 
-The previously-set 'destroyed' flag is used to determine OSD ids that will be reused in the next OSD deployment.
+The 'destroyed' flag is used to determine which OSD ids will be reused in the
+next OSD deployment.
 
-If you use OSDSpecs for OSD deployment, your newly added disks will be assigned the OSD ids of their replaced
-counterparts, assuming the new disks still match the OSDSpecs.
+If you use OSDSpecs for OSD deployment, your newly added disks will be assigned
+the OSD ids of their replaced counterparts. This assumes that the new disks
+still match the OSDSpecs.
 
-For assistance in this process you can use the '--dry-run' feature.
+Use the ``--dry-run`` flag to make certain that the ``ceph orch apply osd`` 
+command does what you want it to. The ``--dry-run`` flag shows you what the
+outcome of the command will be without making the changes you specify. When
+you are satisfied that the command will do what you want, run the command
+without the ``--dry-run`` flag.
 
-Tip: The name of your OSDSpec can be retrieved from **ceph orch ls**
+.. tip::
 
-Alternatively, you can use your OSDSpec file::
+  The name of your OSDSpec can be retrieved with the command ``ceph orch ls``
 
-    ceph orch apply osd -i <osd_spec_file> --dry-run
-    NAME                  HOST  DATA     DB WAL
-    <name_of_osd_spec>    node1 /dev/vdb -  -
+Alternatively, you can use your OSDSpec file:
+
+.. prompt:: bash #
+
+  ceph orch apply osd -i <osd_spec_file> --dry-run
+
+Expected output::
+
+  NAME                  HOST  DATA     DB WAL
+  <name_of_osd_spec>    node1 /dev/vdb -  -
 
 
-If this matches your anticipated behavior, just omit the --dry-run flag to execute the deployment.
+When this output reflects your intention, omit the ``--dry-run`` flag to
+execute the deployment.
 
 
-Erase Devices (Zap Devices)
----------------------------
+Erasing Devices (Zapping Devices)
+---------------------------------
 
-Erase (zap) a device so that it can be reused. ``zap`` calls ``ceph-volume zap`` on the remote host.
+Erase (zap) a device so that it can be reused. ``zap`` calls ``ceph-volume
+zap`` on the remote host.
 
-::
+.. prompt:: bash #
 
-     orch device zap <hostname> <path>
+  orch device zap <hostname> <path>
 
-Example command::
+Example command:
 
-     ceph orch device zap my_hostname /dev/sdx
+.. prompt:: bash #
+
+  ceph orch device zap my_hostname /dev/sdx
 
 .. note::
-    Cephadm orchestrator will automatically deploy drives that match the DriveGroup in your OSDSpec if the unmanaged flag is unset.
-    For example, if you use the ``all-available-devices`` option when creating OSDs, when you ``zap`` a device the cephadm orchestrator will automatically create a new OSD in the device .
-    To disable this behavior, see :ref:`cephadm-osd-declarative`.
+    If the unmanaged flag is unset, cephadm automatically deploys drives that
+    match the DriveGroup in your OSDSpec.  For example, if you use the
+    ``all-available-devices`` option when creating OSDs, when you ``zap`` a
+    device the cephadm orchestrator automatically creates a new OSD in the
+    device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
 
 
 .. _drivegroups:
