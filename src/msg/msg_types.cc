@@ -12,27 +12,20 @@
 
 bool entity_name_t::parse(std::string_view s)
 {
-  const char *start = s.data();
-  char *end = nullptr;
-  bool got = parse(start, &end);
-  return got && end == start + s.size();
-}
-
-bool entity_name_t::parse(const char *start, char **end)
-{
-  if (strstr(start, "mon.") == start) {
+  const char* start = s.data();
+  if (s.find("mon.") == 0) {
     _type = TYPE_MON;
     start += 4;
-  } else if (strstr(start, "osd.") == start) {
+  } else if (s.find("osd.") == 0) {
     _type = TYPE_OSD;
     start += 4;
-  } else if (strstr(start, "mds.") == start) {
+  } else if (s.find("mds.") == 0) {
     _type = TYPE_MDS;
     start += 4;
-  } else if (strstr(start, "client.") == start) {
+  } else if (s.find("client.") == 0) {
     _type = TYPE_CLIENT;
     start += 7;
-  } else if (strstr(start, "mgr.") == start) {
+  } else if (s.find("mgr.") == 0) {
     _type = TYPE_MGR;
     start += 4;
   } else {
@@ -40,10 +33,13 @@ bool entity_name_t::parse(const char *start, char **end)
   }
   if (isspace(*start))
     return false;
-  _num = strtoll(start, end, 10);
-  if (*end == NULL || *end == start)
+  char *end = nullptr;
+  _num = strtoll(start, &end, 10);
+  if (end == nullptr || end == start) {
     return false;
-  return true;
+  } else {
+    return end == s.data() + s.size();
+  }
 }
 
 void entity_name_t::dump(ceph::Formatter *f) const
