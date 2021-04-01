@@ -184,9 +184,13 @@
                               [selectionLimit]="4"
                               (selection)="appSelection()">
             </cd-select-badges>
+            <i *ngIf="data.applications.selected <= 0"
+               i18n-title
+               title="Pools should be associated with an application tag"
+               class="{{icons.warning}} icon-warning-color">
+            </i>
           </div>
         </div>
-
         <!-- CRUSH -->
         <div *ngIf="isErasure || isReplicated">
 
