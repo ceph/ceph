@@ -162,7 +162,7 @@ int write_part_header(cls_method_context_t hctx,
 
 int read_header(cls_method_context_t hctx,
 		std::optional<objv> objv,
-		info* info)
+		info* info, bool get_info = false)
 {
   std::uint64_t size;
 
@@ -180,7 +180,11 @@ int read_header(cls_method_context_t hctx,
   }
 
   if (r == 0) {
-    CLS_ERR("ERROR: %s: Zero length object, returning ENODATA", __PRETTY_FUNCTION__);
+    if (get_info) {
+      CLS_LOG(5, "%s: Zero length object, likely probe, returning ENODATA", __PRETTY_FUNCTION__);
+    } else {
+      CLS_ERR("ERROR: %s: Zero length object, returning ENODATA", __PRETTY_FUNCTION__);
+    }
     return -ENODATA;
   }
 
@@ -366,7 +370,7 @@ int get_meta(cls_method_context_t hctx, ceph::buffer::list* in,
   }
 
   op::get_meta_reply reply;
-  int r = read_header(hctx, op.version, &reply.info);
+  int r = read_header(hctx, op.version, &reply.info, true);
   if (r < 0) {
     return r;
   }
