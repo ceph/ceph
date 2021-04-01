@@ -956,6 +956,38 @@ def shell(ctx, config):
                    ['bash', '-c', c],
                    extra_cephadm_args=env)
 
+def apply(ctx, config):
+    """
+    Apply spec
+    
+      tasks:
+        - cephadm.apply:
+            specs:
+            - service_type: rgw
+              service_id: foo
+              spec:
+                rgw_frontend_port: 8000
+            - service_type: rgw
+              service_id: bar
+              spec:
+                rgw_frontend_port: 9000
+                zone: bar
+                realm: asdf
+
+    """
+    cluster_name = config.get('cluster', 'ceph')
+
+    specs = config.get('specs', [])
+    y = '\n---\n'.join(map(yaml.dump, specs))
+
+    log.info(f'Applying spec:\n{y}')
+    _shell(
+        ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+        ['ceph', 'orch', 'apply', '-i', '-'],
+        stdin=y,
+    )
+
+
 @contextlib.contextmanager
 def tweaked_option(ctx, config):
     """
