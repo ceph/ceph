@@ -7,6 +7,7 @@ import errno
 import json
 import threading
 import time
+import six
 
 import bcrypt
 
@@ -14,11 +15,23 @@ from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteComman
 
 from .. import mgr, logger
 from ..security import Scope, Permission
-from ..tools import ensure_str
 from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
                          PermissionNotValid, RoleIsAssociatedWithUser, \
                          UserAlreadyExists, UserDoesNotExist, ScopeNotInRole, \
                          RoleNotInUser
+
+
+# replicates tools.ensure_str() to avoid recursive import:
+# ..tools -> .services.auth -> .access_control -> ..tools
+def ensure_str(s, encoding='utf-8', errors='strict'):
+    """Ported from six."""
+    if not isinstance(s, (six.text_type, six.binary_type)):
+        raise TypeError("not expecting type '%s'" % type(s))
+    if six.PY2 and isinstance(s, six.text_type):
+        s = s.encode(encoding, errors)
+    elif six.PY3 and isinstance(s, six.binary_type):
+        s = s.decode(encoding, errors)
+    return s
 
 
 # password hashing algorithm
