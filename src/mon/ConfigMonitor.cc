@@ -168,17 +168,6 @@ bool ConfigMonitor::preprocess_query(MonOpRequestRef op)
   return false;
 }
 
-static string indent_who(const string& who)
-{
-  if (who == "global") {
-    return who;
-  }
-  if (who.find('.') == string::npos) {
-    return "  " + who;
-  }
-  return "    " + who;
-}
-
 bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
@@ -278,7 +267,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     for (auto s : sections) {
       for (auto& i : s.second->options) {
 	if (!f) {
-	  tbl << indent_who(s.first);
+	  tbl << s.first;
 	  tbl << i.second.mask.to_str();
 	  tbl << Option::level_to_str(i.second.opt->level);
           tbl << i.first;
