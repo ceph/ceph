@@ -374,6 +374,7 @@ int RGWRadosBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int 
   int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
   if (ret >= 0) {
     results.next_marker = list_op.get_next_marker();
+    params.marker = results.next_marker;
   }
 
   return ret;
