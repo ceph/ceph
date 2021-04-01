@@ -244,6 +244,7 @@ void usage()
   cout << "  datalog list               list data log\n";
   cout << "  datalog trim               trim data log\n";
   cout << "  datalog status             read data log status\n";
+  cout << "  datalog type               change datalog type to --log_type={fifo,omap}\n";
   cout << "  orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             deprecated -- clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs          deprecated -- list the current job-ids for orphans search\n";
@@ -720,6 +721,8 @@ enum class OPT {
   DATALOG_STATUS,
   DATALOG_AUTOTRIM,
   DATALOG_TRIM,
+  DATALOG_TYPE,
+  DATALOG_PRUNE,
   REALM_CREATE,
   REALM_DELETE,
   REALM_GET,
@@ -930,6 +933,8 @@ static SimpleCmd::Commands all_cmds = {
   { "datalog status", OPT::DATALOG_STATUS },
   { "datalog autotrim", OPT::DATALOG_AUTOTRIM },
   { "datalog trim", OPT::DATALOG_TRIM },
+  { "datalog type", OPT::DATALOG_TYPE },
+  { "datalog prune", OPT::DATALOG_PRUNE },
   { "realm create", OPT::REALM_CREATE },
   { "realm rm", OPT::REALM_DELETE },
   { "realm get", OPT::REALM_GET },
@@ -1018,6 +1023,15 @@ BIIndexType get_bi_index_type(const string& type_str) {
     return BIIndexType::OLH;
 
   return BIIndexType::Invalid;
+}
+
+log_type get_log_type(const string& type_str) {
+  if (strcasecmp(type_str.c_str(), "fifo") == 0)
+    return log_type::fifo;
+  if (strcasecmp(type_str.c_str(), "omap") == 0)
+    return log_type::omap;
+
+  return static_cast<log_type>(0xff);
 }
 
 void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
@@ -3124,6 +3138,7 @@ int main(int argc, const char **argv)
   uint64_t min_rewrite_stripe_size = 0;
 
   BIIndexType bi_index_type = BIIndexType::Plain;
+  std::optional<log_type> opt_log_type;
 
   string job_id;
   int num_shards = 0;
@@ -3446,6 +3461,14 @@ int main(int argc, const char **argv)
         cerr << "ERROR: invalid bucket index entry type" << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--log-type", (char*)NULL)) {
+      string log_type_str = val;
+      auto l = get_log_type(log_type_str);
+      if (l == static_cast<log_type>(0xff)) {
+        cerr << "ERROR: invalid log type" << std::endl;
+        return EINVAL;
+      }
+      opt_log_type = l;
     } else if (ceph_argparse_binary_flag(args, i, &is_master_int, NULL, "--master", (char*)NULL)) {
       is_master = (bool)is_master_int;
       is_master_set = true;
@@ -8782,6 +8805,36 @@ next:
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::DATALOG_TYPE) {
+    if (!opt_log_type) {
+      std::cerr << "log-type not specified." << std::endl;
+      return -EINVAL;
+    }
+    auto datalog = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->datalog_rados;
+    ret = datalog->change_format(*opt_log_type, null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: change_format(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::DATALOG_PRUNE) {
+    auto datalog = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->datalog_rados;
+    std::optional<uint64_t> through;
+    ret = datalog->trim_generations(through);
+
+    if (ret < 0) {
+      cerr << "ERROR: trim_generations(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    if (through) {
+      std::cout << "Pruned " << *through << " empty generations." << std::endl;
+    } else {
+      std::cout << "No empty generations." << std::endl;
     }
   }
 
