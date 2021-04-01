@@ -99,10 +99,6 @@ div.highlight {
   border: 1px solid #F5DBC6;
 }
 
-.rst-content .admonition.important a {
-  color: #E6E8E8;
-}
-
 /* table */
 .rst-content table.docutils {
   border: 0;
