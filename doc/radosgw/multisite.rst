@@ -770,17 +770,17 @@ realm. Alternatively, to change which realm is the default, execute:
 Delete a Realm
 ~~~~~~~~~~~~~~
 
-To delete a realm, execute ``realm delete`` and specify the realm name.
+To delete a realm, execute ``realm rm`` and specify the realm name.
 
 ::
 
-    # radosgw-admin realm delete --rgw-realm={realm-name}
+    # radosgw-admin realm rm --rgw-realm={realm-name}
 
 For example:
 
 ::
 
-    # radosgw-admin realm delete --rgw-realm=movies
+    # radosgw-admin realm rm --rgw-realm=movies
 
 Get a Realm
 ~~~~~~~~~~~
