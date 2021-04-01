@@ -13,7 +13,17 @@
  */
 
 
+#include <dlfcn.h>
 #include <errno.h>
+
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
+
 #include "ceph_ver.h"
 #include "include/types.h"
 #include "common/Formatter.h"
@@ -52,15 +62,73 @@ void usage(ostream &out)
   out << "  select_test <n>     select generated test object as in-memory object\n";
   out << "  is_deterministic    exit w/ success if type encodes deterministically\n";
 }
-  
+
+static constexpr string_view REGISTER_DENCODERS_FUNCTION = "register_dencoders\0";
+
+class DencoderPlugin {
+public:
+  DencoderPlugin(const fs::path& path) {
+    mod = dlopen(path.c_str(), RTLD_NOW);
+    if (mod == nullptr) {
+      std::cerr << "failed to dlopen(" << path << "): " << dlerror() << std::endl;
+    }
+  }
+  ~DencoderPlugin() {
+    if (mod) {
+      dlclose(mod);
+    }
+  }
+  int register_dencoders() {
+    assert(mod);
+    using register_dencoders_t = void (*)();
+    const auto register_dencoders =
+      reinterpret_cast<register_dencoders_t>(dlsym(mod, REGISTER_DENCODERS_FUNCTION.data()));
+    if (register_dencoders == nullptr) {
+      std::cerr << "failed to dlsym(" << REGISTER_DENCODERS_FUNCTION << ")" << std::endl;
+      return -1;
+    }
+    const unsigned nr_before = DencoderRegistry::instance().get().size();
+    register_dencoders();
+    const unsigned nr_after = DencoderRegistry::instance().get().size();
+    return nr_after - nr_before;
+  }
+  bool good() const {
+    return mod != nullptr;
+  }
+private:
+  void *mod = nullptr;
+};
+
+vector<DencoderPlugin> load_plugins()
+{
+  fs::path mod_dir{CEPH_DENC_MOD_DIR};
+  if (auto ceph_lib = getenv("CEPH_LIB"); ceph_lib) {
+    mod_dir = ceph_lib;
+  }
+  vector<DencoderPlugin> dencoder_plugins;
+  for (auto& entry : fs::directory_iterator(mod_dir)) {
+    static const string_view DENC_MOD_PREFIX = "denc-mod-";
+    if (entry.path().stem().string().compare(0, DENC_MOD_PREFIX.size(),
+					     DENC_MOD_PREFIX) != 0) {
+      continue;
+    }
+    DencoderPlugin plugin(entry);
+    if (!plugin.good()) {
+      continue;
+    }
+    int n = plugin.register_dencoders();
+    if (n <= 0) {
+      std::cerr << "fail to load dencoders from " << entry << std::endl;
+      continue;
+    }
+    dencoder_plugins.push_back(std::move(plugin));
+  }
+  return dencoder_plugins;
+}
+
 int main(int argc, const char **argv)
 {
-  register_common_dencoders();
-  register_mds_dencoders();
-  register_osd_dencoders();
-  register_rbd_dencoders();
-  register_rgw_dencoders();
-
+  auto plugins = load_plugins();
   auto& dencoders = DencoderRegistry::instance().get();
 
   vector<const char*> args;
