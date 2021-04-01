@@ -1,5 +1,12 @@
 tasks:
-- cephadm.shell:
-    host.a:
-      - ceph orch apply rgw foo --port=8000 "--placement=count-per-host:4 *"
-      - sleep 60
+- cephadm.apply:
+    specs:
+      - service_type: rgw
+        service_id: foo
+        placement:
+          count_per_host: 4
+          host_pattern: "*"
+        spec:
+          rgw_frontend_port: 8000
+- sleep:
+    interval: 60
