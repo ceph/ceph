@@ -771,7 +771,7 @@ class DummyChildPool {
       if (right_child->can_split()) {
         splitable_nodes.insert(right_child);
       }
-      return insert_parent(c, *impl->get_pivot_index(), right_child);
+      return apply_split_to_parent(c, right_child);
     }
 
     node_future<> insert_and_split(

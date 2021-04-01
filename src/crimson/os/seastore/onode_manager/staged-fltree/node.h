@@ -415,12 +415,14 @@ class Node
   // as child/non-root
   template <bool VALIDATE = true>
   void as_child(const search_position_t&, Ref<InternalNode>);
+
   struct parent_info_t {
     search_position_t position;
     Ref<InternalNode> ptr;
   };
   const parent_info_t& parent_info() const { return *_parent_info; }
-  node_future<> insert_parent(context_t, const key_view_t&, Ref<Node> right_node);
+
+  node_future<> apply_split_to_parent(context_t, Ref<Node>);
   node_future<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);
 
  private:
@@ -467,9 +469,7 @@ class InternalNode final : public Node {
 
   node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
 
-  node_future<> apply_child_split(
-      context_t, const search_position_t&, const key_view_t& left_key,
-      Ref<Node> left, Ref<Node> right);
+  node_future<> apply_child_split(context_t, Ref<Node> left, Ref<Node> right);
 
   template <bool VALIDATE>
   void do_track_child(Node& child) {
@@ -498,6 +498,13 @@ class InternalNode final : public Node {
     }
   }
 
+  void validate_child_tracked(const Node& child) const {
+    validate_child(child);
+    assert(tracked_child_nodes.find(child.parent_info().position) !=
+           tracked_child_nodes.end());
+    assert(tracked_child_nodes.find(child.parent_info().position)->second == &child);
+  }
+
   static node_future<Ref<InternalNode>> allocate_root(
       context_t, level_t, laddr_t, Super::URef&&);
 
@@ -516,7 +523,7 @@ class InternalNode final : public Node {
   node_future<Ref<Node>> get_or_track_child(context_t, const search_position_t&, laddr_t);
   void track_insert(
       const search_position_t&, match_stage_t, Ref<Node>, Ref<Node> nxt_child = nullptr);
-  void replace_track(const search_position_t&, Ref<Node> new_child, Ref<Node> old_child);
+  void replace_track(Ref<Node> new_child, Ref<Node> old_child);
   void track_split(const search_position_t&, Ref<InternalNode>);
   void validate_tracked_children() const {
 #ifndef NDEBUG
