@@ -82,7 +82,6 @@ public:
   }
 
   bool parse(std::string_view s);
-  bool parse(const char *start, char **end);
 
   DENC(entity_name_t, v, p) {
     denc(v._type, p);
