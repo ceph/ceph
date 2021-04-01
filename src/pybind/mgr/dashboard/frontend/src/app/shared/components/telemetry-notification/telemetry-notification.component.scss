@@ -1,3 +1,17 @@
+@use './src/styles/vendor/variables' as vv;
+
 ::ng-deep cd-telemetry-notification .no-margin-bottom {
   margin-bottom: 0;
+}
+
+.activate-button {
+  background-color: vv.$barley-white;
+  border: vv.$gray-700 solid 0.5px;
+  border-radius: 10%;
+  padding: 0.1rem 0.4rem;
+}
+
+.activate-text {
+  color: vv.$gray-700;
+  font-weight: bold;
 }
