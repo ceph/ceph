@@ -190,16 +190,19 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
 
   template<class Func>
   static auto handle(Func&& func) {
-    static_assert(std::is_invocable_v<Func, ErrorT>);
     return [
       func = std::forward<Func>(func)
     ] (stateful_error_t<ErrorT>&& e) mutable -> decltype(auto) {
       try {
         std::rethrow_exception(e.ep);
       } catch (const ErrorT& obj) {
-        return std::invoke(std::forward<Func>(func), obj);
+        if constexpr (std::is_invocable_v<Func, decltype(obj)>) {
+          return std::invoke(std::forward<Func>(func), obj);
+        } else {
+          return std::invoke(std::forward<Func>(func));
+        }
       }
-      ceph_abort_msg("exception type mismatch – impossible!");
+      ceph_abort_msg("exception type mismatch -- impossible!");
     };
   }
 
@@ -398,11 +401,14 @@ private:
       // 2) isn't already included in the errorator's error set.
       // It's enough to negate contains_once_v as any errorator<...>
       // type is already guaranteed to be free of duplications.
-      using next_errorator = std::conditional_t<
+      using _next_errorator = std::conditional_t<
         is_error_v<ErrorVisitorRetsHeadT> &&
           !step_errorator::template contains_once_v<ErrorVisitorRetsHeadT>,
         typename step_errorator::template extend<ErrorVisitorRetsHeadT>,
         step_errorator>;
+      using maybe_head_ertr = get_errorator_t<ErrorVisitorRetsHeadT>;
+      using next_errorator =
+	typename _next_errorator::template extend_ertr<maybe_head_ertr>;
 
     public:
       using type = typename make_errorator<next_errorator,

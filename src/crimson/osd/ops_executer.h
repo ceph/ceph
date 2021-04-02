@@ -38,7 +38,7 @@ class OSDOp;
 
 namespace crimson::osd {
 
-// PgOpsExecuter -- a class for executing ops targeting a certain object.
+// OpsExecuter -- a class for executing ops targeting a certain object.
 class OpsExecuter {
   using call_errorator = crimson::errorator<
     crimson::stateful_ec,
@@ -166,7 +166,7 @@ private:
     class OSDOp& osd_op,
     const class ObjectState& os);
 
-  hobject_t &get_target() const {
+  const hobject_t &get_target() const {
     return obc->obs.oi.soid;
   }
 
