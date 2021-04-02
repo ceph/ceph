@@ -74,7 +74,16 @@ class NodeImpl {
   virtual nextent_state_t get_extent_state() const = 0;
   virtual void prepare_mutate(context_t) = 0;
   virtual bool is_level_tail() const = 0;
-  virtual bool is_empty() const = 0;
+
+  /* Invariants for num_keys and num_values:
+   * - for leaf node and non-tail internal node, num_keys == num_values;
+   * - for tail internal node, num_keys + 1 == num_values;
+   * - all node must have at least 1 value, except the root leaf node;
+   * - the root internal node must have more than 1 values;
+   */
+  virtual void validate_non_empty() const = 0;
+  virtual bool is_keys_empty() const = 0;
+
   virtual level_t level() const = 0;
   virtual node_offset_t free_size() const = 0;
   virtual std::optional<key_view_t> get_pivot_index() const = 0;

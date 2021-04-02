@@ -93,17 +93,27 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   nextent_state_t get_extent_state() const override { return extent.get_state(); }
   void prepare_mutate(context_t c) override { return extent.prepare_mutate(c); }
   bool is_level_tail() const override { return extent.read().is_level_tail(); }
-  bool is_empty() const override { return extent.read().keys() == 0; }
+
+  void validate_non_empty() const override {
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      if (is_level_tail()) {
+        return;
+      }
+    }
+    assert(!is_keys_empty());
+  }
+  bool is_keys_empty() const override { return extent.read().keys() == 0; }
+
   level_t level() const override { return extent.read().level(); }
   node_offset_t free_size() const override { return extent.read().free_size(); }
 
   std::optional<key_view_t> get_pivot_index() const override {
-    assert(!is_empty());
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       if (is_level_tail()) {
         return std::nullopt;
       }
     }
+    assert(!is_keys_empty());
     key_view_t pivot_index;
     get_largest_slot(nullptr, &pivot_index, nullptr);
     return {pivot_index};
@@ -113,7 +123,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     node_stats_t stats;
     auto& node_stage = extent.read();
     key_view_t index_key;
-    if (node_stage.keys()) {
+    if (!is_keys_empty()) {
       STAGE_T::get_stats(node_stage, stats, index_key);
     }
     stats.size_persistent = node_stage_t::EXTENT_SIZE;
@@ -139,7 +149,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        << "B, value=" << stats.size_value << "B";
     os << ":\n  header: " << node_stage_t::header_size() << "B";
     size_t size = 0u;
-    if (node_stage.keys()) {
+    if (!is_keys_empty()) {
       STAGE_T::dump(node_stage, os, "  ", size, p_start);
     } else {
       size += node_stage_t::header_size();
@@ -195,7 +205,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void get_slot(const search_position_t& pos,
                 key_view_t* p_index_key = nullptr,
                 const value_t** pp_value = nullptr) const override {
-    assert(!is_empty());
+    assert(!is_keys_empty());
     assert(!pos.is_end());
     if (p_index_key && pp_value) {
       STAGE_T::template get_slot<true, true>(
@@ -214,7 +224,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void get_next_slot(search_position_t& pos,
                      key_view_t* p_index_key = nullptr,
                      const value_t** pp_value = nullptr) const override {
-    assert(!is_empty());
+    assert(!is_keys_empty());
     assert(!pos.is_end());
     bool find_next;
     if (p_index_key && pp_value) {
@@ -234,10 +244,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void get_largest_slot(search_position_t* p_pos = nullptr,
                         key_view_t* p_index_key = nullptr,
                         const value_t** pp_value = nullptr) const override {
-    assert(!is_empty());
-    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      assert(!is_level_tail());
-    }
+    assert(!is_keys_empty());
     if (p_pos && p_index_key && pp_value) {
       STAGE_T::template get_largest_slot<true, true, true>(
           extent.read(), &cast_down_fill_0<STAGE>(*p_pos), p_index_key, pp_value);
@@ -255,11 +262,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       key_view_t* index_key=nullptr, marker_t={}) const override {
     auto& node_stage = extent.read();
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      if (unlikely(node_stage.keys() == 0)) {
+      if (unlikely(is_keys_empty())) {
         history.set<STAGE_LEFT>(MatchKindCMP::LT);
         return lookup_result_t<NODE_TYPE>::end();
       }
     }
+    assert(!is_keys_empty());
 
     typename STAGE_T::result_t result_raw;
     if (index_key) {
@@ -604,8 +612,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       auto& node_stage = extent.read();
       match_stage_t insert_stage;
       node_offset_t insert_size;
-      if (unlikely(!node_stage.keys())) {
+      if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
+        assert(is_level_tail());
         insert_stage = STAGE;
         insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, value);
       } else {
@@ -626,8 +635,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const MatchHistory& history, match_stat_t mstat,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      if (unlikely(is_empty())) {
+      if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
+        assert(is_level_tail());
         return {STAGE, STAGE_T::template insert_size<KeyT::HOBJ>(key, value)};
       } else {
         return STAGE_T::evaluate_insert(

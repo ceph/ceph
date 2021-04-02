@@ -715,7 +715,9 @@ class DummyChildPool {
     level_t level() const override { return 0u; }
     void prepare_mutate(context_t) override {
       ceph_abort("impossible path"); }
-    bool is_empty() const override {
+    void validate_non_empty() const override {
+      ceph_abort("impossible path"); }
+    bool is_keys_empty() const override {
       ceph_abort("impossible path"); }
     node_offset_t free_size() const override {
       ceph_abort("impossible path"); }
