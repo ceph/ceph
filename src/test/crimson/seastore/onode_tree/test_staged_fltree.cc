@@ -1214,16 +1214,19 @@ TEST_F(d_seastore_tm_test_t, 6_random_insert_leaf_node)
       auto t = tm->create_transaction();
       tree->bootstrap(*t).unsafe_get();
       tm->submit_transaction(std::move(t)).unsafe_get();
+      segment_cleaner->run_until_halt().get0();
     }
     {
       auto t = tm->create_transaction();
       tree->insert(*t).unsafe_get();
       tm->submit_transaction(std::move(t)).unsafe_get();
+      segment_cleaner->run_until_halt().get0();
     }
     {
       auto t = tm->create_transaction();
       tree->get_stats(*t).unsafe_get();
       tm->submit_transaction(std::move(t)).unsafe_get();
+      segment_cleaner->run_until_halt().get0();
     }
     if constexpr (TEST_SEASTORE) {
       logger().info("seastore replay begin");
