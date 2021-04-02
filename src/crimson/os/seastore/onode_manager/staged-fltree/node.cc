@@ -494,7 +494,7 @@ InternalNode::InternalNode(InternalNodeImpl* impl, NodeImplURef&& impl_ref)
 node_future<Ref<tree_cursor_t>>
 InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
 {
-  assert(!impl->is_empty());
+  impl->validate_non_empty();
   if (pos.is_end()) {
     assert(impl->is_level_tail());
     return get_next_cursor_from_parent(c);
@@ -602,7 +602,7 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
   ).safe_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
     auto root = fresh_node.node;
-    assert(root->impl->is_empty());
+    assert(root->impl->is_keys_empty());
     auto p_value = root->impl->get_tail_value();
     fresh_node.mut.copy_in_absolute(
         const_cast<laddr_packed_t*>(p_value), old_root_addr);
@@ -614,7 +614,7 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
 node_future<Ref<tree_cursor_t>>
 InternalNode::lookup_smallest(context_t c)
 {
-  assert(!impl->is_empty());
+  impl->validate_non_empty();
   auto position = search_position_t::begin();
   const laddr_packed_t* p_child_addr;
   impl->get_slot(position, nullptr, &p_child_addr);
@@ -629,7 +629,7 @@ InternalNode::lookup_largest(context_t c)
 {
   // NOTE: unlike LeafNode::lookup_largest(), this only works for the tail
   // internal node to return the tail child address.
-  assert(!impl->is_empty());
+  impl->validate_non_empty();
   assert(impl->is_level_tail());
   auto p_child_addr = impl->get_tail_value();
   return get_or_track_child(c, search_position_t::end(), p_child_addr->value
@@ -653,7 +653,7 @@ InternalNode::lower_bound_tracked(
 node_future<> InternalNode::do_get_tree_stats(
     context_t c, tree_stats_t& stats)
 {
-  assert(!impl->is_empty());
+  impl->validate_non_empty();
   auto nstats = impl->get_stats();
   stats.size_persistent_internal += nstats.size_persistent;
   stats.size_filled_internal += nstats.size_filled;
@@ -882,7 +882,7 @@ LeafNode::get_kv(const search_position_t& pos) const
 node_future<Ref<tree_cursor_t>>
 LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
 {
-  assert(!impl->is_empty());
+  impl->validate_non_empty();
   search_position_t next_pos = pos;
   key_view_t index_key;
   const value_header_t* p_value_header = nullptr;
@@ -931,7 +931,7 @@ LeafNode::prepare_mutate_value_payload(context_t c)
 node_future<Ref<tree_cursor_t>>
 LeafNode::lookup_smallest(context_t)
 {
-  if (unlikely(impl->is_empty())) {
+  if (unlikely(impl->is_keys_empty())) {
     assert(is_root());
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
         tree_cursor_t::create_end(this));
@@ -947,7 +947,7 @@ LeafNode::lookup_smallest(context_t)
 node_future<Ref<tree_cursor_t>>
 LeafNode::lookup_largest(context_t)
 {
-  if (unlikely(impl->is_empty())) {
+  if (unlikely(impl->is_keys_empty())) {
     assert(is_root());
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
         tree_cursor_t::create_end(this));
