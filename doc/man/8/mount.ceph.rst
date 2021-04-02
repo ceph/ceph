@@ -100,8 +100,8 @@ Basic
     available modes are ``no`` and ``clean``. The default is ``no``.
 
     - ``no``: never attempt to reconnect when client detects that it has been
-       blocklisted. Blocklisted clients will not attempt to reconnect and
-       their operations will fail too.
+      blocklisted. Blocklisted clients will not attempt to reconnect and
+      their operations will fail too.
 
     - ``clean``: client reconnects to the Ceph cluster automatically when it
       detects that it has been blocklisted. During reconnect, client drops
@@ -204,6 +204,7 @@ Mount only part of the namespace/file system::
     mount.ceph :/some/directory/in/cephfs /mnt/mycephfs
 
 Mount non-default FS, in case cluster has multiple FSs::
+
     mount -t ceph :/ /mnt/mycephfs2 -o fs=mycephfs2
     
     or
@@ -240,7 +241,7 @@ Availability
 ============
 
 **mount.ceph** is part of Ceph, a massively scalable, open-source, distributed
-storage system. Please refer to the Ceph documentation at http://ceph.com/docs
+storage system. Please refer to the Ceph documentation at https://docs.ceph.com
 for more information.
 
 Feature Availability

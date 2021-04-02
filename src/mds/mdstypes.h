@@ -1333,7 +1333,6 @@ struct session_info_t {
 
   void clear_meta() {
     prealloc_inos.clear();
-    used_inos.clear();
     completed_requests.clear();
     completed_flushes.clear();
     client_metadata.clear();
@@ -1347,7 +1346,6 @@ struct session_info_t {
   entity_inst_t inst;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
-  interval_set<inodeno_t> used_inos;       // journaling use
   client_metadata_t client_metadata;
   std::set<ceph_tid_t> completed_flushes;
   EntityName auth_name;

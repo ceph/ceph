@@ -53,9 +53,9 @@ class LogSegment {
 
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
   void purge_inodes_finish(interval_set<inodeno_t>& inos){
-    purge_inodes.subtract(inos);
+    purging_inodes.subtract(inos);
     if (NULL != purged_cb &&
-	purge_inodes.empty())
+	purging_inodes.empty())
       purged_cb->complete(0);
   }
   void set_purged_cb(MDSContext* c){
@@ -84,7 +84,7 @@ class LogSegment {
   elist<CInode*>  dirty_dirfrag_dirfragtree;
 
   set<CInode*> truncating_inodes;
-  interval_set<inodeno_t> purge_inodes;
+  interval_set<inodeno_t> purging_inodes;
   MDSContext* purged_cb = nullptr;
 
   map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable

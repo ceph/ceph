@@ -13,9 +13,6 @@ from teuthology.misc import sudo_write_file
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 
-from teuthology.contextutil import safe_while
-
-
 log = logging.getLogger(__name__)
 
 def for_teuthology(f):
@@ -137,7 +134,7 @@ class CephFSTestCase(CephTestCase):
         # In case anything is in the OSD blocklist list, clear it out.  This is to avoid
         # the OSD map changing in the background (due to blocklist expiry) while tests run.
         try:
-            self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "clear")
+            self.mds_cluster.mon_manager.run_cluster_cmd(args="osd blocklist clear")
         except CommandFailedError:
             # Fallback for older Ceph cluster
             blocklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
@@ -198,7 +195,6 @@ class CephFSTestCase(CephTestCase):
             self.recovery_fs.set_data_pool_name(self.fs.get_data_pool_name())
             self.recovery_fs.create()
             self.recovery_fs.getinfo(refresh=True)
-            self.recovery_fs.mds_restart()
             self.recovery_fs.wait_for_daemons()
 
         # Load an config settings of interest
@@ -384,13 +380,11 @@ class CephFSTestCase(CephTestCase):
         except contextutil.MaxWhileTries as e:
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
 
-    def _wait_until_scrub_complete(self, path="/", recursive=True):
-        out_json = self.fs.rank_tell(["scrub", "start", path] + ["recursive"] if recursive else [])
-        with safe_while(sleep=10, tries=10) as proceed:
-            while proceed():
-                out_json = self.fs.rank_tell(["scrub", "status"])
-                if out_json['status'] == "no active scrubs running":
-                    break;
+    def _wait_until_scrub_complete(self, path="/", recursive=True, timeout=100):
+        out_json = self.fs.run_scrub(["start", path] + ["recursive"] if recursive else [])
+        if not self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"],
+                                                 sleep=10, timeout=timeout):
+            log.info("timed out waiting for scrub to complete")
 
     def _wait_distributed_subtrees(self, count, status=None, rank=None, path=None):
         try:

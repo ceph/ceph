@@ -57,6 +57,7 @@ namespace librbd {
   template <typename> class PluginRegistry;
 
   namespace asio { struct ContextWQ; }
+  namespace crypto { class CryptoInterface; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -232,6 +233,8 @@ namespace librbd {
     journal::Policy *journal_policy = nullptr;
 
     ZTracer::Endpoint trace_endpoint;
+
+    crypto::CryptoInterface* crypto = nullptr;
 
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,

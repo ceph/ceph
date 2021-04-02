@@ -28,6 +28,15 @@ documentation:
   - man/**
   - "**/*.+(rst|md)"
 
+libcephsqlite:
+  - doc/rados/api/libcephsqlite.rst
+  - qa/suites/rados/basic/tasks/libcephsqlite.yaml
+  - qa/workunits/rados/test_libcephsqlite.sh
+  - src/SimpleRADOSStriper.*
+  - src/include/libcephsqlite.h
+  - src/libcephsqlite.cc
+  - src/test/libcephsqlite/**
+
 mon:
   - doc/man/8/ceph-mon.rst
   - doc/man/8/monmaptool.rst
@@ -66,7 +75,9 @@ cephadm:
   - doc/man/8/cephadm.rst
   - qa/suites/rados/cephadm/**
   - qa/tasks/cephadm.py
+  - qa/tasks/cephadm_cases
   - qa/tasks/mgr/test_cephadm_orchestrator.py
+  - qa/tasks/mgr/test_orchestrator_cli.py
   - qa/workunits/cephadm/**
   - src/cephadm/**
   - src/pybind/mgr/cephadm/**

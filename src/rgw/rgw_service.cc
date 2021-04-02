@@ -142,7 +142,7 @@ int RGWServices_Def::init(CephContext *cct,
     }
 
     r = datalog_rados->start(&zone->get_zone(),
-			     zone->get_zone_params(), cls.get(),
+			     zone->get_zone_params(),
 			     rados->get_rados_handle());
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;

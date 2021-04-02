@@ -417,13 +417,10 @@ void C_DiscardRequest<T>::setup_log_operations() {
   std::lock_guard locker(m_lock);
   GenericWriteLogEntries log_entries;
   for (auto &extent : this->image_extents) {
-    op = std::make_shared<DiscardLogOperation>(pwl.get_current_sync_point(),
-                                               extent.first,
-                                               extent.second,
-                                               m_discard_granularity_bytes,
-                                               this->m_dispatched_time,
-                                               m_perfcounter,
-                                               pwl.get_context());
+    op = pwl.m_builder->create_discard_log_operation(
+        pwl.get_current_sync_point(), extent.first, extent.second,
+        m_discard_granularity_bytes, this->m_dispatched_time, m_perfcounter,
+        pwl.get_context());
     log_entries.emplace_back(op->log_entry);
     break;
   }
@@ -433,6 +430,8 @@ void C_DiscardRequest<T>::setup_log_operations() {
     pwl.inc_last_op_sequence_num();
   }
   auto discard_req = this;
+  Context *on_write_append = pwl.get_current_sync_point()->prior_persisted_gather_new_sub();
+
   Context *on_write_persist = new LambdaContext(
     [this, discard_req](int r) {
       ldout(pwl.get_context(), 20) << "discard_req=" << discard_req
@@ -441,7 +440,8 @@ void C_DiscardRequest<T>::setup_log_operations() {
       discard_req->complete_user_request(r);
       discard_req->release_cell();
     });
-  op->init(current_sync_gen, persist_on_flush, pwl.get_last_op_sequence_num(), on_write_persist);
+  op->init_op(current_sync_gen, persist_on_flush, pwl.get_last_op_sequence_num(),
+              on_write_persist, on_write_append);
   pwl.add_into_log_map(log_entries, this);
 }
 

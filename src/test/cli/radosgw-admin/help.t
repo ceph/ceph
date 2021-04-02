@@ -138,6 +138,7 @@
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
+    datalog type               change datalog type to --log_type={fifo,omap}
     orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)
     orphans finish             deprecated -- clean up search for leaked rados objects
     orphans list-jobs          deprecated -- list the current job-ids for orphans search

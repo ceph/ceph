@@ -1,0 +1,41 @@
+os_type: centos
+os_version: "8.3"
+overrides:
+  selinux:
+    whitelist:
+      - scontext=system_u:system_r:logrotate_t:s0
+
+tasks:
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:octopus
+    cephadm_branch: octopus
+    cephadm_git_url: https://github.com/ceph/ceph
+    # avoid --cap-add=PTRACE + --privileged for older cephadm versions
+    allow_ptrace: false
+    # deploy additional mons the "old" (octopus) way
+    add_mons_via_daemon_add: true
+
+
+roles:
+- - mon.a
+  - mon.c
+  - mgr.y
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - client.0
+#  - ceph.rgw.realm.zone.a  # CLI change in v16 pacific
+  - node-exporter.a
+  - alertmanager.a
+- - mon.b
+  - mgr.x
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.1
+  - prometheus.a
+  - grafana.a
+  - node-exporter.b
+  - ceph.iscsi.iscsi.a

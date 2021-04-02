@@ -39,7 +39,10 @@ LBAInternalNode::lookup_ret LBAInternalNode::lookup(
   }
   assert(meta.begin <= addr);
   assert(meta.end > addr);
-  auto iter = lower_bound(addr);
+
+  [[maybe_unused]] auto [iter, biter] = bound(addr, addr + 1);
+  assert(iter != biter);
+  assert(iter + 1 == biter);
   return get_lba_btree_extent(
     c,
     this,
@@ -166,6 +169,11 @@ LBAInternalNode::mutate_internal_address_ret LBAInternalNode::mutate_internal_ad
     }
     auto iter = get_containing_child(laddr);
     if (iter->get_key() != laddr) {
+      logger().debug(
+	"LBAInternalNode::mutate_internal_address laddr {} "
+	"not found in extent {}",
+	laddr,
+	*this);
       return crimson::ct_error::enoent::make();
     }
 

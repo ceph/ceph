@@ -12,13 +12,13 @@
  *
  */
 #include "lockdep.h"
+#include <bitset>
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
-#define MAX_LOCKS  4096   // increase me as needed
 #define BACKTRACE_SKIP 2
 
 /******* Globals **********/
@@ -37,10 +37,13 @@ static lockdep_stopper_t lockdep_stopper;
 static ceph::unordered_map<std::string, int> lock_ids;
 static std::map<int, std::string> lock_names;
 static std::map<int, int> lock_refs;
-static char free_ids[MAX_LOCKS/8]; // bit set = free
+static constexpr size_t MAX_LOCKS = 128 * 1024;   // increase me as needed
+static std::bitset<MAX_LOCKS> free_ids; // bit set = free
 static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
-static char follows[MAX_LOCKS][MAX_LOCKS/8]; // follows[a][b] means b taken after a
-static ceph::BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
+static constexpr size_t NR_LOCKS = 4096; // the initial number of locks
+static std::vector<std::bitset<MAX_LOCKS>> follows(NR_LOCKS); // follows[a][b] means b taken after a
+static std::vector<std::map<int,ceph::BackTrace *>> follows_bt(NR_LOCKS);
+// upper bound of lock id
 unsigned current_maxid;
 int last_freed_id = -1;
 static bool free_ids_inited;
@@ -68,7 +71,7 @@ void lockdep_register_ceph_context(CephContext *cct)
     if (!free_ids_inited) {
       free_ids_inited = true;
       // FIPS zeroization audit 20191115: this memset is not security related.
-      memset((void*) &free_ids[0], 255, sizeof(free_ids));
+      free_ids.set();
     }
   }
   pthread_mutex_unlock(&lockdep_mutex);
@@ -93,9 +96,10 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     held.clear();
     lock_names.clear();
     lock_ids.clear();
-    // FIPS zeroization audit 20191115: these memsets are not security related.
-    memset((void*)&follows[0][0], 0, current_maxid * MAX_LOCKS/8);
-    memset((void*)&follows_bt[0][0], 0, sizeof(ceph::BackTrace*) * current_maxid * MAX_LOCKS);
+    std::for_each(follows.begin(), std::next(follows.begin(), current_maxid),
+                  [](auto& follow) { follow.reset(); });
+    std::for_each(follows_bt.begin(), std::next(follows_bt.begin(), current_maxid),
+                  [](auto& follow_bt) { follow_bt = {}; });
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
@@ -125,26 +129,21 @@ out:
 int lockdep_get_free_id(void)
 {
   // if there's id known to be freed lately, reuse it
-  if ((last_freed_id >= 0) && 
-     (free_ids[last_freed_id/8] & (1 << (last_freed_id % 8)))) {
+  if (last_freed_id >= 0 &&
+      free_ids.test(last_freed_id)) {
     int tmp = last_freed_id;
     last_freed_id = -1;
-    free_ids[tmp/8] &= 255 - (1 << (tmp % 8));
+    free_ids.reset(tmp);
     lockdep_dout(1) << "lockdep reusing last freed id " << tmp << dendl;
     return tmp;
   }
   
   // walk through entire array and locate nonzero char, then find
   // actual bit.
-  for (int i = 0; i < MAX_LOCKS / 8; ++i) {
-    if (free_ids[i] != 0) {
-      for (int j = 0; j < 8; ++j) {
-        if (free_ids[i] & (1 << j)) {
-          free_ids[i] &= 255 - (1 << j);
-          lockdep_dout(1) << "lockdep using id " << i * 8 + j << dendl;
-          return i * 8 + j;
-        }
-      }
+  for (size_t i = 0; i < free_ids.size(); ++i) {
+    if (free_ids.test(i)) {
+      free_ids.reset(i);
+      return i;
     }
   }
   
@@ -171,7 +170,11 @@ static int _lockdep_register(const char *name)
       ceph_abort();
     }
     if (current_maxid <= (unsigned)id) {
-        current_maxid = (unsigned)id + 1;
+      current_maxid = (unsigned)id + 1;
+      if (current_maxid == follows.size()) {
+        follows.resize(current_maxid + 1);
+        follows_bt.resize(current_maxid + 1);
+      }
     }
     lock_ids[name] = id;
     lock_names[id] = name;
@@ -215,15 +218,14 @@ void lockdep_unregister(int id)
   if (--refs == 0) {
     if (p != lock_names.end()) {
       // reset dependency ordering
-      // FIPS zeroization audit 20191115: this memset is not security related.
-      memset((void*)&follows[id][0], 0, MAX_LOCKS/8);
+      follows[id].reset();
       for (unsigned i=0; i<current_maxid; ++i) {
         delete follows_bt[id][i];
         follows_bt[id][i] = NULL;
 
         delete follows_bt[i][id];
         follows_bt[i][id] = NULL;
-        follows[i][id / 8] &= 255 - (1 << (id % 8));
+        follows[i].reset(id);
       }
 
       lockdep_dout(10) << "unregistered '" << name << "' from " << id << dendl;
@@ -231,7 +233,7 @@ void lockdep_unregister(int id)
       lock_names.erase(id);
     }
     lock_refs.erase(id);
-    free_ids[id/8] |= (1 << (id % 8));
+    free_ids.set(id);
     last_freed_id = id;
   } else if (g_lockdep) {
     lockdep_dout(20) << "have " << refs << " of '" << name << "' " <<
@@ -244,7 +246,7 @@ void lockdep_unregister(int id)
 // does b follow a?
 static bool does_follow(int a, int b)
 {
-  if (follows[a][b/8] & (1 << (b % 8))) {
+  if (follows[a].test(b)) {
     lockdep_dout(0) << "\n";
     *_dout << "------------------------------------" << "\n";
     *_dout << "existing dependency " << lock_names[a] << " (" << a << ") -> "
@@ -257,7 +259,7 @@ static bool does_follow(int a, int b)
   }
 
   for (unsigned i=0; i<current_maxid; i++) {
-    if ((follows[a][i/8] & (1 << (i % 8))) &&
+    if (follows[a].test(i) &&
 	does_follow(i, b)) {
       lockdep_dout(0) << "existing intermediate dependency " << lock_names[a]
           << " (" << a << ") -> " << lock_names[i] << " (" << i << ") at:\n";
@@ -305,8 +307,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
 	*_dout << dendl;
 	ceph_abort();
       }
-    }
-    else if (!(follows[p->first][id/8] & (1 << (id % 8)))) {
+    } else if (!follows[p->first].test(id)) {
       // new dependency
 
       // did we just create a cycle?
@@ -339,7 +340,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
         if (force_backtrace || lockdep_force_backtrace()) {
           bt = new ceph::BackTrace(BACKTRACE_SKIP);
         }
-        follows[p->first][id/8] |= 1 << (id % 8);
+        follows[p->first].set(id);
         follows_bt[p->first][id] = bt;
 	lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
 	//bt->print(*_dout);

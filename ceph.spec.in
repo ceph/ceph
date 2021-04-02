@@ -31,6 +31,14 @@
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
+%ifarch x86_64 ppc64le
+%bcond_without rbd_rwl_cache
+%bcond_without rbd_ssd_cache
+%global _system_pmdk 1
+%else
+%bcond_with rbd_rwl_cache
+%bcond_with rbd_ssd_cache
+%endif
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
 %else
@@ -43,9 +51,6 @@
 %bcond_without ocf
 %global luarocks_package_name luarocks
 %bcond_without lua_packages
-%bcond_without rbd_rwl_cache
-%bcond_without rbd_ssd_cache
-%global _system_pmdk 0
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
@@ -116,9 +121,11 @@
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
+%if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
 %global _source_payload w7T%{_smp_build_ncpus}.xzdio
 %global _binary_payload w7T%{_smp_build_ncpus}.xzdio
+%endif
 
 %define smp_limit_mem_per_job() %( \
   kb_per_job=%1 \
@@ -214,6 +221,7 @@ BuildRequires:	libtool
 BuildRequires:	libxml2-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
+BuildRequires:	libicu-devel
 BuildRequires:	parted
 BuildRequires:	patch
 BuildRequires:	perl
@@ -222,6 +230,7 @@ BuildRequires:  procps
 BuildRequires:	python%{python3_pkgversion}
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	snappy-devel
+BuildRequires:	sqlite-devel
 BuildRequires:	sudo
 BuildRequires:	pkgconfig(udev)
 BuildRequires:	util-linux
@@ -268,6 +277,10 @@ BuildRequires:  nlohmann_json-devel
 %endif
 BuildRequires:  libevent-devel
 BuildRequires:  yaml-cpp-devel
+%endif
+%if 0%{?_system_pmdk}
+BuildRequires:  libpmem-devel
+BuildRequires:  libpmemobj-devel
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
@@ -319,10 +332,6 @@ BuildRequires:  rdma-core-devel
 BuildRequires:	liblz4-devel >= 1.7
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
-%if 0%{?_system_pmdk}
-BuildRequires:  libpmem-devel
-BuildRequires:  libpmemobj-devel
-%endif
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
@@ -346,7 +355,9 @@ BuildRequires:	lz4-devel >= 1.7
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
+BuildRequires:	golang-github-prometheus
 BuildRequires:	libtool-ltdl-devel
+BuildRequires:	ninja-build
 BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-devel
 %ifarch x86_64
@@ -362,9 +373,11 @@ BuildRequires:	python%{python3_pkgversion}-werkzeug
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
 %if 0%{?suse_version}
+BuildRequires:	golang-github-prometheus-prometheus
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
+BuildRequires:	ninja
 BuildRequires:	python%{python3_pkgversion}-CherryPy
 BuildRequires:	python%{python3_pkgversion}-PyJWT
 BuildRequires:	python%{python3_pkgversion}-Routes
@@ -544,6 +557,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
+Requires:	    libcephsqlite = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
@@ -774,6 +788,7 @@ in realtime.
 %if %{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
+BuildArch:	noarch
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
@@ -910,6 +925,32 @@ Obsoletes:	python-rados < %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Ceph RADOS
 object store.
+
+%package -n libcephsqlite
+Summary:	SQLite3 VFS for Ceph
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
+Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+%description -n libcephsqlite
+A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+distributed object store.
+
+%package -n libcephsqlite-devel
+Summary:	SQLite3 VFS for Ceph headers
+%if 0%{?suse_version}
+Group:		Development/Libraries/C and C++
+%endif
+Requires:	sqlite-devel
+Requires:	libcephsqlite = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
+Provides:	libcephsqlite-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	libcephsqlite-devel < %{_epoch_prefix}%{version}-%{release}
+%description -n libcephsqlite-devel
+A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+distributed object store.
 
 %if 0%{with libradosstriper}
 %package -n libradosstriper1
@@ -1227,8 +1268,11 @@ export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 
 env | sort
 
-mkdir build
-cd build
+%{?!_vpath_builddir:%global _vpath_builddir %{_target_platform}}
+
+# TODO: drop this step once we can use `cmake -B`
+mkdir -p %{_vpath_builddir}
+pushd %{_vpath_builddir}
 cmake .. \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
@@ -1310,18 +1354,25 @@ cat ./CMakeFiles/CMakeOutput.log
 cat ./CMakeFiles/CMakeError.log
 %endif
 
+%if 0%{?suse_version}
+make %{_smp_mflags}
+%else
 %make_build
+%endif
+
+popd
 
 %if 0%{with make_check}
 %check
 # run in-tree unittests
-cd build
+pushd %{_vpath_builddir}
 ctest %{_smp_mflags}
+popd
 %endif
 
 
 %install
-pushd build
+pushd %{_vpath_builddir}
 %make_install
 # we have dropped sysvinit bits
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
@@ -1357,7 +1408,7 @@ touch %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 chmod 0600 %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 
 # firewall templates and /sbin/mount.ceph symlink
-%if 0%{?suse_version}
+%if 0%{?suse_version} && !0%{?usrmerged}
 mkdir -p %{buildroot}/sbin
 ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
@@ -1533,13 +1584,14 @@ exit 0
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
 %{_sbindir}/mount.ceph
-%if 0%{?suse_version}
+%if 0%{?suse_version} && !0%{?usrmerged}
 /sbin/mount.ceph
 %endif
 %if %{with lttng}
 %{_bindir}/rbd-replay-prep
 %endif
 %{_bindir}/ceph-post-file
+%{_libdir}/ceph/denc/denc-mod-*.so
 %{_tmpfilesdir}/ceph-common.conf
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
@@ -2143,6 +2195,16 @@ fi
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
 %{python3_sitearch}/rados-*.egg-info
+
+%files -n libcephsqlite
+%{_libdir}/libcephsqlite.so
+
+%post -n libcephsqlite -p /sbin/ldconfig
+
+%postun -n libcephsqlite -p /sbin/ldconfig
+
+%files -n libcephsqlite-devel
+%{_includedir}/libcephsqlite.h
 
 %if 0%{with libradosstriper}
 %files -n libradosstriper1

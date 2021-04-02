@@ -18,7 +18,6 @@ class StupidAllocator : public Allocator {
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
   int64_t num_free;     ///< total bytes in freelist
-  uint64_t bdev_block_size;
 
   template <typename K, typename V> using allocator_t =
     mempool::bluestore_alloc::pool_allocator<std::pair<const K, V>>;
@@ -38,9 +37,9 @@ class StupidAllocator : public Allocator {
 
 public:
   StupidAllocator(CephContext* cct,
-                  const std::string& name,
                   int64_t size,
-                  int64_t block_size);
+                  int64_t block_size,
+		  const std::string& name);
   ~StupidAllocator() override;
   const char* get_type() const override
   {

@@ -540,6 +540,9 @@ TEST(LibCephFS, Xattrs) {
   int fd = ceph_open(cmount, test_xattr_file, O_CREAT, 0666);
   ASSERT_GT(fd, 0);
 
+  // test removing non-existent xattr
+  ASSERT_EQ(-ENODATA, ceph_removexattr(cmount, test_xattr_file, "user.nosuchxattr"));
+
   char i = 'a';
   char xattrk[128];
   char xattrv[128];
@@ -810,6 +813,47 @@ TEST(LibCephFS, Fchmod) {
 
   ASSERT_EQ(ceph_write(cmount, fd, bytes, strlen(bytes), 0), (int)strlen(bytes));
   ceph_close(cmount, fd);
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, Lchmod) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+  sprintf(test_file, "test_perms_lchmod_%d", getpid());
+
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  // write some stuff
+  const char *bytes = "foobarbaz";
+  ASSERT_EQ(ceph_write(cmount, fd, bytes, strlen(bytes), 0), (int)strlen(bytes));
+  ceph_close(cmount, fd);
+
+  // Create symlink
+  char test_symlink[256];
+  sprintf(test_symlink, "test_lchmod_sym_%d", getpid());
+  ASSERT_EQ(ceph_symlink(cmount, test_file, test_symlink), 0);
+
+  // get symlink stat - lstat
+  struct ceph_statx stx_orig1;
+  ASSERT_EQ(ceph_statx(cmount, test_symlink, &stx_orig1, CEPH_STATX_ALL_STATS, AT_SYMLINK_NOFOLLOW), 0);
+
+  // Change mode on symlink file
+  ASSERT_EQ(ceph_lchmod(cmount, test_symlink, 0400), 0);
+  struct ceph_statx stx_orig2;
+  ASSERT_EQ(ceph_statx(cmount, test_symlink, &stx_orig2, CEPH_STATX_ALL_STATS, AT_SYMLINK_NOFOLLOW), 0);
+
+  // Compare modes
+  ASSERT_NE(stx_orig1.stx_mode, stx_orig2.stx_mode);
+  static const int permbits = S_IRWXU|S_IRWXG|S_IRWXO;
+  ASSERT_EQ(permbits&stx_orig1.stx_mode, 0777);
+  ASSERT_EQ(permbits&stx_orig2.stx_mode, 0400);
 
   ceph_shutdown(cmount);
 }
@@ -2028,7 +2072,7 @@ static void shutdown_racer_func()
 // See tracker #20988
 TEST(LibCephFS, ShutdownRace)
 {
-  const int nthreads = 128;
+  const int nthreads = 32;
   std::thread threads[nthreads];
 
   // Need a bunch of fd's for this test
@@ -2036,6 +2080,10 @@ TEST(LibCephFS, ShutdownRace)
   ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rold), 0);
   rnew = rold;
   rnew.rlim_cur = rnew.rlim_max;
+
+  cout << "Setting RLIMIT_NOFILE from " << rold.rlim_cur <<
+	  " to " << rnew.rlim_cur << std::endl;
+
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rnew), 0);
 
   for (int i = 0; i < nthreads; ++i)

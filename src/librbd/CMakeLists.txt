@@ -1,7 +1,3 @@
-if(Boost_VERSION VERSION_GREATER_EQUAL 1.74)
-  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
-endif()
-
 set(librbd_types_srcs
   journal/Types.cc
   mirroring_watcher/Types.cc
@@ -18,7 +14,7 @@ add_library(rbd_types STATIC
 
 if (WITH_RBD_RWL)
   target_link_libraries(rbd_types
-    PRIVATE pmem::pmemobj)
+    PUBLIC pmem::pmemobj)
 endif()
 
 set(librbd_internal_srcs
@@ -66,6 +62,8 @@ set(librbd_internal_srcs
   crypto/CryptoObjectDispatch.cc
   crypto/FormatRequest.cc
   crypto/LoadRequest.cc
+  crypto/ShutDownCryptoRequest.cc
+  crypto/Utils.cc
   crypto/openssl/DataCryptor.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
@@ -281,6 +279,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
       set(rbd_plugin_pwl_srcs
         ${rbd_plugin_pwl_srcs}
         cache/pwl/ssd/LogEntry.cc
+        cache/pwl/ssd/LogOperation.cc
         cache/pwl/ssd/ReadRequest.cc
         cache/pwl/ssd/Request.cc
         cache/pwl/ssd/WriteLog.cc)

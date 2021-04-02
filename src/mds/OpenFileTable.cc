@@ -745,7 +745,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 				 std::map<std::string, bufferlist> &values)
 {
   using ceph::decode;
-  int err = -EINVAL;
+  int err = -CEPHFS_EINVAL;
 
   auto decode_func = [this](unsigned idx, inodeno_t ino, bufferlist &bl) {
     auto p = bl.cbegin();

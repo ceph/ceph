@@ -354,7 +354,7 @@ public:
 
   /**
    * Returns the length of the buffer that got filled in, or -errno.
-   * If it returns -ERANGE you just need to increase the size of the
+   * If it returns -CEPHFS_ERANGE you just need to increase the size of the
    * buffer and try again.
    */
   int _getdents(dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
@@ -369,6 +369,7 @@ public:
   loff_t telldir(dir_result_t *dirp);
   void seekdir(dir_result_t *dirp, loff_t offset);
 
+  int may_delete(const char *relpath, const UserPerm& perms);
   int link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
   int unlink(const char *path, const UserPerm& perm);
   int rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
@@ -707,7 +708,6 @@ public:
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap &capsnap, int used);
-  void _flushed_cap_snap(Inode *in, snapid_t seq);
 
   void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
@@ -801,6 +801,36 @@ public:
   }
   std::pair<uint64_t, uint64_t> get_cap_hit_rates() {
     return std::make_pair(cap_hits, cap_misses);
+  }
+
+  void inc_opened_files() {
+    ++opened_files;
+  }
+  void dec_opened_files() {
+    --opened_files;
+  }
+  std::pair<uint64_t, uint64_t> get_opened_files_rates() {
+    return std::make_pair(opened_files, inode_map.size());
+  }
+
+  void inc_pinned_icaps() {
+    ++pinned_icaps;
+  }
+  void dec_pinned_icaps(uint64_t nr=1) {
+    pinned_icaps -= nr;
+  }
+  std::pair<uint64_t, uint64_t> get_pinned_icaps_rates() {
+    return std::make_pair(pinned_icaps, inode_map.size());
+  }
+
+  void inc_opened_inodes() {
+    ++opened_inodes;
+  }
+  void dec_opened_inodes() {
+    --opened_inodes;
+  }
+  std::pair<uint64_t, uint64_t> get_opened_inodes_rates() {
+    return std::make_pair(opened_inodes, inode_map.size());
   }
 
   xlist<Inode*> &get_dirty_list() { return dirty_list; }
@@ -1182,6 +1212,7 @@ private:
     MAY_READ = 4,
   };
 
+  std::unique_ptr<CephContext, std::function<void(CephContext*)>> cct_deleter;
 
   /* Flags for VXattr */
   static const unsigned VXATTR_RSTAT = 0x1;
@@ -1441,7 +1472,7 @@ private:
   ino_t last_used_faked_ino;
   ino_t last_used_faked_root;
 
-  int local_osd = -ENXIO;
+  int local_osd = -CEPHFS_ENXIO;
   epoch_t local_osd_epoch = 0;
 
   // mds requests
@@ -1483,6 +1514,10 @@ private:
 
   uint64_t cap_hits = 0;
   uint64_t cap_misses = 0;
+
+  uint64_t opened_files = 0;
+  uint64_t pinned_icaps = 0;
+  uint64_t opened_inodes = 0;
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;

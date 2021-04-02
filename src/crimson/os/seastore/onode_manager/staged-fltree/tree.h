@@ -240,13 +240,19 @@ class Btree {
     return btree_ertr::make_ready_future<size_t>(0u);
   }
 
-  btree_future<Cursor> erase(Cursor& pos) {
+  btree_future<Cursor> erase(Transaction &t, Cursor& pos) {
     // TODO
     return btree_ertr::make_ready_future<Cursor>(
         Cursor::make_end(this));
   }
 
-  btree_future<Cursor> erase(Cursor& first, Cursor& last) {
+  btree_future<Cursor> erase(Transaction &t, Cursor& first, Cursor& last) {
+    // TODO
+    return btree_ertr::make_ready_future<Cursor>(
+        Cursor::make_end(this));
+  }
+
+  btree_future<Cursor> erase(Transaction &t, Value &value) {
     // TODO
     return btree_ertr::make_ready_future<Cursor>(
         Cursor::make_end(this));

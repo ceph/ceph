@@ -73,7 +73,7 @@ public:
   inodeno_t ino = 0;
   uint64_t size = 0;
   file_layout_t layout;
-  compact_set<int64_t> old_pools;
+  std::vector<int64_t> old_pools;
   SnapContext snapc;
   fragtree_t fragtree;
 private:

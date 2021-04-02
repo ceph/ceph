@@ -1,7 +1,7 @@
 import errno
 import logging
 import os
-from typing import List, Any, Tuple, Dict, cast
+from typing import List, Any, Tuple, Dict, Optional, cast
 
 from mgr_module import HandleCommandResult
 
@@ -84,7 +84,10 @@ class GrafanaService(CephadmService):
             service_url
         )
 
-    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+    def ok_to_stop(self,
+                   daemon_ids: List[str],
+                   force: bool = False,
+                   known: Optional[List[str]] = None) -> HandleCommandResult:
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Grafana', 1)
         if warn and not force:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
@@ -175,7 +178,10 @@ class AlertmanagerService(CephadmService):
             service_url
         )
 
-    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+    def ok_to_stop(self,
+                   daemon_ids: List[str],
+                   force: bool = False,
+                   known: Optional[List[str]] = None) -> HandleCommandResult:
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Alertmanager', 1)
         if warn and not force:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
@@ -280,7 +286,10 @@ class PrometheusService(CephadmService):
             service_url
         )
 
-    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+    def ok_to_stop(self,
+                   daemon_ids: List[str],
+                   force: bool = False,
+                   known: Optional[List[str]] = None) -> HandleCommandResult:
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Prometheus', 1)
         if warn and not force:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
@@ -299,7 +308,10 @@ class NodeExporterService(CephadmService):
         assert self.TYPE == daemon_spec.daemon_type
         return {}, []
 
-    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+    def ok_to_stop(self,
+                   daemon_ids: List[str],
+                   force: bool = False,
+                   known: Optional[List[str]] = None) -> HandleCommandResult:
         # since node exporter runs on each host and cannot compromise data, no extra checks required
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'

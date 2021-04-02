@@ -129,7 +129,7 @@ struct omap_manager_test_t :
     const omap_root_t &omap_root,
     Transaction &t,
     const std::optional<std::string> &start,
-    size_t max = MAX_SIZE) {
+    size_t max = 128) {
 
     if (start) {
       logger().debug("list on {}", *start);
@@ -137,8 +137,10 @@ struct omap_manager_test_t :
       logger().debug("list on start");
     }
 
+    auto config = OMapManager::omap_list_config_t::with_max(max);
+    config.max_result_size = max;
     auto [complete, results] = omap_manager->omap_list(
-      omap_root, t, start, max
+      omap_root, t, start, config
     ).unsafe_get0();
 
     auto it = start ?
@@ -183,6 +185,11 @@ struct omap_manager_test_t :
     omap_manager = omap_manager::create_omap_manager(*tm);
     logger().debug("{}: end", __func__);
   }
+
+  void submit_transaction(TransactionRef &&t) {
+    tm->submit_transaction(std::move(t)).unsafe_get0();
+    segment_cleaner->run_until_halt().get0();
+  }
 };
 
 TEST_F(omap_manager_test_t, basic)
@@ -192,7 +199,7 @@ TEST_F(omap_manager_test_t, basic)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
 
     string key = "owner";
@@ -203,7 +210,7 @@ TEST_F(omap_manager_test_t, basic)
       logger().debug("first transaction");
       set_key(omap_root, *t, key, val);
       get_value(omap_root, *t, key);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     {
       auto t = tm->create_transaction();
@@ -211,13 +218,13 @@ TEST_F(omap_manager_test_t, basic)
       get_value(omap_root, *t, key);
       rm_key(omap_root, *t, key);
       get_value(omap_root, *t, key);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     {
       auto t = tm->create_transaction();
       logger().debug("third transaction");
       get_value(omap_root, *t, key);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
   });
 }
@@ -229,7 +236,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     for (unsigned i = 0; i < 40; i++) {
       auto t = tm->create_transaction();
@@ -241,7 +248,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split)
         }
       }
       logger().debug("force split submit transaction i = {}", i);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
       check_mappings(omap_root);
     }
   });
@@ -254,7 +261,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
 
     for (unsigned i = 0; i < 80; i++) {
@@ -267,7 +274,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
         }
       }
       logger().debug("submitting transaction");
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
       if (i % 50 == 0) {
         check_mappings(omap_root);
       }
@@ -281,7 +288,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
 
       if (i % 10 == 0) {
         logger().debug("submitting transaction i= {}", i);
-        tm->submit_transaction(std::move(t)).unsafe_get();
+        submit_transaction(std::move(t));
         t = tm->create_transaction();
       }
       if (i % 100 == 0) {
@@ -292,7 +299,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
       i++;
     }
     logger().debug("finally submitting transaction ");
-    tm->submit_transaction(std::move(t)).unsafe_get();
+    submit_transaction(std::move(t));
   });
 }
 
@@ -303,7 +310,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
 
     for (unsigned i = 0; i < 50; i++) {
@@ -316,7 +323,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
         }
       }
       logger().debug("submitting transaction");
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
       if (i % 50 == 0) {
         check_mappings(omap_root);
       }
@@ -331,7 +338,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
 
       if (i % 10 == 0) {
       logger().debug("submitting transaction i= {}", i);
-        tm->submit_transaction(std::move(t)).unsafe_get();
+        submit_transaction(std::move(t));
         t = tm->create_transaction();
       }
       if (i % 50 == 0) {
@@ -344,7 +351,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
  break;
     }
     logger().debug("finally submitting transaction ");
-    tm->submit_transaction(std::move(t)).unsafe_get();
+    submit_transaction(std::move(t));
     check_mappings(omap_root);
   });
 }
@@ -356,7 +363,7 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     string temp;
     for (unsigned i = 0; i < 40; i++) {
@@ -371,7 +378,7 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
         }
       }
       logger().debug("force split submit transaction i = {}", i);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
       check_mappings(omap_root);
     }
 
@@ -388,7 +395,7 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
     {
       auto t = tm->create_transaction();
       clear(omap_root, *t);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
   });
 }
@@ -400,7 +407,7 @@ TEST_F(omap_manager_test_t, internal_force_split)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     for (unsigned i = 0; i < 10; i++) {
       logger().debug("opened split transaction");
@@ -413,7 +420,7 @@ TEST_F(omap_manager_test_t, internal_force_split)
         }
       }
       logger().debug("submitting transaction i = {}", i);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     check_mappings(omap_root);
   });
@@ -426,7 +433,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
 
     for (unsigned i = 0; i < 8; i++) {
@@ -440,7 +447,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
         }
       }
       logger().debug("submitting transaction");
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     auto t = tm->create_transaction();
     int i = 0;
@@ -450,7 +457,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
 
       if (i % 10 == 0) {
       logger().debug("submitting transaction i= {}", i);
-        tm->submit_transaction(std::move(t)).unsafe_get();
+        submit_transaction(std::move(t));
         t = tm->create_transaction();
       }
       if (i % 50 == 0) {
@@ -461,7 +468,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
       i++;
     }
     logger().debug("finally submitting transaction ");
-    tm->submit_transaction(std::move(t)).unsafe_get();
+    submit_transaction(std::move(t));
     check_mappings(omap_root);
   });
 }
@@ -473,7 +480,7 @@ TEST_F(omap_manager_test_t, replay)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
       replay();
     }
 
@@ -488,7 +495,7 @@ TEST_F(omap_manager_test_t, replay)
         }
       }
       logger().debug("submitting transaction i = {}", i);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     replay();
     check_mappings(omap_root);
@@ -501,7 +508,7 @@ TEST_F(omap_manager_test_t, replay)
 
       if (i % 10 == 0) {
       logger().debug("submitting transaction i= {}", i);
-        tm->submit_transaction(std::move(t)).unsafe_get();
+        submit_transaction(std::move(t));
         replay();
         t = tm->create_transaction();
       }
@@ -513,7 +520,7 @@ TEST_F(omap_manager_test_t, replay)
       i++;
     }
     logger().debug("finally submitting transaction ");
-    tm->submit_transaction(std::move(t)).unsafe_get();
+    submit_transaction(std::move(t));
     replay();
     check_mappings(omap_root);
   });
@@ -527,7 +534,7 @@ TEST_F(omap_manager_test_t, internal_force_split_to_root)
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
 
     logger().debug("set big keys");
@@ -538,7 +545,7 @@ TEST_F(omap_manager_test_t, internal_force_split_to_root)
         set_random_key(omap_root, *t);
       }
       logger().debug("submitting transaction i = {}", i);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
      logger().debug("set small keys");
      for (unsigned i = 0; i < 100; i++) {
@@ -547,7 +554,7 @@ TEST_F(omap_manager_test_t, internal_force_split_to_root)
          set_random_key(omap_root, *t);
        }
       logger().debug("submitting transaction last");
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
      }
     check_mappings(omap_root);
   });

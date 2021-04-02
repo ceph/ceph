@@ -144,37 +144,37 @@ Enablement
 ----------
 
 
-``auth_cluster_required``
+.. confval:: auth_cluster_required
 
-:Description: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
-              ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
-              each other. Valid settings are ``cephx`` or ``none``.
+   If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
+   ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
+   each other. Valid settings are ``cephx`` or ``none``.
 
-:Type: String
-:Required: No
-:Default: ``cephx``.
-
-
-``auth_service_required``
-
-:Description: If enabled, the Ceph Storage Cluster daemons require Ceph Clients
-              to authenticate with the Ceph Storage Cluster in order to access
-              Ceph services. Valid settings are ``cephx`` or ``none``.
-
-:Type: String
-:Required: No
-:Default: ``cephx``.
+  :type: String
+  :required: No
+  :default: ``cephx``.
 
 
-``auth_client_required``
+.. confval:: auth_service_required
 
-:Description: If enabled, the Ceph Client requires the Ceph Storage Cluster to
-              authenticate with the Ceph Client. Valid settings are ``cephx``
-              or ``none``.
+   If enabled, the Ceph Storage Cluster daemons require Ceph Clients
+   to authenticate with the Ceph Storage Cluster in order to access
+   Ceph services. Valid settings are ``cephx`` or ``none``.
 
-:Type: String
-:Required: No
-:Default: ``cephx``.
+   :type: String
+   :required: No
+   :default: ``cephx``.
+
+
+.. confval:: auth_client_required
+
+   If enabled, the Ceph Client requires the Ceph Storage Cluster to
+   authenticate with the Ceph Client. Valid settings are ``cephx``
+   or ``none``.
+
+   :type: String
+   :required: No
+   :default: ``cephx``.
 
 
 .. index:: keys; keyring
@@ -206,28 +206,31 @@ You may specify the key itself in the Ceph configuration file using the ``key``
 setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 
 
-``keyring``
+.. confval:: keyring
 
-:Description: The path to the keyring file.
-:Type: String
-:Required: No
-:Default: ``/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin``
+   The path to the keyring file.
 
-
-``keyfile``
-
-:Description: The path to a key file (i.e,. a file containing only the key).
-:Type: String
-:Required: No
-:Default: None
+  :type: String
+  :required: No
+  :default: ``/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin``
 
 
-``key``
+.. confval:: keyfile
 
-:Description: The key (i.e., the text string of the key itself). Not recommended.
-:Type: String
-:Required: No
-:Default: None
+   The path to a key file (i.e,. a file containing only the key).
+
+   :type: String
+   :required: No
+   :default: None
+
+
+.. confval:: key
+
+   The key (i.e., the text string of the key itself). Not recommended.
+
+   :type: String
+   :required: No
+   :default: None
 
 
 Daemon Keyrings
@@ -295,61 +298,61 @@ Ceph, and so you can enable/disable signatures for messages between Ceph daemons
 Note that even with signatures enabled data is not encrypted in
 flight.
 
-``cephx_require_signatures``
+.. confval:: cephx_require_signatures
 
-:Description: If set to ``true``, Ceph requires signatures on all message
-              traffic between the Ceph Client and the Ceph Storage Cluster, and
-              between daemons comprising the Ceph Storage Cluster.
+   If set to ``true``, Ceph requires signatures on all message
+   traffic between the Ceph Client and the Ceph Storage Cluster, and
+   between daemons comprising the Ceph Storage Cluster.
 
-	      Ceph Argonaut and Linux kernel versions prior to 3.19 do
-	      not support signatures; if such clients are in use this
-	      option can be turned off to allow them to connect.
+   Ceph Argonaut and Linux kernel versions prior to 3.19 do
+   not support signatures; if such clients are in use this
+   option can be turned off to allow them to connect.
 
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``cephx_cluster_require_signatures``
-
-:Description: If set to ``true``, Ceph requires signatures on all message
-              traffic between Ceph daemons comprising the Ceph Storage Cluster.
-
-:Type: Boolean
-:Required: No
-:Default: ``false``
+  :type: Boolean
+  :required: No
+  :default: ``false``
 
 
-``cephx_service_require_signatures``
+.. confval:: cephx_cluster_require_signatures
 
-:Description: If set to ``true``, Ceph requires signatures on all message
-              traffic between Ceph Clients and the Ceph Storage Cluster.
+   If set to ``true``, Ceph requires signatures on all message
+   traffic between Ceph daemons comprising the Ceph Storage Cluster.
 
-:Type: Boolean
-:Required: No
-:Default: ``false``
+   :type: Boolean
+   :required: No
+   :default: ``false``
 
 
-``cephx_sign_messages``
+.. confval:: cephx_service_require_signatures
 
-:Description: If the Ceph version supports message signing, Ceph will sign
-              all messages so they are more difficult to spoof.
+   If set to ``true``, Ceph requires signatures on all message
+   traffic between Ceph Clients and the Ceph Storage Cluster.
 
-:Type: Boolean
-:Default: ``true``
+   :type: Boolean
+   :required: No
+   :default: ``false``
+
+
+.. confval:: cephx_sign_messages
+
+   If the Ceph version supports message signing, Ceph will sign
+   all messages so they are more difficult to spoof.
+
+   :type: Boolean
+   :default: ``true``
 
 
 Time to Live
 ------------
 
-``auth_service_ticket_ttl``
+.. confval:: auth_service_ticket_ttl
 
-:Description: When the Ceph Storage Cluster sends a Ceph Client a ticket for
-              authentication, the Ceph Storage Cluster assigns the ticket a
-              time to live.
+   When the Ceph Storage Cluster sends a Ceph Client a ticket for
+   authentication, the Ceph Storage Cluster assigns the ticket a
+   time to live.
 
-:Type: Double
-:Default: ``60*60``
+   :type: Double
+   :default: ``60*60``
 
 
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping

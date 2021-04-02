@@ -363,6 +363,9 @@
 /* Define if RBD QCOW migration format is enabled */
 #cmakedefine WITH_RBD_MIGRATION_FORMAT_QCOW_V1
 
+/* Define if libcephsqlite is enabled */
+#cmakedefine WITH_LIBCEPHSQLITE
+
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
 

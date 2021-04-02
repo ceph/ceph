@@ -1,3 +1,6 @@
+.. _cephfs-nfs:
+
+
 =======================
 CephFS Exports over NFS
 =======================
@@ -25,6 +28,9 @@ This creates a common recovery pool for all NFS Ganesha daemons, new user based 
    orchestrator module (see :doc:`/mgr/orchestrator`) such as "mgr/cephadm", at
    least one such module must be enabled for it to work.
 
+   Currently, NFS Ganesha daemon deployed by cephadm listens on the standard
+   port. So only one daemon will be deployed on a host.
+
 ``<type>`` signifies the export type, which corresponds to the NFS Ganesha file
 system abstraction layer (FSAL). Permissible values are ``"cephfs`` or
 ``rgw``, but currently only ``cephfs`` is supported.
@@ -40,11 +46,11 @@ daemon running per node). For example, the following placement string means
 
     "host1,host2"
 
-and this placement specification says to deploy two NFS Ganesha daemons each
-on nodes host1 and host2 (for a total of four NFS Ganesha daemons in the
+and this placement specification says to deploy single NFS Ganesha daemon each
+on nodes host1 and host2 (for a total of two NFS Ganesha daemons in the
 cluster)::
 
-    "4 host1,host2"
+    "2 host1,host2"
 
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
@@ -213,6 +219,68 @@ where:
 ``<clusterid>`` is the NFS Ganesha cluster ID.
 
 ``<binding>`` is the pseudo root path (must be an absolute path).
+
+
+Update CephFS Export
+====================
+
+.. code:: bash
+
+    $ ceph nfs export update -i <json_file>
+
+This updates the cephfs export specified in the json file. Export in json
+format can be fetched with above get command. For example::
+
+   $ ceph nfs export get vstart /cephfs > update_cephfs_export.json
+   $ cat update_cephfs_export.json
+   {
+     "export_id": 1,
+     "path": "/",
+     "cluster_id": "vstart",
+     "pseudo": "/cephfs",
+     "access_type": "RW",
+     "squash": "no_root_squash",
+     "security_label": true,
+     "protocols": [
+       4
+     ],
+     "transports": [
+       "TCP"
+     ],
+     "fsal": {
+       "name": "CEPH",
+       "user_id": "vstart1",
+       "fs_name": "a",
+       "sec_label_xattr": ""
+     },
+     "clients": []
+   }
+   # Here in the fetched export, pseudo and access_type is modified. Then the modified file is passed to update interface
+   $ ceph nfs export update -i update_cephfs_export.json
+   $ cat update_cephfs_export.json
+   {
+     "export_id": 1,
+     "path": "/",
+     "cluster_id": "vstart",
+     "pseudo": "/cephfs_testing",
+     "access_type": "RO",
+     "squash": "no_root_squash",
+     "security_label": true,
+     "protocols": [
+       4
+     ],
+     "transports": [
+       "TCP"
+     ],
+     "fsal": {
+       "name": "CEPH",
+       "user_id": "vstart1",
+       "fs_name": "a",
+       "sec_label_xattr": ""
+     },
+     "clients": []
+   }
+
 
 Configuring NFS Ganesha to export CephFS with vstart
 ====================================================

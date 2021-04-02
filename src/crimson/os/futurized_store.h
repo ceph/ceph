@@ -37,9 +37,6 @@ public:
     virtual std::string key() {
       return {};
     }
-    virtual seastar::future<std::string> tail_key() {
-      return seastar::make_ready_future<std::string>();
-    }
     virtual ceph::buffer::list value() {
       return {};
     }

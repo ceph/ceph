@@ -994,7 +994,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   if (set_all) {
     UserQuotas quotas;
 
-    if ((op_ret = rgw_rest_get_json_input(store->ctx(), s, quotas, QUOTA_INPUT_MAX_LEN, NULL)) < 0) {
+    if ((op_ret = get_json_input(store->ctx(), s, quotas, QUOTA_INPUT_MAX_LEN, NULL)) < 0) {
       ldpp_dout(this, 20) << "failed to retrieve input" << dendl;
       return;
     }
@@ -1006,7 +1006,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
 
     if (!use_http_params) {
       bool empty;
-      op_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
+      op_ret = get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
       if (op_ret < 0) {
         ldpp_dout(this, 20) << "failed to retrieve input" << dendl;
         if (!empty)

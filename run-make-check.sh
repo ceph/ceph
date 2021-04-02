@@ -22,6 +22,10 @@ source src/script/run-make.sh
 
 set -e
 
+function in_jenkins() {
+    test -n "$JENKINS_HOME"
+}
+
 function run() {
     # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
     $DRY_RUN ulimit -n $(ulimit -Hn)
@@ -32,12 +36,23 @@ function run() {
 
     # increase the aio-max-nr, which is by default 65536. we could reach this
     # limit while running seastar tests and bluestore tests.
-    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * 16))
+    local m=16
+    if [ $(nproc) -gt $m ]; then
+        m=$(nproc)
+    fi
+    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * $(nproc)))
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-    if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
-        rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
-        return 1
+    if in_jenkins; then
+        if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure -T Test; then
+            # do not return failure, as the jenkins publisher will take care of this
+            rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+        fi
+    else
+        if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
+            rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+            return 1
+        fi
     fi
 }
 

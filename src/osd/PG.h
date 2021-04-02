@@ -33,7 +33,6 @@
 
 #include "PGLog.h"
 #include "OSDMap.h"
-#include "messages/MOSDPGLog.h"
 #include "include/str_list.h"
 #include "PGBackend.h"
 #include "PGPeeringEvent.h"
@@ -57,14 +56,10 @@ class OSD;
 class OSDService;
 class OSDShard;
 class OSDShardPGSlot;
-class MOSDPGScan;
-class MOSDPGBackfill;
-class MOSDPGInfo;
 
 class PG;
 struct OpRequest;
 typedef OpRequest::Ref OpRequestRef;
-class MOSDPGLog;
 class DynamicPerfStats;
 class PgScrubber;
 
@@ -185,6 +180,10 @@ public:
   requested_scrub_t m_planned_scrub;
   /// scrubbing state for both Primary & replicas
   bool is_scrub_active() const { return m_scrubber->is_scrub_active(); }
+
+  bool get_reserve_failed() const { return m_scrubber->get_reserve_failed(); }
+  void set_reserve_failed() { m_scrubber->set_reserve_failed(); }
+  void clear_reserve_failed() { m_scrubber->clear_reserve_failed(); }
 
 public:
   // -- members --

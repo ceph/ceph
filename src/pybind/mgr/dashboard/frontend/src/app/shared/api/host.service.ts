@@ -51,8 +51,19 @@ export class HostService {
     return this.http.get<string[]>(`${this.baseUIURL}/labels`);
   }
 
-  update(hostname: string, labels: string[]) {
-    return this.http.put(`${this.baseURL}/${hostname}`, { labels: labels });
+  update(
+    hostname: string,
+    updateLabels = false,
+    labels: string[] = [],
+    maintenance = false,
+    force = false
+  ) {
+    return this.http.put(`${this.baseURL}/${hostname}`, {
+      update_labels: updateLabels,
+      labels: labels,
+      maintenance: maintenance,
+      force: force
+    });
   }
 
   identifyDevice(hostname: string, device: string, duration: number) {

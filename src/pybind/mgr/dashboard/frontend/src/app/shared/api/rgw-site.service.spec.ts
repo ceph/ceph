@@ -16,6 +16,7 @@ describe('RgwSiteService', () => {
   beforeEach(() => {
     service = TestBed.inject(RgwSiteService);
     httpTesting = TestBed.inject(HttpTestingController);
+    RgwHelper.selectDaemon();
   });
 
   afterEach(() => {
@@ -28,7 +29,6 @@ describe('RgwSiteService', () => {
 
   it('should contain site endpoint in GET request', () => {
     service.get().subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`${service['url']}?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
   });
@@ -36,7 +36,6 @@ describe('RgwSiteService', () => {
   it('should add query param in GET request', () => {
     const query = 'placement-targets';
     service.get(query).subscribe();
-    RgwHelper.getCurrentDaemon();
     httpTesting.expectOne(
       `${service['url']}?${RgwHelper.DAEMON_QUERY_PARAM}&query=placement-targets`
     );

@@ -49,8 +49,7 @@ class TestCapFlush(CephFSTestCase):
         time.sleep(10)
 
         # Restart mds. Client will re-send the unsafe request and cap flush
-        self.fs.mds_stop()
-        self.fs.mds_fail_restart()
+        self.fs.rank_fail()
         self.fs.wait_for_daemons()
 
         mode = self.mount_a.run_shell(['stat', '-c' '%a', file_path]).stdout.getvalue().strip()

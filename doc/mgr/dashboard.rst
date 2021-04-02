@@ -410,9 +410,8 @@ have to do to get the Object Gateway management functionality working. The
 dashboard will try to automatically determine the host and port
 from the Ceph Manager's service map.
 
-If multiple zones are used, it will automatically determine the host within the
-master zone group and master zone. This should be sufficient for most setups,
-but in some circumstances you might want to set the host and port manually::
+In case of having several Object Gateways, you might want to set
+the default one by setting its host and port manually::
 
   $ ceph dashboard set-rgw-api-host <host>
   $ ceph dashboard set-rgw-api-port <port>

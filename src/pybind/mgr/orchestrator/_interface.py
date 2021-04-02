@@ -432,7 +432,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     @handle_orch_error
-    def apply(self, specs: Sequence["GenericSpec"]) -> List[str]:
+    def apply(self, specs: Sequence["GenericSpec"], no_overwrite: bool = False) -> List[str]:
         """
         Applies any spec
         """
@@ -576,32 +576,20 @@ class Orchestrator(object):
         """Zap/Erase a device (DESTROYS DATA)"""
         raise NotImplementedError()
 
-    def add_mon(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create mon daemon(s)"""
+    def add_daemon(self, spec: ServiceSpec) -> OrchResult[List[str]]:
+        """Create daemons daemon(s) for unmanaged services"""
         raise NotImplementedError()
 
     def apply_mon(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update mon cluster"""
         raise NotImplementedError()
 
-    def add_mgr(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create mgr daemon(s)"""
-        raise NotImplementedError()
-
     def apply_mgr(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update mgr cluster"""
         raise NotImplementedError()
 
-    def add_mds(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create MDS daemon(s)"""
-        raise NotImplementedError()
-
     def apply_mds(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update MDS cluster"""
-        raise NotImplementedError()
-
-    def add_rgw(self, spec: RGWSpec) -> OrchResult[List[str]]:
-        """Create RGW daemon(s)"""
         raise NotImplementedError()
 
     def apply_rgw(self, spec: RGWSpec) -> OrchResult[str]:
@@ -612,72 +600,36 @@ class Orchestrator(object):
         """Update ha-rgw daemons"""
         raise NotImplementedError()
 
-    def add_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create rbd-mirror daemon(s)"""
-        raise NotImplementedError()
-
     def apply_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update rbd-mirror cluster"""
-        raise NotImplementedError()
-
-    def add_nfs(self, spec: NFSServiceSpec) -> OrchResult[List[str]]:
-        """Create NFS daemon(s)"""
         raise NotImplementedError()
 
     def apply_nfs(self, spec: NFSServiceSpec) -> OrchResult[str]:
         """Update NFS cluster"""
         raise NotImplementedError()
 
-    def add_iscsi(self, spec: IscsiServiceSpec) -> OrchResult[List[str]]:
-        """Create iscsi daemon(s)"""
-        raise NotImplementedError()
-
     def apply_iscsi(self, spec: IscsiServiceSpec) -> OrchResult[str]:
         """Update iscsi cluster"""
-        raise NotImplementedError()
-
-    def add_prometheus(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create new prometheus daemon"""
         raise NotImplementedError()
 
     def apply_prometheus(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update prometheus cluster"""
         raise NotImplementedError()
 
-    def add_node_exporter(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new Node-Exporter service"""
-        raise NotImplementedError()
-
     def apply_node_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Node-Exporter daemon(s)"""
-        raise NotImplementedError()
-
-    def add_crash(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new crash service"""
         raise NotImplementedError()
 
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a crash daemon(s)"""
         raise NotImplementedError()
 
-    def add_grafana(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new grafana service"""
-        raise NotImplementedError()
-
     def apply_grafana(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a grafana service"""
         raise NotImplementedError()
 
-    def add_alertmanager(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new AlertManager service"""
-        raise NotImplementedError()
-
     def apply_alertmanager(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update an existing AlertManager daemon(s)"""
-        raise NotImplementedError()
-
-    def add_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[List[str]]:
-        """Create a new cephadm exporter daemon"""
         raise NotImplementedError()
 
     def apply_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
@@ -739,6 +691,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'keepalived': 'ha-rgw',
         'iscsi': 'iscsi',
         'rbd-mirror': 'rbd-mirror',
+        'cephfs-mirror': 'cephfs-mirror',
         'nfs': 'nfs',
         'grafana': 'grafana',
         'alertmanager': 'alertmanager',
@@ -762,6 +715,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'ha-rgw': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
         'rbd-mirror': ['rbd-mirror'],
+        'cephfs-mirror': ['cephfs-mirror'],
         'nfs': ['nfs'],
         'grafana': ['grafana'],
         'alertmanager': ['alertmanager'],
@@ -780,6 +734,7 @@ class UpgradeStatusSpec(object):
         self.in_progress = False  # Is an upgrade underway?
         self.target_image: Optional[str] = None
         self.services_complete: List[str] = []  # Which daemon types are fully updated?
+        self.progress: Optional[str] = None  # How many of the daemons have we upgraded
         self.message = ""  # Freeform description
 
 
@@ -836,6 +791,9 @@ class DaemonDescription(object):
                  memory_request: Optional[int] = None,
                  memory_limit: Optional[int] = None,
                  service_name: Optional[str] = None,
+                 ports: Optional[List[int]] = None,
+                 ip: Optional[str] = None,
+                 deployed_by: Optional[List[str]] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -888,7 +846,19 @@ class DaemonDescription(object):
         self.memory_request: Optional[int] = memory_request
         self.memory_limit: Optional[int] = memory_limit
 
+        self.ports: Optional[List[int]] = ports
+        self.ip: Optional[str] = ip
+
+        self.deployed_by = deployed_by
+
         self.is_active = is_active
+
+    def get_port_summary(self) -> str:
+        if not self.ports:
+            return ''
+        return ' '.join([
+            f"{self.ip or '*'}:{p}" for p in self.ports
+        ])
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -988,6 +958,8 @@ class DaemonDescription(object):
         if self.daemon_type == 'osd':
             out['osdspec_affinity'] = self.osdspec_affinity
         out['is_active'] = self.is_active
+        out['ports'] = self.ports
+        out['ip'] = self.ip
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:

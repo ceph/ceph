@@ -780,6 +780,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_store(key)
 
+    def get_localized_store(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
+        if r is None:
+            r = self._ceph_get_store(key)
+            if r is None:
+                r = default
+        return r
+
     def get_active_uri(self) -> str:
         return self._ceph_get_active_uri()
 
@@ -1033,8 +1041,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return ''
 
-    def _perfpath_to_path_labels(self, daemon, path):
-        # type: (str, str) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]
+    def _perfpath_to_path_labels(self, daemon: str,
+                                 path: str) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]:
         label_names = ("ceph_daemon",)  # type: Tuple[str, ...]
         labels = (daemon,)  # type: Tuple[str, ...]
 

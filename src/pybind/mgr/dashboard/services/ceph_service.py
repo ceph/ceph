@@ -67,22 +67,29 @@ class CephService(object):
         return [svc for _, svcs in service_map.items() for svc in svcs['services']]
 
     @classmethod
-    def get_service(cls, service_name, service_id):
+    def get_service_data_by_metadata_id(cls,
+                                        service_type: str,
+                                        metadata_id: str) -> Optional[Dict[str, Any]]:
         for server in mgr.list_servers():
             for service in server['services']:
-                if service['type'] == service_name:
-                    inst_id = service['id']
-                    if inst_id == service_id:
-                        metadata = mgr.get_metadata(service_name, inst_id)
-                        status = mgr.get_daemon_status(service_name, inst_id)
+                if service['type'] == service_type:
+                    metadata = mgr.get_metadata(service_type, service['id'])
+                    if metadata_id == metadata['id']:
                         return {
-                            'id': inst_id,
-                            'type': service_name,
+                            'id': metadata['id'],
+                            'service_map_id': str(service['id']),
+                            'type': service_type,
                             'hostname': server['hostname'],
-                            'metadata': metadata,
-                            'status': status
+                            'metadata': metadata
                         }
         return None
+
+    @classmethod
+    def get_service(cls, service_type: str, metadata_id: str) -> Optional[Dict[str, Any]]:
+        svc_data = cls.get_service_data_by_metadata_id(service_type, metadata_id)
+        if svc_data:
+            svc_data['status'] = mgr.get_daemon_status(svc_data['type'], svc_data['service_map_id'])
+        return svc_data
 
     @classmethod
     def get_pool_list(cls, application=None):
@@ -225,12 +232,20 @@ class CephService(object):
 
             for daemon in daemons:
                 svc_type, svc_id = daemon.split('.')
-                try:
-                    dev_smart_data = CephService.send_command(
-                        svc_type, 'smart', svc_id, devid=device['devid'])
-                except SendCommandError:
-                    # Try to retrieve SMART data from another daemon.
-                    continue
+                if 'osd' in svc_type:
+                    try:
+                        dev_smart_data = CephService.send_command(
+                            svc_type, 'smart', svc_id, devid=device['devid'])
+                    except SendCommandError:
+                        # Try to retrieve SMART data from another daemon.
+                        continue
+                else:
+                    try:
+                        dev_smart_data = CephService.send_command(
+                            svc_type, 'device get-health-metrics', svc_id, devid=device['devid'])
+                    except SendCommandError:
+                        # Try to retrieve SMART data from another daemon.
+                        continue
                 for dev_id, dev_data in dev_smart_data.items():
                     if 'error' in dev_data:
                         logger.warning(

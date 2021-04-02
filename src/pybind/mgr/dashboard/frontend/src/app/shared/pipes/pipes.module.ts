@@ -111,6 +111,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     MillisecondsPipe,
     NotAvailablePipe,
     UpperFirstPipe,
+    DurationPipe,
     MapPipe,
     TruncatePipe
   ]

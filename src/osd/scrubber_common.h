@@ -150,6 +150,10 @@ struct ScrubPgIF {
    */
   [[nodiscard]] virtual bool is_scrub_active() const = 0;
 
+  [[nodiscard]] virtual bool get_reserve_failed() const = 0;
+  virtual void set_reserve_failed() = 0;
+  virtual void clear_reserve_failed() = 0;
+
   /// are we waiting for resource reservation grants form our replicas?
   [[nodiscard]] virtual bool is_reserving() const = 0;
 

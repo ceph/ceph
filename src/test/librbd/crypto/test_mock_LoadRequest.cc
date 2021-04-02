@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/crypto/CryptoObjectDispatch.h"
+#include "librbd/crypto/Utils.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -44,7 +45,9 @@ struct TestMockCryptoLoadRequest : public TestMockFixture {
   C_SaferCond finished_cond;
   Context *on_finish = &finished_cond;
   MockEncryptionFormat* mock_encryption_format;
+  MockCryptoInterface* crypto;
   Context* load_context;
+  MockLoadRequest* mock_load_request;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -53,63 +56,52 @@ struct TestMockCryptoLoadRequest : public TestMockFixture {
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
     mock_image_ctx = new MockImageCtx(*ictx);
     mock_encryption_format = new MockEncryptionFormat();
+    crypto = new MockCryptoInterface();
+    mock_load_request = MockLoadRequest::create(
+          mock_image_ctx,
+          std::unique_ptr<MockEncryptionFormat>(mock_encryption_format),
+          on_finish);
   }
 
   void TearDown() override {
+    crypto->put();
     delete mock_image_ctx;
     TestMockFixture::TearDown();
   }
 
-  void expect_crypto_layer_exists_check(bool exists) {
-    EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, exists(
-            io::OBJECT_DISPATCH_LAYER_CRYPTO)).WillOnce(Return(exists));
+  void expect_test_journal_feature() {
+    expect_test_journal_feature(mock_image_ctx, false);
   }
 
-  void expect_test_journal_feature(bool has_journal=false) {
-    EXPECT_CALL(*mock_image_ctx, test_features(
+  void expect_test_journal_feature(MockImageCtx* ctx, bool has_journal=false) {
+    EXPECT_CALL(*ctx, test_features(
             RBD_FEATURE_JOURNALING)).WillOnce(Return(has_journal));
   }
 
   void expect_encryption_load() {
     EXPECT_CALL(*mock_encryption_format, load(
-            mock_image_ctx, _, _)).WillOnce(
-                    WithArgs<1, 2>(Invoke([this](
-                            ceph::ref_t<CryptoInterface>* result_crypto,
-                            Context* ctx) {
+            mock_image_ctx, _)).WillOnce(
+                    WithArgs<1>(Invoke([this](Context* ctx) {
                       load_context = ctx;
-                      *result_crypto = new MockCryptoInterface();
     })));
   }
+
 };
 
 TEST_F(TestMockCryptoLoadRequest, CryptoAlreadyLoaded) {
-  auto mock_load_request = MockLoadRequest::create(
-          mock_image_ctx,
-          std::unique_ptr<MockEncryptionFormat>(mock_encryption_format),
-          on_finish);
-  expect_crypto_layer_exists_check(true);
+  mock_image_ctx->crypto = new MockCryptoInterface();
   mock_load_request->send();
   ASSERT_EQ(-EEXIST, finished_cond.wait());
 }
 
 TEST_F(TestMockCryptoLoadRequest, JournalEnabled) {
-  auto mock_load_request = MockLoadRequest::create(
-          mock_image_ctx,
-          std::unique_ptr<MockEncryptionFormat>(mock_encryption_format),
-          on_finish);
-  expect_crypto_layer_exists_check(false);
-  expect_test_journal_feature(true);
+  expect_test_journal_feature(mock_image_ctx, true);
   mock_load_request->send();
   ASSERT_EQ(-ENOTSUP, finished_cond.wait());
 }
 
 TEST_F(TestMockCryptoLoadRequest, LoadFail) {
-  auto mock_load_request = MockLoadRequest::create(
-          mock_image_ctx,
-          std::unique_ptr<MockEncryptionFormat>(mock_encryption_format),
-          on_finish);
-  expect_crypto_layer_exists_check(false);
-  expect_test_journal_feature(false);
+  expect_test_journal_feature();
   expect_encryption_load();
   mock_load_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
@@ -118,19 +110,15 @@ TEST_F(TestMockCryptoLoadRequest, LoadFail) {
 }
 
 TEST_F(TestMockCryptoLoadRequest, Success) {
-  auto mock_load_request = MockLoadRequest::create(
-          mock_image_ctx,
-          std::unique_ptr<MockEncryptionFormat>(mock_encryption_format),
-          on_finish);
-  expect_crypto_layer_exists_check(false);
-  expect_test_journal_feature(false);
+  mock_image_ctx->parent = nullptr;
+  expect_test_journal_feature(mock_image_ctx, false);
   expect_encryption_load();
   mock_load_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, register_dispatch(_));
-  EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, register_dispatch(_));
+  EXPECT_CALL(*mock_encryption_format, get_crypto()).WillOnce(Return(crypto));
   load_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_EQ(crypto, mock_image_ctx->crypto);
 }
 
 } // namespace crypto

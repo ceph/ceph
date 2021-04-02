@@ -4,6 +4,8 @@ export enum OrchestratorFeature {
   HOST_DELETE = 'remove_host',
   HOST_LABEL_ADD = 'add_host_label',
   HOST_LABEL_REMOVE = 'remove_host_label',
+  HOST_MAINTENANCE_ENTER = 'enter_host_maintenance',
+  HOST_MAINTENANCE_EXIT = 'exit_host_maintenance',
 
   SERVICE_LIST = 'describe_service',
   SERVICE_CREATE = 'apply',

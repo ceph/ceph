@@ -91,7 +91,8 @@ Administration
     Health messages <health-messages>
     Upgrading old file systems <upgrading>
     CephFS Top Utility <cephfs-top>
-
+    Scheduled Snapshots <snap-schedule>
+    CephFS Snapshot Mirroring <cephfs-mirroring>
 
 .. raw:: html
 
@@ -113,6 +114,7 @@ Mounting CephFS
     Mount CephFS: Prerequisites <mount-prerequisites>
     Mount CephFS using Kernel Driver <mount-using-kernel-driver>
     Mount CephFS using FUSE <mount-using-fuse>
+    Mount CephFS on Windows <ceph-dokan>
     Use the CephFS Shell <cephfs-shell>
     Supported Features of Kernel Driver <kernel-features>
     Manual: ceph-fuse <../../man/8/ceph-fuse>

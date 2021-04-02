@@ -74,6 +74,18 @@ option {
   white-space: pre;
 }
 
+.icon-danger-color {
+  color: vv.$danger;
+}
+
+.icon-warning-color {
+  color: vv.$warning;
+}
+
+.border-warning {
+  border-left: 4px solid vv.$warning;
+}
+
 .border-danger {
   border-left: 4px solid vv.$danger;
 }

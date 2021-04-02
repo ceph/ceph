@@ -7,6 +7,7 @@
 #include "common/Formatter.h"
 #include "common/Thread.h"
 #include "mds/FSMap.h"
+#include "ServiceDaemon.h"
 #include "Types.h"
 
 namespace cephfs {
@@ -18,9 +19,9 @@ class PeerReplayerAdminSocketHook;
 class PeerReplayer {
 public:
   PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
-               const Filesystem &filesystem, const Peer &peer,
-               const std::set<std::string, std::less<>> &directories,
-               MountRef mount);
+               RadosRef local_cluster, const Filesystem &filesystem,
+               const Peer &peer, const std::set<std::string, std::less<>> &directories,
+               MountRef mount, ServiceDaemon *service_daemon);
   ~PeerReplayer();
 
   // initialize replayer for a peer
@@ -40,6 +41,9 @@ public:
 
 private:
   inline static const std::string PRIMARY_SNAP_ID_KEY = "primary_snap_id";
+
+  inline static const std::string SERVICE_DAEMON_FAILED_DIR_COUNT_KEY = "failure_count";
+  inline static const std::string SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY = "recovery_count";
 
   bool is_stopping() {
     return m_stopping;
@@ -101,6 +105,12 @@ private:
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
 
+  // stats sent to service daemon
+  struct ServiceDaemonStats {
+    uint64_t failed_dir_count = 0;
+    uint64_t recovered_dir_count = 0;
+  };
+
   struct SnapSyncStat {
     uint64_t nr_failures = 0; // number of consecutive failures
     boost::optional<time> last_failed; // lat failed timestamp
@@ -119,12 +129,22 @@ private:
     "cephfs_mirror_max_consecutive_failures_per_directory");
     auto &sync_stat = m_snap_sync_stats.at(dir_path);
     sync_stat.last_failed = clock::now();
-    if (++sync_stat.nr_failures >= max_failures) {
+    if (++sync_stat.nr_failures >= max_failures && !sync_stat.failed) {
       sync_stat.failed = true;
+      ++m_service_daemon_stats.failed_dir_count;
+      m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, m_peer,
+                                                     SERVICE_DAEMON_FAILED_DIR_COUNT_KEY,
+                                                     m_service_daemon_stats.failed_dir_count);
     }
   }
   void _reset_failed_count(const std::string &dir_path) {
     auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    if (sync_stat.failed) {
+      ++m_service_daemon_stats.recovered_dir_count;
+      m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, m_peer,
+                                                     SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY,
+                                                     m_service_daemon_stats.recovered_dir_count);
+    }
     sync_stat.nr_failures = 0;
     sync_stat.failed = false;
     sync_stat.last_failed = boost::none;
@@ -199,12 +219,15 @@ private:
 
   CephContext *m_cct;
   FSMirror *m_fs_mirror;
+  RadosRef m_local_cluster;
+  Filesystem m_filesystem;
   Peer m_peer;
   // probably need to be encapsulated when supporting cancelations
   std::map<std::string, DirRegistry> m_registered;
   std::vector<std::string> m_directories;
   std::map<std::string, SnapSyncStat> m_snap_sync_stats;
   MountRef m_local_mount;
+  ServiceDaemon *m_service_daemon;
   PeerReplayerAdminSocketHook *m_asok_hook = nullptr;
 
   ceph::mutex m_lock;
@@ -213,6 +236,8 @@ private:
   MountRef m_remote_mount;
   bool m_stopping = false;
   SnapshotReplayers m_replayers;
+
+  ServiceDaemonStats m_service_daemon_stats;
 
   void run(SnapshotReplayerThread *replayer);
 

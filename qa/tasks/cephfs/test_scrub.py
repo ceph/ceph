@@ -1,6 +1,8 @@
 """
 Test CephFS scrub (distinct from OSD scrub) functionality
 """
+
+from io import BytesIO
 import logging
 from collections import namedtuple
 
@@ -12,8 +14,9 @@ ValidationError = namedtuple("ValidationError", ["exception", "backtrace"])
 
 
 class Workload(CephFSTestCase):
-    def __init__(self, filesystem, mount):
+    def __init__(self, test, filesystem, mount):
         super().__init__()
+        self._test =  test
         self._mount = mount
         self._filesystem = filesystem
         self._initial_state = None
@@ -43,9 +46,8 @@ class Workload(CephFSTestCase):
         default just wipe everything in the metadata pool
         """
         # Delete every object in the metadata pool
-        objects = self._filesystem.rados(["ls"]).split("\n")
-        for o in objects:
-            self._filesystem.rados(["rm", o])
+        pool = self._filesystem.get_metadata_pool_name()
+        self._filesystem.rados(["purge", pool, '--yes-i-really-really-mean-it'])
 
     def flush(self):
         """
@@ -91,21 +93,20 @@ class DupInodeWorkload(Workload):
         self._mount.write_n_mb("parent/child/childfile", 6)
 
     def damage(self):
-        temp_bin_path = "/tmp/10000000000.00000000_omap.bin"
         self._mount.umount_wait()
         self._filesystem.mds_asok(["flush", "journal"])
-        self._filesystem.mds_stop()
-        self._filesystem.rados(["getomapval", "10000000000.00000000",
-                                "parentfile_head", temp_bin_path])
-        self._filesystem.rados(["setomapval", "10000000000.00000000",
-                                "shadow_head"], stdin_file=temp_bin_path)
-        self._filesystem.set_ceph_conf('mds', 'mds hack allow loading invalid metadata', True)
-        self._filesystem.mds_restart()
+        self._filesystem.fail()
+        d = self._filesystem.radosmo(["getomapval", "10000000000.00000000", "parentfile_head", "-"])
+        self._filesystem.radosm(["setomapval", "10000000000.00000000", "shadow_head"], stdin=BytesIO(d))
+        self._test.config_set('mds', 'mds_hack_allow_loading_invalid_metadata', True)
+        self._filesystem.set_joinable()
         self._filesystem.wait_for_daemons()
 
     def validate(self):
-        out_json = self._filesystem.rank_tell(["scrub", "start", "/", "recursive", "repair"])
+        out_json = self._filesystem.run_scrub(["start", "/", "recursive", "repair"])
         self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self._filesystem.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
         self.assertTrue(self._filesystem.are_daemons_healthy())
         return self._errors
 
@@ -133,8 +134,10 @@ class TestScrub(CephFSTestCase):
         # Apply any data damage the workload wants
         workload.damage()
 
-        out_json = self.fs.rank_tell(["scrub", "start", "/", "recursive", "repair"])
+        out_json = self.fs.run_scrub(["start", "/", "recursive", "repair"])
         self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
         # See that the files are present and correct
         errors = workload.validate()
@@ -162,14 +165,14 @@ class TestScrub(CephFSTestCase):
         That scrubbing new files does not lead to errors
         """
         workload.create_files(1000)
-        self._wait_until_scrub_complete()
+        self.fs.wait_until_scrub_complete()
         self.assertEqual(self._get_damage_count(), 0)
 
     def test_scrub_backtrace_for_new_files(self):
-        self._scrub_new_files(BacktraceWorkload(self.fs, self.mount_a))
+        self._scrub_new_files(BacktraceWorkload(self, self.fs, self.mount_a))
 
     def test_scrub_backtrace(self):
-        self._scrub(BacktraceWorkload(self.fs, self.mount_a))
+        self._scrub(BacktraceWorkload(self, self.fs, self.mount_a))
 
     def test_scrub_dup_inode(self):
-        self._scrub(DupInodeWorkload(self.fs, self.mount_a))
+        self._scrub(DupInodeWorkload(self, self.fs, self.mount_a))

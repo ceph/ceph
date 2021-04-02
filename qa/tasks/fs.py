@@ -5,9 +5,28 @@ CephFS sub-tasks.
 import logging
 import re
 
-from tasks.cephfs.filesystem import Filesystem
+from tasks.cephfs.filesystem import Filesystem, MDSCluster
 
 log = logging.getLogger(__name__)
+
+def ready(ctx, config):
+    """
+    That the file system is ready for clients.
+    """
+
+    if config is None:
+        config = {}
+    assert isinstance(config, dict), \
+        'task only accepts a dict for configuration'
+
+    timeout = config.get('timeout', 300)
+
+    mdsc = MDSCluster(ctx)
+    status = mdsc.status()
+
+    for filesystem in status.get_filesystems():
+        fs = Filesystem(ctx, fscid=filesystem['id'])
+        fs.wait_for_daemons(timeout=timeout, status=status)
 
 def clients_evicted(ctx, config):
     """
@@ -56,10 +75,10 @@ def clients_evicted(ctx, config):
         if mount is not None:
             if evicted:
                 log.info("confirming client {} is blocklisted".format(client))
-                assert mount.is_blocklisted()
+                assert fs.is_addr_blocklisted(mount.get_global_addr())
             elif client in no_session:
                 log.info("client {} should not be evicted but has no session with an MDS".format(client))
-                mount.is_blocklisted() # for debugging
+                fs.is_addr_blocklisted(mount.get_global_addr()) # for debugging
                 should_assert = True
     if should_assert:
         raise RuntimeError("some clients which should not be evicted have no session with an MDS?")

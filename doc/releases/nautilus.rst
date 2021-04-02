@@ -1,3 +1,223 @@
+========
+Nautilus
+========
+
+Nautilus is the 14th stable release of Ceph.  It is named after the
+nautilus, a family of cephalopods characterized by a whorled shell.
+
+
+v14.2.19 Nautilus
+=================
+
+This is the 19th update to the Ceph Nautilus release series. This is a hotfix
+release to prevent daemons from binding to loopback network interfaces. All
+nautilus users are advised to upgrade to this release.
+
+Notable Changes
+---------------
+
+* This release fixes a regression introduced in v14.2.17 whereby in certain environments, OSDs will bind to 127.0.0.1.  See `issue#49938 <https://tracker.ceph.com/issues/49938>`_.
+
+Changelog
+---------
+
+* common/ipaddr: also skip just `lo` (`pr#40423 <https://github.com/ceph/ceph/pull/40423>`_, Dan van der Ster)
+
+
+v14.2.18 Nautilus
+=================
+
+This is the 18th backport release in the Nautilus series. It fixes a regression
+introduced in 14.2.17 in which the manager module tries to use a couple python 
+modules that do not exist in some environments. We recommend users to 
+update to this release.
+
+Notable Changes
+---------------
+
+* This release fixes issues loading the dashboard and volumes manager
+  modules in some environments.
+
+Changelog
+---------
+* nautilus: .github: add workflow for adding labels and milestone (`pr#39926 <https://github.com/ceph/ceph/pull/39926>`_, Kefu Chai, Ernesto Puerta)
+* nautilus: mgr/dashboard: Python2 Cookie module import fails on Python3 (`pr#40116 <https://github.com/ceph/ceph/pull/40116>`_, Volker Theile)
+* nautilus: mgr/volumes: don't require typing (`pr#40095 <https://github.com/ceph/ceph/pull/40095>`_, Josh Durgin)
+* nautilus: qa/suites/krbd: address recent issues caused by newer kernels (`pr#40064 <https://github.com/ceph/ceph/pull/40064>`_, Ilya Dryomov)
+
+v14.2.17 Nautilus
+=================
+
+This is the 17th backport release in the Nautilus series. We recommend
+users to update to this release.
+
+Notable Changes
+---------------
+
+* $pid expansion in config paths like ``admin_socket`` will now properly expand
+  to the daemon pid for commands like ``ceph-mds`` or ``ceph-osd``. Previously
+  only ``ceph-fuse``/``rbd-nbd`` expanded ``$pid`` with the actual daemon pid.
+* RADOS: PG removal has been optimized in this release.
+* RADOS: Memory allocations are tracked in finer detail in BlueStore and displayed as a part of the ``dump_mempools`` command.
+* cephfs: clients which acquire capabilities too quickly are throttled to prevent instability.  See new config option ``mds_session_cap_acquisition_throttle`` to control this behavior.
+
+Changelog
+---------
+
+* nautilus mgr/dashboard: fix 'ceph dashboard iscsi-gateway-add' (`pr#39175 <https://github.com/ceph/ceph/pull/39175>`_, Alfonso Martínez)
+* nautilus: Do not add sensitive information in Ceph log files (`pr#38614 <https://github.com/ceph/ceph/pull/38614>`_, Neha Ojha)
+* nautilus: bluestore: Add protection against bluefs log file growth (`pr#37948 <https://github.com/ceph/ceph/pull/37948>`_, Adam Kupczyk)
+* nautilus: bluestore: provide a different name for fallback allocator (`pr#37793 <https://github.com/ceph/ceph/pull/37793>`_, Igor Fedotov)
+* nautilus: build-integration-branch: take PRs in chronological order (`pr#37693 <https://github.com/ceph/ceph/pull/37693>`_, Nathan Cutler)
+* nautilus: build/ops: install-deps.sh,deb,rpm: move python-saml deps into debian/control and ceph.spec.in (`pr#39184 <https://github.com/ceph/ceph/pull/39184>`_, Kefu Chai)
+* nautilus: ceph-volume batch: reject partitions in argparser (`pr#38279 <https://github.com/ceph/ceph/pull/38279>`_, Jan Fajerski)
+* nautilus: ceph-volume: Fix usage of is_lv (`pr#39221 <https://github.com/ceph/ceph/pull/39221>`_, Michał Nasiadka)
+* nautilus: ceph-volume: Update batch.py (`pr#39470 <https://github.com/ceph/ceph/pull/39470>`_, shenjiatong)
+* nautilus: ceph-volume: add no-systemd argument to zap (`pr#37723 <https://github.com/ceph/ceph/pull/37723>`_, wanghongxu)
+* nautilus: ceph-volume: add some flexibility to bytes_to_extents (`pr#39270 <https://github.com/ceph/ceph/pull/39270>`_, Jan Fajerski)
+* nautilus: ceph-volume: consume mount opt in simple activate (`pr#38015 <https://github.com/ceph/ceph/pull/38015>`_, Dimitri Savineau)
+* nautilus: ceph-volume: implement the --log-level flag (`pr#38372 <https://github.com/ceph/ceph/pull/38372>`_, Andrew Schoen)
+* nautilus: ceph-volume: remove mention of dmcache from docs and help text (`pr#38048 <https://github.com/ceph/ceph/pull/38048>`_, Dimitri Savineau, Andrew Schoen)
+* nautilus: cephfs: client: check rdonly file handle on truncate (`pr#39129 <https://github.com/ceph/ceph/pull/39129>`_, Patrick Donnelly)
+* nautilus: cephfs: client: dump which fs is used by client for multiple-fs (`pr#38552 <https://github.com/ceph/ceph/pull/38552>`_, Zhi Zhang)
+* nautilus: cephfs: client: ensure we take Fs caps when fetching directory link count from cached inode (`pr#38950 <https://github.com/ceph/ceph/pull/38950>`_, Jeff Layton)
+* nautilus: cephfs: client: fix inode ll_ref reference count leak (`pr#37838 <https://github.com/ceph/ceph/pull/37838>`_, sepia-liu)
+* nautilus: cephfs: client: increment file position on _read_sync near eof (`pr#37991 <https://github.com/ceph/ceph/pull/37991>`_, Patrick Donnelly)
+* nautilus: cephfs: client: set CEPH_STAT_RSTAT mask for dir in readdir_r_cb (`pr#38948 <https://github.com/ceph/ceph/pull/38948>`_, chencan)
+* nautilus: cephfs: mds: throttle cap acquisition via readdir (`pr#38101 <https://github.com/ceph/ceph/pull/38101>`_, Kotresh HR)
+* nautilus: cephfs: mount.ceph: collect v2 addresses for non-legacy ms_mode options (`pr#39133 <https://github.com/ceph/ceph/pull/39133>`_, Jeff Layton)
+* nautilus: cephfs: osdc: restart read on truncate/discard (`pr#37988 <https://github.com/ceph/ceph/pull/37988>`_, Patrick Donnelly)
+* nautilus: cephfs: release client dentry_lease before send caps release to mds (`pr#39127 <https://github.com/ceph/ceph/pull/39127>`_, Wei Qiaomiao)
+* nautilus: client: add ceph.{cluster_fsid/client_id} vxattrs suppport (`pr#39001 <https://github.com/ceph/ceph/pull/39001>`_, Xiubo Li)
+* nautilus: client: do not use g_conf().get_val<>() in libcephfs (`pr#38467 <https://github.com/ceph/ceph/pull/38467>`_, Xiubo Li)
+* nautilus: cmake: define BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT for Boost.Asio users (`pr#38760 <https://github.com/ceph/ceph/pull/38760>`_, Kefu Chai)
+* nautilus: cmake: detect and use sigdescr_np() if available (`pr#38952 <https://github.com/ceph/ceph/pull/38952>`_, David Disseldorp)
+* nautilus: common/mempool: Improve mempool shard selection (`pr#39651 <https://github.com/ceph/ceph/pull/39651>`_, Nathan Cutler, Adam Kupczyk)
+* nautilus: common: fix logfile create perms (`issue#7849 <http://tracker.ceph.com/issues/7849>`_, `pr#38558 <https://github.com/ceph/ceph/pull/38558>`_, Kefu Chai, Roman Penyaev)
+* nautilus: common: skip interfaces starting with "lo" in find_ipv{4,6}_in_subnet() (`pr#39342 <https://github.com/ceph/ceph/pull/39342>`_, Thomas Goirand, Jiawei Li)
+* nautilus: core: osd: An empty bucket or OSD is not an error (`pr#39126 <https://github.com/ceph/ceph/pull/39126>`_, Brad Hubbard)
+* nautilus: crush/CrushWrapper: rebuild reverse maps after rebuilding crush map (`pr#39197 <https://github.com/ceph/ceph/pull/39197>`_, Jason Dillaman)
+* nautilus: krbd: add support for msgr2 (kernel 5.11) (`pr#39202 <https://github.com/ceph/ceph/pull/39202>`_, Ilya Dryomov)
+* nautilus: librados, tests: allow to list objects with the NUL character in names (`pr#39324 <https://github.com/ceph/ceph/pull/39324>`_, Radoslaw Zarzynski)
+* nautilus: librbd: clear implicitly enabled feature bits when creating images (`pr#39121 <https://github.com/ceph/ceph/pull/39121>`_, Jason Dillaman)
+* nautilus: log: fix timestap precision of log can't set to millisecond (`pr#37659 <https://github.com/ceph/ceph/pull/37659>`_, Guan yunfei)
+* nautilus: lvm/create.py: fix a typo in the help message (`pr#38371 <https://github.com/ceph/ceph/pull/38371>`_, ZhenLiu94)
+* nautilus: mds : move start_files_to_recover() to recovery_done (`pr#37986 <https://github.com/ceph/ceph/pull/37986>`_, Simon Gao)
+* nautilus: mds: account for closing sessions in hit_session (`pr#37820 <https://github.com/ceph/ceph/pull/37820>`_, Dan van der Ster)
+* nautilus: mds: avoid spurious sleeps (`pr#39130 <https://github.com/ceph/ceph/pull/39130>`_, Patrick Donnelly)
+* nautilus: mds: dir->mark_new() should together with dir->mark_dirty() (`pr#39128 <https://github.com/ceph/ceph/pull/39128>`_, "Yan, Zheng")
+* nautilus: mds: update defaults for recall configs (`pr#39134 <https://github.com/ceph/ceph/pull/39134>`_, Patrick Donnelly)
+* nautilus: mgr/PyModule: correctly remove config options (`pr#38803 <https://github.com/ceph/ceph/pull/38803>`_, Tim Serong)
+* nautilus: mgr/crash: Serialize command handling (`pr#39338 <https://github.com/ceph/ceph/pull/39338>`_, Boris Ranto)
+* nautilus: mgr/dashboard: CLI commands: read passwords from file (`pr#38832 <https://github.com/ceph/ceph/pull/38832>`_, Ernesto Puerta, Alfonso Martínez, Juan Miguel Olmo Martínez)
+* nautilus: mgr/dashboard: Datatable catches select events from other datatables (`pr#37756 <https://github.com/ceph/ceph/pull/37756>`_, Volker Theile, Tiago Melo)
+* nautilus: mgr/dashboard: Disable TLS 1.0 and 1.1 (`pr#38332 <https://github.com/ceph/ceph/pull/38332>`_, Volker Theile)
+* nautilus: mgr/dashboard: Disable sso without python3-saml (`pr#38404 <https://github.com/ceph/ceph/pull/38404>`_, Kevin Meijer)
+* nautilus: mgr/dashboard: Display a warning message in Dashboard when debug mode is enabled (`pr#38799 <https://github.com/ceph/ceph/pull/38799>`_, Volker Theile)
+* nautilus: mgr/dashboard: Display users current bucket quota usage (`pr#38024 <https://github.com/ceph/ceph/pull/38024>`_, Avan Thakkar)
+* nautilus: mgr/dashboard: Drop invalid RGW client instances, improve logging (`pr#38584 <https://github.com/ceph/ceph/pull/38584>`_, Volker Theile)
+* nautilus: mgr/dashboard: Fix for datatable item not showing details after getting selected (`pr#38813 <https://github.com/ceph/ceph/pull/38813>`_, Nizamudeen A)
+* nautilus: mgr/dashboard: Fix for incorrect validation in rgw user form (`pr#39117 <https://github.com/ceph/ceph/pull/39117>`_, Nizamudeen A)
+* nautilus: mgr/dashboard: RGW User Form is validating disabled fields (`pr#39543 <https://github.com/ceph/ceph/pull/39543>`_, Aashish Sharma)
+* nautilus: mgr/dashboard: The /rgw/status endpoint does not check for running service (`pr#38771 <https://github.com/ceph/ceph/pull/38771>`_, Volker Theile)
+* nautilus: mgr/dashboard: Updating the inbuilt ssl providers error (`pr#38509 <https://github.com/ceph/ceph/pull/38509>`_, Nizamudeen A)
+* nautilus: mgr/dashboard: Use secure cookies to store JWT Token (`pr#38839 <https://github.com/ceph/ceph/pull/38839>`_, Avan Thakkar, Aashish Sharma)
+* nautilus: mgr/dashboard: add `--ssl` to `ng serve` (`pr#38972 <https://github.com/ceph/ceph/pull/38972>`_, Tatjana Dehler)
+* nautilus: mgr/dashboard: avoid using document.write() (`pr#39526 <https://github.com/ceph/ceph/pull/39526>`_, Avan Thakkar)
+* nautilus: mgr/dashboard: customize CherryPy Server Header (`pr#39419 <https://github.com/ceph/ceph/pull/39419>`_, anurag)
+* nautilus: mgr/dashboard: delete EOF when reading passwords from file (`pr#39438 <https://github.com/ceph/ceph/pull/39438>`_, Alfonso Martínez)
+* nautilus: mgr/dashboard: disable cluster selection in NFS export editing form (`pr#37995 <https://github.com/ceph/ceph/pull/37995>`_, Kiefer Chang)
+* nautilus: mgr/dashboard: enable different URL for users of browser to Grafana (`pr#39136 <https://github.com/ceph/ceph/pull/39136>`_, Patrick Seidensal)
+* nautilus: mgr/dashboard: fix MTU Mismatch alert (`pr#39518 <https://github.com/ceph/ceph/pull/39518>`_, Aashish Sharma)
+* nautilus: mgr/dashboard: fix issues related with PyJWT versions >=2.0.0 (`pr#39837 <https://github.com/ceph/ceph/pull/39837>`_, Alfonso Martínez)
+* nautilus: mgr/dashboard: fix security scopes of some NFS-Ganesha endpoints (`pr#37961 <https://github.com/ceph/ceph/pull/37961>`_, Kiefer Chang)
+* nautilus: mgr/dashboard: fix tooltip for Provisioned/Total Provisioned fields (`pr#39646 <https://github.com/ceph/ceph/pull/39646>`_, Avan Thakkar)
+* nautilus: mgr/dashboard: minimize console log traces of Ceph backend API tests (`pr#39544 <https://github.com/ceph/ceph/pull/39544>`_, Aashish Sharma)
+* nautilus: mgr/dashboard: prometheus alerting: add some leeway for package drops and errors (`pr#39509 <https://github.com/ceph/ceph/pull/39509>`_, Patrick Seidensal)
+* nautilus: mgr/dashboard: python 2: error when setting non-ASCII password (`pr#39441 <https://github.com/ceph/ceph/pull/39441>`_, Alfonso Martínez)
+* nautilus: mgr/dashboard: remove pyOpenSSL version pinning (`pr#38504 <https://github.com/ceph/ceph/pull/38504>`_, Kiefer Chang)
+* nautilus: mgr/dashboard: set security headers (`pr#39626 <https://github.com/ceph/ceph/pull/39626>`_, Avan Thakkar)
+* nautilus: mgr/dashboard: test_standby\* (tasks.mgr.test_dashboard.TestDashboard) failed locally (`pr#38527 <https://github.com/ceph/ceph/pull/38527>`_, Volker Theile)
+* nautilus: mgr/dashboard: trigger alert if some nodes have a MTU different than the median value (`pr#39104 <https://github.com/ceph/ceph/pull/39104>`_, Aashish Sharma)
+* nautilus: mgr/insights: Test environment requires 'six' (`pr#38382 <https://github.com/ceph/ceph/pull/38382>`_, Brad Hubbard)
+* nautilus: mgr/progress: delete all events over the wire (`pr#38416 <https://github.com/ceph/ceph/pull/38416>`_, Sage Weil)
+* nautilus: mgr/progress: make it so progress bar does not get stuck forever (`issue#40618 <http://tracker.ceph.com/issues/40618>`_, `pr#37589 <https://github.com/ceph/ceph/pull/37589>`_, Kamoltat (Junior) Sirivadhna, Kamoltat)
+* nautilus: mgr/prometheus: Add SLOW_OPS healthcheck as a metric (`pr#39747 <https://github.com/ceph/ceph/pull/39747>`_, Paul Cuzner)
+* nautilus: mgr/prometheus: Fix 'pool filling up' with >50% usage (`pr#39076 <https://github.com/ceph/ceph/pull/39076>`_, Daniël Vos)
+* nautilus: mgr/prometheus: Make module more stable (`pr#38334 <https://github.com/ceph/ceph/pull/38334>`_, Boris Ranto, Ken Dreyer)
+* nautilus: mgr/restful: fix TypeError occurring in _gather_osds() (`issue#48488 <http://tracker.ceph.com/issues/48488>`_, `pr#39339 <https://github.com/ceph/ceph/pull/39339>`_, Jerry Pu)
+* nautilus: mgr/telemetry: fix proxy usage (`pr#38816 <https://github.com/ceph/ceph/pull/38816>`_, Nathan Cutler)
+* nautilus: mgr/volume: subvolume auth_id management and few bug fixes (`pr#39292 <https://github.com/ceph/ceph/pull/39292>`_, Rishabh Dave, Patrick Donnelly, Kotresh HR, Ramana Raja)
+* nautilus: mgr/volumes: Make number of cloner threads configurable (`pr#37936 <https://github.com/ceph/ceph/pull/37936>`_, Kotresh HR)
+* nautilus: mgr: Pin importlib_metadata version 2.1.0 (`pr#38296 <https://github.com/ceph/ceph/pull/38296>`_, Brad Hubbard)
+* nautilus: mgr: don't update osd stat which is already out (`pr#38354 <https://github.com/ceph/ceph/pull/38354>`_, Zhi Zhang)
+* nautilus: mgr: fix deadlock in ActivePyModules::get_osdmap() (`pr#39340 <https://github.com/ceph/ceph/pull/39340>`_, peng jiaqi)
+* nautilus: mgr: update mon metadata when monmap is updated (`pr#39075 <https://github.com/ceph/ceph/pull/39075>`_, Kefu Chai)
+* nautilus: mon scrub testing (`pr#38362 <https://github.com/ceph/ceph/pull/38362>`_, Brad Hubbard)
+* nautilus: mon/MDSMonitor do not ignore mds's down:dne request (`pr#37822 <https://github.com/ceph/ceph/pull/37822>`_, chencan)
+* nautilus: mon/MDSMonitor: divide mds identifier and mds real name with dot (`pr#37821 <https://github.com/ceph/ceph/pull/37821>`_, Zhi Zhang)
+* nautilus: mon: Log "ceph health detail" periodically in cluster log (`pr#38118 <https://github.com/ceph/ceph/pull/38118>`_, Prashant Dhange)
+* nautilus: mon: have 'mon stat' output json as well (`pr#37706 <https://github.com/ceph/ceph/pull/37706>`_, Joao Eduardo Luis, Sage Weil)
+* nautilus: mon: paxos: Delete logger in destructor (`pr#39160 <https://github.com/ceph/ceph/pull/39160>`_, Brad Hubbard)
+* nautilus: mon: validate crush-failure-domain (`pr#39124 <https://github.com/ceph/ceph/pull/39124>`_, Prashant Dhange)
+* nautilus: monitoring: Use null yaxes min for OSD read latency (`pr#37959 <https://github.com/ceph/ceph/pull/37959>`_, Seena Fallah)
+* nautilus: msg/async/ProtocolV2: allow rxbuf/txbuf get bigger in testing, again (`pr#38268 <https://github.com/ceph/ceph/pull/38268>`_, Ilya Dryomov)
+* nautilus: ocf: add support for mapping images within an RBD namespace (`pr#39047 <https://github.com/ceph/ceph/pull/39047>`_, Jason Dillaman)
+* nautilus: os/bluestore: Add option to check BlueFS reads (`pr#39756 <https://github.com/ceph/ceph/pull/39756>`_, Adam Kupczyk)
+* nautilus: os/bluestore: detect and fix "zombie" spanning blobs using fsck (`pr#39255 <https://github.com/ceph/ceph/pull/39255>`_, Igor Fedotov)
+* nautilus: os/bluestore: fix huge read/writes in BlueFS (`pr#39698 <https://github.com/ceph/ceph/pull/39698>`_, Jianpeng Ma, Kefu Chai, Igor Fedotov)
+* nautilus: os/bluestore: fix inappropriate ENOSPC from avl/hybrid allocator (`pr#38475 <https://github.com/ceph/ceph/pull/38475>`_, Igor Fedotov)
+* nautilus: os/bluestore: fix segfault on out-of-bound offset provided to  claim\_… (`pr#38637 <https://github.com/ceph/ceph/pull/38637>`_, Igor Fedotov)
+* nautilus: os/bluestore: go beyond pinned onodes while trimming the cache (`pr#39720 <https://github.com/ceph/ceph/pull/39720>`_, Igor Fedotov)
+* nautilus: os/bluestore: mempool's finer granularity + adding missed structs (`pr#38310 <https://github.com/ceph/ceph/pull/38310>`_, Deepika Upadhyay, Igor Fedotov, Adam Kupczyk)
+* nautilus: osd: Check for nosrub/nodeep-scrub in between chunks, to avoid races (`pr#38411 <https://github.com/ceph/ceph/pull/38411>`_, David Zafman)
+* nautilus: osd: fix bluestore bitmap allocator calculate wrong last_pos with hint (`pr#39708 <https://github.com/ceph/ceph/pull/39708>`_, Xue Yantao)
+* nautilus: osd: optimize PG removal (part1) (`pr#38478 <https://github.com/ceph/ceph/pull/38478>`_, Neha Ojha, Igor Fedotov)
+* nautilus: pybind/ceph_volume_client: Update the 'volumes' key to 'subvolumes' in auth-metadata file (`pr#39658 <https://github.com/ceph/ceph/pull/39658>`_, Kotresh HR, Michael Fritch)
+* nautilus: pybind/cephfs: add special values for not reading conffile (`pr#37725 <https://github.com/ceph/ceph/pull/37725>`_, Kefu Chai)
+* nautilus: pybind/cephfs: fix missing terminating NULL char in readlink()'s C string (`pr#38894 <https://github.com/ceph/ceph/pull/38894>`_, Tuan Hoang)
+* nautilus: pybind/mgr/rbd_support: delay creation of progress module events (`pr#38833 <https://github.com/ceph/ceph/pull/38833>`_, Jason Dillaman)
+* nautilus: qa/cephfs: add session_timeout option support (`pr#37840 <https://github.com/ceph/ceph/pull/37840>`_, Xiubo Li)
+* nautilus: qa/distros: add rhel 7.9 (`pr#38188 <https://github.com/ceph/ceph/pull/38188>`_, rakeshgm)
+* nautilus: qa/tasks/ceph_manager.py: don't use log-early in raw_cluster_cmd (`pr#39960 <https://github.com/ceph/ceph/pull/39960>`_, Neha Ojha)
+* nautilus: qa/tasks/{ceph,ceph_manager}: drop py2 support (`pr#37906 <https://github.com/ceph/ceph/pull/37906>`_, Rishabh Dave, Deepika Upadhyay, Kefu Chai)
+* nautilus: qa: fix tox failures (`pr#38627 <https://github.com/ceph/ceph/pull/38627>`_, Patrick Donnelly)
+* nautilus: qa: krbd_stable_pages_required.sh: move to stable_writes attribute (`pr#38834 <https://github.com/ceph/ceph/pull/38834>`_, Ilya Dryomov)
+* nautilus: qa: restore file name (`pr#38772 <https://github.com/ceph/ceph/pull/38772>`_, Patrick Donnelly)
+* nautilus: qa: unmount volumes before removal (`pr#38690 <https://github.com/ceph/ceph/pull/38690>`_, Patrick Donnelly)
+* nautilus: qa: use normal build for valgrind (`pr#39584 <https://github.com/ceph/ceph/pull/39584>`_, Sage Weil)
+* nautilus: rados/upgrade/nautilus-x-singleton fails due to cluster [WRN] evicting unresponsive client (`pr#39706 <https://github.com/ceph/ceph/pull/39706>`_, Patrick Donnelly)
+* nautilus: rbd-nbd: reexpand the conf meta in child process (`pr#38830 <https://github.com/ceph/ceph/pull/38830>`_, Xiubo Li)
+* nautilus: rbd/bench: include used headers (`pr#39123 <https://github.com/ceph/ceph/pull/39123>`_, Kefu Chai)
+* nautilus: rbd: librbd: ensure that thread pool lock is held when processing throttled IOs (`pr#37895 <https://github.com/ceph/ceph/pull/37895>`_, Jason Dillaman)
+* nautilus: rbd: librbd: update hidden global config when removing pool config override (`pr#38831 <https://github.com/ceph/ceph/pull/38831>`_, Jason Dillaman)
+* nautilus: rgw: Disable prefetch of entire head object when GET request with range header (`pr#38556 <https://github.com/ceph/ceph/pull/38556>`_, Or Friedmann)
+* nautilus: rgw: S3 Put Bucket Policy should return 204 on success (`pr#38623 <https://github.com/ceph/ceph/pull/38623>`_, Matthew Oliver)
+* nautilus: rgw: avoid expiration early triggering caused by overflow (`pr#38823 <https://github.com/ceph/ceph/pull/38823>`_, jiahuizeng)
+* nautilus: rgw: cls/rgw/cls_rgw.cc: fix multiple lastest version problem (`pr#38085 <https://github.com/ceph/ceph/pull/38085>`_, Yang Honggang, Ruan Zitao)
+* nautilus: rgw: cls/user: set from_index for reset stats calls (`pr#38822 <https://github.com/ceph/ceph/pull/38822>`_, Mykola Golub, Abhishek Lekshmanan)
+* nautilus: rgw: distribute cache for exclusive put (`pr#38827 <https://github.com/ceph/ceph/pull/38827>`_, Or Friedmann)
+* nautilus: rgw: fix bucket limit check fill_status warnings (`issue#40255 <http://tracker.ceph.com/issues/40255>`_, `pr#38825 <https://github.com/ceph/ceph/pull/38825>`_, Paul Emmerich)
+* nautilus: rgw: fix invalid payload issue when serving s3website error page (`pr#38590 <https://github.com/ceph/ceph/pull/38590>`_, Ilsoo Byun)
+* nautilus: rgw: fix trailing null in object names of multipart reuploads (`pr#39276 <https://github.com/ceph/ceph/pull/39276>`_, Casey Bodley)
+* nautilus: rgw: in ordered bucket listing skip namespaced entries internally when possible (`pr#38493 <https://github.com/ceph/ceph/pull/38493>`_, J. Eric Ivancich)
+* nautilus: rgw: keep syncstopped flag when copying bucket shard headers (`pr#38589 <https://github.com/ceph/ceph/pull/38589>`_, Ilsoo Byun)
+* nautilus: rgw: multisite: Verify if the synced object is identical to source (`pr#38885 <https://github.com/ceph/ceph/pull/38885>`_, Prasad Krishnan, Yang Honggang, Casey Bodley)
+* nautilus: rgw: radosgw-admin: clarify error when email address already in use (`pr#39661 <https://github.com/ceph/ceph/pull/39661>`_, Matthew Vernon)
+* nautilus: rgw: rgw-admin: fixes BucketInfo for missing buckets (`pr#38588 <https://github.com/ceph/ceph/pull/38588>`_, Nick Janus, caolei)
+* nautilus: rgw_file: return common_prefixes in lexical order (`pr#38828 <https://github.com/ceph/ceph/pull/38828>`_, Matt Benjamin)
+* nautilus: rpm,deb: change sudoers file mode to 440 (`pr#39090 <https://github.com/ceph/ceph/pull/39090>`_, David Turner)
+* nautilus: rpm: ceph-mgr-dashboard recommends python3-saml on SUSE (`pr#38818 <https://github.com/ceph/ceph/pull/38818>`_, Nathan Cutler)
+* nautilus: run-make-check.sh: Don't run tests if build fails (`pr#38295 <https://github.com/ceph/ceph/pull/38295>`_, Brad Hubbard)
+* nautilus: test/librados: fix endian bugs in checksum test cases (`pr#37605 <https://github.com/ceph/ceph/pull/37605>`_, Ulrich Weigand)
+* nautilus: test/rbd-mirror: fix broken ceph_test_rbd_mirror_random_write (`pr#39650 <https://github.com/ceph/ceph/pull/39650>`_, Jason Dillaman)
+* nautilus: test/run-cli-tests: use cram from github (`pr#39072 <https://github.com/ceph/ceph/pull/39072>`_, Kefu Chai)
+* nautilus: tests: cancelling both noscrub \*and\* nodeep-scrub (`pr#39125 <https://github.com/ceph/ceph/pull/39125>`_, Ronen Friedman)
+* nautilus: tools/rados: add support for binary object names in the rados CLI (`pr#39329 <https://github.com/ceph/ceph/pull/39329>`_, Radoslaw Zarzynski, Kefu Chai)
+* nautilus: tools/rados: flush formatter periodically during json output of "rados ls" (`pr#37834 <https://github.com/ceph/ceph/pull/37834>`_, J. Eric Ivancich)
+* nautilus: vstart.sh: fix fs set max_mds bug (`pr#37836 <https://github.com/ceph/ceph/pull/37836>`_, Jinmyeong Lee)
+
+
 v14.2.16 Nautilus
 =================
 

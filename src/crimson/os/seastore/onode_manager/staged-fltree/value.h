@@ -73,6 +73,13 @@ struct value_header_t {
   value_magic_t magic;
   value_size_t payload_size;
 
+  bool operator==(const value_header_t& rhs) const {
+    return (magic == rhs.magic && payload_size == rhs.payload_size);
+  }
+  bool operator!=(const value_header_t& rhs) const {
+    return !(*this == rhs);
+  }
+
   value_size_t allocation_size() const {
     return payload_size + sizeof(value_header_t);
   }

@@ -66,6 +66,8 @@ export enum Icons {
   json = 'fa fa-file-code-o', // JSON file
   text = 'fa fa-file-text', // Text file
   wrench = 'fa fa-wrench', // Configuration Error
+  enter = 'fa fa-sign-in', // Enter
+  exit = 'fa fa-sign-out', // Exit
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

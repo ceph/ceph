@@ -1309,6 +1309,8 @@ def test_bucket_creation_time():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
 
+    zonegroup_meta_checkpoint(zonegroup)
+
     zone_buckets = [zone.get_connection().get_all_buckets() for zone in zonegroup_conns.rw_zones]
     for z1, z2 in combinations(zone_buckets, 2):
         for a, b in zip(z1, z2):

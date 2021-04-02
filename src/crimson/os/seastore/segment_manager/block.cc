@@ -239,15 +239,27 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
     get_offset(addr),
     bl.length());
 
+  bufferptr bptr;
+  try {
+    bptr = bufferptr(ceph::buffer::create_page_aligned(bl.length()));
+    auto iter = bl.cbegin();
+    iter.copy(bl.length(), bptr.c_str());
+  } catch (const std::exception &e) {
+    logger().error(
+      "BlockSegmentManager::segment_write: "
+      "exception creating aligned buffer {}",
+      e
+    );
+    throw e;
+  }
+
   
   // TODO send an iovec and avoid the copy -- bl should have aligned
   // constituent buffers and they will remain unmodified until the write
   // completes
   return seastar::do_with(
-    bufferptr(ceph::buffer::create_page_aligned(bl.length())),
+    std::move(bptr),
     [&](auto &bp) {
-      auto iter = bl.cbegin();
-      iter.copy(bl.length(), bp.c_str());
       return do_write(device, get_offset(addr), bp);
     });
 }
@@ -256,7 +268,7 @@ BlockSegmentManager::~BlockSegmentManager()
 {
 }
 
-BlockSegmentManager::mount_ret BlockSegmentManager::mount(mount_config_t config)
+BlockSegmentManager::mount_ret BlockSegmentManager::mount(const mount_config_t& config)
 {
   return open_device(
     config.path, seastar::open_flags::rw | seastar::open_flags::dsync

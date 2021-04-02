@@ -89,6 +89,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   node_type_t node_type() const override { return NODE_TYPE; }
   field_type_t field_type() const override { return FIELD_TYPE; }
   laddr_t laddr() const override { return extent.get_laddr(); }
+  const char* read() const override { return extent.read().p_start(); }
+  bool is_duplicate() const override { return extent.is_duplicate(); }
   void prepare_mutate(context_t c) override { return extent.prepare_mutate(c); }
   bool is_level_tail() const override { return extent.read().is_level_tail(); }
   bool is_empty() const override { return extent.read().keys() == 0; }

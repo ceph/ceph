@@ -52,13 +52,13 @@ set -e
 
 if [ ! -e $vdir ]; then
     virtualenv --python=python3 $vdir
-fi
 
-$vdir/bin/pip install --quiet \
+    $vdir/bin/pip install --quiet \
               -r $TOPDIR/admin/doc-requirements.txt \
               -r $TOPDIR/admin/doc-python-common-requirements.txt
-BUILD_DOC=1 $vdir/bin/pip install --quiet \
+    BUILD_DOC=1 $vdir/bin/pip install --quiet \
          -r $TOPDIR/admin/doc-pybind.txt
+fi
 
 install -d -m0755 \
     $TOPDIR/build-doc/output/html \
@@ -91,7 +91,8 @@ for target in $sphinx_targets; do
             ;;
         man)
             $vdir/bin/sphinx-build -W --keep-going -a -b man -t man -d doctrees \
-                                   $TOPDIR/doc $TOPDIR/build-doc/output/$target
+                                   -c $TOPDIR/man \
+                                   $TOPDIR/doc/man $TOPDIR/build-doc/output/$target
             ;;
         livehtml)
             $vdir/bin/pip install --quiet sphinx-autobuild

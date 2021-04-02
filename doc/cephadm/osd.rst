@@ -1,38 +1,103 @@
 ***********
 OSD Service
 ***********
+.. _device management: ../rados/operations/devices
+.. _libstoragemgmt: https://github.com/libstorage/libstoragemgmt
 
 List Devices
 ============
 
-Print a list of discovered devices, grouped by host and optionally
-filtered to a particular host:
+``ceph-volume`` scans each cluster in the host from time to time in order
+to determine which devices are present and whether they are eligible to be
+used as OSDs.
+
+To print a list of devices discovered by ``cephadm``, run this command:
 
 .. prompt:: bash #
 
-    ceph orch device ls [--host=...] [--refresh]
+    ceph orch device ls [--hostname=...] [--wide] [--refresh]
 
-Example::
+Example
+::
 
-    HOST    PATH      TYPE   SIZE  DEVICE  AVAIL  REJECT REASONS
-    master  /dev/vda  hdd   42.0G          False  locked
-    node1   /dev/vda  hdd   42.0G          False  locked
-    node1   /dev/vdb  hdd   8192M  387836  False  locked, LVM detected, Insufficient space (<5GB) on vgs
-    node1   /dev/vdc  hdd   8192M  450575  False  locked, LVM detected, Insufficient space (<5GB) on vgs
-    node3   /dev/vda  hdd   42.0G          False  locked
-    node3   /dev/vdb  hdd   8192M  395145  False  LVM detected, locked, Insufficient space (<5GB) on vgs
-    node3   /dev/vdc  hdd   8192M  165562  False  LVM detected, locked, Insufficient space (<5GB) on vgs
-    node2   /dev/vda  hdd   42.0G          False  locked
-    node2   /dev/vdb  hdd   8192M  672147  False  LVM detected, Insufficient space (<5GB) on vgs, locked
-    node2   /dev/vdc  hdd   8192M  228094  False  LVM detected, Insufficient space (<5GB) on vgs, locked
+  Hostname  Path      Type  Serial              Size   Health   Ident  Fault  Available
+  srv-01    /dev/sdb  hdd   15P0A0YFFRD6         300G  Unknown  N/A    N/A    No
+  srv-01    /dev/sdc  hdd   15R0A08WFRD6         300G  Unknown  N/A    N/A    No
+  srv-01    /dev/sdd  hdd   15R0A07DFRD6         300G  Unknown  N/A    N/A    No
+  srv-01    /dev/sde  hdd   15P0A0QDFRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sdb  hdd   15R0A033FRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sdc  hdd   15R0A05XFRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sde  hdd   15R0A0ANFRD6         300G  Unknown  N/A    N/A    No
+  srv-02    /dev/sdf  hdd   15R0A06EFRD6         300G  Unknown  N/A    N/A    No
+  srv-03    /dev/sdb  hdd   15R0A0OGFRD6         300G  Unknown  N/A    N/A    No
+  srv-03    /dev/sdc  hdd   15R0A0P7FRD6         300G  Unknown  N/A    N/A    No
+  srv-03    /dev/sdd  hdd   15R0A0O7FRD6         300G  Unknown  N/A    N/A    No
 
+Using the ``--wide`` option provides all details relating to the device,
+including any reasons that the device might not be eligible for use as an OSD.
+
+In the above example you can see fields named "Health", "Ident", and "Fault".
+This information is provided by integration with `libstoragemgmt`_. By default,
+this integration is disabled (because `libstoragemgmt`_ may not be 100%
+compatible with your hardware).  To make ``cephadm`` include these fields,
+enable cephadm's "enhanced device scan" option as follows;
+
+.. prompt:: bash #
+
+    ceph config set mgr mgr/cephadm/device_enhanced_scan true
+
+.. warning::
+    Although the libstoragemgmt library performs standard SCSI inquiry calls,
+    there is no guarantee that your firmware fully implements these standards.
+    This can lead to erratic behaviour and even bus resets on some older
+    hardware. It is therefore recommended that, before enabling this feature,
+    you test your hardware's compatibility with libstoragemgmt first to avoid
+    unplanned interruptions to services.
+
+    There are a number of ways to test compatibility, but the simplest may be
+    to use the cephadm shell to call libstoragemgmt directly - ``cephadm shell
+    lsmcli ldl``. If your hardware is supported you should see something like
+    this: 
+
+    ::
+
+      Path     | SCSI VPD 0x83    | Link Type | Serial Number      | Health Status
+      ----------------------------------------------------------------------------
+      /dev/sda | 50000396082ba631 | SAS       | 15P0A0R0FRD6       | Good
+      /dev/sdb | 50000396082bbbf9 | SAS       | 15P0A0YFFRD6       | Good
+
+
+After you have enabled libstoragemgmt support, the output will look something
+like this:
+
+::
+
+  # ceph orch device ls
+  Hostname   Path      Type  Serial              Size   Health   Ident  Fault  Available
+  srv-01     /dev/sdb  hdd   15P0A0YFFRD6         300G  Good     Off    Off    No
+  srv-01     /dev/sdc  hdd   15R0A08WFRD6         300G  Good     Off    Off    No
+  :
+
+In this example, libstoragemgmt has confirmed the health of the drives and the ability to
+interact with the Identification and Fault LEDs on the drive enclosures. For further
+information about interacting with these LEDs, refer to `device management`_.
+
+.. note::
+    The current release of `libstoragemgmt`_ (1.8.8) supports SCSI, SAS, and SATA based
+    local disks only. There is no official support for NVMe devices (PCIe)
 
 .. _cephadm-deploy-osds:
-             
+
 Deploy OSDs
 ===========
 
-An inventory of storage devices on all cluster hosts can be displayed with:
+Listing Storage Devices
+-----------------------
+
+In order to deploy an OSD, there must be a storage device that is *available* on
+which the OSD will be deployed.
+
+Run this command to display an inventory of storage devices on all cluster hosts:
 
 .. prompt:: bash #
 
@@ -48,7 +113,10 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph refuses to provision an OSD on a device that is not available.
+Ceph will not provision an OSD on a device that is not available.
+
+Creating New OSDs
+-----------------
 
 There are a few ways to create new OSDs:
 
@@ -59,41 +127,47 @@ There are a few ways to create new OSDs:
     ceph orch apply osd --all-available-devices
 
 * Create an OSD from a specific device on a specific host:
-  
+
   .. prompt:: bash #
 
     ceph orch daemon add osd *<host>*:*<device-path>*
 
   For example:
-  
+
   .. prompt:: bash #
 
     ceph orch daemon add osd host1:/dev/sdb
 
-* Use :ref:`drivegroups` to describe device(s) to consume
-  based on their properties, such device type (SSD or HDD), device
-  model names, size, or the hosts on which the devices exist:
-  
+* You can use :ref:`drivegroups` to categorize device(s) based on their
+  properties. This might be useful in forming a clearer picture of which
+  devices are available to consume. Properties include device type (SSD or
+  HDD), device model names, size, and the hosts on which the devices exist:
+
   .. prompt:: bash #
 
     ceph orch apply -i spec.yml
-    
+
 Dry Run
 -------
 
-``--dry-run`` will cause the orchestrator to present a preview of what will happen
-without actually creating the OSDs.
+The ``--dry-run`` flag causes the orchestrator to present a preview of what
+will happen without actually creating the OSDs.
 
-Example::
+For example:
 
-    # ceph orch apply osd --all-available-devices --dry-run
-    NAME                  HOST  DATA     DB WAL
-    all-available-devices node1 /dev/vdb -  -
-    all-available-devices node2 /dev/vdc -  -
-    all-available-devices node3 /dev/vdd -  -
+   .. prompt:: bash #
+
+     ceph orch apply osd --all-available-devices --dry-run
+
+   ::
+
+     NAME                  HOST  DATA      DB  WAL
+     all-available-devices node1 /dev/vdb  -   -
+     all-available-devices node2 /dev/vdc  -   -
+     all-available-devices node3 /dev/vdd  -   -
 
 .. _cephadm-osd-declarative:
-    
+
 Declarative State
 -----------------
 
@@ -107,32 +181,52 @@ That is, after using::
 * If you add new disks to the cluster they will automatically be used to create new OSDs.
 * A new OSD will be created automatically if you remove an OSD and clean the LVM physical volume.
 
-If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter::
+If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
 
-    ceph orch apply osd --all-available-devices --unmanaged=true
+.. prompt:: bash #
+
+   ceph orch apply osd --all-available-devices --unmanaged=true
 
 * For cephadm, see also :ref:`cephadm-spec-unmanaged`.
-    
+
 
 Remove an OSD
 =============
-::
 
-    ceph orch osd rm <osd_id(s)> [--replace] [--force]
+Removing an OSD from a cluster involves two steps:
 
-Evacuates PGs from an OSD and removes it from the cluster.
+#. evacuating all placement groups (PGs) from the cluster
+#. removing the PG-free OSD from the cluster
 
-Example::
+The following command performs these two steps:
 
-    # ceph orch osd rm 0
-    Scheduled OSD(s) for removal
+.. prompt:: bash #
 
+  ceph orch osd rm <osd_id(s)> [--replace] [--force]
 
-OSDs that are not safe-to-destroy will be rejected.
+Example:
 
-You can query the state of the operation with::
+.. prompt:: bash #
 
-    # ceph orch osd rm status
+  ceph orch osd rm 0
+
+Expected output::
+
+   Scheduled OSD(s) for removal
+
+OSDs that are not safe to destroy will be rejected.
+
+Monitoring OSD State
+--------------------
+
+You can query the state of OSD operation with the following command:
+
+.. prompt:: bash #
+
+   ceph orch osd rm status
+
+Expected output::
+
     OSD_ID  HOST         STATE                    PG_COUNT  REPLACE  FORCE  STARTED_AT
     2       cephadm-dev  done, waiting for purge  0         True     False  2020-07-17 13:01:43.147684
     3       cephadm-dev  draining                 17        False    True   2020-07-17 13:01:45.162158
@@ -143,78 +237,108 @@ When no PGs are left on the OSD, it will be decommissioned and removed from the 
 
 .. note::
     After removing an OSD, if you wipe the LVM physical volume in the device used by the removed OSD, a new OSD will be created.
-    Read information about the ``unmanaged`` parameter in :ref:`cephadm-osd-declarative`.
+    For more information on this, read about the ``unmanaged`` parameter in :ref:`cephadm-osd-declarative`.
 
 Stopping OSD Removal
 --------------------
 
-You can stop the queued OSD removal operation with
+It is possible to stop queued OSD removals by using the following command:
 
-::
+.. prompt:: bash #
 
-    ceph orch osd rm stop <svc_id(s)>
+  ceph orch osd rm stop <svc_id(s)>
 
-Example::
+Example:
 
-    # ceph orch osd rm stop 4
+.. prompt:: bash #
+
+    ceph orch osd rm stop 4
+
+Expected output::
+
     Stopped OSD(s) removal
 
-This will reset the initial state of the OSD and take it off the removal queue.
+This resets the initial state of the OSD and takes it off the removal queue.
 
 
-Replace an OSD
--------------------
-::
+Replacing an OSD
+----------------
 
-    orch osd rm <svc_id(s)> --replace [--force]
+.. prompt:: bash #
 
-Example::
+  orch osd rm <svc_id(s)> --replace [--force]
 
-    # ceph orch osd rm 4 --replace
-    Scheduled OSD(s) for replacement
+Example:
 
+.. prompt:: bash #
 
-This follows the same procedure as the "Remove OSD" part with the exception that the OSD is not permanently removed
-from the CRUSH hierarchy, but is assigned a 'destroyed' flag.
+  ceph orch osd rm 4 --replace
+
+Expected output::
+
+   Scheduled OSD(s) for replacement
+
+This follows the same procedure as the procedure in the "Remove OSD" section, with
+one exception: the OSD is not permanently removed from the CRUSH hierarchy, but is
+instead assigned a 'destroyed' flag.
 
 **Preserving the OSD ID**
 
-The previously-set 'destroyed' flag is used to determine OSD ids that will be reused in the next OSD deployment.
+The 'destroyed' flag is used to determine which OSD ids will be reused in the
+next OSD deployment.
 
-If you use OSDSpecs for OSD deployment, your newly added disks will be assigned the OSD ids of their replaced
-counterparts, assuming the new disks still match the OSDSpecs.
+If you use OSDSpecs for OSD deployment, your newly added disks will be assigned
+the OSD ids of their replaced counterparts. This assumes that the new disks
+still match the OSDSpecs.
 
-For assistance in this process you can use the '--dry-run' feature.
+Use the ``--dry-run`` flag to make certain that the ``ceph orch apply osd`` 
+command does what you want it to. The ``--dry-run`` flag shows you what the
+outcome of the command will be without making the changes you specify. When
+you are satisfied that the command will do what you want, run the command
+without the ``--dry-run`` flag.
 
-Tip: The name of your OSDSpec can be retrieved from **ceph orch ls**
+.. tip::
 
-Alternatively, you can use your OSDSpec file::
+  The name of your OSDSpec can be retrieved with the command ``ceph orch ls``
 
-    ceph orch apply osd -i <osd_spec_file> --dry-run
-    NAME                  HOST  DATA     DB WAL
-    <name_of_osd_spec>    node1 /dev/vdb -  -
+Alternatively, you can use your OSDSpec file:
+
+.. prompt:: bash #
+
+  ceph orch apply osd -i <osd_spec_file> --dry-run
+
+Expected output::
+
+  NAME                  HOST  DATA     DB WAL
+  <name_of_osd_spec>    node1 /dev/vdb -  -
 
 
-If this matches your anticipated behavior, just omit the --dry-run flag to execute the deployment.
+When this output reflects your intention, omit the ``--dry-run`` flag to
+execute the deployment.
 
 
-Erase Devices (Zap Devices)
----------------------------
+Erasing Devices (Zapping Devices)
+---------------------------------
 
-Erase (zap) a device so that it can be reused. ``zap`` calls ``ceph-volume zap`` on the remote host.
+Erase (zap) a device so that it can be reused. ``zap`` calls ``ceph-volume
+zap`` on the remote host.
 
-::
+.. prompt:: bash #
 
-     orch device zap <hostname> <path>
+  orch device zap <hostname> <path>
 
-Example command::
+Example command:
 
-     ceph orch device zap my_hostname /dev/sdx
+.. prompt:: bash #
+
+  ceph orch device zap my_hostname /dev/sdx
 
 .. note::
-    Cephadm orchestrator will automatically deploy drives that match the DriveGroup in your OSDSpec if the unmanaged flag is unset.
-    For example, if you use the ``all-available-devices`` option when creating OSDs, when you ``zap`` a device the cephadm orchestrator will automatically create a new OSD in the device .
-    To disable this behavior, see :ref:`cephadm-osd-declarative`.
+    If the unmanaged flag is unset, cephadm automatically deploys drives that
+    match the DriveGroup in your OSDSpec.  For example, if you use the
+    ``all-available-devices`` option when creating OSDs, when you ``zap`` a
+    device the cephadm orchestrator automatically creates a new OSD in the
+    device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
 
 
 .. _drivegroups:
@@ -668,3 +792,16 @@ It is also possible to specify directly device paths in specific hosts like the 
 
 
 This can easily be done with other filters, like `size` or `vendor` as well.
+
+Activate existing OSDs
+======================
+
+In case the OS of a host was reinstalled, existing OSDs need to be activated
+again. For this use case, cephadm provides a wrapper for :ref:`ceph-volume-lvm-activate` that
+activates all existing OSDs on a host.
+
+.. prompt:: bash #
+
+   ceph cephadm osd activate <host>...
+
+This will scan all existing disks for OSDs and deploy corresponding daemons.

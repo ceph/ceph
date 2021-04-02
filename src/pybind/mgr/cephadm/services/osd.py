@@ -84,9 +84,17 @@ class OSDService(CephService):
             raise RuntimeError(
                 'cephadm exited with an error code: %d, stderr:%s' % (
                     code, '\n'.join(err)))
+        return self.deploy_osd_daemons_for_existing_osds(host, drive_group.service_name(),
+                                                         replace_osd_ids)
 
+    def deploy_osd_daemons_for_existing_osds(self, host: str, service_name: str,
+                                             replace_osd_ids: Optional[List[str]] = None) -> str:
+
+        if replace_osd_ids is None:
+            replace_osd_ids = self.find_destroyed_osds().get(host, [])
+            assert replace_osd_ids is not None
         # check result
-        out, err, code = CephadmServe(self.mgr)._run_cephadm(
+        osds_elems: dict = CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
             [
                 '--',
@@ -94,11 +102,6 @@ class OSDService(CephService):
                 '--format', 'json',
             ])
         before_osd_uuid_map = self.mgr.get_osd_uuid_map(only_up=True)
-        try:
-            osds_elems = json.loads('\n'.join(out))
-        except ValueError:
-            logger.exception('Cannot decode JSON: \'%s\'' % '\n'.join(out))
-            osds_elems = {}
         fsid = self.mgr._cluster_fsid
         osd_uuid_map = self.mgr.get_osd_uuid_map()
         created = []
@@ -122,7 +125,7 @@ class OSDService(CephService):
 
                 created.append(osd_id)
                 daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
-                    service_name=drive_group.service_name(),
+                    service_name=service_name,
                     daemon_id=osd_id,
                     host=host,
                     daemon_type='osd',
@@ -716,7 +719,8 @@ class OSDRemovalQueue(object):
                 if not osd.destroy():
                     raise orchestrator.OrchestratorError(
                         f"Could not destroy {osd}")
-                logger.info(f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
+                logger.info(
+                    f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
             else:
                 # purge from osdmap
                 if not osd.purge():

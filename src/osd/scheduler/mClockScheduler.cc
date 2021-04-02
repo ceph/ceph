@@ -47,6 +47,7 @@ mClockScheduler::mClockScheduler(CephContext *cct,
   ceph_assert(num_shards > 0);
   set_max_osd_capacity();
   set_osd_mclock_cost_per_io();
+  set_osd_mclock_cost_per_byte();
   set_mclock_profile();
   enable_mclock_profile_settings();
   client_registry.update_from_config(cct->_conf);
@@ -110,31 +111,62 @@ void mClockScheduler::set_max_osd_capacity()
         cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_ssd");
     }
   }
-  // Set max osd bandwidth across all shards (at 4KiB blocksize)
-  max_osd_bandwidth = max_osd_capacity * 4 * 1024;
   // Set per op-shard iops limit
   max_osd_capacity /= num_shards;
+  dout(1) << __func__ << " #op shards: " << num_shards
+          << " max osd capacity(iops) per shard: " << max_osd_capacity << dendl;
 }
 
 void mClockScheduler::set_osd_mclock_cost_per_io()
 {
-  if (cct->_conf.get_val<uint64_t>("osd_mclock_cost_per_io_msec")) {
-    osd_mclock_cost_per_io_msec =
-      cct->_conf.get_val<uint64_t>("osd_mclock_cost_per_io_msec");
+  std::chrono::seconds sec(1);
+  if (cct->_conf.get_val<double>("osd_mclock_cost_per_io_usec")) {
+    osd_mclock_cost_per_io =
+      cct->_conf.get_val<double>("osd_mclock_cost_per_io_usec");
   } else {
     if (is_rotational) {
-      osd_mclock_cost_per_io_msec =
-        cct->_conf.get_val<uint64_t>("osd_mclock_cost_per_io_msec_hdd");
+      osd_mclock_cost_per_io =
+        cct->_conf.get_val<double>("osd_mclock_cost_per_io_usec_hdd");
+      // For HDDs, convert value to seconds
+      osd_mclock_cost_per_io /= std::chrono::microseconds(sec).count();
     } else {
-      osd_mclock_cost_per_io_msec =
-        cct->_conf.get_val<uint64_t>("osd_mclock_cost_per_io_msec_ssd");
+      // For SSDs, convert value to milliseconds
+      osd_mclock_cost_per_io =
+        cct->_conf.get_val<double>("osd_mclock_cost_per_io_usec_ssd");
+      osd_mclock_cost_per_io /= std::chrono::milliseconds(sec).count();
     }
   }
+  dout(1) << __func__ << " osd_mclock_cost_per_io: "
+          << std::fixed << osd_mclock_cost_per_io << dendl;
+}
+
+void mClockScheduler::set_osd_mclock_cost_per_byte()
+{
+  std::chrono::seconds sec(1);
+  if (cct->_conf.get_val<double>("osd_mclock_cost_per_byte_usec")) {
+    osd_mclock_cost_per_byte =
+      cct->_conf.get_val<double>("osd_mclock_cost_per_byte_usec");
+  } else {
+    if (is_rotational) {
+      osd_mclock_cost_per_byte =
+        cct->_conf.get_val<double>("osd_mclock_cost_per_byte_usec_hdd");
+      // For HDDs, convert value to seconds
+      osd_mclock_cost_per_byte /= std::chrono::microseconds(sec).count();
+    } else {
+      osd_mclock_cost_per_byte =
+        cct->_conf.get_val<double>("osd_mclock_cost_per_byte_usec_ssd");
+      // For SSDs, convert value to milliseconds
+      osd_mclock_cost_per_byte /= std::chrono::milliseconds(sec).count();
+    }
+  }
+  dout(1) << __func__ << " osd_mclock_cost_per_byte: "
+          << std::fixed << osd_mclock_cost_per_byte << dendl;
 }
 
 void mClockScheduler::set_mclock_profile()
 {
   mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
+  dout(1) << __func__ << " mclock profile: " << mclock_profile << dendl;
 }
 
 std::string mClockScheduler::get_mclock_profile()
@@ -354,23 +386,30 @@ void mClockScheduler::set_global_recovery_options()
   cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
   cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
 
+  // Disable delete sleep
+  cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
+  cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
+  cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
+  cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
+
+  // Disable snap trim sleep
+  cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));
+  cct->_conf.set_val("osd_snap_trim_sleep_hdd", std::to_string(0));
+  cct->_conf.set_val("osd_snap_trim_sleep_ssd", std::to_string(0));
+  cct->_conf.set_val("osd_snap_trim_sleep_hybrid", std::to_string(0));
+
+  // Disable scrub sleep
+  cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
+
   // Apply the changes
   cct->_conf.apply_changes(nullptr);
 }
 
-int mClockScheduler::calc_scaled_cost(int cost)
+int mClockScheduler::calc_scaled_cost(int item_cost)
 {
-  // Calculate scaled cost in msecs based on item cost
-  int scaled_cost = std::floor((cost / max_osd_bandwidth) * 1000);
-
-  // Scale the cost down by an additional cost factor if specified
-  // to account for different device characteristics (hdd, ssd).
-  // This option can be used to further tune the performance further
-  // if necessary (disabled by default).
-  if (osd_mclock_cost_per_io_msec > 0) {
-    scaled_cost *= osd_mclock_cost_per_io_msec / 1000.0;
-  }
-
+  // Calculate total scaled cost in secs
+  int scaled_cost =
+    std::round(osd_mclock_cost_per_io + (osd_mclock_cost_per_byte * item_cost));
   return std::max(scaled_cost, 1);
 }
 
@@ -437,9 +476,12 @@ const char** mClockScheduler::get_tracked_conf_keys() const
     "osd_mclock_scheduler_background_best_effort_res",
     "osd_mclock_scheduler_background_best_effort_wgt",
     "osd_mclock_scheduler_background_best_effort_lim",
-    "osd_mclock_cost_per_io_msec",
-    "osd_mclock_cost_per_io_msec_hdd",
-    "osd_mclock_cost_per_io_msec_ssd",
+    "osd_mclock_cost_per_io_usec",
+    "osd_mclock_cost_per_io_usec_hdd",
+    "osd_mclock_cost_per_io_usec_ssd",
+    "osd_mclock_cost_per_byte_usec",
+    "osd_mclock_cost_per_byte_usec_hdd",
+    "osd_mclock_cost_per_byte_usec_ssd",
     "osd_mclock_max_capacity_iops",
     "osd_mclock_max_capacity_iops_hdd",
     "osd_mclock_max_capacity_iops_ssd",
@@ -453,10 +495,15 @@ void mClockScheduler::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string> &changed)
 {
-  if (changed.count("osd_mclock_cost_per_io_msec") ||
-      changed.count("osd_mclock_cost_per_io_msec_hdd") ||
-      changed.count("osd_mclock_cost_per_io_msec_ssd")) {
+  if (changed.count("osd_mclock_cost_per_io_usec") ||
+      changed.count("osd_mclock_cost_per_io_usec_hdd") ||
+      changed.count("osd_mclock_cost_per_io_usec_ssd")) {
     set_osd_mclock_cost_per_io();
+  }
+  if (changed.count("osd_mclock_cost_per_byte_usec") ||
+      changed.count("osd_mclock_cost_per_byte_usec_hdd") ||
+      changed.count("osd_mclock_cost_per_byte_usec_ssd")) {
+    set_osd_mclock_cost_per_byte();
   }
   if (changed.count("osd_mclock_max_capacity_iops") ||
       changed.count("osd_mclock_max_capacity_iops_hdd") ||

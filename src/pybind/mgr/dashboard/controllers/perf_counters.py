@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from typing import Any, Dict
+
 import cherrypy
 
 from .. import mgr
@@ -79,6 +81,39 @@ class OsdPerfCounter(PerfCounter):
 @ControllerDoc("Rgw Perf Counters Management API", "RgwPerfCounter")
 class RgwPerfCounter(PerfCounter):
     service_type = 'rgw'
+
+    def get(self, service_id: str) -> Dict[str, Any]:
+        svc_data = CephService.get_service_data_by_metadata_id(self.service_type, service_id)
+        service_map_id = svc_data['service_map_id']
+        schema_dict = mgr.get_perf_schema(self.service_type, service_map_id)
+        try:
+            schema = schema_dict["{}.{}".format(self.service_type, service_map_id)]
+        except KeyError as e:
+            raise cherrypy.HTTPError(404, "{0} not found".format(e))
+        counters = []
+
+        for key, value in sorted(schema.items()):
+            counter = dict()
+            counter['name'] = str(key)
+            counter['description'] = value['description']
+            # pylint: disable=W0212
+            if mgr._stattype_to_str(value['type']) == 'counter':
+                counter['value'] = CephService.get_rate(
+                    self.service_type, service_map_id, key)
+                counter['unit'] = mgr._unit_to_str(value['units'])
+            else:
+                counter['value'] = mgr.get_latest(
+                    self.service_type, service_map_id, key)
+                counter['unit'] = ''
+            counters.append(counter)
+
+        return {
+            'service': {
+                'type': self.service_type,
+                'id': svc_data['id']
+            },
+            'counters': counters
+        }
 
 
 @ApiController('perf_counters/rbd-mirror', Scope.RBD_MIRRORING)

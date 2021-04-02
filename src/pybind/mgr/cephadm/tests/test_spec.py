@@ -72,8 +72,7 @@ from orchestrator import DaemonDescription, OrchestratorError
   "service_type": "rgw",
   "service_id": "default-rgw-realm.eu-central-1.1",
   "rgw_realm": "default-rgw-realm",
-  "rgw_zone": "eu-central-1",
-  "subcluster": "1"
+  "rgw_zone": "eu-central-1"
 },
 {
   "service_type": "osd",
@@ -296,40 +295,38 @@ def test_dd_octopus(dd_json):
     # https://tracker.ceph.com/issues/44934
     (
         RGWSpec(
+            service_id="foo",
             rgw_realm="default-rgw-realm",
             rgw_zone="eu-central-1",
-            subcluster='1',
         ),
         DaemonDescription(
             daemon_type='rgw',
-            daemon_id="default-rgw-realm.eu-central-1.1.ceph-001.ytywjo",
+            daemon_id="foo.ceph-001.ytywjo",
             hostname="ceph-001",
         ),
         True
     ),
     (
-        # no subcluster
+        # no realm
         RGWSpec(
-            rgw_realm="default-rgw-realm",
+            service_id="foo.bar",
             rgw_zone="eu-central-1",
         ),
         DaemonDescription(
             daemon_type='rgw',
-            daemon_id="default-rgw-realm.eu-central-1.ceph-001.ytywjo",
+            daemon_id="foo.bar.ceph-001.ytywjo",
             hostname="ceph-001",
         ),
         True
     ),
     (
-        # with tld
+        # no realm or zone
         RGWSpec(
-            rgw_realm="default-rgw-realm",
-            rgw_zone="eu-central-1",
-            subcluster='1',
+            service_id="bar",
         ),
         DaemonDescription(
             daemon_type='rgw',
-            daemon_id="default-rgw-realm.eu-central-1.1.host.domain.tld.ytywjo",
+            daemon_id="bar.host.domain.tld.ytywjo",
             hostname="host.domain.tld",
         ),
         True
@@ -337,8 +334,7 @@ def test_dd_octopus(dd_json):
     (
         # explicit naming
         RGWSpec(
-            rgw_realm="realm",
-            rgw_zone="zone",
+            service_id="realm.zone",
         ),
         DaemonDescription(
             daemon_type='rgw',
@@ -351,9 +347,20 @@ def test_dd_octopus(dd_json):
         # without host
         RGWSpec(
             service_type='rgw',
-            rgw_realm="default-rgw-realm",
-            rgw_zone="eu-central-1",
-            subcluster='1',
+            service_id="foo",
+        ),
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id="foo.hostname.ytywjo",
+            hostname=None,
+        ),
+        False
+    ),
+    (
+        # without host (2)
+        RGWSpec(
+            service_type='rgw',
+            service_id="default-rgw-realm.eu-central-1.1",
         ),
         DaemonDescription(
             daemon_type='rgw',
@@ -363,16 +370,14 @@ def test_dd_octopus(dd_json):
         False
     ),
     (
-        # zone contains hostname
-        # https://tracker.ceph.com/issues/45294
+        # service_id contains hostname
+        # (sort of) https://tracker.ceph.com/issues/45294
         RGWSpec(
-            rgw_realm="default.rgw.realm",
-            rgw_zone="ceph.001",
-            subcluster='1',
+            service_id="default.rgw.realm.ceph.001",
         ),
         DaemonDescription(
             daemon_type='rgw',
-            daemon_id="default.rgw.realm.ceph.001.1.ceph.001.ytywjo",
+            daemon_id="default.rgw.realm.ceph.001.ceph.001.ytywjo",
             hostname="ceph.001",
         ),
         True

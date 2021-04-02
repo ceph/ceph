@@ -6,7 +6,6 @@
 
 #include "include/encoding.h"
 
-#include "common/RWLock.h"
 #include "common/ceph_json.h"
 
 #include "rgw_coroutine.h"

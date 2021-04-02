@@ -37,8 +37,8 @@ struct lba_node_meta_le_t {
   lba_node_meta_le_t() = default;
   lba_node_meta_le_t(const lba_node_meta_le_t &) = default;
   explicit lba_node_meta_le_t(const lba_node_meta_t &val)
-    : begin(init_le64(val.begin)),
-      end(init_le64(val.end)),
+    : begin(ceph_le64(val.begin)),
+      end(ceph_le64(val.end)),
       depth(init_depth_le(val.depth)) {}
 
   operator lba_node_meta_t() const {
@@ -319,16 +319,16 @@ constexpr size_t LEAF_NODE_CAPACITY = 145;
 struct lba_map_val_le_t {
   extent_len_le_t len = init_extent_len_le(0);
   paddr_le_t paddr;
-  ceph_le32 refcount = init_le32(0);
-  ceph_le32 checksum = init_le32(0);
+  ceph_le32 refcount{0};
+  ceph_le32 checksum{0};
 
   lba_map_val_le_t() = default;
   lba_map_val_le_t(const lba_map_val_le_t &) = default;
   explicit lba_map_val_le_t(const lba_map_val_t &val)
     : len(init_extent_len_le(val.len)),
       paddr(paddr_le_t(val.paddr)),
-      refcount(init_le32(val.refcount)),
-      checksum(init_le32(val.checksum)) {}
+      refcount(val.refcount),
+      checksum(val.checksum) {}
 
   operator lba_map_val_t() const {
     return lba_map_val_t{ len, paddr, refcount, checksum };

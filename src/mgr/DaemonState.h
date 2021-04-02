@@ -20,7 +20,6 @@
 #include <set>
 #include <boost/circular_buffer.hpp>
 
-#include "common/RWLock.h"
 #include "include/str_map.h"
 
 #include "msg/msg_types.h"

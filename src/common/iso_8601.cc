@@ -151,7 +151,9 @@ optional<real_time> from_iso_8601(const string_view s,
 }
 
 string to_iso_8601(const real_time t,
-		   const iso_8601_format f) noexcept {
+		   const iso_8601_format f,
+                   std::string_view date_separator,
+                   std::string_view time_separator) noexcept {
   ceph_assert(f >= iso_8601_format::Y &&
 	      f <= iso_8601_format::YMDhmsn);
   stringstream out(std::ios_base::out);
@@ -169,12 +171,12 @@ string to_iso_8601(const real_time t,
     return out.str();
   }
 
-  out << '-' << setw(2) << bt.tm_mon + 1;
+  out << date_separator << setw(2) << bt.tm_mon + 1;
   if (f == iso_8601_format::YM) {
     return out.str();
   }
 
-  out << '-' << setw(2) << bt.tm_mday;
+  out << date_separator << setw(2) << bt.tm_mday;
   if (f == iso_8601_format::YMD) {
     return out.str();
   }
@@ -185,13 +187,13 @@ string to_iso_8601(const real_time t,
     return out.str();
   }
 
-  out << ':' << setw(2) << bt.tm_min;
+  out << time_separator << setw(2) << bt.tm_min;
   if (f == iso_8601_format::YMDhm) {
     out << 'Z';
     return out.str();
   }
 
-  out << ':' << setw(2) << bt.tm_sec;
+  out << time_separator << setw(2) << bt.tm_sec;
   if (f == iso_8601_format::YMDhms) {
     out << 'Z';
     return out.str();
@@ -199,4 +201,5 @@ string to_iso_8601(const real_time t,
   out << '.' << setw(9) << nsec << 'Z';
   return out.str();
 }
+
 }

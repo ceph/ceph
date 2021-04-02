@@ -1,0 +1,5 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph orch apply rgw foo --port=8000 "--placement=count-per-host:4 *"
+      - sleep 60

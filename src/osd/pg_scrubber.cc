@@ -807,7 +807,6 @@ void PgScrubber::on_init()
 
 void PgScrubber::on_replica_init()
 {
-  ceph_assert(!m_active);
   m_active = true;
 }
 

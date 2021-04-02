@@ -3,6 +3,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "include/rados.h"
 #include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -2552,11 +2553,11 @@ void PGMap::get_health_checks(
             ss << " for " << utimespan_str(dur);
           }
           ss << ", current state " << pg_state_string(pg_info.state)
-             << ", last acting " << pg_info.acting;
+             << ", last acting " << pg_vector_string(pg_info.acting);
         } else {
           ss << "pg " << pg_id << " is "
              << pg_state_string(pg_info.state);
-          ss << ", acting " << pg_info.acting;
+          ss << ", acting " << pg_vector_string(pg_info.acting);
           if (pg_info.stats.sum.num_objects_unfound) {
             ss << ", " << pg_info.stats.sum.num_objects_unfound
                << " unfound";
@@ -3243,7 +3244,9 @@ void PGMap::get_health_checks(
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
 	summary += " have dangerous mismatch between BlueStore block device and free list sizes";
       } else if (asum.first == "BLUESTORE_NO_PER_PG_OMAP") {
-	summary += " reporting legacy (not per-pg) BlueStore omap usage stats";
+	summary += " reporting legacy (not per-pg) BlueStore omap";
+      } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
+	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
       } else if (asum.first == "BLUESTORE_SPURIOUS_READ_ERRORS") {
         summary += " have spurious read errors";
       }
@@ -3990,7 +3993,7 @@ int reweight::by_utilization(
   // but aggressively adjust weights up whenever possible.
   const double underload_util = average_util;
 
-  const unsigned max_change = (unsigned)(max_changef * (double)0x10000);
+  const unsigned max_change = (unsigned)(max_changef * (double)CEPH_OSD_IN);
 
   ostringstream oss;
   if (f) {
@@ -4067,13 +4070,13 @@ int reweight::by_utilization(
       if (f) {
 	f->open_object_section("osd");
 	f->dump_int("osd", p.first);
-	f->dump_float("weight", (float)weight / (float)0x10000);
-	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
+	f->dump_float("weight", (float)weight / (float)CEPH_OSD_IN);
+	f->dump_float("new_weight", (float)new_weight / (float)CEPH_OSD_IN);
 	f->close_section();
       } else {
         oss << "osd." << p.first << " weight "
-            << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000 << "\n";
+            << (float)weight / (float)CEPH_OSD_IN << " -> "
+            << (float)new_weight / (float)CEPH_OSD_IN << "\n";
       }
       if (++num_changed >= max_osds)
 	break;
@@ -4082,13 +4085,13 @@ int reweight::by_utilization(
       // assign a higher weight.. if we can.
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       new_weight = std::min(new_weight, weight + max_change);
-      if (new_weight > 0x10000)
-	new_weight = 0x10000;
+      if (new_weight > CEPH_OSD_IN)
+	new_weight = CEPH_OSD_IN;
       if (new_weight > weight) {
 	new_weights->insert({p.first, new_weight});
         oss << "osd." << p.first << " weight "
-            << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000 << "\n";
+            << (float)weight / (float)CEPH_OSD_IN << " -> "
+            << (float)new_weight / (float)CEPH_OSD_IN << "\n";
 	if (++num_changed >= max_osds)
 	  break;
       }

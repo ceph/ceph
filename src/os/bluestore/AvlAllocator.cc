@@ -230,7 +230,7 @@ int AvlAllocator::_allocate(
   ceph_assert(align != 0);
   uint64_t *cursor = &lbas[cbits(align) - 1];
 
-  const int free_pct = num_free * 100 / num_total;
+  const int free_pct = num_free * 100 / device_size;
   uint64_t start = 0;
   /*
    * If we're running low on space switch to using the size
@@ -268,6 +268,7 @@ void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
   for (auto p = release_set.begin(); p != release_set.end(); ++p) {
     const auto offset = p.get_start();
     const auto length = p.get_len();
+    ceph_assert(offset + length <= uint64_t(device_size));
     ldout(cct, 10) << __func__ << std::hex
       << " offset 0x" << offset
       << " length 0x" << length
@@ -298,8 +299,6 @@ AvlAllocator::AvlAllocator(CephContext* cct,
                            uint64_t max_mem,
                            const std::string& name) :
   Allocator(name, device_size, block_size),
-  num_total(device_size),
-  block_size(block_size),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
@@ -313,8 +312,6 @@ AvlAllocator::AvlAllocator(CephContext* cct,
 			   int64_t block_size,
 			   const std::string& name) :
   Allocator(name, device_size, block_size),
-  num_total(device_size),
-  block_size(block_size),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
@@ -406,6 +403,7 @@ void AvlAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> no
 void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
@@ -416,6 +414,7 @@ void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length

@@ -28,6 +28,16 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 	     << ")";
 }
 
+
+std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
+{
+  return out << "extent_info_t("
+	     << " type: " << info.type
+	     << " addr: " << info.addr
+	     << " len: " << info.len
+	     << ")";
+}
+
 segment_nonce_t generate_nonce(
   segment_seq_t seq,
   const seastore_meta_t &meta)
@@ -672,7 +682,7 @@ Journal::scan_extents_ret Journal::scan_extents(
 	return scan_valid_records(
 	  cursor,
 	  segment_nonce,
-	  std::numeric_limits<size_t>::max(),
+	  bytes_to_read,
 	  dhandler).safe_then([](auto){});
       });
   }).safe_then([ret=std::move(ret)] {

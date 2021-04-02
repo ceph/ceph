@@ -706,6 +706,13 @@ extern "C" void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_res
   cmount->get_client()->seekdir(reinterpret_cast<dir_result_t*>(dirp), offset);
 }
 
+extern "C" int ceph_may_delete(struct ceph_mount_info *cmount, const char *path)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->may_delete(path, cmount->default_perms);
+}
+
 extern "C" int ceph_link (struct ceph_mount_info *cmount, const char *existing,
 			  const char *newname)
 {
@@ -944,6 +951,12 @@ extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->chmod(path, mode, cmount->default_perms);
+}
+extern "C" int ceph_lchmod(struct ceph_mount_info *cmount, const char *path, mode_t mode)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->lchmod(path, mode, cmount->default_perms);
 }
 extern "C" int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode)
 {

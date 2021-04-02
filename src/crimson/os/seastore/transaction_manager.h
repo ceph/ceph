@@ -281,10 +281,14 @@ public:
   submit_transaction_ertr::future<> submit_transaction(TransactionRef);
 
   /// SegmentCleaner::ExtentCallbackInterface
+  using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
+  submit_transaction_direct_ret submit_transaction_direct(
+    TransactionRef t) final;
 
   using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
-    journal_seq_t seq) final;
+    journal_seq_t seq,
+    size_t max_bytes) final;
 
   using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(

@@ -30,9 +30,10 @@ Creating Users
 --------------
 
 Start by creating a user (on the primary/local cluster) for the mirror daemon. This user
-has restrictive capabilities on the MDS and the OSD::
+requires write capability on the metadata pool to create RADOS objects (index objects)
+for watch/notify operation and read capability on the data pool(s).
 
-  $ ceph auth get-or-create client.mirror mon 'allow r' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
+  $ ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
 
 Create a user for each file system peer (on the secondary/remote cluster). This user needs
 to have full capabilities on the MDS (to take snapshots) and the OSDs::
@@ -130,9 +131,14 @@ when added. See `Creating Users` section on how to create Ceph users for mirrori
 
 To add a peer use::
 
-  $ ceph fs snapshot mirror peer_add <fs> <remote_cluster_spec> [<remote_fs_name>]
+  $ ceph fs snapshot mirror peer_add <fs> <remote_cluster_spec> [<remote_fs_name>] [<remote_mon_host>] [<cephx_key>]
 
 `<remote_fs_name>` is optional, and default to `<fs>` (on the remote cluster).
+
+This requires the remote cluster ceph configuration and user keyring to be available in
+the primary cluster. See `Bootstrap Peers` section to avoid this. `peer_add` additionally
+supports passing the remote cluster monitor address and the user key. However, bootstrapping
+a peer is the recommended way to add a peer.
 
 .. note:: Only a single peer is supported right now.
 
@@ -141,6 +147,10 @@ To remove a peer use::
   $ ceph fs snapshot mirror peer_remove <fs> <peer_uuid>
 
 .. note:: See `Mirror Daemon Status` section on how to figure out Peer UUID.
+
+To list file system mirror peers use::
+
+  $ ceph fs snapshot mirror peer_list <fs>
 
 To configure a directory for mirroring, use::
 
@@ -169,6 +179,32 @@ disallowed to be added for mirorring::
 
 Commands to check directory mapping (to mirror daemons) and directory distribution are
 detailed in `Mirror Daemon Status` section.
+
+Bootstrap Peers
+---------------
+
+Adding a peer (via `peer_add`) requires the peer cluster configuration and user keyring
+to be available in the primary cluster (manager host and hosts running the mirror daemon).
+This can be avoided by bootstrapping and importing a peer token. Peer bootstrap involves
+creating a bootstrap token on the peer cluster via::
+
+  $ ceph fs snapshot mirror peer_bootstrap create <fs_name> <client_entity> <site-name>
+
+e.g.::
+
+  $ ceph fs snapshot mirror peer_bootstrap create backup_fs client.mirror_remote site-remote
+  {"token": "eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ=="}
+
+`site-name` refers to a user-defined string to identify the remote filesystem. In context
+of `peer_add` interface, `site-name` is the passed in `cluster` name from `remote_cluster_spec`.
+
+Import the bootstrap token in the primary cluster via::
+
+  $ ceph fs snapshot mirror peer_bootstrap import <fs_name> <token>
+
+e.g.::
+
+  $ ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
 
 Mirror Daemon Status
 --------------------

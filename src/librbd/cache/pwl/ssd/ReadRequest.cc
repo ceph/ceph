@@ -27,45 +27,45 @@ void C_ReadRequest::finish(int r) {
        * hits.
        */
     uint64_t miss_bl_offset = 0;
-    for (auto &extent : read_extents) {
-      if (extent.m_bl.length()) {
+    for (auto extent : read_extents) {
+      if (extent->m_bl.length()) {
         /* This was a hit */
         bufferlist data_bl;
-        if (extent.writesame) {
-          int data_len = extent.m_bl.length();
-          int read_buffer_offset = extent.truncate_offset;
-          if (extent.need_to_truncate && extent.truncate_offset >= data_len) {
-            read_buffer_offset = (extent.truncate_offset) % data_len;
+        if (extent->writesame) {
+          int data_len = extent->m_bl.length();
+          int read_buffer_offset = extent->truncate_offset;
+          if (extent->need_to_truncate && extent->truncate_offset >= data_len) {
+            read_buffer_offset = (extent->truncate_offset) % data_len;
           }
           // build data and truncate
           bufferlist temp_bl;
-          uint64_t total_left_bytes = read_buffer_offset + extent.second;
+          uint64_t total_left_bytes = read_buffer_offset + extent->second;
           while (total_left_bytes > 0) {
-            temp_bl.append(extent.m_bl);
+            temp_bl.append(extent->m_bl);
             total_left_bytes = total_left_bytes - data_len;
           }
-          data_bl.substr_of(temp_bl, read_buffer_offset, extent.second);
+          data_bl.substr_of(temp_bl, read_buffer_offset, extent->second);
           m_out_bl->claim_append(data_bl);
-        } else if (extent.need_to_truncate) {
-          assert(extent.m_bl.length() >= extent.truncate_offset + extent.second);
-          data_bl.substr_of(extent.m_bl, extent.truncate_offset, extent.second);
+        } else if (extent->need_to_truncate) {
+          assert(extent->m_bl.length() >= extent->truncate_offset + extent->second);
+          data_bl.substr_of(extent->m_bl, extent->truncate_offset, extent->second);
           m_out_bl->claim_append(data_bl);
         } else {
-          assert(extent.second == extent.m_bl.length());
-          m_out_bl->claim_append(extent.m_bl);
+          assert(extent->second == extent->m_bl.length());
+          m_out_bl->claim_append(extent->m_bl);
         }
         ++hits;
-        hit_bytes += extent.second;
+        hit_bytes += extent->second;
       } else {
         /* This was a miss. */
         ++misses;
-        miss_bytes += extent.second;
+        miss_bytes += extent->second;
         bufferlist miss_extent_bl;
-        miss_extent_bl.substr_of(miss_bl, miss_bl_offset, extent.second);
+        miss_extent_bl.substr_of(miss_bl, miss_bl_offset, extent->second);
         /* Add this read miss bufferlist to the output bufferlist */
         m_out_bl->claim_append(miss_extent_bl);
         /* Consume these bytes in the read miss bufferlist */
-        miss_bl_offset += extent.second;
+        miss_bl_offset += extent->second;
       }
     }
   }

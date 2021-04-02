@@ -2,4 +2,10 @@ tasks:
 - cephadm.shell:
     env: [sha1]
     mon.a:
+      - radosgw-admin realm create --rgw-realm=r --default
+      - radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
+      - radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=z --master --default
+      - radosgw-admin period update --rgw-realm=r --commit
+      - ceph orch apply rgw r z --placement=2 --port=8000
+      - sleep 120
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1

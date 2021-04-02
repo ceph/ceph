@@ -18,9 +18,9 @@ namespace cephfs {
 namespace mirror {
 
 int connect(std::string_view client_name, std::string_view cluster_name,
-            RadosRef *cluster) {
+            RadosRef *cluster, std::string_view mon_host, std::string_view cephx_key) {
   dout(20) << ": connecting to cluster=" << cluster_name << ", client=" << client_name
-           << dendl;
+           << ", mon_host=" << mon_host << dendl;
 
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   if (client_name.empty() || !iparams.name.from_str(client_name)) {
@@ -33,7 +33,7 @@ int connect(std::string_view client_name, std::string_view cluster_name,
   cct->_conf->cluster = cluster_name;
 
   int r = cct->_conf.parse_config_files(nullptr, nullptr, 0);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     derr << ": could not read ceph conf: " << ": " << cpp_strerror(r) << dendl;
     return r;
   }
@@ -48,6 +48,23 @@ int connect(std::string_view client_name, std::string_view cluster_name,
     return r;
   }
   cct->_conf.parse_env(cct->get_module_type());
+
+  if (!mon_host.empty()) {
+    r = cct->_conf.set_val("mon_host", std::string(mon_host));
+    if (r < 0) {
+      derr << "failed to set mon_host config: " << cpp_strerror(r) << dendl;
+      cct->put();
+      return r;
+    }
+  }
+  if (!cephx_key.empty()) {
+    r = cct->_conf.set_val("key", std::string(cephx_key));
+    if (r < 0) {
+      derr << "failed to set key config: " << cpp_strerror(r) << dendl;
+      cct->put();
+      return r;
+    }
+  }
 
   cluster->reset(new librados::Rados());
 

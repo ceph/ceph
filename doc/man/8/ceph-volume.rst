@@ -9,15 +9,15 @@
 Synopsis
 ========
 
-| **ceph-volume** [-h] [--cluster CLUSTER] [--log-level LOG_LEVEL]
-|                 [--log-path LOG_PATH]
+**ceph-volume** [-h] [--cluster CLUSTER] [--log-level LOG_LEVEL]
+[--log-path LOG_PATH]
 
-| **ceph-volume** **inventory**
+**ceph-volume** **inventory**
 
-| **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
+**ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
 | *zap* | *list* | *batch*]
 
-| **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
+**ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
 
 
 Description
@@ -53,9 +53,14 @@ Examples::
 
 Optional arguments:
 
-* [-h, --help]          show the help message and exit
-* [--format]            report format, valid values are ``plain`` (default),
-                        ``json`` and ``json-pretty``
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --format
+
+   report format, valid values are ``plain`` (default),
+   ``json`` and ``json-pretty``
 
 lvm
 ---
@@ -66,7 +71,9 @@ activated.
 
 Subcommands:
 
-**batch**
+batch
+^^^^^
+
 Creates OSDs from a list of devices using a ``filestore``
 or ``bluestore`` (default) setup. It will create all necessary volume groups
 and logical volumes required to have a working OSD.
@@ -77,30 +84,72 @@ Example usage with three devices::
 
 Optional arguments:
 
-* [-h, --help]          show the help message and exit
-* [--bluestore]         Use the bluestore objectstore (default)
-* [--filestore]         Use the filestore objectstore
-* [--yes]               Skip the report and prompt to continue provisioning
-* [--prepare]           Only prepare OSDs, do not activate
-* [--dmcrypt]           Enable encryption for the underlying OSD devices
-* [--crush-device-class] Define a CRUSH device class to assign the OSD to
-* [--no-systemd]         Do not enable or create any systemd units
-* [--osds-per-device]   Provision more than 1 (the default) OSD per device
-* [--report]         Report what the potential outcome would be for the current input (requires devices to be passed in)
-* [--format]         Output format when reporting (used along with --report), can be one of 'pretty' (default) or 'json'
-* [--block-db-size]     Set (or override) the "bluestore_block_db_size" value, in bytes
-* [--journal-size]      Override the "osd_journal_size" value, in megabytes
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --bluestore
+
+   Use the bluestore objectstore (default)
+
+.. option:: --filestore
+
+   Use the filestore objectstore
+
+.. option:: --yes
+
+   Skip the report and prompt to continue provisioning
+
+.. option:: --prepare
+
+   Only prepare OSDs, do not activate
+
+.. option:: --dmcrypt
+
+   Enable encryption for the underlying OSD devices
+
+.. option:: --crush-device-class
+
+   Define a CRUSH device class to assign the OSD to
+
+.. option:: --no-systemd
+
+   Do not enable or create any systemd units
+
+.. option:: --osds-per-device
+
+   Provision more than 1 (the default) OSD per device
+
+.. option:: --report
+
+   Report what the potential outcome would be for the current input (requires devices
+   to be passed in)
+
+.. option:: --format
+
+   Output format when reporting (used along with --report), can be one of 'pretty'
+   (default) or 'json'
+
+.. option:: --block-db-size
+
+   Set (or override) the "bluestore_block_db_size" value, in bytes
+
+.. option:: --journal-size
+
+   Override the "osd_journal_size" value, in megabytes
 
 Required positional arguments:
 
-* <DEVICE>    Full path to a raw device, like ``/dev/sda``. Multiple
-              ``<DEVICE>`` paths can be passed in.
+.. describe:: <DEVICE>
 
+   Full path to a raw device, like ``/dev/sda``. Multiple
+   ``<DEVICE>`` paths can be passed in.
 
-**activate**
-Enables a systemd unit that persists the OSD ID and its UUID (also called
-``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
-enabled and needs to be mounted.
+.. describe:: **activate**
+
+   Enables a systemd unit that persists the OSD ID and its UUID (also called
+   ``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
+   enabled and needs to be mounted.
 
 Usage::
 
@@ -108,21 +157,40 @@ Usage::
 
 Optional Arguments:
 
-* [-h, --help]  show the help message and exit
-* [--auto-detect-objectstore] Automatically detect the objectstore by inspecting
-  the OSD
-* [--bluestore] bluestore objectstore (default)
-* [--filestore] filestore objectstore
-* [--all] Activate all OSDs found in the system
-* [--no-systemd] Skip creating and enabling systemd units and starting of OSD
-  services
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --auto-detect-objectstore
+
+   Automatically detect the objectstore by inspecting
+   the OSD
+
+.. option:: --bluestore
+
+   bluestore objectstore (default)
+
+.. option:: --filestore
+
+   filestore objectstore
+
+.. option:: --all
+
+   Activate all OSDs found in the system
+
+.. option:: --no-systemd
+
+   Skip creating and enabling systemd units and starting of OSD
+   services
 
 Multiple OSDs can be activated at once by using the (idempotent) ``--all`` flag::
 
     ceph-volume lvm activate --all
 
 
-**prepare**
+prepare
+^^^^^^^
+
 Prepares a logical volume to be used as an OSD and journal using a ``filestore``
 or ``bluestore`` (default) setup. It will not create or modify the logical volumes
 except for adding extra metadata.
@@ -133,26 +201,59 @@ Usage::
 
 Optional arguments:
 
-* [-h, --help]          show the help message and exit
-* [--journal JOURNAL]   A logical group name, path to a logical volume, or path to a device
-* [--bluestore]         Use the bluestore objectstore (default)
-* [--block.wal]         Path to a bluestore block.wal logical volume or partition
-* [--block.db]          Path to a bluestore block.db logical volume or partition
-* [--filestore]         Use the filestore objectstore
-* [--dmcrypt]           Enable encryption for the underlying OSD devices
-* [--osd-id OSD_ID]     Reuse an existing OSD id
-* [--osd-fsid OSD_FSID] Reuse an existing OSD fsid
-* [--crush-device-class] Define a CRUSH device class to assign the OSD to
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --journal JOURNAL
+
+   logical group name, path to a logical volume, or path to a device
+
+.. option:: --bluestore
+
+   Use the bluestore objectstore (default)
+
+.. option:: --block.wal
+
+   Path to a bluestore block.wal logical volume or partition
+
+.. option:: --block.db
+
+   Path to a bluestore block.db logical volume or partition
+
+.. option:: --filestore
+
+   Use the filestore objectstore
+
+.. option:: --dmcrypt
+
+   Enable encryption for the underlying OSD devices
+
+.. option:: --osd-id OSD_ID
+
+   Reuse an existing OSD id
+
+.. option:: --osd-fsid OSD_FSID
+
+   Reuse an existing OSD fsid
+
+.. option:: --crush-device-class
+
+   Define a CRUSH device class to assign the OSD to
 
 Required arguments:
 
-* --data                A logical group name or a path to a logical volume
+.. option:: --data
+
+   A logical group name or a path to a logical volume
 
 For encrypting an OSD, the ``--dmcrypt`` flag must be added when preparing
 (also supported in the ``create`` sub-command).
 
 
-**create**
+create
+^^^^^^
+
 Wraps the two-step process to provision a new osd (calling ``prepare`` first
 and then ``activate``) into a single one. The reason to prefer ``prepare`` and
 then ``activate`` is to gradually introduce new OSDs into a cluster, and
@@ -162,7 +263,9 @@ The single-call process unifies exactly what ``prepare`` and ``activate`` do,
 with the convenience of doing it all at once. Flags and general usage are
 equivalent to those of the ``prepare`` and ``activate`` subcommand.
 
-**trigger**
+trigger
+^^^^^^^
+
 This subcommand is not meant to be used directly, and it is used by systemd so
 that it proxies input to ``ceph-volume lvm activate`` by parsing the
 input from systemd, detecting the UUID and ID associated with an OSD.
@@ -180,9 +283,13 @@ so that all needed tags and metadata exist.
 
 Positional arguments:
 
-* <SYSTEMD_DATA>  Data from a systemd unit containing ID and UUID of the OSD.
+.. describe:: <SYSTEMD_DATA>
 
-**list**
+   Data from a systemd unit containing ID and UUID of the OSD.
+
+list
+^^^^
+
 List devices or logical volumes associated with Ceph. An association is
 determined if a device has information relating to an OSD. This is
 verified by querying LVM's metadata and correlating it with devices.
@@ -205,11 +312,15 @@ group, and lv the logical volume name)::
 
 Positional arguments:
 
-* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
-  ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
+.. describe:: <DEVICE>
+
+   Either in the form of ``vg/lv`` for logical volumes,
+   ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
 
 
-**zap**
+zap
+^^^
+
 Zaps the given logical volume or partition. If given a path to a logical
 volume it must be in the format of vg/lv. Any file systems present
 on the given lv or partition will be removed and all data will be purged.
@@ -237,8 +348,10 @@ Multiple devices can be removed by specifying the OSD ID and/or the OSD FSID::
 
 Positional arguments:
 
-* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
-  ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
+.. describe:: <DEVICE>
+
+   Either in the form of ``vg/lv`` for logical volumes,
+   ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
 
 
 simple
@@ -249,7 +362,9 @@ ceph-disk, or manually.
 
 Subcommands:
 
-**activate**
+activate
+^^^^^^^^
+
 Enables a systemd unit that persists the OSD ID and its UUID (also called
 ``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
 enabled and needs to be mounted, while reading information that was previously
@@ -261,16 +376,28 @@ Usage::
 
 Optional Arguments:
 
-* [-h, --help]  show the help message and exit
-* [--bluestore] bluestore objectstore (default)
-* [--filestore] filestore objectstore
+.. option:: -h, --help
 
-Note: It requires a matching JSON file with the following format::
+   show the help message and exit
+
+.. option:: --bluestore
+
+   bluestore objectstore (default)
+
+.. option:: --filestore
+
+   filestore objectstore
+
+.. note::
+
+   It requires a matching JSON file with the following format::
 
     /etc/ceph/osd/<osd id>-<osd fsid>.json
 
 
-**scan**
+scan
+^^^^
+
 Scan a running OSD or data device for an OSD for metadata that can later be
 used to activate and manage the OSD with ceph-volume. The scan method will
 create a JSON file with the required information plus anything found in the OSD
@@ -293,15 +420,27 @@ Running OSD directories::
 
 Optional arguments:
 
-* [-h, --help]          show the help message and exit
-* [--stdout]            Send the JSON blob to stdout
-* [--force]             If the JSON file exists at destination, overwrite it
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --stdout
+
+   Send the JSON blob to stdout
+
+.. option:: --force
+
+   If the JSON file exists at destination, overwrite it
 
 Optional Positional arguments:
 
-* <DATA DEVICE or OSD DIR>  Actual data partition or a path to the running OSD
+.. describe:: <DATA DEVICE or OSD DIR>
 
-**trigger**
+   Actual data partition or a path to the running OSD
+
+trigger
+^^^^^^^
+
 This subcommand is not meant to be used directly, and it is used by systemd so
 that it proxies input to ``ceph-volume simple activate`` by parsing the
 input from systemd, detecting the UUID and ID associated with an OSD.
@@ -319,7 +458,9 @@ a scan (or manually), so that all needed metadata can be used.
 
 Positional arguments:
 
-* <SYSTEMD_DATA>  Data from a systemd unit containing ID and UUID of the OSD.
+.. describe:: <SYSTEMD_DATA>
+
+   Data from a systemd unit containing ID and UUID of the OSD.
 
 
 Availability

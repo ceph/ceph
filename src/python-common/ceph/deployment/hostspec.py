@@ -32,7 +32,7 @@ class HostSpec(object):
         return {
             'hostname': self.hostname,
             'addr': self.addr,
-            'labels': self.labels,
+            'labels': list(set((self.labels))),
             'status': self.status,
         }
 
@@ -40,7 +40,7 @@ class HostSpec(object):
     def from_json(cls, host_spec: dict) -> 'HostSpec':
         _cls = cls(host_spec['hostname'],
                    host_spec['addr'] if 'addr' in host_spec else None,
-                   host_spec['labels'] if 'labels' in host_spec else None,
+                   list(set(host_spec['labels'])) if 'labels' in host_spec else None,
                    host_spec['status'] if 'status' in host_spec else None)
         return _cls
 

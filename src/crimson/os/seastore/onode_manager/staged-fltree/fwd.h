@@ -160,4 +160,12 @@ inline std::ostream& operator<<(std::ostream& os, const tree_stats_t& stats) {
   return os;
 }
 
+template <typename PtrType>
+void reset_ptr(PtrType& ptr, const char* origin_base, const char* new_base) {
+  assert((const char*)ptr > origin_base);
+  assert((const char*)ptr - origin_base < NODE_BLOCK_SIZE);
+  ptr = reinterpret_cast<PtrType>(
+      (const char*)ptr - origin_base + new_base);
+}
+
 }

@@ -5,14 +5,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
-import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
   FeatureTogglesMap,
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
-import { configureTestBed } from '~/testing/unit-test-helper';
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 import { ContextComponent } from './context.component';
 
 describe('ContextComponent', () => {
@@ -26,17 +25,7 @@ describe('ContextComponent', () => {
   let ftMap: FeatureTogglesMap;
   let httpTesting: HttpTestingController;
 
-  const getDaemonList = () => {
-    const daemonList: RgwDaemon[] = [];
-    for (let daemonIndex = 1; daemonIndex <= 3; daemonIndex++) {
-      const rgwDaemon = new RgwDaemon();
-      rgwDaemon.id = `daemon${daemonIndex}`;
-      rgwDaemon.default = daemonIndex === 2;
-      rgwDaemon.zonegroup_name = `zonegroup${daemonIndex}`;
-      daemonList.push(rgwDaemon);
-    }
-    return daemonList;
-  };
+  const daemonList = RgwHelper.getDaemonList();
 
   configureTestBed({
     declarations: [ContextComponent],
@@ -59,9 +48,6 @@ describe('ContextComponent', () => {
     getFeatureTogglesSpy.and.returnValue(of(ftMap));
     fixture = TestBed.createComponent(ContextComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
-    const req = httpTesting.expectOne('api/rgw/daemon');
-    req.flush(getDaemonList());
   });
 
   it('should create', () => {
@@ -75,7 +61,10 @@ describe('ContextComponent', () => {
 
   it('should select the default daemon', fakeAsync(() => {
     component.isRgwRoute = true;
+    fixture.detectChanges();
     tick();
+    const req = httpTesting.expectOne('api/rgw/daemon');
+    req.flush(daemonList);
     fixture.detectChanges();
     const selectedDaemon = fixture.debugElement.nativeElement.querySelector(
       '.ctx-bar-selected-rgw-daemon'
@@ -85,22 +74,27 @@ describe('ContextComponent', () => {
     const availableDaemons = fixture.debugElement.nativeElement.querySelectorAll(
       '.ctx-bar-available-rgw-daemon'
     );
-    expect(availableDaemons.length).toEqual(getDaemonList().length);
+    expect(availableDaemons.length).toEqual(daemonList.length);
     expect(availableDaemons[0].textContent).toEqual(' daemon1 ( zonegroup1 ) ');
+    component.ngOnDestroy();
   }));
 
   it('should select the chosen daemon', fakeAsync(() => {
     component.isRgwRoute = true;
-    component.onDaemonSelection(getDaemonList()[2]);
-    tick();
     fixture.detectChanges();
-
+    tick();
+    const req = httpTesting.expectOne('api/rgw/daemon');
+    req.flush(daemonList);
+    fixture.detectChanges();
+    component.onDaemonSelection(daemonList[2]);
     expect(routerNavigateByUrlSpy).toHaveBeenCalledTimes(1);
+    fixture.detectChanges();
+    tick();
     expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
-
     const selectedDaemon = fixture.debugElement.nativeElement.querySelector(
       '.ctx-bar-selected-rgw-daemon'
     );
     expect(selectedDaemon.textContent).toEqual(' daemon3 ( zonegroup3 ) ');
+    component.ngOnDestroy();
   }));
 });

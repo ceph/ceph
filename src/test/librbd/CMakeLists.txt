@@ -58,6 +58,7 @@ set(unittest_librbd_srcs
   crypto/test_mock_CryptoObjectDispatch.cc
   crypto/test_mock_FormatRequest.cc
   crypto/test_mock_LoadRequest.cc
+  crypto/test_mock_ShutDownCryptoRequest.cc
   crypto/openssl/test_DataCryptor.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
@@ -132,17 +133,14 @@ set(unittest_librbd_srcs
   )
 
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
-   set(unittest_librbd_srcs
-     ${unittest_librbd_srcs}
+   list(APPEND unittest_librbd_srcs
      cache/pwl/test_WriteLogMap.cc)
    if(WITH_RBD_RWL)
-     set(unittest_librbd_srcs
-       ${unittest_librbd_srcs}
+     list(APPEND unittest_librbd_srcs
        cache/pwl/test_mock_ReplicatedWriteLog.cc)
    endif()
    if(WITH_RBD_SSD_CACHE)
-     set(unittest_librbd_srcs
-       ${unittest_librbd_srcs}
+     list(APPEND unittest_librbd_srcs
        cache/pwl/test_mock_SSDWriteLog.cc)
    endif()
 endif()

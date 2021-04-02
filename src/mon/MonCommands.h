@@ -437,6 +437,7 @@ COMMAND("fs mirror disable "
 	"disable mirroring for a ceph filesystem", "mds", "rw")
 COMMAND("fs mirror peer_add "
 	"name=fs_name,type=CephString "
+	"name=uuid,type=CephString "
 	"name=remote_cluster_spec,type=CephString "
 	"name=remote_fs_name,type=CephString",
 	"add a mirror peer for a ceph filesystem", "mds", "rw")

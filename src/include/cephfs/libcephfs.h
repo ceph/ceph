@@ -746,6 +746,16 @@ int ceph_symlink(struct ceph_mount_info *cmount, const char *existing, const cha
  * @{
  */
 
+
+/**
+ * Checks if deleting a file, link or directory is allowed.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param path the path of the file, link or directory.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_may_delete(struct ceph_mount_info *cmount, const char *path);
+
 /**
  * Removes a file, link, or symbolic link.  If the file/link has multiple links to it, the
  * file will not disappear from the namespace until all references to it are removed.
@@ -864,6 +874,17 @@ int ceph_fsetattrx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *st
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
+
+/**
+ * Change the mode bits (permissions) of a file/directory. If the path is a
+ * symbolic link, it's not de-referenced.
+ *
+ * @param cmount the ceph mount handle to use for performing the chmod.
+ * @param path the path of file/directory to change the mode bits on.
+ * @param mode the new permissions to set.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_lchmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
 
 /**
  * Change the mode bits (permissions) of an open file.

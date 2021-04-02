@@ -78,9 +78,8 @@ void SessionMap::dump()
     dout(10) << p->first << " " << p->second
 	     << " state " << p->second->get_state_name()
 	     << " completed " << p->second->info.completed_requests
-	     << " prealloc_inos " << p->second->info.prealloc_inos
+	     << " free_prealloc_inos " << p->second->free_prealloc_inos
 	     << " delegated_inos " << p->second->delegated_inos
-	     << " used_inos " << p->second->info.used_inos
 	     << dendl;
 }
 
@@ -598,6 +597,16 @@ void Session::dump(Formatter *f, bool cap_dump) const
   f->dump_object("recall_caps_throttle2o", recall_caps_throttle2o);
   f->dump_object("session_cache_liveness", session_cache_liveness);
   f->dump_object("cap_acquisition", cap_acquisition);
+
+  f->open_array_section("delegated_inos");
+  for (const auto& [start, len] : delegated_inos) {
+    f->open_object_section("ino_range");
+    f->dump_stream("start") << start;
+    f->dump_unsigned("length", len);
+    f->close_section();
+  }
+  f->close_section();
+
   info.dump(f);
 }
 
@@ -636,9 +645,9 @@ void SessionMap::wipe_ino_prealloc()
        p != session_map.end(); 
        ++p) {
     p->second->pending_prealloc_inos.clear();
+    p->second->free_prealloc_inos.clear();
     p->second->delegated_inos.clear();
     p->second->info.prealloc_inos.clear();
-    p->second->info.used_inos.clear();
   }
   projected = ++version;
 }
@@ -983,6 +992,8 @@ void Session::decode(bufferlist::const_iterator &p)
 {
   info.decode(p);
 
+  free_prealloc_inos = info.prealloc_inos;
+
   _update_human_name();
 }
 
@@ -1011,14 +1022,14 @@ int Session::check_access(CInode *in, unsigned mask,
       inode->layout.pool_ns.length() &&
       !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
-    return -EIO;
+    return -CEPHFS_EIO;
   }
 
   if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
 			    info.inst.addr)) {
-    return -EACCES;
+    return -CEPHFS_EACCES;
   }
   return 0;
 }
@@ -1123,7 +1134,7 @@ int SessionFilter::parse(
       id = strict_strtoll(s.c_str(), 10, &err);
       if (!err.empty()) {
 	*ss << "Invalid filter '" << s << "'";
-	return -EINVAL;
+	return -CEPHFS_EINVAL;
       }
       return 0;
     }
@@ -1153,13 +1164,13 @@ int SessionFilter::parse(
       id = strict_strtoll(v.c_str(), 10, &err);
       if (!err.empty()) {
         *ss << err;
-        return -EINVAL;
+        return -CEPHFS_EINVAL;
       }
     } else if (k == "reconnecting") {
 
       /**
        * Strict boolean parser.  Allow true/false/0/1.
-       * Anything else is -EINVAL.
+       * Anything else is -CEPHFS_EINVAL.
        */
       auto is_true = [](std::string_view bstr, bool *out) -> bool
       {
@@ -1172,7 +1183,7 @@ int SessionFilter::parse(
           *out = false;
           return 0;
         } else {
-          return -EINVAL;
+          return -CEPHFS_EINVAL;
         }
       };
 
@@ -1182,11 +1193,11 @@ int SessionFilter::parse(
         set_reconnecting(bval);
       } else {
         *ss << "Invalid boolean value '" << v << "'";
-        return -EINVAL;
+        return -CEPHFS_EINVAL;
       }
     } else {
       *ss << "Invalid filter key '" << k << "'";
-      return -EINVAL;
+      return -CEPHFS_EINVAL;
     }
   }
 

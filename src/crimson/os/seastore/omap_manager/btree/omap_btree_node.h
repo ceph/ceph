@@ -70,13 +70,14 @@ struct OMapNode : LogicalCachedExtent {
     omap_context_t oc,
     const std::string &key) = 0;
 
+  using omap_list_config_t = OMapManager::omap_list_config_t;
   using list_ertr = base_ertr;
   using list_bare_ret = OMapManager::omap_list_bare_ret;
   using list_ret = OMapManager::omap_list_ret;
   virtual list_ret list(
     omap_context_t oc,
     const std::optional<std::string> &start,
-    size_t max_result_size) = 0;
+    omap_list_config_t config) = 0;
 
   using clear_ertr = base_ertr;
   using clear_ret = clear_ertr::future<>;

@@ -37,7 +37,7 @@ void generate_buffer(int size, bufferlist *outbl, int seed)
     p.set_length(l);
     char *b = p.c_str();
     for (size_t i = 0; i < l / sizeof(uint64_t); ++i) {
-      ((ceph_le64 *)b)[i] = init_le64(engine());
+      ((ceph_le64 *)b)[i] = ceph_le64(engine());
     }
     outbl->append(p);
   }

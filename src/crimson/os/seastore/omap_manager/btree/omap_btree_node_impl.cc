@@ -193,7 +193,7 @@ OMapInnerNode::list_ret
 OMapInnerNode::list(
   omap_context_t oc,
   const std::optional<std::string> &start,
-  size_t max_result_size)
+  omap_list_config_t config)
 {
   logger().debug("OMapInnerNode: {}", __func__);
 
@@ -209,9 +209,8 @@ OMapInnerNode::list(
     [=, &start](auto &biter, auto &eiter, auto &ret) {
       auto &[complete, result] = ret;
       return crimson::do_until(
-	[&, &complete=complete, &result=result, max_result_size, oc, this]()
-	-> list_ertr::future<bool> {
-	  if (biter == eiter  || result.size() == max_result_size) {
+	[&, config, oc, this]() -> list_ertr::future<bool> {
+	  if (biter == eiter  || result.size() == config.max_result_size) {
 	    complete = biter == eiter;
 	    return list_ertr::make_ready_future<bool>(true);
 	  }
@@ -219,12 +218,12 @@ OMapInnerNode::list(
 	  return omap_load_extent(
 	    oc, laddr,
 	    get_meta().depth - 1
-	  ).safe_then([&, max_result_size, oc] (auto &&extent) {
+	  ).safe_then([&, config, oc, this] (auto &&extent) {
 	    return extent->list(
 	      oc,
 	      start,
-	      max_result_size - result.size()
-	    ).safe_then([&, max_result_size](auto &&child_ret) mutable {
+	      config.with_reduced_max(result.size())
+	    ).safe_then([&, config, this](auto &&child_ret) mutable {
 	      auto &[child_complete, child_result] = child_ret;
 	      if (result.size() && child_result.size()) {
 		assert(child_result.begin()->first > result.rbegin()->first);
@@ -236,8 +235,7 @@ OMapInnerNode::list(
 		child_result.begin(),
 		child_result.end());
 	      biter++;
-	      (void)max_result_size;
-	      assert(child_complete || result.size() == max_result_size);
+	      assert(child_complete || result.size() == config.max_result_size);
 	      return list_ertr::make_ready_future<bool>(false);
 	    });
 	  });
@@ -518,21 +516,24 @@ OMapLeafNode::list_ret
 OMapLeafNode::list(
   omap_context_t oc,
   const std::optional<std::string> &start,
-  size_t max_result_size)
+  omap_list_config_t config)
 {
   logger().debug(
-    "OMapLeafNode::{} start {} max_result_size {}",
+    "OMapLeafNode::{} start {} max_result_size {} inclusive {}",
     __func__,
     start ? start->c_str() : "",
-    max_result_size
+    config.max_result_size,
+    config.inclusive
   );
   auto ret = list_bare_ret(false, {});
   auto &[complete, result] = ret;
   auto iter = start ?
-    string_upper_bound(*start) : 
+    (config.inclusive ?
+     string_lower_bound(*start) :
+     string_upper_bound(*start)) :
     iter_begin();
 
-  for (; iter != iter_end() && result.size() < max_result_size; iter++) {
+  for (; iter != iter_end() && result.size() < config.max_result_size; iter++) {
     result.emplace(std::make_pair(iter->get_key(), iter->get_val()));
   }
 

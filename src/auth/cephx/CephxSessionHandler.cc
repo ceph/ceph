@@ -56,9 +56,9 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
       ceph_le32 middle_crc;
       ceph_le32 data_crc;
     } __attribute__ ((packed)) sigblock = {
-      1, init_le64(AUTH_ENC_MAGIC), init_le32(4*4),
-      init_le32(header.crc), init_le32(footer.front_crc),
-      init_le32(footer.middle_crc), init_le32(footer.data_crc)
+      1, ceph_le64(AUTH_ENC_MAGIC), ceph_le32(4 * 4),
+      ceph_le32(header.crc), ceph_le32(footer.front_crc),
+      ceph_le32(footer.middle_crc), ceph_le32(footer.data_crc)
     };
 
     char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
@@ -91,14 +91,14 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
       ceph_le32 data_len;
       ceph_le32 seq_lower_word;
     } __attribute__ ((packed)) sigblock = {
-      init_le32(header.crc),
-      init_le32(footer.front_crc),
-      init_le32(header.front_len),
-      init_le32(footer.middle_crc),
-      init_le32(header.middle_len),
-      init_le32(footer.data_crc),
-      init_le32(header.data_len),
-      init_le32(header.seq)
+      ceph_le32(header.crc),
+      ceph_le32(footer.front_crc),
+      ceph_le32(header.front_len),
+      ceph_le32(footer.middle_crc),
+      ceph_le32(header.middle_len),
+      ceph_le32(footer.data_crc),
+      ceph_le32(header.data_len),
+      ceph_le32(header.seq)
     };
 
     char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];

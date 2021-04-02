@@ -60,15 +60,18 @@ seastar::future<> RepRequest::start()
 {
   logger().debug("{} start", *this);
   IRef ref = this;
+
   return with_blocking_future(handle.enter(cp().await_map))
-    .then([this]() {
-      return with_blocking_future(osd.osdmap_gate.wait_for_map(req->get_min_epoch()));
-    }).then([this](epoch_t epoch) {
-      return with_blocking_future(handle.enter(cp().get_pg));
-    }).then([this] {
-      return with_blocking_future(osd.wait_for_pg(req->get_spg()));
-    }).then([this, ref=std::move(ref)](Ref<PG> pg) {
-      return pg->handle_rep_op(std::move(req));
-    });
+  .then([this]() {
+    return with_blocking_future(osd.osdmap_gate.wait_for_map(req->get_min_epoch()));
+  }).then([this](epoch_t epoch) {
+    return with_blocking_future(handle.enter(cp().get_pg));
+  }).then([this] {
+    return with_blocking_future(osd.wait_for_pg(req->get_spg()));
+  }).then([this, ref=std::move(ref)](Ref<PG> pg) {
+    return interruptor::with_interruption([this, ref, pg] {
+	return pg->handle_rep_op(std::move(req));
+      }, [](std::exception_ptr) { return seastar::now(); }, pg);
+  });
 }
 }

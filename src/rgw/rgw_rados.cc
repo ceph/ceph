@@ -1126,17 +1126,21 @@ int RGWRados::init_rados()
 
 int RGWRados::register_to_service_map(const string& daemon_type, const map<string, string>& meta)
 {
+  string name = cct->_conf->name.get_id();
+  if (name.compare(0, 4, "rgw.") == 0) {
+    name = name.substr(4);
+  }
   map<string,string> metadata = meta;
   metadata["num_handles"] = "1"s;
   metadata["zonegroup_id"] = svc.zone->get_zonegroup().get_id();
   metadata["zonegroup_name"] = svc.zone->get_zonegroup().get_name();
   metadata["zone_name"] = svc.zone->zone_name();
   metadata["zone_id"] = svc.zone->zone_id().id;
-  string name = cct->_conf->name.get_id();
-  if (name.compare(0, 4, "rgw.") == 0) {
-    name = name.substr(4);
-  }
-  int ret = rados.service_daemon_register(daemon_type, name, metadata);
+  metadata["id"] = name;
+  int ret = rados.service_daemon_register(
+    daemon_type,
+    stringify(rados.get_instance_id()),
+    metadata);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: service_daemon_register() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -4112,8 +4116,16 @@ int RGWRados::copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
 
   auto rest_master_conn = svc.zone->get_master_conn();
 
-  int ret = rest_master_conn->put_obj_async(user_id, dest_obj, astate->size, src_attrs, true, &out_stream_req);
+  int ret = rest_master_conn->put_obj_async_init(user_id, dest_obj, src_attrs, &out_stream_req);
   if (ret < 0) {
+    return ret;
+  }
+
+  out_stream_req->set_send_length(astate->size);
+
+  ret = RGWHTTP::send(out_stream_req);
+  if (ret < 0) {
+    delete out_stream_req;
     return ret;
   }
 

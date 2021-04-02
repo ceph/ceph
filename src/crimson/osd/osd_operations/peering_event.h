@@ -69,7 +69,6 @@ public:
     ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
     Args&&... args) :
     shard_services(shard_services),
-    ctx{ceph_release_t::octopus},
     from(from),
     pgid(pgid),
     evt(std::forward<Args>(args)...)
@@ -79,7 +78,6 @@ public:
     ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
     float delay, Args&&... args) :
     shard_services(shard_services),
-    ctx{ceph_release_t::octopus},
     from(from),
     pgid(pgid),
     delay(delay),

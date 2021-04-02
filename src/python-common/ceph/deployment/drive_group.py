@@ -255,6 +255,8 @@ class DriveGroupSpec(ServiceSpec):
         else:
             args.update(cls._drive_group_spec_from_json(json_drive_group))
 
+        args['unmanaged'] = json_drive_group.pop('unmanaged', False)
+
         return cls(**args)
 
     @classmethod
@@ -283,6 +285,9 @@ class DriveGroupSpec(ServiceSpec):
         if not isinstance(self.placement.host_pattern, str) and \
                 self.placement.host_pattern is not None:
             raise DriveGroupValidationError('host_pattern must be of type string')
+
+        if self.data_devices is None:
+            raise DriveGroupValidationError("`data_devices` element is required.")
 
         specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
         for s in filter(None, specs):

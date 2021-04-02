@@ -18,6 +18,7 @@ function(build_pmem)
       GIT_REPOSITORY "https://github.com/ceph/pmdk.git"
       GIT_TAG "1.7"
       GIT_SHALLOW TRUE
+      GIT_CONFIG advice.detachedHead=false
       SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
       CONFIGURE_COMMAND ""
       # Explicitly built w/o NDCTL, otherwise if ndtcl is present on the
@@ -27,7 +28,7 @@ function(build_pmem)
       BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} NDCTL_ENABLE=n
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "${PMDK_LIB}/libpmem.a" "${PMDK_LIB}/libpmemobj.a"
-      INSTALL_COMMAND "true")
+      INSTALL_COMMAND "")
 
   # libpmem
   add_library(pmem::pmem STATIC IMPORTED)
@@ -44,6 +45,5 @@ function(build_pmem)
   set_target_properties(pmem::pmemobj PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${PMDK_INCLUDE}
     IMPORTED_LOCATION "${PMDK_LIB}/libpmemobj.a"
-    INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
-
+    INTERFACE_LINK_LIBRARIES "pmem::pmem;${CMAKE_THREAD_LIBS_INIT}")
 endfunction()

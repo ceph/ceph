@@ -18,7 +18,8 @@ namespace {
   }
 }
 
-seastar::future<> ReplicatedRecoveryBackend::recover_object(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,
   eversion_t need)
 {
@@ -26,7 +27,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   // always add_recovering(soid) before recover_object(soid)
   assert(is_recovering(soid));
   // start tracking the recovery of soid
-  return maybe_pull_missing_obj(soid, need).then([this, soid, need] {
+  return maybe_pull_missing_obj(soid, need).then_interruptible([this, soid, need] {
     logger().debug("recover_object: loading obc: {}", soid);
     return pg.with_head_obc<RWState::RWREAD>(soid,
       [this, soid, need](auto obc) {
@@ -35,7 +36,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
       recovery_waiter.obc = obc;
       recovery_waiter.obc->wait_recovery_read();
       return maybe_push_shards(soid, need);
-    }).handle_error(
+    }).handle_error_interruptible(
       crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       // TODO: may need eio handling?
       logger().error("recover_object saw error code {}, ignoring object {}",
@@ -44,14 +45,14 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   });
 }
 
-seastar::future<>
+RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::maybe_push_shards(
   const hobject_t& soid,
   eversion_t need)
 {
-  return seastar::parallel_for_each(get_shards_to_push(soid),
+  return interruptor::parallel_for_each(get_shards_to_push(soid),
     [this, need, soid](auto shard) {
-    return prep_push(soid, need, shard).then([this, soid, shard](auto push) {
+    return prep_push(soid, need, shard).then_interruptible([this, soid, shard](auto push) {
       auto msg = make_message<MOSDPGPush>();
       msg->from = pg.get_pg_whoami();
       msg->pgid = pg.get_pgid();
@@ -59,14 +60,16 @@ ReplicatedRecoveryBackend::maybe_push_shards(
       msg->min_epoch = pg.get_last_peering_reset();
       msg->pushes.push_back(std::move(push));
       msg->set_priority(pg.get_recovery_op_priority());
-      return shard_services.send_to_osd(shard.osd,
-                                        std::move(msg),
-                                        pg.get_osdmap_epoch()).then(
+      return interruptor::make_interruptible(
+	  shard_services.send_to_osd(shard.osd,
+				     std::move(msg),
+				     pg.get_osdmap_epoch()))
+      .then_interruptible(
         [this, soid, shard] {
         return recovering.at(soid).wait_for_pushes(shard);
       });
     });
-  }).then([this, soid] {
+  }).then_interruptible([this, soid] {
     auto &recovery = recovering.at(soid);
     auto push_info = recovery.pushing.begin();
     object_stat_sum_t stat = {};
@@ -79,7 +82,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     }
     pg.get_recovery_handler()->on_global_recover(soid, stat, false);
     return seastar::make_ready_future<>();
-  }).handle_exception([this, soid](auto e) {
+  }).handle_exception_interruptible([this, soid](auto e) {
     auto &recovery = recovering.at(soid);
     if (recovery.obc) {
       recovery.obc->drop_recovery_read();
@@ -89,7 +92,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
   });
 }
 
-seastar::future<>
+RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   const hobject_t& soid,
   eversion_t need)
@@ -110,26 +113,28 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   msg->map_epoch = pg.get_osdmap_epoch();
   msg->min_epoch = pg.get_last_peering_reset();
   msg->set_pulls({std::move(po)});
-  return shard_services.send_to_osd(
-    pi.from.osd,
-    std::move(msg),
-    pg.get_osdmap_epoch()
-  ).then([&recovery_waiter] {
+  return interruptor::make_interruptible(
+    shard_services.send_to_osd(
+      pi.from.osd,
+      std::move(msg),
+      pg.get_osdmap_epoch()
+  )).then_interruptible([&recovery_waiter] {
     return recovery_waiter.wait_for_pull();
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::push_delete(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::push_delete(
   const hobject_t& soid,
   eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
-  recovering[soid];
   epoch_t min_epoch = pg.get_last_peering_reset();
 
   assert(pg.get_acting_recovery_backfill().size() > 0);
-  return seastar::parallel_for_each(pg.get_acting_recovery_backfill(),
-    [this, soid, need, min_epoch](pg_shard_t shard) {
+  return interruptor::parallel_for_each(pg.get_acting_recovery_backfill(),
+    [this, soid, need, min_epoch](pg_shard_t shard)
+    -> interruptible_future<> {
     if (shard == pg.get_pg_whoami())
       return seastar::make_ready_future<>();
     auto iter = pg.get_shard_missing().find(shard);
@@ -143,8 +148,9 @@ seastar::future<> ReplicatedRecoveryBackend::push_delete(
 	  pg.get_pg_whoami(), target_pg, pg.get_osdmap_epoch(), min_epoch);
       msg->set_priority(pg.get_recovery_op_priority());
       msg->objects.push_back(std::make_pair(soid, need));
-      return shard_services.send_to_osd(shard.osd, std::move(msg),
-					pg.get_osdmap_epoch()).then(
+      return interruptor::make_interruptible(
+	  shard_services.send_to_osd(shard.osd, std::move(msg),
+				     pg.get_osdmap_epoch())).then_interruptible(
 	[this, soid, shard] {
 	return recovering.at(soid).wait_for_pushes(shard);
       });
@@ -153,13 +159,15 @@ seastar::future<> ReplicatedRecoveryBackend::push_delete(
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::handle_recovery_delete(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::handle_recovery_delete(
   Ref<MOSDPGRecoveryDelete> m)
 {
   logger().debug("{}: {}", __func__, *m);
 
   auto& p = m->objects.front(); //TODO: only one delete per message for now.
-  return local_recover_delete(p.first, p.second, pg.get_osdmap_epoch()).then(
+  return local_recover_delete(p.first, p.second, pg.get_osdmap_epoch())
+  .then_interruptible(
     [this, m] {
     auto reply = make_message<MOSDPGRecoveryDeleteReply>();
     reply->from = pg.get_pg_whoami();
@@ -172,7 +180,8 @@ seastar::future<> ReplicatedRecoveryBackend::handle_recovery_delete(
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::on_local_recover_persist(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::on_local_recover_persist(
   const hobject_t& soid,
   const ObjectRecoveryInfo& _recovery_info,
   bool is_delete,
@@ -181,32 +190,36 @@ seastar::future<> ReplicatedRecoveryBackend::on_local_recover_persist(
   logger().debug("{}", __func__);
   ceph::os::Transaction t;
   pg.get_recovery_handler()->on_local_recover(soid, _recovery_info, is_delete, t);
-  return shard_services.get_store().do_transaction(coll, std::move(t)).then(
+  return interruptor::make_interruptible(
+      shard_services.get_store().do_transaction(coll, std::move(t)))
+  .then_interruptible(
     [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
     pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
     return seastar::make_ready_future<>();
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::local_recover_delete(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::local_recover_delete(
   const hobject_t& soid,
   eversion_t need,
   epoch_t epoch_to_freeze)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
-  return backend->load_metadata(soid).safe_then([this]
-    (auto lomt) {
+  return backend->load_metadata(soid).safe_then_interruptible([this]
+    (auto lomt) -> interruptible_future<> {
     if (lomt->os.exists) {
       return seastar::do_with(ceph::os::Transaction(),
 	[this, lomt = std::move(lomt)](auto& txn) {
-	return backend->remove(lomt->os, txn).then([this, &txn]() mutable {
+	return backend->remove(lomt->os, txn).then_interruptible(
+	  [this, &txn]() mutable {
 	  return shard_services.get_store().do_transaction(coll,
 							   std::move(txn));
 	});
       });
     }
     return seastar::make_ready_future<>();
-  }).safe_then([this, soid, epoch_to_freeze, need] {
+  }).safe_then_interruptible([this, soid, epoch_to_freeze, need] {
     ObjectRecoveryInfo recovery_info;
     recovery_info.soid = soid;
     recovery_info.version = need;
@@ -223,7 +236,8 @@ seastar::future<> ReplicatedRecoveryBackend::local_recover_delete(
   );
 }
 
-seastar::future<> ReplicatedRecoveryBackend::recover_delete(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::recover_delete(
   const hobject_t &soid, eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
@@ -231,8 +245,9 @@ seastar::future<> ReplicatedRecoveryBackend::recover_delete(
   epoch_t cur_epoch = pg.get_osdmap_epoch();
   return seastar::do_with(object_stat_sum_t(),
     [this, soid, need, cur_epoch](auto& stat_diff) {
-    return local_recover_delete(soid, need, cur_epoch).then(
-      [this, &stat_diff, cur_epoch, soid, need] {
+    return local_recover_delete(soid, need, cur_epoch).then_interruptible(
+      [this, &stat_diff, cur_epoch, soid, need]()
+      -> interruptible_future<> {
       if (!pg.has_reset_since(cur_epoch)) {
 	bool object_missing = false;
 	for (const auto& shard : pg.get_acting_recovery_backfill()) {
@@ -254,14 +269,14 @@ seastar::future<> ReplicatedRecoveryBackend::recover_delete(
 	}
       }
       return seastar::make_ready_future<>();
-    }).then([this, soid, &stat_diff] {
+    }).then_interruptible([this, soid, &stat_diff] {
       pg.get_recovery_handler()->on_global_recover(soid, stat_diff, true);
       return seastar::make_ready_future<>();
     });
   });
 }
 
-seastar::future<PushOp>
+RecoveryBackend::interruptible_future<PushOp>
 ReplicatedRecoveryBackend::prep_push(
   const hobject_t& soid,
   eversion_t need,
@@ -299,7 +314,7 @@ ReplicatedRecoveryBackend::prep_push(
   pi.recovery_progress.omap_complete =
     !missing_iter->second.clean_regions.omap_is_dirty();
 
-  return build_push_op(pi.recovery_info, pi.recovery_progress, &pi.stat).then(
+  return build_push_op(pi.recovery_info, pi.recovery_progress, &pi.stat).then_interruptible(
     [this, soid, pg_shard](auto pop) {
     auto& recovery_waiter = recovering.at(soid);
     auto& pi = recovery_waiter.pushing[pg_shard];
@@ -339,7 +354,8 @@ void ReplicatedRecoveryBackend::prepare_pull(PullOp& po, PullInfo& pi,
   pi.recovery_progress = po.recovery_progress;
 }
 
-seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
+RecoveryBackend::interruptible_future<PushOp>
+ReplicatedRecoveryBackend::build_push_op(
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
     object_stat_sum_t* stat)
@@ -355,7 +371,7 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
     (auto& new_progress, auto& available, auto& v, auto& pop) {
     return read_metadata_for_push_op(recovery_info.soid,
                                      progress, new_progress,
-                                     v, &pop).then([&](eversion_t local_ver) mutable {
+                                     v, &pop).then_interruptible([&](eversion_t local_ver) mutable {
       // If requestor didn't know the version, use ours
       if (v == eversion_t()) {
         v = local_ver;
@@ -368,14 +384,14 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
                                    progress,
                                    new_progress,
                                    &available, &pop);
-    }).then([this, &recovery_info, &progress, &available, &pop]() mutable {
+    }).then_interruptible([this, &recovery_info, &progress, &available, &pop]() mutable {
       logger().debug("build_push_op: available: {}, copy_subset: {}",
 		     available, recovery_info.copy_subset);
       return read_object_for_push_op(recovery_info.soid,
 				     recovery_info.copy_subset,
 				     progress.data_recovered_to,
 				     available, &pop);
-    }).then([&recovery_info, &v, &progress, &new_progress, stat, &pop]
+    }).then_interruptible([&recovery_info, &v, &progress, &new_progress, stat, &pop]
             (uint64_t recovered_to) mutable {
       new_progress.data_recovered_to = recovered_to;
       if (new_progress.is_complete(recovery_info)) {
@@ -403,7 +419,7 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
   });
 }
 
-seastar::future<eversion_t>
+RecoveryBackend::interruptible_future<eversion_t>
 ReplicatedRecoveryBackend::read_metadata_for_push_op(
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
@@ -411,21 +427,25 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     eversion_t ver,
     PushOp* push_op)
 {
+  logger().debug("{}, {}", __func__, oid);
   if (!progress.first) {
     return seastar::make_ready_future<eversion_t>(ver);
   }
-  return seastar::when_all_succeed(
-    backend->omap_get_header(coll, ghobject_t(oid)).handle_error(
-      crimson::os::FuturizedStore::read_errorator::all_same_way(
-        [] (const std::error_code& e) {
-        return seastar::make_ready_future<bufferlist>();
-      })),
-    store->get_attrs(coll, ghobject_t(oid)).handle_error(
-      crimson::os::FuturizedStore::get_attrs_ertr::all_same_way(
-        [] (const std::error_code& e) {
-        return seastar::make_ready_future<crimson::os::FuturizedStore::attrs_t>();
-      }))
-  ).then_unpack([&new_progress, push_op](auto bl, auto attrs) {
+  return interruptor::make_interruptible(interruptor::when_all_succeed(
+      backend->omap_get_header(coll, ghobject_t(oid)).handle_error_interruptible<false>(
+	crimson::os::FuturizedStore::read_errorator::all_same_way(
+	  [oid] (const std::error_code& e) {
+	  logger().debug("read_metadata_for_push_op, error {} when getting omap header: {}", e, oid);
+	  return seastar::make_ready_future<bufferlist>();
+	})),
+      interruptor::make_interruptible(store->get_attrs(coll, ghobject_t(oid)))
+      .handle_error_interruptible<false>(
+	crimson::os::FuturizedStore::get_attrs_ertr::all_same_way(
+	  [oid] (const std::error_code& e) {
+	  logger().debug("read_metadata_for_push_op, error {} when getting attrs: {}", e, oid);
+	  return seastar::make_ready_future<crimson::os::FuturizedStore::attrs_t>();
+	}))
+  )).then_unpack_interruptible([&new_progress, push_op](auto bl, auto attrs) {
     if (bl.length() == 0) {
       logger().warn("read_metadata_for_push_op: fail to read omap header");
     } else if (attrs.empty()) {
@@ -444,7 +464,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
   });
 }
 
-seastar::future<uint64_t>
+RecoveryBackend::interruptible_future<uint64_t>
 ReplicatedRecoveryBackend::read_object_for_push_op(
     const hobject_t& oid,
     const interval_set<uint64_t>& copy_subset,
@@ -458,7 +478,7 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
   }
   // 1. get the extents in the interested range
   return backend->fiemap(coll, ghobject_t{oid},
-                         0, copy_subset.range_end()).then_wrapped(
+                         0, copy_subset.range_end()).then_wrapped_interruptible(
     [=](auto&& fiemap_included) mutable {
     interval_set<uint64_t> extents;
     try {
@@ -475,7 +495,7 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     // 3. read the truncated extents
     // TODO: check if the returned extents are pruned
     return store->readv(coll, ghobject_t{oid}, push_op->data_included, 0);
-  }).safe_then([push_op, range_end=copy_subset.range_end()](auto &&bl) {
+  }).safe_then_interruptible([push_op, range_end=copy_subset.range_end()](auto &&bl) {
     push_op->data.claim_append(std::move(bl));
     uint64_t recovered_to = 0;
     if (push_op->data_included.empty()) {
@@ -492,7 +512,7 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
   }));
 }
 
-seastar::future<>
+RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::read_omap_for_push_op(
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
@@ -561,15 +581,16 @@ ReplicatedRecoveryBackend::get_shards_to_push(const hobject_t& soid) const
   return shards;
 }
 
-seastar::future<> ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 {
   logger().debug("{}: {}", __func__, *m);
   return seastar::do_with(m->take_pulls(), [this, from=m->from](auto& pulls) {
-    return seastar::parallel_for_each(pulls,
+    return interruptor::parallel_for_each(pulls,
                                       [this, from](auto& pull_op) {
       const hobject_t& soid = pull_op.soid;
       logger().debug("handle_pull: {}", soid);
-      return backend->stat(coll, ghobject_t(soid)).then(
+      return backend->stat(coll, ghobject_t(soid)).then_interruptible(
         [this, &pull_op](auto st) {
         ObjectRecoveryInfo &recovery_info = pull_op.recovery_info;
         ObjectRecoveryProgress &progress = pull_op.recovery_progress;
@@ -586,7 +607,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
           assert(recovery_info.clone_subset.empty());
         }
         return build_push_op(recovery_info, progress, 0);
-      }).then([this, from](auto pop) {
+      }).then_interruptible([this, from](auto pop) {
         auto msg = make_message<MOSDPGPush>();
         msg->from = pg.get_pg_whoami();
         msg->pgid = pg.get_pgid();
@@ -601,7 +622,8 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
   });
 }
 
-seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
+RecoveryBackend::interruptible_future<bool>
+ReplicatedRecoveryBackend::_handle_pull_response(
   pg_shard_t from,
   PushOp& pop,
   PullOp* response,
@@ -623,7 +645,8 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
   if (pi.recovery_info.version == eversion_t())
     pi.recovery_info.version = pop.version;
 
-  auto prepare_waiter = seastar::make_ready_future<>();
+  auto prepare_waiter = interruptor::make_interruptible(
+      seastar::make_ready_future<>());
   if (pi.recovery_progress.first) {
     prepare_waiter = pg.with_head_obc<RWState::RWNONE>(
       pi.recovery_info.soid, [&pi, &recovery_waiter, &pop](auto obc) {
@@ -632,9 +655,9 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
         obc->obs.oi.decode(pop.attrset.at(OI_ATTR));
         pi.recovery_info.oi = obc->obs.oi;
         return crimson::osd::PG::load_obc_ertr::now();
-      }).handle_error(crimson::ct_error::assert_all{});
+      }).handle_error_interruptible(crimson::ct_error::assert_all{});
   };
-  return prepare_waiter.then([this, &pi, &pop, t, response]() mutable {
+  return prepare_waiter.then_interruptible([this, &pi, &pop, t, response]() mutable {
     const bool first = pi.recovery_progress.first;
     pi.recovery_progress = pop.after_progress;
     logger().debug("new recovery_info {}, new progress {}",
@@ -656,7 +679,8 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
     return submit_push_data(pi.recovery_info, first, complete, clear_omap,
                             std::move(data_zeros), std::move(usable_intervals),
                             std::move(data), std::move(pop.omap_header),
-                            pop.attrset, std::move(pop.omap_entries), t).then(
+                            pop.attrset, std::move(pop.omap_entries), t)
+    .then_interruptible(
       [this, response, &pi, &pop, complete, t, bytes_recovered=data.length()] {
       pi.stat.num_keys_recovered += pop.omap_entries.size();
       pi.stat.num_bytes_recovered += bytes_recovered;
@@ -677,7 +701,8 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::handle_pull_response(
   Ref<MOSDPGPush> m)
 {
   const PushOp& pop = m->pushes[0]; //TODO: only one push per message for now.
@@ -697,7 +722,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
       [this, &response](auto& t, auto& m) {
       pg_shard_t from = m->from;
       PushOp& pop = m->pushes[0]; // only one push per message for now
-      return _handle_pull_response(from, pop, &response, &t).then(
+      return _handle_pull_response(from, pop, &response, &t).then_interruptible(
 	[this, &t](bool complete) {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
 	return shard_services.get_store().do_transaction(coll, std::move(t))
@@ -707,7 +732,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
 	  return seastar::make_ready_future<bool>(complete);
 	});
       });
-    }).then([this, m, &response](bool complete) {
+    }).then_interruptible([this, m, &response](bool complete) {
       if (complete) {
 	auto& pop = m->pushes[0];
 	recovering.at(pop.soid).set_pulled();
@@ -726,7 +751,8 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::_handle_push(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::_handle_push(
   pg_shard_t from,
   PushOp &pop,
   PushReplyOp *response,
@@ -752,7 +778,8 @@ seastar::future<> ReplicatedRecoveryBackend::_handle_push(
   return submit_push_data(pop.recovery_info, first, complete, clear_omap,
                           std::move(data_zeros), std::move(pop.data_included),
                           std::move(pop.data), std::move(pop.omap_header),
-                          pop.attrset, std::move(pop.omap_entries), t).then(
+                          pop.attrset, std::move(pop.omap_entries), t)
+  .then_interruptible(
     [this, complete, &pop, t] {
     if (complete) {
       pg.get_recovery_handler()->on_local_recover(
@@ -762,7 +789,8 @@ seastar::future<> ReplicatedRecoveryBackend::_handle_push(
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::handle_push(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::handle_push(
   Ref<MOSDPGPush> m)
 {
   if (pg.is_primary()) {
@@ -774,16 +802,17 @@ seastar::future<> ReplicatedRecoveryBackend::handle_push(
     PushOp& pop = m->pushes[0]; // TODO: only one push per message for now
     return seastar::do_with(ceph::os::Transaction(),
       [this, m, &pop, &response](auto& t) {
-      return _handle_push(m->from, pop, &response, &t).then(
+      return _handle_push(m->from, pop, &response, &t).then_interruptible(
 	[this, &t] {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
-	return shard_services.get_store().do_transaction(coll, std::move(t)).then(
+	return interruptor::make_interruptible(
+	    shard_services.get_store().do_transaction(coll, std::move(t))).then_interruptible(
 	  [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
 	  //TODO: this should be grouped with pg.on_local_recover somehow.
 	  pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
 	});
       });
-    }).then([this, m, &response]() mutable {
+    }).then_interruptible([this, m, &response]() mutable {
       auto reply = make_message<MOSDPGPushReply>();
       reply->from = pg.get_pg_whoami();
       reply->set_priority(m->get_priority());
@@ -798,7 +827,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_push(
   });
 }
 
-seastar::future<std::optional<PushOp>>
+RecoveryBackend::interruptible_future<std::optional<PushOp>>
 ReplicatedRecoveryBackend::_handle_push_reply(
   pg_shard_t peer,
   const PushReplyOp &op)
@@ -815,10 +844,10 @@ ReplicatedRecoveryBackend::_handle_push_reply(
     bool error = pi.recovery_progress.error;
     if (!pi.recovery_progress.data_complete && !error) {
       return build_push_op(pi.recovery_info, pi.recovery_progress,
-			   &pi.stat).then([&pi] (auto pop) {
+			   &pi.stat).then_interruptible([&pi] (auto pop) {
         pi.recovery_progress = pop.after_progress;
 	return seastar::make_ready_future<std::optional<PushOp>>(std::move(pop));
-      }).handle_exception([recovering_iter, &pi, peer] (auto e) {
+      }).handle_exception_interruptible([recovering_iter, &pi, peer] (auto e) {
         pi.recovery_progress.error = true;
         recovering_iter->second.set_push_failed(peer, e);
         return seastar::make_ready_future<std::optional<PushOp>>();
@@ -832,14 +861,15 @@ ReplicatedRecoveryBackend::_handle_push_reply(
   }
 }
 
-seastar::future<> ReplicatedRecoveryBackend::handle_push_reply(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::handle_push_reply(
   Ref<MOSDPGPushReply> m)
 {
   logger().debug("{}: {}", __func__, *m);
   auto from = m->from;
   auto& push_reply = m->replies[0]; //TODO: only one reply per message
 
-  return _handle_push_reply(from, push_reply).then(
+  return _handle_push_reply(from, push_reply).then_interruptible(
     [this, from](std::optional<PushOp> push_op) {
     if (push_op) {
       auto msg = make_message<MOSDPGPush>();
@@ -890,7 +920,7 @@ ReplicatedRecoveryBackend::trim_pushed_data(
   return {intervals_usable, data_usable};
 }
 
-seastar::future<hobject_t>
+RecoveryBackend::interruptible_future<hobject_t>
 ReplicatedRecoveryBackend::prep_push_target(
   const ObjectRecoveryInfo& recovery_info,
   bool first,
@@ -943,7 +973,8 @@ ReplicatedRecoveryBackend::prep_push_target(
     return seastar::make_ready_future<hobject_t>(target_oid.hobj);
   }
   // clone overlap content in local object if using a new object
-  return store->stat(coll, ghobject_t(recovery_info.soid)).then(
+  return interruptor::make_interruptible(store->stat(coll, ghobject_t(recovery_info.soid)))
+  .then_interruptible(
     [this, &recovery_info, t, target_oid] (auto st) {
     // TODO: pg num bytes counting
     uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
@@ -962,8 +993,8 @@ ReplicatedRecoveryBackend::prep_push_target(
     return seastar::make_ready_future<hobject_t>(target_oid.hobj);
   });
 }
-
-seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::submit_push_data(
   const ObjectRecoveryInfo &recovery_info,
   bool first,
   bool complete,
@@ -979,7 +1010,7 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
   logger().debug("{}", __func__);
   return prep_push_target(recovery_info, first, complete,
                           clear_omap, t, attrs,
-                          std::move(omap_header)).then(
+                          std::move(omap_header)).then_interruptible(
     [this,
      &recovery_info, t,
      first, complete,
@@ -988,6 +1019,7 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
      data_included=std::move(data_included),
      omap_entries=std::move(omap_entries),
      &attrs](auto target_oid) mutable {
+
     uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
     // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
     if (!data_zeros.empty()) {
@@ -1047,7 +1079,8 @@ void ReplicatedRecoveryBackend::submit_push_complete(
   }
 }
 
-seastar::future<> ReplicatedRecoveryBackend::handle_recovery_delete_reply(
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::handle_recovery_delete_reply(
   Ref<MOSDPGRecoveryDeleteReply> m)
 {
   auto& p = m->objects.front();
@@ -1059,7 +1092,8 @@ seastar::future<> ReplicatedRecoveryBackend::handle_recovery_delete_reply(
   return seastar::now();
 }
 
-seastar::future<> ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDispatchOp> m)
+RecoveryBackend::interruptible_future<>
+ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDispatchOp> m)
 {
   switch (m->get_header().type) {
   case MSG_OSD_PG_PULL:

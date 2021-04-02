@@ -126,7 +126,6 @@ class SharedDriverQueueData {
   uint32_t block_size;
   uint32_t max_queue_depth;
   struct spdk_nvme_qpair *qpair;
-  bool reap_io = false;
   int alloc_buf_from_pool(Task *t, bool write);
 
   public:
@@ -159,16 +158,11 @@ class SharedDriverQueueData {
       }
       data_buf_list.push_front(*reinterpret_cast<data_cache_buf *>(b));
     }
-
-    bdev->queue_number++;
-    if (bdev->queue_number.load() == 1)
-      reap_io = true;
   }
 
   ~SharedDriverQueueData() {
     if (qpair) {
       spdk_nvme_ctrlr_free_io_qpair(qpair);
-      bdev->queue_number--;
     }
 
     data_buf_list.clear_and_dispose(spdk_dma_free);
@@ -186,18 +180,14 @@ struct Task {
   Task *next = nullptr;
   int64_t return_code;
   Task *primary = nullptr;
-  ceph::coarse_real_clock::time_point start;
   IORequest io_request = {};
-  ceph::mutex lock = ceph::make_mutex("Task::lock");
-  ceph::condition_variable cond;
   SharedDriverQueueData *queue = nullptr;
   // reference count by subtasks.
   int ref = 0;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0,
        Task *p = nullptr)
     : device(dev), command(c), offset(off), len(l),
-      return_code(rc), primary(p),
-      start(ceph::coarse_real_clock::now()) {
+      return_code(rc), primary(p) {
         if (primary) {
           primary->ref++;
           return_code = primary->return_code;
@@ -419,8 +409,6 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
     }
   }
 
-  if (reap_io)
-    bdev->reap_ioc();
   dout(20) << __func__ << " end" << dendl;
 }
 

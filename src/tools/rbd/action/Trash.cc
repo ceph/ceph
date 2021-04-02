@@ -147,6 +147,9 @@ int execute_remove(const po::variables_map &vm,
       std::cerr << "rbd: image has snapshots - these must be deleted"
                 << " with 'rbd snap purge' before the image can be removed."
                 << std::endl;
+    } else if (r == -EUCLEAN) {
+      std::cerr << "rbd: error: image not fully moved to trash."
+                << std::endl;
     } else if (r == -EBUSY) {
       std::cerr << "rbd: error: image still has watchers"
                 << std::endl

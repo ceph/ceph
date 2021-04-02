@@ -1,3 +1,5 @@
+.. _radosgw admin ops:
+
 ==================
  Admin Operations
 ==================
@@ -1927,7 +1929,7 @@ Set Quota for an Individual Bucket
 To set a quota, the user must have ``buckets`` capability set with ``write``
 permission. ::
 
-	PUT /admin/bucket?quota&uid=<uid>&bucket=<bucket-name>&quota
+	PUT /admin/bucket?quota&uid=<uid>&bucket=<bucket-name>
 
 The content must include a JSON representation of the quota settings
 as mentioned in Set Bucket Quota section above.

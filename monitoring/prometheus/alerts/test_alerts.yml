@@ -1,0 +1,783 @@
+rule_files:
+  - ceph_default_alerts.yml
+evaluation_interval: 5m
+tests:
+ # health error
+ - interval: 5m
+   input_series:
+    - series: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+      values: '2 2 2 2 2 2 2'
+   promql_expr_test:
+    - expr: ceph_health_status == 2
+      eval_time: 5m
+      exp_samples:
+       - labels: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+         value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: health error
+    - eval_time: 6m
+      alertname: health error
+      exp_alerts:
+      - exp_labels:
+          instance: ceph:9283
+          job: ceph
+          oid: 1.3.6.1.4.1.50495.15.1.2.2.1
+          type: ceph_default
+          severity: critical
+        exp_annotations:
+          description: >
+            Ceph in HEALTH_ERROR state for more than 5 minutes.
+            Please check "ceph health detail" for more information.
+
+ # health warning
+ - interval: 5m
+   input_series:
+    - series: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_status == 1
+       eval_time: 15m
+       exp_samples:
+         - labels: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: health warn
+    - eval_time: 20m
+      alertname: health warn
+      exp_alerts:
+      - exp_labels:
+          instance: ceph:9283
+          job: ceph
+          oid: 1.3.6.1.4.1.50495.15.1.2.2.2
+          type: ceph_default
+          severity: warning
+        exp_annotations:
+          description: >
+            Ceph has been in HEALTH_WARN for more than 15 minutes.
+            Please check "ceph health detail" for more information.
+
+ # low monitor quorum count
+ - interval: 1m
+   input_series:
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.a",instance="ceph:9283",
+      job="ceph"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.b",instance="ceph:9283",
+      job="ceph"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.c",instance="ceph:9283",
+      job="ceph"}'
+      values: '0 0 0 0 0'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.a",ceph_version="ceph version
+      17.0.0-189-g3558fd72 (3558fd7291855971aa6481a2ade468ad61fbb346) pacific
+      (dev)",hostname="ceph",instance="ceph:9283",job="ceph",
+      public_addr="172.20.0.2",rank="0"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.b",ceph_version="ceph version
+      17.0.0-189-g3558fd72 (3558fd7291855971aa6481a2ade468ad61fbb346) pacific
+      (dev)",hostname="ceph",instance="ceph:9283",job="ceph",
+      public_addr="172.20.0.2",rank="1"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.c",ceph_version="ceph version
+      17.0.0-189-g3558fd72 (3558fd7291855971aa6481a2ade468ad61fbb346) pacific
+      (dev)",hostname="ceph",instance="ceph:9283",job="ceph",
+      public_addr="172.20.0.2",rank="2"}'
+      values: '1 1 1 1 1'
+   promql_expr_test:
+     - expr: sum(ceph_mon_quorum_status) < 3
+       eval_time: 1m
+       exp_samples:
+         - labels: '{}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: low monitor quorum count
+      exp_alerts:
+      - exp_labels:
+          oid: 1.3.6.1.4.1.50495.15.1.2.3.1
+          type: ceph_default
+          severity: critical
+        exp_annotations:
+          description: |
+            Monitor count in quorum is below three.
+
+            Only 2 of 3 monitors are active.
+
+            The following monitors are down:
+              - mon.c on ceph
+
+
+ # 10% OSDs down
+ - interval: 1m
+   input_series:
+    - series: 'ceph_osd_up{ceph_daemon="osd.0",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1",instance="ceph:9283",job="ceph"}'
+      values: '0 0 0 0 0'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1'
+   promql_expr_test:
+     - expr: count(ceph_osd_up == 0) / count(ceph_osd_up) * 100 >= 10
+       eval_time: 1m
+       exp_samples:
+         - labels: '{}'
+           value: 3.333333333333333E+01
+   alert_rule_test:
+     - eval_time: 1m
+       alertname: 10% OSDs down
+       exp_alerts:
+       - exp_labels:
+           oid: 1.3.6.1.4.1.50495.15.1.2.4.1
+           type: ceph_default
+           severity: critical
+         exp_annotations:
+           description: |
+             33.33% or 1 of 3 OSDs are down (≥ 10%).
+
+             The following OSDs are down:
+               - osd.1 on ceph
+
+ # OSD down
+ - interval: 1m
+   input_series:
+    - series: 'ceph_osd_up{ceph_daemon="osd.0",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1",instance="ceph:9283",job="ceph"}'
+      values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: count(ceph_osd_up == 0) > 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 15m
+       alertname: OSD down
+       exp_alerts:
+       - exp_labels:
+           oid: 1.3.6.1.4.1.50495.15.1.2.4.2
+           type: ceph_default
+           severity: warning
+         exp_annotations:
+           description: |
+
+             1 OSD down for more than 15 minutes.
+
+             1 of 3 OSDs are down.
+
+             The following OSD is down:
+                 - osd.1 on ceph
+
+  # OSDs near full
+ - interval: 1m
+   input_series:
+    - series: 'ceph_osd_stat_bytes_used{ceph_daemon="osd.0",instance="ceph:9283"
+      ,job="ceph"}'
+      values: '1076310016 1076310016 1076310016 1076310016 1076310016
+      1076310016'
+    - series: 'ceph_osd_stat_bytes_used{ceph_daemon="osd.1",instance="ceph:9283"
+      ,job="ceph"}'
+      values: '1076310016 1076310016 1076310016 1076310016 1076310016
+      1076310016'
+    - series: 'ceph_osd_stat_bytes_used{ceph_daemon="osd.2",instance="ceph:9283"
+      ,job="ceph"}'
+      values: '1076310016 1076310016 1076310016 1076310016 1076310016
+      100856561909.76'
+    - series: 'ceph_osd_stat_bytes{ceph_daemon="osd.0",instance="ceph:9283"
+      ,job="ceph"}'
+      values: '108447916032 108447916032 108447916032 108447916032 108447916032
+      108447916032'
+    - series: 'ceph_osd_stat_bytes{ceph_daemon="osd.1",instance="ceph:9283"
+      ,job="ceph"}'
+      values: '108447916032 108447916032 108447916032 108447916032 108447916032
+      108447916032'
+    - series: 'ceph_osd_stat_bytes{ceph_daemon="osd.2",instance="ceph:9283"
+      ,job="ceph"}'
+      values: '108447916032 108447916032 108447916032 108447916032 108447916032
+      108447916032'
+    - series: 'ceph_osd_up{ceph_daemon="osd.0",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: |
+         (
+           ((ceph_osd_stat_bytes_used / ceph_osd_stat_bytes) and on(ceph_daemon)
+           ceph_osd_up == 1) * on(ceph_daemon) group_left(hostname)
+           ceph_osd_metadata
+         ) * 100 > 90
+
+       eval_time: 5m
+       exp_samples:
+         - labels: '{ceph_daemon="osd.2",hostname="ceph",instance="ceph:9283",
+           job="ceph"}'
+           value: 9.3E+01
+   alert_rule_test:
+     - eval_time: 10m
+       alertname: OSDs near full
+       exp_alerts:
+       - exp_labels:
+           ceph_daemon: osd.2
+           hostname: ceph
+           instance: ceph:9283
+           job: ceph
+           oid: 1.3.6.1.4.1.50495.15.1.2.4.3
+           type: ceph_default
+           severity: critical
+         exp_annotations:
+           description: >
+             OSD osd.2 on ceph is dangerously full: 93%
+
+ # flapping OSD
+ - interval: 1s
+   input_series:
+    - series: 'ceph_osd_up{ceph_daemon="osd.0",instance="ceph:9283",job="ceph"}'
+      values: '1+1x100'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1",instance="ceph:9283",job="ceph"}'
+      values: '1+0x100'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2",instance="ceph:9283",job="ceph"}'
+      values: '1+0x100'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: |
+         (
+           rate(ceph_osd_up[5m])
+           * on(ceph_daemon) group_left(hostname) ceph_osd_metadata
+         ) * 60 > 1
+       eval_time: 1m
+       exp_samples:
+         - labels: '{ceph_daemon="osd.0", hostname="ceph", instance="ceph:9283",
+           job="ceph"}'
+           value: 1.2200000000000001E+01
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: flapping OSD
+       exp_alerts:
+       - exp_labels:
+           ceph_daemon: osd.0
+           hostname: ceph
+           instance: ceph:9283
+           job: ceph
+           oid: 1.3.6.1.4.1.50495.15.1.2.4.4
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           description: >
+              OSD osd.0 on ceph was
+              marked down and back up at 20.1 times once a
+              minute for 5 minutes.
+
+ # high pg count deviation
+ - interval: 1m
+   input_series:
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.0",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 160'
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.1",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 320'
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.2",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 160'
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.3",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 160'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.3",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: |
+         abs(
+           (
+             (ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0)
+             by (job)
+           ) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)
+         ) * on(ceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
+
+       eval_time: 5m
+       exp_samples:
+         - labels: '{ceph_daemon="osd.1", hostname="ceph", instance="ceph:9283",
+           job="ceph"}'
+           value: 6E-01
+   alert_rule_test:
+     - eval_time: 10m
+       alertname: high pg count deviation
+       exp_alerts:
+       - exp_labels:
+           ceph_daemon: osd.1
+           hostname: ceph
+           instance: ceph:9283
+           job: ceph
+           oid: 1.3.6.1.4.1.50495.15.1.2.4.5
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           description: >
+              OSD osd.1 on ceph deviates
+              by more than 30% from average PG count.
+
+ # pgs inactive
+ - interval: 1m
+   input_series:
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="2"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="3"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '33 32 32 32 32 33 33 32'
+    - series: 'ceph_pg_active{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_active{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32'
+    - series: 'ceph_pg_active{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '32 32 32 32 32 32 32 32'
+   promql_expr_test:
+     - expr: ceph_pool_metadata * on(pool_id,instance) group_left()
+             (ceph_pg_total - ceph_pg_active) > 0
+       eval_time: 5m
+       exp_samples:
+         - labels: '{instance="ceph:9283", job="ceph",
+           name="device_health_metrics",
+           pool_id="3"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: pgs inactive
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           job: ceph
+           name: device_health_metrics
+           oid: 1.3.6.1.4.1.50495.15.1.2.7.1
+           pool_id: 3
+           severity: critical
+           type: ceph_default
+         exp_annotations:
+           description: >
+              1 PGs have been inactive for more than 5 minutes in pool
+              device_health_metrics.
+              Inactive placement groups aren't able to serve read/write
+              requests.
+
+ #pgs unclean
+ - interval: 1m
+   input_series:
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="2"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="3"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32
+      32 32 32'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
+      33 33'
+    - series: 'ceph_pg_clean{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_clean{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32
+      32 32'
+    - series: 'ceph_pg_clean{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32
+      32 32'
+   promql_expr_test:
+     - expr: ceph_pool_metadata * on(pool_id,instance) group_left()
+             (ceph_pg_total - ceph_pg_clean) > 0
+       eval_time: 15m
+       exp_samples:
+         - labels: '{instance="ceph:9283", job="ceph",
+           name="device_health_metrics", pool_id="3"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 16m
+       alertname: pgs unclean
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           job: ceph
+           name: device_health_metrics
+           oid: 1.3.6.1.4.1.50495.15.1.2.7.2
+           pool_id: 3
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           description: >
+              1 PGs haven't been clean for more than 15 minutes in pool
+              device_health_metrics.
+              Unclean PGs haven't been able to completely recover from a
+              previous failure.
+
+ # root volume full
+ - interval: 1m
+   input_series:
+    - series: 'node_filesystem_avail_bytes{device="/dev/mapper/fedora_localhost
+      --live-home",fstype="ext4",instance="node-exporter",job="node-exporter",
+      mountpoint="/"}'
+      values: '35336400896 35336400896 35336400896 35336400896 35336400896
+      3525385519.104 3533640089'
+    - series: 'node_filesystem_size_bytes{device="/dev/mapper/fedora_localhost
+      --live-home",fstype="ext4",instance="node-exporter",job="node-exporter",
+      mountpoint="/"}'
+      values: '73445531648 73445531648 73445531648 73445531648 73445531648
+      73445531648 73445531648'
+   promql_expr_test:
+     - expr: node_filesystem_avail_bytes{mountpoint="/"} /
+             node_filesystem_size_bytes{mountpoint="/"} * 100 < 5
+       eval_time: 5m
+       exp_samples:
+         - labels: '{device="/dev/mapper/fedora_localhost --live-home",
+           fstype="ext4", instance="node-exporter", job="node-exporter",
+           mountpoint="/"}'
+           value: 4.8E+00
+   alert_rule_test:
+     - eval_time: 10m
+       alertname: root volume full
+       exp_alerts:
+       - exp_labels:
+           device: /dev/mapper/fedora_localhost --live-home
+           fstype: ext4
+           instance: node-exporter
+           job: node-exporter
+           mountpoint: /
+           oid: 1.3.6.1.4.1.50495.15.1.2.8.1
+           severity: critical
+           type: ceph_default
+         exp_annotations:
+           description: >
+              Root volume (OSD and MON store) is dangerously full: 4.811% free.
+
+ # network packets dropped
+ - interval: 1s
+   input_series:
+    - series: 'node_network_receive_drop_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+    - series: 'node_network_transmit_drop_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+   promql_expr_test:
+     - expr: |
+         (
+           increase(node_network_receive_drop_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_drop_total{device!="lo"}[1m])
+         ) / (
+           increase(node_network_receive_packets_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_packets_total{device!="lo"}[1m])
+         ) >= 0.0001 or (
+           increase(node_network_receive_drop_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_drop_total{device!="lo"}[1m])
+         ) >= 10
+
+       eval_time: 5m
+       exp_samples:
+         - labels: '{device="eth0", instance="node-exporter",
+           job="node-exporter"}'
+           value: 1.2E+02
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: network packets dropped
+       exp_alerts:
+       - exp_labels:
+           device: eth0
+           instance: node-exporter
+           job: node-exporter
+           oid: 1.3.6.1.4.1.50495.15.1.2.8.2
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           description: >
+              Node node-exporter experiences packet drop > 0.01% or >
+              10 packets/s on interface eth0.
+
+ # network packets errors
+ - interval: 1s
+   input_series:
+    - series: 'node_network_receive_errs_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+    - series: 'node_network_transmit_errs_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+   promql_expr_test:
+     - expr: |
+         (
+           increase(node_network_receive_errs_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_errs_total{device!="lo"}[1m])
+         ) / (
+           increase(node_network_receive_packets_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_packets_total{device!="lo"}[1m])
+         ) >= 0.0001 or (
+           increase(node_network_receive_errs_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_errs_total{device!="lo"}[1m])
+         ) >= 10
+
+       eval_time: 5m
+       exp_samples:
+         - labels: '{device="eth0", instance="node-exporter",
+           job="node-exporter"}'
+           value: 1.2E+02
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: network packet errors
+       exp_alerts:
+       - exp_labels:
+           device: eth0
+           instance: node-exporter
+           job: node-exporter
+           oid: 1.3.6.1.4.1.50495.15.1.2.8.3
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           description: >
+              Node node-exporter experiences packet errors > 0.01% or > 10
+              packets/s on interface eth0.
+
+ # MTU Mismatch
+ - interval: 1m
+   input_series:
+    - series: 'node_network_mtu_bytes{device="eth0",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth1",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth2",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth3",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node-exporter",
+      job="node-exporter"}'
+      values: '9000 9000 9000 9000 9000'
+   promql_expr_test:
+     - expr: node_network_mtu_bytes{device!="lo"} != on() group_left()
+             (quantile(0.5, node_network_mtu_bytes{device!="lo"}))
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="node_network_mtu_bytes", device="eth4",
+           instance="node-exporter", job="node-exporter"}'
+           value: 9000
+   alert_rule_test:
+     - eval_time: 1m
+       alertname: MTU Mismatch
+       exp_alerts:
+       - exp_labels:
+           device: eth4
+           instance: node-exporter
+           job: node-exporter
+           oid: 1.3.6.1.4.1.50495.15.1.2.8.5
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           description: >
+               Node node-exporter has a different MTU size (9000)
+               than the median value on device eth4.
+
+ # pool full
+ - interval: 1m
+   input_series:
+    - series: 'ceph_pool_stored{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '0 0 0 0 0 0 0 0 0'
+    - series: 'ceph_pool_stored{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '1850 1850 1850 1850 1850 1850 1850'
+    - series: 'ceph_pool_stored{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '900 900 23524 23524 23524 23524 23524 23524
+      23524'
+    - series: 'ceph_pool_max_avail{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '106287063040 106287063040 106287063040 106287063040 106287063040
+      106287063040 106287063040'
+    - series: 'ceph_pool_max_avail{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '106287063040 106287063040 106287063040 106287063040 106287063040
+      106287063040 106287063040'
+    - series: 'ceph_pool_max_avail{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '37.5 37.5 37.5 37.5 37.5 37.5 37.5'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name=".rgw.root",pool_id="2"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="default.rgw.log",pool_id="3"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: |
+         ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)
+         * on(pool_id) group_right ceph_pool_metadata * 100 > 90
+
+       eval_time: 1m
+       exp_samples:
+         - labels: '{instance="ceph:9283", job="ceph", name="default.rgw.log",
+           pool_id="3"}'
+           value: 9.6E+01
+   alert_rule_test:
+     - eval_time: 2m
+       alertname: pool full
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           job: ceph
+           name: default.rgw.log
+           oid: 1.3.6.1.4.1.50495.15.1.2.9.1
+           pool_id: 3
+           severity: critical
+           type: ceph_default
+         exp_annotations:
+           description: Pool default.rgw.log at 96% capacity.
+
+ # slow OSD ops
+ - interval : 1m
+   input_series:
+    - series: 'ceph_healthcheck_slow_ops{instance="ceph:9283",job="ceph"}'
+      values: '1+0x120'
+   promql_expr_test:
+     - expr: ceph_healthcheck_slow_ops > 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_healthcheck_slow_ops", instance="ceph:9283",
+           job="ceph"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 20m
+       alertname: Slow OSD Ops
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           job: ceph
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           description: >
+             1 OSD requests are taking too long to process
+             (osd_op_complaint_time exceeded)

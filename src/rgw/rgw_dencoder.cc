@@ -593,7 +593,7 @@ void RGWBucketEntryPoint::generate_test_instances(list<RGWBucketEntryPoint*>& o)
   RGWBucketEntryPoint *bp = new RGWBucketEntryPoint();
   init_bucket(&bp->bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
   bp->owner = "owner";
-  bp->creation_time = ceph::real_clock::from_ceph_timespec({init_le32(2), init_le32(3)});
+  bp->creation_time = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
 
   o.push_back(bp);
   o.push_back(new RGWBucketEntryPoint);

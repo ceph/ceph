@@ -181,6 +181,8 @@ if(WITH_FUSE)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
 
+option(WITH_DOKAN "Dokan is here" OFF)
+
 option(WITH_XFS "XFS is here" ON)
 if(WITH_XFS)
   find_package(xfs)
@@ -279,6 +281,11 @@ endif(WITH_QATZIP)
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
+option(WITH_LIBCEPHSQLITE "libcephsqlite client library" ON)
+if(WITH_LIBCEPHSQLITE)
+  find_package(SQLite3 REQUIRED)
+endif()
+
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
 
@@ -318,7 +325,8 @@ if(WITH_LZ4)
   set(HAVE_LZ4 ${LZ4_FOUND})
 endif(WITH_LZ4)
 
-option(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" ON
+  "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
 
 #if allocator is set on command line make sure it matches below strings
 set(ALLOCATOR "" CACHE STRING

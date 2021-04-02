@@ -18,6 +18,7 @@ describe('RgwUserService', () => {
   beforeEach(() => {
     service = TestBed.inject(RgwUserService);
     httpTesting = TestBed.inject(HttpTestingController);
+    RgwHelper.selectDaemon();
   });
 
   afterEach(() => {
@@ -33,7 +34,6 @@ describe('RgwUserService', () => {
     service.list().subscribe((resp) => {
       result = resp;
     });
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
     req.flush([]);
@@ -45,7 +45,6 @@ describe('RgwUserService', () => {
     service.list().subscribe((resp) => {
       result = resp;
     });
-    RgwHelper.getCurrentDaemon();
     let req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
@@ -63,35 +62,30 @@ describe('RgwUserService', () => {
 
   it('should call enumerate', () => {
     service.enumerate().subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
   });
 
   it('should call get', () => {
     service.get('foo').subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`api/rgw/user/foo?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
   });
 
   it('should call getQuota', () => {
     service.getQuota('foo').subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`api/rgw/user/foo/quota?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
   });
 
   it('should call update', () => {
     service.update('foo', { xxx: 'yyy' }).subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`api/rgw/user/foo?${RgwHelper.DAEMON_QUERY_PARAM}&xxx=yyy`);
     expect(req.request.method).toBe('PUT');
   });
 
   it('should call updateQuota', () => {
     service.updateQuota('foo', { xxx: 'yyy' }).subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(
       `api/rgw/user/foo/quota?${RgwHelper.DAEMON_QUERY_PARAM}&xxx=yyy`
     );
@@ -100,21 +94,18 @@ describe('RgwUserService', () => {
 
   it('should call create', () => {
     service.create({ foo: 'bar' }).subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}&foo=bar`);
     expect(req.request.method).toBe('POST');
   });
 
   it('should call delete', () => {
     service.delete('foo').subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(`api/rgw/user/foo?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('DELETE');
   });
 
   it('should call createSubuser', () => {
     service.createSubuser('foo', { xxx: 'yyy' }).subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(
       `api/rgw/user/foo/subuser?${RgwHelper.DAEMON_QUERY_PARAM}&xxx=yyy`
     );
@@ -123,7 +114,6 @@ describe('RgwUserService', () => {
 
   it('should call deleteSubuser', () => {
     service.deleteSubuser('foo', 'bar').subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(
       `api/rgw/user/foo/subuser/bar?${RgwHelper.DAEMON_QUERY_PARAM}`
     );
@@ -132,7 +122,6 @@ describe('RgwUserService', () => {
 
   it('should call addCapability', () => {
     service.addCapability('foo', 'bar', 'baz').subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(
       `api/rgw/user/foo/capability?${RgwHelper.DAEMON_QUERY_PARAM}&type=bar&perm=baz`
     );
@@ -141,7 +130,6 @@ describe('RgwUserService', () => {
 
   it('should call deleteCapability', () => {
     service.deleteCapability('foo', 'bar', 'baz').subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(
       `api/rgw/user/foo/capability?${RgwHelper.DAEMON_QUERY_PARAM}&type=bar&perm=baz`
     );
@@ -150,7 +138,6 @@ describe('RgwUserService', () => {
 
   it('should call addS3Key', () => {
     service.addS3Key('foo', { xxx: 'yyy' }).subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(
       `api/rgw/user/foo/key?${RgwHelper.DAEMON_QUERY_PARAM}&key_type=s3&xxx=yyy`
     );
@@ -159,7 +146,6 @@ describe('RgwUserService', () => {
 
   it('should call deleteS3Key', () => {
     service.deleteS3Key('foo', 'bar').subscribe();
-    RgwHelper.getCurrentDaemon();
     const req = httpTesting.expectOne(
       `api/rgw/user/foo/key?${RgwHelper.DAEMON_QUERY_PARAM}&key_type=s3&access_key=bar`
     );

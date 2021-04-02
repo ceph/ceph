@@ -1,4 +1,5 @@
 import json
+import uuid
 from io import StringIO
 from os.path import join as os_path_join
 
@@ -301,11 +302,6 @@ class TestConfigCommands(CephFSTestCase):
         out = self.mount_a.admin_socket(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
 
-        self.mount_a.write_n_mb("file.bin", 1);
-
-        # Implicitly asserting that things don't have lockdep error in shutdown
-        self.mount_a.umount_wait(require_clean=True)
-        self.fs.mds_stop()
 
     def test_mds_config_asok(self):
         test_key = "mds_max_purge_ops"
@@ -314,25 +310,15 @@ class TestConfigCommands(CephFSTestCase):
         out = self.fs.mds_asok(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
 
-        # Implicitly asserting that things don't have lockdep error in shutdown
-        self.mount_a.umount_wait(require_clean=True)
-        self.fs.mds_stop()
-
     def test_mds_config_tell(self):
         test_key = "mds_max_purge_ops"
         test_val = "123"
 
-        mds_id = self.fs.get_lone_mds_id()
-        self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id), "injectargs",
-                                            "--{0}={1}".format(test_key, test_val))
+        self.fs.rank_tell(['injectargs', "--{0}={1}".format(test_key, test_val)])
 
         # Read it back with asok because there is no `tell` equivalent
-        out = self.fs.mds_asok(['config', 'get', test_key])
+        out = self.fs.rank_tell(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
-
-        # Implicitly asserting that things don't have lockdep error in shutdown
-        self.mount_a.umount_wait(require_clean=True)
-        self.fs.mds_stop()
 
 
 class TestMirroringCommands(CephFSTestCase):
@@ -346,7 +332,8 @@ class TestMirroringCommands(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", fs_name)
 
     def _add_peer(self, fs_name, peer_spec, remote_fs_name):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_spec, remote_fs_name)
+        peer_uuid = str(uuid.uuid4())
+        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
 
     def _remove_peer(self, fs_name, peer_uuid):
         self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
@@ -366,12 +353,12 @@ class TestMirroringCommands(CephFSTestCase):
         fs_map = status.get_fsmap_byname(fs_name)
         mirror_info = fs_map.get('mirror_info', None)
         self.assertTrue(mirror_info is not None)
-        for uuid, remote in mirror_info['peers'].items():
+        for peer_uuid, remote in mirror_info['peers'].items():
             client_name = remote['remote']['client_name']
             cluster_name = remote['remote']['cluster_name']
             spec = f'{client_name}@{cluster_name}'
             if spec == peer_spec:
-                return uuid
+                return peer_uuid
         return None
 
     def test_mirroring_command(self):
@@ -448,7 +435,7 @@ class TestMirroringCommands(CephFSTestCase):
         self.assertTrue(uuid_peer_b is not None)
         # reset filesystem
         self.fs.fail()
-        self.fs.mon_manager.raw_cluster_cmd("fs", "reset", self.fs.name, "--yes-i-really-mean-it")
+        self.fs.reset()
         self.fs.wait_for_daemons()
         self._verify_mirroring(self.fs.name, "disabled")
 

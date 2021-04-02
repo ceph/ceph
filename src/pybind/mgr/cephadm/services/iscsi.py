@@ -1,7 +1,8 @@
 import errno
 import json
 import logging
-from typing import List, cast
+from typing import List, cast, Optional
+from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import IscsiServiceSpec
@@ -27,15 +28,12 @@ class IscsiService(CephService):
         spec = cast(IscsiServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id
 
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(igw_id),
-            'caps': ['mon', 'profile rbd, '
-                            'allow command "osd blocklist", '
-                            'allow command "config-key get" with "key" prefix "iscsi/"',
-                     'mgr', 'allow command "service status"',
-                     'osd', 'allow rwx'],
-        })
+        keyring = self.get_keyring_with_caps(self.get_auth_entity(igw_id),
+                                             ['mon', 'profile rbd, '
+                                              'allow command "osd blocklist", '
+                                              'allow command "config-key get" with "key" prefix "iscsi/"',
+                                              'mgr', 'allow command "service status"',
+                                              'osd', 'allow rwx'])
 
         if spec.ssl_cert:
             if isinstance(spec.ssl_cert, list):
@@ -98,6 +96,9 @@ class IscsiService(CephService):
                     logger.warning('No ServiceSpec found for %s', dd)
                     continue
                 ip = utils.resolve_ip(dd.hostname)
+                # IPv6 URL encoding requires square brackets enclosing the ip
+                if type(ip_address(ip)) is IPv6Address:
+                    ip = f'[{ip}]'
                 protocol = "http"
                 if spec.api_secure and spec.ssl_cert and spec.ssl_key:
                     protocol = "https"
@@ -121,7 +122,10 @@ class IscsiService(CephService):
             get_set_cmd_dicts=get_set_cmd_dicts
         )
 
-    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+    def ok_to_stop(self,
+                   daemon_ids: List[str],
+                   force: bool = False,
+                   known: Optional[List[str]] = None) -> HandleCommandResult:
         # if only 1 iscsi, alert user (this is not passable with --force)
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Iscsi', 1, True)
         if warn:

@@ -1,0 +1,5 @@
+nose >=1.0.0
+boto >=2.6.0
+boto3 >=1.0.0
+configparser >=5.0.0
+kafka-python >=2.0.0

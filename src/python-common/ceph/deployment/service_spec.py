@@ -3,6 +3,7 @@ import fnmatch
 import re
 from collections import OrderedDict
 from functools import wraps
+from ipaddress import ip_network, ip_address
 from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
     NamedTuple
 
@@ -115,7 +116,6 @@ class HostPlacementSpec(NamedTuple):
         if not require_network:
             return host_spec
 
-        from ipaddress import ip_network, ip_address
         networks = list()  # type: List[str]
         network = host_spec.network
         # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
@@ -157,7 +157,8 @@ class PlacementSpec(object):
                  label=None,  # type: Optional[str]
                  hosts=None,  # type: Union[List[str],List[HostPlacementSpec], None]
                  count=None,  # type: Optional[int]
-                 host_pattern=None  # type: Optional[str]
+                 count_per_host=None,  # type: Optional[int]
+                 host_pattern=None,  # type: Optional[str]
                  ):
         # type: (...) -> None
         self.label = label
@@ -167,6 +168,7 @@ class PlacementSpec(object):
             self.set_hosts(hosts)
 
         self.count = count  # type: Optional[int]
+        self.count_per_host = count_per_host   # type: Optional[int]
 
         #: fnmatch patterns to select hosts. Can also be a single host.
         self.host_pattern = host_pattern  # type: Optional[str]
@@ -174,17 +176,21 @@ class PlacementSpec(object):
         self.validate()
 
     def is_empty(self) -> bool:
-        return self.label is None and \
-            not self.hosts and \
-            not self.host_pattern and \
-            self.count is None
+        return (
+            self.label is None
+            and not self.hosts
+            and not self.host_pattern
+            and self.count is None
+            and self.count_per_host is None
+        )
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, PlacementSpec):
             return self.label == other.label \
                    and self.hosts == other.hosts \
                    and self.count == other.count \
-                   and self.host_pattern == other.host_pattern
+                   and self.host_pattern == other.host_pattern \
+                   and self.count_per_host == other.count_per_host
         return NotImplemented
 
     def set_hosts(self, hosts: Union[List[str], List[HostPlacementSpec]]) -> None:
@@ -204,20 +210,17 @@ class PlacementSpec(object):
         if self.hosts:
             all_hosts = [hs.hostname for hs in hostspecs]
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
-        elif self.label:
+        if self.label:
             return [hs.hostname for hs in hostspecs if self.label in hs.labels]
-        elif self.host_pattern:
-            all_hosts = [hs.hostname for hs in hostspecs]
+        all_hosts = [hs.hostname for hs in hostspecs]
+        if self.host_pattern:
             return fnmatch.filter(all_hosts, self.host_pattern)
-        else:
-            # This should be caught by the validation but needs to be here for
-            # get_host_selection_size
-            return []
+        return all_hosts
 
-    def get_host_selection_size(self, hostspecs: Iterable[HostSpec]) -> int:
+    def get_target_count(self, hostspecs: Iterable[HostSpec]) -> int:
         if self.count:
             return self.count
-        return len(self.filter_matching_hostspecs(hostspecs))
+        return len(self.filter_matching_hostspecs(hostspecs)) * (self.count_per_host or 1)
 
     def pretty_str(self) -> str:
         """
@@ -230,6 +233,8 @@ class PlacementSpec(object):
             kv.append(';'.join([str(h) for h in self.hosts]))
         if self.count:
             kv.append('count:%d' % self.count)
+        if self.count_per_host:
+            kv.append('count-per-host:%d' % self.count_per_host)
         if self.label:
             kv.append('label:%s' % self.label)
         if self.host_pattern:
@@ -240,6 +245,8 @@ class PlacementSpec(object):
         kv = []
         if self.count:
             kv.append('count=%d' % self.count)
+        if self.count_per_host:
+            kv.append('count_per_host=%d' % self.count_per_host)
         if self.label:
             kv.append('label=%s' % repr(self.label))
         if self.hosts:
@@ -269,6 +276,8 @@ class PlacementSpec(object):
             r['hosts'] = [host.to_json() for host in self.hosts]
         if self.count:
             r['count'] = self.count
+        if self.count_per_host:
+            r['count_per_host'] = self.count_per_host
         if self.host_pattern:
             r['host_pattern'] = self.host_pattern
         return r
@@ -279,6 +288,26 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
             raise ServiceSpecValidationError("num/count must be > 1")
+        if self.count_per_host is not None and self.count_per_host < 1:
+            raise ServiceSpecValidationError("count-per-host must be >= 1")
+        if self.count_per_host is not None and not (
+                self.label
+                or self.hosts
+                or self.host_pattern
+        ):
+            raise ServiceSpecValidationError(
+                "count-per-host must be combined with label or hosts or host_pattern"
+            )
+        if self.count is not None and self.count_per_host is not None:
+            raise ServiceSpecValidationError("cannot combine count and count-per-host")
+        if (
+                self.count_per_host is not None
+                and self.hosts
+                and any([hs.network or hs.name for hs in self.hosts])
+        ):
+            raise ServiceSpecValidationError(
+                "count-per-host cannot be combined explicit placement with names or networks"
+            )
         if self.host_pattern and self.hosts:
             raise ServiceSpecValidationError('cannot combine host patterns and hosts')
         for h in self.hosts:
@@ -336,6 +365,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
             raise ServiceSpecValidationError('invalid placement %s' % arg)
 
         count = None
+        count_per_host = None
         if strings:
             try:
                 count = int(strings[0])
@@ -345,7 +375,15 @@ tPlacementSpec(hostname='host2', network='', name='')])
         for s in strings:
             if s.startswith('count:'):
                 try:
-                    count = int(s[6:])
+                    count = int(s[len('count:'):])
+                    strings.remove(s)
+                    break
+                except ValueError:
+                    pass
+        for s in strings:
+            if s.startswith('count-per-host:'):
+                try:
+                    count_per_host = int(s[len('count-per-host:'):])
                     strings.remove(s)
                     break
                 except ValueError:
@@ -370,6 +408,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
                 'more than one host pattern provided: {}'.format(host_patterns))
 
         ps = PlacementSpec(count=count,
+                           count_per_host=count_per_host,
                            hosts=advanced_hostspecs,
                            label=label,
                            host_pattern=host_patterns[0] if host_patterns else None)
@@ -389,7 +428,7 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container cephadm-exporter ha-rgw'.split()
+                          'container cephadm-exporter ha-rgw cephfs-mirror'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
@@ -435,6 +474,7 @@ class ServiceSpec(object):
                  config: Optional[Dict[str, str]] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
+                 networks: Optional[List[str]] = None,
                  ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
@@ -445,6 +485,7 @@ class ServiceSpec(object):
             self.service_id = service_id
         self.unmanaged = unmanaged
         self.preview_only = preview_only
+        self.networks: List[str] = networks or []
 
         self.config: Optional[Dict[str, str]] = None
         if config:
@@ -475,6 +516,7 @@ class ServiceSpec(object):
             service_id: foo
             config:
               some_option: the_value
+            networks: [10.10.0.0/16]
             spec:
               pool: mypool
               namespace: myns
@@ -488,6 +530,10 @@ class ServiceSpec(object):
 
         :param json_spec: A valid dict with ServiceSpec
         """
+
+        if not isinstance(json_spec, dict):
+            raise ServiceSpecValidationError(
+                f'Service Spec is not an (JSON or YAML) object. got "{str(json_spec)}"')
 
         c = json_spec.copy()
 
@@ -530,6 +576,11 @@ class ServiceSpec(object):
             n += '.' + self.service_id
         return n
 
+    def get_port_start(self) -> Optional[int]:
+        # If defined, we will allocate and number ports starting at this
+        # point.
+        return None
+
     def to_json(self):
         # type: () -> OrderedDict[str, Any]
         ret: OrderedDict[str, Any] = OrderedDict()
@@ -540,6 +591,8 @@ class ServiceSpec(object):
         ret['placement'] = self.placement.to_json()
         if self.unmanaged:
             ret['unmanaged'] = self.unmanaged
+        if self.networks:
+            ret['networks'] = self.networks
 
         c = {}
         for key, val in sorted(self.__dict__.items(), key=lambda tpl: tpl[0]):
@@ -560,6 +613,9 @@ class ServiceSpec(object):
         if self.service_type in self.REQUIRES_SERVICE_ID:
             if not self.service_id:
                 raise ServiceSpecValidationError('Cannot add Service: id required')
+            if not re.match('^[a-zA-Z0-9_.-]+$', self.service_id):
+                raise ServiceSpecValidationError('Service id contains invalid characters, '
+                                                 'only [a-zA-Z0-9_.-] allowed')
         elif self.service_id:
             raise ServiceSpecValidationError(
                     f'Service of type \'{self.service_type}\' should not contain a service id')
@@ -572,6 +628,13 @@ class ServiceSpec(object):
                     raise ServiceSpecValidationError(
                         f'Cannot set config option {k} in spec: it is managed by cephadm'
                     )
+        for network in self.networks or []:
+            try:
+                ip_network(network)
+            except ValueError as e:
+                raise ServiceSpecValidationError(
+                    f'Cannot parse network {network}: {e}'
+                )
 
     def __repr__(self) -> str:
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
@@ -602,12 +665,13 @@ class NFSServiceSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
             'nfs', service_id=service_id,
             placement=placement, unmanaged=unmanaged, preview_only=preview_only,
-            config=config)
+            config=config, networks=networks)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
@@ -657,40 +721,36 @@ class RGWSpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  rgw_realm: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
-                 subcluster: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[List[str]] = None,
-                 rgw_frontend_ssl_key: Optional[List[str]] = None,
+                 rgw_frontend_type: Optional[str] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 subcluster: Optional[str] = None,  # legacy, only for from_json on upgrade
                  ):
         assert service_type == 'rgw', service_type
-        if service_id:
-            a = service_id.split('.', 2)
-            rgw_realm = a[0]
-            if len(a) > 1:
-                rgw_zone = a[1]
-            if len(a) > 2:
-                subcluster = a[2]
-        else:
-            if subcluster:
-                service_id = '%s.%s.%s' % (rgw_realm, rgw_zone, subcluster)
-            else:
-                service_id = '%s.%s' % (rgw_realm, rgw_zone)
+
+        # for backward compatibility with octopus spec files,
+        if not service_id and (rgw_realm and rgw_zone):
+            service_id = rgw_realm + '.' + rgw_zone
+
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config)
+            preview_only=preview_only, config=config, networks=networks)
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
-        self.subcluster = subcluster
         self.rgw_frontend_port = rgw_frontend_port
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
-        self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
+        self.rgw_frontend_type = rgw_frontend_type
         self.ssl = ssl
+
+    def get_port_start(self) -> Optional[int]:
+        return self.get_port()
 
     def get_port(self) -> int:
         if self.rgw_frontend_port:
@@ -699,26 +759,6 @@ class RGWSpec(ServiceSpec):
             return 443
         else:
             return 80
-
-    def rgw_frontends_config_value(self) -> str:
-        ports = []
-        if self.ssl:
-            ports.append(f"ssl_port={self.get_port()}")
-            ports.append(f"ssl_certificate=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.crt")
-            ports.append(f"ssl_key=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.key")
-        else:
-            ports.append(f"port={self.get_port()}")
-        return f'beast {" ".join(ports)}'
-
-    def validate(self) -> None:
-        super(RGWSpec, self).validate()
-
-        if not self.rgw_realm:
-            raise ServiceSpecValidationError(
-                'Cannot add RGW: No realm specified')
-        if not self.rgw_zone:
-            raise ServiceSpecValidationError(
-                'Cannot add RGW: No zone specified')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
@@ -740,12 +780,13 @@ class IscsiServiceSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
                  ):
         assert service_type == 'iscsi'
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
                                                preview_only=preview_only,
-                                               config=config)
+                                               config=config, networks=networks)
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
@@ -786,12 +827,13 @@ class AlertManagerSpec(ServiceSpec):
                  preview_only: bool = False,
                  user_data: Optional[Dict[str, Any]] = None,
                  config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
                  ):
         assert service_type == 'alertmanager'
         super(AlertManagerSpec, self).__init__(
             'alertmanager', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config)
+            preview_only=preview_only, config=config, networks=networks)
 
         # Custom configuration.
         #
@@ -818,6 +860,7 @@ class HA_RGWSpec(ServiceSpec):
                  service_type: str = 'ha-rgw',
                  service_id: Optional[str] = None,
                  config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  virtual_ip_interface: Optional[str] = None,
                  virtual_ip_address: Optional[str] = None,
@@ -836,11 +879,12 @@ class HA_RGWSpec(ServiceSpec):
                  ha_proxy_ssl_options: Optional[List[str]] = None,
                  haproxy_container_image: Optional[str] = None,
                  keepalived_container_image: Optional[str] = None,
-                 definitive_host_list: Optional[List[HostPlacementSpec]] = None
+                 definitive_host_list: Optional[List[str]] = None
                  ):
         assert service_type == 'ha-rgw'
         super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id,
-                                         placement=placement, config=config)
+                                         placement=placement, config=config,
+                                         networks=networks)
 
         self.virtual_ip_interface = virtual_ip_interface
         self.virtual_ip_address = virtual_ip_address
@@ -862,7 +906,7 @@ class HA_RGWSpec(ServiceSpec):
         # placeholder variable. Need definitive list of hosts this service will
         # be placed on in order to generate keepalived config. Will be populated
         # when applying spec
-        self.definitive_host_list = []  # type: List[HostPlacementSpec]
+        self.definitive_host_list = []  # type: List[str]
 
     def validate(self) -> None:
         super(HA_RGWSpec, self).validate()
@@ -909,6 +953,7 @@ class CustomContainerSpec(ServiceSpec):
                  service_type: str = 'container',
                  service_id: Optional[str] = None,
                  config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -932,7 +977,8 @@ class CustomContainerSpec(ServiceSpec):
         super(CustomContainerSpec, self).__init__(
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config)
+            preview_only=preview_only, config=config,
+            networks=networks)
 
         self.image = image
         self.entrypoint = entrypoint

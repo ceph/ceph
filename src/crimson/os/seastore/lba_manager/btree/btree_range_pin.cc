@@ -15,8 +15,8 @@ namespace crimson::os::seastore::lba_manager::btree {
 
 void btree_range_pin_t::take_pin(btree_range_pin_t &other)
 {
-  assert(other.extent);
-  assert(other.pins);
+  ceph_assert(other.extent);
+  ceph_assert(other.pins);
   other.pins->replace_pin(*this, other);
   pins = other.pins;
   other.pins = nullptr;
@@ -29,8 +29,8 @@ void btree_range_pin_t::take_pin(btree_range_pin_t &other)
 
 btree_range_pin_t::~btree_range_pin_t()
 {
-  assert(!pins == !is_linked());
-  assert(!ref);
+  ceph_assert(!pins == !is_linked());
+  ceph_assert(!ref);
   if (pins) {
     logger().debug("{}: removing {}", __func__, *this);
     pins->remove_pin(*this, true);
@@ -46,9 +46,9 @@ void btree_pin_set_t::replace_pin(btree_range_pin_t &to, btree_range_pin_t &from
 void btree_pin_set_t::remove_pin(btree_range_pin_t &pin, bool do_check_parent)
 {
   logger().debug("{}: {}", __func__, pin);
-  assert(pin.is_linked());
-  assert(pin.pins);
-  assert(!pin.ref);
+  ceph_assert(pin.is_linked());
+  ceph_assert(pin.pins);
+  ceph_assert(!pin.ref);
 
   pins.erase(pin);
   pin.pins = nullptr;
@@ -98,7 +98,7 @@ const btree_range_pin_t *btree_pin_set_t::maybe_get_first_child(
 
 void btree_pin_set_t::release_if_no_children(btree_range_pin_t &pin)
 {
-  assert(pin.is_linked());
+  ceph_assert(pin.is_linked());
   if (maybe_get_first_child(pin.range) == nullptr) {
     pin.drop_ref();
   }
@@ -106,20 +106,20 @@ void btree_pin_set_t::release_if_no_children(btree_range_pin_t &pin)
 
 void btree_pin_set_t::add_pin(btree_range_pin_t &pin)
 {
-  assert(!pin.is_linked());
-  assert(!pin.pins);
-  assert(!pin.ref);
+  ceph_assert(!pin.is_linked());
+  ceph_assert(!pin.pins);
+  ceph_assert(!pin.ref);
 
   auto [prev, inserted] = pins.insert(pin);
   if (!inserted) {
     logger().error("{}: unable to add {}, found {}", __func__, pin, *prev);
-    assert(0 == "impossible");
+    ceph_assert(0 == "impossible");
     return;
   }
   pin.pins = this;
   if (!pin.is_root()) {
     auto *parent = maybe_get_parent(pin.range);
-    assert(parent);
+    ceph_assert(parent);
     if (!parent->has_ref()) {
       logger().debug("{}: acquiring parent {}", __func__,
 		     static_cast<void*>(parent));

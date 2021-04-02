@@ -312,8 +312,8 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
   }
   // purge inodes
-  dout(10) << "try_to_expire waiting for purge of " << purge_inodes << dendl;
-  if (purge_inodes.size())
+  dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
+  if (purging_inodes.size())
     set_purged_cb(gather_bld.new_sub());
   
   if (gather_bld.has_subs()) {
@@ -1591,13 +1591,14 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
 	if (used_preallocated_ino) {
 	  if (!session->info.prealloc_inos.empty()) {
-	    inodeno_t i = session->take_ino(used_preallocated_ino);
-	    ceph_assert(i == used_preallocated_ino);
-	    session->info.used_inos.clear();
+	    inodeno_t ino = session->take_ino(used_preallocated_ino);
+	    session->info.prealloc_inos.erase(ino);
+	    ceph_assert(ino == used_preallocated_ino);
 	  }
           mds->sessionmap.replay_dirty_session(session);
 	}
 	if (!preallocated_inos.empty()) {
+	  session->free_prealloc_inos.insert(preallocated_inos);
 	  session->info.prealloc_inos.insert(preallocated_inos);
           mds->sessionmap.replay_dirty_session(session);
 	}
@@ -1720,9 +1721,9 @@ void EPurged::replay(MDSRank *mds)
 {
   if (inos.size()) {
     LogSegment *ls = mds->mdlog->get_segment(seq);
-    if (ls) {
-      ls->purge_inodes.subtract(inos);
-    }
+    if (ls)
+      ls->purging_inodes.subtract(inos);
+
     if (mds->inotable->get_version() >= inotablev) {
       dout(10) << "EPurged.replay inotable " << mds->inotable->get_version()
 	       << " >= " << inotablev << ", noop" << dendl;
@@ -1767,14 +1768,14 @@ void EPurged::dump(Formatter *f) const
 void ESession::update_segment()
 {
   get_segment()->sessionmapv = cmapv;
-  if (inos.size() && inotablev)
+  if (inos_to_free.size() && inotablev)
     get_segment()->inotablev = inotablev;
 }
 
 void ESession::replay(MDSRank *mds)
 {
-  if (purge_inos.size())
-    get_segment()->purge_inodes.insert(purge_inos);
+  if (inos_to_purge.size())
+    get_segment()->purging_inodes.insert(inos_to_purge);
   
   if (mds->sessionmap.get_version() >= cmapv) {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.get_version() 
@@ -1818,7 +1819,7 @@ void ESession::replay(MDSRank *mds)
     mds->sessionmap.set_version(cmapv);
   }
   
-  if (inos.size() && inotablev) {
+  if (inos_to_free.size() && inotablev) {
     if (mds->inotable->get_version() >= inotablev) {
       dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
 	       << " >= " << inotablev << ", noop" << dendl;
@@ -1826,7 +1827,7 @@ void ESession::replay(MDSRank *mds)
       dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
 	       << " < " << inotablev << " " << (open ? "add":"remove") << dendl;
       ceph_assert(!open);  // for now
-      mds->inotable->replay_release_ids(inos);
+      mds->inotable->replay_release_ids(inos_to_free);
       ceph_assert(mds->inotable->get_version() == inotablev);
     }
   }
@@ -1841,10 +1842,10 @@ void ESession::encode(bufferlist &bl, uint64_t features) const
   encode(client_inst, bl, features);
   encode(open, bl);
   encode(cmapv, bl);
-  encode(inos, bl);
+  encode(inos_to_free, bl);
   encode(inotablev, bl);
   encode(client_metadata, bl);
-  encode(purge_inos, bl);
+  encode(inos_to_purge, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1856,7 +1857,7 @@ void ESession::decode(bufferlist::const_iterator &bl)
   decode(client_inst, bl);
   decode(open, bl);
   decode(cmapv, bl);
-  decode(inos, bl);
+  decode(inos_to_free, bl);
   decode(inotablev, bl);
   if (struct_v == 4) {
     decode(client_metadata.kv_map, bl);
@@ -1864,7 +1865,7 @@ void ESession::decode(bufferlist::const_iterator &bl)
     decode(client_metadata, bl);
   }
   if (struct_v >= 6){
-    decode(purge_inos, bl);
+    decode(inos_to_purge, bl);
   }
     
   DECODE_FINISH(bl);
@@ -1875,9 +1876,10 @@ void ESession::dump(Formatter *f) const
   f->dump_stream("client instance") << client_inst;
   f->dump_string("open", open ? "true" : "false");
   f->dump_int("client map version", cmapv);
-  f->dump_stream("inos") << inos;
+  f->dump_stream("inos_to_free") << inos_to_free;
   f->dump_int("inotable version", inotablev);
   f->open_object_section("client_metadata");
+  f->dump_stream("inos_to_purge") << inos_to_purge;
   client_metadata.dump(f);
   f->close_section();  // client_metadata
 }

@@ -6,11 +6,11 @@ import curses
 import errno
 import json
 import signal
-import time
 
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum, unique
+from threading import Event
 
 import rados
 
@@ -37,6 +37,9 @@ FS_TOP_SUPPORTED_VER = 1
 
 ITEMS_PAD_LEN = 1
 ITEMS_PAD = "  " * ITEMS_PAD_LEN
+DEFAULT_REFRESH_INTERVAL = 1
+# min refresh interval allowed
+MIN_REFRESH_INTERVAL = 0.5
 
 # metadata provided by mgr/stats
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "CLIENT_ID"
@@ -56,6 +59,9 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
     ("WRITE_LATENCY", MetricType.METRIC_TYPE_LATENCY),
     ("METADATA_LATENCY", MetricType.METRIC_TYPE_LATENCY),
     ("DENTRY_LEASE", MetricType.METRIC_TYPE_PERCENTAGE),
+    ("OPENED_FILES", MetricType.METRIC_TYPE_NONE),
+    ("PINNED_ICAPS", MetricType.METRIC_TYPE_NONE),
+    ("OPENED_INODES", MetricType.METRIC_TYPE_NONE),
 ])
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
@@ -68,6 +74,7 @@ CLIENT_METADATA_MOUNT_POINT_KEY = "mount_point"
 CLIENT_METADATA_MOUNT_ROOT_KEY = "root"
 CLIENT_METADATA_IP_KEY = "IP"
 CLIENT_METADATA_HOSTNAME_KEY = "hostname"
+CLIENT_METADATA_VALID_METRICS_KEY = "valid_metrics"
 
 GLOBAL_METRICS_KEY = "global_metrics"
 GLOBAL_COUNTERS_KEY = "global_counters"
@@ -93,14 +100,15 @@ def wrap(s, sl):
 class FSTop(object):
     def __init__(self, args):
         self.rados = None
-        self.stop = False
         self.stdscr = None  # curses instance
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
+        self.refresh_interval_secs = args.delay
+        self.exit_ev = Event()
 
     def handle_signal(self, signum, _):
-        self.stop = True
+        self.exit_ev.set()
 
     def init(self):
         try:
@@ -130,6 +138,10 @@ class FSTop(object):
         stats_json = self.perf_stats_query()
         if not stats_json['version'] == FS_TOP_SUPPORTED_VER:
             raise FSTopException('perf stats version mismatch!')
+        missing = [m for m in stats_json["global_counters"] if m.upper() not in MGR_STATS_COUNTERS]
+        if missing:
+            raise FSTopException('Cannot handle unknown metrics from \'ceph fs perf stats\': '
+                                 f'{missing}')
 
     def setup_curses(self):
         self.stdscr = curses.initscr()
@@ -173,6 +185,7 @@ class FSTop(object):
         elif typ == MetricType.METRIC_TYPE_LATENCY:
             return "(s)"
         else:
+            # return empty string for none type
             return ''
 
     def refresh_top_line_and_build_coord(self):
@@ -201,14 +214,30 @@ class FSTop(object):
         self.topl.addstr(0, 0, ITEMS_PAD.join(heading), curses.A_STANDOUT | curses.A_BOLD)
         return x_coord_map
 
+    @staticmethod
+    def has_metric(metadata, metrics_key):
+        return metrics_key in metadata
+
+    @staticmethod
+    def has_metrics(metadata, metrics_keys):
+        for key in metrics_keys:
+            if not FSTop.has_metric(metadata, key):
+                return False
+        return True
+
     def refresh_client(self, client_id, metrics, counters, client_meta, x_coord_map, y_coord):
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_END:
             coord = x_coord_map[item]
             if item == FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR:
-                self.mainw.addstr(y_coord, coord[0],
-                                  f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'
-                                  f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'
-                                  f'{client_meta[CLIENT_METADATA_IP_KEY]}')
+                if FSTop.has_metrics(client_meta, [CLIENT_METADATA_MOUNT_POINT_KEY,
+                                                   CLIENT_METADATA_HOSTNAME_KEY,
+                                                   CLIENT_METADATA_IP_KEY]):
+                    self.mainw.addstr(y_coord, coord[0],
+                                      f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'
+                                      f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'
+                                      f'{client_meta[CLIENT_METADATA_IP_KEY]}')
+                else:
+                    self.mainw.addstr(y_coord, coord[0], "N/A")
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_START:
             coord = x_coord_map[item]
             hlen = coord[1] - len(ITEMS_PAD)
@@ -216,18 +245,24 @@ class FSTop(object):
                 self.mainw.addstr(y_coord, coord[0],
                                   wrap(client_id.split('.')[1], hlen))
             elif item == FS_TOP_MAIN_WINDOW_COL_MNT_ROOT:
-                self.mainw.addstr(y_coord, coord[0],
-                                  wrap(client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY], hlen))
+                if FSTop.has_metric(client_meta, CLIENT_METADATA_MOUNT_ROOT_KEY):
+                    self.mainw.addstr(y_coord, coord[0],
+                                      wrap(client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY], hlen))
+                else:
+                    self.mainw.addstr(y_coord, coord[0], "N/A")
         cidx = 0
         for item in counters:
             coord = x_coord_map[item]
             m = metrics[cidx]
             typ = MAIN_WINDOW_TOP_LINE_METRICS[MGR_STATS_COUNTERS[cidx]]
-            if item.lower() in client_meta['valid_metrics']:
+            if item.lower() in client_meta.get(CLIENT_METADATA_VALID_METRICS_KEY, []):
                 if typ == MetricType.METRIC_TYPE_PERCENTAGE:
                     self.mainw.addstr(y_coord, coord[0], f'{calc_perc(m)}')
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
                     self.mainw.addstr(y_coord, coord[0], f'{calc_lat(m)}')
+                else:
+                    # display 0th element from metric tuple
+                    self.mainw.addstr(y_coord, coord[0], f'{m[0]}')
             else:
                 self.mainw.addstr(y_coord, coord[0], "N/A")
             cidx += 1
@@ -253,8 +288,9 @@ class FSTop(object):
             return False
         client_metadata = stats_json[CLIENT_METADATA_KEY]
         num_clients = len(client_metadata)
-        num_mounts = len([client for client, metadata in client_metadata.items() if not
-                          metadata[CLIENT_METADATA_MOUNT_POINT_KEY] == 'N/A'])
+        num_mounts = len([client for client, metadata in client_metadata.items() if
+                          CLIENT_METADATA_MOUNT_POINT_KEY in metadata
+                          and metadata[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A'])
         num_kclients = len([client for client, metadata in client_metadata.items() if
                             "kernel_version" in metadata])
         num_libs = num_clients - (num_mounts + num_kclients)
@@ -271,7 +307,7 @@ class FSTop(object):
     def display(self, _):
         x_coord_map = self.refresh_top_line_and_build_coord()
         self.topl.refresh()
-        while not self.stop:
+        while not self.exit_ev.is_set():
             stats_json = self.perf_stats_query()
             self.header.clear()
             self.mainw.clear()
@@ -279,10 +315,17 @@ class FSTop(object):
                 self.refresh_main_window(x_coord_map, stats_json)
             self.header.refresh()
             self.mainw.refresh()
-            time.sleep(1)
+            self.exit_ev.wait(timeout=self.refresh_interval_secs)
 
 
 if __name__ == '__main__':
+    def float_greater_than(x):
+        value = float(x)
+        if value < MIN_REFRESH_INTERVAL:
+            raise argparse.ArgumentTypeError(f'{value} should be greater than '
+                                             f'{MIN_REFRESH_INTERVAL}')
+        return value
+
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
     parser.add_argument('--cluster', nargs='?', const='ceph', default='ceph',
                         help='Ceph cluster to connect (defualt: ceph)')
@@ -292,6 +335,10 @@ if __name__ == '__main__':
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
                         help='run in selftest mode')
+    parser.add_argument('-d', '--delay', nargs='?', default=DEFAULT_REFRESH_INTERVAL,
+                        type=float_greater_than, help='Interval to refresh data '
+                        f'(default: {DEFAULT_REFRESH_INTERVAL})')
+
     args = parser.parse_args()
     err = False
     ft = FSTop(args)

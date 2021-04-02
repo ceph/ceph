@@ -203,6 +203,18 @@ class TestDevice(object):
         disk = device.Device("/dev/sdb")
         assert not disk.available
 
+    def test_reject_device_with_gpt_headers(self, device_info):
+        data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
+        lsblk = {"TYPE": "disk"}
+        blkid= {"PTTYPE": "gpt"}
+        device_info(
+            devices=data,
+            blkid=blkid,
+            lsblk=lsblk,
+        )
+        disk = device.Device("/dev/sdb")
+        assert not disk.available
+
     def test_accept_non_removable_device(self, device_info):
         data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
         lsblk = {"TYPE": "disk"}

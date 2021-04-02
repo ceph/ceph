@@ -1,3 +1,11 @@
+==========
+Cuttlefish
+==========
+
+Cuttlefish is the 3rd stable release of Ceph. It is named after a type
+of cephalopod (order Sepiida) characterized by a unique internal shell, the
+cuttlebone, which is used for control of bouyancy.
+
 v0.61.9 "Cuttlefish"
 ====================
 

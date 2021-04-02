@@ -21,30 +21,25 @@
 #include "../LogEvent.h"
 
 class EPurged : public LogEvent {
+public:
+  EPurged() : LogEvent(EVENT_PURGED) { }
+  EPurged(const interval_set<inodeno_t>& _inos, LogSegment::seq_t _seq, version_t iv)
+    : LogEvent(EVENT_PURGED), inos(_inos), seq(_seq), inotablev(iv) {
+  }
+  void encode(bufferlist& bl, uint64_t features) const override;
+  void decode(bufferlist::const_iterator& bl) override;
+  void dump(Formatter *f) const override;
+  void print(ostream& out) const override {
+    out << "Eurged " << inos.size() << " inos, inotable v" << inotablev;
+  }
 
- protected:
-    interval_set<inodeno_t> inos;
-    version_t inotablev{0};
-    LogSegment::seq_t seq;
- public:
- EPurged() : LogEvent(EVENT_PURGED) {
-    }
- EPurged(interval_set<inodeno_t> i, version_t iv, LogSegment::seq_t _seq = 0) :
-   LogEvent(EVENT_PURGED), inos(std::move(i)), inotablev(iv), seq(_seq) {
-    }
-    void encode(bufferlist& bl, uint64_t features) const override;
-    void decode(bufferlist::const_iterator& bl) override;
-    void dump(Formatter *f) const override;
-    void print(ostream& out) const override {
+  void update_segment() override;
+  void replay(MDSRank *mds) override;
 
-        if (inotablev)
-            out << "Eurge complete";
-        else
-            out << "Eurge inodes ";
-    }
-
-    void update_segment() override;
-    void replay(MDSRank *mds) override;
+protected:
+  interval_set<inodeno_t> inos;
+  LogSegment::seq_t seq;
+  version_t inotablev{0};
 };
 WRITE_CLASS_ENCODER_FEATURES(EPurged)
 

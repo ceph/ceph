@@ -513,11 +513,16 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<bool>(false);
       },
-      crimson::ct_error::pass_further_all{}
-    ).unsafe_get0();
+      crimson::ct_error::assert_all{
+	"try_submit_transaction hit invalid error"
+      }
+    ).then([this](auto ret) {
+      return segment_cleaner->run_until_halt().then([ret] { return ret; });
+    }).get0();
 
-    if (success)
+    if (success) {
       test_mappings.consume(t.mapping_delta);
+    }
 
     return success;
   }

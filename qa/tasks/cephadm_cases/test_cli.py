@@ -6,10 +6,11 @@ log = logging.getLogger(__name__)
 
 
 class TestCephadmCLI(MgrTestCase):
-    def _cmd(self, *args):
+    def _cmd(self, *args) -> str:
+        assert self.mgr_cluster is not None
         return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
 
-    def _orch_cmd(self, *args):
+    def _orch_cmd(self, *args) -> str:
         return self._cmd("orch", *args)
 
     def setUp(self):
@@ -53,3 +54,10 @@ class TestCephadmCLI(MgrTestCase):
 
     def test_device_ls_wide(self):
         self._orch_cmd('device', 'ls', '--wide')
+
+    def test_cephfs_mirror(self):
+        self._orch_cmd('apply', 'cephfs-mirror')
+        self.wait_until_true(lambda: 'cephfs-mirror' in self._orch_cmd('ps'), 30)
+        self.wait_for_health_clear(30)
+        self._orch_cmd('rm', 'cephfs-mirror')
+        self.wait_until_true(lambda: 'cephfs-mirror' not in self._orch_cmd('ps'), 30)
