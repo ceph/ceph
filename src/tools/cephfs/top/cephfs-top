@@ -148,6 +148,14 @@ class FSTop(object):
 
     def setup_curses(self, win):
         self.stdscr = win
+        curses.use_default_colors()
+        curses.start_color()
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            # If the terminal do not support the visibility
+            # requested it will raise an exception
+            pass
         self.run_display()
 
     def verify_perf_stats_support(self):
