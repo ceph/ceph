@@ -39,6 +39,7 @@ To optimize the performance of your cluster, refer to the following:
    mon-lookup-dns
    Heartbeat Settings <mon-osd-interaction>
    OSD Settings <osd-config-ref>
+   DmClock Settings <mclock-config-ref>
    BlueStore Settings <bluestore-config-ref>
    FileStore Settings <filestore-config-ref>
    Journal Settings <journal-ref>
