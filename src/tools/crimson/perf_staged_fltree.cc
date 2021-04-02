@@ -35,12 +35,14 @@ class PerfTree : public TMTestState {
           auto t = tm->create_transaction();
           tree->bootstrap(*t).unsafe_get();
           tm->submit_transaction(std::move(t)).unsafe_get();
+          segment_cleaner->run_until_halt().get0();
         }
         {
           auto t = tm->create_transaction();
           tree->insert(*t).unsafe_get();
           auto start_time = mono_clock::now();
           tm->submit_transaction(std::move(t)).unsafe_get();
+          segment_cleaner->run_until_halt().get0();
           std::chrono::duration<double> duration = mono_clock::now() - start_time;
           logger().warn("submit_transaction() done! {}s", duration.count());
         }
@@ -48,6 +50,7 @@ class PerfTree : public TMTestState {
           auto t = tm->create_transaction();
           tree->get_stats(*t).unsafe_get();
           tm->submit_transaction(std::move(t)).unsafe_get();
+          segment_cleaner->run_until_halt().get0();
         }
         {
           // Note: tm->create_weak_transaction() can also work, but too slow.
