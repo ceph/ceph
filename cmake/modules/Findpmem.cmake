@@ -6,7 +6,11 @@
 
 find_package(PkgConfig QUIET REQUIRED)
 
-foreach(component pmem ${pmem_FIND_COMPONENTS})
+# all pmem libraries depend on pmem, so always find it
+set(pmem_FIND_COMPONENTS ${pmem_FIND_COMPONENTS} pmem)
+list(REMOVE_DUPLICATES pmem_FIND_COMPONENTS)
+
+foreach(component ${pmem_FIND_COMPONENTS})
   set(pmem_COMPONENTS pmem pmemobj)
   list(FIND pmem_COMPONENTS "${component}" found)
   if(found EQUAL -1)
