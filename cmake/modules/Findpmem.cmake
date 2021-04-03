@@ -4,13 +4,27 @@
 # pmem_LIBRARIES - List of libraries when using libpmem.
 # pmem_FOUND - True if pmem found.
 
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+  pkg_check_modules(PKG_pmem QUIET libpmem)
+  pkg_check_modules(PKG_pmemobj QUIET libpmemobj)
+endif()
+
 foreach(component pmem ${pmem_FIND_COMPONENTS})
   if(component STREQUAL pmem)
-    find_path(pmem_${component}_INCLUDE_DIR libpmem.h)
-    find_library(pmem_${component}_LIBRARY pmem)
+    find_path(pmem_${component}_INCLUDE_DIR
+      NAMES libpmem.h
+      HINTS ${PKG_pmem_INCLUDE_DIRS})
+    find_library(pmem_${component}_LIBRARY
+      NAMES pmem
+      HINTS ${PKG_pmem_LIBRARY_DIRS})
   elseif(component STREQUAL pmemobj)
-    find_path(pmem_${component}_INCLUDE_DIR libpmemobj.h)
-    find_library(pmem_${component}_LIBRARY pmemobj)
+    find_path(pmem_${component}_INCLUDE_DIR
+      NAMES libpmemobj.h
+      HINTS ${PKG_pmemobj_INCLUDE_DIRS})
+    find_library(pmem_${component}_LIBRARY
+      NAMES pmemobj
+      HINTS ${PKG_pmemobj_LIBRARY_DIRS}))
   else()
     message(FATAL_ERROR "unknown libpmem component: ${component}")
   endif()
