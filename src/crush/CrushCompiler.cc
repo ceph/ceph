@@ -88,7 +88,7 @@ static void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 static void print_fixedpoint(ostream& out, int i)
 {
   char s[20];
-  snprintf(s, sizeof(s), "%.3f", (float)i / (float)0x10000);
+  snprintf(s, sizeof(s), "%.5f", (float)i / (float)0x10000);
   out << s;
 }
 

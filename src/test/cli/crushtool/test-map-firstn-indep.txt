@@ -115,306 +115,306 @@ type 3 default
 # buckets
 host host0 {
 	id -1		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device0 weight 1.000
-	item device1 weight 1.000
-	item device2 weight 1.000
-	item device3 weight 1.000
+	item device0 weight 1.00000
+	item device1 weight 1.00000
+	item device2 weight 1.00000
+	item device3 weight 1.00000
 }
 host host1 {
 	id -2		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device4 weight 1.000
-	item device5 weight 1.000
-	item device6 weight 1.000
-	item device7 weight 1.000
+	item device4 weight 1.00000
+	item device5 weight 1.00000
+	item device6 weight 1.00000
+	item device7 weight 1.00000
 }
 host host2 {
 	id -3		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device8 weight 1.000
-	item device9 weight 1.000
-	item device10 weight 1.000
-	item device11 weight 1.000
+	item device8 weight 1.00000
+	item device9 weight 1.00000
+	item device10 weight 1.00000
+	item device11 weight 1.00000
 }
 host host3 {
 	id -4		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device12 weight 1.000
-	item device13 weight 1.000
-	item device14 weight 1.000
-	item device15 weight 1.000
+	item device12 weight 1.00000
+	item device13 weight 1.00000
+	item device14 weight 1.00000
+	item device15 weight 1.00000
 }
 host host4 {
 	id -5		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device16 weight 1.000
-	item device17 weight 1.000
-	item device18 weight 1.000
-	item device19 weight 1.000
+	item device16 weight 1.00000
+	item device17 weight 1.00000
+	item device18 weight 1.00000
+	item device19 weight 1.00000
 }
 host host5 {
 	id -6		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device20 weight 1.000
-	item device21 weight 1.000
-	item device22 weight 1.000
-	item device23 weight 1.000
+	item device20 weight 1.00000
+	item device21 weight 1.00000
+	item device22 weight 1.00000
+	item device23 weight 1.00000
 }
 host host6 {
 	id -7		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device24 weight 1.000
-	item device25 weight 1.000
-	item device26 weight 1.000
-	item device27 weight 1.000
+	item device24 weight 1.00000
+	item device25 weight 1.00000
+	item device26 weight 1.00000
+	item device27 weight 1.00000
 }
 host host7 {
 	id -8		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device28 weight 1.000
-	item device29 weight 1.000
-	item device30 weight 1.000
-	item device31 weight 1.000
+	item device28 weight 1.00000
+	item device29 weight 1.00000
+	item device30 weight 1.00000
+	item device31 weight 1.00000
 }
 host host8 {
 	id -9		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device32 weight 1.000
-	item device33 weight 1.000
-	item device34 weight 1.000
-	item device35 weight 1.000
+	item device32 weight 1.00000
+	item device33 weight 1.00000
+	item device34 weight 1.00000
+	item device35 weight 1.00000
 }
 host host9 {
 	id -10		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device36 weight 1.000
-	item device37 weight 1.000
-	item device38 weight 1.000
-	item device39 weight 1.000
+	item device36 weight 1.00000
+	item device37 weight 1.00000
+	item device38 weight 1.00000
+	item device39 weight 1.00000
 }
 host host10 {
 	id -11		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device40 weight 1.000
-	item device41 weight 1.000
-	item device42 weight 1.000
-	item device43 weight 1.000
+	item device40 weight 1.00000
+	item device41 weight 1.00000
+	item device42 weight 1.00000
+	item device43 weight 1.00000
 }
 host host11 {
 	id -12		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device44 weight 1.000
-	item device45 weight 1.000
-	item device46 weight 1.000
-	item device47 weight 1.000
+	item device44 weight 1.00000
+	item device45 weight 1.00000
+	item device46 weight 1.00000
+	item device47 weight 1.00000
 }
 host host12 {
 	id -13		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device48 weight 1.000
-	item device49 weight 1.000
-	item device50 weight 1.000
-	item device51 weight 1.000
+	item device48 weight 1.00000
+	item device49 weight 1.00000
+	item device50 weight 1.00000
+	item device51 weight 1.00000
 }
 host host13 {
 	id -14		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device52 weight 1.000
-	item device53 weight 1.000
-	item device54 weight 1.000
-	item device55 weight 1.000
+	item device52 weight 1.00000
+	item device53 weight 1.00000
+	item device54 weight 1.00000
+	item device55 weight 1.00000
 }
 host host14 {
 	id -15		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device56 weight 1.000
-	item device57 weight 1.000
-	item device58 weight 1.000
-	item device59 weight 1.000
+	item device56 weight 1.00000
+	item device57 weight 1.00000
+	item device58 weight 1.00000
+	item device59 weight 1.00000
 }
 host host15 {
 	id -16		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device60 weight 1.000
-	item device61 weight 1.000
-	item device62 weight 1.000
-	item device63 weight 1.000
+	item device60 weight 1.00000
+	item device61 weight 1.00000
+	item device62 weight 1.00000
+	item device63 weight 1.00000
 }
 host host16 {
 	id -17		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device64 weight 1.000
-	item device65 weight 1.000
-	item device66 weight 1.000
-	item device67 weight 1.000
+	item device64 weight 1.00000
+	item device65 weight 1.00000
+	item device66 weight 1.00000
+	item device67 weight 1.00000
 }
 host host17 {
 	id -18		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device68 weight 1.000
-	item device69 weight 1.000
-	item device70 weight 1.000
-	item device71 weight 1.000
+	item device68 weight 1.00000
+	item device69 weight 1.00000
+	item device70 weight 1.00000
+	item device71 weight 1.00000
 }
 host host18 {
 	id -19		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device72 weight 1.000
-	item device73 weight 1.000
-	item device74 weight 1.000
-	item device75 weight 1.000
+	item device72 weight 1.00000
+	item device73 weight 1.00000
+	item device74 weight 1.00000
+	item device75 weight 1.00000
 }
 host host19 {
 	id -20		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device76 weight 1.000
-	item device77 weight 1.000
-	item device78 weight 1.000
-	item device79 weight 1.000
+	item device76 weight 1.00000
+	item device77 weight 1.00000
+	item device78 weight 1.00000
+	item device79 weight 1.00000
 }
 host host20 {
 	id -21		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device80 weight 1.000
-	item device81 weight 1.000
-	item device82 weight 1.000
-	item device83 weight 1.000
+	item device80 weight 1.00000
+	item device81 weight 1.00000
+	item device82 weight 1.00000
+	item device83 weight 1.00000
 }
 host host21 {
 	id -22		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device84 weight 1.000
-	item device85 weight 1.000
-	item device86 weight 1.000
-	item device87 weight 1.000
+	item device84 weight 1.00000
+	item device85 weight 1.00000
+	item device86 weight 1.00000
+	item device87 weight 1.00000
 }
 host host22 {
 	id -23		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device88 weight 1.000
-	item device89 weight 1.000
-	item device90 weight 1.000
-	item device91 weight 1.000
+	item device88 weight 1.00000
+	item device89 weight 1.00000
+	item device90 weight 1.00000
+	item device91 weight 1.00000
 }
 host host23 {
 	id -24		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device92 weight 1.000
-	item device93 weight 1.000
-	item device94 weight 1.000
-	item device95 weight 1.000
+	item device92 weight 1.00000
+	item device93 weight 1.00000
+	item device94 weight 1.00000
+	item device95 weight 1.00000
 }
 host host24 {
 	id -25		# do not change unnecessarily
-	# weight 4.000
+	# weight 4.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device96 weight 1.000
-	item device97 weight 1.000
-	item device98 weight 1.000
-	item device99 weight 1.000
+	item device96 weight 1.00000
+	item device97 weight 1.00000
+	item device98 weight 1.00000
+	item device99 weight 1.00000
 }
 rack rack0 {
 	id -26		# do not change unnecessarily
-	# weight 40.000
+	# weight 40.00000
 	alg straw
 	hash 0	# rjenkins1
-	item host0 weight 4.000
-	item host1 weight 4.000
-	item host2 weight 4.000
-	item host3 weight 4.000
-	item host4 weight 4.000
-	item host5 weight 4.000
-	item host6 weight 4.000
-	item host7 weight 4.000
-	item host8 weight 4.000
-	item host9 weight 4.000
+	item host0 weight 4.00000
+	item host1 weight 4.00000
+	item host2 weight 4.00000
+	item host3 weight 4.00000
+	item host4 weight 4.00000
+	item host5 weight 4.00000
+	item host6 weight 4.00000
+	item host7 weight 4.00000
+	item host8 weight 4.00000
+	item host9 weight 4.00000
 }
 rack rack1 {
 	id -27		# do not change unnecessarily
-	# weight 40.000
+	# weight 40.00000
 	alg straw
 	hash 0	# rjenkins1
-	item host10 weight 4.000
-	item host11 weight 4.000
-	item host12 weight 4.000
-	item host13 weight 4.000
-	item host14 weight 4.000
-	item host15 weight 4.000
-	item host16 weight 4.000
-	item host17 weight 4.000
-	item host18 weight 4.000
-	item host19 weight 4.000
+	item host10 weight 4.00000
+	item host11 weight 4.00000
+	item host12 weight 4.00000
+	item host13 weight 4.00000
+	item host14 weight 4.00000
+	item host15 weight 4.00000
+	item host16 weight 4.00000
+	item host17 weight 4.00000
+	item host18 weight 4.00000
+	item host19 weight 4.00000
 }
 rack rack2 {
 	id -28		# do not change unnecessarily
-	# weight 20.000
+	# weight 20.00000
 	alg straw
 	hash 0	# rjenkins1
-	item host20 weight 4.000
-	item host21 weight 4.000
-	item host22 weight 4.000
-	item host23 weight 4.000
-	item host24 weight 4.000
+	item host20 weight 4.00000
+	item host21 weight 4.00000
+	item host22 weight 4.00000
+	item host23 weight 4.00000
+	item host24 weight 4.00000
 }
 
 default root {
 	id -31		# do not change unnecessarily
-	# weight 100.000
+	# weight 100.00000
 	alg straw
 	hash 0	# rjenkins1
-	item rack1 weight 40.000
-	item rack1 weight 40.000
-	item rack2 weight 20.000
+	item rack1 weight 40.00000
+	item rack1 weight 40.00000
+	item rack2 weight 20.00000
 }
 
 # rules

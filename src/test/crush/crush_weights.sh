@@ -22,14 +22,14 @@ type 2 pool
 # buckets
 domain root {
     id -1        # do not change unnecessarily
-    # weight 5.000
+    # weight 5.00000
     alg straw2
     hash 0    # rjenkins1
-    item device0 weight 10.0
-    item device1 weight 10.0
-    item device2 weight 10.0
-    item device3 weight 10.0
-    item device4 weight 1.000
+    item device0 weight 10.00000
+    item device1 weight 10.00000
+    item device2 weight 10.00000
+    item device3 weight 10.00000
+    item device4 weight 1.00000
 }
 # rules
 rule data {
