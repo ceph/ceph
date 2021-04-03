@@ -12,6 +12,16 @@ foreach(component pmem ${pmem_FIND_COMPONENTS})
   if(found EQUAL -1)
     message(FATAL_ERROR "unknown libpmem component: ${component}")
   endif()
+  set(pkg_module_spec "lib${component}")
+  if(pmem_FIND_VERSION_EXACT)
+    set(pkg_module_spec "lib${component}=${pmem_FIND_VERSION}")
+  elseif(pmem_FIND_VERSION)
+    set(pkg_module_spec "lib${component}>=${pmem_FIND_VERSION}")
+  endif()
+  pkg_check_modules(PKG_${component} QUIET ${pkg_module_spec})
+  if(NOT pmem_VERSION_STRING OR PKG_${component}_VERSION VERSION_LESS pmem_VERSION_STRING)
+    set(pmem_VERSION_STRING ${PKG_${component}_VERSION})
+  endif()
   pkg_check_modules(PKG_${component} QUIET lib${component})
   find_path(pmem_${component}_INCLUDE_DIR
     NAMES lib${component}.h
@@ -28,7 +38,8 @@ endforeach()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(pmem
-  DEFAULT_MSG pmem_INCLUDE_DIRS pmem_LIBRARIES)
+  REQUIRED_VARS pmem_INCLUDE_DIRS pmem_LIBRARIES
+  VERSION_VAR pmem_VERSION_STRING)
 
 mark_as_advanced(
   pmem_INCLUDE_DIRS
