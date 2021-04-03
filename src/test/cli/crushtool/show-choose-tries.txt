@@ -16,12 +16,12 @@ type 1 root
 # buckets
 root root {
 	id -1		# do not change unnecessarily
-	# weight 3.000
+	# weight 3.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device0 weight 1.000
-	item device1 weight 1.000
-	item device2 weight 1.000
+	item device0 weight 1.00000
+	item device1 weight 1.00000
+	item device2 weight 1.00000
 }
 
 rule first_ruleset {
