@@ -68,9 +68,11 @@ class VolumeClient(CephfsClient["Module"]):
         log.info("shutting down")
         # first, note that we're shutting down
         self.stopping.set()
-        # second, ask purge threads to quit
-        self.purge_queue.cancel_all_jobs()
-        # third, delete all libcephfs handles from connection pool
+        # stop clones
+        self.cloner.shutdown()
+        # stop purge threads
+        self.purge_queue.shutdown()
+        # last, delete all libcephfs handles from connection pool
         self.connection_pool.del_all_handles()
 
     def cluster_log(self, msg, lvl=None):
