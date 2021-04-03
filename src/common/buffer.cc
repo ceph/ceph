@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <atomic>
@@ -2277,7 +2277,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
 
 void ceph::buffer::list::page_aligned_appender::_refill(size_t len) {
   const size_t alloc = \
-    std::max((size_t)min_alloc, (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK);
+    std::max(static_cast<size_t>(min_alloc), static_cast<size_t>((len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK));
   auto new_back = \
     ptr_node::create(buffer::create_page_aligned(alloc));
   new_back->set_length(0);   // unused, so far.
