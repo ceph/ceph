@@ -19,6 +19,7 @@
 #include <string.h>
 #include <vector>
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <fmt/format.h>
 
 #include "include/ipaddr.h"
@@ -37,94 +38,110 @@
 using std::string;
 using std::vector;
 
+namespace {
+
+bool matches_with_name(const ifaddrs& ifa, const std::string& if_name)
+{
+  return if_name.compare(ifa.ifa_name) == 0;
+}
+
+bool is_addr_allowed(const ifaddrs& ifa, bool exclude_lo_iface)
+{
+  if (exclude_lo_iface && strcmp(ifa.ifa_name, "lo") == 0) {
+    return false;
+  }
+  if (boost::starts_with(ifa.ifa_name, "lo:")) {
+    return false;
+  }
+  return true;
+}
+
+bool matches_with_net(const ifaddrs& ifa,
+                      const sockaddr* net,
+                      unsigned int prefix_len,
+                      unsigned ipv)
+{
+  switch (net->sa_family) {
+  case AF_INET:
+    if (ipv & CEPH_PICK_ADDRESS_IPV4) {
+      return matches_ipv4_in_subnet(ifa, (struct sockaddr_in*)net, prefix_len);
+    }
+    break;
+  case AF_INET6:
+    if (ipv & CEPH_PICK_ADDRESS_IPV6) {
+      return matches_ipv6_in_subnet(ifa, (struct sockaddr_in6*)net, prefix_len);
+    }
+    break;
+  }
+  return false;
+}
+
+bool matches_with_net(CephContext *cct,
+                      const ifaddrs& ifa,
+                      const std::string& s,
+                      unsigned ipv)
+{
+  struct sockaddr_storage net;
+  unsigned int prefix_len;
+  if (!parse_network(s.c_str(), &net, &prefix_len)) {
+    lderr(cct) << "unable to parse network: " << s << dendl;
+    exit(1);
+  }
+  return matches_with_net(ifa, (sockaddr*)&net, prefix_len, ipv);
+}
+
+bool matches_with_numa_node(const ifaddrs& ifa, int numa_node)
+{
+#if defined(WITH_SEASTAR) || defined(_WIN32)
+  return true;
+#else
+  if (numa_node < 0) {
+    return true;
+  }
+  int if_node = -1;
+  int r = get_iface_numa_node(ifa.ifa_name, &if_node);
+  if (r < 0) {
+    return false;
+  }
+  return if_node == numa_node;
+#endif
+}
+}
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,
   const struct ifaddrs *ifa,
   unsigned ipv,
   const std::string &networks,
   const std::string &interfaces,
+  bool exclude_lo_iface,
   int numa_node)
 {
-  std::list<string> nets;
-  get_str_list(networks, nets);
-  std::list<string> ifs;
-  get_str_list(interfaces, ifs);
-
-  // filter interfaces by name
-  const struct ifaddrs *filtered = nullptr;
-  if (ifs.empty()) {
-    filtered = ifa;
-  } else {
-    if (nets.empty()) {
+  const auto ifs = get_str_list(interfaces);
+  const auto nets = get_str_list(networks);
+  if (!ifs.empty() && nets.empty()) {
       lderr(cct) << "interface names specified but not network names" << dendl;
       exit(1);
-    }
-    const struct ifaddrs *t = ifa;
-    struct ifaddrs *head = 0;
-    while (t) {
-      bool match = false;
-      for (auto& i : ifs) {
-	if (strcmp(i.c_str(), t->ifa_name) == 0) {
-	  match = true;
-	  break;
-	}
-      }
-      if (match) {
-	struct ifaddrs *n = new ifaddrs;
-	memcpy(n, t, sizeof(*t));
-	n->ifa_next = head;
-	head = n;
-      }
-      t = t->ifa_next;
-    }
-    if (!head) {
-      lderr(cct) << "no interfaces matching " << ifs << dendl;
-      exit(1);
-    }
-    filtered = head;
   }
 
-  struct sockaddr *r = nullptr;
-  for (auto& s : nets) {
-    struct sockaddr_storage net;
-    unsigned int prefix_len;
-
-    if (!parse_network(s.c_str(), &net, &prefix_len)) {
-      lderr(cct) << "unable to parse network: " << s << dendl;
-      exit(1);
+  for (const auto* addr = ifa; addr != nullptr; addr = addr->ifa_next) {
+    if (!is_addr_allowed(*addr, exclude_lo_iface)) {
+      continue;
     }
-
-    switch (net.ss_family) {
-    case AF_INET:
-      if (!(ipv & CEPH_PICK_ADDRESS_IPV4)) {
-	continue;
-      }
-      break;
-    case AF_INET6:
-      if (!(ipv & CEPH_PICK_ADDRESS_IPV6)) {
-	continue;
-      }
-      break;
-    }
-
-    const struct ifaddrs *found = find_ip_in_subnet(
-      filtered,
-      (struct sockaddr *) &net, prefix_len, numa_node);
-    if (found) {
-      r = found->ifa_addr;
-      break;
+    if ((ifs.empty() ||
+         std::any_of(std::begin(ifs), std::end(ifs),
+                     [&](const auto& if_name) {
+                       return matches_with_name(*addr, if_name);
+                     })) &&
+        (nets.empty() ||
+         std::any_of(std::begin(nets), std::end(nets),
+                     [&](const auto& net) {
+                       return matches_with_net(cct, *addr, net, ipv);
+                     })) &&
+        matches_with_numa_node(*addr, numa_node)) {
+      return addr->ifa_addr;
     }
   }
-
-  if (filtered != ifa) {
-    while (filtered) {
-      struct ifaddrs *t = filtered->ifa_next;
-      delete filtered;
-      filtered = t;
-    }
-  }
-
-  return r;
+  return nullptr;
 }
 
 #ifndef WITH_SEASTAR
@@ -147,8 +164,9 @@ struct Observer : public md_config_obs_t {
 
 static void fill_in_one_address(CephContext *cct,
 				const struct ifaddrs *ifa,
-				const string networks,
-				const string interfaces,
+				const string &networks,
+				const string &interfaces,
+				bool exclude_lo_iface,
 				const char *conf_var,
 				int numa_node = -1)
 {
@@ -158,6 +176,7 @@ static void fill_in_one_address(CephContext *cct,
     CEPH_PICK_ADDRESS_IPV4|CEPH_PICK_ADDRESS_IPV6,
     networks,
     interfaces,
+    exclude_lo_iface,
     numa_node);
   if (!found) {
     lderr(cct) << "unable to find any IP address in networks '" << networks
@@ -193,8 +212,6 @@ static void fill_in_one_address(CephContext *cct,
 
 void pick_addresses(CephContext *cct, int needs)
 {
-  struct ifaddrs *ifa;
-  int r = getifaddrs(&ifa);
   auto public_addr = cct->_conf.get_val<entity_addr_t>("public_addr");
   auto public_network = cct->_conf.get_val<std::string>("public_network");
   auto public_network_interface =
@@ -204,33 +221,39 @@ void pick_addresses(CephContext *cct, int needs)
   auto cluster_network_interface =
     cct->_conf.get_val<std::string>("cluster_network_interface");
 
+  struct ifaddrs *ifa;
+  int r = getifaddrs(&ifa);
   if (r < 0) {
     string err = cpp_strerror(errno);
     lderr(cct) << "unable to fetch interfaces and addresses: " << err << dendl;
     exit(1);
   }
+  auto free_ifa = make_scope_guard([ifa] { freeifaddrs(ifa); });
 
+  const bool exclude_lo_iface =
+    cct->_conf.get_val<bool>("ms_bind_exclude_lo_iface");
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC) &&
     public_addr.is_blank_ip() && !public_network.empty()) {
     fill_in_one_address(cct, ifa, public_network, public_network_interface,
-      "public_addr");
+			exclude_lo_iface,
+			"public_addr");
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER) && cluster_addr.is_blank_ip()) {
     if (!cluster_network.empty()) {
       fill_in_one_address(cct, ifa, cluster_network, cluster_network_interface,
-	"cluster_addr");
+			  exclude_lo_iface,
+			  "cluster_addr");
     } else {
       if (!public_network.empty()) {
         lderr(cct) << "Public network was set, but cluster network was not set " << dendl;
         lderr(cct) << "    Using public network also for cluster network" << dendl;
         fill_in_one_address(cct, ifa, public_network, public_network_interface,
-          "cluster_addr");
+			    exclude_lo_iface,
+			    "cluster_addr");
       }
     }
   }
-
-  freeifaddrs(ifa);
 }
 #endif	// !WITH_SEASTAR
 
@@ -238,13 +261,17 @@ static int fill_in_one_address(
   CephContext *cct,
   const struct ifaddrs *ifa,
   unsigned ipv,
-  const string networks,
-  const string interfaces,
+  const string &networks,
+  const string &interfaces,
+  bool exclude_lo_iface,
   entity_addrvec_t *addrs,
   int numa_node = -1)
 {
-  const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, ipv, networks,
-							interfaces, numa_node);
+  const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, ipv,
+							networks,
+							interfaces,
+							exclude_lo_iface,
+							numa_node);
   if (!found) {
     std::string ip_type = "";
     if ((ipv & CEPH_PICK_ADDRESS_IPV4) && (ipv & CEPH_PICK_ADDRESS_IPV6)) {
@@ -358,24 +385,32 @@ int pick_addresses(
       !networks.empty()) {
     int ipv4_r = !(ipv & CEPH_PICK_ADDRESS_IPV4) ? 0 : -1;
     int ipv6_r = !(ipv & CEPH_PICK_ADDRESS_IPV6) ? 0 : -1;
+    const bool exclude_lo_iface =
+      cct->_conf.get_val<bool>("ms_bind_exclude_lo_iface");
     // first try on preferred numa node (if >= 0), then anywhere.
     while (true) {
       // note: pass in ipv to filter the matching addresses
       if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	  (flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
 	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-                                     networks, interfaces, addrs,
+                                     networks, interfaces,
+				     exclude_lo_iface,
+				     addrs,
                                      preferred_numa_node);
       }
       if (ipv & CEPH_PICK_ADDRESS_IPV6) {
 	ipv6_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6,
-                                     networks, interfaces, addrs,
+                                     networks, interfaces,
+				     exclude_lo_iface,
+				     addrs,
                                      preferred_numa_node);
       }
       if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	  !(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
 	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-                                     networks, interfaces, addrs,
+                                     networks, interfaces,
+				     exclude_lo_iface,
+				     addrs,
                                      preferred_numa_node);
       }
       if (ipv4_r >= 0 && ipv6_r >= 0) {
@@ -467,20 +502,15 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
     lderr(cct) << "unable to fetch interfaces and addresses: " << err << dendl;
     return {};
   }
-
+  auto free_ifa = make_scope_guard([ifa] { freeifaddrs(ifa); });
   const unsigned int prefix_len = std::max(sizeof(in_addr::s_addr), sizeof(in6_addr::s6_addr)) * CHAR_BIT;
-  const struct ifaddrs *found = find_ip_in_subnet(
-    ifa,
-    (const struct sockaddr *) &network, prefix_len);
-
-  std::string result;
-  if (found) {
-    result = found->ifa_name;
+  for (auto addr = ifa; addr != nullptr; addr = addr->ifa_next) {
+    if (matches_with_net(*ifa, (const struct sockaddr *) &network, prefix_len,
+			 CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6)) {
+      return addr->ifa_name;
+    }
   }
-
-  freeifaddrs(ifa);
-
-  return result;
+  return {};
 }
 
 
@@ -492,8 +522,8 @@ bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entit
     lderr(cct) << "unable to fetch interfaces and addresses: " << cpp_strerror(errno) << dendl;
     exit(1);
   }
+  auto free_ifa = make_scope_guard([ifa] { freeifaddrs(ifa); });
 
-  bool found = false;
   for (struct ifaddrs *addrs = ifa; addrs != nullptr; addrs = addrs->ifa_next) {
     if (addrs->ifa_addr) {
       entity_addr_t a;
@@ -501,16 +531,12 @@ bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entit
       for (auto& p : ls) {
         if (a.is_same_host(p)) {
           *match = p;
-          found = true;
-          goto out;
+          return true;
         }
       }
     }
   }
-
- out:
-  freeifaddrs(ifa);
-  return found;
+  return false;
 }
 
 int get_iface_numa_node(
