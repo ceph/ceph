@@ -4,30 +4,21 @@
 # pmem_LIBRARIES - List of libraries when using libpmem.
 # pmem_FOUND - True if pmem found.
 
-find_package(PkgConfig QUIET)
-if(PKG_CONFIG_FOUND)
-  pkg_check_modules(PKG_pmem QUIET libpmem)
-  pkg_check_modules(PKG_pmemobj QUIET libpmemobj)
-endif()
+find_package(PkgConfig QUIET REQUIRED)
 
 foreach(component pmem ${pmem_FIND_COMPONENTS})
-  if(component STREQUAL pmem)
-    find_path(pmem_${component}_INCLUDE_DIR
-      NAMES libpmem.h
-      HINTS ${PKG_pmem_INCLUDE_DIRS})
-    find_library(pmem_${component}_LIBRARY
-      NAMES pmem
-      HINTS ${PKG_pmem_LIBRARY_DIRS})
-  elseif(component STREQUAL pmemobj)
-    find_path(pmem_${component}_INCLUDE_DIR
-      NAMES libpmemobj.h
-      HINTS ${PKG_pmemobj_INCLUDE_DIRS})
-    find_library(pmem_${component}_LIBRARY
-      NAMES pmemobj
-      HINTS ${PKG_pmemobj_LIBRARY_DIRS}))
-  else()
+  set(pmem_COMPONENTS pmem pmemobj)
+  list(FIND pmem_COMPONENTS "${component}" found)
+  if(found EQUAL -1)
     message(FATAL_ERROR "unknown libpmem component: ${component}")
   endif()
+  pkg_check_modules(PKG_${component} QUIET lib${component})
+  find_path(pmem_${component}_INCLUDE_DIR
+    NAMES lib${component}.h
+    HINTS ${PKG_${component}_INCLUDE_DIRS})
+  find_library(pmem_${component}_LIBRARY
+    NAMES ${component}
+    HINTS ${PKG_${component}_LIBRARY_DIRS})
   mark_as_advanced(
     pmem_${component}_INCLUDE_DIR
     pmem_${component}_LIBRARY)
