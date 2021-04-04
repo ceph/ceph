@@ -251,7 +251,7 @@ cursorgen(std::string_view cursor_) {
 
 inline std::pair<uint64_t, std::string_view>
 cursorgeno(std::optional<std::string_view> cursor) {
-  if (cursor) {
+  if (cursor && !cursor->empty()) {
     return cursorgen(*cursor);
   } else {
     return { 0, ""s };
