@@ -4,6 +4,7 @@ tasks:
       kafka_version: 2.6.0
 - notification-tests:
     client.0:
-      force-branch: master
+      force-branch: wip-backport-to-pacific
+      git_remote: https://github.com/TRYTOBE8TME/
       extra_attr: ["kafka_test"]
       rgw_server: client.0
