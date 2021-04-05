@@ -23,12 +23,25 @@ with patch('builtins.open', create=True):
 
 class TestCephAdm(object):
 
+    @staticmethod
+    def mock_docker():
+        docker = mock.Mock(cd.Docker)
+        docker.path = '/usr/bin/docker'
+        return docker
+
+    @staticmethod
+    def mock_podman():
+        podman = mock.Mock(cd.Podman)
+        podman.path = '/usr/bin/podman'
+        podman.version = (2, 1, 0)
+        return podman
+
     def test_docker_unit_file(self):
         ctx = mock.Mock()
-        ctx.container_path = '/usr/bin/docker'
+        ctx.container_engine = self.mock_docker()
         r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
         assert 'Requires=docker.service' in r
-        ctx.container_path = '/usr/sbin/podman'
+        ctx.container_engine = self.mock_podman()
         r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
         assert 'Requires=docker.service' not in r
 
@@ -146,15 +159,15 @@ class TestCephAdm(object):
             cd._parse_args(['deploy', '--name', 'wrong', '--fsid', 'fsid'])
 
     @pytest.mark.parametrize("test_input, expected", [
-        ("podman version 1.6.2", (1,6,2)),
-        ("podman version 1.6.2-stable2", (1,6,2)),
+        ("1.6.2", (1,6,2)),
+        ("1.6.2-stable2", (1,6,2)),
     ])
     def test_parse_podman_version(self, test_input, expected):
         assert cd._parse_podman_version(test_input) == expected
 
     def test_parse_podman_version_invalid(self):
         with pytest.raises(ValueError) as res:
-            cd._parse_podman_version('podman version inval.id')
+            cd._parse_podman_version('inval.id')
         assert 'inval' in str(res.value)
 
     @pytest.mark.parametrize("test_input, expected", [
@@ -318,6 +331,7 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
+        ctx.container_engine = self.mock_docker()
         assert ctx
         retval = cd.command_registry_login(ctx)
         assert retval == 0
@@ -335,6 +349,7 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
         get_parm.return_value = {"url": "sample-url", "username": "sample-username", "password": "sample-password"}
         ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
+        ctx.container_engine = self.mock_docker()
         assert ctx
         retval = cd.command_registry_login(ctx)
         assert retval == 0
