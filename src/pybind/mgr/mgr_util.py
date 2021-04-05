@@ -74,24 +74,22 @@ class RTimer(Timer):
             raise
 
 @contextlib.contextmanager
-def lock_timeout_log(lock: Lock, timeout: int = 5) -> Iterator[bool]:
+def lock_timeout_log(lock: Lock, timeout: int = 5) -> Iterator[None]:
     start = time.time()
     WARN_AFTER = 30
     warned = False
-    locked = False
     while True:
         logger.debug("locking {} with {} timeout".format(lock, timeout))
-        locked = lock.acquire(timeout=timeout)
-        if locked:
+        if lock.acquire(timeout=timeout):
             logger.debug("locked {}".format(lock))
+            yield
+            lock.release()
             break
         now = time.time()
         if not warned and now - start > WARN_AFTER:
             logger.info("possible deadlock acquiring {}".format(lock))
             warned = True
-    yield
-    if locked:
-        lock.release()
+
 
 class CephfsConnectionPool(object):
     class Connection(object):
