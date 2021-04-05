@@ -23,6 +23,7 @@ namespace fs = std::filesystem;
 #include <experimental/filesystem>
 namespace fs = std::experimental::filesystem;
 #endif
+#include <iomanip>
 
 #include "ceph_ver.h"
 #include "include/types.h"
@@ -104,6 +105,12 @@ vector<DencoderPlugin> load_plugins()
   fs::path mod_dir{CEPH_DENC_MOD_DIR};
   if (auto ceph_lib = getenv("CEPH_LIB"); ceph_lib) {
     mod_dir = ceph_lib;
+  }
+  if (!fs::is_directory(mod_dir)) {
+    std::cerr << "unable to load dencoders from "
+	      << std::quoted(mod_dir.native()) << ". "
+	      << "it is not a directory." << std::endl;
+    return {};
   }
   vector<DencoderPlugin> dencoder_plugins;
   for (auto& entry : fs::directory_iterator(mod_dir)) {
