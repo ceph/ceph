@@ -408,7 +408,7 @@ struct entity_addr_t {
   }
 
   bool parse(const std::string_view s, int default_type=TYPE_DEFAULT);
-  bool parse(const char *s, const char **end = 0, int type=0);
+  bool parse(const char *s, const char **end = 0, int default_type=TYPE_DEFAULT);
 
   void decode_legacy_addr_after_marker(ceph::buffer::list::const_iterator& bl)
   {
