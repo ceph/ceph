@@ -1280,8 +1280,7 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
 	     << addrstr << "'" << dendl;
 
     entity_addr_t addr;
-    const char *end = 0;
-    if (!addr.parse(addrstr.c_str(), &end, entity_addr_t::TYPE_ANY)) {
+    if (!addr.parse(addrstr, entity_addr_t::TYPE_ANY)) {
       ss << "failed to parse addrs '" << addrstr
 	 << "'; syntax is 'add_bootstrap_peer_hint ip[:port]'";
       return false;
