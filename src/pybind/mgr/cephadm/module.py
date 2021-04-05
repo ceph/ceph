@@ -435,6 +435,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.requires_post_actions: Set[str] = set()
 
+        self.image_digests_to_names: List[Tuple[List[str], str]] = []
+
         self.config_checker = CephadmConfigChecks(self)
 
     def shutdown(self) -> None:
@@ -658,6 +660,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def offline_hosts_remove(self, host: str) -> None:
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
+
+    def insert_digest_to_name(self, digests: List[str], name: str) -> None:
+        for t in self.image_digests_to_names:
+            if t[1] == name:
+                for digest in digests:
+                    if digest not in t[0]:
+                        t[0].append(digest)
+                return
+        self.image_digests_to_names.append((digests, name))
+
+    def get_name_from_digest(self, digest: str) -> str:
+        for t in self.image_digests_to_names:
+            if digest in t[0]:
+                return t[1]
+        return ''
 
     @staticmethod
     def can_run() -> Tuple[bool, str]:

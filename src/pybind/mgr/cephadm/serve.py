@@ -272,7 +272,10 @@ class CephadmServe:
             if sd.container_id:
                 # shorten the hash
                 sd.container_id = sd.container_id[0:12]
-            sd.container_image_name = d.get('container_image_name')
+            img_name = d.get('container_image_name')
+            if img_name and is_repo_digest(img_name) and self.mgr.get_name_from_digest(img_name):
+                img_name = self.mgr.get_name_from_digest(img_name)
+            sd.container_image_name = img_name
             sd.container_image_id = d.get('container_image_id')
             sd.container_image_digests = d.get('container_image_digests')
             sd.memory_usage = d.get('memory_usage')
@@ -783,6 +786,10 @@ class CephadmServe:
                     # FIXME: we assume the first digest here is the best
                     assert is_repo_digest(image_info.repo_digests[0]), image_info
                 digests[container_image_ref] = image_info
+            elif not self.mgr.get_name_from_digest(container_image_ref):
+                image_info = self._get_container_image_info(container_image_ref)
+                if image_info.repo_tags:
+                    self.mgr.insert_digest_to_name([container_image_ref], image_info.repo_tags[0])
 
         for entity, container_image_ref in settings.items():
             if not is_repo_digest(container_image_ref):
@@ -790,6 +797,7 @@ class CephadmServe:
                 if image_info.repo_digests:
                     # FIXME: we assume the first digest here is the best
                     self.mgr.set_container_image(entity, image_info.repo_digests[0])
+                    self.mgr.insert_digest_to_name(image_info.repo_digests, container_image_ref)
 
     def _create_daemon(self,
                        daemon_spec: CephadmDaemonDeploySpec,
@@ -1087,7 +1095,8 @@ class CephadmServe:
         r = ContainerInspectInfo(
             j['image_id'],
             j.get('ceph_version'),
-            j.get('repo_digests')
+            j.get('repo_digests'),
+            j.get('repo_tags')
         )
         self.log.debug(f'image {image_name} -> {r}')
         return r
