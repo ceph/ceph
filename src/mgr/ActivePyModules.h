@@ -95,6 +95,7 @@ public:
      const std::string &svc_id);
   PyObject *get_context();
   PyObject *get_osdmap();
+  /// @note @c fct is not allowed to acquire locks when holding GIL
   PyObject *with_perf_counters(
       std::function<void(
         PerfCounterInstance& counter_instance,
