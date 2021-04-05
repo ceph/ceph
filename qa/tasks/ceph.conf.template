@@ -91,6 +91,10 @@
 	mon osd prime pg temp = true
 	mon reweight min bytes per osd = 10
 
+	# rotate auth tickets quickly to exercise renewal paths
+	auth mon ticket ttl = 660      # 11m
+	auth service ticket ttl = 240  # 4m
+
 [client]
 	rgw cache enabled = true
 	rgw enable ops log = true
