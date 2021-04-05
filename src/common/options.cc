@@ -178,7 +178,7 @@ int Option::parse_value(
     }
   } else if (type == Option::TYPE_ADDR) {
     entity_addr_t addr;
-    if (!addr.parse(val.c_str())){
+    if (!addr.parse(val)){
       return -EINVAL;
     }
     *out = addr;

@@ -526,7 +526,7 @@ bool validate_str_arg(std::string_view value,
 {
   if (type == "CephIPAddr") {
     entity_addr_t addr;
-    if (addr.parse(string(value).c_str())) {
+    if (addr.parse(value)) {
       return true;
     } else {
       os << "failed to parse addr '" << value << "', should be ip:[port]";
