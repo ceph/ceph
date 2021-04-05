@@ -168,7 +168,6 @@ It is a yaml format file with the following properties:
       ha_proxy_stats_password: <string> # ex: true
       ha_proxy_enable_prometheus_exporter: <boolean> # ex: true
       ha_proxy_monitor_uri: <string> # ex: /haproxy_health
-      keepalived_user: <string> # ex: admin
       keepalived_password: <string> # ex: admin
       ha_proxy_frontend_ssl_certificate: <optional string> ex:
         [
@@ -220,8 +219,6 @@ where the properties of this service specification are:
     allow to consume RGW Service metrics from Grafana.
 * ``ha_proxy_monitor_uri``:
     To set the API endpoint where the health of HAProxy daemon is provided
-* ``keepalived_user``
-    User needed to access keepalived daemons
 * ``keepalived_password``:
     The password needed to access keepalived daemons
 * ``ha_proxy_frontend_ssl_certificate``:
