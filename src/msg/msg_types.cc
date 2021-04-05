@@ -113,7 +113,7 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
     *end = s;
   }
 
-  int newtype;
+  int newtype = default_type;
   if (strncmp("v1:", s, 3) == 0) {
     start += 3;
     newtype = TYPE_LEGACY;
@@ -129,8 +129,6 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
       *end = s + 1;
     }
     return true;
-  } else {
-    newtype = default_type ? default_type : TYPE_DEFAULT;
   }
 
   bool brackets = false;
