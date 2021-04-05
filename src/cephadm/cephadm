@@ -4307,7 +4307,7 @@ def command_shell(ctx):
     if not ctx.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
         ctx.keyring = SHELL_DEFAULT_KEYRING
 
-    container_args = []  # type: List[str]
+    container_args: List[str] = ['-i']
     mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
                                   no_config=True if ctx.config else False)
     binds = get_container_binds(ctx, ctx.fsid, daemon_type, daemon_id)
@@ -4330,7 +4330,7 @@ def command_shell(ctx):
     else:
         command = ['bash']
         container_args += [
-            '-it',
+            '-t',
             '-e', 'LANG=C',
             '-e', 'PS1=%s' % CUSTOM_PS1,
         ]
@@ -4369,13 +4369,13 @@ def command_enter(ctx):
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
     (daemon_type, daemon_id) = ctx.name.split('.', 1)
-    container_args = []  # type: List[str]
+    container_args = ['-i']  # type: List[str]
     if ctx.command:
         command = ctx.command
     else:
         command = ['sh']
         container_args += [
-            '-it',
+            '-t',
             '-e', 'LANG=C',
             '-e', 'PS1=%s' % CUSTOM_PS1,
         ]
