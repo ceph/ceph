@@ -99,6 +99,7 @@ struct ConfigMap {
   Section global;
   std::map<std::string,Section> by_type;
   std::map<std::string,Section> by_id;
+  std::list<std::unique_ptr<Option>> stray_options;
 
   Section *find_section(const std::string& name) {
     if (name == "global") {
@@ -118,6 +119,7 @@ struct ConfigMap {
     global.clear();
     by_type.clear();
     by_id.clear();
+    stray_options.clear();
   }
   void dump(Formatter *f) const;
   void generate_entity_map(
