@@ -1,0 +1,11 @@
+meta:
+- desc: |
+   run basic cls tests for rbd
+stress-tasks:
+- print: "**** done cls/test_cls_rbd.sh 4-workload start"
+- workunit:
+    branch: pacific
+    clients:
+      client.0:
+        - cls/test_cls_rbd.sh
+- print: "**** done cls/test_cls_rbd.sh 4-workload end"
