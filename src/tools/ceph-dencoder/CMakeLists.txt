@@ -100,5 +100,6 @@ target_link_libraries(ceph-dencoder
   cls_user_client
   cls_cas_client
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS})
+  ${CMAKE_DL_LIBS}
+  ${ALLOC_LIBS})
 install(TARGETS ceph-dencoder DESTINATION bin)
