@@ -182,6 +182,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
                     optional_yield yield,
 		    rgw::dmclock::Scheduler *scheduler,
                     string* user,
+                    ceph::coarse_real_clock::duration* latency,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -355,10 +356,15 @@ done:
     handler->put_op(op);
   rest->put_handler(handler);
 
+  const auto lat = s->time_elapsed();
+  if (latency) {
+    *latency = lat;
+  }
+
   dout(1) << "====== req done req=" << hex << req << dec
 	  << " op status=" << op_ret
 	  << " http_status=" << s->err.http_ret
-	  << " latency=" << s->time_elapsed()
+	  << " latency=" << lat
 	  << " ======"
 	  << dendl;
 
