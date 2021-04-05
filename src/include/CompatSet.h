@@ -222,6 +222,13 @@ struct CompatSet {
     return true;
   }
 
+  std::ostream& printlite(std::ostream& o) const {
+    o << "{c=[" << std::hex << compat.mask << "]";
+    o << ",r=[" << std::hex << ro_compat.mask << "]";
+    o << ",i=[" << std::hex << incompat.mask << "]}";
+    return o;
+  }
+
   void encode(ceph::buffer::list& bl) const {
     compat.encode(bl);
     ro_compat.encode(bl);
