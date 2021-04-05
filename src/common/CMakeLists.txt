@@ -25,6 +25,7 @@ set(common_srcs
   Graylog.cc
   HTMLFormatter.cc
   HeartbeatMap.cc
+  Journald.cc
   LogClient.cc
   LogEntry.cc
   ostream_temp.cc

@@ -665,6 +665,16 @@ std::vector<Option> get_global_options() {
     .set_description("port number for the remote graylog server")
     .add_see_also("log_graylog_host"),
 
+    Option("log_to_journald", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .set_description("send log lines to journald")
+    .add_see_also("err_to_journald"),
+
+    Option("err_to_journald", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .set_description("send critical error log lines to journald")
+    .add_see_also("log_to_journald"),
+
     Option("log_coarse_timestamps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("timestamp log entries from coarse system clock "
@@ -782,6 +792,12 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("Graylog port for cluster log messages")
     .add_see_also("mon_cluster_log_to_graylog"),
+
+    Option("mon_cluster_log_to_journald", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("false")
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_service("mon")
+    .set_description("Make monitor send cluster log to journald"),
 
     Option("enable_experimental_unrecoverable_data_corrupting_features", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_RUNTIME)
