@@ -154,8 +154,10 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_show_system_role(self):
         role = self.exec_cmd('ac-role-show', rolename="read-only")
         self.assertEqual(role['name'], 'read-only')
-        self.assertEqual(role['description'],
-                         'allows read permission for all security scopes except dashboard settings')
+        self.assertEqual(
+            role['description'],
+            'allows read permission for all security scope except dashboard settings and config-opt'
+        )
 
     def test_delete_system_role(self):
         with self.assertRaises(CmdException) as ctx:
