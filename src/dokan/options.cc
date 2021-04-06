@@ -21,7 +21,9 @@
 
 void print_usage() {
   const char* usage_str = R"(
-Usage: ceph-dokan.exe -l <drive_letter>
+Usage: ceph-dokan.exe -l <mountpoint>
+                      map -l <mountpoint>    Map a CephFS filesystem
+                      unmap -l <mountpoint>  Unmap a CephFS filesystem
 
 Map options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x)
@@ -36,7 +38,13 @@ Map options:
   --read-only                 read-only mount
   -o [ --win-mount-mgr]       use the Windows mount manager
   --current-session-only      expose the mount only to the current user session
-  -m [ --removable ]          use a removable drive
+  --removable                 use a removable drive
+  --win-vol-name arg          The Windows volume name. Default: Ceph - <fs_name>.
+
+Unmap options:
+  -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x).
+                              It has to be the exact same mountpoint that was
+                              used when the mapping was created.
 
 Common Options:
 )";
@@ -75,6 +83,7 @@ int parse_args(
   std::vector<const char*>::iterator i;
   std::ostringstream err;
   std::string mountpoint;
+  std::string win_vol_name;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -93,10 +102,13 @@ int parse_args(
       cfg->dokan_stderr = true;
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       cfg->readonly = true;
-    } else if (ceph_argparse_flag(args, i, "--removable", "-m", (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--removable", (char *)NULL)) {
       cfg->removable = true;
     } else if (ceph_argparse_flag(args, i, "--win-mount-mgr", "-o", (char *)NULL)) {
       cfg->use_win_mount_mgr = true;
+    } else if (ceph_argparse_witharg(args, i, &win_vol_name,
+                                     "--win-vol-name", (char *)NULL)) {
+      cfg->win_vol_name = to_wstring(win_vol_name);
     } else if (ceph_argparse_flag(args, i, "--current-session-only", (char *)NULL)) {
       cfg->current_session_only = true;
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->thread_count,
@@ -138,6 +150,8 @@ int parse_args(
       cmd = Command::Version;
     } else if (strcmp(*args.begin(), "map") == 0) {
       cmd = Command::Map;
+    } else if (strcmp(*args.begin(), "unmap") == 0) {
+      cmd = Command::Unmap;
     } else {
       *err_msg << "ceph-dokan: unknown command: " <<  *args.begin();
       return -EINVAL;
@@ -151,6 +165,7 @@ int parse_args(
 
   switch (cmd) {
     case Command::Map:
+    case Command::Unmap:
       if (cfg->mountpoint.empty()) {
         *err_msg << "ceph-dokan: missing mountpoint.";
         return -EINVAL;

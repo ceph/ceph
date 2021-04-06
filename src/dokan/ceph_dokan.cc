@@ -38,6 +38,8 @@
 
 #include "global/global_init.h"
 
+#include "include/uuid.h"
+
 #include "dbg.h"
 #include "utils.h"
 
@@ -784,10 +786,9 @@ static NTSTATUS WinCephGetVolumeInformation(
   DWORD FileSystemNameSize,
   PDOKAN_FILE_INFO DokanFileInfo)
 {
-  // TODO: configurable volume name and serial number.
-  // We should also support having multiple mounts.
-  wcscpy(VolumeNameBuffer, L"Ceph");
-  *VolumeSerialNumber = 0x19831116;
+  g_cfg->win_vol_name.copy(VolumeNameBuffer, VolumeNameSize);
+  *VolumeSerialNumber = g_cfg->win_vol_serial;
+
   *MaximumComponentLength = 256;
   *FileSystemFlags = FILE_CASE_SENSITIVE_SEARCH |
             FILE_CASE_PRESERVED_NAMES |
@@ -819,7 +820,16 @@ static NTSTATUS WinCephGetDiskFreeSpace(
   return 0;
 }
 
-int do_unmount() {
+int do_unmap(wstring& mountpoint) {
+  if (!DokanRemoveMountPoint(mountpoint.c_str())) {
+    wcerr << "Couldn't remove the specified CephFS mount: "
+          << mountpoint << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int cleanup_mount() {
   int ret = ceph_unmount(cmount);
   if (ret)
     derr << "Couldn't perform clean unmount. Error: " << ret << dendl;
@@ -831,7 +841,7 @@ int do_unmount() {
 static NTSTATUS WinCephUnmount(
   PDOKAN_FILE_INFO  DokanFileInfo)
 {
-  do_unmount();
+  cleanup_mount();
   // TODO: consider propagating unmount errors to Dokan.
   return 0;
 }
@@ -853,7 +863,31 @@ BOOL WINAPI ConsoleHandler(DWORD dwType)
 
 static void unmount_atexit(void)
 {
-  do_unmount();
+  cleanup_mount();
+}
+
+NTSTATUS get_volume_serial(PDWORD serial) {
+  int64_t fs_cid = ceph_get_fs_cid(cmount);
+
+  char fsid_str[64] = { 0 };
+  int ret = ceph_getxattr(cmount, "/", "ceph.cluster_fsid",
+                          fsid_str, sizeof(fsid_str));
+  if (ret < 0) {
+    dout(2) << "Coudln't retrieve the cluster fsid. Error: " << ret << dendl;
+    return cephfs_errno_to_ntsatus(ret);
+  }
+
+  uuid_d fsid;
+  if (!fsid.parse(fsid_str)) {
+    dout(2) << "Couldn't parse cluster fsid" << dendl;
+    return STATUS_INTERNAL_ERROR;
+  }
+
+  // We're generating a volume serial number by concatenating the last 16 bits
+  // of the filesystem id and the cluster fsid.
+  *serial = ((*(uint16_t*) fsid.bytes() & 0xffff) << 16) | (fs_cid & 0xffff);
+
+  return 0;
 }
 
 int do_map() {
@@ -900,8 +934,23 @@ int do_map() {
     return cephfs_errno_to_ntsatus(r);
   }
 
+  if (g_cfg->win_vol_name.empty()) {
+    string ceph_fs_name = g_conf().get_val<string>("client_fs");
+
+    g_cfg->win_vol_name = L"Ceph";
+    if (!ceph_fs_name.empty()) {
+      g_cfg->win_vol_name += L" - " + to_wstring(ceph_fs_name);
+    }
+  }
+
+  if (!g_cfg->win_vol_serial) {
+    if (get_volume_serial(&g_cfg->win_vol_serial)) {
+      return -EINVAL;
+    }
+  }
+
   atexit(unmount_atexit);
-  dout(0) << "Mounted cephfs directory: " << ceph_getcwd(cmount)
+  dout(0) << "Mounted cephfs directory: " << g_cfg->root_path.c_str()
           <<". Mountpoint: " << to_string(g_cfg->mountpoint) << dendl;
 
   DWORD status = DokanMain(dokan_options, dokan_operations);
@@ -1008,6 +1057,8 @@ int main(int argc, const char** argv)
   switch (cmd) {
     case Command::Map:
       return do_map();
+    case Command::Unmap:
+      return do_unmap(g_cfg->mountpoint);
     default:
       print_usage();
       break;
