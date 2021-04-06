@@ -31,17 +31,21 @@ struct Config {
   int thread_count = CEPH_DOKAN_DEFAULT_THREAD_COUNT;
 
   std::wstring mountpoint = L"";
-  std::string root_path = "";
+  std::string root_path = "/";
+
+  std::wstring win_vol_name = L"";
+  unsigned long win_vol_serial = 0;
 };
 
 extern Config *g_cfg;
 
-// TODO: list and unmap commands.
+// TODO: list and service commands.
 enum class Command {
   None,
   Version,
   Help,
   Map,
+  Unmap,
 };
 
 void print_usage();
