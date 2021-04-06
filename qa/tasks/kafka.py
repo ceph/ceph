@@ -56,6 +56,10 @@ def install_kafka(ctx, config):
         current_version = get_kafka_version(config)
         for client in config:
             ctx.cluster.only(client).run(
+                args=['rm', '-rf', '{tdir}/logs'.format(tdir=test_dir)],
+            )
+
+            ctx.cluster.only(client).run(
                 args=['rm', '-rf', test_dir],
             )
 
