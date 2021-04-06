@@ -6835,7 +6835,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
       em.first->second = make_message<MCacheExpire>(mds->get_nodeid());
     }
 
-    dout(20) << __func__ << ": try expiring " << *mdsdir_in << " for stopping mds." << mds <<  dendl;
+    dout(20) << __func__ << ": try expiring " << *mdsdir_in << " for stopping mds." << mds->get_nodeid() <<  dendl;
 
     const bool aborted = expire_recursive(mdsdir_in, expiremap);
     if (!aborted) {
