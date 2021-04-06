@@ -157,7 +157,7 @@ set(librgw_common_srcs
   rgw_kms.cc
   rgw_kmip_client.cc
   rgw_url.cc
-  rgw_oidc_provider
+  rgw_oidc_provider.cc
   rgw_datalog.cc
   cls_fifo_legacy.cc
   rgw_lua_utils.cc
