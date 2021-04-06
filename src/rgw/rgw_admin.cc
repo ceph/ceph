@@ -3675,211 +3675,223 @@ int main(int argc, const char **argv)
     usage();
     exit(1);
   }
-  else {
-    std::vector<string> extra_args;
-    std::vector<string> expected;
 
-    std::any _opt_cmd;
+  std::vector<string> extra_args;
+  std::vector<string> expected;
 
-    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
-      if (!expected.empty()) {
-        cerr << err << std::endl;
-        cerr << "Expected one of the following:" << std::endl;
-        for (auto& exp : expected) {
-          if (exp == "*" || exp == "[*]") {
-            continue;
-          }
-          cerr << "  " << exp << std::endl;
-        }
-      } else {
-        cerr << "Command not found:";
-        for (auto& arg : args) {
-          cerr << " " << arg;
-        }
-        cerr << std::endl;
+  std::any _opt_cmd;
+
+  if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
+    if (!expected.empty()) {
+      cerr << err << std::endl;
+      cerr << "Expected one of the following:" << std::endl;
+      for (auto& exp : expected) {
+	if (exp == "*" || exp == "[*]") {
+	  continue;
+	}
+	cerr << "  " << exp << std::endl;
       }
-      exit(1);
-    }
-
-    opt_cmd = std::any_cast<OPT>(_opt_cmd);
-
-    /* some commands may have an optional extra param */
-    if (!extra_args.empty()) {
-      switch (opt_cmd) {
-        case OPT::METADATA_GET:
-        case OPT::METADATA_PUT:
-        case OPT::METADATA_RM:
-        case OPT::METADATA_LIST:
-          metadata_key = extra_args[0];
-          break;
-        default:
-          break;
+    } else {
+      cerr << "Command not found:";
+      for (auto& arg : args) {
+	cerr << " " << arg;
       }
+      cerr << std::endl;
     }
+    exit(1);
+  }
 
-    // not a raw op if 'period update' needs to commit to master
-    bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
-    // not a raw op if 'period pull' needs to read zone/period configuration
-    bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
+  opt_cmd = std::any_cast<OPT>(_opt_cmd);
 
-    std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE,
-			 OPT::ZONEGROUP_DELETE,
-			 OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
-			 OPT::ZONEGROUP_SET, OPT::ZONEGROUP_DEFAULT,
-			 OPT::ZONEGROUP_RENAME, OPT::ZONEGROUP_MODIFY,
-			 OPT::ZONEGROUP_REMOVE,
-			 OPT::ZONEGROUP_PLACEMENT_ADD, OPT::ZONEGROUP_PLACEMENT_RM,
-			 OPT::ZONEGROUP_PLACEMENT_MODIFY, OPT::ZONEGROUP_PLACEMENT_LIST,
-			 OPT::ZONEGROUP_PLACEMENT_GET,
-			 OPT::ZONEGROUP_PLACEMENT_DEFAULT,
-			 OPT::ZONE_CREATE, OPT::ZONE_DELETE,
-			 OPT::ZONE_GET, OPT::ZONE_SET, OPT::ZONE_RENAME,
-			 OPT::ZONE_LIST, OPT::ZONE_MODIFY, OPT::ZONE_DEFAULT,
-			 OPT::ZONE_PLACEMENT_ADD, OPT::ZONE_PLACEMENT_RM,
-			 OPT::ZONE_PLACEMENT_MODIFY, OPT::ZONE_PLACEMENT_LIST,
-			 OPT::ZONE_PLACEMENT_GET,
-			 OPT::REALM_CREATE,
-			 OPT::PERIOD_DELETE, OPT::PERIOD_GET,
-			 OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
-			 OPT::GLOBAL_QUOTA_GET, OPT::GLOBAL_QUOTA_SET,
-			 OPT::GLOBAL_QUOTA_ENABLE, OPT::GLOBAL_QUOTA_DISABLE,
-			 OPT::REALM_DELETE, OPT::REALM_GET, OPT::REALM_LIST,
-			 OPT::REALM_LIST_PERIODS,
-			 OPT::REALM_GET_DEFAULT,
-			 OPT::REALM_RENAME, OPT::REALM_SET,
-			 OPT::REALM_DEFAULT, OPT::REALM_PULL};
-
-    std::set<OPT> readonly_ops_list = {
-                         OPT::USER_INFO,
-			 OPT::USER_STATS,
-			 OPT::BUCKETS_LIST,
-			 OPT::BUCKET_LIMIT_CHECK,
-			 OPT::BUCKET_STATS,
-			 OPT::BUCKET_SYNC_CHECKPOINT,
-			 OPT::BUCKET_SYNC_INFO,
-			 OPT::BUCKET_SYNC_STATUS,
-			 OPT::BUCKET_SYNC_MARKERS,
-			 OPT::LOG_LIST,
-			 OPT::LOG_SHOW,
-			 OPT::USAGE_SHOW,
-			 OPT::OBJECT_STAT,
-			 OPT::BI_GET,
-			 OPT::BI_LIST,
-			 OPT::OLH_GET,
-			 OPT::OLH_READLOG,
-			 OPT::GC_LIST,
-			 OPT::LC_LIST,
-			 OPT::ORPHANS_LIST_JOBS,
-			 OPT::ZONEGROUP_GET,
-			 OPT::ZONEGROUP_LIST,
-			 OPT::ZONEGROUP_PLACEMENT_LIST,
-			 OPT::ZONEGROUP_PLACEMENT_GET,
-			 OPT::ZONE_GET,
-			 OPT::ZONE_LIST,
-			 OPT::ZONE_PLACEMENT_LIST,
-			 OPT::ZONE_PLACEMENT_GET,
-			 OPT::METADATA_GET,
-			 OPT::METADATA_LIST,
-			 OPT::METADATA_SYNC_STATUS,
-			 OPT::MDLOG_LIST,
-			 OPT::MDLOG_STATUS,
-			 OPT::SYNC_ERROR_LIST,
-			 OPT::SYNC_GROUP_GET,
-			 OPT::SYNC_POLICY_GET,
-			 OPT::BILOG_LIST,
-			 OPT::BILOG_STATUS,
-			 OPT::DATA_SYNC_STATUS,
-			 OPT::DATALOG_LIST,
-			 OPT::DATALOG_STATUS,
-			 OPT::REALM_GET,
-			 OPT::REALM_GET_DEFAULT,
-			 OPT::REALM_LIST,
-			 OPT::REALM_LIST_PERIODS,
-			 OPT::PERIOD_GET,
-			 OPT::PERIOD_GET_CURRENT,
-			 OPT::PERIOD_LIST,
-			 OPT::GLOBAL_QUOTA_GET,
-			 OPT::SYNC_INFO,
-			 OPT::SYNC_STATUS,
-			 OPT::ROLE_GET,
-			 OPT::ROLE_LIST,
-			 OPT::ROLE_POLICY_LIST,
-			 OPT::ROLE_POLICY_GET,
-			 OPT::RESHARD_LIST,
-			 OPT::RESHARD_STATUS,
-			 OPT::PUBSUB_TOPICS_LIST,
-			 OPT::PUBSUB_TOPIC_GET,
-			 OPT::PUBSUB_SUB_GET,
-			 OPT::PUBSUB_SUB_PULL,
-			 OPT::SCRIPT_GET,
-    };
-
-
-    raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
-			   raw_period_update || raw_period_pull);
-    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
-
-    if (raw_storage_op) {
-      store = RGWStoreManager::get_raw_storage(dpp(), g_ceph_context, "rados");
-    } else {
-      store = RGWStoreManager::get_storage(dpp(), g_ceph_context, "rados", false, false, false,
-					   false, false,
-					   need_cache && g_conf()->rgw_cache_enabled);
+  /* some commands may have an optional extra param */
+  if (!extra_args.empty()) {
+    switch (opt_cmd) {
+    case OPT::METADATA_GET:
+    case OPT::METADATA_PUT:
+    case OPT::METADATA_RM:
+    case OPT::METADATA_LIST:
+      metadata_key = extra_args[0];
+      break;
+    default:
+      break;
     }
-    if (!store) {
-      cerr << "couldn't init storage provider" << std::endl;
-      return 5; //EIO
-    }
+  }
 
-    /* Needs to be after the store is initialized.  Note, user could be empty here. */
-    user = store->get_user(user_id_arg);
+  // not a raw op if 'period update' needs to commit to master
+  bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
+  // not a raw op if 'period pull' needs to read zone/period configuration
+  bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
 
-    init_optional_bucket(opt_bucket, opt_tenant,
-                         opt_bucket_name, opt_bucket_id);
-    init_optional_bucket(opt_source_bucket, opt_source_tenant,
-                         opt_source_bucket_name, opt_source_bucket_id);
-    init_optional_bucket(opt_dest_bucket, opt_dest_tenant,
-                         opt_dest_bucket_name, opt_dest_bucket_id);
+  std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE,
+    OPT::ZONEGROUP_DELETE,
+    OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
+    OPT::ZONEGROUP_SET, OPT::ZONEGROUP_DEFAULT,
+    OPT::ZONEGROUP_RENAME, OPT::ZONEGROUP_MODIFY,
+    OPT::ZONEGROUP_REMOVE,
+    OPT::ZONEGROUP_PLACEMENT_ADD, OPT::ZONEGROUP_PLACEMENT_RM,
+    OPT::ZONEGROUP_PLACEMENT_MODIFY, OPT::ZONEGROUP_PLACEMENT_LIST,
+    OPT::ZONEGROUP_PLACEMENT_GET,
+    OPT::ZONEGROUP_PLACEMENT_DEFAULT,
+    OPT::ZONE_CREATE, OPT::ZONE_DELETE,
+    OPT::ZONE_GET, OPT::ZONE_SET, OPT::ZONE_RENAME,
+    OPT::ZONE_LIST, OPT::ZONE_MODIFY, OPT::ZONE_DEFAULT,
+    OPT::ZONE_PLACEMENT_ADD, OPT::ZONE_PLACEMENT_RM,
+    OPT::ZONE_PLACEMENT_MODIFY, OPT::ZONE_PLACEMENT_LIST,
+    OPT::ZONE_PLACEMENT_GET,
+    OPT::REALM_CREATE,
+    OPT::PERIOD_DELETE, OPT::PERIOD_GET,
+    OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
+    OPT::GLOBAL_QUOTA_GET, OPT::GLOBAL_QUOTA_SET,
+    OPT::GLOBAL_QUOTA_ENABLE, OPT::GLOBAL_QUOTA_DISABLE,
+    OPT::REALM_DELETE, OPT::REALM_GET, OPT::REALM_LIST,
+    OPT::REALM_LIST_PERIODS,
+    OPT::REALM_GET_DEFAULT,
+    OPT::REALM_RENAME, OPT::REALM_SET,
+    OPT::REALM_DEFAULT, OPT::REALM_PULL};
 
-    if (tenant.empty()) {
-      tenant = user->get_tenant();
-    } else {
-      if (rgw::sal::RGWUser::empty(user) && opt_cmd != OPT::ROLE_CREATE
-                          && opt_cmd != OPT::ROLE_DELETE
-                          && opt_cmd != OPT::ROLE_GET
-                          && opt_cmd != OPT::ROLE_MODIFY
-                          && opt_cmd != OPT::ROLE_LIST
-                          && opt_cmd != OPT::ROLE_POLICY_PUT
-                          && opt_cmd != OPT::ROLE_POLICY_LIST
-                          && opt_cmd != OPT::ROLE_POLICY_GET
-                          && opt_cmd != OPT::ROLE_POLICY_DELETE
-                          && opt_cmd != OPT::RESHARD_ADD
-                          && opt_cmd != OPT::RESHARD_CANCEL
-                          && opt_cmd != OPT::RESHARD_STATUS) {
-        cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
-        return EINVAL;
-      }
-      user->set_tenant(tenant);
-    }
-    if (user_ns.empty()) {
-      user_ns = user->get_id().ns;
-    } else {
-      user->set_ns(user_ns);
-    }
+  std::set<OPT> readonly_ops_list = {
+    OPT::USER_INFO,
+    OPT::USER_STATS,
+    OPT::BUCKETS_LIST,
+    OPT::BUCKET_LIMIT_CHECK,
+    OPT::BUCKET_STATS,
+    OPT::BUCKET_SYNC_CHECKPOINT,
+    OPT::BUCKET_SYNC_INFO,
+    OPT::BUCKET_SYNC_STATUS,
+    OPT::BUCKET_SYNC_MARKERS,
+    OPT::LOG_LIST,
+    OPT::LOG_SHOW,
+    OPT::USAGE_SHOW,
+    OPT::OBJECT_STAT,
+    OPT::BI_GET,
+    OPT::BI_LIST,
+    OPT::OLH_GET,
+    OPT::OLH_READLOG,
+    OPT::GC_LIST,
+    OPT::LC_LIST,
+    OPT::ORPHANS_LIST_JOBS,
+    OPT::ZONEGROUP_GET,
+    OPT::ZONEGROUP_LIST,
+    OPT::ZONEGROUP_PLACEMENT_LIST,
+    OPT::ZONEGROUP_PLACEMENT_GET,
+    OPT::ZONE_GET,
+    OPT::ZONE_LIST,
+    OPT::ZONE_PLACEMENT_LIST,
+    OPT::ZONE_PLACEMENT_GET,
+    OPT::METADATA_GET,
+    OPT::METADATA_LIST,
+    OPT::METADATA_SYNC_STATUS,
+    OPT::MDLOG_LIST,
+    OPT::MDLOG_STATUS,
+    OPT::SYNC_ERROR_LIST,
+    OPT::SYNC_GROUP_GET,
+    OPT::SYNC_POLICY_GET,
+    OPT::BILOG_LIST,
+    OPT::BILOG_STATUS,
+    OPT::DATA_SYNC_STATUS,
+    OPT::DATALOG_LIST,
+    OPT::DATALOG_STATUS,
+    OPT::REALM_GET,
+    OPT::REALM_GET_DEFAULT,
+    OPT::REALM_LIST,
+    OPT::REALM_LIST_PERIODS,
+    OPT::PERIOD_GET,
+    OPT::PERIOD_GET_CURRENT,
+    OPT::PERIOD_LIST,
+    OPT::GLOBAL_QUOTA_GET,
+    OPT::SYNC_INFO,
+    OPT::SYNC_STATUS,
+    OPT::ROLE_GET,
+    OPT::ROLE_LIST,
+    OPT::ROLE_POLICY_LIST,
+    OPT::ROLE_POLICY_GET,
+    OPT::RESHARD_LIST,
+    OPT::RESHARD_STATUS,
+    OPT::PUBSUB_TOPICS_LIST,
+    OPT::PUBSUB_TOPIC_GET,
+    OPT::PUBSUB_SUB_GET,
+    OPT::PUBSUB_SUB_PULL,
+    OPT::SCRIPT_GET,
+  };
 
-    if (!new_user_id.empty() && !tenant.empty()) {
-      new_user_id.tenant = tenant;
-    }
 
-    /* check key parameter conflict */
-    if ((!access_key.empty()) && gen_access_key) {
-        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
-        return EINVAL;
+  raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
+		    raw_period_update || raw_period_pull);
+  bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
+
+  rgw_http_client_init(g_ceph_context);
+
+  // Moved here so init_oldest_period() can access curl during store setup.
+
+  struct rgw_curl_setup {
+    rgw_curl_setup() {
+      rgw::curl::setup_curl(boost::none);
     }
-    if ((!secret_key.empty()) && gen_secret_key) {
-        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
-        return EINVAL;
+    ~rgw_curl_setup() {
+      rgw::curl::cleanup_curl();
     }
+  } curl_cleanup;
+
+  if (raw_storage_op) {
+    store = RGWStoreManager::get_raw_storage(dpp(), g_ceph_context, "rados");
+  } else {
+    store = RGWStoreManager::get_storage(dpp(), g_ceph_context, "rados", false, false, false,
+					 false, false,
+					 need_cache && g_conf()->rgw_cache_enabled);
+  }
+  if (!store) {
+    cerr << "couldn't init storage provider" << std::endl;
+    return 5; //EIO
+  }
+
+  /* Needs to be after the store is initialized.  Note, user could be empty here. */
+  user = store->get_user(user_id_arg);
+
+  init_optional_bucket(opt_bucket, opt_tenant,
+		       opt_bucket_name, opt_bucket_id);
+  init_optional_bucket(opt_source_bucket, opt_source_tenant,
+		       opt_source_bucket_name, opt_source_bucket_id);
+  init_optional_bucket(opt_dest_bucket, opt_dest_tenant,
+		       opt_dest_bucket_name, opt_dest_bucket_id);
+
+  if (tenant.empty()) {
+    tenant = user->get_tenant();
+  } else {
+    if (rgw::sal::RGWUser::empty(user) && opt_cmd != OPT::ROLE_CREATE
+	&& opt_cmd != OPT::ROLE_DELETE
+	&& opt_cmd != OPT::ROLE_GET
+	&& opt_cmd != OPT::ROLE_MODIFY
+	&& opt_cmd != OPT::ROLE_LIST
+	&& opt_cmd != OPT::ROLE_POLICY_PUT
+	&& opt_cmd != OPT::ROLE_POLICY_LIST
+	&& opt_cmd != OPT::ROLE_POLICY_GET
+	&& opt_cmd != OPT::ROLE_POLICY_DELETE
+	&& opt_cmd != OPT::RESHARD_ADD
+	&& opt_cmd != OPT::RESHARD_CANCEL
+	&& opt_cmd != OPT::RESHARD_STATUS) {
+      cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
+      return EINVAL;
+    }
+    user->set_tenant(tenant);
+  }
+  if (user_ns.empty()) {
+    user_ns = user->get_id().ns;
+  } else {
+    user->set_ns(user_ns);
+  }
+
+  if (!new_user_id.empty() && !tenant.empty()) {
+    new_user_id.tenant = tenant;
+  }
+
+  /* check key parameter conflict */
+  if ((!access_key.empty()) && gen_access_key) {
+    cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
+    return EINVAL;
+  }
+  if ((!secret_key.empty()) && gen_secret_key) {
+    cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
+    return EINVAL;
   }
 
   // default to pretty json
@@ -3916,17 +3928,6 @@ int main(int argc, const char **argv)
       source_zone = source_zone_name;
     }
   }
-
-  rgw_http_client_init(g_ceph_context);
-
-  struct rgw_curl_setup {
-    rgw_curl_setup() {
-      rgw::curl::setup_curl(boost::none);
-    }
-    ~rgw_curl_setup() {
-      rgw::curl::cleanup_curl();
-    }
-  } curl_cleanup;
 
   oath_init();
 
