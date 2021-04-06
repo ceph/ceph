@@ -15,6 +15,7 @@
 namespace crimson::os::seastore {
 
 struct retired_extent_gate_t;
+class SeaStore;
 
 /**
  * Transaction
@@ -161,6 +162,8 @@ public:
       write_set.erase(*i++);
     }
   }
+
+  friend class crimson::os::seastore::SeaStore;
 };
 using TransactionRef = Transaction::Ref;
 
