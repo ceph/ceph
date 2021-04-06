@@ -213,6 +213,11 @@ add_executable(unittest_cls_fifo_legacy test_cls_fifo_legacy.cc)
 target_link_libraries(unittest_cls_fifo_legacy radostest-cxx ${UNITTEST_LIBS}
   ${rgw_libs})
 
+# unittest_log_backing
+add_executable(unittest_log_backing test_log_backing.cc)
+target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
+  ${rgw_libs})
+
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
 target_link_libraries(unittest_rgw_lua ${rgw_libs} ${LUA_LIBRARIES})
