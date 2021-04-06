@@ -21,24 +21,21 @@ from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
                          RoleNotInUser
 
 
-# replicates tools.ensure_str() to avoid recursive import:
-# ..tools -> .services.auth -> .access_control -> ..tools
-def ensure_str(s, encoding='utf-8', errors='strict'):
+def ensure_text(s, encoding='utf-8', errors='strict'):
     """Ported from six."""
-    if not isinstance(s, (six.text_type, six.binary_type)):
+    if isinstance(s, six.binary_type):
+        return s.decode(encoding, errors)
+    elif isinstance(s, six.text_type):
+        return s
+    else:
         raise TypeError("not expecting type '%s'" % type(s))
-    if six.PY2 and isinstance(s, six.text_type):
-        s = s.encode(encoding, errors)
-    elif six.PY3 and isinstance(s, six.binary_type):
-        s = s.decode(encoding, errors)
-    return s
 
 
 # password hashing algorithm
 def password_hash(password, salt_password=None):
     if not password:
         return None
-    password = ensure_str(password)
+    password = ensure_text(password)
     if not salt_password:
         salt_password = bcrypt.gensalt()
     else:
