@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 from contextlib import contextmanager
 
-import cephfs
+import cephfs  # pylint: disable=import-error
 
 from .. import mgr, logger
 

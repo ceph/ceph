@@ -9,7 +9,7 @@ from datetime import datetime
 
 import cherrypy
 
-import rbd
+import rbd  # pylint: disable=import-error
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
               DeletePermission, CreatePermission, ReadPermission, allow_empty_body

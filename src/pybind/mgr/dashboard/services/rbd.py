@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import six
 
-import rbd
+import rbd  # pylint: disable=import-error
 
 from .. import mgr
 from .ceph_service import CephService
