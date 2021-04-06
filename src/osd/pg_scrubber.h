@@ -412,10 +412,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   [[nodiscard]] bool is_scrub_active() const final { return m_active; }
 
-  [[nodiscard]] bool get_reserve_failed() const final { return m_reserve_failed; }
-  void set_reserve_failed() final { m_reserve_failed = true; }
-  void clear_reserve_failed() final { m_reserve_failed = false; }
-
  private:
   void reset_internal_state();
 
@@ -539,9 +535,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   scrub_flags_t m_flags;
 
   bool m_active{false};
-
-  // This PG could not get all the scrub reservations
-  bool m_reserve_failed{false};
 
   eversion_t m_subset_last_update{};
 
