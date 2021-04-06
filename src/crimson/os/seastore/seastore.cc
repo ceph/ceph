@@ -911,13 +911,41 @@ boost::intrusive_ptr<SeastoreCollection> SeaStore::_get_collection(const coll_t&
 seastar::future<> SeaStore::write_meta(const std::string& key,
 					const std::string& value)
 {
-  return seastar::make_ready_future<>();
+  logger().debug("{}, key: {}; value: {}", __func__, key, value);
+  return seastar::do_with(key, value,
+    [this](auto& key, auto& value) {
+    return repeat_eagain([this, &key, &value] {
+      auto t = transaction_manager->create_transaction();
+      return transaction_manager->get_root(*t).safe_then(
+        [this, t=std::move(t), &key, &value](auto root) mutable {
+        transaction_manager->update_root_meta(*t, key, value);
+        return transaction_manager->submit_transaction(std::move(t));
+      });
+    });
+  }).handle_error(
+    crimson::ct_error::assert_all{"Invalid error in Seastar::write_meta"}
+  );
 }
 
 seastar::future<std::tuple<int, std::string>> SeaStore::read_meta(const std::string& key)
 {
-  return seastar::make_ready_future<std::tuple<int, std::string>>(
-    std::make_tuple(0, ""s));
+  logger().debug("{}, key: {}", __func__, key);
+  return seastar::do_with(transaction_manager->create_transaction(), key,
+    [this](auto& t, auto& key) {
+    return transaction_manager->get_root(*t).safe_then(
+      [this, &key](auto root) {
+      auto& meta = root->meta;
+      auto it = meta.find(key);
+      if (it != meta.end()) {
+        return seastar::make_ready_future<std::tuple<int, std::string>>(
+          std::make_tuple(0, it->second));
+      }
+      return seastar::make_ready_future<std::tuple<int, std::string>>(
+        std::make_tuple(-1, std::string("")));
+    });
+  }).handle_error(
+    crimson::ct_error::assert_all{"Invalid error in Seastar::write_meta"}
+  );
 }
 
 uuid_d SeaStore::get_fsid() const
