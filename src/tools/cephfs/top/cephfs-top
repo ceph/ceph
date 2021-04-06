@@ -328,13 +328,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
     parser.add_argument('--cluster', nargs='?', const='ceph', default='ceph',
-                        help='Ceph cluster to connect (defualt: ceph)')
+                        help='Ceph cluster to connect (default: ceph)')
     parser.add_argument('--id', nargs='?', const='fstop', default='fstop',
                         help='Ceph user to use to connection (default: fstop)')
     parser.add_argument('--conffile', nargs='?', default=None,
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
-                        help='run in selftest mode')
+                        help='Run in selftest mode')
     parser.add_argument('-d', '--delay', nargs='?', default=DEFAULT_REFRESH_INTERVAL,
                         type=float_greater_than, help='Interval to refresh data '
                         f'(default: {DEFAULT_REFRESH_INTERVAL})')
