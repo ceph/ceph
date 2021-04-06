@@ -448,7 +448,7 @@ public:
     template <typename ClientMetricPayload>
     inline void operator()(const ClientMetricPayload &payload) const {
       ClientMetricType metric_type = ClientMetricPayload::METRIC_TYPE;
-      *_out << "[client_metric_type: " << metric_type;
+      *_out << "[client_metric_type: " << metric_type << " ";
       payload.print(_out);
       *_out << "]";
     }
