@@ -233,7 +233,7 @@ void Beacon::_notify_mdsmap(const MDSMap &mdsmap)
 {
   ceph_assert(mdsmap.get_epoch() >= epoch);
 
-  if (mdsmap.get_epoch() != epoch) {
+  if (mdsmap.get_epoch() >= epoch) {
     epoch = mdsmap.get_epoch();
     compat = MDSMap::get_compat_set_default();
     compat.merge(mdsmap.compat);
