@@ -307,10 +307,17 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
     } catch (const int err) {
       ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
       return err;
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 5) << "applier throwed unexpected err: " << e.what()
+                        << dendl;
+      return -EPERM;
     }
   } catch (const int err) {
     ldpp_dout(dpp, 5) << "auth engine throwed err=" << err << dendl;
     return err;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 5) << "auth engine throwed unexpected err: " << e.what()
+                      << dendl;
   }
 
   /* We never should be here. */
