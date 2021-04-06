@@ -41,12 +41,12 @@ body {
   font-size: 0.9em;
 }
 
-div.section h1,
-div.section h2,
-div.section h3,
-div.section h4,
-div.section h5,
-div.section h6 {
+section h1,
+section h2,
+section h3,
+section h4,
+section h5,
+section h6 {
   font-weight: normal;
   margin: 30px 0px 10px 0px;
   padding: 5px 0 5px 10px;
@@ -54,16 +54,16 @@ div.section h6 {
   text-transform: uppercase;
 }
 
-div.section h1 {
+section h1 {
   border-top: 20px solid white; margin-top: 0;
 }
 
-div.section h1 { font-family: Titillium Web; font-size: 200%; background-color: #99DAE3;}
-div.section h2 { font-family: Titillium Web; font-size: 150%; background-color: #B2E3EA; }
-div.section h3 { font-family: Titillium Web; font-size: 120%; background-color: #CCECF1; }
-div.section h4 { font-family: Helvetica, Arial, sans-serif; font-size: 110%; background-color: #CCECF1; }
-div.section h5 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
-div.section h6 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
+section h1 { font-family: Titillium Web; font-size: 200%; background-color: #99DAE3;}
+section h2 { font-family: Titillium Web; font-size: 150%; background-color: #B2E3EA; }
+section h3 { font-family: Titillium Web; font-size: 120%; background-color: #CCECF1; }
+section h4 { font-family: Helvetica, Arial, sans-serif; font-size: 110%; background-color: #CCECF1; }
+section h5 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
+section h6 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
 
 /* nature theme */
 div.highlight {
@@ -135,6 +135,11 @@ html.writer-html5 .rst-content table.docutils th,
 
 .rst-content table.docutils ul + ul {
   margin-top: 1em;
+}
+
+.rst-content section ul li {
+  list-style: disc;
+  margin-left: 24px;
 }
 
 /* versions */
