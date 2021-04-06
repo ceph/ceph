@@ -13,6 +13,8 @@
   is consistent with the help message.
 
 * OSD: Ceph now uses mclock_scheduler as its default osd_op_queue to provide QoS.
+* RGW: S3 bucket notification events now contain `eTag` instead of `etag`, fixing
+  a deviation from the message format observed on AWS.
 
 >=16.0.0
 --------
