@@ -133,8 +133,17 @@ Example use cases
      Squash = None;
      FSAL {
        Name = CEPH;
+       Filesystem = "filesystem name";
+       User_Id = "user id";
+       Secret_Access_Key = "secret key";
      }
    }
+
+.. note:: User specified in FSAL block should have proper caps for NFS-Ganesha
+   daemons to access ceph cluster. User can be created in following way using
+   `auth get-or-create`::
+
+         # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=nfs-ganesha namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
 
 Reset NFS Ganesha Configuration
 ===============================
