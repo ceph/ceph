@@ -14,11 +14,13 @@ import sys
 import tempfile
 import threading
 import time
+
 from uuid import uuid4
 from OpenSSL import crypto
-import _strptime  # pylint: disable=unused-import
 from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
 from mgr_util import get_default_addr, ServerConfigException, verify_tls_files
+
+import _strptime  # pylint: disable=unused-import
 
 try:
     import cherrypy

@@ -7,8 +7,8 @@ from contextlib import contextmanager
 
 import cherrypy
 
-import rbd
-import rados
+import rbd  # pylint: disable=import-error
+import rados  # pylint: disable=import-error
 
 from .. import logger
 from ..services.ceph_service import SendCommandError
