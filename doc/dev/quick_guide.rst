@@ -25,23 +25,42 @@ Example:
    ./install-deps.sh
    ./do_cmake.sh -DWITH_MANPAGE=OFF -DWITH_BABELTRACE=OFF -DWITH_MGR_DASHBOARD_FRONTEND=OFF
 
-Running a development deployment
---------------------------------
-Ceph contains a script called ``vstart.sh`` (see also :doc:`/dev/dev_cluster_deployement`) which allows developers to quickly test their code using
-a simple deployment on your development system. Once the build finishes successfully, start the ceph
-deployment using the following command:
+You can also turn off building of some core components that are not relevant to
+your development:
 
 .. prompt:: bash $
 
-   cd ceph/build  # Assuming this is where you ran cmake
-   make vstart
-   ../src/vstart.sh -d -n -x
+   ./do_cmake.sh ... -DWITH_RBD=OFF -DWITH_KRBD=OFF -DWITH_RADOSGW=OFF
+
+Finally, build ceph:
+
+.. prompt:: bash $
+
+   cmake --build build [--target <target>...]
+
+Omit ``--target...`` if you want to do a full build.
+
+
+Running a development deployment
+--------------------------------
+
+Ceph contains a script called ``vstart.sh`` (see also
+:doc:`/dev/dev_cluster_deployement`) which allows developers to quickly test
+their code using a simple deployment on your development system. Once the build
+finishes successfully, start the ceph deployment using the following command:
+
+.. prompt:: bash $
+
+   cd build
+   ../src/vstart.sh -d -n
 
 You can also configure ``vstart.sh`` to use only one monitor and one metadata server by using the following:
 
 .. prompt:: bash $
 
-   MON=1 MDS=1 ../src/vstart.sh -d -n -x
+   env MON=1 MDS=1 ../src/vstart.sh -d -n -x
+
+Most logs from the cluster can be found in ``build/out``.
 
 The system creates two pools on startup: `cephfs_data_a` and `cephfs_metadata_a`.  Let's get some stats on
 the current pools:
@@ -108,7 +127,7 @@ you might do something like this:
 
    ../src/stop.sh
    rm -rf out dev
-   MDS=1 MON=1 OSD=3 ../src/vstart.sh -n -d
+   env MDS=1 MON=1 OSD=3 ../src/vstart.sh -n -d
 
 Running a RadosGW development environment
 -----------------------------------------
@@ -136,5 +155,4 @@ The tests are located in `src/tests`.  To run them type:
 
 .. prompt:: bash $
 
-   make check
-
+   (cd build && ninja check)
