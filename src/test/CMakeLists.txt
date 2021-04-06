@@ -153,10 +153,11 @@ if(NOT WIN32)
   target_link_libraries(ceph_bench_log rt)
 endif()
 
-add_executable(ceph_bench_journald_logger
-  bench_journald_logger.cc
-  )
-target_link_libraries(ceph_bench_journald_logger ceph-common)
+if(HAVE_MSGHDR)
+  add_executable(ceph_bench_journald_logger
+    bench_journald_logger.cc)
+  target_link_libraries(ceph_bench_journald_logger ceph-common)
+endif()
 
 # ceph_test_mutate
 add_executable(ceph_test_mutate

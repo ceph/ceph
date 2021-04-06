@@ -25,7 +25,6 @@ set(common_srcs
   Graylog.cc
   HTMLFormatter.cc
   HeartbeatMap.cc
-  Journald.cc
   LogClient.cc
   LogEntry.cc
   ostream_temp.cc
@@ -100,6 +99,11 @@ set(common_srcs
   utf8.c
   util.cc
   version.cc)
+
+if(HAVE_MSGHDR)
+  list(APPEND common_srcs
+    Journald.cc)
+endif()
 
 if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND common_srcs
