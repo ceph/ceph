@@ -180,7 +180,7 @@ Cleaning the Source Tree
 
 .. prompt:: bash $
 
-  make clean
+  ninja clean
   
 .. note:: The following commands will remove everything in the source tree 
           that isn't tracked by git. Make sure to back up your log files 
