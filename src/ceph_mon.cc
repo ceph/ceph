@@ -747,7 +747,7 @@ int main(int argc, const char **argv)
     if (g_conf().get_val_from_conf_file(my_sections, "mon addr",
 				       mon_addr_str, true) == 0) {
       entity_addr_t conf_addr;
-      if (conf_addr.parse(mon_addr_str.c_str())) {
+      if (conf_addr.parse(mon_addr_str)) {
 	entity_addrvec_t conf_addrs = make_mon_addrs(conf_addr);
         if (ipaddrs != conf_addrs) {
 	  derr << "WARNING: 'mon addr' config option " << conf_addrs

@@ -41,9 +41,7 @@ static std::string map_option_uuid_cb(const char *value_char)
 static std::string map_option_ip_cb(const char *value_char)
 {
   entity_addr_t a;
-  const char *endptr;
-  if (!a.parse(value_char, &endptr) ||
-      endptr != value_char + strlen(value_char)) {
+  if (!a.parse(value_char)) {
     return "";
   }
 

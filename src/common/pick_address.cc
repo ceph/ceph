@@ -303,8 +303,7 @@ static int fill_in_one_address(
   }
 
   entity_addr_t addr;
-  const char *end = 0;
-  bool r = addr.parse(buf, &end);
+  bool r = addr.parse(buf);
   if (!r) {
     return -1;
   }
