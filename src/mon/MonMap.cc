@@ -660,7 +660,7 @@ int MonMap::init_with_config_file(const ConfigProxy& conf,
     // there on a weird port is a v1 address, and do not handle
     // addrvecs.
     entity_addr_t addr;
-    if (!addr.parse(val.c_str(), nullptr, entity_addr_t::TYPE_LEGACY)) {
+    if (!addr.parse(val, entity_addr_t::TYPE_LEGACY)) {
       errout << "unable to parse address for mon." << mon_name
              << ": addr='" << val << "'" << std::endl;
       continue;

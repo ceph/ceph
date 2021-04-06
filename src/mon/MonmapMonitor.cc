@@ -584,7 +584,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     entity_addr_t addr;
     bufferlist rdata;
 
-    if (!addr.parse(addrstr.c_str())) {
+    if (!addr.parse(addrstr)) {
       err = -EINVAL;
       ss << "addr " << addrstr << "does not parse";
       goto reply;
