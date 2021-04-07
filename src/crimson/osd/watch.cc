@@ -173,7 +173,7 @@ seastar::future<> Notify::complete_watcher(
 seastar::future<> Notify::send_completion(
   std::set<WatchRef> timedout_watchers)
 {
-  logger().info("{} -- {} in progress watchers, {} timedout watchers {}",
+  logger().info("{} -- {} in progress watchers, timedout watchers {}",
                 __func__, watchers.size(), timedout_watchers.size());
   logger().debug("{} sending notify replies: {}", __func__, notify_replies);
 
