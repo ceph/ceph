@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /**
@@ -110,8 +110,6 @@ sort_and_write(rapidjson::Value &d, H &writer, canonical_char_sorter<MyMember>& 
     } cmp_functor{ccs};
         if (!(r = writer.StartObject()))
             break;
-        const auto &o{d.GetObject()};
-        auto b{o.begin()},e{o.end()};
         std::vector<MyMember*> q;
         for (auto &m: d.GetObject())
             q.push_back(&m);
