@@ -337,6 +337,7 @@ enum class extent_types_t : uint8_t {
   OBJECT_DATA_BLOCK = 8,
   RETIRED_PLACEHOLDER = 9,
 
+  RBM_ALLOC_INFO = 0xE0,
   // Test Block Types
   TEST_BLOCK = 0xF0,
   TEST_BLOCK_PHYSICAL = 0xF1,
@@ -667,6 +668,19 @@ struct __attribute__((packed)) root_t {
   void adjust_addrs_from_base(paddr_t base) {
     lba_root.adjust_addrs_from_base(base);
   }
+};
+
+using blk_id_t = uint64_t;
+constexpr blk_id_t NULL_BLK_ID =
+  std::numeric_limits<blk_id_t>::max();
+
+// use absolute address
+using blk_paddr_t = uint64_t;
+struct rbm_extent_t {
+  extent_types_t type;
+  std::vector<blk_id_t> blk_ids;
+  blk_paddr_t addr;
+  ceph::bufferlist bl;
 };
 
 }

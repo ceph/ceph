@@ -116,6 +116,18 @@ public:
     return weak;
   }
 
+  void add_rbm_allocated_blocks(rbm_extent_t &extent) {
+    allocated_blocks.push_back(extent);
+  }
+  void clear_rbm_allocated_blocks() {
+    if (!allocated_blocks.empty()) {
+      allocated_blocks.clear();
+    }
+  }
+  const auto &get_rbm_allocated_blocks() {
+    return allocated_blocks;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -146,6 +158,8 @@ private:
   journal_seq_t initiated_after;
 
   retired_extent_gate_t::token_t retired_gate_token;
+
+  std::vector<rbm_extent_t> allocated_blocks;
 
 public:
   Transaction(
