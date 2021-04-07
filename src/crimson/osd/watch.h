@@ -55,6 +55,7 @@ public:
       winfo(winfo),
       entity_name(entity_name) {
   }
+  ~Watch();
 
   seastar::future<> connect(crimson::net::ConnectionRef, bool);
   bool is_alive() const {
