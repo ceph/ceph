@@ -132,6 +132,14 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
   client->flush_set_callback(oset);
 }
 
+bool Client::is_reserved_vino(vinodeno_t &vino) {
+  if (vino.ino < MDS_INO_SYSTEM_BASE && vino.ino != MDS_INO_ROOT) {
+    ldout(cct, -1) << __func__ << "attempt to access reserved inode number " << vino << dendl;
+    return true;
+  }
+  return false;
+}
+
 
 // -------------
 
@@ -8715,6 +8723,9 @@ int Client::_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode)
   if (unmounting)
     return -ENOTCONN;
 
+  if (is_reserved_vino(vino))
+    return -ESTALE;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPINO);
   filepath path(vino.ino);
   req->set_filepath(path);
@@ -10914,6 +10925,9 @@ int Client::ll_lookup_vino(
   if (unmounting)
     return -ENOTCONN;
 
+  if (is_reserved_vino(vino))
+    return -ESTALE;
+
   std::lock_guard lock(client_lock);
   ldout(cct, 3) << __func__ << vino << dendl;
    
@@ -11163,6 +11177,9 @@ Inode *Client::ll_get_inode(vinodeno_t vino)
   std::lock_guard lock(client_lock);
 
   if (unmounting)
+    return NULL;
+
+  if (is_reserved_vino(vino))
     return NULL;
 
   unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
