@@ -313,6 +313,15 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       });
   }
 
+  for (auto b : t.allocated_blocks) {
+    record.extents.push_back(
+      extent_t{
+      extent_types_t::RBM_ALLOC_INFO,
+	b.addr,
+	std::move(b.bl)
+      });
+  }
+
   return std::make_optional<record_t>(std::move(record));
 }
 

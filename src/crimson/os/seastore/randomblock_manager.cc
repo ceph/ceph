@@ -1,0 +1,507 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#include <sys/mman.h>
+#include <string.h>
+
+#include "crimson/common/log.h"
+
+#include "include/buffer.h"
+#include "randomblock_manager.h"
+#include "crimson/os/seastore/nvmedevice/nvmedevice.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_filestore);
+  }
+}
+
+namespace crimson::os::seastore {
+
+RandomBlockManager::write_ertr::future<>
+RandomBlockManager::rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t block_no)
+{
+  bufferptr bptr;
+  try {
+    bptr = bufferptr(ceph::buffer::create_page_aligned(block.get_size()));
+    bufferlist bl;
+    encode(block, bl);
+    auto iter = bl.cbegin();
+    iter.copy(block.get_size(), bptr.c_str());
+  } catch (const std::exception &e) {
+    logger().error(
+      "rmb_sync_block_bitmap: "
+      "exception creating aligned buffer {}",
+      e
+    );
+    ceph_assert(0 == "unhandled exception");
+  }
+  uint64_t bitmap_block_no = convert_block_no_to_bitmap_block(block_no);
+  return device->write(super.start_alloc_area +
+		       bitmap_block_no * super.block_size,
+		       bptr);
+}
+
+RandomBlockManager::mkfs_ertr::future<>
+RandomBlockManager::initialize_blk_alloc_area() {
+  auto bp = ceph::bufferptr(buffer::create_page_aligned(super.block_size));
+  bp.zero();
+  /* initialize alloc area to zero */
+  for (uint64_t i = 0; i < super.alloc_area_size / super.block_size; i++) {
+    device->write(super.start_alloc_area + (i * super.block_size), bp);
+  }
+
+  /* write allocated bitmap info to rbm meta block */
+  auto start = super.start_data_area / super.block_size;
+  rbm_bitmap_block_t b_block(super.block_size);
+  alloc_rbm_bitmap_block_buf(b_block);
+  logger().debug(" start {} ", start);
+  for (uint64_t i = 0; i < start; i++) {
+    b_block.set_bit(i);
+  }
+  b_block.set_crc();
+
+  return rbm_sync_block_bitmap(b_block,
+    super.start_alloc_area / super.block_size
+    ).safe_then([this, b_block] () mutable {
+      /*
+       * Set rest of the block bitmap to 1
+       * To do so, we only mark 1 to the byte, which is the last byte of bitmap-blocks
+       */
+      uint64_t last_block_no = super.size/super.block_size - 1;
+      uint64_t remain_block = last_block_no % max_block_by_bitmap_block();
+      logger().debug(" last_block_no: {}, remain_block: {} ",
+		     last_block_no, remain_block);
+      if (remain_block) {
+	logger().debug(" try to remained write alloc info ");
+	if (last_block_no > max_block_by_bitmap_block()) {
+	  b_block.buf.clear();
+	  alloc_rbm_bitmap_block_buf(b_block);
+	}
+	for (uint64_t i = remain_block; i < max_block_by_bitmap_block(); i++) {
+	  b_block.set_bit(i);
+	}
+	b_block.set_crc();
+	return rbm_sync_block_bitmap(b_block, last_block_no
+	    ).handle_error(
+		mkfs_ertr::pass_further{},
+		crimson::ct_error::assert_all{
+		  "Invalid error rbm_sync_block_bitmap to update last bitmap block \
+		   in RandomBlockManager::initialize_blk_alloc_area"
+		}
+	      );
+      }
+      return mkfs_ertr::now();
+    }).handle_error(
+      mkfs_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Invalid error rbm_sync_block_bitmap in RandomBlockManager::initialize_blk_alloc_area"
+      }
+      );
+}
+
+RandomBlockManager::mkfs_ertr::future<>
+RandomBlockManager::mkfs(mkfs_config_t config)
+{
+  logger().debug("path {}", path);
+  return _open_device(path).safe_then([this, &config]() {
+    return read_rbm_header(config.start
+	).safe_then([this, &config](auto super) {
+	  logger().debug(" already exists ");
+	  return mkfs_ertr::now();
+	}).handle_error(
+	  crimson::ct_error::enoent::handle([this, &config] (auto) {
+
+	    super.uuid = uuid_d(); // TODO
+	    super.magic = 0xFF; // TODO
+	    super.start = config.start;
+	    super.end = config.end;
+	    super.block_size = config.block_size;
+	    super.size = config.total_size;
+	    super.free_block_count = config.total_size/config.block_size - 2;
+	    super.alloc_area_size = get_alloc_area_size();
+	    super.start_alloc_area = RBM_SUPERBLOCK_SIZE;
+	    super.start_data_area = super.start_alloc_area + super.alloc_area_size;
+	    super.crc = 0;
+	    super.feature |= RBM_BITMAP_BLOCK_CRC;
+
+	    logger().debug(" super {} ", super);
+	    // write super block
+	    return write_rbm_header().safe_then([this] {
+		return initialize_blk_alloc_area();
+	      }).handle_error(
+		mkfs_ertr::pass_further{},
+		crimson::ct_error::assert_all{
+		  "Invalid error write_rbm_header in RandomBlockManager::mkfs"
+		});
+	    }),
+	  mkfs_ertr::pass_further{},
+	  crimson::ct_error::assert_all{
+	    "Invalid error read_rbm_header in RandomBlockManager::mkfs"
+	  }
+	);
+    }).handle_error(
+	mkfs_ertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "Invalid error open_device in RandomBlockManager::mkfs"
+	}
+    ).finally([this] {
+      if (device) {
+	return device->close().then([]() {
+	    return mkfs_ertr::now();
+	    });
+      }
+      return mkfs_ertr::now();
+      });
+
+}
+
+RandomBlockManager::find_block_ret
+RandomBlockManager::find_free_block(Transaction &t, size_t size)
+{
+  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  return seastar::do_with(uint64_t(0), uint64_t(super.start_alloc_area),
+	  [&, this] (auto &allocated, auto addr) mutable {
+    return crimson::do_until(
+	[&, this] () mutable {
+	return device->read(
+	    addr,
+	    bp
+	    ).safe_then([bp, addr, size, &allocated, &t, this]() mutable {
+	      logger().debug("find_free_list: allocate {}, addr {}", allocated, addr);
+	      rbm_bitmap_block_t b_block(super.block_size);
+	      bufferlist bl_bitmap_block;
+	      bl_bitmap_block.append(bp);
+	      decode(b_block, bl_bitmap_block);
+	      auto max = max_block_by_bitmap_block();
+	      auto prev_alloc_blocks = allocated;
+	      auto allocated_blocks = t.get_rbm_allocated_blocks();
+	      std::vector<blk_id_t> ids;
+	      for (uint64_t i = 0; i < max; i++) {
+		bool alloc = false;
+		for (auto b : allocated_blocks) {
+		  if (std::find(b.blk_ids.begin(), b.blk_ids.end(), convert_bitmap_block_no_to_block_id(i, addr))
+		      != b.blk_ids.end()) {
+		    alloc = true;
+		    break;
+		  }
+		}
+		if (b_block.is_allocated(i) || alloc) {
+		  continue;
+		}
+		b_block.set_bit(i);
+		logger().debug("find_free_list: allocated block no {} i {}",
+			       convert_bitmap_block_no_to_block_id(i, addr), i);
+		ids.push_back(convert_bitmap_block_no_to_block_id(i, addr));
+		allocated += 1;
+		if (((uint64_t)size)/super.block_size <= allocated ||
+		    addr > super.end) {
+		  break;
+		}
+	      }
+
+	      if (allocated - prev_alloc_blocks > 0) {
+		bufferlist bl;
+		encode(b_block, bl);
+		rbm_extent_t extent{
+		  extent_types_t::RBM_ALLOC_INFO,
+		  ids,
+		  addr,
+		  bl
+		};
+		t.add_rbm_allocated_blocks(extent);
+	      }
+	      if (((uint64_t)size)/super.block_size <= allocated ||
+		  addr > super.end) {
+		logger().debug(" allocated: {} ", allocated);
+		return find_block_ertr::make_ready_future<bool>(true);
+	      }
+
+	      addr += super.block_size;
+	      return find_block_ertr::make_ready_future<bool>(false);
+	      });
+	}).safe_then([&allocated, &t] () {
+	  logger().debug(" allocated: {} size {} ", allocated, t.get_rbm_allocated_blocks().size());
+	  return find_block_ret(
+	      find_block_ertr::ready_future_marker{},
+	      allocated);
+	  }).handle_error(
+	      find_block_ertr::pass_further{},
+	      crimson::ct_error::assert_all{
+		"Invalid error in RandomBlockManager::find_free_block"
+	      }
+	    );
+    });
+}
+
+/* TODO : block allocator */
+RandomBlockManager::allocate_ertr::future<>
+RandomBlockManager::alloc_extent(Transaction &t, size_t size)
+{
+
+  /*
+   * 1. find free blocks using block allocator
+   * 2. add free blocks to transaction (free block is reserved state, but not stored)
+   * 3. link free blocks to onode
+   * Due to in-memory block allocator is the next work to do,
+   * just read the block bitmap directly to find free blocks here.
+   *
+   */
+  return find_free_block(t, size
+      ).safe_then([this, &t, size] (auto allocated) mutable -> allocate_ertr::future<> {
+	logger().debug("after find_free_block: allocated {}", allocated);
+	if (allocated * super.block_size < size) {
+	  t.clear_rbm_allocated_blocks();
+	  return crimson::ct_error::enospc::make();
+	}
+	return allocate_ertr::now();
+	}
+      ).handle_error(
+	allocate_ertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "Invalid error find_free_block in RandomBlockManager::alloc_extent"
+	}
+	);
+}
+
+RandomBlockManager::free_block_ertr::future<>
+RandomBlockManager::free_extent(Transaction &t, blk_paddr_t blk_paddr)
+{
+
+  blk_id_t block_no = blk_paddr / super.block_size;
+  auto addr = (super.start_alloc_area +
+	      block_no / max_block_by_bitmap_block())
+	      * super.block_size;
+  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  return device->read(
+      addr,
+      bp
+      ).safe_then([&, this]() {
+	logger().debug("free_extent: addr {}", addr);
+	rbm_bitmap_block_t b_block(super.block_size);
+	bufferlist bl_bitmap_block;
+	bl_bitmap_block.append(bp);
+	encode(b_block, bl_bitmap_block);
+
+	auto remain_offset = block_no % max_block_by_bitmap_block();
+	b_block.clear_bit(remain_offset);
+	bufferlist bl;
+	encode(b_block, bl);
+	logger().debug("free_extent: free block no {}",
+		       convert_bitmap_block_no_to_block_id(remain_offset, addr));
+	std::vector<blk_id_t> ids;
+	ids.push_back(convert_bitmap_block_no_to_block_id(remain_offset, addr));
+	rbm_extent_t extent{
+	  extent_types_t::RBM_ALLOC_INFO,
+	  ids,
+	  addr,
+	  bl
+	};
+	t.add_rbm_allocated_blocks(extent);
+	return free_block_ertr::now();
+	}
+  ).handle_error(
+    free_block_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in RandomBlockManager::free_extent"
+    }
+    );
+}
+
+RandomBlockManager::write_ertr::future<>
+RandomBlockManager::complete_allocation(Transaction &t)
+{
+  const auto alloc_blocks = t.get_rbm_allocated_blocks();
+  return seastar::do_with(alloc_blocks,
+	  [&, this] (auto &alloc_blocks) mutable {
+    return crimson::do_for_each(
+	alloc_blocks,
+	[this, &alloc_blocks](auto &alloc) {
+	  logger().debug(
+	      "complete_allocation: addr {}",
+	      alloc.addr);
+	  bufferptr bptr;
+	  try {
+	    bptr = bufferptr(ceph::buffer::create_page_aligned(alloc.bl.length()));
+	    auto iter = alloc.bl.cbegin();
+	    iter.copy(alloc.bl.length(), bptr.c_str());
+	  } catch (const std::exception &e) {
+	    logger().error(
+		"RandomBlockManager::complete_allocation: "
+		"exception creating aligned buffer {}",
+		e
+		);
+	    ceph_assert(0 == "unhandled exception");
+	  }
+	  return device->write(
+	      alloc.addr,
+	      bptr);
+	}).safe_then([this, &alloc_blocks]() mutable {
+	  auto alloc_block_count = 0;
+	  for (const auto b : alloc_blocks) {
+	    alloc_block_count += b.blk_ids.size();
+	  }
+	  super.free_block_count -= alloc_block_count;
+	  return write_ertr::now();
+	  });
+  });
+}
+
+RandomBlockManager::open_ertr::future<>
+RandomBlockManager::open(const std::string &path, blk_paddr_t addr)
+{
+  logger().debug("open: path{}", path);
+  return _open_device(path
+      ).safe_then([this, addr]() {
+      return read_rbm_header(addr).safe_then([&](auto s) -> open_ertr::future<> {
+	if (s.magic != 0xFF) {
+	  return crimson::ct_error::enoent::make();
+	}
+	super = s;
+	return open_ertr::now();
+      }
+      ).handle_error(
+	open_ertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "Invalid error read_rbm_header in RandomBlockManager::open"
+	}
+      );
+    });
+}
+
+RandomBlockManager::write_ertr::future<>
+RandomBlockManager::write(
+  blk_paddr_t addr,
+  bufferptr &bptr)
+{
+  ceph_assert(device);
+  if (addr > super.end - super.start) {
+    return crimson::ct_error::erange::make();
+  }
+  return device->write(
+    addr,
+    bptr);
+}
+
+RandomBlockManager::read_ertr::future<>
+RandomBlockManager::read(
+  blk_paddr_t addr,
+  bufferptr &buffer)
+{
+  ceph_assert(device);
+  if (addr > super.end - super.start ||
+      buffer.length() > super.end - super.start) {
+    return crimson::ct_error::erange::make();
+  }
+  return device->read(
+      addr,
+      buffer);
+}
+
+RandomBlockManager::close_ertr::future<>
+RandomBlockManager::close()
+{
+  ceph_assert(device);
+  return device->close();
+}
+
+RandomBlockManager::open_ertr::future<>
+RandomBlockManager::_open_device(const std::string path)
+{
+  ceph_assert(device);
+  return device->open(path, seastar::open_flags::rw
+      ).safe_then([this] {
+	return open_ertr::now();
+  });
+}
+
+RandomBlockManager::write_ertr::future<>
+RandomBlockManager::write_rbm_header()
+{
+  bufferlist meta_b_header;
+  super.crc = 0;
+  encode(super, meta_b_header);
+  super.crc = meta_b_header.crc32c(-1);
+
+  bufferlist bl;
+  encode(super, bl);
+  auto iter = bl.begin();
+  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  assert(bl.length() < super.block_size);
+  iter.copy(bl.length(), bp.c_str());
+
+  return device->write(super.start, bp
+      ).safe_then([this]() {
+	return write_ertr::now();
+	});
+}
+
+RandomBlockManager::read_ertr::future<rbm_metadata_header_t>
+RandomBlockManager::read_rbm_header(blk_paddr_t addr)
+{
+  ceph_assert(device);
+  bufferptr bptr = bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
+  bptr.zero();
+  return device->read(
+    addr,
+    bptr
+  ).safe_then([length=bptr.length(), this, bptr]() -> read_ertr::future<rbm_metadata_header_t> {
+    bufferlist bl;
+    bl.append(bptr);
+    auto p = bl.cbegin();
+    rbm_metadata_header_t super_block;
+    try {
+      decode(super_block, p);
+    }
+    catch (ceph::buffer::error& e) {
+      logger().debug(" read_rbm_header: unable to decode rbm super block {}", e.what());
+      return crimson::ct_error::enoent::make();
+    }
+    checksum_t crc = super_block.crc;
+    bufferlist meta_b_header;
+    super_block.crc = 0;
+    encode(super_block, meta_b_header);
+    if (meta_b_header.crc32c(-1) != crc) {
+      logger().debug(" bad crc on super block, expected {} != actual {} ", meta_b_header.crc32c(-1), crc);
+      return crimson::ct_error::input_output_error::make();
+    }
+    logger().debug(" got {} ", super);
+    return read_ertr::future<rbm_metadata_header_t>(
+      read_ertr::ready_future_marker{},
+      super_block
+      );
+
+  }).handle_error(
+    read_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in RandomBlockManager::read_rbm_header"
+    }
+    );
+}
+
+std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
+{
+  out << " rbm_metadata_header_t(size=" << header.size
+       << ", block_size=" << header.block_size
+       << ", start=" << header.start
+       << ", end=" << header.end
+       << ", magic=" << header.magic
+       << ", uuid=" << header.uuid
+       << ", free_block_count=" << header.free_block_count
+       << ", alloc_area_size=" << header.alloc_area_size
+       << ", start_alloc_area=" << header.start_alloc_area
+       << ", start_data_area=" << header.start_data_area
+       << ", flag=" << header.flag
+       << ", feature=" << header.feature
+       << ", crc=" << header.crc;
+  return out << ")";
+}
+
+std::ostream &operator<<(std::ostream &out, const rbm_bitmap_block_header_t &header)
+{
+  out << " rbm_bitmap_block_header_t(size=" << header.size
+       << ", checksum=" << header.checksum;
+  return out << ")";
+}
+
+}
