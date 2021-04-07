@@ -5704,6 +5704,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     try {
       rank = boost::lexical_cast<mds_rank_t>(value);
       if (rank < 0) rank = MDS_RANK_NONE;
+      else if (rank >= MAX_MDS) {
+        respond_to_request(mdr, -CEPHFS_EDOM);
+        return;
+      }
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
       respond_to_request(mdr, -CEPHFS_EINVAL);
