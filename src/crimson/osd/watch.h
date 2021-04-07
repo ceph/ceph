@@ -106,7 +106,7 @@ struct notify_reply_t {
 };
 std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 
-class Notify {
+class Notify : public seastar::enable_shared_from_this<Notify> {
   std::set<WatchRef> watchers;
   const notify_info_t ninfo;
   crimson::net::ConnectionRef conn;
