@@ -34,6 +34,7 @@
 #include "common/valgrind.h"
 #include "common/deleter.h"
 #include "common/error_code.h"
+#include "include/intarith.h"
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
 
@@ -2276,8 +2277,10 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
 
 
 void ceph::buffer::list::page_aligned_appender::_refill(size_t len) {
-  const size_t alloc = \
-    std::max(static_cast<size_t>(min_alloc), static_cast<size_t>((len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK));
+  const unsigned alloc =
+    std::max(min_alloc,
+	     shift_round_up(static_cast<unsigned>(len),
+			    static_cast<unsigned>(CEPH_PAGE_SHIFT)));
   auto new_back = \
     ptr_node::create(buffer::create_page_aligned(alloc));
   new_back->set_length(0);   // unused, so far.
