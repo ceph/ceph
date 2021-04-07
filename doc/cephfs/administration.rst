@@ -31,6 +31,12 @@ List all file systems by name.
 
 ::
 
+    fs lsflags <file system name>
+
+List all the flags set on a file system.
+
+::
+
     fs dump [epoch]
 
 This dumps the FSMap at the given epoch (default: current) which includes all
