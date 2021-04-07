@@ -134,6 +134,10 @@ struct Config {
   bool pretty_format = false;
 
   std::vector<string> attach_vec;
+  std::string id;
+  std::string keyfile;
+  std::string keyring;
+  std::string mon_host;
 
   std::optional<librbd::encryption_format_t> encryption_format;
   std::optional<std::string> encryption_passphrase_file;
@@ -1578,11 +1582,30 @@ done:
   return r;
 }
 
-static void attach_multiple_devices(const vector<Config> &cfgs)
+static void attach_multiple_devices(Config *config,
+                                    const vector<Config> &restore_cfgs)
 {
-  for (const Config &c: cfgs) {
+  for (const Config &c: restore_cfgs) {
     vector<string> args;
     args.push_back(rbd_nbd_path);
+
+    if (!config->id.empty()) {
+      args.push_back("--id");
+      args.push_back(config->id);
+    }
+    if (!config->keyfile.empty()) {
+      args.push_back("--keyfile");
+      args.push_back(config->keyfile);
+    }
+    if (!config->keyring.empty()) {
+      args.push_back("--keyring");
+      args.push_back(config->keyring);
+    }
+    if (!config->mon_host.empty()) {
+      args.push_back("-m");
+      args.push_back(config->mon_host);
+    }
+
     args.push_back("attach");
 
     std::string image_spec = c.image_spec();
@@ -1723,7 +1746,7 @@ static void remove_device_from_config(string dev_path)
   return;
 }
 
-static void restore_from_config(vector<string> attach_vec)
+static void restore_from_config(Config *config)
 {
   json_spirit::Value input;
 
@@ -1781,9 +1804,9 @@ static void restore_from_config(vector<string> attach_vec)
     cfgs.push_back(cfg);
   }
 
-  if (!attach_vec.empty()) {
+  if (!config->attach_vec.empty()) {
     vector<Config> sub_cfgs;
-    for (auto &item : attach_vec) {
+    for (auto &item : config->attach_vec) {
       bool match = false;
       for (const Config &c: cfgs) {
         if ((item == c.devpath) || (item == c.image_spec())) {
@@ -1796,9 +1819,9 @@ static void restore_from_config(vector<string> attach_vec)
         std::cerr << "=> " << item << ": Not found in config" << std::endl;
     }
     if (!sub_cfgs.empty())
-      attach_multiple_devices(sub_cfgs);
+      attach_multiple_devices(config, sub_cfgs);
   } else {
-    attach_multiple_devices(cfgs);
+    attach_multiple_devices(config, cfgs);
   }
 
   return;
@@ -2349,6 +2372,15 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
   config.parse_argv(args);
   cfg->poolname = config.get_val<std::string>("rbd_default_pool");
 
+  cfg->id = iparams.name.get_id();
+  cfg->keyfile = config.get_val<std::string>("keyfile");
+
+  // FIXME: Avoid collecting the keyring if its same as default keyring
+  cfg->keyring = config.get_val<std::string>("keyring");
+
+  cfg->mon_host = config.get_val<std::string>("mon_host");
+  std::replace(cfg->mon_host.begin(), cfg->mon_host.end(), ' ', ',');
+
   std::vector<const char*>::iterator i;
   std::ostringstream err;
   std::string arg_value;
@@ -2615,7 +2647,7 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     case Restore:
       strncpy(rbd_nbd_path, argv[0], PATH_MAX-1);
-      restore_from_config(cfg.attach_vec);
+      restore_from_config(&cfg);
       break;
     default:
       usage();
