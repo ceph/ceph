@@ -116,6 +116,7 @@ class BaseConfig:
         self.env: List[str] = []
         self.memory_request: Optional[int] = None
         self.memory_limit: Optional[int] = None
+        self.log_to_journald: Optional[bool] = None
 
         self.container_init: bool = CONTAINER_INIT
         self.container_engine: Optional[ContainerEngine] = None
@@ -2101,6 +2102,13 @@ def get_legacy_daemon_fsid(ctx, cluster,
     return fsid
 
 
+def should_log_to_journald(ctx):
+    if ctx.log_to_journald is not None:
+        return ctx.log_to_journald
+    return isinstance(ctx.container_engine, Podman) and \
+        ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION
+
+
 def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     # type: (CephadmContext, str, str, Union[int, str]) -> List[str]
     r = list()  # type: List[str]
@@ -2110,14 +2118,29 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
             '--setuser', 'ceph',
             '--setgroup', 'ceph',
             '--default-log-to-file=false',
-            '--default-log-to-stderr=true',
-            '--default-log-stderr-prefix=debug ',
         ]
+        log_to_journald = should_log_to_journald(ctx)
+        if log_to_journald:
+            r += [
+                '--default-log-to-journald=true',
+                '--default-log-to-stderr=false',
+            ]
+        else:
+            r += [
+                '--default-log-to-stderr=true',
+                '--default-log-stderr-prefix=debug ',
+            ]
         if daemon_type == 'mon':
             r += [
                 '--default-mon-cluster-log-to-file=false',
-                '--default-mon-cluster-log-to-stderr=true',
             ]
+            if log_to_journald:
+                r += [
+                    '--default-mon-cluster-log-to-journald=true',
+                    '--default-mon-cluster-log-to-stderr=false',
+                ]
+            else:
+                r += ['--default-mon-cluster-log-to-stderr=true']
     elif daemon_type in Monitoring.components:
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
@@ -2312,6 +2335,9 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             crash_dir = '/var/lib/ceph/%s/crash' % fsid
             if os.path.exists(crash_dir):
                 mounts[crash_dir] = '/var/lib/ceph/crash:z'
+            if daemon_type != 'crash' and should_log_to_journald(ctx):
+                journald_sock_dir = '/run/systemd/journal'
+                mounts[journald_sock_dir] = journald_sock_dir
 
     if daemon_type in Ceph.daemons and daemon_id:
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
