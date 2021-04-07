@@ -174,7 +174,7 @@ function install_pkg_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
-    local ver=1.73
+    local ver=1.75
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
