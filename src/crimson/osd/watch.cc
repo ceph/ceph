@@ -18,6 +18,11 @@ namespace {
 
 namespace crimson::osd {
 
+Watch::~Watch()
+{
+  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
+}
+
 seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
 {
   if (this->conn == conn) {
@@ -215,6 +220,10 @@ void Notify::do_timeout()
   // to avoid use-after-free we bump up the ref counter with `guard_ptr`.
   [[maybe_unused]] auto guard_ptr = shared_from_this();
   for (auto& watcher : watchers) {
+    logger().debug("canceling watcher cookie={} gid={} use_count={}",
+      watcher->get_cookie(),
+      watcher->get_watcher_gid(),
+      watcher->use_count());
     watcher->cancel_notify(ninfo.notify_id);
   }
   std::ignore = send_completion(std::move(watchers));
