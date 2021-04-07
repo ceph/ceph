@@ -1,9 +1,10 @@
 
 from mgr_module import MgrModule, CommandResult
-import threading
-import random
-import json
 import errno
+import json
+import random
+import sys
+import threading
 
 
 class Module(MgrModule):
@@ -100,6 +101,11 @@ class Module(MgrModule):
                 "desc": "Create an audit log record.",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test python-version",
+                "desc": "Query the version of the embedded Python runtime",
+                "perm": "r"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -109,7 +115,13 @@ class Module(MgrModule):
         self._health = {}
 
     def handle_command(self, inbuf, command):
-        if command['prefix'] == 'mgr self-test run':
+        if command['prefix'] == 'mgr self-test python-version':
+            major = sys.version_info.major
+            minor = sys.version_info.minor
+            micro = sys.version_info.micro
+            return 0, f'{major}.{minor}.{micro}', ''
+
+        elif command['prefix'] == 'mgr self-test run':
             self._self_test()
             return 0, '', 'Self-test succeeded'
 
