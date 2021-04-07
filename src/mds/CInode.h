@@ -890,12 +890,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   int get_num_caps_notable() const { return num_caps_notable; }
   void adjust_num_caps_notable(int d);
 
-  Capability *add_client_cap(client_t client, Session *session,
+  std::unique_ptr<Capability> add_client_cap(client_t client, Session *session,
 			     SnapRealm *conrealm=nullptr, bool new_inode=false);
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 
-  Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
+  std::shared_ptr<Capability> reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
   void clear_client_caps_after_export();
   void export_client_caps(std::map<client_t,Capability::Export>& cl);
 

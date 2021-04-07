@@ -570,10 +570,10 @@ class MDCache {
 			   map<client_t,ref_t<MClientSnap>>& splits);
   void prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm, map<client_t,ref_t<MClientSnap>>& splits);
   void send_snaps(map<client_t,ref_t<MClientSnap>>& splits);
-  Capability* rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds);
+  std::shared_ptr<Capability> rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq,
 				  map<client_t,ref_t<MClientSnap>>& updates);
-  Capability* try_reconnect_cap(CInode *in, Session *session);
+  std::shared_ptr<Capability> try_reconnect_cap(CInode *in, Session *session);
   void export_remaining_imported_caps();
 
   void do_cap_import(Session *session, CInode *in, Capability *cap,

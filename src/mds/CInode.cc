@@ -3358,7 +3358,7 @@ void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
   }
 }
 
-Capability *CInode::add_client_cap(client_t client, Session *session,
+std::unique_ptr<Capability> CInode::add_client_cap(client_t client, Session *session,
 				   SnapRealm *conrealm, bool new_inode)
 {
   ceph_assert(last == CEPH_NOSNAP);
@@ -3377,14 +3377,18 @@ Capability *CInode::add_client_cap(client_t client, Session *session,
   }
 
   uint64_t cap_id = new_inode ? 1 : ++mdcache->last_cap_id;
-  auto ret = client_caps.emplace(std::piecewise_construct, std::forward_as_tuple(client),
-                                 std::forward_as_tuple(this, session, cap_id));
-  ceph_assert(ret.second == true);
-  Capability *cap = &ret.first->second;
 
+  // HACK: We will immediately not remember the capabilities sent out
+  //       We need to return a pointer since Capability's copy constructor is set to delete.
+  //
+  // auto ret = client_caps.emplace(std::piecewise_construct, std::forward_as_tuple(client),
+  //                               std::forward_as_tuple(this, session, cap_id));
+  // ceph_assert(ret.second == true);
+  std::unique_ptr<Capability> cap(new Capability(this, session, cap_id));
   cap->client_follows = first-1;
-  containing_realm->add_cap(client, cap);
-
+  
+  // HACK: Don't keep track of capabilities in MDS
+  // containing_realm->add_cap(client, cap);
   return cap;
 }
 
@@ -3439,9 +3443,9 @@ void CInode::move_to_realm(SnapRealm *realm)
   containing_realm = realm;
 }
 
-Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session)
+std::shared_ptr<Capability> CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session)
 {
-  Capability *cap = get_client_cap(client);
+  std::shared_ptr<Capability> cap(get_client_cap(client));
   if (cap) {
     // FIXME?
     cap->merge(icr.capinfo.wanted, icr.capinfo.issued);
@@ -3760,7 +3764,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // "fake" a version that is old (stable) version, +1 if projected.
   version_t version = (oi->version * 2) + is_projected();
 
-  Capability *cap = get_client_cap(client);
+  std::shared_ptr<Capability> cap(get_client_cap(client));
   bool pfile = filelock.is_xlocked_by_client(client) || get_loner() == client;
   //(cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
   bool pauth = authlock.is_xlocked_by_client(client) || get_loner() == client;
@@ -3899,7 +3903,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     int issue = 0;
     if (!no_caps && cap) {
       int likes = get_caps_liked();
-      int allowed = get_caps_allowed_for_client(session, cap, file_i);
+      int allowed = get_caps_allowed_for_client(session, cap.get(), file_i);
       issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue, true);
       issue = cap->pending();
