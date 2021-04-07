@@ -637,7 +637,7 @@ else()
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.73
+  build_boost(1.75
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
