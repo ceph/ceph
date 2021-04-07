@@ -75,7 +75,7 @@ public:
   }
   void got_ping(utime_t);
 
-  seastar::future<> remove(bool send_disconnect);
+  seastar::future<> remove();
 
   /// Call when notify_ack received on notify_id
   seastar::future<> notify_ack(
