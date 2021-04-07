@@ -1012,6 +1012,7 @@ private:
   static const VXattr _common_vxattrs[];
 
 
+  bool is_reserved_vino(vinodeno_t &vino);
 
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
