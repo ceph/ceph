@@ -1024,7 +1024,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *at
 {
   if (!store->svc()->zone->is_meta_master()) {
     set_err_msg(err_msg, "ERROR: failed to update bucket sync: only allowed on meta master zone");
-    return EINVAL;
+    return -EINVAL;
   }
   bool sync = op_state.will_sync_bucket();
   if (sync) {
