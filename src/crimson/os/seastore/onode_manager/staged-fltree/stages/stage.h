@@ -858,8 +858,20 @@ struct staged {
 
   static bool is_keys_one(
       const container_t& container) {      // IN
-    // TODO
-    ceph_abort("not implemented");
+    auto iter = iterator_t(container);
+    iter.seek_last();
+    if (iter.index() == 0) {
+      if constexpr (IS_BOTTOM) {
+        // ok, there is only 1 key
+        return true;
+      } else {
+        auto nxt_container = iter.get_nxt_container();
+        return NXT_STAGE_T::is_keys_one(nxt_container);
+      }
+    } else {
+      // more than 1 keys
+      return false;
+    }
   }
 
   template <bool GET_KEY>
