@@ -210,6 +210,10 @@ void Notify::do_timeout()
   if (complete) {
     return;
   }
+  // it might be that `this` is kept alive only because of the reference
+  // a watcher stores and which is being removed by `cancel_notify()`.
+  // to avoid use-after-free we bump up the ref counter with `guard_ptr`.
+  [[maybe_unused]] auto guard_ptr = shared_from_this();
   for (auto& watcher : watchers) {
     watcher->cancel_notify(ninfo.notify_id);
   }
