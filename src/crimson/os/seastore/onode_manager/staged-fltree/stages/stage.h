@@ -335,7 +335,7 @@ struct staged {
 
     template <typename T = void>
     std::enable_if_t<!IS_BOTTOM, T>
-    update_size(NodeExtentMutable& mut, node_offset_t insert_size) {
+    update_size(NodeExtentMutable& mut, int insert_size) {
       assert(!is_end());
       container_t::update_size_at(mut, container, _index, insert_size);
     }
@@ -627,7 +627,7 @@ struct staged {
           mut, container, key, is_end(), size, p_left_bound);
     }
 
-    void update_size(NodeExtentMutable& mut, node_offset_t insert_size) {
+    void update_size(NodeExtentMutable& mut, int insert_size) {
       assert(!is_end());
       container_t::update_size(mut, container, insert_size);
     }
