@@ -665,7 +665,7 @@ bs::error_code logback_generations::remove_empty(optional_yield y) noexcept {
       for (const auto& [gen_id, e] : es) {
 	ceph_assert(e.pruned);
 	auto ec = log_remove(ioctx, shards,
-			     [this, gen_id](int shard) {
+			     [this, gen_id=gen_id](int shard) {
 			       return this->get_oid(gen_id, shard);
 			     }, (gen_id == 0), y);
 	if (ec) {
