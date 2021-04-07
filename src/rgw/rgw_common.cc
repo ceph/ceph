@@ -410,10 +410,12 @@ void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_met
         snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
         int j;
         for (j = 0; name_low[j]; j++) {
-          if (name_low[j] != '_')
-            name_low[j] = tolower(name_low[j]);
-          else
+          if (name_low[j] == '_')
             name_low[j] = '-';
+          else if (name_low[j] == '-')
+            name_low[j] = '_';
+          else
+            name_low[j] = tolower(name_low[j]);
         }
         name_low[j] = 0;
 
