@@ -36,6 +36,13 @@ void F013_T::update_size_at(
     NodeExtentMutable& mut, const me_t& node, index_t index, int change)
 {
   assert(index <= node.num_keys);
+#ifndef NDEBUG
+  // check underflow
+  if (change < 0 && index != node.num_keys) {
+    assert(node.get_item_start_offset(index) <
+           node.get_item_end_offset(index));
+  }
+#endif
   for (const auto* p_slot = &node.slots[index];
        p_slot < &node.slots[node.num_keys];
        ++p_slot) {
@@ -44,6 +51,14 @@ void F013_T::update_size_at(
         (void*)&(p_slot->right_offset),
         node_offset_t(offset - change));
   }
+#ifndef NDEBUG
+  // check overflow
+  if (change > 0 && index != node.num_keys) {
+    assert(node.num_keys > 0);
+    assert(node.get_key_start_offset(node.num_keys) <=
+           node.slots[node.num_keys - 1].right_offset);
+  }
+#endif
 }
 
 template <typename SlotType>
