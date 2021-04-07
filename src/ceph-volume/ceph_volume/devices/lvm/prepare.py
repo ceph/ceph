@@ -151,8 +151,8 @@ class Prepare(object):
 
         try:
             vg_name, lv_name = device_name.split('/')
-            lv = api.get_first_lv(filters={'lv_name': lv_name,
-                                           'vg_name': vg_name})
+            lv = api.get_single_lv(filters={'lv_name': lv_name,
+                                            'vg_name': vg_name})
         except ValueError:
             lv = None
 
@@ -240,8 +240,8 @@ class Prepare(object):
 
         try:
             vgname, lvname = self.args.data.split('/')
-            lv = api.get_first_lv(filters={'lv_name': lvname,
-                                           'vg_name': vgname})
+            lv = api.get_single_lv(filters={'lv_name': lvname,
+                                            'vg_name': vgname})
         except ValueError:
             lv = None
 
@@ -325,7 +325,7 @@ class Prepare(object):
 
             try:
                 vg_name, lv_name = self.args.data.split('/')
-                data_lv = api.get_first_lv(filters={'lv_name': lv_name,
+                data_lv = api.get_single_lv(filters={'lv_name': lv_name,
                                                     'vg_name': vg_name})
             except ValueError:
                 data_lv = None
@@ -340,8 +340,8 @@ class Prepare(object):
             data_lv.set_tags(tags)
             if not journal_device.startswith('/'):
                 # we got a journal lv, set rest of the tags
-                api.get_first_lv(filters={'lv_name': lv_name,
-                                          'vg_name': vg_name}).set_tags(tags)
+                api.get_single_lv(filters={'lv_name': lv_name,
+                                           'vg_name': vg_name}).set_tags(tags)
 
             prepare_filestore(
                 data_lv.lv_path,
@@ -354,8 +354,8 @@ class Prepare(object):
         elif self.args.bluestore:
             try:
                 vg_name, lv_name = self.args.data.split('/')
-                block_lv = api.get_first_lv(filters={'lv_name': lv_name,
-                                                 'vg_name': vg_name})
+                block_lv = api.get_single_lv(filters={'lv_name': lv_name,
+                                                      'vg_name': vg_name})
             except ValueError:
                 block_lv = None
 
