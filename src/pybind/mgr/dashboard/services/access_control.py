@@ -217,9 +217,10 @@ ADMIN_ROLE = Role(
 
 # read-only role provides read-only permission for all scopes
 READ_ONLY_ROLE = Role(
-    'read-only', 'allows read permission for all security scopes except dashboard settings', {
+    'read-only',
+    'allows read permission for all security scope except dashboard settings and config-opt', {
         scope_name: [_P.READ] for scope_name in Scope.all_scopes()
-        if scope_name != Scope.DASHBOARD_SETTINGS
+        if scope_name not in (Scope.DASHBOARD_SETTINGS, Scope.CONFIG_OPT)
     })
 
 
@@ -246,7 +247,7 @@ RGW_MGR_ROLE = Role(
 # Config options
 CLUSTER_MGR_ROLE = Role(
     'cluster-manager', """allows full permissions for the hosts, osd, mon, mgr,
-    and config-opt scopes.""", {
+    and config-opt scopes""", {
         Scope.HOSTS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.OSD: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.MONITOR: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
