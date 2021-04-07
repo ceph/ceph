@@ -218,8 +218,6 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
 
   struct disconnect_ctx_t {
     ObjectContext::watch_key_t key;
-    bool send_disconnect{ false };
-
     disconnect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name) {
     }
@@ -240,7 +238,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
         return seastar::do_with(std::move(nh.mapped()),
                          [ctx](auto&& watcher) {
           logger().info("op_effect: disconnect watcher {}", ctx.key);
-          return watcher->remove(ctx.send_disconnect);
+          return watcher->remove();
         });
       } else {
         logger().info("op_effect: disconnect failed to find watcher {}", ctx.key);

@@ -155,19 +155,20 @@ void Watch::got_ping(utime_t)
   }
 }
 
-seastar::future<> Watch::remove(const bool send_disconnect)
+seastar::future<> Watch::remove()
 {
   logger().info("{}", __func__);
-  auto disconnected = send_disconnect ? send_disconnect_msg()
-                                      : seastar::now();
-  return std::move(disconnected).then([this] {
-    return seastar::do_for_each(in_progress_notifies,
-      [this_shared=shared_from_this()] (auto notify) {
-        return notify->remove_watcher(this_shared);
-      }).then([this] {
-        discard_state();
-        return seastar::now();
-      });
+  // in contrast to ceph-osd crimson sends CEPH_WATCH_EVENT_DISCONNECT directly
+  // from the timeout handler and _after_ CEPH_WATCH_EVENT_NOTIFY_COMPLETE.
+  // this simplifies the Watch::remove() interface as callers aren't obliged
+  // anymore to decide whether EVENT_DISCONNECT needs to be send or not -- it
+  // becomes an implementation detail of Watch.
+  return seastar::do_for_each(in_progress_notifies,
+    [this_shared=shared_from_this()] (auto notify) {
+      return notify->remove_watcher(this_shared);
+    }).then([this] {
+      discard_state();
+      return seastar::now();
     });
 }
 
@@ -181,8 +182,11 @@ void Watch::cancel_notify(const uint64_t notify_id)
 
 void Watch::do_watch_timeout(Ref<PG> pg)
 {
-  pg->get_shard_services().start_operation<WatchTimeoutRequest>(
+  auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(
     shared_from_this(), pg);
+  std::ignore = std::move(fut).then([op=std::move(op), this] {
+    return send_disconnect_msg();
+  });
 }
 
 bool notify_reply_t::operator<(const notify_reply_t& rhs) const
