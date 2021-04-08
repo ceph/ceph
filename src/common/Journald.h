@@ -13,7 +13,7 @@ struct LogEntry;
 
 namespace ceph::logging {
 
-#ifdef HAVE_MSGHDR
+#ifdef WITH_SYSTEMD
 
 namespace detail {
 
@@ -86,7 +86,7 @@ class JournaldClusterLogger {
   std::unique_ptr<detail::LogEntryEncoder> m_log_entry_encoder;
 };
 
-#else  // HAVE_MSGHDR
+#else  // WITH_SYSTEMD
 
 class JournaldLogger {
 public:
@@ -103,7 +103,7 @@ public:
   }
 };
 
-#endif // HAVE_MSGHDR
+#endif // WITH_SYSTEMD
 
 } // ceph::logging
 

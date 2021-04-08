@@ -63,9 +63,6 @@
 /* Define to 1 if the system has the type `__u8'. */
 #cmakedefine HAVE___U8 1
 
-/* Define to 1 if the system has the type `msghdr` */
-#cmakedefine HAVE_MSGHDR 1
-
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
 
@@ -132,6 +129,9 @@
 
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
+
+/* define if systemed is enabled */
+#cmakedefine WITH_SYSTEMD
 
 /*define if GSSAPI/KRB5 enabled */
 #cmakedefine HAVE_GSSAPI
