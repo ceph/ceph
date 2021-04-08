@@ -261,29 +261,4 @@ public:
     );
 };
 
-/**
- * Holds weak refs to Watch structures corresponding to a connection
- * Lives in the Session object of an OSD connection
- */
-class WatchConState {
-  ceph::mutex lock = ceph::make_mutex("WatchConState");
-  std::set<WatchRef> watches;
-public:
-  CephContext* cct;
-  explicit WatchConState(CephContext* cct) : cct(cct) {}
-
-  /// Add a watch
-  void addWatch(
-    WatchRef watch ///< [in] Ref to new watch object
-    );
-
-  /// Remove a watch
-  void removeWatch(
-    WatchRef watch ///< [in] Ref to watch object to remove
-    );
-
-  /// Called on session reset, disconnects watchers
-  void reset(Connection *con);
-};
-
 #endif

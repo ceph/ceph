@@ -377,9 +377,6 @@ void Watch::connect(ConnectionRef con)
   conn = con;
   auto priv = con->get_priv();
   if (priv) {
-    auto sessionref = static_cast<Session*>(priv.get());
-    sessionref->wstate.addWatch(self.lock());
-    priv.reset();
     for (auto i = in_progress_notifies.begin();
 	 i != in_progress_notifies.end();
 	 ++i) {
@@ -416,10 +413,6 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (is_connected()) {
-    if (auto priv = conn->get_priv(); priv) {
-      auto session = static_cast<Session*>(priv.get());
-      session->wstate.removeWatch(self.lock());
-    }
     conn = ConnectionRef();
   }
   obc = ObjectContextRef();
@@ -503,39 +496,4 @@ WatchRef Watch::makeWatchRef(
   WatchRef ret(new Watch(pg, osd, obc, timeout, cookie, entity, addr));
   ret->set_self(ret);
   return ret;
-}
-
-void WatchConState::addWatch(WatchRef watch)
-{
-  std::lock_guard l(lock);
-  watches.insert(watch);
-}
-
-void WatchConState::removeWatch(WatchRef watch)
-{
-  std::lock_guard l(lock);
-  watches.erase(watch);
-}
-
-void WatchConState::reset(Connection *con)
-{
-  set<WatchRef> _watches;
-  {
-    std::lock_guard l(lock);
-    _watches.swap(watches);
-  }
-  for (set<WatchRef>::iterator i = _watches.begin();
-       i != _watches.end();
-       ++i) {
-    boost::intrusive_ptr<PrimaryLogPG> pg((*i)->get_pg());
-    pg->lock();
-    if (!(*i)->is_discarded()) {
-      if ((*i)->is_connected(con)) {
-	(*i)->disconnect();
-      } else {
-	lgeneric_derr(cct) << __func__ << " not still connected to " << (*i) << dendl;
-      }
-    }
-    pg->unlock();
-  }
 }

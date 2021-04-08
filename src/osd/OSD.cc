@@ -6292,7 +6292,6 @@ bool OSD::ms_handle_reset(Connection *con)
   dout(2) << "ms_handle_reset con " << con << " session " << session.get() << dendl;
   if (!session)
     return false;
-  session->wstate.reset(con);
   session->con->set_priv(nullptr);
   session->con.reset();  // break con <-> session ref cycle
   // note that we break session->con *before* the session_handle_reset
