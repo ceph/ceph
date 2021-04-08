@@ -15,7 +15,7 @@ The following chart illustrates the basic Ceph development workflow:
                 | git merge                          |
                 |                                    v
            /----------------\  git commit --amend   /-------------\
-           |  make check    |---------------------> | ceph/fix_1  |
+           | ninja check    |---------------------> | ceph/fix_1  |
            | ceph--qa--suite|                       \-------------/
            \----------------/                        |
                 ^                                    | fix changes
