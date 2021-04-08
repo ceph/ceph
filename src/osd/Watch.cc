@@ -369,10 +369,6 @@ void Watch::got_ping(utime_t t)
 
 void Watch::connect(ConnectionRef con)
 {
-  if (is_connected(con.get())) {
-    dout(10) << __func__ << " con " << con << " - already connected" << dendl;
-    return;
-  }
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   auto priv = con->get_priv();
@@ -380,6 +376,9 @@ void Watch::connect(ConnectionRef con)
     for (auto i = in_progress_notifies.begin();
 	 i != in_progress_notifies.end();
 	 ++i) {
+      // try to send regardless whether we were already connected or not.
+      // this can lead to duplicating the `MWatchNotify` which should be
+      // harmless.
       send_notify(i->second);
     }
   }
