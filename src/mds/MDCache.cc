@@ -4433,7 +4433,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
       ceph_assert(!in || in->is_auth());
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << " on " << *in << dendl;
-	std::shared_ptr<Capability> cap = rejoin_import_cap(in, q->first, q->second, from);
+	Capability *cap = rejoin_import_cap(in, q->first, q->second, from);
 	Capability::Import& im = imported_caps[p->first][q->first];
 	if (cap) {
 	  im.cap_id = cap->get_cap_id();
@@ -5505,7 +5505,7 @@ bool MDCache::process_imported_caps()
 	  continue;
 
 	Session *session = r->second.first;
-	std::shared_ptr<Capability> cap(in->get_client_cap(q->first));
+	Capability *cap = in->get_client_cap(q->first);
 	if (!cap) {
 	  cap = in->add_client_cap(q->first, session);
 	  // add empty item to reconnected_caps
@@ -5518,7 +5518,7 @@ bool MDCache::process_imported_caps()
 	ceph_assert(cap->get_mseq() == im.mseq);
 	cap->set_cap_id(im.cap_id);
 	// send cap import because we assigned a new cap ID
-	do_cap_import(session, in, cap.get(), q->second.cap_id, q->second.seq, q->second.mseq - 1,
+	do_cap_import(session, in, cap, q->second.cap_id, q->second.seq, q->second.mseq - 1,
 		      p->second.first, CEPH_CAP_FLAG_AUTH);
       }
     }
@@ -5550,12 +5550,12 @@ bool MDCache::process_imported_caps()
 	    continue;
 	  }
 
-	  std::shared_ptr<Capability> cap = in->reconnect_cap(q->first, r->second, session);
+	  Capability *cap = in->reconnect_cap(q->first, r->second, session);
 	  add_reconnected_cap(q->first, in->ino(), r->second);
 	  if (r->first >= 0) {
 	    if (cap->get_last_seq() == 0) // don't increase mseq if cap already exists
 	      cap->inc_mseq();
-	    do_cap_import(session, in, cap.get(), r->second.capinfo.cap_id, 0, 0, r->first, 0);
+	    do_cap_import(session, in, cap, r->second.capinfo.cap_id, 0, 0, r->first, 0);
 
 	    Capability::Import& im = rejoin_imported_caps[r->first][p->first][q->first];
 	    im.cap_id = cap->get_cap_id();
@@ -5778,7 +5778,7 @@ void MDCache::dump_openfiles(Formatter *f)
   f->close_section();
 }
 
-std::shared_ptr<Capability> MDCache::rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds)
+Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds)
 {
   dout(10) << "rejoin_import_cap for client." << client << " from mds." << frommds
 	   << " on " << *in << dendl;
@@ -5788,12 +5788,12 @@ std::shared_ptr<Capability> MDCache::rejoin_import_cap(CInode *in, client_t clie
     return NULL;
   }
 
-  std::shared_ptr<Capability> cap = in->reconnect_cap(client, icr, session);
+  Capability *cap = in->reconnect_cap(client, icr, session);
 
   if (frommds >= 0) {
     if (cap->get_last_seq() == 0) // don't increase mseq if cap already exists
       cap->inc_mseq();
-    do_cap_import(session, in, cap.get(), icr.capinfo.cap_id, 0, 0, frommds, 0);
+    do_cap_import(session, in, cap, icr.capinfo.cap_id, 0, 0, frommds, 0);
   }
 
   return cap;
@@ -5838,10 +5838,10 @@ void MDCache::export_remaining_imported_caps()
   }
 }
 
-std::shared_ptr<Capability> MDCache::try_reconnect_cap(CInode *in, Session *session)
+Capability* MDCache::try_reconnect_cap(CInode *in, Session *session)
 {
   client_t client = session->info.get_client();
-  std::shared_ptr<Capability> cap(nullptr);
+  Capability *cap = nullptr;
   const cap_reconnect_t *rc = get_replay_cap_reconnect(in->ino(), client);
   if (rc) {
     cap = in->reconnect_cap(client, *rc, session);

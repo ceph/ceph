@@ -3305,7 +3305,7 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
 
     Session *session = p->second.first;
 
-    std::unique_ptr<Capability> cap(in->get_client_cap(it.first));
+    Capability *cap = in->get_client_cap(it.first);
     if (!cap) {
       cap = in->add_client_cap(it.first, session);
       if (peer < 0)
@@ -3336,7 +3336,7 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
 
     if (peer >= 0) {
       cap->merge(it.second, auth_cap);
-      mdcache->do_cap_import(session, in, cap.get(), it.second.cap_id,
+      mdcache->do_cap_import(session, in, cap, it.second.cap_id,
 				  it.second.seq, it.second.mseq - 1, peer,
 				  auth_cap ? CEPH_CAP_FLAG_AUTH : CEPH_CAP_FLAG_RELEASE);
     }

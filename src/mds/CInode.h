@@ -873,18 +873,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   const mempool_cap_map& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
-    // HACK: return 0 always
-    return 0;
-
     auto client_caps_entry = client_caps.find(client);
     if (client_caps_entry != client_caps.end())
       return &client_caps_entry->second;
     return 0;
   }
   int get_client_cap_pending(client_t client) const {
-    // HACK: return 0 always
-    return 0;
-
     auto client_caps_entry = client_caps.find(client);
     if (client_caps_entry != client_caps.end()) {
       return client_caps_entry->second.pending();
@@ -896,12 +890,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   int get_num_caps_notable() const { return num_caps_notable; }
   void adjust_num_caps_notable(int d);
 
-  std::unique_ptr<Capability> add_client_cap(client_t client, Session *session,
+  Capability *add_client_cap(client_t client, Session *session,
 			     SnapRealm *conrealm=nullptr, bool new_inode=false);
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 
-  std::shared_ptr<Capability> reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
+  Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
   void clear_client_caps_after_export();
   void export_client_caps(std::map<client_t,Capability::Export>& cl);
 

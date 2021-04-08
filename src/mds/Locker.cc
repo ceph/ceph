@@ -2189,7 +2189,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
   mut->cleanup();
 }
 
-std::shared_ptr<Capability> Locker::issue_new_caps(CInode *in,
+Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
 				   MDRequestRef& mdr,
 				   SnapRealm *realm)
@@ -2208,7 +2208,7 @@ std::shared_ptr<Capability> Locker::issue_new_caps(CInode *in,
   int my_want = ceph_caps_for_mode(mode);
 
   // register a capability
-  std::shared_ptr<Capability> cap(in->get_client_cap(my_client));
+  Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
     cap = in->add_client_cap(my_client, session, realm, new_inode);
