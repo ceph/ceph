@@ -442,6 +442,3 @@ class CephFSTestCase(CephTestCase):
 
         self.run_cluster_cmd(cmd)
         return self.run_cluster_cmd(f'auth get {self.client_name}')
-
-    def create_keyring_file(self, remote, keyring):
-        return remote.mktemp(data=keyring)
