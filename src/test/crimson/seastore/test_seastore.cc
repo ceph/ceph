@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #include <string>
 #include <iostream>
@@ -51,6 +51,17 @@ struct seastore_test_t :
     return seastore->do_transaction(
       coll,
       std::move(t)).get0();
+  }
+
+  void set_meta(
+    const std::string& key,
+    const std::string& value) {
+    return seastore->write_meta(key, value).get0();
+  }
+
+  std::tuple<int, std::string> get_meta(
+    const std::string& key) {
+    return seastore->read_meta(key).get();
   }
 
   struct object_state_t {
@@ -265,6 +276,20 @@ TEST_F(seastore_test_t, collection_create_list_remove)
       EXPECT_EQ(collections.size(), 1);
       EXPECT_TRUE(contains(collections, coll_name));
     }
+  });
+}
+
+TEST_F(seastore_test_t, meta) {
+  run_async([this] {
+    set_meta("key1", "value1");
+    set_meta("key2", "value2");
+
+    const auto [ret1, value1] = get_meta("key1");
+    const auto [ret2, value2] = get_meta("key2");
+    EXPECT_EQ(ret1, 0);
+    EXPECT_EQ(ret2, 0);
+    EXPECT_EQ(value1, "value1");
+    EXPECT_EQ(value2, "value2");
   });
 }
 
