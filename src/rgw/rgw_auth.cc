@@ -473,6 +473,9 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
       s->env.emplace(e_key, val);
       ldpp_dout(dpp, 10) << "RGW Env Tag Key: " << e_key << " Value: " << val << dendl;
 
+      s->env.emplace("aws:TagKeys", key);
+        ldpp_dout(dpp, 10) << "aws:TagKeys: " << key << dendl;
+
       if (s->principal_tags.size() == 50) {
         ldpp_dout(dpp, 0) << "ERROR: Number of tag/value pairs exceeding 50, hence skipping the rest" << dendl;
         break;
@@ -867,6 +870,11 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
 
   for (auto& m : token_attrs.principal_tags) {
     s->env.emplace(m.first, m.second);
+    ldpp_dout(dpp, 10) << "Principal Tag Key: " << m.first << " Value: " << m.second << dendl;
+    std::size_t pos = m.first.find('/');
+    string key = m.first.substr(pos + 1);
+    s->env.emplace("aws:TagKeys", key);
+    ldpp_dout(dpp, 10) << "aws:TagKeys: " << key << dendl;
   }
 
   s->token_claims.emplace_back("sts");
