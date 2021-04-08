@@ -310,7 +310,6 @@ Watch::Watch(
     timeout(timeout),
     cookie(cookie),
     addr(addr),
-    will_ping(false),
     entity(entity),
     discarded(false) {
   dout(10) << "Watch()" << dendl;
@@ -368,7 +367,7 @@ void Watch::got_ping(utime_t t)
   }
 }
 
-void Watch::connect(ConnectionRef con, bool _will_ping)
+void Watch::connect(ConnectionRef con)
 {
   if (is_connected(con.get())) {
     dout(10) << __func__ << " con " << con << " - already connected" << dendl;
@@ -376,7 +375,6 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
   }
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
-  will_ping = _will_ping;
   auto priv = con->get_priv();
   if (priv) {
     auto sessionref = static_cast<Session*>(priv.get());
@@ -388,20 +386,14 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
       send_notify(i->second);
     }
   }
-  if (will_ping) {
-    last_ping = ceph_clock_now();
-    register_cb();
-  } else {
-    unregister_cb();
-  }
+  last_ping = ceph_clock_now();
+  register_cb();
 }
 
 void Watch::disconnect()
 {
   dout(10) << "disconnect (con was " << conn << ")" << dendl;
   conn = ConnectionRef();
-  if (!will_ping)
-    register_cb();
 }
 
 void Watch::discard()
@@ -459,16 +451,14 @@ void Watch::start_notify(NotifyRef notif)
 {
   ceph_assert(in_progress_notifies.find(notif->notify_id) ==
 	 in_progress_notifies.end());
-  if (will_ping) {
-    utime_t cutoff = ceph_clock_now();
-    cutoff.sec_ref() -= timeout;
-    if (last_ping < cutoff) {
-      dout(10) << __func__ << " " << notif->notify_id
-	       << " last_ping " << last_ping << " < cutoff " << cutoff
-	       << ", disconnecting" << dendl;
-      disconnect();
-      return;
-    }
+  utime_t cutoff = ceph_clock_now();
+  cutoff.sec_ref() -= timeout;
+  if (last_ping < cutoff) {
+    dout(10) << __func__ << " " << notif->notify_id
+             << " last_ping " << last_ping << " < cutoff " << cutoff
+             << ", disconnecting" << dendl;
+    disconnect();
+    return;
   }
   dout(10) << "start_notify " << notif->notify_id << dendl;
   in_progress_notifies[notif->notify_id] = notif;

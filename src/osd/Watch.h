@@ -162,7 +162,6 @@ class Watch {
   uint64_t cookie;
   entity_addr_t addr;
 
-  bool will_ping;    ///< is client new enough to ping the watch
   utime_t last_ping; ///< last client ping
 
   entity_name_t entity;
@@ -230,8 +229,7 @@ public:
 
   /// Transitions Watch to connected, unregister_cb, resends pending Notifies
   void connect(
-    ConnectionRef con, ///< [in] Reference to new connection
-    bool will_ping     ///< [in] client is new and will send pings
+    ConnectionRef con ///< [in] Reference to new connection
     );
 
   /// Transitions watch to disconnected, register_cb

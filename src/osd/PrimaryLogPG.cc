@@ -6860,8 +6860,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	watch_info_t w(cookie, timeout,
 	  ctx->op->get_req()->get_connection()->get_peer_addr());
-	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH ||
-	    op.watch.op == CEPH_OSD_WATCH_OP_LEGACY_WATCH) {
+	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH) {
 	  if (oi.watchers.count(make_pair(cookie, entity))) {
 	    dout(10) << " found existing watch " << w << " by " << entity << dendl;
 	  } else {
@@ -6869,8 +6868,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    oi.watchers[make_pair(cookie, entity)] = w;
 	    t->nop(soid);  // make sure update the object_info on disk!
 	  }
-	  bool will_ping = (op.watch.op == CEPH_OSD_WATCH_OP_WATCH);
-	  ctx->watch_connects.push_back(make_pair(w, will_ping));
+	  ctx->watch_connects.push_back(make_pair(w, true));
+	} else if (op.watch.op == CEPH_OSD_WATCH_OP_LEGACY_WATCH) {
+	  dout(5) << "saw the unsupported CEPH_OSD_WATCH_OP_LEGACY_WATCH" << dendl;
+	  result = -EOPNOTSUPP;
+	  break;
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_RECONNECT) {
 	  if (!oi.watchers.count(make_pair(cookie, entity))) {
 	    result = -ENOTCONN;
@@ -8592,7 +8594,7 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 	  watcher,
 	  watch));
     }
-    watch->connect(conn, i->second);
+    watch->connect(conn);
   }
 
   for (list<notify_info_t>::iterator p = ctx->notifies.begin();
