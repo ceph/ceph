@@ -2636,6 +2636,16 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     dout(1) << " unknown client op " << req->get_op() << dendl;
     respond_to_request(mdr, -CEPHFS_EOPNOTSUPP);
   }
+
+  // HACK: Always release the capability here so that the MDS is no longer tracking it.
+  client_t client = mdr->get_client();
+  CInode* ino = mdr->in[0];
+  if (ino) {
+    Capability *cap = ino->get_client_cap(client);
+    if (cap) {
+      mds->locker->_do_cap_release(client, inodeno_t((uint64_t)cap->get_inode()) , cap->get_cap_id(), cap->get_mseq(), cap->get_last_seq());
+    }
+  }
 }
 
 

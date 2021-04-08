@@ -189,6 +189,9 @@ public:
   void revoke_client_leases(SimpleLock *lock);
   static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 
+  // HACK: Make visible so that we can immediately release a cap
+  void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
+
 protected:
   void send_lock_message(SimpleLock *lock, int msg);
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
@@ -221,7 +224,6 @@ protected:
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, const cref_t<MClientCaps> &m,
 		      const ref_t<MClientCaps> &ack, bool *need_flush=NULL);
   void handle_client_cap_release(const cref_t<MClientCapRelease> &m);
-  void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
 
   bool local_wrlock_start(LocalLockC *lock, MDRequestRef& mut);
