@@ -873,12 +873,18 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   const mempool_cap_map& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
+    // HACK: return 0 always
+    return 0;
+
     auto client_caps_entry = client_caps.find(client);
     if (client_caps_entry != client_caps.end())
       return &client_caps_entry->second;
     return 0;
   }
   int get_client_cap_pending(client_t client) const {
+    // HACK: return 0 always
+    return 0;
+
     auto client_caps_entry = client_caps.find(client);
     if (client_caps_entry != client_caps.end()) {
       return client_caps_entry->second.pending();

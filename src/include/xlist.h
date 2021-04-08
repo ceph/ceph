@@ -26,9 +26,11 @@ class xlist {
 public:
   class item {
   public:
-    item(T i) : _item(i) {}
+    item(T i) : _item(i) {
+    }
     ~item() { 
-      ceph_assert(!is_on_list());
+      // HACK: Allow items to be destructed without being on a list for
+      // ceph_assert(!is_on_list());
     }
 
     item(const item& other) = delete;
