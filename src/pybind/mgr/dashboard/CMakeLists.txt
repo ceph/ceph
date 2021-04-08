@@ -15,6 +15,8 @@ function(add_npm_command)
     DEPENDS ${NC_DEPENDS}
     WORKING_DIRECTORY "${NC_WORKING_DIRECTORY}"
     COMMENT ${NC_COMMENT})
+  set_property(DIRECTORY APPEND
+    PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${NC_OUTPUT}")
 endfunction(add_npm_command)
 
 function(add_npm_options)
