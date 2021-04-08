@@ -225,6 +225,19 @@ function install_libzbd_on_ubuntu {
         libzbd-dev
 }
 
+function install_libpmem_on_ubuntu {
+    local codename=$1
+    local project=pmem
+    local sha1=7c18b4b1413ae965ea8bcbfc69eb9784f9212319
+    install_pkg_on_ubuntu \
+        $project \
+        $sha1 \
+        $codename \
+        check \
+        libpmem-dev \
+        libpmemobj-dev
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -300,6 +313,7 @@ else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
+    [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary)
@@ -316,6 +330,7 @@ else
             *Focal*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
+                $with_pmem && install_libpmem_on_ubuntu focal
                 ;;
             *)
                 $SUDO apt-get install -y gcc
