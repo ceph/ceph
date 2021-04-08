@@ -25,6 +25,34 @@ Example:
    ./install-deps.sh
    ./do_cmake.sh -DWITH_MANPAGE=OFF -DWITH_BABELTRACE=OFF -DWITH_MGR_DASHBOARD_FRONTEND=OFF
 
+Introducing new dependencies
+----------------------------
+Adding external dependencies should be avoided whenever possible, in order to
+reduce maintenance overhead. In case the new dependency is absolutely essential
+and must be introduced, please verify that its package is available in the
+repositories of all the supported distributions. In addition, pay attention to
+its version, since sometimes versions do not match across distributions.
+
+For RHEL and CentOS you can check if a dependency is available with:
+
+.. prompt:: bash $
+
+   dnf search <package_name>
+
+Make sure you add Extra Packages for Enterprise Linux (EPEL) repository to your
+``/etc/yum.repos.d/``.
+Instructions for doing so are found on the Fedora Wiki:
+https://fedoraproject.org/wiki/EPEL
+
+For Debian:
+
+.. prompt:: bash $
+
+   apt search <package_name>
+
+Both unit and integration tests which make use of the new dependency should be
+added as a part of the pull request that introduces the dependency.
+
 Running a development deployment
 --------------------------------
 Ceph contains a script called ``vstart.sh`` (see also :doc:`/dev/dev_cluster_deployement`) which allows developers to quickly test their code using
