@@ -195,7 +195,7 @@ struct b_dummy_tree_test_t : public seastar_test_suite_t {
   }
 };
 
-TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
+TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
 {
   run_async([this] {
     logger().info("\n---------------------------------------------"
@@ -207,27 +207,48 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     ASSERT_TRUE(tree.begin(t).unsafe_get0().is_end());
     ASSERT_TRUE(tree.last(t).unsafe_get0().is_end());
 
-    std::vector<std::tuple<ghobject_t,
-                           test_item_t,
-                           TestBtree::Cursor>> insert_history;
+    std::map<ghobject_t,
+             std::tuple<test_item_t, TestBtree::Cursor>> insert_history;
+
     auto f_validate_insert_new = [this, &insert_history] (
         const ghobject_t& key, const test_item_t& value) {
       auto [cursor, success] = tree.insert(
           t, key, {value.get_payload_size()}).unsafe_get0();
       initialize_cursor_from_item(t, key, value, cursor, success);
-      insert_history.emplace_back(key, value, cursor);
+      insert_history.emplace(key, std::make_tuple(value, cursor));
       auto cursor_ = tree.find(t, key).unsafe_get0();
       ceph_assert(cursor_ != tree.end());
       ceph_assert(cursor_.value() == cursor.value());
       validate_cursor_from_item(key, value, cursor_);
       return cursor.value();
     };
+
+    auto f_validate_erase = [this, &insert_history] (const ghobject_t& key) {
+      auto cursor_erase = tree.find(t, key).unsafe_get0();
+      auto cursor_next = cursor_erase.get_next(t).unsafe_get0();
+      auto cursor_ret = tree.erase(t, cursor_erase).unsafe_get0();
+      ceph_assert(cursor_erase.is_end());
+      ceph_assert(cursor_ret == cursor_next);
+      auto cursor_lb = tree.lower_bound(t, key).unsafe_get0();
+      ceph_assert(cursor_lb == cursor_next);
+      auto it = insert_history.find(key);
+      ceph_assert(std::get<1>(it->second).is_end());
+      insert_history.erase(it);
+    };
+
+    auto f_insert_erase_insert = [&f_validate_insert_new, &f_validate_erase] (
+        const ghobject_t& key, const test_item_t& value) {
+      f_validate_insert_new(key, value);
+      f_validate_erase(key);
+      return f_validate_insert_new(key, value);
+    };
+
     auto values = Values<test_item_t>(15);
 
     // insert key1, value1 at STAGE_LEFT
     auto key1 = make_ghobj(3, 3, 3, "ns3", "oid3", 3, 3);
     auto value1 = values.pick();
-    auto test_value1 = f_validate_insert_new(key1, value1);
+    auto test_value1 = f_insert_erase_insert(key1, value1);
 
     // validate lookup
     {
@@ -251,53 +272,53 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     // insert node front at STAGE_LEFT
     auto key2 = make_ghobj(2, 2, 2, "ns3", "oid3", 3, 3);
     auto value2 = values.pick();
-    f_validate_insert_new(key2, value2);
+    f_insert_erase_insert(key2, value2);
 
     // insert key3, value3 to key1's right at STAGE_LEFT
     // insert node last at STAGE_LEFT
     auto key3 = make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3);
     auto value3 = values.pick();
-    f_validate_insert_new(key3, value3);
+    f_insert_erase_insert(key3, value3);
 
     // insert key4, value4 to key1's left at STAGE_STRING (collision)
     auto key4 = make_ghobj(3, 3, 3, "ns2", "oid2", 3, 3);
     auto value4 = values.pick();
-    f_validate_insert_new(key4, value4);
+    f_insert_erase_insert(key4, value4);
 
     // insert key5, value5 to key1's right at STAGE_STRING (collision)
     auto key5 = make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3);
     auto value5 = values.pick();
-    f_validate_insert_new(key5, value5);
+    f_insert_erase_insert(key5, value5);
 
     // insert key6, value6 to key1's left at STAGE_RIGHT
     auto key6 = make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2);
     auto value6 = values.pick();
-    f_validate_insert_new(key6, value6);
+    f_insert_erase_insert(key6, value6);
 
     // insert key7, value7 to key1's right at STAGE_RIGHT
     auto key7 = make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4);
     auto value7 = values.pick();
-    f_validate_insert_new(key7, value7);
+    f_insert_erase_insert(key7, value7);
 
     // insert node front at STAGE_RIGHT
     auto key8 = make_ghobj(2, 2, 2, "ns3", "oid3", 2, 2);
     auto value8 = values.pick();
-    f_validate_insert_new(key8, value8);
+    f_insert_erase_insert(key8, value8);
 
     // insert node front at STAGE_STRING (collision)
     auto key9 = make_ghobj(2, 2, 2, "ns2", "oid2", 3, 3);
     auto value9 = values.pick();
-    f_validate_insert_new(key9, value9);
+    f_insert_erase_insert(key9, value9);
 
     // insert node last at STAGE_RIGHT
     auto key10 = make_ghobj(4, 4, 4, "ns3", "oid3", 4, 4);
     auto value10 = values.pick();
-    f_validate_insert_new(key10, value10);
+    f_insert_erase_insert(key10, value10);
 
     // insert node last at STAGE_STRING (collision)
     auto key11 = make_ghobj(4, 4, 4, "ns4", "oid4", 3, 3);
     auto value11 = values.pick();
-    f_validate_insert_new(key11, value11);
+    f_insert_erase_insert(key11, value11);
 
     // insert key, value randomly until a perfect 3-ary tree is formed
     std::vector<std::pair<ghobject_t, test_item_t>> kvs{
@@ -320,13 +341,14 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     auto [smallest_key, smallest_value] = kvs[0];
     auto [largest_key, largest_value] = kvs[kvs.size() - 1];
     std::random_shuffle(kvs.begin(), kvs.end());
-    std::for_each(kvs.begin(), kvs.end(), [&f_validate_insert_new] (auto& kv) {
-      f_validate_insert_new(kv.first, kv.second);
+    std::for_each(kvs.begin(), kvs.end(), [&f_insert_erase_insert] (auto& kv) {
+      f_insert_erase_insert(kv.first, kv.second);
     });
     ASSERT_EQ(tree.height(t).unsafe_get0(), 1);
     ASSERT_FALSE(tree.test_is_clean());
 
-    for (auto& [k, v, c] : insert_history) {
+    for (auto& [k, val] : insert_history) {
+      auto& [v, c] = val;
       // validate values in tree keep intact
       auto cursor = tree.find(t, k).unsafe_get0();
       EXPECT_NE(cursor, tree.end());
@@ -350,7 +372,8 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     // validate range query
     {
       kvs.clear();
-      for (auto& [k, v, c] : insert_history) {
+      for (auto& [k, val] : insert_history) {
+        auto& [v, c] = val;
         kvs.emplace_back(k, v);
       }
       insert_history.clear();
@@ -369,6 +392,16 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     std::ostringstream oss;
     tree.dump(t, oss);
     logger().info("\n{}\n", oss.str());
+
+    // randomized erase until empty
+    std::random_shuffle(kvs.begin(), kvs.end());
+    for (auto& [k, v] : kvs) {
+      auto e_size = tree.erase(t, k).unsafe_get0();
+      ASSERT_EQ(e_size, 1);
+    }
+    auto cursor = tree.begin(t).unsafe_get0();
+    ASSERT_TRUE(cursor.is_end());
+    ASSERT_EQ(tree.height(t).unsafe_get0(), 1);
   });
 }
 
