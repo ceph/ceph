@@ -81,3 +81,7 @@
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
 	branch = ceph-master
+[submodule "src/crypto/ipsec_mb/intel-ipsec-mb"]
+    path = src/crypto/ipsec_mb/intel-ipsec-mb
+    url = https://github.com/intel/intel-ipsec-mb
+    branch = v0.55
