@@ -60,7 +60,7 @@ for example:
 
 Or per daemon::
 
-  ceph orch ceph --service-type mds --daemon-id=hostname.ppdhsz --format yaml
+  ceph orch ps --service-name <service-name> --daemon-id <daemon-id> --format yaml
 
 .. code-block:: yaml
 
