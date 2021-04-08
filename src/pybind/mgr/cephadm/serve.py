@@ -410,21 +410,22 @@ class CephadmServe:
                     daemon_id = s.get('id')
                     assert daemon_id
                     name = '%s.%s' % (s.get('type'), daemon_id)
-                    if s.get('type') in ['rbd-mirror', 'cephfs-mirror', 'rgw']:
+                    if s.get('type') in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
                         metadata = self.mgr.get_metadata(
                             cast(str, s.get('type')), daemon_id, {})
                         assert metadata is not None
                         try:
-                            name = '%s.%s' % (s.get('type'), metadata['id'])
+                            if s.get('type') == 'rgw-nfs':
+                                # https://tracker.ceph.com/issues/49573
+                                name = metadata['id'][:-4]
+                            else:
+                                name = '%s.%s' % (s.get('type'), metadata['id'])
                         except (KeyError, TypeError):
                             self.log.debug(
                                 "Failed to find daemon id for %s service %s" % (
                                     s.get('type'), s.get('id')
                                 )
                             )
-                    elif s.get('type') == 'rgw-nfs':
-                        # https://tracker.ceph.com/issues/49573
-                        name = daemon_id.split('-rgw')[0]
 
                     if host not in self.mgr.inventory:
                         missing_names.append(name)
