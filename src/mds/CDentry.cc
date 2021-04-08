@@ -63,7 +63,10 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     if (dn.is_replicated()) 
       out << dn.get_replicas();
   } else {
-    out << " rep@" << dn.authority();
+    mds_authority_t a = dn.authority();
+    out << " rep@" << a.first;
+    if (a.second != CDIR_AUTH_UNKNOWN)
+      out << "," << a.second;
     out << "." << dn.get_replica_nonce();
   }
 
