@@ -387,6 +387,23 @@ struct Condition {
   };
 
   using unordered_multimap_it_pair = std::pair <std::unordered_multimap<std::string,std::string>::const_iterator, std::unordered_multimap<std::string,std::string>::const_iterator>;
+
+  template<typename F>
+  static bool andible(F&& f, const unordered_multimap_it_pair& it,
+		      const std::vector<std::string>& v) {
+    for (auto itr = it.first; itr != it.second; itr++) {
+      bool matched = false;
+      for (const auto& d : v) {
+        if (std::forward<F>(f)(itr->second, d)) {
+	        matched = true;
+      }
+     }
+     if (!matched)
+      return false;
+    }
+    return true;
+  }
+
   template<typename F>
   static bool orrible(F&& f, const unordered_multimap_it_pair& it,
 		      const std::vector<std::string>& v) {

@@ -678,7 +678,13 @@ bool Condition::eval(const Environment& env) const {
   }
 
   if (i == env.end()) {
-    return ifexists;
+    if (op == TokenID::ForAllValuesStringEquals ||
+        op == TokenID::ForAllValuesStringEqualsIgnoreCase ||
+        op == TokenID::ForAllValuesStringLike) {
+      return true;
+    } else {
+      return ifexists;
+    }
   }
   const auto& s = i->second;
 
@@ -686,6 +692,7 @@ bool Condition::eval(const Environment& env) const {
 
   switch (op) {
     // String!
+  case TokenID::ForAnyValueStringEquals:
   case TokenID::StringEquals:
     return orrible(std::equal_to<std::string>(), itr, vals);
 
@@ -693,17 +700,28 @@ bool Condition::eval(const Environment& env) const {
     return orrible(std::not_fn(std::equal_to<std::string>()),
 		   itr, vals);
 
+  case TokenID::ForAnyValueStringEqualsIgnoreCase:
   case TokenID::StringEqualsIgnoreCase:
     return orrible(ci_equal_to(), itr, vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
     return orrible(std::not_fn(ci_equal_to()), itr, vals);
 
+  case TokenID::ForAnyValueStringLike:
   case TokenID::StringLike:
     return orrible(string_like(), itr, vals);
 
   case TokenID::StringNotLike:
     return orrible(std::not_fn(string_like()), itr, vals);
+
+  case TokenID::ForAllValuesStringEquals:
+    return andible(std::equal_to<std::string>(), itr, vals);
+
+  case TokenID::ForAllValuesStringLike:
+    return andible(string_like(), itr, vals);
+
+  case TokenID::ForAllValuesStringEqualsIgnoreCase:
+    return andible(ci_equal_to(), itr, vals);
 
     // Numeric
   case TokenID::NumericEquals:
