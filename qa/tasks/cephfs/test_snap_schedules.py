@@ -63,6 +63,9 @@ class TestSnapSchedules(CephFSTestCase):
     def _allow_minute_granularity_snapshots(self):
         self.config_set('mgr', 'mgr/snap_schedule/allow_m_granularity', True)
 
+    def _dump_on_update(self):
+        self.config_set('mgr', 'mgr/snap_schedule/dump_on_update', True)
+
     def setUp(self):
         super(TestSnapSchedules, self).setUp()
         self.volname = None
@@ -74,6 +77,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.snapshots = set()
         self._enable_snap_schedule()
         self._allow_minute_granularity_snapshots()
+        self._dump_on_update()
 
     def tearDown(self):
         if self.vol_created:
@@ -106,15 +110,19 @@ class TestSnapSchedules(CephFSTestCase):
         self.remove_cbks.remove(cbk)
 
     def assert_if_not_verified(self):
-        self.assertTrue(len(self.create_cbks) == 0 and len(self.remove_cbks) == 0)
+        self.assertListEqual(self.create_cbks, [])
+        self.assertListEqual(self.remove_cbks, [])
 
     def verify(self, dir_path, max_trials):
         trials = 0
         snap_path = "{0}/.snap".format(dir_path)
         while (len(self.create_cbks) or len(self.remove_cbks)) and trials < max_trials:
             snapshots = set(self.mount_a.ls(path=snap_path))
+            log.info(f"snapshots: {snapshots}")
             added = snapshots - self.snapshots
+            log.info(f"added: {added}")
             removed = self.snapshots - snapshots
+            log.info(f"removed: {removed}")
             if added:
                 for cbk in list(self.create_cbks):
                     res = cbk(list(added))
