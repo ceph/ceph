@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <string>
 #include <iostream>
@@ -177,6 +177,21 @@ struct seastore_test_t :
       EXPECT_EQ(contents.length(), st.st_size);
     }
 
+    void set_attr_oi(
+      SeaStore &seastore,
+      bufferlist& val) {
+      CTransaction t;
+      t.setattr(cid, oid, OI_ATTR, val);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
+    SeaStore::attrs_t get_attr_oi(
+      SeaStore &seastore) {
+      return seastore.get_attrs(
+        coll, oid).handle_error(SeaStore::get_attrs_ertr::discard_all{}).get();
+    }
 
     void check_omap_key(
       SeaStore &seastore,
@@ -328,6 +343,23 @@ TEST_F(seastore_test_t, omap_test_simple)
     test_obj.check_omap_key(
       *seastore,
       "asdf");
+  });
+}
+
+TEST_F(seastore_test_t, attr)
+{
+  run_async([this] {
+    auto& test_obj = get_object(make_oid(0));
+    std::string s("asdfasdfasdf");
+    bufferlist bl;
+    encode(s, bl);
+    test_obj.set_attr_oi(*seastore, bl);
+    auto attrs = test_obj.get_attr_oi(*seastore);
+    std::string s2;
+    bufferlist bl2;
+    bl2.push_back(attrs[OI_ATTR]);
+    decode(s2, bl);
+    EXPECT_EQ(s, s2);
   });
 }
 
