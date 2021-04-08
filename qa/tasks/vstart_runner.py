@@ -316,6 +316,8 @@ class LocalRemote(object):
         from tempfile import mktemp
         if not path:
             path = mktemp(suffix=suffix, dir=parentdir)
+        if not parentdir:
+            path = os.path.join('/tmp', path)
 
         if data:
             # sudo is set to False since root user can't write files in /tmp
