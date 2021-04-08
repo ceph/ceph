@@ -195,7 +195,6 @@ class CephFSTestCase(CephTestCase):
             self.recovery_fs.set_data_pool_name(self.fs.get_data_pool_name())
             self.recovery_fs.create()
             self.recovery_fs.getinfo(refresh=True)
-            self.recovery_fs.mds_restart()
             self.recovery_fs.wait_for_daemons()
 
         # Load an config settings of interest
