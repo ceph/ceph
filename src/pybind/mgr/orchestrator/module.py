@@ -1083,6 +1083,13 @@ Usage:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
+        if realm and not zone:
+            raise OrchestratorValidationError(
+                'Cannot add RGW: Realm specified but no zone specified')
+        if zone and not realm:
+            raise OrchestratorValidationError(
+                'Cannot add RGW: Zone specified but no realm specified')
+
         spec = RGWSpec(
             service_id=svc_id,
             rgw_realm=realm,
