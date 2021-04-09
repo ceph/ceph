@@ -84,6 +84,18 @@ namespace fs = std::experimental::filesystem;
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
 
+#define DEFAULT_QUIESCE_HOOK      CMAKE_INSTALL_LIBEXECDIR "/rbd-nbd/rbd-nbd_quiesce"
+
+#define DEFAULT_REATTACH_TIMEOUT  30
+#define DEFAULT_IO_TIMEOUT        -1
+#define DEFAULT_NBDS_MAX          0
+#define DEFAULT_MAX_PART          255
+
+#define DEFAULT_EXCLUSIVE         false
+#define DEFAULT_QUIESCE           false
+#define DEFAULT_READONLY          false
+#define DEFAULT_TRY_NETLINK       false
+
 enum Command {
   None,
   Map,
@@ -94,23 +106,23 @@ enum Command {
 };
 
 struct Config {
-  int nbds_max = 0;
-  int max_part = 255;
-  int io_timeout = -1;
-  int reattach_timeout = 30;
+  int nbds_max = DEFAULT_NBDS_MAX;
+  int max_part = DEFAULT_MAX_PART;
+  int io_timeout = DEFAULT_IO_TIMEOUT;
+  int reattach_timeout = DEFAULT_REATTACH_TIMEOUT;
 
-  bool exclusive = false;
-  bool quiesce = false;
-  bool readonly = false;
+  bool exclusive = DEFAULT_EXCLUSIVE;
+  bool quiesce = DEFAULT_QUIESCE;
+  bool readonly = DEFAULT_READONLY;
+  bool try_netlink = DEFAULT_TRY_NETLINK;
   bool set_max_part = false;
-  bool try_netlink = false;
 
   std::string poolname;
   std::string nsname;
   std::string imgname;
   std::string snapname;
   std::string devpath;
-  std::string quiesce_hook = CMAKE_INSTALL_LIBEXECDIR "/rbd-nbd/rbd-nbd_quiesce";
+  std::string quiesce_hook = DEFAULT_QUIESCE_HOOK;
 
   std::string format;
   bool pretty_format = false;
