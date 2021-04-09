@@ -759,6 +759,16 @@ class RGWSpec(ServiceSpec):
         else:
             return 80
 
+    def validate(self) -> None:
+        super(RGWSpec, self).validate()
+
+        if self.rgw_realm and not self.rgw_zone:
+            raise ServiceSpecValidationError(
+                    'Cannot add RGW: Realm specified but no zone specified')
+        if self.rgw_zone and not self.rgw_realm:
+            raise ServiceSpecValidationError(
+                    'Cannot add RGW: Zone specified but no realm specified')
+
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
