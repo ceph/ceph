@@ -63,7 +63,7 @@ protected:
   using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
   using AbstractWriteLog<ImageCtxT>::m_bytes_allocated;
 
-  void initialize_pool(Context *on_finish,
+  bool initialize_pool(Context *on_finish,
                        pwl::DeferredContexts &later) override;
   void process_work() override;
   void append_scheduled_ops(void) override;

@@ -529,7 +529,10 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
     return;
   }
 
-  initialize_pool(on_finish, later);
+  bool succeeded = initialize_pool(on_finish, later);
+  if (!succeeded) {
+    return ;
+  }
 
   ldout(cct,1) << "pool " << m_log_pool_name << " has " << m_total_log_entries
                << " log entries, " << m_free_log_entries << " of which are free."

@@ -104,7 +104,7 @@ protected:
       C_BlockIORequestT *req) override;
   Context *construct_flush_entry_ctx(
         const std::shared_ptr<pwl::GenericLogEntry> log_entry) override;
-  void initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;
+  bool initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;
   void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,
       pwl::WriteLogCacheEntry *pmem_entry) override;
