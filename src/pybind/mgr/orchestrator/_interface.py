@@ -1023,7 +1023,9 @@ class ServiceDescription(object):
                  deleted: Optional[datetime.datetime] = None,
                  size: int = 0,
                  running: int = 0,
-                 events: Optional[List['OrchestratorEvent']] = None) -> None:
+                 events: Optional[List['OrchestratorEvent']] = None,
+                 virtual_ip: Optional[str] = None,
+                 ports: List[int] = []) -> None:
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
         # (image name)
@@ -1053,11 +1055,19 @@ class ServiceDescription(object):
 
         self.events: List[OrchestratorEvent] = events or []
 
+        self.virtual_ip = virtual_ip
+        self.ports = ports
+
     def service_type(self) -> str:
         return self.spec.service_type
 
     def __repr__(self) -> str:
         return f"<ServiceDescription of {self.spec.one_line_str()}>"
+
+    def get_port_summary(self) -> str:
+        if not self.ports:
+            return ''
+        return f"{self.virtual_ip or '?'}:{','.join(map(str, self.ports or []))}"
 
     def to_json(self) -> OrderedDict:
         out = self.spec.to_json()
@@ -1070,6 +1080,8 @@ class ServiceDescription(object):
             'running': self.running,
             'last_refresh': self.last_refresh,
             'created': self.created,
+            'virtual_ip': self.virtual_ip,
+            'ports': self.ports if self.ports else None,
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):

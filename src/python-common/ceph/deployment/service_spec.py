@@ -577,6 +577,9 @@ class ServiceSpec(object):
         # point.
         return []
 
+    def get_virtual_ip(self) -> Optional[str]:
+        return None
+
     def to_json(self):
         # type: () -> OrderedDict[str, Any]
         ret: OrderedDict[str, Any] = OrderedDict()
@@ -896,6 +899,9 @@ class IngressSpec(ServiceSpec):
     def get_port_start(self) -> List[int]:
         return [cast(int, self.frontend_port),
                 cast(int, self.monitor_port)]
+
+    def get_virtual_ip(self) -> Optional[str]:
+        return self.virtual_ip
 
     def validate(self) -> None:
         super(IngressSpec, self).validate()
