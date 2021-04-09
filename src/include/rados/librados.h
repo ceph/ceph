@@ -467,10 +467,10 @@ CEPH_RADOS_API int rados_create_with_context(rados_t *cluster,
  * buffer and length pointers can be NULL, in which case they are
  * not filled in.
  *
- * @param      cluster    cluster handle
- * @param[in]  mon_id     ID of the monitor to ping
- * @param[out] outstr     double pointer with the resulting reply
- * @param[out] outstrlen  pointer with the size of the reply in outstr
+ * @param cluster         cluster handle
+ * @param mon_id [in]     ID of the monitor to ping
+ * @param outstr [out]    double pointer with the resulting reply
+ * @param outstrlen [out] pointer with the size of the reply in outstr
  */
 CEPH_RADOS_API int rados_ping_monitor(rados_t cluster, const char *mon_id,
                                       char **outstr, size_t *outstrlen);
@@ -744,7 +744,7 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  * Gets the minimum compatible OSD version
  *
  * @param cluster cluster handle
- * @param[out] require_osd_release minimum compatible OSD version
+ * @param require_osd_release [out] minimum compatible OSD version
  *  based upon the current features
  * @returns 0 on sucess, negative error code on failure
  */
@@ -755,9 +755,9 @@ CEPH_RADOS_API int rados_get_min_compatible_osd(rados_t cluster,
  * Gets the minimum compatible client version
  *
  * @param cluster cluster handle
- * @param[out] min_compat_client minimum compatible client version
+ * @param min_compat_client [out] minimum compatible client version
  *  based upon the current features
- * @param[out] require_min_compat_client required minimum client version
+ * @param require_min_compat_client [out] required minimum client version
  *  based upon explicit setting
  * @returns 0 on success, negative error code on failure
  */
@@ -924,7 +924,7 @@ CEPH_RADOS_API int rados_pool_create_with_all(rados_t cluster,
  *
  * @param cluster the cluster the pool is in
  * @param pool ID of the pool to query
- * @param[out] base_tier base tier, or \c pool if tiering is not configured
+ * @param base_tier [out] base tier, or \c pool if tiering is not configured
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_pool_get_base_tier(rados_t cluster, int64_t pool,
