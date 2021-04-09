@@ -562,14 +562,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             now = datetime_now()
             table = PrettyTable(
                 ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
-                 'PLACEMENT', 'IMAGE ID'
+                 'PLACEMENT',
                  ],
                 border=False)
             table.align['NAME'] = 'l'
             table.align['RUNNING'] = 'r'
             table.align['REFRESHED'] = 'l'
             table.align['AGE'] = 'l'
-            table.align['IMAGE ID'] = 'l'
             table.align['PLACEMENT'] = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 2
@@ -591,7 +590,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     refreshed,
                     nice_delta(now, s.created),
                     pl,
-                    ukn(s.container_image_id)[0:12],
                 ))
 
             return HandleCommandResult(stdout=table.get_string())
