@@ -250,14 +250,11 @@
 /* we have a recent nasm and are x86_64 */
 #cmakedefine HAVE_NASM_X64
 
-/* nasm can also build the isa-l:avx2 */
-#cmakedefine HAVE_NASM_X64_AVX2
-
 /* nasm can also build the isa-l:avx512 */
 #cmakedefine HAVE_NASM_X64_AVX512
 
-/* Define if isa-l is compiled for arm64 */
-#cmakedefine HAVE_ARMV8_SIMD
+/* Define if the erasure code isa-l plugin is compiled */
+#cmakedefine WITH_EC_ISA_PLUGIN
 
 /* Define to 1 if strerror_r returns char *. */
 #cmakedefine STRERROR_R_CHAR_P 1
