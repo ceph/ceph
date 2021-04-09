@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab ft=cpp expandtab
 
 #include <errno.h>
 
@@ -35,8 +35,8 @@ int RGWRestRole::verify_permission(optional_yield y)
     return op_ret;
   }
 
+  _role = std::move(role);
   if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    _role = std::move(role);
     return ret;
   }
 
@@ -50,8 +50,6 @@ int RGWRestRole::verify_permission(optional_yield y)
                                              op)) {
     return -EACCES;
   }
-
-  _role = std::move(role);
 
   return 0;
 }
