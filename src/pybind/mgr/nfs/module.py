@@ -7,7 +7,7 @@ from mgr_module import MgrModule
 from volumes.module import mgr_cmd_wrap
 import orchestrator
 
-from .export.nfs import NFSCluster, FSExport
+from .export.nfs import NFSCluster, ExportMgr
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         with self.lock:
-            self.fs_export = FSExport(self)
+            self.export_mgr = ExportMgr(self)
             self.nfs = NFSCluster(self)
             self.inited = True
 
@@ -120,25 +120,28 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_nfs_export_create_cephfs(self, inbuf, cmd):
         #TODO Extend export creation for rgw.
-        return self.fs_export.create_export(fs_name=cmd['fsname'], cluster_id=cmd['clusterid'],
-                pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False), path=cmd.get('path', '/'))
+        return self.export_mgr.create_export(fsal_type='cephfs', fs_name=cmd['fsname'],
+                                             cluster_id=cmd['clusterid'],
+                                             pseudo_path=cmd['binding'],
+                                             read_only=cmd.get('readonly', False),
+                                             path=cmd.get('path', '/'))
 
     @mgr_cmd_wrap
     def _cmd_nfs_export_delete(self, inbuf, cmd):
-        return self.fs_export.delete_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
+        return self.export_mgr.delete_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
 
     @mgr_cmd_wrap
     def _cmd_nfs_export_ls(self, inbuf, cmd):
-        return self.fs_export.list_exports(cluster_id=cmd['clusterid'], detailed=cmd.get('detailed', False))
+        return self.export_mgr.list_exports(cluster_id=cmd['clusterid'], detailed=cmd.get('detailed', False))
 
     @mgr_cmd_wrap
     def _cmd_nfs_export_get(self, inbuf, cmd):
-        return self.fs_export.get_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
+        return self.export_mgr.get_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
 
     @mgr_cmd_wrap
     def _cmd_nfs_export_update(self, inbuf, cmd):
         # The export <json_file> is passed to -i and it's processing is handled by the Ceph CLI.
-        return self.fs_export.update_export(export_config=inbuf)
+        return self.export_mgr.update_export(export_config=inbuf)
 
     @mgr_cmd_wrap
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
