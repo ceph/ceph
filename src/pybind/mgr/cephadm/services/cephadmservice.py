@@ -1,7 +1,7 @@
 import errno
 import json
-import re
 import logging
+import re
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType, cast
@@ -394,7 +394,7 @@ class CephService(CephadmService):
         """
         # despite this mapping entity names to daemons, self.TYPE within
         # the CephService class refers to service types, not daemon types
-        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ha-rgw']:
+        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
             return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE == 'crash':
             if host == "":
@@ -832,15 +832,15 @@ class RgwService(CephService):
             force: bool = False,
             known: Optional[List[str]] = None  # output argument
     ) -> HandleCommandResult:
-        # if load balancer (ha-rgw) is present block if only 1 daemon up otherwise ok
+        # if load balancer (ingress) is present block if only 1 daemon up otherwise ok
         # if no load balancer, warn if > 1 daemon, block if only 1 daemon
-        def ha_rgw_present() -> bool:
-            running_ha_rgw_daemons = [
-                daemon for daemon in self.mgr.cache.get_daemons_by_type('ha-rgw') if daemon.status == 1]
+        def ingress_present() -> bool:
+            running_ingress_daemons = [
+                daemon for daemon in self.mgr.cache.get_daemons_by_type('ingress') if daemon.status == 1]
             running_haproxy_daemons = [
-                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'haproxy']
+                daemon for daemon in running_ingress_daemons if daemon.daemon_type == 'haproxy']
             running_keepalived_daemons = [
-                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'keepalived']
+                daemon for daemon in running_ingress_daemons if daemon.daemon_type == 'keepalived']
             # check that there is at least one haproxy and keepalived daemon running
             if running_haproxy_daemons and running_keepalived_daemons:
                 return True
@@ -853,7 +853,7 @@ class RgwService(CephService):
 
         # if reached here, there is > 1 rgw daemon.
         # Say okay if load balancer present or force flag set
-        if ha_rgw_present() or force:
+        if ingress_present() or force:
             return HandleCommandResult(0, warn_message, '')
 
         # if reached here, > 1 RGW daemon, no load balancer and no force flag.

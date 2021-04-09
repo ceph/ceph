@@ -6,7 +6,7 @@ from typing import NamedTuple, List, Dict
 import pytest
 
 from ceph.deployment.hostspec import HostSpec
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError, IngressSpec
 
 from cephadm.module import HostAssignment
 from cephadm.schedule import DaemonPlacement
@@ -810,6 +810,27 @@ class NodeAssignmentTest4(NamedTuple):
              'rgw:host1(10.0.0.1:82)', 'rgw:host2(10.0.0.2:82)'],
             []
         ),
+        NodeAssignmentTest4(
+            IngressSpec(
+                service_type='ingress',
+                service_id='rgw.foo',
+                frontend_port=443,
+                monitor_port=8888,
+                virtual_ip='10.0.0.20/8',
+                backend_service='rgw.foo',
+                placement=PlacementSpec(label='foo'),
+                networks=['10.0.0.0/8'],
+            ),
+            {
+                'host1': {'10.0.0.0/8': {'eth0': ['10.0.0.1']}},
+                'host2': {'10.0.0.0/8': {'eth1': ['10.0.0.2']}},
+                'host3': {'192.168.0.0/16': {'eth2': ['192.168.0.1']}},
+            },
+            [],
+            ['haproxy:host1(10.0.0.1:443,8888)', 'haproxy:host2(10.0.0.2:443,8888)'],
+            ['haproxy:host1(10.0.0.1:443,8888)', 'haproxy:host2(10.0.0.2:443,8888)'],
+            []
+        ),
     ])
 def test_node_assignment4(spec, networks, daemons,
                           expected, expected_add, expected_remove):
@@ -819,6 +840,7 @@ def test_node_assignment4(spec, networks, daemons,
         daemons=daemons,
         allow_colo=True,
         networks=networks,
+        primary_daemon_type='haproxy' if spec.service_type == 'ingress' else spec.service_type,
     ).place()
 
     got = [str(p) for p in all_slots]
