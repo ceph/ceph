@@ -17,14 +17,14 @@ POOL_NAME = 'nfs-ganesha'
 
 
 def available_clusters(mgr):
-    '''
+    """
     This method returns list of available cluster ids.
     Service name is service_type.service_id
     Example:
     completion.result value:
     <ServiceDescription of <NFSServiceSpec for service_name=nfs.vstart>>
     return value: ['vstart']
-    '''
+    """
     # TODO check cephadm cluster list with rados pool conf objects
     completion = mgr.describe_service(service_type='nfs')
     orchestrator.raise_if_exception(completion)
@@ -33,11 +33,11 @@ def available_clusters(mgr):
 
 
 def restart_nfs_service(mgr, cluster_id):
-    '''
+    """
     This methods restarts the nfs daemons
-    '''
+    """
     completion = mgr.service_action(action='restart',
-            service_name='nfs.'+cluster_id)
+                                    service_name='nfs.' + cluster_id)
     orchestrator.raise_if_exception(completion)
 
 
@@ -68,6 +68,7 @@ class FSExportError(Exception):
 
     def __str__(self):
         return self.err_msg
+
 
 class GaneshaConfParser(object):
     def __init__(self, raw_config):
@@ -223,7 +224,7 @@ class GaneshaConfParser(object):
         return conf_str
 
 
-class CephFSFSal():
+class CephFSFSal:
     def __init__(self, name, user_id=None, fs_name=None, sec_label_xattr=None,
                  cephx_key=None):
         self.name = name
@@ -377,7 +378,7 @@ class NFSRados:
 class Export(object):
     # pylint: disable=R0902
     def __init__(self, export_id, path, cluster_id, pseudo, access_type, squash, security_label,
-            protocols, transports, fsal, clients=None):
+                 protocols, transports, fsal, clients=None):
         self.export_id = export_id
         self.path = path
         self.fsal = fsal
@@ -548,7 +549,8 @@ class FSExport(object):
     def _save_export(self, export):
         self.exports[self.rados_namespace].append(export)
         NFSRados(self.mgr, self.rados_namespace).write_obj(export.to_export_block(),
-                 f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
+                                                           f'export-{export.export_id}',
+                                                           f'conf-nfs.{export.cluster_id}')
 
     def _delete_export(self, cluster_id, pseudo_path, export_obj=None):
         try:
@@ -620,7 +622,7 @@ class FSExport(object):
                         "cluster": cluster_id,
                         "mode": access_type,
                         }
-                return (0, json.dumps(result, indent=4), '')
+                return 0, json.dumps(result, indent=4), ''
             return 0, "", "Export already exists"
         except Exception as e:
             log.exception(f"Failed to create {pseudo_path} export for {cluster_id}")
@@ -673,13 +675,13 @@ class FSExport(object):
 
     def _validate_pseudo_path(self, path):
         if not isabs(path) or path == "/":
-            raise FSExportError(f"pseudo path {path} is invalid. "\
-                    "It should be an absolute path and it cannot be just '/'.")
+            raise FSExportError(f"pseudo path {path} is invalid. "
+                                f"It should be an absolute path and it cannot be just '/'.")
 
     def _validate_squash(self, squash):
         valid_squash_ls = ["root", "root_squash", "rootsquash", "rootid", "root_id_squash",
-                "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous", "allanonymous",
-                "no_root_squash", "none", "noidsquash"]
+                           "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous", "allanonymous",
+                           "no_root_squash", "none", "noidsquash"]
         if squash not in valid_squash_ls:
             raise FSExportError(f"squash {squash} not in valid list {valid_squash_ls}")
 
@@ -729,8 +731,9 @@ class FSExport(object):
         try:
             with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
                 ioctx.set_namespace(self.rados_namespace)
-                export =  Export.from_export_block(GaneshaConfParser(ioctx.read(f"export-{ex_id}"
-                    ).decode("utf-8")).parse()[0], self.rados_namespace)
+                export = Export.from_export_block(GaneshaConfParser(ioctx.read(f"export-{ex_id}"
+                                                                               ).decode("utf-8")).parse()[0],
+                                                  self.rados_namespace)
                 return export
         except ObjectNotFound:
             log.exception(f"Export ID: {ex_id} not found")
@@ -738,7 +741,7 @@ class FSExport(object):
     def _validate_export(self, new_export_dict):
         if new_export_dict['cluster_id'] not in available_clusters(self.mgr):
             raise FSExportError(f"Cluster {new_export_dict['cluster_id']} does not exists",
-                    -errno.ENOENT)
+                                -errno.ENOENT)
         export = self._fetch_export(new_export_dict['pseudo'])
         out_msg = ''
         if export:
@@ -753,7 +756,7 @@ class FSExport(object):
             else:
                 new_export_dict['pseudo'] = self.format_path(new_export_dict['pseudo'])
                 self._validate_pseudo_path(new_export_dict['pseudo'])
-                log.debug(f"Pseudo path has changed from {export.pseudo} to "\
+                log.debug(f"Pseudo path has changed from {export.pseudo} to "
                           f"{new_export_dict['pseudo']}")
         # Check if squash changed
         if export.squash != new_export_dict['squash']:
@@ -816,7 +819,7 @@ class FSExport(object):
             old_export, update_user_caps = self._validate_export(update_export)
             if update_user_caps:
                 self._update_user_id(update_export['path'], update_export['access_type'],
-                        update_export['fsal']['fs_name'], update_export['fsal']['user_id'])
+                                     update_export['fsal']['fs_name'], update_export['fsal']['user_id'])
             update_export = Export.from_dict(update_export['export_id'], update_export)
             update_export.fsal.cephx_key = old_export.fsal.cephx_key
             self._update_export(update_export)
@@ -955,7 +958,6 @@ class NFSCluster:
 
     def show_nfs_cluster_info(self, cluster_id=None):
         try:
-            cluster_ls = []
             info_res = {}
             if cluster_id:
                 cluster_ls = [cluster_id]
@@ -966,7 +968,7 @@ class NFSCluster:
                 res = self._show_nfs_cluster_info(cluster_id)
                 if res:
                     info_res[cluster_id] = res
-            return (0, json.dumps(info_res, indent=4), '')
+            return 0, json.dumps(info_res, indent=4), ''
         except Exception as e:
             log.exception(f"Failed to show info for cluster")
             return getattr(e, 'errno', -1), "", str(e)
