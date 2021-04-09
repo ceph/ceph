@@ -140,7 +140,7 @@ class HostAssignment(object):
                 d for d in self.daemons if d.daemon_type == self.per_host_daemon_type
             ]
             slots += host_slots
-            for dd in existings:
+            for dd in existing:
                 found = False
                 for p in host_slots:
                     if p.matches_daemon(dd):
