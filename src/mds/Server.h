@@ -28,6 +28,7 @@
 #include "messages/MClientSnap.h"
 #include "messages/MClientReclaim.h"
 #include "messages/MClientReclaimReply.h"
+#include "messages/MClientQoS.h"
 #include "messages/MLock.h"
 
 #include "CInode.h"
