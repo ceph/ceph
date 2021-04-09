@@ -258,7 +258,7 @@ void WriteLog<I>::remove_pool_file() {
 }
 
 template <typename I>
-void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &later) {
+bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &later) {
   CephContext *cct = m_image_ctx.cct;
   TOID(struct WriteLogPoolRoot) pool_root;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
@@ -275,7 +275,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       m_cache_state->empty = true;
       /* TODO: filter/replace errnos that are meaningless to the caller */
       on_finish->complete(-errno);
-      return;
+      return false;
     }
     m_cache_state->present = true;
     m_cache_state->clean = true;
@@ -292,7 +292,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     if (num_small_writes <= 2) {
       lderr(cct) << "num_small_writes needs to > 2" << dendl;
       on_finish->complete(-EINVAL);
-      return;
+      return false;
     }
     this->m_bytes_allocated_cap = effective_pool_size;
     /* Log ring empty */
@@ -318,7 +318,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       this->m_free_log_entries = 0;
       lderr(cct) << "failed to initialize pool (" << this->m_log_pool_name << ")" << dendl;
       on_finish->complete(-pmemobj_tx_errno());
-      return;
+      return false;
     } TX_FINALLY {
     } TX_END;
   } else {
@@ -330,7 +330,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       lderr(cct) << "failed to open pool (" << this->m_log_pool_name << "): "
                  << pmemobj_errormsg() << dendl;
       on_finish->complete(-errno);
-      return;
+      return false;
     }
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
     if (D_RO(pool_root)->header.layout_version != RWL_POOL_VERSION) {
@@ -339,13 +339,13 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
                  << D_RO(pool_root)->header.layout_version
                  << " expected " << RWL_POOL_VERSION << dendl;
       on_finish->complete(-EINVAL);
-      return;
+      return false;
     }
     if (D_RO(pool_root)->block_size != MIN_WRITE_ALLOC_SIZE) {
       lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size
                  << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
       on_finish->complete(-EINVAL);
-      return;
+      return false;
     }
     this->m_log_pool_size = D_RO(pool_root)->pool_size;
     this->m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;
@@ -369,6 +369,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     m_cache_state->clean = this->m_dirty_log_entries.empty();
     m_cache_state->empty = m_log_entries.empty();
   }
+  return true;
 }
 
 /*

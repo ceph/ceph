@@ -364,7 +364,7 @@ protected:
   virtual void append_scheduled_ops(void) = 0;
   virtual void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) = 0;
   virtual void remove_pool_file() = 0;
-  virtual void initialize_pool(Context *on_finish,
+  virtual bool initialize_pool(Context *on_finish,
                                pwl::DeferredContexts &later) = 0;
   virtual void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,

@@ -122,8 +122,8 @@ void InitRequest<I>::init_image_cache() {
   ldout(cct, 10) << dendl;
 
   using klass = InitRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_init_image_cache>(this);
+  Context *ctx = create_async_context_callback(m_image_ctx,
+    create_context_callback<klass, &klass::handle_init_image_cache>(this));
   m_image_cache->init(ctx);
 }
 
