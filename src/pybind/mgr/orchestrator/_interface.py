@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec
+    ServiceSpecValidationError, IscsiServiceSpec, IngressSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -450,7 +450,7 @@ class Orchestrator(object):
             'prometheus': self.apply_prometheus,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
-            'ha-rgw': self.apply_ha_rgw,
+            'ingress': self.apply_ingress,
             'host': self.add_host,
             'cephadm-exporter': self.apply_cephadm_exporter,
         }
@@ -596,8 +596,8 @@ class Orchestrator(object):
         """Update RGW cluster"""
         raise NotImplementedError()
 
-    def apply_ha_rgw(self, spec: HA_RGWSpec) -> OrchResult[str]:
-        """Update ha-rgw daemons"""
+    def apply_ingress(self, spec: IngressSpec) -> OrchResult[str]:
+        """Update ingress daemons"""
         raise NotImplementedError()
 
     def apply_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[str]:
@@ -687,8 +687,8 @@ def daemon_type_to_service(dtype: str) -> str:
         'mds': 'mds',
         'rgw': 'rgw',
         'osd': 'osd',
-        'haproxy': 'ha-rgw',
-        'keepalived': 'ha-rgw',
+        'haproxy': 'ingress',
+        'keepalived': 'ingress',
         'iscsi': 'iscsi',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
@@ -712,7 +712,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'mds': ['mds'],
         'rgw': ['rgw'],
         'osd': ['osd'],
-        'ha-rgw': ['haproxy', 'keepalived'],
+        'ingress': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
@@ -809,8 +809,6 @@ class DaemonDescription(object):
 
         # The type of service (osd, mon, mgr, etc.)
         self.daemon_type = daemon_type
-
-        assert daemon_type not in ['HA_RGW', 'ha-rgw']
 
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
