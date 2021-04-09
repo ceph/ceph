@@ -19,7 +19,7 @@ from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
-    DaemonDescriptionStatus, daemon_type_to_service, service_to_daemon_types
+    DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
@@ -565,6 +565,8 @@ class CephadmServe:
                 else None
             ),
             allow_colo=svc.allow_colo(),
+            primary_daemon_type=svc.primary_daemon_type(),
+            per_host_daemon_type=svc.per_host_daemon_type(),
         )
 
         try:
@@ -591,73 +593,67 @@ class CephadmServe:
         self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
 
         for slot in slots_to_add:
-            for daemon_type in service_to_daemon_types(service_type):
-                if daemon_type != 'keepalived':
-                    slot_ports = slot.ports
-                    slot_ip = slot.ip
-                else:
-                    slot_ports = []
-                    slot_ip = None
+            # first remove daemon on conflicting port?
+            if slot.ports:
+                for d in daemons_to_remove:
+                    if d.hostname != slot.hostname:
+                        continue
+                    if not (set(d.ports or []) & set(slot.ports)):
+                        continue
+                    if d.ip and slot.ip and d.ip != slot.ip:
+                        continue
+                    self.log.info(
+                        f'Removing {d.name()} before deploying to {slot} to avoid a port conflict'
+                    )
+                    # NOTE: we don't check ok-to-stop here to avoid starvation if
+                    # there is only 1 gateway.
+                    self._remove_daemon(d.name(), d.hostname)
+                    daemons_to_remove.remove(d)
+                    break
 
-                # first remove daemon on conflicting port?
-                if slot_ports:
-                    for d in daemons_to_remove:
-                        if d.hostname != slot.hostname:
-                            continue
-                        if not (set(d.ports or []) & set(slot_ports)):
-                            continue
-                        if d.ip and slot_ip and d.ip != slot_ip:
-                            continue
-                        self.log.info(
-                            f'Removing {d.name()} before deploying to {slot} to avoid a port conflict'
-                        )
-                        # NOTE: we don't check ok-to-stop here to avoid starvation if
-                        # there is only 1 gateway.
-                        self._remove_daemon(d.name(), d.hostname)
-                        daemons_to_remove.remove(d)
-                        break
+            # deploy new daemon
+            daemon_id = self.mgr.get_unique_name(
+                slot.daemon_type,
+                slot.hostname,
+                daemons,
+                prefix=spec.service_id,
+                forcename=slot.name)
 
-                # deploy new daemon
-                daemon_id = self.mgr.get_unique_name(
-                    daemon_type,
-                    slot.hostname,
-                    daemons,
-                    prefix=spec.service_id,
-                    forcename=slot.name)
+            if not did_config:
+                svc.config(spec, daemon_id)
+                did_config = True
 
-                if not did_config:
-                    svc.config(spec, daemon_id)
-                    did_config = True
+            daemon_spec = svc.make_daemon_spec(
+                slot.hostname, daemon_id, slot.network, spec,
+                daemon_type=slot.daemon_type,
+                ports=slot.ports,
+                ip=slot.ip,
+            )
+            self.log.debug('Placing %s.%s on host %s' % (
+                slot.daemon_type, daemon_id, slot.hostname))
 
-                daemon_spec = svc.make_daemon_spec(
-                    slot.hostname, daemon_id, slot.network, spec, daemon_type=daemon_type,
-                    ports=slot_ports,
-                    ip=slot_ip,
-                )
-                self.log.debug('Placing %s.%s on host %s' % (
-                    daemon_type, daemon_id, slot.hostname))
+            try:
+                daemon_spec = svc.prepare_create(daemon_spec)
+                self._create_daemon(daemon_spec)
+                r = True
+            except (RuntimeError, OrchestratorError) as e:
+                self.mgr.events.for_service(
+                    spec, 'ERROR',
+                    f"Failed while placing {slot.daemon_type}.{daemon_id} "
+                    f"on {slot.hostname}: {e}")
+                # only return "no change" if no one else has already succeeded.
+                # later successes will also change to True
+                if r is None:
+                    r = False
+                continue
 
-                try:
-                    daemon_spec = svc.prepare_create(daemon_spec)
-                    self._create_daemon(daemon_spec)
-                    r = True
-                except (RuntimeError, OrchestratorError) as e:
-                    self.mgr.events.for_service(spec, 'ERROR',
-                                                f"Failed while placing {daemon_type}.{daemon_id} "
-                                                f"on {slot.hostname}: {e}")
-                    # only return "no change" if no one else has already succeeded.
-                    # later successes will also change to True
-                    if r is None:
-                        r = False
-                    continue
-
-                # add to daemon list so next name(s) will also be unique
-                sd = orchestrator.DaemonDescription(
-                    hostname=slot.hostname,
-                    daemon_type=daemon_type,
-                    daemon_id=daemon_id,
-                )
-                daemons.append(sd)
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.DaemonDescription(
+                hostname=slot.hostname,
+                daemon_type=slot.daemon_type,
+                daemon_id=daemon_id,
+            )
+            daemons.append(sd)
 
         # remove any?
         def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
