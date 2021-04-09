@@ -133,17 +133,14 @@ set(unittest_librbd_srcs
   )
 
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
-   set(unittest_librbd_srcs
-     ${unittest_librbd_srcs}
+   list(APPEND unittest_librbd_srcs
      cache/pwl/test_WriteLogMap.cc)
    if(WITH_RBD_RWL)
-     set(unittest_librbd_srcs
-       ${unittest_librbd_srcs}
+     list(APPEND unittest_librbd_srcs
        cache/pwl/test_mock_ReplicatedWriteLog.cc)
    endif()
    if(WITH_RBD_SSD_CACHE)
-     set(unittest_librbd_srcs
-       ${unittest_librbd_srcs}
+     list(APPEND unittest_librbd_srcs
        cache/pwl/test_mock_SSDWriteLog.cc)
    endif()
 endif()

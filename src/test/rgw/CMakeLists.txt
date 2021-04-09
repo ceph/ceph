@@ -1,4 +1,3 @@
-
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # amqp mock library
   set(amqp_mock_src
