@@ -1577,6 +1577,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
                 deleted=self.spec_store.spec_deleted.get(nm, None),
+                virtual_ip=spec.get_virtual_ip(),
+                ports=spec.get_port_start(),
             )
             if service_type == 'nfs':
                 spec = cast(NFSServiceSpec, spec)
