@@ -6527,7 +6527,7 @@ void Monitor::notify_new_monmap(bool can_change_external_state)
   }
 
   if (monmap->stretch_mode_enabled) {
-    maybe_engage_stretch_mode();
+    try_engage_stretch_mode();
   }
 
   if (is_stretch_mode()) {
@@ -6561,10 +6561,10 @@ struct CMonEnableStretchMode : public Context {
   Monitor *m;
   CMonEnableStretchMode(Monitor *mon) : m(mon) {}
   void finish(int r) {
-    m->maybe_engage_stretch_mode();
+    m->try_engage_stretch_mode();
   }
 };
-void Monitor::maybe_engage_stretch_mode()
+void Monitor::try_engage_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (stretch_mode_engaged) return;
