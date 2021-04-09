@@ -4,7 +4,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h" 
 
-class MClientQoS : public SafeMessage {
+class MClientQoS final : public SafeMessage {
 public:
   inodeno_t ino;
   dmclock_info_t dmclock_info;
@@ -14,7 +14,7 @@ protected:
     SafeMessage{CEPH_MSG_CLIENT_QOS},
     ino(0)
   {}
-  ~MClientQoS() override {}
+  ~MClientQoS() final {}
 
 public:
   std::string_view get_type_name() const override { return "client_qos"; }
