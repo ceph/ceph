@@ -878,7 +878,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
   if (osdmap.stretch_mode_enabled) {
     dout(20) << "Stretch mode enabled in this map" << dendl;
-    mon->maybe_engage_stretch_mode();
+    mon->try_engage_stretch_mode();
     if (osdmap.degraded_stretch_mode) {
       dout(20) << "Degraded stretch mode set in this map" << dendl;
       if (!osdmap.recovering_stretch_mode) {

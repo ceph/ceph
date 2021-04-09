@@ -274,7 +274,7 @@ public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
   bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
-  void maybe_engage_stretch_mode();
+  void try_engage_stretch_mode();
   void maybe_go_degraded_stretch_mode();
   void trigger_degraded_stretch_mode(const set<string>& dead_mons,
 				     const set<int>& dead_buckets);
