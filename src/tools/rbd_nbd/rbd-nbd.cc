@@ -79,10 +79,15 @@ namespace fs = std::experimental::filesystem;
 
 #include "mon/MonClient.h"
 
+#include "json_spirit/json_spirit.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
+
+#define SAVECONFIG_DIR "/etc/ceph"
+#define SAVECONFIG_PATH SAVECONFIG_DIR "/saveconfig.json"
 
 #define DEFAULT_QUIESCE_HOOK      CMAKE_INSTALL_LIBEXECDIR "/rbd-nbd/rbd-nbd_quiesce"
 
@@ -102,7 +107,8 @@ enum Command {
   Unmap,
   Attach,
   Detach,
-  List
+  List,
+  Restore
 };
 
 struct Config {
@@ -156,6 +162,7 @@ static void usage()
             << "               [options] attach <image-or-snap-spec> Attach image to nbd device\n"
             << "               unmap <device|image-or-snap-spec>     Unmap nbd device\n"
             << "               [options] list-mapped                 List mapped nbd devices\n"
+            << "               [options] restore                     Restore to attach the detached nbd devices\n"
             << "Map and attach options:\n"
             << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
             << "  --encryption-format           Image encryption format\n"
@@ -183,6 +190,7 @@ static void usage()
 static int nbd = -1;
 static int nbd_index = -1;
 static EventSocket terminate_event_sock;
+static char rbd_nbd_path[PATH_MAX] = "";
 
 #define RBD_NBD_BLKSIZE 512UL
 
@@ -198,6 +206,9 @@ static EventSocket terminate_event_sock;
 #endif
 #define htonll(a) ntohll(a)
 
+static int rbd_nbd(int argc, const char *argv[]);
+static int parse_imgpath(const std::string &imgpath, Config *cfg,
+                         std::ostream *err_msg);
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg);
 static int netlink_disconnect(int index);
@@ -1561,6 +1572,317 @@ done:
   return r;
 }
 
+static void attach_multiple_devices(const vector<Config> &cfgs)
+{
+  for (const Config &c: cfgs) {
+    vector<string> args;
+    args.push_back(rbd_nbd_path);
+    args.push_back("attach");
+
+    std::string image_spec = c.image_spec();
+
+    if (!image_spec.empty())
+      args.push_back(image_spec);
+
+    if (!c.devpath.empty()) {
+      args.push_back("--device");
+      args.push_back(c.devpath);
+    }
+
+    if (c.encryption_format.has_value()) {
+      args.push_back("--encryption_format");
+      switch (c.encryption_format.value()) {
+        case RBD_ENCRYPTION_FORMAT_LUKS1:
+          args.push_back("luks1");
+          break;
+        case RBD_ENCRYPTION_FORMAT_LUKS2:
+          args.push_back("luks2");
+          break;
+      }
+      if (c.encryption_passphrase_file.has_value()) {
+        args.push_back("--encryption-format");
+        args.push_back(c.encryption_passphrase_file.value().c_str());
+      }
+    }
+
+    if (c.reattach_timeout > 0 && c.reattach_timeout != DEFAULT_REATTACH_TIMEOUT) {
+      args.push_back("--reattach-timeout");
+      args.push_back(to_string(c.reattach_timeout));
+    }
+
+    if (c.io_timeout > 0 && c.io_timeout != DEFAULT_IO_TIMEOUT) {
+      args.push_back("--io-timeout");
+      args.push_back(to_string(c.io_timeout));
+    }
+
+    if (c.max_part > 0 && c.max_part != DEFAULT_MAX_PART) {
+      args.push_back("--max_part");
+      args.push_back(to_string(c.max_part));
+    }
+
+    if (c.nbds_max > 0 && c.nbds_max != DEFAULT_NBDS_MAX) {
+      args.push_back("--nbds_max");
+      args.push_back(to_string(c.nbds_max));
+    }
+
+    if (c.quiesce) {
+      if (c.quiesce_hook != DEFAULT_QUIESCE_HOOK) {
+        args.push_back("--quiesce-hook");
+        args.push_back(c.quiesce_hook);
+      }
+      if (c.quiesce != DEFAULT_QUIESCE)
+        args.push_back("--quiesce");
+    }
+
+    if (c.try_netlink && c.try_netlink != DEFAULT_TRY_NETLINK)
+      args.push_back("--try-netlink");
+
+    if (c.exclusive && c.exclusive != DEFAULT_EXCLUSIVE)
+      args.push_back("--exclusive");
+
+    if (c.readonly && c.readonly != DEFAULT_READONLY)
+      args.push_back("--readonly");
+
+    std::vector<char*> argv;
+    for (const auto& arg : args)
+      argv.push_back((char*)arg.data());
+    argv.push_back(nullptr);
+
+    std::cout << "=> Attempting to attach: " << c.devpath
+              << " -> " << image_spec << std::endl;
+
+    pid_t id = fork();
+    if (id == 0) {
+      execv(rbd_nbd_path, argv.data());
+      std::cerr << "=> Failed to attach: " << c.devpath
+              << " with image: " << image_spec << std::endl;
+      exit(EXIT_FAILURE);
+    } else if (id > 0) { //parent
+      int status;
+      waitpid(id, &status, 0);
+      string result = (WEXITSTATUS(status) == 0) ? "SUCCESS" : "FAIL";
+      std::cout << result << std::endl;
+    } else {
+      std::cerr << "Failed to fork the rbd_nbd command for: " << c.devpath
+                << " with image: " << image_spec << " :" << cpp_strerror(errno)
+                << std::endl;
+    }
+  }
+}
+
+static void remove_device_from_config(string dev_path)
+{
+  json_spirit::Value input;
+
+  std::ifstream file(SAVECONFIG_PATH);
+  if (file.fail()) {
+    // No file, hence nothing to remove
+    return;
+  }
+
+  json_spirit::read(file, input);
+  file.close();
+
+  json_spirit::Object saveconfig = input.get_obj();
+  if (saveconfig.empty()) {
+    return;
+  }
+
+  json_spirit::Array old_array = saveconfig[0].value_.get_array();
+  json_spirit::Array new_array;
+
+  bool is_match = false;
+  for(unsigned int i = 0; i < old_array.size(); ++i) {
+    auto object = old_array[i].get_obj();
+    if (!is_match) {
+      for (auto entry : object) {
+        if (entry.name_ == "device" && dev_path == entry.value_.get_str()) {
+          is_match = true;
+          break;
+        }
+      }
+      if (is_match)
+        continue;
+    }
+    new_array.push_back(object);
+  }
+
+  saveconfig[0].value_ = new_array;
+
+  // Save it back to file
+  std::ofstream out(SAVECONFIG_PATH);
+  out << json_spirit::write(saveconfig, json_spirit::pretty_print) << "\n";
+  out.close();
+
+  return;
+}
+
+static void restore_from_config()
+{
+  json_spirit::Value input;
+
+  std::ifstream file(SAVECONFIG_PATH);
+  if (file.fail()) {
+    std::cerr << "rbd-nbd: unable to restore from "
+              << SAVECONFIG_PATH << " :" << cpp_strerror(errno) << std::endl;
+    return;
+  }
+  json_spirit::read(file, input);
+  file.close();
+
+  json_spirit::Object saveconfig = input.get_obj();
+  json_spirit::Array array = saveconfig[0].value_.get_array();
+
+  vector<Config> cfgs;
+  for(unsigned int i = 0; i < array.size(); ++i) {
+    Config cfg;
+    auto object = array[i].get_obj();
+    for (auto entry : object) {
+      if (entry.name_ == "image_spec")
+        parse_imgpath(entry.value_.get_str(), &cfg, NULL);
+      else if (entry.name_ == "device")
+        cfg.devpath = entry.value_.get_str();
+      else if (entry.name_ == "encryption_format") {
+        std::string format = entry.value_.get_str();
+        if (format == "luks1")
+          cfg.encryption_format = std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS1);
+        else if (format == "luks2")
+          cfg.encryption_format = std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS2);
+      }
+      else if (entry.name_ == "encryption_passphrase_file")
+        cfg.encryption_passphrase_file = entry.value_.get_str();
+      else if (entry.name_ == "quiesce_hook")
+        cfg.quiesce_hook = entry.value_.get_str();
+
+      else if (entry.name_ == "quiesce")
+        cfg.quiesce_hook = entry.value_.get_bool();
+      else if (entry.name_ == "try_netlink")
+        cfg.try_netlink = entry.value_.get_bool();
+      else if (entry.name_ == "readonly")
+        cfg.readonly = entry.value_.get_bool();
+      else if (entry.name_ == "exclusive")
+        cfg.exclusive = entry.value_.get_bool();
+
+      else if (entry.name_ == "reattach_timeout")
+        cfg.reattach_timeout = entry.value_.get_int();
+      else if (entry.name_ == "io_timeout")
+        cfg.io_timeout = entry.value_.get_int();
+      else if (entry.name_ == "max_part")
+        cfg.max_part = entry.value_.get_int();
+      else if (entry.name_ == "nbds_max")
+        cfg.nbds_max = entry.value_.get_int();
+    }
+    cfgs.push_back(cfg);
+  }
+
+  attach_multiple_devices(cfgs);
+
+  return;
+}
+
+static void save_mapped_device(Config *cfg)
+{
+  json_spirit::Value input;
+  json_spirit::Object saveconfig;
+  json_spirit::Array old_array, new_array;
+
+  std::ifstream file(SAVECONFIG_PATH);
+  if (!file.fail()) {
+    json_spirit::read(file, input);
+    saveconfig = input.get_obj();
+    file.close();
+  }
+
+  // Prepare the Object that needs to be added
+  json_spirit::Object new_obj;
+  if (!cfg->poolname.empty())
+    new_obj.push_back(json_spirit::Pair("image_spec", cfg->image_spec()));
+  if (!cfg->devpath.empty())
+    new_obj.push_back(json_spirit::Pair("device", cfg->devpath));
+  if (cfg->encryption_format.has_value()) {
+    switch (cfg->encryption_format.value()) {
+      case RBD_ENCRYPTION_FORMAT_LUKS1:
+        new_obj.push_back(json_spirit::Pair("encryption_format", "luks1"));
+        break;
+      case RBD_ENCRYPTION_FORMAT_LUKS2:
+        new_obj.push_back(json_spirit::Pair("encryption_format", "luks2"));
+        break;
+    }
+    if (cfg->encryption_passphrase_file.has_value())
+      new_obj.push_back(json_spirit::Pair("encryption_passphrase_file",
+                                      cfg->encryption_passphrase_file.value().c_str()));
+  }
+  if (!cfg->quiesce_hook.empty() && cfg->quiesce_hook != DEFAULT_QUIESCE_HOOK)
+    new_obj.push_back(json_spirit::Pair("quiesce_hook", cfg->quiesce_hook));
+
+  if (cfg->quiesce != DEFAULT_QUIESCE)
+    new_obj.push_back(json_spirit::Pair("quiesce", cfg->quiesce));
+  if (cfg->try_netlink != DEFAULT_TRY_NETLINK)
+    new_obj.push_back(json_spirit::Pair("try_netlink", cfg->try_netlink));
+  if (cfg->readonly != DEFAULT_READONLY)
+    new_obj.push_back(json_spirit::Pair("readonly", cfg->readonly));
+  if (cfg->exclusive != DEFAULT_EXCLUSIVE)
+    new_obj.push_back(json_spirit::Pair("exclusive", cfg->exclusive));
+
+  if (cfg->reattach_timeout > 0 && cfg->reattach_timeout != DEFAULT_REATTACH_TIMEOUT)
+    new_obj.push_back(json_spirit::Pair("reattach_timeout", cfg->reattach_timeout));
+  if (cfg->io_timeout > 0 && cfg->io_timeout != DEFAULT_IO_TIMEOUT)
+    new_obj.push_back(json_spirit::Pair("io_timeout", cfg->io_timeout));
+  if (cfg->max_part > 0 && cfg->max_part != DEFAULT_MAX_PART)
+    new_obj.push_back(json_spirit::Pair("max_part", cfg->max_part));
+  if (cfg->nbds_max > 0 && cfg->nbds_max != DEFAULT_NBDS_MAX)
+    new_obj.push_back(json_spirit::Pair("nbds_max", cfg->nbds_max));
+
+
+  if (saveconfig.empty()) {
+    new_array.push_back(new_obj);
+    saveconfig.push_back(json_spirit::Pair("devices", new_array));
+  } else {
+    // In case if there is an exitsing object with matching device & image_spec update-it
+    bool is_devpath_match, is_image_match, need_update;
+    old_array = saveconfig[0].value_.get_array();
+    need_update = true;
+    for (unsigned int i = 0; i < old_array.size(); ++i) {
+      is_devpath_match = false;
+      is_image_match = false;
+      auto obj = old_array[i].get_obj();
+      // Try to find the match, if its not already found
+      if (need_update) {
+        for (auto entry : obj) {
+          if (entry.name_ == "device" && cfg->devpath == entry.value_.get_str())
+            is_devpath_match = true;
+          if (entry.name_ == "image_spec" && cfg->image_spec() == entry.value_.get_str())
+            is_image_match = true;
+          if (is_devpath_match && is_image_match) {
+            need_update = false;
+            break;
+          }
+        }
+        if (!need_update)
+          // replace: found the match
+          new_array.push_back(new_obj);
+        else
+          // append: not matching
+          new_array.push_back(obj);
+      } else {
+        // append: as we already replaced
+        new_array.push_back(obj);
+      }
+    }
+    // append: came all way through the config and not found the match anywhere
+    if (need_update)
+        new_array.push_back(new_obj);
+    saveconfig[0].value_ = new_array;
+  }
+
+  // Save the whole config back to file
+  std::ofstream out(SAVECONFIG_PATH);
+  out << json_spirit::write(saveconfig, json_spirit::pretty_print) << "\n";
+  out.close();
+
+  return;
+}
+
 static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 {
   int r;
@@ -1776,7 +2098,13 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     if (r < 0)
       goto close_nbd;
 
-    cout << cfg->devpath << std::endl;
+    if (cfg->command == Map) {
+      cout << cfg->devpath << std::endl;
+      // No point in storing the details if netlink is not used
+      if (use_netlink) {
+        save_mapped_device(cfg);
+      }
+    }
 
     run_server(forker, server, use_netlink);
 
@@ -1861,6 +2189,8 @@ static int do_unmap(Config *cfg)
   if (cfg->pid > 0) {
     r = wait_for_terminate(cfg->pid, cfg->reattach_timeout);
   }
+
+  remove_device_from_config(cfg->devpath);
 
   return 0;
 }
@@ -2102,6 +2432,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cmd = Detach;
     } else if (strcmp(*args.begin(), "list-mapped") == 0) {
       cmd = List;
+    } else if (strcmp(*args.begin(), "restore") == 0) {
+      cmd = Restore;
     } else {
       *err_msg << "rbd-nbd: unknown command: " <<  *args.begin();
       return -EINVAL;
@@ -2180,6 +2512,14 @@ static int rbd_nbd(int argc, const char *argv[])
     return r;
   }
 
+  if (mkdir(SAVECONFIG_DIR, 0755) == -1) {
+    if (errno != EEXIST) {
+      cerr << "rbd-nbd: error creating the config directory: "
+           << SAVECONFIG_DIR << strerror(errno) << std::endl;
+      return -EEXIST;
+    }
+  }
+
   if (!err_msg.str().empty()) {
     cerr << err_msg.str() << std::endl;
   }
@@ -2237,6 +2577,10 @@ static int rbd_nbd(int argc, const char *argv[])
       r = do_list_mapped_devices(cfg.format, cfg.pretty_format);
       if (r < 0)
         return -EINVAL;
+      break;
+    case Restore:
+      strncpy(rbd_nbd_path, argv[0], PATH_MAX-1);
+      restore_from_config();
       break;
     default:
       usage();
