@@ -369,9 +369,8 @@ class TestMDSDmclockQoS(CephFSTestCase):
 
         self.mount_a.umount_wait()
 
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        log.info(str(self.mds_cluster.status()))
+        self.fs.mds_asok(['cache', 'drop'], mds_id='a')
+        self.fs.mds_asok(['cache', 'drop'], mds_id='b')
 
         self.mount_a.mount(cephfs_mntpt=str(self.get_subvolume_root(self.mount_a)))
         self.verify_qos_info(self.mount_a, reservation_a, weight_a, limit_a)
