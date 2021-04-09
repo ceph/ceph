@@ -183,7 +183,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "registry.suse.com/ses/7/ceph/grafana:7.0.3",
+            "image": "registry.suse.com/ses/7/ceph/grafana:7.3.1",
             "cpus": "2",
             "memory": "4GB",
             "args": [],

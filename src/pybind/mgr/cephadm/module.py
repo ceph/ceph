@@ -173,7 +173,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_grafana',
-            'default': 'registry.suse.com/ses/7/ceph/grafana:7.0.3',
+            'default': 'registry.suse.com/ses/7/ceph/grafana:7.3.1',
             'desc': 'Prometheus container image',
         },
         {
