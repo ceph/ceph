@@ -12,6 +12,7 @@ T = TypeVar('T')
 
 
 class DaemonPlacement(NamedTuple):
+    daemon_type: str
     hostname: str
     network: str = ''   # for mons only
     name: str = ''
@@ -19,7 +20,7 @@ class DaemonPlacement(NamedTuple):
     ports: List[int] = []
 
     def __str__(self) -> str:
-        res = self.hostname
+        res = self.daemon_type + ':' + self.hostname
         other = []
         if self.network:
             other.append(f'network={self.network}')
@@ -33,6 +34,7 @@ class DaemonPlacement(NamedTuple):
 
     def renumber_ports(self, n: int) -> 'DaemonPlacement':
         return DaemonPlacement(
+            self.daemon_type,
             self.hostname,
             self.network,
             self.name,
@@ -41,6 +43,8 @@ class DaemonPlacement(NamedTuple):
         )
 
     def matches_daemon(self, dd: DaemonDescription) -> bool:
+        if self.daemon_type != dd.daemon_type:
+            return False
         if self.hostname != dd.hostname:
             return False
         # fixme: how to match against network?
@@ -63,9 +67,12 @@ class HostAssignment(object):
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  allow_colo: bool = False,
+                 primary_daemon_type: Optional[str] = None,
+                 per_host_sidecar: Optional[str] = None,
                  ):
         assert spec
         self.spec = spec  # type: ServiceSpec
+        self.primary_daemon_type = primary_daemon_type or spec.service_type
         self.hosts: List[orchestrator.HostSpec] = hosts
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
@@ -214,18 +221,21 @@ class HostAssignment(object):
     def get_candidates(self) -> List[DaemonPlacement]:
         if self.spec.placement.hosts:
             ls = [
-                DaemonPlacement(hostname=h.hostname, network=h.network, name=h.name,
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=h.hostname, network=h.network, name=h.name,
                                 ports=self.ports_start)
                 for h in self.spec.placement.hosts
             ]
         elif self.spec.placement.label:
             ls = [
-                DaemonPlacement(hostname=x.hostname, ports=self.ports_start)
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=x.hostname, ports=self.ports_start)
                 for x in self.hosts_by_label(self.spec.placement.label)
             ]
         elif self.spec.placement.host_pattern:
             ls = [
-                DaemonPlacement(hostname=x, ports=self.ports_start)
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=x, ports=self.ports_start)
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
             ]
         elif (
@@ -233,7 +243,8 @@ class HostAssignment(object):
                 or self.spec.placement.count_per_host is not None
         ):
             ls = [
-                DaemonPlacement(hostname=x.hostname, ports=self.ports_start)
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=x.hostname, ports=self.ports_start)
                 for x in self.hosts
             ]
         else:
@@ -247,7 +258,8 @@ class HostAssignment(object):
             for p in orig:
                 ip = self.find_ip_on_host(p.hostname, self.spec.networks)
                 if ip:
-                    ls.append(DaemonPlacement(hostname=p.hostname, network=p.network,
+                    ls.append(DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                              hostname=p.hostname, network=p.network,
                                               name=p.name, ports=p.ports, ip=ip))
                 else:
                     logger.debug(
