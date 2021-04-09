@@ -53,8 +53,6 @@ class TestMDSDmclockQoS(CephFSTestCase):
         self.mount_b.run_shell(['sudo', 'chown', "{0}:{1}".format(getuid(), getgid()), self.mount_b.hostfs_mntpt])
 
     def tearDown(self):
-        super(TestMDSDmclockQoS, self).tearDown()
-
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
@@ -62,6 +60,8 @@ class TestMDSDmclockQoS(CephFSTestCase):
             self._fs_cmd("subvolume", "rm", self.fs.name, subv_)
 
         self.fs.set_max_mds(1)
+
+        super(TestMDSDmclockQoS, self).tearDown()
 
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("-c", "ceph.conf", "-k", "keyring", "fs", *args)
