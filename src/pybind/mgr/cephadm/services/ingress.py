@@ -2,7 +2,7 @@ import ipaddress
 import logging
 import random
 import string
-from typing import List, Dict, Any, Tuple, cast
+from typing import List, Dict, Any, Tuple, cast, Optional
 
 from ceph.deployment.service_spec import IngressSpec
 from cephadm.utils import resolve_ip
@@ -14,6 +14,12 @@ logger = logging.getLogger(__name__)
 
 class IngressService(CephService):
     TYPE = 'ingress'
+
+    def primary_daemon_type(self) -> str:
+        return 'haproxy'
+
+    def per_host_daemon_type(self) -> Optional[str]:
+        return 'keepalived'
 
     def prepare_create(
             self,
