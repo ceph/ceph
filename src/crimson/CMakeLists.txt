@@ -118,7 +118,8 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
-  $<TARGET_OBJECTS:common_mountcephfs_objs>)
+  $<TARGET_OBJECTS:common_mountcephfs_objs>
+  $<TARGET_OBJECTS:common-options-objs>)
 
 target_compile_definitions(crimson-common PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
