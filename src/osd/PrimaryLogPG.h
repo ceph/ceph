@@ -1427,6 +1427,7 @@ protected:
 			      Context *cb, std::optional<bufferlist> chunk);
   void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);
   void dec_refcount(const hobject_t& soid, const object_ref_delta_t& refs);
+  void update_chunk_map_by_dirty(OpContext* ctx);
   void dec_refcount_by_dirty(OpContext* ctx);
   ObjectContextRef get_prev_clone_obc(ObjectContextRef obc);
   bool recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op);
@@ -1439,12 +1440,15 @@ protected:
   int start_dedup(OpRequestRef op, ObjectContextRef obc);
   hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
   int finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
+  int finish_set_manifest_refcount(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend struct C_CopyChunk;
   friend struct RefCountCallback;
   friend struct C_SetDedupChunks;
+  friend struct C_SetManifestRefCountDone;
+  friend struct SetManifestFinisher;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
@@ -1800,7 +1804,9 @@ private:
   // whiteout or no change.
   void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
   int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout);
-  int _rollback_to(OpContext *ctx, ceph_osd_op& op);
+  int _rollback_to(OpContext *ctx, OSDOp& op);
+  void _do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
+				    OSDOp& op);
 public:
   bool is_missing_object(const hobject_t& oid) const;
   bool is_unreadable_object(const hobject_t &oid) const {
