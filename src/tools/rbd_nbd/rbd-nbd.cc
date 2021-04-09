@@ -133,6 +133,7 @@ struct Config {
   std::string format;
   bool pretty_format = false;
 
+  std::string saveconfig_file;
   std::vector<string> attach_vec;
   std::string id;
   std::string keyfile;
@@ -193,6 +194,10 @@ static void usage()
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
             << "  --pretty-format         Pretty formatting (json and xml)\n"
+            << "\n"
+            << "Common options:\n"
+            << "  --saveconfig-file FILE  Path to the JSON file that will contain data about rbd-nbd devices\n"
+            << "                          (default: " << SAVECONFIG_PATH << ")"
             << std::endl;
   generic_server_usage();
 }
@@ -1672,6 +1677,11 @@ static void attach_multiple_devices(Config *config,
     if (c.readonly && c.readonly != DEFAULT_READONLY)
       args.push_back("--readonly");
 
+    if (config->saveconfig_file != SAVECONFIG_PATH) {
+      args.push_back("--saveconfig_file");
+      args.push_back(config->saveconfig_file);
+    }
+
     std::vector<char*> argv;
     for (const auto& arg : args)
       argv.push_back((char*)arg.data());
@@ -1699,11 +1709,14 @@ static void attach_multiple_devices(Config *config,
   }
 }
 
-static void remove_device_from_config(string dev_path)
+static void remove_device_from_config(string dev_path, string saveconfig_file)
 {
   json_spirit::Value input;
 
-  std::ifstream file(SAVECONFIG_PATH);
+  if (saveconfig_file.empty())
+    saveconfig_file = SAVECONFIG_PATH;
+
+  std::ifstream file(saveconfig_file);
   if (file.fail()) {
     // No file, hence nothing to remove
     return;
@@ -1739,7 +1752,7 @@ static void remove_device_from_config(string dev_path)
   saveconfig[0].value_ = new_array;
 
   // Save it back to file
-  std::ofstream out(SAVECONFIG_PATH);
+  std::ofstream out(saveconfig_file);
   out << json_spirit::write(saveconfig, json_spirit::pretty_print) << "\n";
   out.close();
 
@@ -1750,10 +1763,13 @@ static void restore_from_config(Config *config)
 {
   json_spirit::Value input;
 
-  std::ifstream file(SAVECONFIG_PATH);
+  if (config->saveconfig_file.empty())
+    config->saveconfig_file = SAVECONFIG_PATH;
+
+  std::ifstream file(config->saveconfig_file);
   if (file.fail()) {
     std::cerr << "rbd-nbd: unable to restore from "
-              << SAVECONFIG_PATH << " :" << cpp_strerror(errno) << std::endl;
+              << config->saveconfig_file << " :" << cpp_strerror(errno) << std::endl;
     return;
   }
   json_spirit::read(file, input);
@@ -1833,7 +1849,10 @@ static void save_mapped_device(Config *cfg)
   json_spirit::Object saveconfig;
   json_spirit::Array old_array, new_array;
 
-  std::ifstream file(SAVECONFIG_PATH);
+  if (cfg->saveconfig_file.empty())
+    cfg->saveconfig_file = SAVECONFIG_PATH;
+
+  std::ifstream file(cfg->saveconfig_file);
   if (!file.fail()) {
     json_spirit::read(file, input);
     saveconfig = input.get_obj();
@@ -1923,7 +1942,7 @@ static void save_mapped_device(Config *cfg)
   }
 
   // Save the whole config back to file
-  std::ofstream out(SAVECONFIG_PATH);
+  std::ofstream out(cfg->saveconfig_file);
   out << json_spirit::write(saveconfig, json_spirit::pretty_print) << "\n";
   out.close();
 
@@ -2237,7 +2256,7 @@ static int do_unmap(Config *cfg)
     r = wait_for_terminate(cfg->pid, cfg->reattach_timeout);
   }
 
-  remove_device_from_config(cfg->devpath);
+  remove_device_from_config(cfg->devpath, cfg->saveconfig_file);
 
   return 0;
 }
@@ -2482,6 +2501,12 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
         }
         cfg->attach_vec.push_back(substr);
       }
+    } else if (ceph_argparse_witharg(args, i, &cfg->saveconfig_file, "--saveconfig-file", (char *)NULL)) {
+      std::string s_dir = fs::path(cfg->saveconfig_file).parent_path();
+      if (!fs::is_directory(s_dir)) {
+        *err_msg << "directory " << s_dir << " does not exist, " <<  strerror(errno);
+        return -EINVAL;
+      }
     } else {
       ++i;
     }
@@ -2529,6 +2554,10 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
         return -EINVAL;
       }
       args.erase(args.begin());
+      if (cmd == Map && !cfg->try_netlink) {
+        if (!cfg->saveconfig_file.empty())
+          *err_msg << "rbd-nbd: --saveconfig-file will be effective only when used along with --try-netlink, ignoring!";
+      }
       break;
     case Detach:
     case Unmap:
@@ -2565,6 +2594,7 @@ static int rbd_nbd(int argc, const char *argv[])
   Config cfg;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  std::string saveconfig_file;
 
   std::ostringstream err_msg;
   r = parse_args(args, &err_msg, &cfg);
@@ -2627,6 +2657,7 @@ static int rbd_nbd(int argc, const char *argv[])
         return -EINVAL;
       break;
     case Unmap:
+      saveconfig_file = cfg.saveconfig_file;
       if (cfg.devpath.empty()) {
         if (!find_mapped_dev_by_spec(&cfg)) {
           cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
@@ -2636,6 +2667,9 @@ static int rbd_nbd(int argc, const char *argv[])
       } else if (!find_proc_by_dev(&cfg)) {
         // still try to send disconnect to the device
       }
+      // --saveconfig-file supplied at unmap command takes precedence
+      if (!saveconfig_file.empty())
+        cfg.saveconfig_file = saveconfig_file;
       r = do_unmap(&cfg);
       if (r < 0)
         return -EINVAL;
