@@ -88,62 +88,55 @@ specification.  See :ref:`multisite` for more information of setting up multisit
 High availability service for RGW
 =================================
 
-This service allows the user to create a high avalilability RGW service
-providing a minimun set of configuration options.
+The *ingress* service allows you to create a high availability endpoint
+for RGW with a minumum set of configuration options.  The orchestrator will
+deploy and manage a combination of haproxy and keepalived to provide load
+balancing on a floating virtual IP.
 
-The orchestrator will deploy and configure automatically several HAProxy and
-Keepalived containers to assure the continuity of the RGW service while the
-Ceph cluster will have at least 1 RGW daemon running.
-
-The next image explains graphically how this service works:
+If SSL is used, then SSL must be configured and terminated by the ingress service
+and not RGW itself.
 
 .. image:: ../images/HAProxy_for_RGW.svg
 
-There are N hosts where the HA RGW service is deployed. This means that we have
-an HAProxy and a keeplived daemon running in each of this hosts.
-Keepalived is used to provide a "virtual IP" binded to the hosts. All RGW
-clients use this  "virtual IP"  to connect with the RGW Service.
+There are N hosts where the ingress service is deployed.  Each host
+has a haproxy daemon and a keepalived daemon.  A virtual IP is
+automatically configured on only one of these hosts at a time.
 
-Each keeplived daemon is checking each few seconds what is the status of the
-HAProxy daemon running in the same host. Also it is aware that the "master" keepalived
-daemon will be running without problems.
+Each keepalived daemon checks every few seconds whether the haproxy
+daemon on the same host is responding.  Keepalived will also check
+that the master keepalived daemon is running without problems.  If the
+"master" keepalived daemon or the active haproxy is not responding,
+one of the remaining keepalived daemons running in backup mode will be
+elected as master, and the virtual IP will be moved to that node.
 
-If the "master" keepalived daemon or the Active HAproxy is not responding, one
-of the keeplived daemons running in backup mode will be elected as master, and
-the "virtual ip" will be moved to that node.
-
-The active HAProxy also acts like a load balancer, distributing all RGW requests
+The active haproxy acts like a load balancer, distributing all RGW requests
 between all the RGW daemons available.
 
 **Prerequisites:**
 
-* At least two RGW daemons running in the Ceph cluster
-* Operating system prerequisites:
-  In order for the Keepalived service to forward network packets properly to the
-  real servers, each router node must have IP forwarding turned on in the kernel.
-  So it will be needed to set this system option::
+* An existing RGW service.
+* In order for the Keepalived service to forward network packets properly to the
+  real servers, each ingress node must have IP forwarding turned on in the kernel::
 
-    net.ipv4.ip_forward = 1
+    net.ipv4.ip_forward=1
 
-  Load balancing in HAProxy and Keepalived at the same time also requires the
+* Load balancing in HAProxy and Keepalived at the same time also requires the
   ability to bind to an IP address that are nonlocal, meaning that it is not
   assigned to a device on the local system. This allows a running load balancer
-  instance to bind to an IP that is not local for failover.
-  So it will be needed to set this system option::
+  instance to bind to an IP that is not local for failover.::
 
-    net.ipv4.ip_nonlocal_bind = 1
+    net.ipv4.ip_nonlocal_bind=1
 
-  Be sure to set properly these two options in the file ``/etc/sysctl.conf`` in
+* Be sure to set properly these two options in the file ``/etc/sysctl.conf`` in
   order to persist this values even if the hosts are restarted.
-  These configuration changes must be applied in all the hosts where the HAProxy for
-  RGW service is going to be deployed.
+  These configuration changes must be applied in all the hosts where the ingress service is going to be deployed.
 
 
 **Deploy of the high availability service for RGW**
 
 Use the command::
 
-    ceph orch apply -i <service_spec_file>
+    ceph orch apply -i <ingress_spec_file>
 
 **Service specification file:**
 
@@ -151,25 +144,19 @@ It is a yaml format file with the following properties:
 
 .. code-block:: yaml
 
-    service_type: ha-rgw
-    service_id: haproxy_for_rgw
+    service_type: ingress
+    service_id: rgw.something    # adjust to match your existing RGW service
     placement:
       hosts:
         - host1
         - host2
         - host3
     spec:
-      virtual_ip_interface: <string> # ex: eth0
-      virtual_ip_address: <string>/<string> # ex: 192.168.20.1/24
+      backend_service: rgw.something    # adjust to match your existing RGW service
+      virtual_ip: <string>/<string> # ex: 192.168.20.1/24
       frontend_port: <integer>  # ex: 8080
-      ha_proxy_port: <integer> # ex: 1967
-      ha_proxy_stats_enabled: <boolean> # ex: true
-      ha_proxy_stats_user: <string> # ex: admin
-      ha_proxy_stats_password: <string> # ex: true
-      ha_proxy_enable_prometheus_exporter: <boolean> # ex: true
-      ha_proxy_monitor_uri: <string> # ex: /haproxy_health
-      keepalived_password: <string> # ex: admin
-      ha_proxy_frontend_ssl_certificate: <optional string> ex:
+      monitor_port: <integer> # ex: 1967, used by haproxy for load balancer status
+      ssl_cert: <optional string> ex:
         [
           "-----BEGIN CERTIFICATE-----",
           "MIIDZTCCAk2gAwIBAgIUClb9dnseOsgJWAfhPQvrZw2MP2kwDQYJKoZIhvcNAQEL",
@@ -181,67 +168,27 @@ It is a yaml format file with the following properties:
           "aW5DSCo8DgfNOgycVL/rqcrc",
           "-----END PRIVATE KEY-----"
         ]
-      ha_proxy_frontend_ssl_port: <optional integer> # ex: 8090
-      ha_proxy_ssl_dh_param: <optional integer> # ex: 1024
-      ha_proxy_ssl_ciphers: <optional string> # ex: ECDH+AESGCM:!MD5
-      ha_proxy_ssl_options: <optional string> # ex: no-sslv3
-      haproxy_container_image: <optional string> # ex: haproxy:2.4-dev3-alpine
-      keepalived_container_image: <optional string> # ex: arcts/keepalived:1.2.2
 
 where the properties of this service specification are:
 
 * ``service_type``
-    Mandatory and set to "ha-rgw"
+    Mandatory and set to "ingress"
 * ``service_id``
-    The name of the service.
+    The name of the service.  We suggest naming this after the service you are
+    controlling ingress for (e.g., ``rgw.foo``).
 * ``placement hosts``
-    The hosts where it is desired to run the HA daemons. An HAProxy and a
-    Keepalived containers will be deployed in these hosts.
-    The RGW daemons can run in other different hosts or not.
-* ``virtual_ip_interface``
-    The physical network interface where the virtual ip will be binded
-* ``virtual_ip_address``
-    The virtual IP ( and network ) where the HA RGW service will be available.
-    All your RGW clients must point to this IP in order to use the HA RGW
-    service .
+    The hosts where it is desired to run the HA daemons. An haproxy and a
+    keepalived container will be deployed on these hosts.  These hosts do not need
+    to match the nodes where RGW is deployed.
+* ``virtual_ip``
+    The virtual IP (and network) in CIDR format where the ingress service will be available.
 * ``frontend_port``
-    The port used to access the HA RGW service
-* ``ha_proxy_port``
-    The port used by HAProxy containers
-* ``ha_proxy_stats_enabled``
-    If it is desired to enable the statistics URL in HAProxy daemons
-* ``ha_proxy_stats_user``
-    User needed to access the HAProxy statistics URL
-* ``ha_proxy_stats_password``
-    The password needed to access the HAProxy statistics URL
-* ``ha_proxy_enable_prometheus_exporter``
-    If it is desired to enable the Promethes exporter in HAProxy. This will
-    allow to consume RGW Service metrics from Grafana.
-* ``ha_proxy_monitor_uri``:
-    To set the API endpoint where the health of HAProxy daemon is provided
-* ``keepalived_password``:
-    The password needed to access keepalived daemons
-* ``ha_proxy_frontend_ssl_certificate``:
-    SSl certificate. You must paste the content of your .pem file
-* ``ha_proxy_frontend_ssl_port``:
-    The https port used by HAProxy containers
-* ``ha_proxy_ssl_dh_param``:
-    Value used for the `tune.ssl.default-dh-param` setting in the HAProxy
-    config file
-* ``ha_proxy_ssl_ciphers``:
-    Value used for the `ssl-default-bind-ciphers` setting in HAProxy config
-    file.
-* ``ha_proxy_ssl_options``:
-    Value used for the `ssl-default-bind-options` setting in HAProxy config
-    file.
-* ``haproxy_container_image``:
-    HAProxy image location used to pull the image
-* ``keepalived_container_image``:
-    Keepalived image location used to pull the image
+    The port used to access the ingress service.
+* ``ssl_cert``:
+    SSL certificate, if SSL is to be enabled. This must contain the both the certificate and
+    private key blocks in .pem format.
 
-**Useful hints for the RGW Service:**
+**Useful hints for ingress:**
 
 * Good to have at least 3 RGW daemons
-* Use at least 3 hosts for the HAProxy for RGW service
-* In each host an HAProxy and a Keepalived daemon will be deployed. These
-  daemons can be managed as systemd services
+* Use at least 3 hosts for the ingress
