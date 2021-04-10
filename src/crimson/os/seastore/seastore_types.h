@@ -43,10 +43,15 @@ constexpr segment_id_t RECORD_REL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 2;
 constexpr segment_id_t BLOCK_REL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 3;
-
 // for tests which generate fake paddrs
 constexpr segment_id_t FAKE_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 4;
+
+/* Used to denote references to notional zero filled segment, mainly
+ * in denoting reserved laddr ranges for unallocated object data.
+ */
+constexpr segment_id_t ZERO_SEG_ID =
+  std::numeric_limits<segment_id_t>::max() - 5;
 
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
@@ -101,6 +106,27 @@ struct paddr_t {
 
   bool is_block_relative() const {
     return segment == BLOCK_REL_SEG_ID;
+  }
+
+  /// Denotes special zero segment addr
+  bool is_zero() const {
+    return segment == ZERO_SEG_ID;
+  }
+
+  /// Denotes special null segment addr
+  bool is_null() const {
+    return segment == NULL_SEG_ID;
+  }
+
+  /**
+   * is_real
+   *
+   * indicates whether addr reflects a physical location, absolute
+   * or relative.  FAKE segments also count as real so as to reflect
+   * the way in which unit tests use them.
+   */
+  bool is_real() const {
+    return !is_zero() && !is_null();
   }
 
   paddr_t add_offset(segment_off_t o) const {
@@ -174,6 +200,9 @@ constexpr paddr_t make_block_relative_paddr(segment_off_t off) {
 }
 constexpr paddr_t make_fake_paddr(segment_off_t off) {
   return paddr_t{FAKE_SEG_ID, off};
+}
+constexpr paddr_t zero_paddr() {
+  return paddr_t{ZERO_SEG_ID, 0};
 }
 
 struct __attribute((packed)) paddr_le_t {
