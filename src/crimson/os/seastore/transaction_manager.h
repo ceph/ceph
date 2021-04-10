@@ -168,7 +168,7 @@ public:
     return get_pins(
       t, offset, length
     ).safe_then([this, &t, offset, length](auto pins) {
-      if (pins.size() != 1) {
+      if (pins.size() != 1 || !pins.front()->get_paddr().is_real()) {
 	auto &logger = crimson::get_logger(ceph_subsys_filestore);
 	logger.error(
 	  "TransactionManager::read_extent offset {} len {} got {} extents:",
@@ -265,6 +265,19 @@ public:
       return alloc_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
+  }
+
+  using reserve_extent_ertr = alloc_extent_ertr;
+  using reserve_extent_ret = reserve_extent_ertr::future<LBAPinRef>;
+  reserve_extent_ret reserve_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len) {
+    return lba_manager->alloc_extent(
+      t,
+      hint,
+      len,
+      zero_paddr());
   }
 
   using find_hole_ertr = LBAManager::find_hole_ertr;
