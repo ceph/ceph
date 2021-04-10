@@ -261,6 +261,14 @@ class Export:
         client_blocks = [b for b in export_block['_blocks_']
                          if b['block_name'] == "CLIENT"]
 
+        protocols = export_block.get('protocols')
+        if not isinstance(protocols, list):
+            protocols = [protocols]
+
+        transports = export_block.get('transports')
+        if not isinstance(transports, list):
+            transports = [transports]
+
         return cls(export_block['export_id'],
                    export_block['path'],
                    cluster_id,
@@ -268,8 +276,8 @@ class Export:
                    export_block['access_type'],
                    export_block['squash'],
                    export_block['security_label'],
-                   export_block['protocols'],
-                   export_block['transports'],
+                   protocols,
+                   transports,
                    CephFSFSal.from_fsal_block(fsal_block[0]),
                    [Client.from_client_block(client)
                     for client in client_blocks])
