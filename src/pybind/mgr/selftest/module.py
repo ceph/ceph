@@ -222,26 +222,26 @@ class Module(MgrModule):
         # not have gone by the time we call another function referring to it
 
         objects = [
-                "fs_map",
-                "osdmap_crush_map_text",
-                "osd_map",
-                "config",
-                "mon_map",
-                "service_map",
-                "osd_metadata",
-                "pg_summary",
-                "pg_status",
-                "pg_dump",
-                "pg_ready",
-                "df",
-                "pg_stats",
-                "pool_stats",
-                "osd_stats",
-                "osd_ping_times",
-                "health",
-                "mon_status",
-                "mgr_map"
-                ]
+            "fs_map",
+            "osdmap_crush_map_text",
+            "osd_map",
+            "config",
+            "mon_map",
+            "service_map",
+            "osd_metadata",
+            "pg_summary",
+            "pg_status",
+            "pg_dump",
+            "pg_ready",
+            "df",
+            "pg_stats",
+            "pool_stats",
+            "osd_stats",
+            "osd_ping_times",
+            "health",
+            "mon_status",
+            "mgr_map"
+        ]
         for obj in objects:
             assert self.get(obj) is not None
 
@@ -257,7 +257,6 @@ class Module(MgrModule):
             self.get_metadata("osd", str(osd_id))
 
         self.get_daemon_status("osd", "0")
-        #send_command
 
     def _self_test_config(self):
         # This is not a strong test (can't tell if values really
@@ -355,15 +354,14 @@ class Module(MgrModule):
         self.set_store("testkey", "testvalue")
         assert self.get_store("testkey") == "testvalue"
 
-        assert sorted(self.get_store_prefix("test").keys()) == sorted(
-                list({"testkey"} | existing_keys))
-
+        assert (set(self.get_store_prefix("test").keys())
+                == {"testkey"} | existing_keys)
 
     def _self_test_perf_counters(self):
         self.get_perf_schema("osd", "0")
         self.get_counter("osd", "0", "osd.op")
-        #get_counter
-        #get_all_perf_coutners
+        # get_counter
+        # get_all_perf_coutners
 
     def _self_test_misc(self):
         self.set_uri("http://this.is.a.test.com")
@@ -387,12 +385,12 @@ class Module(MgrModule):
         crush.find_takes()
         crush.get_take_weight_osd_map(-1)
 
-        #osdmap.get_pools_by_take()
-        #osdmap.calc_pg_upmaps()
-        #osdmap.map_pools_pgs_up()
+        # osdmap.get_pools_by_take()
+        # osdmap.calc_pg_upmaps()
+        # osdmap.map_pools_pgs_up()
 
-        #inc.set_osd_reweights
-        #inc.set_crush_compat_weight_set_weights
+        # inc.set_osd_reweights
+        # inc.set_crush_compat_weight_set_weights
 
         self.log.info("Finished self-test procedure.")
 
@@ -460,10 +458,9 @@ class Module(MgrModule):
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd reweight',
                 'id': i,
-                'weight': w
-                }), '')
+                'weight': w}), '')
 
-            crush = osdmap.get_crush().dump()
+            _ = osdmap.get_crush().dump()
             r, outb, outs = result.wait()
 
         self._event.clear()
