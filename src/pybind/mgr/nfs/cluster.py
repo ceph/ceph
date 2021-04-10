@@ -8,7 +8,7 @@ import orchestrator
 
 from .exception import NFSInvalidOperation, ClusterNotFound
 from .utils import POOL_NAME, available_clusters, restart_nfs_service
-from .nfs import NFSRados, exception_handler
+from .export import NFSRados, exception_handler
 
 log = logging.getLogger(__name__)
 
