@@ -43,6 +43,7 @@ from io import StringIO
 from threading import Thread, RLock
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from pathlib import Path
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
@@ -933,6 +934,15 @@ class CustomContainer(object):
                     bind[index] = 'source={}'.format(os.path.join(
                         data_dir, match.group(1)))
         return binds
+
+##################################
+
+
+def touch(file_path: str, uid: Optional[int] = None, gid: Optional[int] = None) -> None:
+    Path(file_path).touch()
+    if uid and gid:
+        os.chown(file_path, uid, gid)
+
 
 ##################################
 
@@ -2164,6 +2174,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+            touch(os.path.join(data_dir_root, 'data', 'grafana.db'), uid, gid)
         elif daemon_type == 'alertmanager':
             data_dir_root = get_data_dir(fsid, ctx.data_dir,
                                          daemon_type, daemon_id)
@@ -2350,6 +2361,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
+            mounts[os.path.join(data_dir, 'data/grafana.db')] = '/var/lib/grafana/grafana.db:Z'
         elif daemon_type == 'alertmanager':
             mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/etc/alertmanager:Z'
 
