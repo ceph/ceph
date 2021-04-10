@@ -1,10 +1,7 @@
-import errno
 import logging
-import traceback
 import threading
 
-from mgr_module import MgrModule
-from volumes.module import mgr_cmd_wrap
+from mgr_module import MgrModule, CLICommand
 import orchestrator
 
 from .export import ExportMgr
@@ -16,88 +13,6 @@ goodchars = '[A-Za-z0-9-_.]'
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
-    COMMANDS = [
-        {
-            'cmd': 'nfs export create cephfs '
-            'name=fsname,type=CephString '
-            'name=clusterid,type=CephString '
-            'name=binding,type=CephString '
-            'name=readonly,type=CephBool,req=false '
-            'name=path,type=CephString,req=false ',
-            'desc': "Create a cephfs export",
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'nfs export delete '
-                   'name=clusterid,type=CephString '
-                   'name=binding,type=CephString ',
-            'desc': "Delete a cephfs export",
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'nfs export ls '
-                   'name=clusterid,type=CephString '
-                   'name=detailed,type=CephBool,req=false ',
-            'desc': "List exports of a NFS cluster",
-            'perm': 'r'
-        },
-        {
-            'cmd': 'nfs export get '
-                   'name=clusterid,type=CephString '
-                   'name=binding,type=CephString ',
-            'desc': "Fetch a export of a NFS cluster given the pseudo path/binding",
-            'perm': 'r'
-        },
-        {
-            'cmd': 'nfs export update ',
-            'desc': "Update an export of a NFS cluster by `-i <json_file>`",
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'nfs cluster create '
-                   f'name=clusterid,type=CephString,goodchars={goodchars} '
-                   'name=placement,type=CephString,req=false ',
-            'desc': "Create an NFS Cluster",
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'nfs cluster update '
-                   'name=clusterid,type=CephString '
-                   'name=placement,type=CephString ',
-            'desc': "Updates an NFS Cluster",
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'nfs cluster delete '
-                   'name=clusterid,type=CephString ',
-            'desc': "Deletes an NFS Cluster",
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'nfs cluster ls ',
-            'desc': "List NFS Clusters",
-            'perm': 'r'
-        },
-        {
-            'cmd': 'nfs cluster info '
-                   'name=clusterid,type=CephString,req=false ',
-            'desc': "Displays NFS Cluster info",
-            'perm': 'r'
-        },
-        {
-            'cmd': 'nfs cluster config set '
-                   'name=clusterid,type=CephString ',
-            'desc': "Set NFS-Ganesha config by `-i <config_file>`",
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'nfs cluster config reset '
-                   'name=clusterid,type=CephString ',
-            'desc': "Reset NFS-Ganesha Config to default",
-            'perm': 'rw'
-        },
-    ]
-
     MODULE_OPTIONS = []
 
     def __init__(self, *args, **kwargs):
@@ -109,64 +24,67 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.nfs = NFSCluster(self)
             self.inited = True
 
-    def handle_command(self, inbuf, cmd):
-        handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
-        try:
-            handler = getattr(self, handler_name)
-        except AttributeError:
-            return -errno.EINVAL, "", "Unknown command"
+    @CLICommand('nfs export create cephfs', perm='rw')
+    def _cmd_nfs_export_create_cephfs(self, fsname: str, clusterid: str, binding: str,
+                                      readonly: bool=False, path: str='/'):
+        """Create a cephfs export"""
+        # TODO Extend export creation for rgw.
+        return self.export_mgr.create_export(fsal_type='cephfs', fs_name=fsname,
+                                             cluster_id=clusterid, pseudo_path=binding,
+                                             read_only=readonly, path=path)
 
-        return handler(inbuf, cmd)
+    @CLICommand('nfs export delete', perm='rw')
+    def _cmd_nfs_export_delete(self, clusterid: str, binding: str):
+        """Delete a cephfs export"""
+        return self.export_mgr.delete_export(cluster_id=clusterid, pseudo_path=binding)
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_export_create_cephfs(self, inbuf, cmd):
-        #TODO Extend export creation for rgw.
-        return self.export_mgr.create_export(fsal_type='cephfs', fs_name=cmd['fsname'],
-                                             cluster_id=cmd['clusterid'],
-                                             pseudo_path=cmd['binding'],
-                                             read_only=cmd.get('readonly', False),
-                                             path=cmd.get('path', '/'))
+    @CLICommand('nfs export ls', perm='r')
+    def _cmd_nfs_export_ls(self, clusterid: str, detailed: bool=False):
+        """List exports of a NFS cluster"""
+        return self.export_mgr.list_exports(cluster_id=clusterid, detailed=detailed)
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_export_delete(self, inbuf, cmd):
-        return self.export_mgr.delete_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
+    @CLICommand('nfs export get', perm='r')
+    def _cmd_nfs_export_get(self, clusterid: str, binding: str):
+        """Fetch a export of a NFS cluster given the pseudo path/binding"""
+        return self.export_mgr.get_export(cluster_id=clusterid, pseudo_path=binding)
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_export_ls(self, inbuf, cmd):
-        return self.export_mgr.list_exports(cluster_id=cmd['clusterid'], detailed=cmd.get('detailed', False))
-
-    @mgr_cmd_wrap
-    def _cmd_nfs_export_get(self, inbuf, cmd):
-        return self.export_mgr.get_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
-
-    @mgr_cmd_wrap
-    def _cmd_nfs_export_update(self, inbuf, cmd):
+    @CLICommand('nfs export update', perm='rw')
+    def _cmd_nfs_export_update(self, inbuf: str):
+        """Update an export of a NFS cluster by `-i <json_file>`"""
         # The export <json_file> is passed to -i and it's processing is handled by the Ceph CLI.
         return self.export_mgr.update_export(export_config=inbuf)
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_cluster_create(self, inbuf, cmd):
-        return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'],
-                                           placement=cmd.get('placement', None))
+    @CLICommand('nfs cluster create', perm='rw')
+    def _cmd_nfs_cluster_create(self, clusterid: str, placement: str=None):
+        """Create an NFS Cluster"""
+        return self.nfs.create_nfs_cluster(cluster_id=clusterid, placement=placement)
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_cluster_update(self, inbuf, cmd):
-        return self.nfs.update_nfs_cluster(cluster_id=cmd['clusterid'], placement=cmd['placement'])
+    @CLICommand('nfs cluster update', perm='rw')
+    def _cmd_nfs_cluster_update(self, clusterid: str, placement: str):
+        """Updates an NFS Cluster"""
+        return self.nfs.update_nfs_cluster(cluster_id=clusterid, placement=placement)
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_cluster_delete(self, inbuf, cmd):
-        return self.nfs.delete_nfs_cluster(cluster_id=cmd['clusterid'])
+    @CLICommand('nfs cluster delete', perm='rw')
+    def _cmd_nfs_cluster_delete(self, clusterid: str):
+        """Deletes an NFS Cluster"""
+        return self.nfs.delete_nfs_cluster(cluster_id=clusterid)
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_cluster_ls(self, inbuf, cmd):
+    @CLICommand('nfs cluster ls', perm='r')
+    def _cmd_nfs_cluster_ls(self):
+        """List NFS Clusters"""
         return self.nfs.list_nfs_cluster()
 
-    @mgr_cmd_wrap
-    def _cmd_nfs_cluster_info(self, inbuf, cmd):
-        return self.nfs.show_nfs_cluster_info(cluster_id=cmd.get('clusterid', None))
+    @CLICommand('nfs cluster info', perm='r')
+    def _cmd_nfs_cluster_info(self, clusterid: str=None):
+        """Displays NFS Cluster info"""
+        return self.nfs.show_nfs_cluster_info(cluster_id=clusterid)
 
-    def _cmd_nfs_cluster_config_set(self, inbuf, cmd):
-        return self.nfs.set_nfs_cluster_config(cluster_id=cmd['clusterid'], nfs_config=inbuf)
+    @CLICommand('nfs cluster config set', perm='rw')
+    def _cmd_nfs_cluster_config_set(self, clusterid: str, inbuf: str):
+        """Set NFS-Ganesha config by `-i <config_file>`"""
+        return self.nfs.set_nfs_cluster_config(cluster_id=clusterid, nfs_config=inbuf)
 
-    def _cmd_nfs_cluster_config_reset(self, inbuf, cmd):
-        return self.nfs.reset_nfs_cluster_config(cluster_id=cmd['clusterid'])
+    @CLICommand('nfs cluster config reset', perm='rw')
+    def _cmd_nfs_cluster_config_reset(self, clusterid: str):
+        """Reset NFS-Ganesha Config to default"""
+        return self.nfs.reset_nfs_cluster_config(cluster_id=clusterid)
