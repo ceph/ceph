@@ -424,6 +424,10 @@ public:
     croot->get_root().collection_root.update(cmroot);
   }
 
+  extent_len_t get_block_size() const {
+    return segment_manager.get_block_size();
+  }
+
   ~TransactionManager();
 
 private:
