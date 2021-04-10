@@ -1,5 +1,5 @@
 
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, Option
 import errno
 import json
 import random
@@ -29,18 +29,29 @@ class Module(MgrModule):
     # The test code in qa/ relies on these options existing -- they
     # are of course not really used for anything in the module
     MODULE_OPTIONS = [
-        {'name': 'testkey'},
-        {'name': 'testlkey'},
-        {'name': 'testnewline'},
-        {'name': 'roption1'},
-        {'name': 'roption2', 'type': 'str', 'default': 'xyz'},
-        {'name': 'rwoption1'},
-        {'name': 'rwoption2', 'type': 'int'},
-        {'name': 'rwoption3', 'type': 'float'},
-        {'name': 'rwoption4', 'type': 'str'},
-        {'name': 'rwoption5', 'type': 'bool'},
-        {'name': 'rwoption6', 'type': 'bool', 'default': True},
-        {'name': 'rwoption7', 'type': 'int', 'min': 1, 'max': 42},
+        Option(name='testkey'),
+        Option(name='testlkey'),
+        Option(name='testnewline'),
+        Option(name='roption1'),
+        Option(name='roption2',
+               type='str',
+               default='xyz'),
+        Option(name='rwoption1'),
+        Option(name='rwoption2',
+               type='int'),
+        Option(name='rwoption3',
+               type='float'),
+        Option(name='rwoption4',
+               type='str'),
+        Option(name='rwoption5',
+               type='bool'),
+        Option(name='rwoption6',
+               type='bool',
+               default=True),
+        Option(name='rwoption7',
+               type='int',
+               min=1,
+               max=42),
     ]
 
     COMMANDS = [
