@@ -63,6 +63,8 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "OMAP_LEAF";
   case extent_types_t::COLL_BLOCK:
     return out << "COLL_BLOCK";
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return out << "OBJECT_DATA_BLOCK";
   case extent_types_t::TEST_BLOCK:
     return out << "TEST_BLOCK";
   case extent_types_t::TEST_BLOCK_PHYSICAL:

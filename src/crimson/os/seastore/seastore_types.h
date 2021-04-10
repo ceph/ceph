@@ -316,6 +316,7 @@ enum class extent_types_t : uint8_t {
   OMAP_LEAF = 5,
   ONODE_BLOCK_STAGED = 6,
   COLL_BLOCK = 7,
+  OBJECT_DATA_BLOCK = 8,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
@@ -393,6 +394,71 @@ std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 struct record_t {
   std::vector<extent_t> extents;
   std::vector<delta_info_t> deltas;
+};
+
+class object_data_t {
+  laddr_t reserved_data_base = L_ADDR_NULL;
+  extent_len_t reserved_data_len = 0;
+
+  bool dirty = false;
+public:
+  object_data_t(
+    laddr_t reserved_data_base,
+    extent_len_t reserved_data_len)
+    : reserved_data_base(reserved_data_base),
+      reserved_data_len(reserved_data_len) {}
+
+  laddr_t get_reserved_data_base() const {
+    return reserved_data_base;
+  }
+
+  extent_len_t get_reserved_data_len() const {
+    return reserved_data_len;
+  }
+
+  bool is_null() const {
+    return reserved_data_base == L_ADDR_NULL;
+  }
+
+  bool must_update() const {
+    return dirty;
+  }
+
+  void update_reserved(
+    laddr_t base,
+    extent_len_t len) {
+    dirty = true;
+    reserved_data_base = base;
+    reserved_data_len = len;
+  }
+
+  void update_len(
+    extent_len_t len) {
+    dirty = true;
+    reserved_data_len = len;
+  }
+
+  void clear() {
+    dirty = true;
+    reserved_data_base = L_ADDR_NULL;
+    reserved_data_len = 0;
+  }
+};
+
+struct __attribute__((packed)) object_data_le_t {
+  laddr_le_t reserved_data_base = laddr_le_t(L_ADDR_NULL);
+  extent_len_le_t reserved_data_len = init_extent_len_le(0);
+
+  void update(const object_data_t &nroot) {
+    reserved_data_base = nroot.get_reserved_data_base();
+    reserved_data_len = init_extent_len_le(nroot.get_reserved_data_len());
+  }
+
+  object_data_t get() const {
+    return object_data_t(
+      reserved_data_base,
+      reserved_data_len);
+  }
 };
 
 struct omap_root_t {
