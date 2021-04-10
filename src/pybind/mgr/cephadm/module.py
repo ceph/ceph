@@ -313,6 +313,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=False,
             desc='Enable or disable the cephadm configuration analysis',
         ),
+        Option(
+            'default_registry',
+            type='str',
+            default='docker.io',
+            desc='Registry to which we should normalize unqualified image names',
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -357,6 +363,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.registry_username: Optional[str] = None
             self.registry_password: Optional[str] = None
             self.use_repo_digest = True
+            self.default_registry = ''
 
         self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
                                     remoto.backends.LegacyModuleExecute]] = {}
