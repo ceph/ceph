@@ -370,6 +370,11 @@ std::ostream& Node::dump_brief(std::ostream& os) const
   return impl->dump_brief(os);
 }
 
+const std::string& Node::get_name() const
+{
+  return impl->get_name();
+}
+
 void Node::test_make_destructable(
     context_t c, NodeExtentMutable& mut, Super::URef&& _super)
 {

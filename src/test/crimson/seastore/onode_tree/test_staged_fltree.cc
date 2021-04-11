@@ -686,6 +686,7 @@ class DummyChildPool {
     DummyChildImpl(const std::set<ghobject_t>& keys, bool is_level_tail, laddr_t laddr)
         : keys{keys}, _is_level_tail{is_level_tail}, _laddr{laddr} {
       std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
+      build_name();
     }
     ~DummyChildImpl() override {
       std::free(p_mem_key_view);
@@ -698,12 +699,14 @@ class DummyChildPool {
       _is_level_tail = level_tail;
       std::free(p_mem_key_view);
       std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
+      build_name();
     }
 
    public:
     laddr_t laddr() const override { return _laddr; }
     bool is_level_tail() const override { return _is_level_tail; }
     std::optional<key_view_t> get_pivot_index() const override { return {key_view}; }
+    const std::string& get_name() const override { return name; }
 
    protected:
     node_type_t node_type() const override { return node_type_t::LEAF; }
@@ -735,9 +738,20 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
 
    private:
+    void build_name() {
+      std::ostringstream sos;
+      sos << "DummyNode"
+          << "@0x" << std::hex << laddr() << std::dec
+          << "Lv" << (unsigned)level()
+          << (is_level_tail() ? "$" : "")
+          << "(" << key_view << ")";
+      name = sos.str();
+    }
+
     std::set<ghobject_t> keys;
     bool _is_level_tail;
     laddr_t _laddr;
+    std::string name;
 
     key_view_t key_view;
     void* p_mem_key_view;
