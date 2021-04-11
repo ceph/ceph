@@ -172,17 +172,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   std::ostream& dump_brief(std::ostream& os) const override {
-    auto& node_stage = extent.read();
-    os << "Node" << NODE_TYPE << FIELD_TYPE
-       << "@0x" << std::hex << extent.get_laddr()
-       << "+" << node_stage_t::EXTENT_SIZE << std::dec
-       << (node_stage.is_level_tail() ? "$" : "")
-       << "(level=" << (unsigned)node_stage.level()
-       << ", filled=" << filled_size() << "B"
-       << ", free=" << node_stage.free_size() << "B"
-       << ")";
+    os << name
+       << "(filled=" << filled_size() << "B"
+       << ", free=" << extent.read().free_size() << "B)";
     return os;
   }
+
+  const std::string& get_name() const override { return name; }
 
   void validate_layout() const override {
 #ifndef NDEBUG
@@ -196,6 +192,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   void test_set_tail(NodeExtentMutable& mut) override {
     node_stage_t::update_is_level_tail(mut, extent.read(), true);
+    build_name();
   }
 
   /*
@@ -536,6 +533,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 #endif
       extent.split_replayable(split_at);
     }
+    if (right_impl.is_level_tail()) {
+      // is_level_tail of left is changed by split/split_insert
+      build_name();
+    }
     if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
       std::ostringstream sos;
       dump(sos);
@@ -653,7 +654,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
  private:
-  NodeLayoutT(NodeExtentRef extent) : extent{extent} {}
+  NodeLayoutT(NodeExtentRef extent) : extent{extent} {
+    build_name();
+  }
 
   node_offset_t filled_size() const {
     auto& node_stage = extent.read();
@@ -662,11 +665,24 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return ret;
   }
 
+  // rebuild the name whenever addr, type, level, tail is changed
+  void build_name() {
+    // XXX: maybe also include the extent state
+    std::ostringstream sos;
+    sos << "Node" << NODE_TYPE << FIELD_TYPE
+        << "@0x" << std::hex << extent.get_laddr()
+        << "+" << node_stage_t::EXTENT_SIZE << std::dec
+        << "Lv" << (unsigned)level()
+        << (is_level_tail() ? "$" : "");
+    name = sos.str();
+  }
+
   static seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_filestore);
   }
 
   extent_t extent;
+  std::string name = "Node-N/A";
 };
 
 using InternalNode0 = NodeLayoutT<node_fields_0_t, node_type_t::INTERNAL>;

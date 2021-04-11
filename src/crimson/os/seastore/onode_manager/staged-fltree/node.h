@@ -373,6 +373,9 @@ class Node
   /// Returns an ostream containing an one-line summary of this node.
   std::ostream& dump_brief(std::ostream&) const;
 
+  /// Print the node name
+  const std::string& get_name() const;
+
   /// Initializes the tree by allocating an empty root node.
   static node_future<> mkfs(context_t, RootNodeTracker&);
 
