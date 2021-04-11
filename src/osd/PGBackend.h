@@ -584,37 +584,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    int be_scan_list(
      ScrubMap &map,
      ScrubMapBuilder &pos);
-   bool be_compare_scrub_objects(
-     pg_shard_t auth_shard,
-     const ScrubMap::object &auth,
-     const object_info_t& auth_oi,
-     const ScrubMap::object &candidate,
-     shard_info_wrapper& shard_error,
-     inconsistent_obj_wrapper &result,
-     std::ostream &errorstream,
-     bool has_snapset);
-   std::map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
-     const hobject_t &obj,
-     const std::map<pg_shard_t,ScrubMap*> &maps,
-     object_info_t *auth_oi,
-     std::map<pg_shard_t, shard_info_wrapper> &shard_map,
-     bool &digest_match,
-     spg_t pgid,
-     std::ostream &errorstream);
-   void be_compare_scrubmaps(
-     const std::map<pg_shard_t,ScrubMap*> &maps,
-     const std::set<hobject_t> &master_set,
-     bool repair,
-     std::map<hobject_t, std::set<pg_shard_t>> &missing,
-     std::map<hobject_t, std::set<pg_shard_t>> &inconsistent,
-     std::map<hobject_t, std::list<pg_shard_t>> &authoritative,
-     std::map<hobject_t, std::pair<std::optional<uint32_t>,
-                         std::optional<uint32_t>>> &missing_digest,
-     int &shallow_errors, int &deep_errors,
-     Scrub::Store *store,
-     const spg_t& pgid,
-     const std::vector<int> &acting,
-     std::ostream &errorstream);
+
    virtual uint64_t be_get_ondisk_size(
      uint64_t logical_size) = 0;
    virtual int be_deep_scrub(
@@ -622,11 +592,6 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ScrubMap &map,
      ScrubMapBuilder &pos,
      ScrubMap::object &o) = 0;
-   void be_omap_checks(
-     const std::map<pg_shard_t,ScrubMap*> &maps,
-     const std::set<hobject_t> &master_set,
-     omap_stat_t& omap_stats,
-     std::ostream &warnstream) const;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
