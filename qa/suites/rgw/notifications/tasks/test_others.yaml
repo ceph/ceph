@@ -1,6 +1,5 @@
 tasks:
 - notification-tests:
     client.0:
-      force-branch: wip-backport-to-pacific
-      git_remote: https://github.com/TRYTOBE8TME/
+      force-branch: pacific
       rgw_server: client.0

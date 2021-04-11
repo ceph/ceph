@@ -30,7 +30,7 @@ from .api import PSTopicS3, \
     put_object_tagging
 
 from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal
+from nose.tools import assert_not_equal, assert_equal, assert_in
 import boto.s3.tagging
 
 # configure logging for the tests module
@@ -170,17 +170,30 @@ class StreamingHTTPServer:
 
 # AMQP endpoint functions
 
-rabbitmq_port = 5672
-
 class AMQPReceiver(object):
     """class for receiving and storing messages on a topic from the AMQP broker"""
-    def __init__(self, exchange, topic):
+    def __init__(self, exchange, topic, external_endpoint_address=None, ca_location=None):
         import pika
-        hostname = get_ip()
+        import ssl
+
+        if ca_location:
+            ssl_context = ssl.create_default_context()
+            ssl_context.load_verify_locations(cafile=ca_location)
+            ssl_options = pika.SSLOptions(ssl_context)
+            rabbitmq_port = 5671
+        else:
+            rabbitmq_port = 5672
+            ssl_options = None
+
+        if external_endpoint_address:
+            params = pika.URLParameters(external_endpoint_address, ssl_options=ssl_options)
+        else:
+            hostname = get_ip()
+            params = pika.ConnectionParameters(host=hostname, port=rabbitmq_port, ssl_options=ssl_options)
         remaining_retries = 10
         while remaining_retries > 0:
             try:
-                connection = pika.BlockingConnection(pika.ConnectionParameters(host=hostname, port=rabbitmq_port))
+                connection = pika.BlockingConnection(params)
                 break
             except Exception as error:
                 remaining_retries -= 1
@@ -223,6 +236,7 @@ class AMQPReceiver(object):
         self.events = []
         return tmp
 
+
 def amqp_receiver_thread_runner(receiver):
     """main thread function for the amqp receiver"""
     try:
@@ -233,13 +247,12 @@ def amqp_receiver_thread_runner(receiver):
         log.info('AMQP receiver ended unexpectedly: %s', str(error))
 
 
-def create_amqp_receiver_thread(exchange, topic):
+def create_amqp_receiver_thread(exchange, topic, external_endpoint_address=None, ca_location=None):
     """create amqp receiver and thread"""
-    receiver = AMQPReceiver(exchange, topic)
+    receiver = AMQPReceiver(exchange, topic, external_endpoint_address, ca_location)
     task = threading.Thread(target=amqp_receiver_thread_runner, args=(receiver,))
     task.daemon = True
     return task, receiver
-
 
 def stop_amqp_receiver(receiver, task):
     """stop the receiver thread and wait for it to finis"""
@@ -249,6 +262,34 @@ def stop_amqp_receiver(receiver, task):
     except Exception as error:
         log.info('failed to gracefuly stop AMQP receiver: %s', str(error))
     task.join(5)
+
+
+def init_rabbitmq():
+    """ start a rabbitmq broker """
+    hostname = get_ip()
+    try:
+        # first try to stop any existing process
+        subprocess.call(['sudo', 'rabbitmqctl', 'stop'])
+        time.sleep(5)
+        proc = subprocess.Popen(['sudo', '--preserve-env=RABBITMQ_CONFIG_FILE', 'rabbitmq-server'])
+    except Exception as error:
+        log.info('failed to execute rabbitmq-server: %s', str(error))
+        print('failed to execute rabbitmq-server: %s' % str(error))
+        return None
+    # TODO add rabbitmq checkpoint instead of sleep
+    time.sleep(5)
+    return proc
+
+
+def clean_rabbitmq(proc):
+    """ stop the rabbitmq broker """
+    try:
+        subprocess.call(['sudo', 'rabbitmqctl', 'stop'])
+        time.sleep(5)
+        proc.terminate()
+    except:
+        log.info('rabbitmq server already terminated')
+
 
 def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
     """ verify there is at least one event per element """
@@ -291,7 +332,7 @@ def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
             log.error(events)
             assert False, err
 
-def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False, expected_sizes={}):
+def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False, expected_sizes={}, etags=[]):
     """ verify there is at least one record per element """
     err = ''
     for key in keys:
@@ -302,13 +343,14 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                 if key_found:
                     break
                 for record in record_list['Records']:
+                    assert_in('eTag', record['s3']['object'])
                     if record['s3']['bucket']['name'] == key.bucket.name and \
                         record['s3']['object']['key'] == key.name:
                         # Assertion Error needs to be fixed
-                        #assert_equal(key.etag[1:-1], record['s3']['object']['eTag'])
+                        #assert_equal(key.etag[1:-1], record['s3']['object']['etag'])
                         if etags:
                             assert_in(key.etag[1:-1], etags)
-                        if deletions and record['eventName'].startswith('ObjectRemoved'):
+                        if deletions and 'ObjectRemoved' in record['eventName']:
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
@@ -318,8 +360,12 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                             break
         else:
             for record in records['Records']:
+                assert_in('etag', record['s3']['object'])
                 if record['s3']['bucket']['name'] == key.bucket.name and \
                     record['s3']['object']['key'] == key.name:
+                    assert_equal(key.etag, record['s3']['object']['etag'])
+                    if etags:
+                        assert_in(key.etag[1:-1], etags)
                     if deletions and 'ObjectRemoved' in record['eventName']:
                         key_found = True
                         object_size = record['s3']['object']['size']
@@ -376,9 +422,9 @@ class KafkaReceiver(object):
         self.topic = topic
         self.stop = False
 
-    def verify_s3_events(self, keys, exact_match=False, deletions=False):
+    def verify_s3_events(self, keys, exact_match=False, deletions=False, etags=[]):
         """verify stored s3 records agains a list of keys"""
-        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions)
+        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, etags=etags)
         self.events = []
 
 def kafka_receiver_thread_runner(receiver):
@@ -434,7 +480,7 @@ def connection():
     vstart_secret_key = get_secret_key()
 
     conn = S3Connection(aws_access_key_id=vstart_access_key,
-	    	      aws_secret_access_key=vstart_secret_key,
+                  aws_secret_access_key=vstart_secret_key,
                       is_secure=False, port=port_no, host=hostname, 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
 
@@ -1053,10 +1099,13 @@ def test_ps_s3_notification_push_kafka_on_master():
         # create objects in the bucket (async)
         number_of_objects = 10
         client_threads = []
+        etags=[]
         start_time = time.time()
         for i in range(number_of_objects):
             key = bucket.new_key(str(i))
             content = str(os.urandom(1024*1024))
+            etag = hashlib.md5(content.encode()).hexdigest()
+            etags.append(etag)
             thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
             thr.start()
             client_threads.append(thr)
@@ -1068,7 +1117,7 @@ def test_ps_s3_notification_push_kafka_on_master():
         print('wait for 5sec for the messages...')
         time.sleep(5)
         keys = list(bucket.list())
-        receiver.verify_s3_events(keys, exact_match=True)
+        receiver.verify_s3_events(keys, exact_match=True, etags=etags)
 
         # delete objects from the bucket
         client_threads = []
@@ -1084,7 +1133,7 @@ def test_ps_s3_notification_push_kafka_on_master():
 
         print('wait for 5sec for the messages...')
         time.sleep(5)
-        receiver.verify_s3_events(keys, exact_match=True, deletions=True)
+        receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
 
     finally:
         # cleanup
@@ -1317,7 +1366,7 @@ def test_ps_s3_opaque_data_on_master():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
-def test_ps_s3_creation_triggers_on_master():
+def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_location=None, verify_ssl='true'):
     """ test object creation s3 notifications in using put/copy/post on master"""
     
     if not external_endpoint_address and not skip_amqp_ssl:
@@ -1339,12 +1388,19 @@ def test_ps_s3_creation_triggers_on_master():
 
     # start amqp receiver
     exchange = 'ex1'
-    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name, external_endpoint_address, ca_location)
     task.start()
 
     # create s3 topic
-    endpoint_address = 'amqp://' + hostname
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    if external_endpoint_address:
+        endpoint_address = external_endpoint_address
+    elif ca_location:
+        endpoint_address = 'amqps://' + hostname
+    else:
+        endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker&verify-ssl='+verify_ssl
+    if ca_location:
+        endpoint_args += '&ca-location={}'.format(ca_location)
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
@@ -1537,7 +1593,6 @@ def test_ps_s3_creation_triggers_on_master_ssl():
 @attr('amqp_test')
 def test_ps_s3_multipart_on_master():
     """ test multipart object upload on master"""
-
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1602,12 +1657,12 @@ def test_ps_s3_multipart_on_master():
 
     events = receiver2.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:Post')
+    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:Post')
     assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_2')
 
     events = receiver3.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:CompleteMultipartUpload')
+    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:CompleteMultipartUpload')
     assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_3')
     print(events[0]['Records'][0]['s3']['object']['size'])
 
@@ -1666,14 +1721,18 @@ def test_ps_s3_metadata_on_master():
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
+    expected_keys = []
     # create objects in the bucket
     key_name = 'foo'
     key = bucket.new_key(key_name)
     key.set_metadata(meta_key, meta_value)
     key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    expected_keys.append(key_name)
 
     # create objects in the bucket using COPY
-    bucket.copy_key('copy_of_foo', bucket.name, key.name)
+    key_name = 'copy_of_foo'
+    bucket.copy_key(key_name, bucket.name, key.name)
+    expected_keys.append(key_name)
 
     # create objects in the bucket using multi-part upload
     fp = tempfile.NamedTemporaryFile(mode='w+b')
@@ -1682,24 +1741,20 @@ def test_ps_s3_metadata_on_master():
     fp.write(content)
     fp.flush()
     fp.seek(0)
-    uploader = bucket.initiate_multipart_upload('multipart_foo',
+    key_name = 'multipart_foo'
+    uploader = bucket.initiate_multipart_upload(key_name,
             metadata={meta_key: meta_value})
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
+    expected_keys.append(key_name)
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
-    event_count = 0
-    for event in receiver.get_and_reset_events():
-        s3_event = event['Records'][0]['s3']
-        assert_equal(s3_event['object']['metadata'][0]['key'], meta_prefix+meta_key)
-        assert_equal(s3_event['object']['metadata'][0]['val'], meta_value)
-        event_count +=1
-
-    # only PUT and POST has the metadata value
-    assert_equal(event_count, 2)
+    events = receiver.get_and_reset_events()
+    for event in events:
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
 
     # delete objects
     for key in bucket.list():
@@ -1707,15 +1762,8 @@ def test_ps_s3_metadata_on_master():
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
-    event_count = 0
     for event in receiver.get_and_reset_events():
-        s3_event = event['Records'][0]['s3']
-        assert_equal(s3_event['object']['metadata'][0]['key'], meta_prefix+meta_key)
-        assert_equal(s3_event['object']['metadata'][0]['val'], meta_value)
-        event_count +=1
-
-    # all 3 object has metadata when deleted
-    assert_equal(event_count, 3)
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
 
     # cleanup
     stop_amqp_receiver(receiver, task)
@@ -1870,7 +1918,9 @@ def test_ps_s3_versioning_on_master():
     bucket.delete_key(key.name, version_id=ver1)
     conn.delete_bucket(bucket_name)
 
-
+'''
+TODO: the fix for this test is still not backported to pacific
+      https://tracker.ceph.com/issues/51320
 @attr('amqp_test')
 def test_ps_s3_versioned_deletion_on_master():
     """ test s3 notification of deletion markers on master """
@@ -1912,19 +1962,23 @@ def test_ps_s3_versioned_deletion_on_master():
 
     # create objects in the bucket
     key = bucket.new_key('foo')
-    key.set_contents_from_string('bar')
-    v1 = key.version_id
-    key.set_contents_from_string('kaboom')
-    v2 = key.version_id
+    content = str(os.urandom(512))
+    size1 = len(content)
+    key.set_contents_from_string(content)
+    ver1 = key.version_id
+    content = str(os.urandom(511))
+    size2 = len(content)
+    key.set_contents_from_string(content)
+    ver2 = key.version_id
     # create delete marker (non versioned deletion)
     delete_marker_key = bucket.delete_key(key.name)
+    versions = [ver1, ver2, delete_marker_key.version_id]
 
     time.sleep(1)
 
     # versioned deletion
-    bucket.delete_key(key.name, version_id=v2)
-    bucket.delete_key(key.name, version_id=v1)
-    delete_marker_key.delete()
+    bucket.delete_key(key.name, version_id=ver2)
+    bucket.delete_key(key.name, version_id=ver1)
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
@@ -1935,26 +1989,37 @@ def test_ps_s3_versioned_deletion_on_master():
     delete_marker_create_events = 0
     for event_list in events:
         for event in event_list['Records']:
-            if event['eventName'] == 's3:ObjectRemoved:Delete':
+            version = event['s3']['object']['versionId']
+            size = event['s3']['object']['size']
+            if version not in versions:
+                print('version mismatch: '+version+' not in: '+str(versions))
+                assert False
+            else:
+                print('version ok: '+version+' in: '+str(versions))
+            if event['eventName'] == 'ObjectRemoved:Delete':
                 delete_events += 1
+                assert size in [size1, size2]
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_3']
-            if event['eventName'] == 's3:ObjectRemoved:DeleteMarkerCreated':
+            if event['eventName'] == 'ObjectRemoved:DeleteMarkerCreated':
                 delete_marker_create_events += 1
+                assert size == size2
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_2']
 
-    # 3 key versions were deleted (v1, v2 and the deletion marker)
+    # 2 key versions were deleted
     # notified over the same topic via 2 notifications (1,3)
-    assert_equal(delete_events, 3*2)
+    assert_equal(delete_events, 2*2)
     # 1 deletion marker was created
     # notified over the same topic over 2 notifications (1,2)
     assert_equal(delete_marker_create_events, 1*2)
 
     # cleanup
+    delete_marker_key.delete()
     stop_amqp_receiver(receiver, task)
     s3_notification_conf.del_config()
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
+'''
 
 
 @attr('manual_test')
@@ -2003,10 +2068,9 @@ def test_ps_s3_persistent_cleanup():
         client_threads.append(thr)
     # stop gateway while clients are sending
     os.system("killall -9 radosgw");
-    zonegroup.master_zone.gateways[0].stop()
     print('wait for 10 sec for before restarting the gateway')
     time.sleep(10)
-    zonegroup.master_zone.gateways[0].start()
+    # TODO: start the radosgw
     [thr.join() for thr in client_threads]
 
     keys = list(bucket.list())

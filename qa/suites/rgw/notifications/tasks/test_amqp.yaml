@@ -3,7 +3,6 @@ tasks:
     client.0:
 - notification-tests:
     client.0:
-      force-branch: wip-backport-to-pacific
-      git_remote: https://github.com/TRYTOBE8TME/
+      force-branch: pacific
       extra_attr: ["amqp_test"]
       rgw_server: client.0
