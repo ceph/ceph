@@ -89,13 +89,11 @@ r = call(['git', 'branch', '-D', branch])
 r = call(['git', 'checkout', '-b', branch])
 assert not r
 for pr in prs:
-    print('--- pr %d --- pulling %s branch %s' % (
-        pr['number'],
-        pr['head']['repo']['clone_url'],
-        pr['head']['ref']))
-    r = call(['git', 'pull', '--no-edit',
-              pr['head']['repo']['clone_url'],
-              pr['head']['ref']])
+    pr_number = pr['number']
+    pr_url = pr['head']['repo']['clone_url']
+    pr_ref = pr['head']['ref']
+    print(f'--- pr {pr_number} --- pulling {pr_url} branch {pr_ref}')
+    r = call(['git', 'pull', '--no-edit', pr_url, pr_ref])
     assert not r
 print('--- done. these PRs were included:')
 print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
