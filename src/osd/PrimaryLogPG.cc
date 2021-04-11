@@ -25,6 +25,8 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
 
+#include "PrimaryLogPG.h"
+
 #include "cls/cas/cls_cas_ops.h"
 #include "common/CDC.h"
 #include "common/EventTrace.h"
@@ -52,9 +54,9 @@
 #include "objclass/objclass.h"
 #include "osd/ClassHandler.h"
 #include "osdc/Objecter.h"
-#include "scrubber/PrimaryLogScrub.h"
-#include "scrubber/ScrubStore.h"
-#include "scrubber/pg_scrubber.h"
+#include "osd/scrubber/PrimaryLogScrub.h"
+#include "osd/scrubber/ScrubStore.h"
+#include "osd/scrubber/pg_scrubber.h"
 
 #include "OSD.h"
 #include "OpRequest.h"
