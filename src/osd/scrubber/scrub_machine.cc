@@ -8,10 +8,9 @@
 
 #include <boost/core/demangle.hpp>
 
-#include "OSD.h"
-#include "OpRequest.h"
+#include "osd/OSD.h"
+#include "osd/OpRequest.h"
 #include "ScrubStore.h"
-#include "scrub_machine_lstnr.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd

@@ -19,7 +19,7 @@
 #include "common/errno.h"
 #include "common/scrub_types.h"
 #include "ReplicatedBackend.h"
-#include "ScrubStore.h"
+#include "scrubber/ScrubStore.h"
 #include "ECBackend.h"
 #include "PGBackend.h"
 #include "OSD.h"

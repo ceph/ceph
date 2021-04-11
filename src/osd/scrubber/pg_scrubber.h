@@ -12,10 +12,10 @@
 #include <string_view>
 #include <vector>
 
-#include "PG.h"
+#include "osd/PG.h"
 #include "ScrubStore.h"
 #include "scrub_machine_lstnr.h"
-#include "scrubber_common.h"
+#include "osd/scrubber_common.h"
 
 class Callback;
 

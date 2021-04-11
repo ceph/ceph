@@ -15,7 +15,7 @@
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDScrubReserve.h"
 
-#include "OSD.h"
+#include "osd/OSD.h"
 #include "ScrubStore.h"
 #include "scrub_machine.h"
 
