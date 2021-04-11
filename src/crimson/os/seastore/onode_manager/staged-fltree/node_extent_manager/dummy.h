@@ -27,7 +27,7 @@ class DummySuper final: public Super {
  protected:
   laddr_t get_root_laddr() const override { return *p_root_laddr; }
   void write_root_laddr(context_t, laddr_t addr) override {
-    logger().info("OTree::Dummy: update root {:#x} ...", addr);
+    logger().debug("OTree::Dummy: update root {:#x} ...", addr);
     *p_root_laddr = addr;
   }
  private:
@@ -175,7 +175,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 
   tm_future<Super::URef> get_super_sync(
       Transaction& t, RootNodeTracker& tracker) {
-    logger().debug("OTree::Dummy: got root {:#x}", root_laddr);
+    logger().trace("OTree::Dummy: got root {:#x}", root_laddr);
     return tm_ertr::make_ready_future<Super::URef>(
         Super::URef(new DummySuper(t, tracker, &root_laddr)));
   }

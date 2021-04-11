@@ -359,10 +359,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(_right_impl.field_type() == FIELD_TYPE);
     auto& right_impl = dynamic_cast<NodeLayoutT&>(_right_impl);
     logger().info("OTree::Layout::Split: begin at "
-                  "insert_pos({}), insert_stage={}, insert_size={}B, "
-                  "{:#x}=>{:#x} ...",
-                  _insert_pos, insert_stage, insert_size,
-                  laddr(), right_impl.laddr());
+                  "insert_pos({}), insert_stage={}, insert_size={}B ...",
+                  _insert_pos, insert_stage, insert_size);
     if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
       std::ostringstream sos;
       dump(sos);
@@ -591,6 +589,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void replace_child_addr(
       const search_position_t& pos, laddr_t dst, laddr_t src) override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      logger().debug("OTree::Layout::ReplaceChildAddr: "
+                     "update from {:#x} to {:#x} at pos({}) ...",
+                     src, dst, pos);
       const laddr_packed_t* p_value;
       if (pos.is_end()) {
         assert(is_level_tail());

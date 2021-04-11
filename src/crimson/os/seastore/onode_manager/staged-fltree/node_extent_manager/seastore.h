@@ -74,7 +74,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
 
   tm_future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) override {
-    logger().debug("OTree::Seastore: reading {}B at {:#x} ...", len, addr);
+    logger().trace("OTree::Seastore: reading {}B at {:#x} ...", len, addr);
     return tm.read_extent<SeastoreNodeExtent>(t, addr, len
     ).safe_then([addr, len](auto&& e) {
       logger().trace("OTree::Seastore: read {}B at {:#x}",
@@ -116,7 +116,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
       Transaction& t, RootNodeTracker& tracker) override {
     logger().trace("OTree::Seastore: get root ...");
     return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
-      logger().debug("OTree::Seastore: got root {:#x}", root_addr);
+      logger().trace("OTree::Seastore: got root {:#x}", root_addr);
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
     });
   }
