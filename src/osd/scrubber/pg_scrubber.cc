@@ -19,6 +19,7 @@
 #include "osd/OSD.h"
 #include "osd/osd_types_fmt.h"
 #include "ScrubStore.h"
+#include "scrub_backend.h"
 #include "scrub_machine.h"
 
 using std::list;
@@ -631,8 +632,7 @@ void PgScrubber::on_applied_when_primary(const eversion_t& applied_version)
  */
 bool PgScrubber::select_range()
 {
-  m_primary_scrubmap = ScrubMap{};
-  m_received_maps.clear();
+  m_primary_scrubmap = m_be->new_chunk();
 
   /* get the start and end of our scrub chunk
    *
@@ -957,6 +957,15 @@ void PgScrubber::on_init()
 
   dout(10) << __func__ << " start same_interval:" << m_interval_start << dendl;
 
+  m_be = std::make_unique<ScrubBackend>(
+    *this,
+    *(m_pg->get_pgbackend()),
+    *m_pg,
+    m_pg_whoami,
+    m_is_repair,
+    m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow,
+    m_pg->get_acting_recovery_backfill());
+
   //  create a new store
   {
     ObjectStore::Transaction t;
@@ -974,116 +983,28 @@ void PgScrubber::on_init()
 
 void PgScrubber::on_replica_init()
 {
+  m_be = std::make_unique<ScrubBackend>(
+    *this,
+    *(m_pg->get_pgbackend()),
+    *m_pg,
+    m_pg_whoami,
+    m_is_repair,
+    m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow);
   m_active = true;
   ++m_sessions_counter;
 }
 
-void PgScrubber::_scan_snaps(ScrubMap& smap)
-{
-  hobject_t head;
-  SnapSet snapset;
-
-  // Test qa/standalone/scrub/osd-scrub-snaps.sh greps for the strings
-  // in this function
-  dout(15) << "_scan_snaps starts" << dendl;
-
-  for (auto i = smap.objects.rbegin(); i != smap.objects.rend(); ++i) {
-
-    const hobject_t& hoid = i->first;
-    ScrubMap::object& o = i->second;
-
-    dout(20) << __func__ << " " << hoid << dendl;
-
-    ceph_assert(!hoid.is_snapdir());
-    if (hoid.is_head()) {
-      // parse the SnapSet
-      bufferlist bl;
-      if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
-	continue;
-      }
-      bl.push_back(o.attrs[SS_ATTR]);
-      auto p = bl.cbegin();
-      try {
-	decode(snapset, p);
-      } catch (...) {
-	continue;
-      }
-      head = hoid.get_head();
-      continue;
-    }
-
-    if (hoid.snap < CEPH_MAXSNAP) {
-      // check and if necessary fix snap_mapper
-      if (hoid.get_head() != head) {
-	derr << __func__ << " no head for " << hoid << " (have " << head << ")" << dendl;
-	continue;
-      }
-      set<snapid_t> obj_snaps;
-      auto p = snapset.clone_snaps.find(hoid.snap);
-      if (p == snapset.clone_snaps.end()) {
-	derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset << dendl;
-	continue;
-      }
-      obj_snaps.insert(p->second.begin(), p->second.end());
-      set<snapid_t> cur_snaps;
-      int r = m_pg->snap_mapper.get_snaps(hoid, &cur_snaps);
-      if (r != 0 && r != -ENOENT) {
-	derr << __func__ << ": get_snaps returned " << cpp_strerror(r) << dendl;
-	ceph_abort();
-      }
-      if (r == -ENOENT || cur_snaps != obj_snaps) {
-	ObjectStore::Transaction t;
-	OSDriver::OSTransaction _t(m_pg->osdriver.get_transaction(&t));
-	if (r == 0) {
-	  r = m_pg->snap_mapper.remove_oid(hoid, &_t);
-	  if (r != 0) {
-	    derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
-	    ceph_abort();
-	  }
-	  m_pg->osd->clog->error()
-	    << "osd." << m_pg->osd->whoami << " found snap mapper error on pg "
-	    << m_pg->info.pgid << " oid " << hoid << " snaps in mapper: " << cur_snaps
-	    << ", oi: " << obj_snaps << "...repaired";
-	} else {
-	  m_pg->osd->clog->error()
-	    << "osd." << m_pg->osd->whoami << " found snap mapper error on pg "
-	    << m_pg->info.pgid << " oid " << hoid << " snaps missing in mapper"
-	    << ", should be: " << obj_snaps << " was " << cur_snaps << " r " << r
-	    << "...repaired";
-	}
-	m_pg->snap_mapper.add_oid(hoid, obj_snaps, &_t);
-
-	// wait for repair to apply to avoid confusing other bits of the system.
-	{
-	  dout(15) << __func__ << " wait on repair!" << dendl;
-
-	  ceph::condition_variable my_cond;
-	  ceph::mutex my_lock = ceph::make_mutex("PG::_scan_snaps my_lock");
-	  int e = 0;
-	  bool done;
-
-	  t.register_on_applied_sync(new C_SafeCond(my_lock, my_cond, &done, &e));
-
-	  e = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
-	  if (e != 0) {
-	    derr << __func__ << ": queue_transaction got " << cpp_strerror(e) << dendl;
-	  } else {
-	    std::unique_lock l{my_lock};
-	    my_cond.wait(l, [&done] { return done; });
-	  }
-	}
-      }
-    }
-  }
-}
 
 int PgScrubber::build_primary_map_chunk()
 {
   epoch_t map_building_since = m_pg->get_osdmap_epoch();
   dout(20) << __func__ << ": initiated at epoch " << map_building_since << dendl;
 
-  auto ret = build_scrub_map_chunk(m_primary_scrubmap, m_primary_scrubmap_pos, m_start,
-				   m_end, m_is_deep);
+  auto ret = build_scrub_map_chunk(*m_primary_scrubmap,
+                                   m_primary_scrubmap_pos,
+                                   m_start,
+                                   m_end,
+                                   m_is_deep);
 
   if (ret == -EINPROGRESS) {
     // reschedule another round of asking the backend to collect the scrub data
@@ -1092,11 +1013,14 @@ int PgScrubber::build_primary_map_chunk()
   return ret;
 }
 
+
 int PgScrubber::build_replica_map_chunk()
 {
   dout(10) << __func__ << " interval start: " << m_interval_start
 	   << " current token: " << m_current_token << " epoch: " << m_epoch_start
 	   << " deep: " << m_is_deep << dendl;
+
+  ceph_assert(m_be);
 
   auto ret = build_scrub_map_chunk(replica_scrubmap, replica_scrubmap_pos, m_start, m_end,
 				   m_is_deep);
@@ -1113,10 +1037,8 @@ int PgScrubber::build_replica_map_chunk()
 
     case 0: {
       // finished!
-      m_cleaned_meta_map.clear_from(m_start);
-      m_cleaned_meta_map.insert(replica_scrubmap);
-      auto for_meta_scrub = clean_meta_map();
-      _scan_snaps(for_meta_scrub);
+
+      m_be->replica_clean_meta(replica_scrubmap, m_end.is_max(), m_start);
 
       // the local map has been created. Send it to the primary.
       // Note: once the message reaches the Primary, it may ask us for another
@@ -1189,47 +1111,12 @@ int PgScrubber::build_scrub_map_chunk(
   // finish
   dout(20) << __func__ << " finishing" << dendl;
   ceph_assert(pos.done());
-  m_pg->_repair_oinfo_oid(map);
+  m_be->repair_oinfo_oid(map);
 
   dout(20) << __func__ << " done, got " << map.objects.size() << " items" << dendl;
   return 0;
 }
 
-/*
- * Process:
- * Building a map of objects suitable for snapshot validation.
- * The data in m_cleaned_meta_map is the left over partial items that need to
- * be completed before they can be processed.
- *
- * Snapshots in maps precede the head object, which is why we are scanning backwards.
- */
-ScrubMap PgScrubber::clean_meta_map()
-{
-  ScrubMap for_meta_scrub;
-
-  if (m_end.is_max() || m_cleaned_meta_map.objects.empty()) {
-    m_cleaned_meta_map.swap(for_meta_scrub);
-  } else {
-    auto iter = m_cleaned_meta_map.objects.end();
-    --iter;  // not empty, see 'if' clause
-    auto begin = m_cleaned_meta_map.objects.begin();
-    if (iter->first.has_snapset()) {
-      ++iter;
-    } else {
-      while (iter != begin) {
-	auto next = iter--;
-	if (next->first.get_head() != iter->first.get_head()) {
-	  ++iter;
-	  break;
-	}
-      }
-    }
-    for_meta_scrub.objects.insert(begin, iter);
-    m_cleaned_meta_map.objects.erase(begin, iter);
-  }
-
-  return for_meta_scrub;
-}
 
 void PgScrubber::run_callbacks()
 {
@@ -1243,7 +1130,8 @@ void PgScrubber::run_callbacks()
 
 void PgScrubber::maps_compare_n_cleanup()
 {
-  scrub_compare_maps();
+  m_pg->add_objects_scrubbed_count(m_be->get_primary_scrubmap().objects.size());
+  m_be->scrub_compare_maps(m_end.is_max());
   m_start = m_end;
   run_callbacks();
   requeue_waiting();
@@ -1320,7 +1208,7 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   preemption_data.reset();
   preemption_data.force_preemptability(msg->allow_preemption);
 
-  replica_scrubmap_pos.reset();
+  replica_scrubmap_pos.reset(); // needed? RRR
 
   set_queued_or_active();
   m_osds->queue_for_rep_scrub(m_pg, m_replica_request_priority,
@@ -1366,103 +1254,6 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
   m_flags.deep_scrub_on_error = request.deep_scrub_on_error;
 }
 
-void PgScrubber::scrub_compare_maps()
-{
-  dout(10) << __func__ << " has maps, analyzing" << dendl;
-
-  // construct authoritative scrub map for type-specific scrubbing
-  m_cleaned_meta_map.insert(m_primary_scrubmap);
-  map<hobject_t, pair<std::optional<uint32_t>, std::optional<uint32_t>>> missing_digest;
-
-  map<pg_shard_t, ScrubMap*> maps;
-  maps[m_pg_whoami] = &m_primary_scrubmap;
-
-  for (const auto& i : m_pg->get_acting_recovery_backfill()) {
-    if (i == m_pg_whoami)
-      continue;
-    dout(2) << __func__ << " replica " << i << " has "
-	    << m_received_maps[i].objects.size() << " items" << dendl;
-    maps[i] = &m_received_maps[i];
-  }
-
-  set<hobject_t> master_set;
-
-  // Construct master set
-  for (const auto& map : maps) {
-    for (const auto& i : map.second->objects) {
-      master_set.insert(i.first);
-    }
-  }
-
-  stringstream ss;
-  m_pg->get_pgbackend()->be_omap_checks(maps, master_set, m_omap_stats, ss);
-
-  if (!ss.str().empty()) {
-    m_osds->clog->warn(ss);
-  }
-
-  if (m_pg->recovery_state.get_acting_recovery_backfill().size() > 1) {
-
-    dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
-
-    // Map from object with errors to good peer
-    map<hobject_t, list<pg_shard_t>> authoritative;
-
-    dout(2) << __func__ << ": primary (" << m_pg->get_primary() << ") has "
-	    << m_primary_scrubmap.objects.size() << " items" << dendl;
-    m_pg->add_objects_scrubbed_count(m_primary_scrubmap.objects.size());
-
-    ss.str("");
-    ss.clear();
-
-    m_pg->get_pgbackend()->be_compare_scrubmaps(
-      maps, master_set, m_is_repair, m_missing, m_inconsistent,
-      authoritative, missing_digest, m_shallow_errors, m_deep_errors, m_store.get(),
-      m_pg->info.pgid, m_pg->recovery_state.get_acting(), ss);
-
-    if (!ss.str().empty()) {
-      m_osds->clog->error(ss);
-    }
-
-    for (auto& i : authoritative) {
-      list<pair<ScrubMap::object, pg_shard_t>> good_peers;
-      for (list<pg_shard_t>::const_iterator j = i.second.begin(); j != i.second.end();
-	   ++j) {
-	good_peers.emplace_back(maps[*j]->objects[i.first], *j);
-      }
-      m_authoritative.emplace(i.first, good_peers);
-    }
-
-    for (auto i = authoritative.begin(); i != authoritative.end(); ++i) {
-      m_cleaned_meta_map.objects.erase(i->first);
-      m_cleaned_meta_map.objects.insert(
-	*(maps[i->second.back()]->objects.find(i->first)));
-    }
-  }
-
-  auto for_meta_scrub = clean_meta_map();
-
-  // ok, do the pg-type specific scrubbing
-
-  // (Validates consistency of the object info and snap sets)
-  scrub_snapshot_metadata(for_meta_scrub, missing_digest);
-
-  // Called here on the primary can use an authoritative map if it isn't the primary
-  _scan_snaps(for_meta_scrub);
-
-  if (!m_store->empty()) {
-
-    if (m_is_repair) {
-      dout(10) << __func__ << ": discarding scrub results" << dendl;
-      m_store->flush(nullptr);
-    } else {
-      dout(10) << __func__ << ": updating scrub object" << dendl;
-      ObjectStore::Transaction t;
-      m_store->flush(&t);
-      m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
-    }
-  }
-}
 
 ScrubMachineListener::MsgAndEpoch PgScrubber::prep_replica_map_msg(
   PreemptionNoted was_preempted)
@@ -1515,10 +1306,9 @@ void PgScrubber::map_from_replica(OpRequestRef op)
     return;
   }
 
-  auto p = const_cast<bufferlist&>(m->get_data()).cbegin();
-
-  m_received_maps[m->from].decode(p, m_pg->info.pgid.pool());
-  dout(15) << "map version is " << m_received_maps[m->from].valid_through << dendl;
+  // note: we check for active() before map_from_replica() is called. Thus, we
+  // know m_be is initialized
+  m_be->decode_received_map(m->from, *m);
 
   auto [is_ok, err_txt] = m_maps_status.mark_arriving_map(m->from);
   if (!is_ok) {
@@ -1719,47 +1509,6 @@ bool PgScrubber::is_queued_or_active() const
   return m_queued_or_active;
 }
 
-[[nodiscard]] bool PgScrubber::scrub_process_inconsistent()
-{
-  dout(10) << __func__ << ": checking authoritative (mode="
-	   << m_mode_desc << ", auth remaining #: " << m_authoritative.size()
-	   << ")" << dendl;
-
-  // authoritative only store objects which are missing or inconsistent.
-  if (!m_authoritative.empty()) {
-
-    stringstream ss;
-    ss << m_pg->info.pgid << " " << m_mode_desc << " " << m_missing.size() << " missing, "
-       << m_inconsistent.size() << " inconsistent objects";
-    dout(2) << ss.str() << dendl;
-    m_osds->clog->error(ss);
-
-    if (m_is_repair) {
-      state_clear(PG_STATE_CLEAN);
-      // we know we have a problem, so it's OK to set the user-visible flag
-      // even if we only reached here via auto-repair
-      state_set(PG_STATE_REPAIR);
-      update_op_mode_text();
-
-      for (const auto& [hobj, shrd_list] : m_authoritative) {
-
-	auto missing_entry = m_missing.find(hobj);
-
-	if (missing_entry != m_missing.end()) {
-	  m_pg->repair_object(hobj, shrd_list, missing_entry->second);
-	  m_fixed_count += missing_entry->second.size();
-	}
-
-	if (m_inconsistent.count(hobj)) {
-	  m_pg->repair_object(hobj, shrd_list, m_inconsistent[hobj]);
-	  m_fixed_count += m_inconsistent[hobj].size();
-	}
-      }
-    }
-  }
-  return (!m_authoritative.empty() && m_is_repair);
-}
-
 /*
  * note: only called for the Primary.
  */
@@ -1785,9 +1534,10 @@ void PgScrubber::scrub_finish()
     update_op_mode_text();
   }
 
-  bool do_auto_scrub = false;
+  m_be->update_repair_status(m_is_repair);
 
   // if a regular scrub had errors within the limit, do a deep scrub to auto repair
+  bool do_auto_scrub = false;
   if (m_flags.deep_scrub_on_error && !m_authoritative.empty() &&
       m_authoritative.size() <= m_pg->cct->_conf->osd_scrub_auto_repair_num_errors) {
     ceph_assert(!m_is_deep);
@@ -1800,7 +1550,9 @@ void PgScrubber::scrub_finish()
   // type-specific finish (can tally more errors)
   _scrub_finish();
 
-  bool has_error = scrub_process_inconsistent();
+  // note that the PG_STATE_REPAIR might have changed above
+  m_fixed_count += m_be->scrub_process_inconsistent();
+  bool has_error = !m_authoritative.empty() && m_is_repair;
 
   {
     stringstream oss;
@@ -1856,44 +1608,55 @@ void PgScrubber::scrub_finish()
     ObjectStore::Transaction t;
     m_pg->recovery_state.update_stats(
       [this](auto& history, auto& stats) {
-	dout(10) << "m_pg->recovery_state.update_stats()" << dendl;
-	utime_t now = ceph_clock_now();
-	history.last_scrub = m_pg->recovery_state.get_info().last_update;
-	history.last_scrub_stamp = now;
-	if (m_is_deep) {
-	  history.last_deep_scrub = m_pg->recovery_state.get_info().last_update;
-	  history.last_deep_scrub_stamp = now;
-	}
+        dout(10) << "m_pg->recovery_state.update_stats() errors:"
+                 << m_shallow_errors << "/" << m_deep_errors << " deep? "
+                 << m_is_deep << dendl;
+        utime_t now = ceph_clock_now();
+        history.last_scrub = m_pg->recovery_state.get_info().last_update;
+        history.last_scrub_stamp = now;
+        if (m_is_deep) {
+          history.last_deep_scrub = m_pg->recovery_state.get_info().last_update;
+          history.last_deep_scrub_stamp = now;
+        }
 
-	if (m_is_deep) {
-	  if ((m_shallow_errors == 0) && (m_deep_errors == 0))
-	    history.last_clean_scrub_stamp = now;
-	  stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
-	  stats.stats.sum.num_deep_scrub_errors = m_deep_errors;
-	  stats.stats.sum.num_large_omap_objects = m_omap_stats.large_omap_objects;
-	  stats.stats.sum.num_omap_bytes = m_omap_stats.omap_bytes;
-	  stats.stats.sum.num_omap_keys = m_omap_stats.omap_keys;
-	  dout(25) << "scrub_finish shard " << m_pg_whoami
-		   << " num_omap_bytes = " << stats.stats.sum.num_omap_bytes
-		   << " num_omap_keys = " << stats.stats.sum.num_omap_keys << dendl;
-	} else {
-	  stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
-	  // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
-	  // because of deep-scrub errors
-	  if (m_shallow_errors == 0)
-	    history.last_clean_scrub_stamp = now;
-	}
-	stats.stats.sum.num_scrub_errors = stats.stats.sum.num_shallow_scrub_errors +
-					   stats.stats.sum.num_deep_scrub_errors;
-	if (m_flags.check_repair) {
-	  m_flags.check_repair = false;
-	  if (m_pg->info.stats.stats.sum.num_scrub_errors) {
-	    state_set(PG_STATE_FAILED_REPAIR);
-	    dout(10) << "scrub_finish " << m_pg->info.stats.stats.sum.num_scrub_errors
-		     << " error(s) still present after re-scrub" << dendl;
-	  }
-	}
-	return true;
+        if (m_is_deep) {
+          if ((m_shallow_errors == 0) && (m_deep_errors == 0)) {
+            history.last_clean_scrub_stamp = now;
+          }
+          stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
+          stats.stats.sum.num_deep_scrub_errors = m_deep_errors;
+          auto omap_stats = m_be->this_scrub_omapstats();
+          stats.stats.sum.num_large_omap_objects =
+            omap_stats.large_omap_objects;
+          stats.stats.sum.num_omap_bytes = omap_stats.omap_bytes;
+          stats.stats.sum.num_omap_keys = omap_stats.omap_keys;
+          dout(19) << "scrub_finish shard " << m_pg_whoami
+                   << " num_omap_bytes = " << stats.stats.sum.num_omap_bytes
+                   << " num_omap_keys = " << stats.stats.sum.num_omap_keys
+                   << dendl;
+        } else {
+          stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
+          // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
+          // because of deep-scrub errors
+          if (m_shallow_errors == 0) {
+            history.last_clean_scrub_stamp = now;
+          }
+        }
+
+        stats.stats.sum.num_scrub_errors =
+          stats.stats.sum.num_shallow_scrub_errors +
+          stats.stats.sum.num_deep_scrub_errors;
+
+        if (m_flags.check_repair) {
+          m_flags.check_repair = false;
+          if (m_pg->info.stats.stats.sum.num_scrub_errors) {
+            state_set(PG_STATE_FAILED_REPAIR);
+            dout(10) << "scrub_finish "
+                     << m_pg->info.stats.stats.sum.num_scrub_errors
+                     << " error(s) still present after re-scrub" << dendl;
+          }
+        }
+        return true;
       },
       &t);
     int tr = m_osds->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
@@ -1926,7 +1689,7 @@ void PgScrubber::scrub_finish()
 
 void PgScrubber::on_digest_updates()
 {
-  dout(10) << __func__ << " #pending: " << num_digest_updates_pending
+  dout(10) << __func__ << " #pending: " << num_digest_updates_pending << " "
 	   << (m_end.is_max() ? " <last chunk>" : " <mid chunk>")
            << (is_queued_or_active() ? "" : " ** not marked as scrubbing **")
            << dendl;
@@ -2224,7 +1987,6 @@ void PgScrubber::reset_internal_state()
 
   preemption_data.reset();
   m_maps_status.reset();
-  m_received_maps.clear();
 
   m_start = hobject_t{};
   m_end = hobject_t{};
@@ -2233,25 +1995,21 @@ void PgScrubber::reset_internal_state()
   m_shallow_errors = 0;
   m_deep_errors = 0;
   m_fixed_count = 0;
-  m_omap_stats = (const struct omap_stat_t){0};
 
   run_callbacks();
 
-  m_inconsistent.clear();
-  m_missing.clear();
   m_authoritative.clear();
   num_digest_updates_pending = 0;
-  m_primary_scrubmap = ScrubMap{};
   m_primary_scrubmap_pos.reset();
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos.reset();
-  m_cleaned_meta_map = ScrubMap{};
   m_needs_sleep = true;
   m_sleep_started_at = utime_t{};
 
   m_active = false;
   clear_queued_or_active();
   ++m_sessions_counter;
+  m_be.reset();
 }
 
 // note that only applicable to the Replica:

@@ -62,6 +62,7 @@ struct OpRequest;
 typedef OpRequest::Ref OpRequestRef;
 class DynamicPerfStats;
 class PgScrubber;
+class ScrubBackend;
 
 namespace Scrub {
   class Store;
@@ -176,6 +177,7 @@ class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend struct NamedState;
   friend class PeeringState;
   friend class PgScrubber;
+  friend class ScrubBackend;
 
 public:
   const pg_shard_t pg_whoami;
@@ -1186,15 +1188,9 @@ protected:
 
   int active_pushes;
 
-  void repair_object(
-    const hobject_t &soid,
-    const std::list<std::pair<ScrubMap::object, pg_shard_t> > &ok_peers,
-    const std::set<pg_shard_t> &bad_peers);
-
   [[nodiscard]] bool ops_blocked_by_scrub() const;
   [[nodiscard]] Scrub::scrub_prio_t is_scrub_blocking_ops() const;
 
-  void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(const std::vector<ghobject_t> &rollback_obs);
   /**
    * returns true if [begin, end) is good to scrub at this time
