@@ -93,8 +93,20 @@ for pr in prs:
     pr_url = pr['head']['repo']['clone_url']
     pr_ref = pr['head']['ref']
     print(f'--- pr {pr_number} --- pulling {pr_url} branch {pr_ref}')
-    r = call(['git', 'pull', '--no-edit', pr_url, pr_ref])
-    assert not r
+    while True:
+        r = call(['git', 'pull', '--no-edit', pr_url, pr_ref])
+        if r == 0:
+            break
+        elif r == 1:
+            print(f'Unable to access {pr_url}, retrying..')
+        elif r == 128:
+            message = f'Unable to resolve conflict when merging PR#{pr_number}'
+            raise Exception(message)
+        else:
+            message = ('Exiting due to an unknown failure when pulling '
+                       f'PR#{pr_number}')
+            raise Exception(message)
+
 print('--- done. these PRs were included:')
 print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
 print('--- perhaps you want to: make && ctest -j12 && git push ci %s' % branch)
