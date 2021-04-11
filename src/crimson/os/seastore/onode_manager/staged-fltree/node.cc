@@ -385,7 +385,10 @@ void Node::test_make_destructable(
 node_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
 {
   return LeafNode::allocate_root(c, root_tracker
-  ).safe_then([](auto ret) { /* FIXME: discard_result(); */ });
+  ).safe_then([](auto ret) {
+    logger().info("OTree::Node::Mkfs: allocated root {}",
+                  ret->get_name());
+  });
 }
 
 node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracker)
@@ -397,6 +400,8 @@ node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracke
     return Node::load(c, root_addr, true
     ).safe_then([c, _super = std::move(_super),
                  &root_tracker](auto root) mutable {
+      logger().trace("OTree::Node::LoadRoot: loaded {}",
+                     root->get_name());
       assert(root->impl->field_type() == field_type_t::N0);
       root->as_root(std::move(_super));
       std::ignore = c; // as only used in an assert
@@ -431,6 +436,8 @@ node_future<> Node::upgrade_root(context_t c)
   return InternalNode::allocate_root(c, impl->level(), impl->laddr(), std::move(super)
   ).safe_then([this](auto new_root) {
     as_child(search_position_t::end(), new_root);
+    logger().info("OTree::Node::UpgradeRoot: upgraded from {} to {}",
+                  get_name(), new_root->get_name());
   });
 }
 
@@ -740,15 +747,15 @@ node_future<Ref<Node>> InternalNode::get_or_track_child(
   auto found = tracked_child_nodes.find(position);
   Ref<InternalNode> this_ref = this;
   return (found == tracked_child_nodes.end()
-    ? (logger().trace("OTree::Internal: load child untracked at {:#x}, pos({}), level={}",
-                      child_addr, position, level() - 1),
-       Node::load(c, child_addr, level_tail
+    ? (Node::load(c, child_addr, level_tail
        ).safe_then([this, position] (auto child) {
          child->as_child(position, this);
+         logger().trace("OTree::Internal::GetTrackChild: loaded child untracked {} at pos({})",
+                        child->get_name(), position);
          return child;
        }))
-    : (logger().trace("OTree::Internal: load child tracked at {:#x}, pos({}), level={}",
-                      child_addr, position, level() - 1),
+    : (logger().trace("OTree::Internal::GetTrackChild: loaded child tracked {} at pos({})",
+                      found->second->get_name(), position),
        node_ertr::make_ready_future<Ref<Node>>(found->second))
   ).safe_then([this_ref, this, position, child_addr] (auto child) {
     assert(child_addr == child->impl->laddr());
@@ -1024,15 +1031,16 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     assert(impl->is_level_tail());
   }
 #endif
-  logger().debug("OTree::Leaf::Insert: "
-                 "pos({}), {}, {}, {}, mstat({}) ...",
-                 pos, key, vconf, history, mstat);
+  logger().debug("OTree::Leaf::InsertValue: insert {} "
+                 "with insert_key={}, insert_value={}, insert_pos({}), "
+                 "history={}, mstat({}) ...",
+                 get_name(), key, vconf, pos, history, mstat);
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
       key, vconf, history, mstat, insert_pos);
   auto free_size = impl->free_size();
   if (free_size >= insert_size) {
-    // insert
+    // proceed to insert
     on_layout_change();
     impl->prepare_mutate(c);
     auto p_value_header = impl->insert(key, vconf, insert_pos, insert_stage, insert_size);
@@ -1051,6 +1059,8 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   }).safe_then([this_ref, this, c, &key, vconf,
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
+    logger().info("OTree::Leaf::InsertValue: proceed split {} to fresh {} ...",
+                  get_name(), right_node->get_name());
     // no need to bump version for right node, as it is fresh
     on_layout_change();
     impl->prepare_mutate(c);
