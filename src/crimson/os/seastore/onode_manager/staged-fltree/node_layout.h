@@ -108,14 +108,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   node_offset_t free_size() const override { return extent.read().free_size(); }
 
   std::optional<key_view_t> get_pivot_index() const override {
-    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      if (is_level_tail()) {
-        return std::nullopt;
-      }
+    if (is_level_tail()) {
+      return std::nullopt;
     }
     assert(!is_keys_empty());
     key_view_t pivot_index;
-    get_largest_slot(nullptr, &pivot_index, nullptr);
+    STAGE_T::template get_largest_slot<false, true, false>(
+        extent.read(), nullptr, &pivot_index, nullptr);
     return {pivot_index};
   }
 
