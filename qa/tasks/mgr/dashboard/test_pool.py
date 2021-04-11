@@ -163,7 +163,7 @@ class PoolTest(DashboardTestCase):
         self.assertStatus(403)
 
     def test_pool_configuration(self):
-        pool_name = 'device_health_metrics'
+        pool_name = '.mgr'
         data = self._get('/api/pool/{}/configuration'.format(pool_name))
         self.assertStatus(200)
         self.assertSchema(data, JList(JObj({
