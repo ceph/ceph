@@ -30,7 +30,7 @@ from .api import PSTopicS3, \
     put_object_tagging
 
 from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal
+from nose.tools import assert_not_equal, assert_equal, assert_in
 import boto.s3.tagging
 
 # configure logging for the tests module
@@ -170,17 +170,30 @@ class StreamingHTTPServer:
 
 # AMQP endpoint functions
 
-rabbitmq_port = 5672
-
 class AMQPReceiver(object):
     """class for receiving and storing messages on a topic from the AMQP broker"""
-    def __init__(self, exchange, topic):
+    def __init__(self, exchange, topic, external_endpoint_address=None, ca_location=None):
         import pika
-        hostname = get_ip()
+        import ssl
+
+        if ca_location:
+            ssl_context = ssl.create_default_context()
+            ssl_context.load_verify_locations(cafile=ca_location)
+            ssl_options = pika.SSLOptions(ssl_context)
+            rabbitmq_port = 5671
+        else:
+            rabbitmq_port = 5672
+            ssl_options = None
+
+        if external_endpoint_address:
+            params = pika.URLParameters(external_endpoint_address, ssl_options=ssl_options)
+        else:
+            hostname = get_ip()
+            params = pika.ConnectionParameters(host=hostname, port=rabbitmq_port, ssl_options=ssl_options)
         remaining_retries = 10
         while remaining_retries > 0:
             try:
-                connection = pika.BlockingConnection(pika.ConnectionParameters(host=hostname, port=rabbitmq_port))
+                connection = pika.BlockingConnection(params)
                 break
             except Exception as error:
                 remaining_retries -= 1
@@ -223,6 +236,7 @@ class AMQPReceiver(object):
         self.events = []
         return tmp
 
+
 def amqp_receiver_thread_runner(receiver):
     """main thread function for the amqp receiver"""
     try:
@@ -233,13 +247,12 @@ def amqp_receiver_thread_runner(receiver):
         log.info('AMQP receiver ended unexpectedly: %s', str(error))
 
 
-def create_amqp_receiver_thread(exchange, topic):
+def create_amqp_receiver_thread(exchange, topic, external_endpoint_address=None, ca_location=None):
     """create amqp receiver and thread"""
-    receiver = AMQPReceiver(exchange, topic)
+    receiver = AMQPReceiver(exchange, topic, external_endpoint_address, ca_location)
     task = threading.Thread(target=amqp_receiver_thread_runner, args=(receiver,))
     task.daemon = True
     return task, receiver
-
 
 def stop_amqp_receiver(receiver, task):
     """stop the receiver thread and wait for it to finis"""
@@ -249,6 +262,34 @@ def stop_amqp_receiver(receiver, task):
     except Exception as error:
         log.info('failed to gracefuly stop AMQP receiver: %s', str(error))
     task.join(5)
+
+
+def init_rabbitmq():
+    """ start a rabbitmq broker """
+    hostname = get_ip()
+    try:
+        # first try to stop any existing process
+        subprocess.call(['sudo', 'rabbitmqctl', 'stop'])
+        time.sleep(5)
+        proc = subprocess.Popen(['sudo', '--preserve-env=RABBITMQ_CONFIG_FILE', 'rabbitmq-server'])
+    except Exception as error:
+        log.info('failed to execute rabbitmq-server: %s', str(error))
+        print('failed to execute rabbitmq-server: %s' % str(error))
+        return None
+    # TODO add rabbitmq checkpoint instead of sleep
+    time.sleep(5)
+    return proc
+
+
+def clean_rabbitmq(proc):
+    """ stop the rabbitmq broker """
+    try:
+        subprocess.call(['sudo', 'rabbitmqctl', 'stop'])
+        time.sleep(5)
+        proc.terminate()
+    except:
+        log.info('rabbitmq server already terminated')
+
 
 def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
     """ verify there is at least one event per element """
@@ -291,7 +332,7 @@ def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
             log.error(events)
             assert False, err
 
-def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False, expected_sizes={}):
+def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False, expected_sizes={}, etags=[]):
     """ verify there is at least one record per element """
     err = ''
     for key in keys:
@@ -302,13 +343,14 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                 if key_found:
                     break
                 for record in record_list['Records']:
+                    assert_in('etag', record['s3']['object'])
                     if record['s3']['bucket']['name'] == key.bucket.name and \
                         record['s3']['object']['key'] == key.name:
                         # Assertion Error needs to be fixed
-                        #assert_equal(key.etag[1:-1], record['s3']['object']['eTag'])
+                        #assert_equal(key.etag[1:-1], record['s3']['object']['etag'])
                         if etags:
                             assert_in(key.etag[1:-1], etags)
-                        if deletions and record['eventName'].startswith('ObjectRemoved'):
+                        if deletions and 'ObjectRemoved' in record['eventName']:
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
@@ -318,8 +360,12 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                             break
         else:
             for record in records['Records']:
+                assert_in('etag', record['s3']['object'])
                 if record['s3']['bucket']['name'] == key.bucket.name and \
                     record['s3']['object']['key'] == key.name:
+                    assert_equal(key.etag, record['s3']['object']['etag'])
+                    if etags:
+                        assert_in(key.etag[1:-1], etags)
                     if deletions and 'ObjectRemoved' in record['eventName']:
                         key_found = True
                         object_size = record['s3']['object']['size']
@@ -376,9 +422,9 @@ class KafkaReceiver(object):
         self.topic = topic
         self.stop = False
 
-    def verify_s3_events(self, keys, exact_match=False, deletions=False):
+    def verify_s3_events(self, keys, exact_match=False, deletions=False, etags=[]):
         """verify stored s3 records agains a list of keys"""
-        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions)
+        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, etags=etags)
         self.events = []
 
 def kafka_receiver_thread_runner(receiver):
@@ -434,7 +480,7 @@ def connection():
     vstart_secret_key = get_secret_key()
 
     conn = S3Connection(aws_access_key_id=vstart_access_key,
-	    	      aws_secret_access_key=vstart_secret_key,
+                  aws_secret_access_key=vstart_secret_key,
                       is_secure=False, port=port_no, host=hostname, 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
 
@@ -1053,10 +1099,13 @@ def test_ps_s3_notification_push_kafka_on_master():
         # create objects in the bucket (async)
         number_of_objects = 10
         client_threads = []
+        etags=[]
         start_time = time.time()
         for i in range(number_of_objects):
             key = bucket.new_key(str(i))
             content = str(os.urandom(1024*1024))
+            etag = hashlib.md5(content.encode()).hexdigest()
+            etags.append(etag)
             thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
             thr.start()
             client_threads.append(thr)
@@ -1068,7 +1117,7 @@ def test_ps_s3_notification_push_kafka_on_master():
         print('wait for 5sec for the messages...')
         time.sleep(5)
         keys = list(bucket.list())
-        receiver.verify_s3_events(keys, exact_match=True)
+        receiver.verify_s3_events(keys, exact_match=True, etags=etags)
 
         # delete objects from the bucket
         client_threads = []
@@ -1084,7 +1133,7 @@ def test_ps_s3_notification_push_kafka_on_master():
 
         print('wait for 5sec for the messages...')
         time.sleep(5)
-        receiver.verify_s3_events(keys, exact_match=True, deletions=True)
+        receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
 
     finally:
         # cleanup
@@ -1317,7 +1366,7 @@ def test_ps_s3_opaque_data_on_master():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
-def test_ps_s3_creation_triggers_on_master():
+def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_location=None, verify_ssl='true'):
     """ test object creation s3 notifications in using put/copy/post on master"""
     
     if not external_endpoint_address and not skip_amqp_ssl:
@@ -1339,12 +1388,19 @@ def test_ps_s3_creation_triggers_on_master():
 
     # start amqp receiver
     exchange = 'ex1'
-    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name, external_endpoint_address, ca_location)
     task.start()
 
     # create s3 topic
-    endpoint_address = 'amqp://' + hostname
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    if external_endpoint_address:
+        endpoint_address = external_endpoint_address
+    elif ca_location:
+        endpoint_address = 'amqps://' + hostname
+    else:
+        endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker&verify-ssl='+verify_ssl
+    if ca_location:
+        endpoint_args += '&ca-location={}'.format(ca_location)
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
@@ -2003,10 +2059,9 @@ def test_ps_s3_persistent_cleanup():
         client_threads.append(thr)
     # stop gateway while clients are sending
     os.system("killall -9 radosgw");
-    zonegroup.master_zone.gateways[0].stop()
     print('wait for 10 sec for before restarting the gateway')
     time.sleep(10)
-    zonegroup.master_zone.gateways[0].start()
+    # TODO: start the radosgw
     [thr.join() for thr in client_threads]
 
     keys = list(bucket.list())
