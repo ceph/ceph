@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "ScrubStore.h"
-#include "osd_types.h"
+#include "osd/osd_types.h"
 #include "common/scrub_types.h"
 #include "include/rados/rados_types.hpp"
 

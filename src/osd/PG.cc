@@ -20,8 +20,8 @@
 #include "common/config.h"
 #include "OSD.h"
 #include "OpRequest.h"
-#include "ScrubStore.h"
-#include "pg_scrubber.h"
+#include "scrubber/ScrubStore.h"
+#include "scrubber/pg_scrubber.h"
 #include "Session.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 

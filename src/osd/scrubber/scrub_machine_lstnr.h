@@ -8,7 +8,7 @@
 #include "common/version.h"
 #include "include/Context.h"
 
-#include "osd_types.h"
+#include "osd/osd_types.h"
 
 namespace Scrub {
 

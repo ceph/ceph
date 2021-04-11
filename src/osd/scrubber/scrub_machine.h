@@ -18,7 +18,7 @@
 #include "include/Context.h"
 
 #include "scrub_machine_lstnr.h"
-#include "scrubber_common.h"
+#include "osd/scrubber_common.h"
 
 using namespace std::string_literals;
 

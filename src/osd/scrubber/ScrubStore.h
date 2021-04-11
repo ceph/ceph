@@ -4,7 +4,7 @@
 #ifndef CEPH_SCRUB_RESULT_H
 #define CEPH_SCRUB_RESULT_H
 
-#include "SnapMapper.h"		// for OSDriver
+#include "osd/SnapMapper.h"		// for OSDriver
 #include "common/map_cacher.hpp"
 
 namespace librados {
