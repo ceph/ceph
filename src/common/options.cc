@@ -574,7 +574,7 @@ std::vector<Option> get_global_options() {
     .set_description("default set by python code"),
 
     Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default(CEPH_PKGLIBDIR"/erasure-code")
+    .set_default(CEPH_INSTALL_FULL_PKGLIBDIR"/erasure-code")
     .set_flag(Option::FLAG_STARTUP)
     .set_description("directory where erasure-code plugins can be found")
     .add_service({"mon", "osd"}),
@@ -805,7 +805,7 @@ std::vector<Option> get_global_options() {
     .set_description("Enable named (or all with '*') experimental features that may be untested, dangerous, and/or cause permanent data loss"),
 
     Option("plugin_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default(CEPH_PKGLIBDIR)
+    .set_default(CEPH_INSTALL_FULL_PKGLIBDIR)
     .set_flag(Option::FLAG_STARTUP)
     .add_service({"mon", "osd"})
     .set_description("Base directory for dynamically loaded plugins"),
@@ -3480,7 +3480,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_deep_scrub_large_omap_object_key_threshold"),
 
     Option("osd_class_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default(CEPH_LIBDIR "/rados-classes")
+    .set_default(CMAKE_INSTALL_LIBDIR "/rados-classes")
     .set_description(""),
 
     Option("osd_open_classes_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5426,7 +5426,7 @@ std::vector<Option> get_global_options() {
     .set_description("Path to cephadm utility"),
 
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default(CEPH_DATADIR "/mgr")
+    .set_default(CEPH_INSTALL_DATADIR "/mgr")
     .add_service("mgr")
     .set_description("Filesystem path to manager modules."),
 
