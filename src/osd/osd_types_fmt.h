@@ -7,6 +7,7 @@
 
 #include "common/hobject_fmt.h"
 #include "osd/osd_types.h"
+#include "include/types_fmt.h"
 
 template <>
 struct fmt::formatter<osd_reqid_t> {
