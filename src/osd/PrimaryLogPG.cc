@@ -8251,6 +8251,11 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, OSDOp& op)
     ObjectContextRef promote_obc;
     cache_result_t tier_mode_result;
     if (obs.exists && obs.oi.has_manifest()) {
+      /* 
+       * In the case of manifest object, the object_info exists on the base tier at all time,
+       * so promote_obc should be equal to rollback_to 
+       * */
+      promote_obc = rollback_to;
       tier_mode_result =
 	maybe_handle_manifest_detail(
 	  ctx->op,
