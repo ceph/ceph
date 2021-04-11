@@ -885,6 +885,8 @@ namespace s3selectEngine
 {
 class s3select;
 class csv_object;
+class parquet_object;
+class rgw_s3select_api;
 }
 
 class RGWSelectObj_ObjStore_S3 : public RGWGetObj_ObjStore_S3
@@ -895,6 +897,7 @@ private:
   std::string m_s3select_query;
   std::string m_result;
   std::unique_ptr<s3selectEngine::csv_object> m_s3_csv_object;
+  std::unique_ptr<s3selectEngine::parquet_object> m_s3_parquet_object;
   std::string m_column_delimiter;
   std::string m_quot;
   std::string m_row_delimiter;
@@ -903,6 +906,15 @@ private:
   std::unique_ptr<char[]>  m_buff_header;
   std::string m_header_info;
   std::string m_sql_query;
+
+  //parquet request 
+  bool m_parquet_type;
+  s3selectEngine::rgw_s3select_api* m_rgw_api;
+  size_t m_request_range;//a request for range may statisfy by several calls to send_response_date (call back)
+  std::string requested_buffer;
+  std::string range_req_str;
+  std::promise<void> range_request_complete;
+  std::future<void> range_request_complete_future;
 
 public:
   unsigned int chunk_number;
@@ -930,6 +942,8 @@ public:
 
   virtual int get_params() override;
 
+  virtual void execute() override;
+
 private:
   void encode_short(char* buff, uint16_t s, int& i);
 
@@ -948,6 +962,13 @@ private:
   void convert_escape_seq(std::string& esc);
 
   int handle_aws_cli_parameters(std::string& sql_query);
+
+  int range_request(int64_t start,int64_t len,void *);
+
+  size_t get_obj_size();
+  std::function<int(int64_t,int64_t,void*)> fp_range_req;
+  std::function<size_t(void)> fp_get_obj_size;
+
 };
 
 

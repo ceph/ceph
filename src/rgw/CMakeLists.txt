@@ -237,6 +237,7 @@ endif()
 
 target_link_libraries(rgw_a
   PRIVATE
+  arrow parquet
   librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client cls_cmpomap_client
   cls_user_client cls_rgw_gc_client ceph-common common_utf8 global
