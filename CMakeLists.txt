@@ -682,6 +682,8 @@ add_custom_target(check
   COMMAND ${CMAKE_CTEST_COMMAND}
   DEPENDS tests)
 
+option(WITH_SYSTEMD "build with systemd support" ON)
+
 add_subdirectory(src)
 
 add_subdirectory(qa)
@@ -691,7 +693,6 @@ if(WITH_MANPAGE)
   add_subdirectory(man)
 endif(WITH_MANPAGE)
 
-option(WITH_SYSTEMD "install systemd target and service files" ON)
 if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()
