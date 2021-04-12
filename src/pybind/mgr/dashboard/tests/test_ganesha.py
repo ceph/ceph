@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-lines
 from __future__ import absolute_import
 
 import unittest
@@ -18,6 +19,38 @@ from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
 class GaneshaConfTest(unittest.TestCase, KVStoreMockMixin):
+    daemon_raw_config = """
+NFS_CORE_PARAM {
+            Enable_NLM = false;
+            Enable_RQUOTA = false;
+            Protocols = 4;
+            NFS_Port = 14000;
+        }
+
+        MDCACHE {
+           Dir_Chunk = 0;
+        }
+
+        NFSv4 {
+           RecoveryBackend = rados_cluster;
+           Minor_Versions = 1, 2;
+        }
+
+        RADOS_KV {
+           pool = nfs-ganesha;
+           namespace = vstart;
+           UserId = vstart;
+           nodeid = a;
+        }
+
+        RADOS_URLS {
+       Userid = vstart;
+       watch_url = 'rados://nfs-ganesha/vstart/conf-nfs.vstart';
+        }
+
+    %url rados://nfs-ganesha/vstart/conf-nfs.vstart
+"""
+
     export_1 = """
 EXPORT {
     Export_ID=1;
@@ -230,6 +263,44 @@ EXPORT
             return result
         ganesha.GaneshaConfOrchestrator._get_orch_nfs_instances = Mock(
             side_effect=_get_nfs_instances)
+
+    def test_parse_daemon_raw_config(self):
+        expected_daemon_config = [
+            {
+                "block_name": "NFS_CORE_PARAM",
+                "enable_nlm": False,
+                "enable_rquota": False,
+                "protocols": 4,
+                "nfs_port": 14000
+            },
+            {
+                "block_name": "MDCACHE",
+                "dir_chunk": 0
+            },
+            {
+                "block_name": "NFSV4",
+                "recoverybackend": "rados_cluster",
+                "minor_versions": [1, 2]
+            },
+            {
+                "block_name": "RADOS_KV",
+                "pool": "nfs-ganesha",
+                "namespace": "vstart",
+                "userid": "vstart",
+                "nodeid": "a"
+            },
+            {
+                "block_name": "RADOS_URLS",
+                "userid": "vstart",
+                "watch_url": "'rados://nfs-ganesha/vstart/conf-nfs.vstart'"
+            },
+            {
+                "block_name": "%url",
+                "value": "rados://nfs-ganesha/vstart/conf-nfs.vstart"
+            }
+        ]
+        daemon_config = GaneshaConfParser(self.daemon_raw_config).parse()
+        self.assertEqual(daemon_config, expected_daemon_config)
 
     def test_export_parser_1(self):
         blocks = GaneshaConfParser(self.export_1).parse()
