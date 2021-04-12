@@ -2540,7 +2540,14 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
 
     ports = ports or []
     if any([port_in_use(ctx, port) for port in ports]):
-        raise Error("TCP Port(s) '{}' required for {} already in use".format(','.join(map(str, ports)), daemon_type))
+        if daemon_type == 'mgr':
+            # non-fatal for mgr when we are in mgr_standby_modules=false, but we can't
+            # tell whether that is the case here.
+            logger.warning(
+                f"ceph-mgr TCP port(s) {','.join(map(str, ports))} already in use"
+            )
+        else:
+            raise Error("TCP Port(s) '{}' required for {} already in use".format(','.join(map(str, ports)), daemon_type))
 
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     if reconfig and not os.path.exists(data_dir):
