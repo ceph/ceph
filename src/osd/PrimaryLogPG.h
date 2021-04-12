@@ -196,7 +196,8 @@ public:
   friend struct CopyFromFinisher;
   friend class PromoteCallback;
   friend struct PromoteFinisher;
-
+  friend class C_gather;
+  
   struct ProxyReadOp {
     OpRequestRef op;
     hobject_t soid;
@@ -256,6 +257,19 @@ public:
     ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
+
+  struct CLSGatherOp {
+    OpContext *ctx = nullptr;
+    ObjectContextRef obc;
+    OpRequestRef op;
+    std::vector<ceph_tid_t> objecter_tids;
+    int rval = 0;
+
+    CLSGatherOp(OpContext *ctx_, ObjectContextRef obc_, OpRequestRef op_)
+      : ctx(ctx_), obc(obc_), op(op_)  {}
+    CLSGatherOp() {}
+    ~CLSGatherOp() {}
+  };
 
   friend struct RefCountCallback;
   struct ManifestOp {
@@ -1351,6 +1365,11 @@ protected:
 
   friend struct C_Flush;
 
+  // -- cls_gather --
+  std::map<hobject_t, CLSGatherOp> cls_gather_ops;
+  void cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
+
   // -- scrub --
   bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) override;
@@ -1499,6 +1518,9 @@ public:
   int do_tmapup_slow(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op, ceph::buffer::list& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
+  int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
+		       const char *cls, const char *method, bufferlist& inbl);
+
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
