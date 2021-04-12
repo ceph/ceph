@@ -469,7 +469,7 @@ def coredump(ctx, config):
                     run.Raw('&&'),
                     'sudo', 'bash', '-c',
                     (f'for f in `find {archive_dir}/coredump -type f`; do '
-                     'file $f | grep -q systemd-sysusers && rm $f ; '
+                     'file $f | grep -q systemd-sysusers && rm $f || true ; '
                      'done'),
                     run.Raw('&&'),
                     # don't litter the archive dir if there were no cores dumped
