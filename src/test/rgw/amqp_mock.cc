@@ -104,6 +104,8 @@ struct amqp_socket_t_ {
   }
 };
 
+extern "C" {
+
 amqp_connection_state_t AMQP_CALL amqp_new_connection(void) {
   auto s = new amqp_connection_state_t_;
   return s;
@@ -291,7 +293,11 @@ amqp_confirm_select_ok_t* amqp_confirm_select(amqp_connection_state_t state, amq
   return state->confirm;
 }
 
+#if AMQP_VERSION >= AMQP_VERSION_CODE(0, 11, 0, 1)
+int amqp_simple_wait_frame_noblock(amqp_connection_state_t state, amqp_frame_t *decoded_frame, const struct timeval* tv) {
+#else
 int amqp_simple_wait_frame_noblock(amqp_connection_state_t state, amqp_frame_t *decoded_frame, struct timeval* tv) {
+#endif
   if (state->socket && state->socket->open_called &&
       state->login_called && state->channel1 && state->channel2 && state->exchange &&
       state->queue && state->consume && state->confirm && !FAIL_NEXT_READ) {
@@ -355,6 +361,8 @@ amqp_basic_consume_ok_t* amqp_basic_consume(
   return state->consume;
 }
 
+} // extern "C"
+
 // amqp_parse_url() is linked via the actual rabbitmq-c library code. see: amqp_url.c
 
 // following functions are the actual implementation copied from rabbitmq-c library
@@ -379,4 +387,5 @@ amqp_bytes_t amqp_bytes_malloc_dup(amqp_bytes_t src) {
   }
   return result;
 }
+
 
