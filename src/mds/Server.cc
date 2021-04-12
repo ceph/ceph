@@ -3327,6 +3327,9 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     auto _xattrs = CInode::allocate_xattr_map();
     decode_noshare(*_xattrs, p);
     dout(10) << "prepare_new_inode setting xattrs " << *_xattrs << dendl;
+    if (_xattrs->count("encryption.ctx")) {
+      _inode->fscrypt = true;
+    }
     in->reset_xattrs(std::move(_xattrs));
   }
 
