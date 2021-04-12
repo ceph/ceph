@@ -141,6 +141,12 @@ add_executable(ceph_test_rados_api_snapshots_pp
 target_link_libraries(ceph_test_rados_api_snapshots_pp
   librados ${UNITTEST_LIBS} radostest-cxx)
 
+add_executable(ceph_test_rados_api_cls_remote_reads
+  cls_remote_reads.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(ceph_test_rados_api_cls_remote_reads
+  librados global ${UNITTEST_LIBS} radostest-cxx)
+
 install(TARGETS
   ceph_test_rados_api_aio
   ceph_test_rados_api_aio_pp
@@ -166,6 +172,7 @@ install(TARGETS
   ceph_test_rados_api_tier_pp
   ceph_test_rados_api_watch_notify
   ceph_test_rados_api_watch_notify_pp
+  ceph_test_rados_api_cls_remote_reads
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_librados

@@ -13,6 +13,9 @@ overrides:
       mon:
         mon warn on pool no app: false
         debug mgrc: 20
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
 tasks:
 - workunit:
     clients:
