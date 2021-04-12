@@ -2991,10 +2991,10 @@ def get_unit_file(ctx, fsid):
     # type: (CephadmContext, str) -> str
     extra_args = ''
     if isinstance(ctx.container_engine, Podman):
-        extra_args = ('ExecStartPre=-/bin/rm -f /%t/%n-pid /%t/%n-cid\n'
-                      'ExecStopPost=-/bin/rm -f /%t/%n-pid /%t/%n-cid\n'
+        extra_args = ('ExecStartPre=-/bin/rm -f %t/%n-pid %t/%n-cid\n'
+                      'ExecStopPost=-/bin/rm -f %t/%n-pid %t/%n-cid\n'
                       'Type=forking\n'
-                      'PIDFile=/%t/%n-pid\n')
+                      'PIDFile=%t/%n-pid\n')
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             extra_args += 'Delegate=yes\n'
 
