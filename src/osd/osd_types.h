@@ -1596,12 +1596,12 @@ public:
   }
 
   int64_t get_dedup_tier() const {
-    int64_t tier_id;
+    int64_t tier_id = 0;
     opts.get(pool_opts_t::DEDUP_TIER, &tier_id);
     return tier_id;
   }
   int64_t get_dedup_cdc_chunk_size() const {
-    int64_t chunk_size;
+    int64_t chunk_size = 0;
     opts.get(pool_opts_t::DEDUP_CDC_CHUNK_SIZE, &chunk_size);
     return chunk_size;
   }
