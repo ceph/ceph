@@ -56,6 +56,11 @@ export class RgwUserListComponent extends ListWithDetails {
         flexGrow: 1
       },
       {
+        name: this.i18n('Tenant'),
+        prop: 'tenant',
+        flexGrow: 1
+      },
+      {
         name: this.i18n('Full name'),
         prop: 'display_name',
         flexGrow: 1

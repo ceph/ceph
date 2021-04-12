@@ -156,21 +156,21 @@ describe('RgwUserFormComponent', () => {
 
   describe('username validation', () => {
     it('should validate that username is required', () => {
-      formHelper.expectErrorChange('uid', '', 'required', true);
+      formHelper.expectErrorChange('user_id', '', 'required', true);
     });
 
     it('should validate that username is valid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
-      formHelper.setValue('uid', 'ab', true);
+      formHelper.setValue('user_id', 'ab', true);
       tick(500);
-      formHelper.expectValid('uid');
+      formHelper.expectValid('user_id');
     }));
 
     it('should validate that username is invalid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
-      formHelper.setValue('uid', 'abc', true);
+      formHelper.setValue('user_id', 'abc', true);
       tick(500);
-      formHelper.expectError('uid', 'notUnique');
+      formHelper.expectError('user_id', 'notUnique');
     }));
   });
 
