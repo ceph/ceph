@@ -810,6 +810,14 @@ class Keepalived(object):
         ]
         return envs
 
+    @staticmethod
+    def get_prestart():
+        return (
+            '# keepalived needs IP forwarding and non-local bind\n'
+            'sysctl net.ipv4.ip_forward=1\n'
+            'sysctl net.ipv4.ip_nonlocal_bind=1\n'
+        )
+
     def extract_uid_gid_keepalived(self):
         # better directory for this?
         return extract_uid_gid(self.ctx, file_path='/var/lib')
@@ -2712,6 +2720,8 @@ def deploy_daemon_units(
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
             _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
+        elif daemon_type == Keepalived.daemon_type:
+            f.write(Keepalived.get_prestart())
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
