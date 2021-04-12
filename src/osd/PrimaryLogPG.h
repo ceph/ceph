@@ -1872,6 +1872,7 @@ public:
   bool maybe_await_blocked_head(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
+  void requeue_op_blocked_by_object(const hobject_t &soid);
 
   void maybe_force_recovery();
 
