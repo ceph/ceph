@@ -103,6 +103,30 @@ IA_TEMPLATE(slot_0_t, KeyT::HOBJ);
 IA_TEMPLATE(slot_1_t, KeyT::HOBJ);
 IA_TEMPLATE(slot_3_t, KeyT::HOBJ);
 
+template <typename SlotType>
+node_offset_t F013_T::erase_at(
+    NodeExtentMutable& mut, const me_t& node, index_t index, const char* p_left_bound)
+{
+  auto offset_item_start = node.get_item_start_offset(index);
+  auto offset_item_end = node.get_item_end_offset(index);
+  assert(offset_item_start < offset_item_end);
+  auto erase_size = offset_item_end - offset_item_start;
+  // fix and shift the left part
+  update_size_at(mut, node, index + 1, -erase_size);
+  const char* p_shift_start = fields_start(node) + node.get_key_start_offset(index + 1);
+  extent_len_t shift_len = sizeof(SlotType) * (node.num_keys - index - 1);
+  int shift_off = -(int)sizeof(SlotType);
+  mut.shift_absolute(p_shift_start, shift_len, shift_off);
+  // shift the right part
+  p_shift_start = p_left_bound;
+  shift_len = fields_start(node) + offset_item_start - p_left_bound;
+  shift_off = erase_size;
+  mut.shift_absolute(p_shift_start, shift_len, shift_off);
+  // fix num_keys
+  mut.copy_in_absolute((void*)&node.num_keys, num_keys_t(node.num_keys - 1));
+  return erase_size;
+}
+
 #define F013_TEMPLATE(ST) template struct F013_INST(ST)
 F013_TEMPLATE(slot_0_t);
 F013_TEMPLATE(slot_1_t);

@@ -44,6 +44,19 @@ node_offset_t internal_sub_items_t::trim_until(
   return ret;
 }
 
+node_offset_t internal_sub_items_t::erase_at(
+    NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
+    index_t index, const char* p_left_bound)
+{
+  assert(index < sub_items.keys());
+  node_offset_t erase_size = sizeof(internal_sub_item_t);
+  const char* p_shift_start = p_left_bound;
+  const char* p_shift_end = reinterpret_cast<const char*>(
+      sub_items.p_first_item - index);
+  mut.shift_absolute(p_shift_start, p_shift_end - p_shift_start, erase_size);
+  return erase_size;
+}
+
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
     const internal_sub_items_t& src, index_t from, index_t items)
@@ -141,6 +154,37 @@ node_offset_t leaf_sub_items_t::trim_until(
   size_t ret = size_trim_offsets + (p_shift_start - p_items_start);
   assert(ret < NODE_BLOCK_SIZE);
   return ret;
+}
+
+node_offset_t leaf_sub_items_t::erase_at(
+    NodeExtentMutable& mut, const leaf_sub_items_t& sub_items,
+    index_t index, const char* p_left_bound)
+{
+  assert(sub_items.keys() > 0);
+  assert(index < sub_items.keys());
+  auto p_item_start = sub_items.get_item_start(index);
+  auto p_item_end = sub_items.get_item_end(index);
+  assert(p_item_start < p_item_end);
+  node_offset_t item_erase_size = p_item_end - p_item_start;
+  node_offset_t erase_size = item_erase_size + sizeof(node_offset_t);
+  auto p_offset_end = (const char*)&sub_items.get_offset(index);
+
+  // a. compensate affected offset[n] ... offset[index+1]
+  for (auto i = index + 1; i < sub_items.keys(); ++i) {
+    const node_offset_packed_t& offset_i = sub_items.get_offset(i);
+    mut.copy_in_absolute((void*)&offset_i, node_offset_t(offset_i.value - item_erase_size));
+  }
+
+  // b. kv[index-1] ... kv[0] ... offset[index+1] >> sizeof(node_offset_t)
+  mut.shift_absolute(p_item_end, p_offset_end - p_item_end, sizeof(node_offset_t));
+
+  // c. ... kv[n] ... kv[index+1] >> item_erase_size
+  mut.shift_absolute(p_left_bound, p_item_start - p_left_bound, erase_size);
+
+  // d. update num_keys
+  mut.copy_in_absolute((void*)sub_items.p_num_keys, num_keys_t(sub_items.keys() - 1));
+
+  return erase_size;
 }
 
 template class internal_sub_items_t::Appender<KeyT::VIEW>;

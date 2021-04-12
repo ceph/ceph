@@ -175,6 +175,9 @@ class node_extent_t {
   static node_offset_t trim_at(NodeExtentMutable&, const node_extent_t&,
                         index_t index, node_offset_t trimmed);
 
+  static node_offset_t erase_at(NodeExtentMutable&, const node_extent_t&,
+                                index_t index, const char* p_left_bound);
+
   template <KeyT KT>
   class Appender;
 

@@ -176,6 +176,22 @@ node_offset_t NODE_T::trim_at(
   return 0;
 }
 
+template <typename FieldType, node_type_t NODE_TYPE>
+node_offset_t NODE_T::erase_at(
+    NodeExtentMutable& mut, const node_extent_t& node,
+    index_t index, const char* p_left_bound)
+{
+  if constexpr (FIELD_TYPE == field_type_t::N0 ||
+                FIELD_TYPE == field_type_t::N1) {
+    assert(node.keys() > 0);
+    assert(index < node.keys());
+    assert(p_left_bound == node.p_left_bound());
+    return FieldType::erase_at(mut, node.fields(), index, p_left_bound);
+  } else {
+    ceph_abort("not implemented");
+  }
+}
+
 #define NODE_TEMPLATE(FT, NT) template class NODE_INST(FT, NT)
 NODE_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL);
 NODE_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL);

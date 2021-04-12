@@ -225,6 +225,7 @@ struct staged {
     *   (!IS_BOTTOM) update_size_at(mut, src, index, size)
     *   trim_until(mut, container, index) -> trim_size
     *   (!IS_BOTTOM) trim_at(mut, container, index, trimmed) -> trim_size
+    *   erase_at(mut, container, index, p_left_bound) -> erase_size
     *
     * Appender::append(const container_t& src, from, items)
     */
@@ -450,6 +451,11 @@ struct staged {
       return container_t::trim_at(mut, container, _index, trimmed);
     }
 
+    node_offset_t erase(NodeExtentMutable& mut, const char* p_left_bound) {
+      assert(!is_end());
+      return container_t::erase_at(mut, container, _index, p_left_bound);
+    }
+
     void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
       container.encode(p_node_start, encoded);
       ceph::encode(_index, encoded);
@@ -502,6 +508,7 @@ struct staged {
      *   update_size(mut, src, size)
      *   trim_until(mut, container) -> trim_size
      *   trim_at(mut, container, trimmed) -> trim_size
+     *   erase(mut, container, p_left_bound) -> erase_size
      */
     // currently the iterative iterator is only implemented with STAGE_STRING
     // for in-node space efficiency
@@ -764,6 +771,11 @@ struct staged {
       return container_t::trim_at(mut, container, trimmed);
     }
 
+    node_offset_t erase(NodeExtentMutable& mut, const char* p_left_bound) {
+      assert(!is_end());
+      return container_t::erase(mut, container, p_left_bound);
+    }
+
     void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
       container.encode(p_node_start, encoded);
       uint8_t is_end = _is_end;
@@ -833,6 +845,8 @@ struct staged {
    *   copy_out_until(appender, to_index) (can be end)
    *   trim_until(mut) -> trim_size
    *   (!IS_BOTTOM) trim_at(mut, trimmed) -> trim_size
+   * erase:
+   *   erase(mut, p_left_bound) -> erase_size
    * denc:
    *   encode(p_node_start, encoded)
    *   decode(p_node_start, delta) -> iterator_t
@@ -2127,6 +2141,91 @@ struct staged {
       assert(trim_at.valid());
       auto& iter = trim_at.get();
       iter.trim_until(mut);
+    }
+  }
+
+  static std::optional<std::tuple<match_stage_t, node_offset_t, bool>>
+  proceed_erase_recursively(
+      NodeExtentMutable& mut,
+      const container_t& container,     // IN
+      const char* p_left_bound,         // IN
+      position_t& pos) {                // IN&OUT
+    auto iter = iterator_t(container);
+    auto& index = pos.index;
+    assert(is_valid_index(index));
+    iter.seek_at(index);
+    bool is_last = iter.is_last();
+
+    if constexpr (!IS_BOTTOM) {
+      auto nxt_container = iter.get_nxt_container();
+      auto ret = NXT_STAGE_T::proceed_erase_recursively(
+          mut, nxt_container, p_left_bound, pos.nxt);
+      if (ret.has_value()) {
+        // erased at lower level
+        auto [r_stage, r_erase_size, r_done] = *ret;
+        assert(r_erase_size != 0);
+        iter.update_size(mut, -r_erase_size);
+        if (r_done) {
+          // done, the next_pos is calculated
+          return ret;
+        } else {
+          if (is_last) {
+            // need to find the next pos at upper stage
+            return ret;
+          } else {
+            // done, calculate the next pos
+            ++index;
+            pos.nxt = NXT_STAGE_T::position_t::begin();
+            return {{r_stage, r_erase_size, true}};
+          }
+        }
+      }
+      // not erased at lower level
+    }
+
+    // not erased yet
+    if (index == 0 && is_last) {
+      // need to erase from the upper stage
+      return std::nullopt;
+    } else {
+      auto erase_size = iter.erase(mut, p_left_bound);
+      assert(erase_size != 0);
+      if (is_last) {
+        // need to find the next pos at upper stage
+        return {{STAGE, erase_size, false}};
+      } else {
+        // done, calculate the next pos (should be correct already)
+        if constexpr (!IS_BOTTOM) {
+          assert(pos.nxt == NXT_STAGE_T::position_t::begin());
+        }
+        return {{STAGE, erase_size, true}};
+      }
+    }
+  }
+
+  static match_stage_t erase(
+      NodeExtentMutable& mut,
+      const container_t& node_stage,    // IN
+      position_t& erase_pos) {          // IN&OUT
+    auto p_left_bound = node_stage.p_left_bound();
+    auto ret = proceed_erase_recursively(
+        mut, node_stage, p_left_bound, erase_pos);
+    if (ret.has_value()) {
+      auto [r_stage, r_erase_size, r_done] = *ret;
+      std::ignore = r_erase_size;
+      if (r_done) {
+        assert(!erase_pos.is_end());
+        return r_stage;
+      } else {
+        // erased the last kv
+        erase_pos = position_t::end();
+        return r_stage;
+      }
+    } else {
+      assert(node_stage.keys() == 1);
+      node_stage.erase_at(mut, node_stage, 0, p_left_bound);
+      erase_pos = position_t::end();
+      return STAGE;
     }
   }
 

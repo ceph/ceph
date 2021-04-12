@@ -138,6 +138,9 @@ class item_iterator_t {
   static node_offset_t trim_at(
       NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&, node_offset_t trimmed);
 
+  static node_offset_t erase(
+      NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&, const char*);
+
   template <KeyT KT>
   class Appender;
 
