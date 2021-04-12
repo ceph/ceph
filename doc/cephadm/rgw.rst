@@ -112,6 +112,10 @@ elected as master, and the virtual IP will be moved to that node.
 The active haproxy acts like a load balancer, distributing all RGW requests
 between all the RGW daemons available.
 
+.. note:: The virtual IP will be configured on an ethernet interface on the host
+	  that has an existing IP in the same subnet.  (If there are multiple such
+	  interfaces, cephadm will choose the "first" one it sees.)
+
 **Prerequisites:**
 
 * An existing RGW service, without SSL.  (If you want SSL service, the certificate
