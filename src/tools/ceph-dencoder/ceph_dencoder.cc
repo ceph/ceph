@@ -75,9 +75,11 @@ public:
     }
   }
   ~DencoderPlugin() {
+#if !defined(__FreeBSD__)
     if (mod) {
       dlclose(mod);
     }
+#endif
   }
   int register_dencoders() {
     assert(mod);
