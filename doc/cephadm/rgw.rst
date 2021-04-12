@@ -141,22 +141,17 @@ It is a yaml format file with the following properties:
         - host2
         - host3
     spec:
-      backend_service: rgw.something    # adjust to match your existing RGW service
-      virtual_ip: <string>/<string> # ex: 192.168.20.1/24
-      frontend_port: <integer>  # ex: 8080
-      monitor_port: <integer> # ex: 1967, used by haproxy for load balancer status
-      ssl_cert: <optional string> ex:
-        [
-          "-----BEGIN CERTIFICATE-----",
-          "MIIDZTCCAk2gAwIBAgIUClb9dnseOsgJWAfhPQvrZw2MP2kwDQYJKoZIhvcNAQEL",
-          ....
-          "-----END CERTIFICATE-----",
-          "-----BEGIN PRIVATE KEY-----",
-          ....
-          "sCHaZTUevxb4h6dCEk1XdPr2O2GdjV0uQ++9bKahAy357ELT3zPE8yYqw7aUCyBO",
-          "aW5DSCo8DgfNOgycVL/rqcrc",
-          "-----END PRIVATE KEY-----"
-        ]
+      backend_service: rgw.something      # adjust to match your existing RGW service
+      virtual_ip: <string>/<string>       # ex: 192.168.20.1/24
+      frontend_port: <integer>            # ex: 8080
+      monitor_port: <integer>             # ex: 1967, used by haproxy for load balancer status
+      ssl_cert: |                         # optional: SSL certificate and key
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----
+        -----BEGIN PRIVATE KEY-----
+        ...
+        -----END PRIVATE KEY-----
 
 where the properties of this service specification are:
 
