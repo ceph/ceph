@@ -153,7 +153,7 @@ if(NOT WIN32)
   target_link_libraries(ceph_bench_log rt)
 endif()
 
-if(HAVE_MSGHDR)
+if(WITH_SYSTEMD)
   add_executable(ceph_bench_journald_logger
     bench_journald_logger.cc)
   target_link_libraries(ceph_bench_journald_logger ceph-common)

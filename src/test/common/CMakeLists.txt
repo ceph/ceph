@@ -361,7 +361,7 @@ target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
 
-if(HAVE_MSGHDR)
+if(WITH_SYSTEMD)
   add_executable(unittest_journald_logger test_journald_logger.cc)
   target_link_libraries(unittest_journald_logger ceph-common)
   add_ceph_unittest(unittest_journald_logger)

@@ -100,7 +100,7 @@ set(common_srcs
   util.cc
   version.cc)
 
-if(HAVE_MSGHDR)
+if(WITH_SYSTEMD)
   list(APPEND common_srcs
     Journald.cc)
 endif()
