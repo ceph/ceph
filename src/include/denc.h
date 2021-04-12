@@ -39,6 +39,7 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
+#include "include/compat.h"
 #include "include/intarith.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
