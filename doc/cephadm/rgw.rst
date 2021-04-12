@@ -114,23 +114,8 @@ between all the RGW daemons available.
 
 **Prerequisites:**
 
-* An existing RGW service.
-* In order for the Keepalived service to forward network packets properly to the
-  real servers, each ingress node must have IP forwarding turned on in the kernel::
-
-    net.ipv4.ip_forward=1
-
-* Load balancing in HAProxy and Keepalived at the same time also requires the
-  ability to bind to an IP address that are nonlocal, meaning that it is not
-  assigned to a device on the local system. This allows a running load balancer
-  instance to bind to an IP that is not local for failover.::
-
-    net.ipv4.ip_nonlocal_bind=1
-
-* Be sure to set properly these two options in the file ``/etc/sysctl.conf`` in
-  order to persist this values even if the hosts are restarted.
-  These configuration changes must be applied in all the hosts where the ingress service is going to be deployed.
-
+* An existing RGW service, without SSL.  (If you want SSL service, the certificate
+  should be configured on the ingress service, not the RGW service.)
 
 **Deploy of the high availability service for RGW**
 
