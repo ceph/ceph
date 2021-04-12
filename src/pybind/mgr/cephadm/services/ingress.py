@@ -51,7 +51,7 @@ class IngressService(CephService):
         host = daemon_spec.host
         spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
-        logger.info('Create daemon haproxy.%s on host %s with spec %s' % (
+        logger.debug('prepare_create haproxy.%s on host %s with spec %s' % (
             daemon_id, host, spec))
 
         daemon_spec.final_config, daemon_spec.deps = self.haproxy_generate_config(daemon_spec)
@@ -121,7 +121,7 @@ class IngressService(CephService):
         host = daemon_spec.host
         spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
-        logger.info('Create daemon keepalived.%s on host %s with spec %s' % (
+        logger.debug('prepare_create keepalived.%s on host %s with spec %s' % (
             daemon_id, host, spec))
 
         daemon_spec.final_config, daemon_spec.deps = self.keepalived_generate_config(daemon_spec)
