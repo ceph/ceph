@@ -873,14 +873,17 @@ class DaemonDescription(object):
     def service_id(self) -> str:
         assert self.daemon_id is not None
         assert self.daemon_type is not None
-        if self.daemon_type == 'osd' and self.osdspec_affinity:
-            return self.osdspec_affinity
 
         if self._service_name:
             if '.' in self._service_name:
                 return self._service_name.split('.', 1)[1]
             else:
                 return ''
+
+        if self.daemon_type == 'osd':
+            if self.osdspec_affinity and self.osdspec_affinity != 'None':
+                return self.osdspec_affinity
+            return 'unmanaged'
 
         def _match() -> str:
             assert self.daemon_id is not None
