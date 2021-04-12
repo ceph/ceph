@@ -551,6 +551,18 @@ class MonService(CephService):
 class MgrService(CephService):
     TYPE = 'mgr'
 
+    def allow_colo(self) -> bool:
+        if self.mgr.get_ceph_option('mgr_standby_modules'):
+            # traditional mgr mode: standby daemons' modules listen on
+            # ports and redirect to the primary.  we must not schedule
+            # multiple mgrs on the same host or else ports will
+            # conflict.
+            return False
+        else:
+            # standby daemons do nothing, and therefore port conflicts
+            # are not a concern.
+            return True
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
         Create a new manager instance on a host.
