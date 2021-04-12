@@ -110,6 +110,9 @@ class internal_sub_items_t {
 
   static node_offset_t trim_until(NodeExtentMutable&, internal_sub_items_t&, index_t);
 
+  static node_offset_t erase_at(
+      NodeExtentMutable&, const internal_sub_items_t&, index_t, const char*);
+
   template <KeyT KT>
   class Appender;
 
@@ -269,6 +272,9 @@ class leaf_sub_items_t {
       index_t index, node_offset_t size, const char* p_left_bound);
 
   static node_offset_t trim_until(NodeExtentMutable&, leaf_sub_items_t&, index_t index);
+
+  static node_offset_t erase_at(
+      NodeExtentMutable&, const leaf_sub_items_t&, index_t, const char*);
 
   template <KeyT KT>
   class Appender;
