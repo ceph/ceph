@@ -155,13 +155,27 @@ class IngressService(CephService):
         hosts = sorted(list(set([str(d.hostname) for d in daemons])))
 
         # interface
-        interface = 'eth0'
+        bare_ip = str(spec.virtual_ip).split('/')[0]
+        interface = None
         for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-            logger.info(f'subnet {subnet} ifaces {ifaces} virtual_ip {spec.virtual_ip}')
-            if ifaces and ipaddress.ip_address(spec.virtual_ip) in ipaddress.ip_network(subnet):
-                logger.info(f'{spec.virtual_ip} is in {subnet}')
+            if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
                 interface = list(ifaces.keys())[0]
+                logger.info(
+                    f'{bare_ip} is in {subnet} on {host} interface {interface}'
+                )
                 break
+        if not interface and spec.networks:
+            # hmm, try spec.networks
+            for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                if subnet in spec.networks:
+                    interface = list(ifaces.keys())[0]
+                    logger.info(
+                        f'{spec.virtual_ip} will be configured on {host} interface '
+                        f'{interface} (which has guiding subnet {subnet})'
+                    )
+                    break
+        if not interface:
+            interface = 'eth0'
 
         # script to monitor health
         script = '/usr/bin/false'

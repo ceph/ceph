@@ -112,10 +112,6 @@ elected as master, and the virtual IP will be moved to that node.
 The active haproxy acts like a load balancer, distributing all RGW requests
 between all the RGW daemons available.
 
-.. note:: The virtual IP will be configured on an ethernet interface on the host
-	  that has an existing IP in the same subnet.  (If there are multiple such
-	  interfaces, cephadm will choose the "first" one it sees.)
-
 **Prerequisites:**
 
 * An existing RGW service, without SSL.  (If you want SSL service, the certificate
@@ -145,6 +141,7 @@ It is a yaml format file with the following properties:
       virtual_ip: <string>/<string>       # ex: 192.168.20.1/24
       frontend_port: <integer>            # ex: 8080
       monitor_port: <integer>             # ex: 1967, used by haproxy for load balancer status
+      virtual_interface_networks: [ ... ] # optional: list of CIDR networks
       ssl_cert: |                         # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
@@ -166,11 +163,46 @@ where the properties of this service specification are:
     to match the nodes where RGW is deployed.
 * ``virtual_ip``
     The virtual IP (and network) in CIDR format where the ingress service will be available.
+* ``virtual_interface_networks``
+    A list of networks to identify which ethernet interface to use for the virtual IP.
 * ``frontend_port``
     The port used to access the ingress service.
 * ``ssl_cert``:
     SSL certificate, if SSL is to be enabled. This must contain the both the certificate and
     private key blocks in .pem format.
+
+**Selecting ethernet interfaces for the virtual IP:**
+
+You cannot simply provide the name of the network interface on which
+to configure the virtual IP because interface names tend to vary
+across hosts (and/or reboots).  Instead, cephadm will select
+interfaces based on other existing IP addresses that are already
+configured.
+
+Normally, the virtual IP will be configured on the first network
+interface that has an existing IP in the same subnet.  For example, if
+the virtual IP is 192.168.0.80/24 and eth2 has the static IP
+192.168.0.40/24, cephadm will use eth2.
+
+In some cases, the virtual IP may not belong to the same subnet as an existing static
+IP.  In such cases, you can provide a list of subnets to match against existing IPs,
+and cephadm will put the virtual IP on the first network interface to match.  For example,
+if the virtual IP is 192.168.0.80/24 and we want it on the same interface as the machine's
+static IP in 10.10.0.0/16, you can use a spec like::
+
+  service_type: ingress
+  service_id: rgw.something
+  spec:
+    virtual_ip: 192.168.0.80/24
+    virtual_interface_networks:
+      - 10.10.0.0/16
+    ...
+
+A consequence of this strategy is that you cannot currently configure the virtual IP
+on an interface that has no existing IP address.  In this situation, we suggest
+configuring a "dummy" IP address is an unroutable network on the correct interface
+and reference that dummy network in the networks list (see above).
+
 
 **Useful hints for ingress:**
 
