@@ -943,10 +943,14 @@ def shell(ctx, config):
             env.extend(['-e', k + '=' + ctx.config.get(k, '')])
         del config['env']
 
-    if 'all' in config and len(config) == 1:
-        a = config['all']
+    if 'all-roles' in config and len(config) == 1:
+        a = config['all-roles']
         roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles)
+        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
+    elif 'all-hosts' in config and len(config) == 1:
+        a = config['all-hosts']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
 
     for role, cmd in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
