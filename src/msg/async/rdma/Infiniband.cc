@@ -629,7 +629,14 @@ Infiniband::CompletionQueue::~CompletionQueue()
 
 int Infiniband::CompletionQueue::init()
 {
-  cq = ibv_create_cq(infiniband.device->ctxt, queue_depth, this, channel->get_channel(), 0);
+  int comp_vector = 0;
+  bool hash_irqs = cct->_conf->ms_async_rdma_support_hash_irqs;
+  if (hash_irqs && cct->_conf->name.is_osd()) {
+    comp_vector = std::stoi(cct->_conf->name.get_id()) %
+                  infiniband.device->ctxt->num_comp_vectors;
+  }
+  cq = ibv_create_cq(infiniband.device->ctxt, queue_depth, this,
+                     channel->get_channel(), comp_vector);
   if (!cq) {
     lderr(cct) << __func__ << " failed to create receive completion queue: "
       << cpp_strerror(errno) << dendl;
