@@ -1937,6 +1937,7 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
 		    ceph_release());
   r->name = name;
   r->quorum = quorum;
+  r->leader = leader;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
   r->paxos_first_version = paxos->get_first_committed();
   r->paxos_last_version = paxos->get_version();
@@ -2104,7 +2105,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       send_mon_message(new MMonJoin(monmap->fsid, name,
 				    messenger->get_myaddrs(), crush_loc,
 				    need_set_crush_loc),
-		       *m->quorum.begin());
+		       m->leader);
     }
   } else {
     if (monmap->contains(m->name)) {
@@ -2379,7 +2380,7 @@ void Monitor::finish_election()
 	     << map_crush_loc <<" -> " << name << "/" << crush_loc << dendl;
     send_mon_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddrs(),
 				  crush_loc, need_set_crush_loc),
-		     *quorum.begin());
+		     leader);
     return;
   }
   do_stretch_mode_election_work();

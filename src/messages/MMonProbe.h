@@ -24,7 +24,7 @@ class MMonProbe : public MessageInstance<MMonProbe> {
 public:
   friend factory;
 
-  static constexpr int HEAD_VERSION = 7;
+  static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 5;
 
   enum {
@@ -52,6 +52,7 @@ public:
   int32_t op = 0;
   string name;
   set<int32_t> quorum;
+  int leader = -1;
   bufferlist monmap_bl;
   version_t paxos_first_version = 0;
   version_t paxos_last_version = 0;
@@ -80,6 +81,7 @@ public:
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;
+    out << " leader " << leader;
     if (op == OP_REPLY) {
       out << " paxos("
 	<< " fc " << paxos_first_version
@@ -117,6 +119,7 @@ public:
     encode(paxos_last_version, payload);
     encode(required_features, payload);
     encode(mon_release, payload);
+    encode(leader, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -136,6 +139,11 @@ public:
       decode(mon_release, p);
     else
       mon_release = 0;
+    if (header.version >= 8) {
+      decode(leader, p);
+    } else if (quorum.size()) {
+      leader = *quorum.begin();
+    }
   }
 };
 
