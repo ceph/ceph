@@ -196,7 +196,8 @@ public:
   friend struct CopyFromFinisher;
   friend class PromoteCallback;
   friend struct PromoteFinisher;
-
+  friend class C_gather;
+  
   struct ProxyReadOp {
     OpRequestRef op;
     hobject_t soid;
@@ -256,6 +257,19 @@ public:
     ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
+
+  struct CLSGatherOp {
+    OpContext *ctx = nullptr;
+    ObjectContextRef obc;
+    OpRequestRef op;
+    std::vector<ceph_tid_t> objecter_tids;
+    int rval = 0;
+
+    CLSGatherOp(OpContext *ctx_, ObjectContextRef obc_, OpRequestRef op_)
+      : ctx(ctx_), obc(obc_), op(op_)  {}
+    CLSGatherOp() {}
+    ~CLSGatherOp() {}
+  };
 
   friend struct RefCountCallback;
   struct ManifestOp {
@@ -1351,6 +1365,11 @@ protected:
 
   friend struct C_Flush;
 
+  // -- cls_gather --
+  std::map<hobject_t, CLSGatherOp> cls_gather_ops;
+  void cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
+
   // -- scrub --
   bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) override;
@@ -1427,6 +1446,7 @@ protected:
 			      Context *cb, std::optional<bufferlist> chunk);
   void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);
   void dec_refcount(const hobject_t& soid, const object_ref_delta_t& refs);
+  void update_chunk_map_by_dirty(OpContext* ctx);
   void dec_refcount_by_dirty(OpContext* ctx);
   ObjectContextRef get_prev_clone_obc(ObjectContextRef obc);
   bool recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op);
@@ -1439,12 +1459,15 @@ protected:
   int start_dedup(OpRequestRef op, ObjectContextRef obc);
   hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
   int finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
+  int finish_set_manifest_refcount(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend struct C_CopyChunk;
   friend struct RefCountCallback;
   friend struct C_SetDedupChunks;
+  friend struct C_SetManifestRefCountDone;
+  friend struct SetManifestFinisher;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
@@ -1495,6 +1518,9 @@ public:
   int do_tmapup_slow(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op, ceph::buffer::list& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
+  int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
+		       const char *cls, const char *method, bufferlist& inbl);
+
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
@@ -1800,7 +1826,9 @@ private:
   // whiteout or no change.
   void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
   int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout);
-  int _rollback_to(OpContext *ctx, ceph_osd_op& op);
+  int _rollback_to(OpContext *ctx, OSDOp& op);
+  void _do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
+				    OSDOp& op);
 public:
   bool is_missing_object(const hobject_t& oid) const;
   bool is_unreadable_object(const hobject_t &oid) const {
@@ -1811,7 +1839,7 @@ public:
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
 
-  int get_manifest_ref_count(ObjectContextRef obc, std::string& fp_oid);
+  int get_manifest_ref_count(ObjectContextRef obc, std::string& fp_oid, OpRequestRef op);
 
   bool check_laggy(OpRequestRef& op);
   bool check_laggy_requeue(OpRequestRef& op);
@@ -1844,6 +1872,7 @@ public:
   bool maybe_await_blocked_head(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
+  void requeue_op_blocked_by_object(const hobject_t &soid);
 
   void maybe_force_recovery();
 

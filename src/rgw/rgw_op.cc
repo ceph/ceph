@@ -2536,6 +2536,8 @@ void RGWSetBucketVersioning::execute(optional_yield y)
   }
 
   if (s->bucket->get_info().obj_lock_enabled() && versioning_status != VersioningEnabled) {
+    s->err.message = "bucket versioning cannot be disabled on buckets with object lock enabled";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_BUCKET_STATE;
     return;
   }
@@ -4734,6 +4736,9 @@ void RGWDeleteObj::execute(optional_yield y)
       int object_lock_response = verify_object_lock(this, attrs, bypass_perm, bypass_governance_mode);
       if (object_lock_response != 0) {
         op_ret = object_lock_response;
+	if (op_ret == -EACCES) {
+	  s->err.message = "forbidden by object lock";
+	}
         return;
       }
     }
@@ -7681,7 +7686,8 @@ int RGWPutBucketObjectLock::verify_permission(optional_yield y)
 void RGWPutBucketObjectLock::execute(optional_yield y)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
-    ldpp_dout(this, 0) << "ERROR: object Lock configuration cannot be enabled on existing buckets" << dendl;
+    s->err.message = "object lock configuration can't be set if bucket object lock not enabled";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_BUCKET_STATE;
     return;
   }
@@ -7709,7 +7715,8 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
     return;
   }
   if (obj_lock.has_rule() && !obj_lock.retention_period_valid()) {
-    ldpp_dout(this, 0) << "ERROR: retention period must be a positive integer value" << dendl;
+    s->err.message = "retention period must be a positive integer value";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_RETENTION_PERIOD;
     return;
   }
@@ -7769,7 +7776,8 @@ void RGWPutObjRetention::pre_exec()
 void RGWPutObjRetention::execute(optional_yield y)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
-    ldpp_dout(this, 0) << "ERROR: object retention can't be set if bucket object lock not configured" << dendl;
+    s->err.message = "object retention can't be set if bucket object lock not configured";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_REQUEST;
     return;
   }
@@ -7795,7 +7803,8 @@ void RGWPutObjRetention::execute(optional_yield y)
   }
 
   if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph_clock_now()) {
-    ldpp_dout(this, 0) << "ERROR: the retain until date must be in the future" << dendl;
+    s->err.message = "the retain-until date must be in the future";
+    ldpp_dout(this, 0) << "ERROR: " << s->err.message << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -7821,6 +7830,7 @@ void RGWPutObjRetention::execute(optional_yield y)
     }
     if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date())) {
       if (old_obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
+	s->err.message = "proposed retain-until date shortens an existing retention period and governance bypass check failed";
         op_ret = -EACCES;
         return;
       }
@@ -7848,7 +7858,8 @@ void RGWGetObjRetention::pre_exec()
 void RGWGetObjRetention::execute(optional_yield y)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
-    ldpp_dout(this, 0) << "ERROR: bucket object lock not configured" << dendl;
+    s->err.message = "bucket object lock not configured";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_REQUEST;
     return;
   }
@@ -7891,7 +7902,8 @@ void RGWPutObjLegalHold::pre_exec()
 
 void RGWPutObjLegalHold::execute(optional_yield y) {
   if (!s->bucket->get_info().obj_lock_enabled()) {
-    ldpp_dout(this, 0) << "ERROR: object legal hold can't be set if bucket object lock not configured" << dendl;
+    s->err.message = "object legal hold can't be set if bucket object lock not enabled";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_REQUEST;
     return;
   }
@@ -7942,7 +7954,8 @@ void RGWGetObjLegalHold::pre_exec()
 void RGWGetObjLegalHold::execute(optional_yield y)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
-    ldpp_dout(this, 0) << "ERROR: bucket object lock not configured" << dendl;
+    s->err.message = "bucket object lock not configured";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_REQUEST;
     return;
   }
@@ -7974,7 +7987,6 @@ void RGWGetClusterStat::execute(optional_yield y)
 {
   op_ret = store->cluster_stat(stats_op);
 }
-
 
 int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
 {

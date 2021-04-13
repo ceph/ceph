@@ -8,7 +8,7 @@ from teuthology.orchestra.run import Raw
 class CapsHelper(CephFSTestCase):
 
     def run_mon_cap_tests(self, moncap, keyring):
-        keyring_path = self.create_keyring_file(self.fs.admin_remote, keyring)
+        keyring_path = self.fs.admin_remote.mktemp(data=keyring)
 
         fsls = self.run_cluster_cmd(f'fs ls --id {self.client_id} -k '
                                     f'{keyring_path}')

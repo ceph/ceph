@@ -118,12 +118,13 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
-  $<TARGET_OBJECTS:common_mountcephfs_objs>)
+  $<TARGET_OBJECTS:common_mountcephfs_objs>
+  $<TARGET_OBJECTS:common-options-objs>)
 
 target_compile_definitions(crimson-common PRIVATE
-  "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
-  "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
-  "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
+  "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
+  "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
+  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
 set(crimson_common_deps
   Boost::iostreams

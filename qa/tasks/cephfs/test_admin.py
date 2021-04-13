@@ -466,8 +466,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
         self.mount_a.write_file(filepath, filedata)
 
         keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
-        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
-                                                keyring)
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
         self.mount_a.remount(client_id=self.client_id,
                              client_keyring_path=keyring_path,
                              cephfs_mntpt='/')
@@ -502,8 +501,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
         filepaths, filedata, mounts, keyring = self.setup_test_env(perm, paths)
         moncap = self.get_mon_cap_from_keyring(self.client_name)
 
-        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
-                                                keyring)
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
         for path in paths:
             self.mount_a.remount(client_id=self.client_id,
                                  client_keyring_path=keyring_path,
@@ -519,8 +517,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
         filepaths, filedata, mounts, keyring = self.setup_test_env(perm, paths)
         moncap = self.get_mon_cap_from_keyring(self.client_name)
 
-        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
-                                                keyring)
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
         for path in paths:
             self.mount_a.remount(client_id=self.client_id,
                                  client_keyring_path=keyring_path,
@@ -544,8 +541,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
         self.mount_a.write_file(filepath, filedata)
 
         keyring = self.fs.authorize(self.client_id, ('/', perm))
-        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
-                                                keyring)
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
 
         self.mount_a.remount(client_id=self.client_id,
                              client_keyring_path=keyring_path,

@@ -4,17 +4,19 @@
 #ifndef CEPH_COMMON_JOURNALD_H
 #define CEPH_COMMON_JOURNALD_H
 
+#include "acconfig.h"
 #include <memory>
 #include <sys/types.h>
 #include <sys/socket.h>
 
 struct LogEntry;
 
-namespace ceph {
+namespace ceph::logging {
 
-namespace logging {
+#ifdef WITH_SYSTEMD
 
 namespace detail {
+
 class EntryEncoder;
 class LogEntryEncoder;
 
@@ -84,7 +86,25 @@ class JournaldClusterLogger {
   std::unique_ptr<detail::LogEntryEncoder> m_log_entry_encoder;
 };
 
-}
-}
+#else  // WITH_SYSTEMD
+
+class JournaldLogger {
+public:
+  JournaldLogger(const SubsystemMap *) {}
+  int log_entry(const Entry &) {
+    return 0;
+  }
+};
+
+class JournaldClusterLogger {
+public:
+  int log_log_entry(const LogEntry &le) {
+    return 0;
+  }
+};
+
+#endif // WITH_SYSTEMD
+
+} // ceph::logging
 
 #endif

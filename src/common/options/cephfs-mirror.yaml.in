@@ -1,0 +1,82 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: cephfs_mirror_max_concurrent_directory_syncs
+  type: uint
+  level: advanced
+  desc: maximum number of concurrent snapshot synchronization threads
+  long_desc: maximum number of directory snapshots that can be synchronized concurrently
+    by cephfs-mirror daemon. Controls the number of synchronization threads.
+  default: 3
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_action_update_interval
+  type: secs
+  level: advanced
+  desc: interval for driving asynchornous mirror actions
+  long_desc: Interval in seconds to process pending mirror update actions.
+  default: 2
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_restart_mirror_on_blocklist_interval
+  type: secs
+  level: advanced
+  desc: interval to restart blocklisted instances
+  long_desc: Interval in seconds to restart blocklisted mirror instances. Setting
+    to zero (0) disables restarting blocklisted instances.
+  default: 30
+  services:
+  - cephfs-mirror
+  min: 0
+- name: cephfs_mirror_max_snapshot_sync_per_cycle
+  type: uint
+  level: advanced
+  desc: number of snapshots to mirror in one cycle
+  long_desc: maximum number of snapshots to mirror when a directory is picked up for
+    mirroring by worker threads.
+  default: 3
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_directory_scan_interval
+  type: uint
+  level: advanced
+  desc: interval to scan directories to mirror snapshots
+  long_desc: interval in seconds to scan configured directories for snapshot mirroring.
+  default: 10
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_max_consecutive_failures_per_directory
+  type: uint
+  level: advanced
+  desc: consecutive failed directory synchronization attempts before marking a directory
+    as "failed"
+  long_desc: number of consecutive snapshot synchronization failues to mark a directory
+    as "failed". failed directories are retried for synchronization less frequently.
+  default: 10
+  services:
+  - cephfs-mirror
+  min: 0
+- name: cephfs_mirror_retry_failed_directories_interval
+  type: uint
+  level: advanced
+  desc: failed directory retry interval for synchronization
+  long_desc: interval in seconds to retry synchronization for failed directories.
+  default: 60
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_restart_mirror_on_failure_interval
+  type: secs
+  level: advanced
+  desc: interval to restart failed mirror instances
+  long_desc: Interval in seconds to restart failed mirror instances. Setting to zero
+    (0) disables restarting failed mirror instances.
+  default: 20
+  services:
+  - cephfs-mirror
+  min: 0

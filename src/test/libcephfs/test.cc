@@ -2554,6 +2554,22 @@ TEST(LibCephFS, SnapInfo) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, LookupInoMDSDir) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  Inode *inode;
+  auto ino = inodeno_t(0x100); /* rank 0 ~mdsdir */
+  ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
+  ino = inodeno_t(0x600); /* rank 0 first stray dir */
+  ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, LookupVino) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);

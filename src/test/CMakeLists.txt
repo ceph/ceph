@@ -153,10 +153,11 @@ if(NOT WIN32)
   target_link_libraries(ceph_bench_log rt)
 endif()
 
-add_executable(ceph_bench_journald_logger
-  bench_journald_logger.cc
-  )
-target_link_libraries(ceph_bench_journald_logger ceph-common)
+if(WITH_SYSTEMD)
+  add_executable(ceph_bench_journald_logger
+    bench_journald_logger.cc)
+  target_link_libraries(ceph_bench_journald_logger ceph-common)
+endif()
 
 # ceph_test_mutate
 add_executable(ceph_test_mutate
@@ -611,8 +612,10 @@ if(PROMTOOL_EXECUTABLE)
       "please use a newer prometheus")
   endif()
 else()
-  add_ceph_test(run-promtool-unittests
-    {CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
+  if(LINUX)
+    add_ceph_test(run-promtool-unittests
+      {CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
+  endif()
 endif()
 
 set_property(

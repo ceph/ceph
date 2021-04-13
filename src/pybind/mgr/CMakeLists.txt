@@ -10,7 +10,7 @@ if(WITH_TESTS)
 endif()
 
 # Location needs to match default setting for mgr_module_path, currently:
-# OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr")
+# OPTION(mgr_module_path, OPT_STR, CEPH_INSTALL_DATADIR "/mgr")
 install(DIRECTORY
   ${CMAKE_CURRENT_SOURCE_DIR}
   DESTINATION ${CEPH_INSTALL_DATADIR}

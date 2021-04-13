@@ -4,19 +4,21 @@
 
 .. index:: mclock; configuration
 
-This dmclock related configuration parameters can be applied using mclock
-profiles. The purpose of the mclock profiles is to mask the low level details
-from a user trying to configure mclock for a specific purpose. At a high level,
-for each OSD in the enviroment the steps involve,
+Mclock profiles mask the low level details from users, making it
+easier for them to configure mclock.  
 
-- providing an input related to the total capacity of OSD(s) and
-- choosing the desired mclock profile to enable
+To use mclock, you must provide the following input parameters:
 
-Based on the profile specified, the OSD determines and applies the lower level
-mclock and Ceph parameters. The parameters applied by the mclock profile
-enables tuning of the QoS between client, background recovery/backfill ops and
-other internal entities (aka best effort clients) within Ceph that generate IOPS
-(for e.g. scrubs, snap trim, PG deletions etc.).
+* total capacity of each OSD
+
+* an mclock profile to enable
+
+Using the settings in the specified profile, the OSD determines and applies the
+lower-level mclock and Ceph parameters. The parameters applied by the mclock
+profile make it possible to tune the QoS between client I/O, recovery/backfill
+operations, and other background operations (for example, scrub, snap trim, and
+PG deletion). These background activities are considered best-effort internal
+clients of Ceph. 
 
 
 .. index:: mclock; profile definition
@@ -29,16 +31,15 @@ Ceph cluster enables the throttling of the operations(IOPS) belonging to
 different client classes (background recovery, scrub, snaptrim, client op,
 osd subop)”*.
 
-The purpose of the mclock profile is to help with the following,
+The mclock profile uses the capacity limits and the mclock profile selected by
+the user to determine the low-level mclock resource control parameters.
 
-- Based on the capacity limits provided and the mclock profile selected,
-  determine the low level mclock resource control parameters,
-- Transparently apply the lower level mclock resource control parameters and
-  some Ceph configuration parameters depending on the profile.
+Depending on the profile, lower-level mclock resource-control parameters and
+some Ceph-configuration parameters are transparently applied.
 
-The lower level mclock resource control parameters are the *reservation, weight
-and limit* that provide control of the resource shares as already described in
-the `OSD Config Reference`_ section.
+The low-level mclock resource control parameters are the *reservation*,
+*limit*, and *weight* that provide control of the resource shares, as
+described in the `OSD Config Reference`_.
 
 
 .. index:: mclock; profile types
@@ -48,30 +49,30 @@ mClock Profile Types
 
 mclock profiles can be broadly classified into two types,
 
-- **Built-in**: A user can choose between the following built-in profiles types,
+- **Built-in**: Users can choose between the following built-in profile types:
 
   - **high_client_ops** (*default*):
-    This profile allocates more reservation and limit to external clients ops
-    when compared to background recoveries and other internal clients within
+    This profile allocates more reservation and limit to external-client ops
+    as compared to background recoveries and other internal clients within
     Ceph. This profile is enabled by default.
   - **high_recovery_ops**:
-    This profile allocates more reservation to background recoveries when
+    This profile allocates more reservation to background recoveries as 
     compared to external clients and other internal clients within Ceph. For
-    e.g. an admin may enable this profile temporarily to speed-up background
+    example, an admin may enable this profile temporarily to speed-up background
     recoveries during non-peak hours.
   - **balanced**:
-    This profile allocates equal reservations to client ops and background
+    This profile allocates equal reservation to client ops and background
     recovery ops.
 
-- **Custom**: A user may enable this profile to have complete control over all the
-  mclock and Ceph configuration parameters. Using this profile is not
-  recommended unless one has a deep understanding of mclock and the related
-  Ceph configuration options.
+- **Custom**: This profile gives users complete control over all mclock and
+  Ceph configuration parameters. Using this profile is not recommended without
+  a deep understanding of mclock and related Ceph-configuration options.
 
-.. note:: Across the built-in profiles, for internal clients of mclock (for e.g.
-          scrub, snap trim etc.) are given slightly lower reservations but
-          higher weight and no limit. This is to ensure that these operations
-          are able to complete quickly if there are no other competing services.
+.. note:: Across the built-in profiles, internal clients of mclock (for example
+          "scrub", "snap trim", and "pg deletion") are given slightly lower 
+          reservations, but higher weight and no limit. This ensures that 
+          these operations are able to complete quickly if there are no other 
+          competing services.
 
 
 .. index:: mclock; built-in profiles
@@ -80,10 +81,10 @@ mClock Built-in Profiles
 ========================
 
 When a built-in profile is enabled, the mClock scheduler calculates the low
-level mclock parameters [*reservation, weight, limit*] based on the profile
+level mclock parameters [*reservation*, *weight*, *limit*] based on the profile
 enabled for each client type. The mclock parameters are calculated based on
 the max OSD capacity provided beforehand. As a result, the following mclock
-config parameters cannot be modified when using any of the built-in profiles,
+config parameters cannot be modified when using any of the built-in profiles:
 
 - ``osd_mclock_scheduler_client_res``
 - ``osd_mclock_scheduler_client_wgt``
@@ -95,7 +96,7 @@ config parameters cannot be modified when using any of the built-in profiles,
 - ``osd_mclock_scheduler_background_best_effort_wgt``
 - ``osd_mclock_scheduler_background_best_effort_lim``
 
-Additionally, the following Ceph options will not be modifiable by the user,
+The following Ceph options will not be modifiable by the user:
 
 - ``osd_max_backfills``
 - ``osd_recovery_max_active``
@@ -103,15 +104,15 @@ Additionally, the following Ceph options will not be modifiable by the user,
 This is because the above options are internally modified by the mclock
 scheduler in order to maximize the impact of the set profile.
 
-By default the *high_client_ops* profile will be enabled to provide larger chunk
-of the bandwidth allocation to client ops. Background recovery ops are given
-lower allocation and so take a longer time to complete. But there might be
-instances that necessitate giving higher allocations to either client ops or
-recovery ops. In order to satisfy such an eventuality, alternate built-in
-profiles mentioned above may be enabled.
+By default, the *high_client_ops* profile is enabled to ensure that a larger
+chunk of the bandwidth allocation goes to client ops. Background recovery ops
+are given lower allocation (and therefore take a longer time to complete). But
+there might be instances that necessitate giving higher allocations to either
+client ops or recovery ops. In order to deal with such a situation, you can
+enable one of the alternate built-in profiles mentioned above.
 
-Additionally, if a built-in profile is active, the following Ceph config sleep
-options will be disabled,
+If a built-in profile is active, the following Ceph config sleep options will
+be disabled,
 
 - ``osd_recovery_sleep``
 - ``osd_recovery_sleep_hdd``
@@ -127,10 +128,10 @@ options will be disabled,
 - ``osd_snap_trim_sleep_ssd``
 - ``osd_snap_trim_sleep_hybrid``
 
-The above sleep options are disabled to ensure that mclock scheduler is able
-determine when to pick the next op from its operation queue and transfer
-it to the operation sequencer. This results in the desired QoS to be provided
-across all its clients.
+The above sleep options are disabled to ensure that mclock scheduler is able to
+determine when to pick the next op from its operation queue and transfer it to
+the operation sequencer. This results in the desired QoS being provided across
+all its clients.
 
 
 .. index:: mclock; enable built-in profile
@@ -138,34 +139,34 @@ across all its clients.
 Steps to Enable mClock Profile
 ==============================
 
-The following sections outline the steps required to enable a mclock profile:
+The following sections outline the steps required to enable a mclock profile.
 
-Determine OSD Capacity Using Benchmark Tests
---------------------------------------------
+Determining OSD Capacity Using Benchmark Tests
+----------------------------------------------
 
-To allow mclock to fulfill the QoS goals across its clients, the most important
-criteria is to have a good understanding of each OSD capacity in terms of their
-baseline throughputs (IOPS) across the Ceph nodes. To determine the capacity,
-appropriate benchmarking tests must be manually performed and the steps for
-this is broadly outlined below.
+To allow mclock to fulfill its QoS goals across its clients, it is most
+important to have a good understanding of each OSD's capacity in terms of its
+baseline throughputs (IOPS) across the Ceph nodes. To determine this capacity,
+you must perform appropriate benchmarking tests. The steps for performing these
+benchmarking tests are broadly outlined below.
 
-Any existing benchmarking tool may be employed for this purpose and the
-following steps employs the *Ceph Benchmarking Tool* (aka cbt_). Regardless of
-the tool used, the steps described below remain the same.
+Any existing benchmarking tool can be used for this purpose. The following
+steps use the *Ceph Benchmarking Tool* (cbt_). Regardless of the tool
+used, the steps described below remain the same.
 
 As already described in the `OSD Config Reference`_ section, the number of
-shards and the bluestore throttle parameters have an impact on the mclock op
+shards and the bluestore's throttle parameters have an impact on the mclock op
 queues. Therefore, it is critical to set these values carefully in order to
 maximize the impact of the mclock scheduler.
 
 :Number of Operational Shards:
-  The recommendation is to use the default number of shards as defined by the
+  We recommend using the default number of shards as defined by the
   configuration options ``osd_op_num_shards``, ``osd_op_num_shards_hdd``, and
   ``osd_op_num_shards_ssd``. In general, a lower number of shards will increase
   the impact of the mclock queues.
 
 :Bluestore Throttle Parameters:
-  The recommendation is to use the default values as defined by
+  We recommend using the default values as defined by
   ``bluestore_throttle_bytes`` and ``bluestore_throttle_deferred_bytes``. But
   these parameters may also be determined during the benchmarking phase as
   described below.
@@ -173,10 +174,10 @@ maximize the impact of the mclock scheduler.
 Benchmarking Test Steps Using CBT
 `````````````````````````````````
 
-The steps below uses the default shards and details the steps to determine the
-correct bluestore throttle values if desired,
+The steps below use the default shards and detail the steps used to determine the
+correct bluestore throttle values.
 
-.. note:: These steps although manual for now will be automated in the future.
+.. note:: These steps, although manual in April 2021, will be automated in the future.
 
 1. On the Ceph node hosting the OSDs, download cbt_ from git.
 2. Install cbt and all the dependencies mentioned on the cbt github page.
@@ -191,8 +192,8 @@ correct bluestore throttle values if desired,
 7. After ensuring that the OSDs nodes are in the desired configuration, run a
    simple 4KiB random write workload on the OSD(s) for 300 secs.
 8. Note the overall throughput(IOPS) obtained from the cbt output file. This
-   value would be the baseline throughput(IOPS) with the default bluestore
-   throttle options.
+   value is the baseline throughput(IOPS) when the default bluestore
+   throttle options are in effect.
 9. If the intent is to determine the bluestore throttle values for your
    environment, then set the two options, ``bluestore_throttle_bytes`` and
    ``bluestore_throttle_deferred_bytes`` to 32 KiB(32768 Bytes) each to begin
@@ -204,9 +205,9 @@ correct bluestore throttle values if desired,
     throttle options by 2x and repeat steps 9 through 11 until the obtained
     throughput is very close to the baseline value.
 
-For e.g., during benchmarking on a machine with NVMe SSDs a value of 256 KiB for
+For example, during benchmarking on a machine with NVMe SSDs, a value of 256 KiB for
 both bluestore throttle and deferred bytes was determined to maximize the impact
-of mclock. For HDDs, the corresponding value was 40 MiB where the overall
+of mclock. For HDDs, the corresponding value was 40 MiB, where the overall
 throughput was roughly equal to the baseline throughput. Note that in general
 for HDDs, the bluestore throttle values are expected to be higher when compared
 to SSDs.
@@ -214,33 +215,38 @@ to SSDs.
 .. _cbt: https://github.com/ceph/cbt
 
 
-Specify Max OSD Capacity
-------------------------
+Specifying  Max OSD Capacity
+----------------------------
 
 The steps in this section may be performed only if the max osd capacity is
 different from the default values (SSDs: 21500 IOPS and HDDs: 315 IOPS). The
-option ``osd_mclock_max_capacity_iops_[hdd, ssd]`` may be set by specifying it
-in either the **[global]** section or in a specific OSD section **[osd.x]** of
-your Ceph configuration file.
+option ``osd_mclock_max_capacity_iops_[hdd, ssd]`` can be set by specifying it
+in either the **[global]** section or in a specific OSD section (**[osd.x]** of
+your Ceph configuration file).
 
-Alternatively, the following commands may be used,
+Alternatively, commands of the following form may be used:
 
-``$ ceph config set [global, osd] osd_mclock_max_capacity_iops_[hdd,ssd]
-<value>``
+  .. prompt:: bash #
 
-For e.g., the following command sets the max capacity for all the OSDs in a
-Ceph node whose underlying device type are SSDs,
+     ceph config set [global, osd] osd_mclock_max_capacity_iops_[hdd,ssd] <value>
 
-``$ ceph config set osd osd_mclock_max_capacity_iops_ssd 25000``
+For example, the following command sets the max capacity for all the OSDs in a
+Ceph node whose underlying device type is SSDs:
 
-To set the capacity for a specific OSD, say osd.0, whose underlying device type
-is HDD use,
+  .. prompt:: bash #
 
-``$ ceph config set osd.0 osd_mclock_max_capacity_iops_hdd 350``
+    ceph config set osd osd_mclock_max_capacity_iops_ssd 25000
+
+To set the capacity for a specific OSD (for example "osd.0") whose underlying
+device type is HDD, use a command like this:
+
+  .. prompt:: bash #
+
+    ceph config set osd.0 osd_mclock_max_capacity_iops_hdd 350
 
 
-Specify mClock Profile to Enable
----------------------------------
+Specifying Which mClock Profile to Enable
+-----------------------------------------
 
 As already mentioned, the default mclock profile is set to *high_client_ops*.
 The other values for the built-in profiles include *balanced* and
@@ -250,14 +256,18 @@ If there is a requirement to change the default profile, then the option
 ``osd_mclock_profile`` may be set in the **[global]** or **[osd]** section of
 your Ceph configuration file before bringing up your cluster.
 
-Alternatively, to change the profile during runtime, use the following command,
+Alternatively, to change the profile during runtime, use the following command:
 
-``$ ceph config set [global,osd] osd_mclock_profile <value>``
+  .. prompt:: bash #
 
-For e.g., to change the profile to allow faster recoveries, the following
-command can be used to switch to the *high_recovery_ops* profile,
+    ceph config set [global,osd] osd_mclock_profile <value>
 
-``$ ceph config set osd osd_mclock_profile high_recovery_ops``
+For example, to change the profile to allow faster recoveries, the following
+command can be used to switch to the *high_recovery_ops* profile:
+
+  .. prompt:: bash #
+
+    ceph config set osd osd_mclock_profile high_recovery_ops
 
 .. note:: The *custom* profile is not recommended unless you are an advanced user.
 

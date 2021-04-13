@@ -58,7 +58,7 @@ TEST(ErasureCodePlugin, factory)
       EXPECT_TRUE(erasure_code.get());
     }
   }
-#ifdef HAVE_NASM_X64_AVX2
+#ifdef WITH_EC_ISA_PLUGIN
   //check clay plugin with scalar_mds=isa
   {
     const char *techniques[] = {

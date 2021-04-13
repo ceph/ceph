@@ -98,7 +98,72 @@ function test_dedup_ratio_fixed()
   done
 }
 
+function test_dedup_chunk_scrub()
+{
+
+  CHUNK_POOL=dedup_chunk_pool
+  run_expect_succ "$CEPH_TOOL" osd pool create "$CHUNK_POOL" 8
+
+  echo "hi there" > foo
+
+  echo "hi there" > bar
+
+  echo "there" > foo-chunk
+
+  echo "CHUNK" > bar-chunk
+
+  $CEPH_TOOL osd pool set $POOL fingerprint_algorithm sha1 --yes-i-really-mean-it
+  $CEPH_TOOL osd pool set $POOL dedup_chunk_algorithm fastcdc --yes-i-really-mean-it
+  $CEPH_TOOL osd pool set $POOL dedup_cdc_chunk_size 4096 --yes-i-really-mean-it
+  $CEPH_TOOL osd pool set $POOL dedup_tier $CHUNK_POOL --yes-i-really-mean-it
+
+  $RADOS_TOOL -p $POOL put foo ./foo
+  $RADOS_TOOL -p $POOL put bar ./bar
+
+  $RADOS_TOOL -p $CHUNK_POOL put bar-chunk ./bar-chunk
+  $RADOS_TOOL -p $CHUNK_POOL put foo-chunk ./foo-chunk
+
+  $RADOS_TOOL -p $POOL set-chunk bar 0 8 --target-pool $CHUNK_POOL bar-chunk 0 --with-reference
+
+  echo -n "There hi" > test_obj
+  # dirty
+  $RADOS_TOOL -p $POOL put foo ./test_obj
+  $RADOS_TOOL -p $POOL set-chunk foo 0 8 --target-pool $CHUNK_POOL foo-chunk 0 --with-reference
+  # flush
+  $RADOS_TOOL -p $POOL tier-flush foo
+  sleep 2
+
+  rados ls -p $CHUNK_POOL
+  CHUNK_OID=$(echo -n "There hi" | sha1sum | awk '{print $1}')
+
+  POOL_ID=$(ceph osd pool ls detail | grep $POOL |  awk '{print$2}')
+  $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref bar --target-ref-pool-id $POOL_ID
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID)
+
+  RESULT=$($DEDUP_TOOL --op chunk-scrub --chunk-pool $CHUNK_POOL | grep "Damaged object" | awk '{print$4}')
+  if [ $RESULT -ne "1" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Chunk-scrub failed expecting damaged objects is not 1"
+  fi
+
+  $DEDUP_TOOL --op chunk-put-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref bar --target-ref-pool-id $POOL_ID
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID | grep bar)
+  if [ -n "$RESULT" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Scrub failed expecting bar is removed"
+  fi
+
+  $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+
+  rm -rf ./foo ./bar ./foo-chunk ./bar-chunk ./test_obj
+  $RADOS_TOOL -p $POOL rm foo
+  $RADOS_TOOL -p $POOL rm bar
+}
+
 test_dedup_ratio_fixed
+test_dedup_chunk_scrub
 
 $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
 

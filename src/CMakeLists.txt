@@ -447,6 +447,7 @@ add_subdirectory(arch)
 set(ceph_common_objs
   $<TARGET_OBJECTS:common-auth-objs>
   $<TARGET_OBJECTS:common-common-objs>
+  $<TARGET_OBJECTS:common-options-objs>
   $<TARGET_OBJECTS:common-msg-objs>
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>

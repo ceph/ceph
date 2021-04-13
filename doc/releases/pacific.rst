@@ -101,7 +101,7 @@ The :ref:`mgr-dashboard` brings improvements in the following management areas:
 RADOS
 ~~~~~
 
-* Pacific introduces RocksDB sharding, which reduces disk space requirements.
+* Pacific introduces :ref:`bluestore-rocksdb-sharding`, which reduces disk space requirements.
 
 * Ceph now provides QoS between client I/O and background operations via the
   mclock scheduler.
