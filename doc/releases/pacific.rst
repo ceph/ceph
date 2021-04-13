@@ -6,6 +6,35 @@ Pacific is the 16th stable release of Ceph.  It is named after the
 giant pacific octopus (Enteroctopus dofleini).
 
 
+v16.2.1 Pacific
+===============
+
+This is the first bugfix release in the Pacific stable series.  It addresses a
+security vulnerability in the Ceph authentication framework.
+
+We recommend all Pacific users upgrade.
+
+Security fixes
+--------------
+
+* This release includes a security fix that ensures the global_id
+  value (a numeric value that should be unique for every authenticated
+  client or daemon in the cluster) is reclaimed after a network
+  disconnect or ticket renewal in a secure fashion.  Two new health
+  alerts may appear during the upgrade indicating that there are
+  clients or daemons that are not yet patched with the appropriate
+  fix.
+
+  To temporarily mute the health alerts around insecure clients for the duration of the
+  upgrade, you may want to::
+
+    ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM 1h
+    ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1h
+
+  For more information, see :ref:`CVE-2021-20288`.
+
+
+
 v16.2.0 Pacific
 ===============
 
