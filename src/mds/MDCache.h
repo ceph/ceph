@@ -1142,6 +1142,7 @@ class MDCache {
 
   std::unique_ptr<PerfCounters> logger;
 
+  TruncWorkQueue trunc_work_queue;
   Filer filer;
   std::array<xlist<ClientLease*>, client_lease_pools> client_leases{};
 

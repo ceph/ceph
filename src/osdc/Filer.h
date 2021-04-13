@@ -27,7 +27,9 @@
  */
 
 
+#include <deque>
 #include <mutex>
+#include <thread>
 
 #include "include/types.h"
 
@@ -42,6 +44,69 @@ class Messenger;
 class OSDMap;
 class Finisher;
 
+struct C_TruncRange;
+
+
+class TruncWorkQueue : public md_config_obs_t {
+public:
+  TruncWorkQueue(Objecter *o, Finisher *f)
+      : cct(o->cct), objecter(o), finisher(f),
+        throttle(o->cct, "trunc_op_throttle",
+                 o->cct->_conf.get_val<uint64_t>("osdc_max_truncate_ops")),
+        thread(&TruncWorkQueue::run, this), stopping(false) {
+    cct->_conf.add_observer(this);
+  }
+  ~TruncWorkQueue() {
+    cct->_conf.remove_observer(this);
+  };
+
+  void set_stopping() {
+    {
+      lock_guard lk(lock);
+      stopping = true;
+      cv.notify_one();
+    }
+    thread.join();
+  }
+  bool is_stopping() { return stopping; }
+  void enqueue(C_TruncRange *ctr);
+  void put_slots(int put) { throttle.put(put); };
+  /// md_config_obs_t
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+			                    const std::set<std::string> &changed) override;
+
+private:
+  using lock_guard = std::lock_guard<std::mutex>;
+  using unique_lock = std::unique_lock<std::mutex>;
+
+  void run();
+  void update_throttle_maximum();
+  C_TruncRange* dequeue() {
+    C_TruncRange *c_trunc_range = nullptr;
+    {
+      unique_lock lk(lock);
+	    cv.wait(lk, [this]{return stopping || !queue.empty() ;});
+      if (!stopping) {
+        c_trunc_range = queue.front();
+        queue.pop_front();
+	    }
+    }
+    return c_trunc_range;
+  }
+  bool queue_job_to_finisher(C_TruncRange* c_tr);
+
+  CephContext *cct;
+  Objecter *objecter;
+  Finisher *finisher;
+
+  Throttle throttle;
+  std::deque<C_TruncRange*> queue;
+  std::thread thread;
+  std::mutex lock;
+  std::condition_variable cv;
+  bool stopping;
+};
 
 /**** Filer interface ***/
 
@@ -49,6 +114,7 @@ class Filer {
   CephContext *cct;
   Objecter   *objecter;
   Finisher   *finisher;
+  TruncWorkQueue *trunc_work_queue;
 
   // probes
   struct Probe {
@@ -107,7 +173,8 @@ class Filer {
   Filer(const Filer& other);
   const Filer operator=(const Filer& other);
 
-  Filer(Objecter *o, Finisher *f) : cct(o->cct), objecter(o), finisher(f) {}
+  Filer(Objecter *o, Finisher *f, TruncWorkQueue *twq = nullptr)
+        : cct(o->cct), objecter(o), finisher(f), trunc_work_queue(twq) {}
   ~Filer() {}
 
   bool is_active() {
