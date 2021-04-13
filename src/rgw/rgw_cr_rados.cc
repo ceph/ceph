@@ -67,13 +67,41 @@ void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
   }
 }
 
-RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(CephContext *_cct, int num_threads)
-  : cct(_cct), m_tp(cct, "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads),
+RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(CephContext *_cct, int num_threads, const char *option)
+  : cct(_cct), 
+    m_tp(cct, "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads, option),
     req_throttle(_cct, "rgw_async_rados_ops", num_threads * 2),
     req_wq(this,
 	   ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
 	   ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
 	   &m_tp) {
+  if (option) {
+    _thread_num_option = option;
+    // set up conf_keys
+    _conf_keys = new const char*[2];
+    _conf_keys[0] = _thread_num_option.c_str();
+    _conf_keys[1] = NULL;
+  } else {
+    _conf_keys = new const char*[1];
+    _conf_keys[0] = NULL;
+  }
+  cct->_conf.add_observer(this);
+}
+
+RGWAsyncRadosProcessor::~RGWAsyncRadosProcessor() 
+{
+  cct->_conf.remove_observer(this);
+}
+
+void RGWAsyncRadosProcessor::handle_conf_change(const ConfigProxy& conf,
+    const std::set<std::string>& changed)
+{
+  if (!changed.count(_thread_num_option))
+    return;
+
+  auto newval = conf.get_val<int64_t>(_thread_num_option.c_str()) * 2;
+  if (req_throttle.get_max() != newval)
+    req_throttle.reset_max(newval);
 }
 
 void RGWAsyncRadosProcessor::start() {
