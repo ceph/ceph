@@ -1,0 +1,1168 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: mds_alternate_name_max
+  type: size
+  level: advanced
+  desc: set the maximum length of alternate names for dentries
+  default: 8_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_valgrind_exit
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_numa_node
+  type: int
+  level: advanced
+  desc: set mds's cpu affinity to a numa node (-1 for none)
+  default: -1
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_data
+  type: str
+  level: advanced
+  desc: path to MDS data and keyring
+  default: /var/lib/ceph/mds/$cluster-$id
+  services:
+  - mds
+  flags:
+  - no_mon_update
+- name: mds_join_fs
+  type: str
+  level: basic
+  desc: file system MDS prefers to join
+  long_desc: This setting indicates which file system name the MDS should prefer to
+    join (affinity). The monitors will try to have the MDS cluster safely reach a
+    state where all MDS have strong affinity, even via failovers to a standby.
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_max_xattr_pairs_size
+  type: size
+  level: advanced
+  desc: maximum aggregate size of extended attributes on a file
+  default: 64_K
+  services:
+  - mds
+- name: mds_cache_trim_interval
+  type: secs
+  level: advanced
+  desc: interval in seconds between cache trimming
+  default: 1
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_release_free_interval
+  type: secs
+  level: dev
+  desc: interval in seconds between heap releases
+  default: 10
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_memory_limit
+  type: size
+  level: basic
+  desc: target maximum memory usage of MDS cache
+  long_desc: This sets a target maximum memory usage of the MDS cache and is the primary
+    tunable to limit the MDS memory usage. The MDS will try to stay under a reservation
+    of this limit (by default 95%; 1 - mds_cache_reservation) by trimming unused metadata
+    in its cache and recalling cached items in the client caches. It is possible for
+    the MDS to exceed this limit due to slow recall from clients. The mds_health_cache_threshold
+    (150%) sets a cache full threshold for when the MDS signals a cluster health warning.
+  default: 4_G
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_reservation
+  type: float
+  level: advanced
+  desc: amount of memory to reserve for future cached objects
+  default: 0.05
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_health_cache_threshold
+  type: float
+  level: advanced
+  desc: threshold for cache size to generate health warning
+  default: 1.5
+  services:
+  - mds
+- name: mds_cache_mid
+  type: float
+  level: advanced
+  desc: midpoint for MDS cache LRU
+  default: 0.7
+  services:
+  - mds
+- name: mds_cache_trim_decay_rate
+  type: float
+  level: advanced
+  desc: decay rate for trimming MDS cache throttle
+  default: 1
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_trim_threshold
+  type: size
+  level: advanced
+  desc: threshold for number of dentries that can be trimmed
+  default: 256_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_max_file_recover
+  type: uint
+  level: advanced
+  desc: maximum number of files to recover file sizes in parallel
+  default: 32
+  services:
+  - mds
+- name: mds_dir_max_commit_size
+  type: int
+  level: advanced
+  desc: maximum size in megabytes for a RADOS write to a directory
+  default: 10
+  services:
+  - mds
+- name: mds_dir_keys_per_op
+  type: int
+  level: advanced
+  desc: number of directory entries to read in one RADOS operation
+  default: 16384
+  services:
+  - mds
+- name: mds_decay_halflife
+  type: float
+  level: advanced
+  desc: rate of decay for temperature counters on each directory for balancing
+  default: 5
+  services:
+  - mds
+- name: mds_beacon_interval
+  type: float
+  level: advanced
+  desc: interval in seconds between MDS beacons to monitors
+  default: 4
+  services:
+  - mds
+- name: mds_beacon_grace
+  type: float
+  level: advanced
+  desc: tolerance in seconds for missed MDS beacons to monitors
+  default: 15
+  services:
+  - mds
+- name: mds_heartbeat_grace
+  type: float
+  level: advanced
+  desc: tolerance in seconds for MDS internal heartbeat
+  default: 15
+  services:
+  - mds
+- name: mds_enforce_unique_name
+  type: bool
+  level: advanced
+  desc: require MDS name is unique in the cluster
+  default: true
+  services:
+  - mds
+- name: mds_session_blocklist_on_timeout
+  type: bool
+  level: advanced
+  desc: blocklist clients whose sessions have become stale
+  default: true
+  services:
+  - mds
+- name: mds_session_blocklist_on_evict
+  type: bool
+  level: advanced
+  desc: blocklist clients that have been evicted
+  default: true
+  services:
+  - mds
+- name: mds_sessionmap_keys_per_op
+  type: uint
+  level: advanced
+  desc: number of omap keys to read from the SessionMap in one operation
+  default: 1_K
+  services:
+  - mds
+- name: mds_recall_max_caps
+  type: size
+  level: advanced
+  desc: maximum number of caps to recall from client session in single recall
+  default: 30000
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_recall_max_decay_rate
+  type: float
+  level: advanced
+  desc: decay rate for throttle on recalled caps on a session
+  default: 1.5
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_recall_max_decay_threshold
+  type: size
+  level: advanced
+  desc: decay threshold for throttle on recalled caps on a session
+  default: 128_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_recall_global_max_decay_threshold
+  type: size
+  level: advanced
+  desc: decay threshold for throttle on recalled caps globally
+  default: 128_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_recall_warning_threshold
+  type: size
+  level: advanced
+  desc: decay threshold for warning on slow session cap recall
+  default: 256_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_recall_warning_decay_rate
+  type: float
+  level: advanced
+  desc: decay rate for warning on slow session cap recall
+  default: 60
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_session_cache_liveness_decay_rate
+  type: float
+  level: advanced
+  desc: decay rate for session liveness leading to preemptive cap recall
+  long_desc: This determines how long a session needs to be quiescent before the MDS
+    begins preemptively recalling capabilities. The default of 5 minutes will cause
+    10 halvings of the decay counter after 1 hour, or 1/1024. The default magnitude
+    of 10 (1^10 or 1024) is chosen so that the MDS considers a previously chatty session
+    (approximately) to be quiescent after 1 hour.
+  default: 5_min
+  services:
+  - mds
+  see_also:
+  - mds_session_cache_liveness_magnitude
+  flags:
+  - runtime
+- name: mds_session_cache_liveness_magnitude
+  type: size
+  level: advanced
+  desc: decay magnitude for preemptively recalling caps on quiet client
+  long_desc: This is the order of magnitude difference (in base 2) of the internal
+    liveness decay counter and the number of capabilities the session holds. When
+    this difference occurs, the MDS treats the session as quiescent and begins recalling
+    capabilities.
+  default: 10
+  services:
+  - mds
+  see_also:
+  - mds_session_cache_liveness_decay_rate
+  flags:
+  - runtime
+- name: mds_session_cap_acquisition_decay_rate
+  type: float
+  level: advanced
+  desc: decay rate for session readdir caps leading to readdir throttle
+  long_desc: The half-life for the session cap acquisition counter of caps acquired
+    by readdir. This is used for throttling readdir requests from clients slow to
+    release caps.
+  default: 10
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_session_cap_acquisition_throttle
+  type: uint
+  level: advanced
+  desc: throttle point for cap acquisition decay counter
+  default: 500000
+  services:
+  - mds
+- name: mds_session_max_caps_throttle_ratio
+  type: float
+  level: advanced
+  desc: ratio of mds_max_caps_per_client that client must exceed before readdir may
+    be throttled by cap acquisition throttle
+  default: 1.1
+  services:
+  - mds
+- name: mds_cap_acquisition_throttle_retry_request_timeout
+  type: float
+  level: advanced
+  desc: timeout in seconds after which a client request is retried due to cap acquisition
+    throttling
+  default: 0.5
+  services:
+  - mds
+- name: mds_freeze_tree_timeout
+  type: float
+  level: dev
+  default: 30
+  services:
+  - mds
+- name: mds_health_summarize_threshold
+  type: int
+  level: advanced
+  desc: threshold of number of clients to summarize late client recall
+  default: 10
+  services:
+  - mds
+- name: mds_reconnect_timeout
+  type: float
+  level: advanced
+  desc: timeout in seconds to wait for clients to reconnect during MDS reconnect recovery
+    state
+  default: 45
+  services:
+  - mds
+- name: mds_deny_all_reconnect
+  type: bool
+  level: advanced
+  desc: flag to deny all client reconnects during failover
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_tick_interval
+  type: float
+  level: advanced
+  desc: time in seconds between upkeep tasks
+  default: 5
+  services:
+  - mds
+- name: mds_dirstat_min_interval
+  type: float
+  level: dev
+  default: 1
+  services:
+  - mds
+- name: mds_scatter_nudge_interval
+  type: float
+  level: advanced
+  desc: minimum interval between scatter lock updates
+  default: 5
+  services:
+  - mds
+- name: mds_client_prealloc_inos
+  type: int
+  level: advanced
+  desc: number of unused inodes to pre-allocate to clients for file creation
+  default: 1000
+  services:
+  - mds
+- name: mds_client_delegate_inos_pct
+  type: uint
+  level: advanced
+  desc: percentage of preallocated inos to delegate to client
+  default: 50
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_early_reply
+  type: bool
+  level: advanced
+  desc: additional reply to clients that metadata requests are complete but not yet
+    durable
+  default: true
+  services:
+  - mds
+- name: mds_replay_unsafe_with_closed_session
+  type: bool
+  level: advanced
+  desc: complete all the replay request when mds is restarted, no matter the session
+    is closed or not
+  default: false
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_default_dir_hash
+  type: int
+  level: advanced
+  desc: hash function to select directory fragment for dentry name
+  # CEPH_STR_HASH_RJENKINS
+  default: 2
+  services:
+  - mds
+- name: mds_log_pause
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_log_skip_corrupt_events
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_log_max_events
+  type: int
+  level: advanced
+  desc: maximum number of events in the MDS journal (-1 is unlimited)
+  default: -1
+  services:
+  - mds
+- name: mds_log_events_per_segment
+  type: int
+  level: advanced
+  desc: maximum number of events in an MDS journal segment
+  default: 1024
+  services:
+  - mds
+- name: mds_log_segment_size
+  type: size
+  level: advanced
+  desc: size in bytes of each MDS log segment
+  default: 0
+  services:
+  - mds
+- name: mds_log_max_segments
+  type: uint
+  level: advanced
+  desc: maximum number of segments which may be untrimmed
+  default: 128
+  services:
+  - mds
+- name: mds_log_warn_factor
+  type: float
+  level: advanced
+  desc: trigger MDS_HEALTH_TRIM warning when the mds log is longer than mds_log_max_segments
+    * mds_log_warn_factor
+  default: 2
+  services:
+  - mds
+  min: 1
+  flags:
+  - runtime
+- name: mds_bal_export_pin
+  type: bool
+  level: advanced
+  desc: allow setting directory export pins to particular ranks
+  default: true
+  services:
+  - mds
+- name: mds_export_ephemeral_random
+  type: bool
+  level: advanced
+  desc: allow ephemeral random pinning of the loaded subtrees
+  long_desc: probabilistically pin the loaded directory inode and the subtree beneath
+    it to an MDS based on the consistent hash of the inode number. The higher this
+    value the more likely the loaded subtrees get pinned
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_export_ephemeral_random_max
+  type: float
+  level: advanced
+  desc: the maximum percent permitted for random ephemeral pin policy
+  default: 0.01
+  services:
+  - mds
+  see_also:
+  - mds_export_ephemeral_random
+  min: 0
+  max: 1
+  flags:
+  - runtime
+- name: mds_export_ephemeral_distributed
+  type: bool
+  level: advanced
+  desc: allow ephemeral distributed pinning of the loaded subtrees
+  long_desc: 'pin the immediate child directories of the loaded directory inode based
+    on the consistent hash of the child''s inode number. '
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_export_ephemeral_distributed_factor
+  type: float
+  level: advanced
+  desc: multiple of max_mds for splitting and distributing directory
+  default: 2
+  services:
+  - mds
+  min: 1
+  max: 100
+  flags:
+  - runtime
+- name: mds_bal_sample_interval
+  type: float
+  level: advanced
+  desc: interval in seconds between balancer ticks
+  default: 3
+  services:
+  - mds
+- name: mds_bal_replicate_threshold
+  type: float
+  level: advanced
+  desc: hot popularity threshold to replicate a subtree
+  default: 8000
+  services:
+  - mds
+- name: mds_bal_unreplicate_threshold
+  type: float
+  level: advanced
+  desc: cold popularity threshold to merge subtrees
+  default: 0
+  services:
+  - mds
+- name: mds_bal_split_size
+  type: int
+  level: advanced
+  desc: minimum size of directory fragment before splitting
+  default: 10000
+  services:
+  - mds
+- name: mds_bal_split_rd
+  type: float
+  level: advanced
+  desc: hot read popularity threshold for splitting a directory fragment
+  default: 25000
+  services:
+  - mds
+- name: mds_bal_split_wr
+  type: float
+  level: advanced
+  desc: hot write popularity threshold for splitting a directory fragment
+  default: 10000
+  services:
+  - mds
+- name: mds_bal_split_bits
+  type: int
+  level: advanced
+  desc: power of two child fragments for a fragment on split
+  default: 3
+  services:
+  - mds
+  min: 1
+  max: 24
+- name: mds_bal_merge_size
+  type: int
+  level: advanced
+  desc: size of fragments where merging should occur
+  default: 50
+  services:
+  - mds
+- name: mds_bal_interval
+  type: int
+  level: advanced
+  desc: interval between MDS balancer cycles
+  default: 10
+  services:
+  - mds
+- name: mds_bal_fragment_interval
+  type: int
+  level: advanced
+  desc: delay in seconds before interrupting client IO to perform splits
+  default: 5
+  services:
+  - mds
+- name: mds_bal_fragment_size_max
+  type: int
+  level: advanced
+  desc: maximum size of a directory fragment before new creat/links fail
+  default: 100000
+  services:
+  - mds
+- name: mds_bal_fragment_fast_factor
+  type: float
+  level: advanced
+  desc: ratio of mds_bal_split_size at which fast fragment splitting occurs
+  default: 1.5
+  services:
+  - mds
+- name: mds_bal_fragment_dirs
+  type: bool
+  level: advanced
+  desc: enable directory fragmentation
+  long_desc: Directory fragmentation is a standard feature of CephFS that allows sharding
+    directories across multiple objects for performance and stability. Additionally,
+    this allows fragments to be distributed across multiple active MDSs to increase
+    throughput. Disabling (new) fragmentation should only be done in exceptional circumstances
+    and may lead to performance issues.
+  default: true
+  services:
+  - mds
+- name: mds_bal_idle_threshold
+  type: float
+  level: advanced
+  desc: idle metadata popularity threshold before rebalancing
+  default: 0
+  services:
+  - mds
+- name: mds_bal_max
+  type: int
+  level: dev
+  default: -1
+  services:
+  - mds
+- name: mds_bal_max_until
+  type: int
+  level: dev
+  default: -1
+  services:
+  - mds
+- name: mds_bal_mode
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_bal_min_rebalance
+  type: float
+  level: dev
+  desc: amount overloaded over internal target before balancer begins offloading
+  default: 0.1
+  services:
+  - mds
+- name: mds_bal_min_start
+  type: float
+  level: dev
+  default: 0.2
+  services:
+  - mds
+- name: mds_bal_need_min
+  type: float
+  level: dev
+  default: 0.8
+  services:
+  - mds
+- name: mds_bal_need_max
+  type: float
+  level: dev
+  default: 1.2
+  services:
+  - mds
+- name: mds_bal_midchunk
+  type: float
+  level: dev
+  default: 0.3
+  services:
+  - mds
+- name: mds_bal_minchunk
+  type: float
+  level: dev
+  default: 0.001
+  services:
+  - mds
+- name: mds_bal_target_decay
+  type: float
+  level: advanced
+  desc: rate of decay for export targets communicated to clients
+  default: 10
+  services:
+  - mds
+- name: mds_oft_prefetch_dirfrags
+  type: bool
+  level: advanced
+  desc: prefetch dirfrags recorded in open file table on startup
+  default: true
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_replay_interval
+  type: float
+  level: advanced
+  desc: time in seconds between replay of updates to journal by standby replay MDS
+  default: 1
+  services:
+  - mds
+- name: mds_shutdown_check
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_thrash_exports
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_thrash_fragments
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_dump_cache_on_map
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_dump_cache_after_rejoin
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_verify_scatter
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_debug_scatterstat
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_debug_frag
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_debug_auth_pins
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_debug_subtrees
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_kill_mdstable_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_max_export_size
+  type: size
+  level: dev
+  default: 20_M
+  services:
+  - mds
+- name: mds_kill_export_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_kill_import_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_kill_link_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_kill_rename_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_kill_openc_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_kill_journal_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_kill_journal_expire_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_kill_journal_replay_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_journal_format
+  type: uint
+  level: dev
+  default: 1
+  services:
+  - mds
+- name: mds_kill_create_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_inject_traceless_reply_probability
+  type: float
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_wipe_sessions
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_wipe_ino_prealloc
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_skip_ino
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+- name: mds_enable_op_tracker
+  type: bool
+  level: advanced
+  desc: track remote operation progression and statistics
+  default: true
+  services:
+  - mds
+- name: mds_op_history_size
+  type: uint
+  level: advanced
+  desc: maximum size for list of historical operations
+  default: 20
+  services:
+  - mds
+- name: mds_op_history_duration
+  type: uint
+  level: advanced
+  desc: expiration time in seconds of historical operations
+  default: 600
+  services:
+  - mds
+- name: mds_op_complaint_time
+  type: float
+  level: advanced
+  desc: time in seconds to consider an operation blocked after no updates
+  default: 30
+  services:
+  - mds
+- name: mds_op_log_threshold
+  type: int
+  level: dev
+  default: 5
+  services:
+  - mds
+- name: mds_snap_min_uid
+  type: uint
+  level: advanced
+  desc: minimum uid of client to perform snapshots
+  default: 0
+  services:
+  - mds
+- name: mds_snap_max_uid
+  type: uint
+  level: advanced
+  desc: maximum uid of client to perform snapshots
+  default: 4294967294
+  services:
+  - mds
+- name: mds_snap_rstat
+  type: bool
+  level: advanced
+  desc: enabled nested rstat for snapshots
+  default: false
+  services:
+  - mds
+- name: mds_verify_backtrace
+  type: uint
+  level: dev
+  default: 1
+  services:
+  - mds
+- name: mds_max_completed_flushes
+  type: uint
+  level: dev
+  default: 100000
+  services:
+  - mds
+- name: mds_max_completed_requests
+  type: uint
+  level: dev
+  default: 100000
+  services:
+  - mds
+- name: mds_action_on_write_error
+  type: uint
+  level: advanced
+  desc: action to take when MDS cannot write to RADOS (0:ignore, 1:read-only, 2:suicide)
+  default: 1
+  services:
+  - mds
+- name: mds_mon_shutdown_timeout
+  type: float
+  level: advanced
+  desc: time to wait for mon to receive damaged MDS rank notification
+  default: 5
+  services:
+  - mds
+- name: mds_max_purge_files
+  type: uint
+  level: advanced
+  desc: maximum number of deleted files to purge in parallel
+  default: 64
+  services:
+  - mds
+- name: mds_max_purge_ops
+  type: uint
+  level: advanced
+  desc: maximum number of purge operations performed in parallel
+  default: 8_K
+  services:
+  - mds
+- name: mds_max_purge_ops_per_pg
+  type: float
+  level: advanced
+  desc: number of parallel purge operations performed per PG
+  default: 0.5
+  services:
+  - mds
+- name: mds_purge_queue_busy_flush_period
+  type: float
+  level: dev
+  default: 1
+  services:
+  - mds
+- name: mds_root_ino_uid
+  type: int
+  level: advanced
+  desc: default uid for new root directory
+  default: 0
+  services:
+  - mds
+- name: mds_root_ino_gid
+  type: int
+  level: advanced
+  desc: default gid for new root directory
+  default: 0
+  services:
+  - mds
+- name: mds_max_scrub_ops_in_progress
+  type: int
+  level: advanced
+  desc: maximum number of scrub operations performed in parallel
+  default: 5
+  services:
+  - mds
+- name: mds_forward_all_requests_to_auth
+  type: bool
+  level: advanced
+  desc: always process op on auth mds
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_damage_table_max_entries
+  type: int
+  level: advanced
+  desc: maximum number of damage table entries
+  default: 10000
+  services:
+  - mds
+- name: mds_client_writeable_range_max_inc_objs
+  type: uint
+  level: advanced
+  desc: maximum number of objects in writeable range of a file for a client
+  default: 1_K
+  services:
+  - mds
+- name: mds_min_caps_per_client
+  type: uint
+  level: advanced
+  desc: minimum number of capabilities a client may hold
+  default: 100
+  services:
+  - mds
+- name: mds_min_caps_working_set
+  type: uint
+  level: advanced
+  desc: number of capabilities a client may hold without cache pressure warnings generated
+  default: 10000
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_max_caps_per_client
+  type: uint
+  level: advanced
+  desc: maximum number of capabilities a client may hold
+  default: 1_M
+  services:
+  - mds
+- name: mds_hack_allow_loading_invalid_metadata
+  type: bool
+  level: advanced
+  desc: INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk.
+    Allows testing repair tools.
+  default: false
+  services:
+  - mds
+- name: mds_defer_session_stale
+  type: bool
+  level: dev
+  default: true
+  services:
+  - mds
+- name: mds_inject_migrator_session_race
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+- name: mds_request_load_average_decay_rate
+  type: float
+  level: advanced
+  desc: rate of decay in seconds for calculating request load average
+  default: 1_min
+  services:
+  - mds
+- name: mds_cap_revoke_eviction_timeout
+  type: float
+  level: advanced
+  desc: number of seconds after which clients which have not responded to cap revoke
+    messages by the MDS are evicted.
+  default: 0
+  services:
+  - mds
+- name: mds_max_retries_on_remount_failure
+  type: uint
+  level: advanced
+  desc: number of consecutive failed remount attempts for invalidating kernel dcache
+    after which client would abort.
+  default: 5
+  services:
+  - mds
+- name: mds_dump_cache_threshold_formatter
+  type: size
+  level: dev
+  desc: threshold for cache usage to disallow "dump cache" operation to formatter
+  long_desc: Disallow MDS from dumping caches to formatter via "dump cache" command
+    if cache usage exceeds this threshold.
+  default: 1_G
+  services:
+  - mds
+- name: mds_dump_cache_threshold_file
+  type: size
+  level: dev
+  desc: threshold for cache usage to disallow "dump cache" operation to file
+  long_desc: Disallow MDS from dumping caches to file via "dump cache" command if
+    cache usage exceeds this threshold.
+  default: 0
+  services:
+  - mds
+- name: mds_task_status_update_interval
+  type: float
+  level: dev
+  desc: task status update interval to manager
+  long_desc: interval (in seconds) for sending mds task status to ceph manager
+  default: 2
+  services:
+  - mds
+- name: mds_max_snaps_per_dir
+  type: uint
+  level: advanced
+  desc: max snapshots per directory
+  long_desc: maximum number of snapshots that can be created per directory
+  default: 100
+  services:
+  - mds
+  min: 0
+  max: 4_K
+  flags:
+  - runtime
+- name: mds_asio_thread_count
+  type: uint
+  level: advanced
+  desc: Size of thread pool for ASIO completions
+  default: 2
+  tags:
+  - mds
+  services:
+  - mds
+  min: 1
+- name: mds_ping_grace
+  type: secs
+  level: advanced
+  desc: timeout after which an MDS is considered laggy by rank 0 MDS.
+  long_desc: timeout for replying to a ping message sent by rank 0 after which an
+    active MDS considered laggy (delayed metrics) by rank 0.
+  default: 15
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_ping_interval
+  type: secs
+  level: advanced
+  desc: interval in seconds for sending ping messages to active MDSs.
+  long_desc: interval in seconds for rank 0 to send ping messages to all active MDSs.
+  default: 5
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_metrics_update_interval
+  type: secs
+  level: advanced
+  desc: interval in seconds for metrics data update.
+  long_desc: interval in seconds after which active MDSs send client metrics data
+    to rank 0.
+  default: 2
+  services:
+  - mds
+  flags:
+  - runtime
