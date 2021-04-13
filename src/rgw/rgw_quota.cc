@@ -995,6 +995,16 @@ public:
       need_resharding = false;
     }
   }
+
+  void check_bucket_shards_static(uint64_t min_bucket_objs, uint64_t max_bucket_objs, uint64_t num_shards,
+                                  uint64_t num_objs, bool& need_resharding, uint64_t configured_shards) override
+  {
+    if (num_objs  >= min_bucket_objs && num_objs <= max_bucket_objs) {
+      need_resharding = num_shards != configured_shards;
+    } else {
+      need_resharding = false;
+    }
+  }
 };
 
 
