@@ -471,6 +471,10 @@ std::vector<Option> get_global_options() {
 			  "whatever options or values are required for us to "
 			  "work will be passed as arguments."),
 
+    Option("max_striper_locks_per_obj", Option::TYPE_UINT, Option::LEVEL_BASIC)
+    .set_default(30)
+    .set_description("maximum number of an object can be locked by striper lock at the same time"),
+
     // lockdep
     Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("enable lockdep lock dependency analyzer")

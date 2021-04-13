@@ -22,6 +22,7 @@
 #include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
 
+#include "common/ceph_context.h"
 #include "global/global_context.h"
 
 #include "include/compat.h"
@@ -36,6 +37,10 @@ CLS_VER(1,0)
 CLS_NAME(lock)
 
 #define LOCK_PREFIX    "lock."
+
+/// name of the lock used on objects to ensure layout stability during IO
+/// reference from src/libradosstriper/RadosStriperImpl.cc
+#define RADOS_LOCK_NAME "striper.lock"
 
 static int clean_lock(cls_method_context_t hctx)
 {
@@ -182,6 +187,12 @@ static int lock_obj(cls_method_context_t hctx,
    * remove the locker entry and not check it later */
   if (lockers.size() && tag != linfo.tag) {
     CLS_LOG(20, "cannot take lock on object, conflicting tag");
+    return -EBUSY;
+  }
+
+  uint64_t max_striper_locks = g_ceph_context->_conf.get_val<uint64_t>("max_striper_locks_per_obj");
+  if (name == RADOS_LOCK_NAME && lockers.size() >= max_striper_locks) {
+    CLS_LOG(10, "locks' size(%ld) are bigger than its max value(%ld)", lockers.size(), max_striper_locks);
     return -EBUSY;
   }
 

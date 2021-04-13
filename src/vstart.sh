@@ -618,6 +618,7 @@ prepare_conf() {
         debug asok assert abort = true
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
+        max striper locks per obj = 3
 EOF
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF

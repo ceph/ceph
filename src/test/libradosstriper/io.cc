@@ -3,15 +3,57 @@
 #include "include/radosstriper/libradosstriper.h"
 #include "include/radosstriper/libradosstriper.hpp"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "test/libradosstriper/TestCase.h"
 
 #include <fcntl.h>
 #include <errno.h>
+#include <algorithm>
+#include <boost/lexical_cast.hpp>
 #include "gtest/gtest.h"
 
 using namespace librados;
 using namespace libradosstriper;
 using std::string;
+using std::count_if;
+
+TEST(ParallelMultiStriper,  MultiIoReadWrite) {
+  MultiStriperTest::pool_name = get_temp_pool_name();
+  create_one_pool_pp(MultiStriperTest::pool_name, MultiStriperTest::s_cluster);
+
+  std::string max_locks_str;
+  MultiStriperTest::s_cluster.conf_get("max_striper_locks_per_obj", max_locks_str);
+  auto max_locks = boost::lexical_cast<uint64_t>(max_locks_str);
+
+  const size_t size = 8192;
+  char *buf = new char[size];
+  memset(buf, 0xcc, size);
+  ParallelMultiStriperTest parallel_striper;
+
+  parallel_striper.sync_write(buf, size, max_locks + 1);
+  ASSERT_EQ(max_locks + 1, parallel_striper.refs.size());
+  ASSERT_EQ(
+    1,
+    std::count_if(
+      parallel_striper.refs.begin(),
+      parallel_striper.refs.end(),
+      [](MultiStriperTest * x) {
+        return x->ret == -EBUSY;
+      }));
+
+  parallel_striper.sync_read(buf, size, max_locks + 1);
+  ASSERT_EQ(max_locks + 1, parallel_striper.refs.size());
+  ASSERT_EQ(
+    1,
+    std::count_if(
+      parallel_striper.refs.begin(),
+      parallel_striper.refs.end(),
+      [](MultiStriperTest * x) {
+        return x->ret == -EBUSY;
+      }));
+
+  delete []buf;
+}
 
 TEST_F(StriperTest, SimpleWrite) {
   char buf[128];

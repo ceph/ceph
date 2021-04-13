@@ -10,7 +10,19 @@
 #include "include/radosstriper/libradosstriper.hpp"
 #include "gtest/gtest.h"
 
+#include <mutex>
 #include <string>
+#include <vector>
+#include <sstream>
+#include <functional>
+
+using std::mutex;
+using std::vector;
+using std::function;
+using std::ostringstream;
+
+using namespace librados;
+using namespace libradosstriper;
 
 /**
  * These test cases create a temporary pool that lives as long as the
@@ -77,6 +89,52 @@ protected:
   librados::Rados &cluster;
   librados::IoCtx ioctx;
   libradosstriper::RadosStriper striper;
+};
+
+class MultiStriperTest {
+public:
+  MultiStriperTest()
+    : ret(0),
+      ioctx(new librados::IoCtx),
+      cluster(new librados::Rados),
+      striper(new libradosstriper::RadosStriper) {}
+
+  ~MultiStriperTest() {
+    delete ioctx;
+    delete cluster;
+    delete striper;
+  }
+
+  void init();
+
+  static void destory();
+
+  static std::string pool_name;
+  static librados::Rados s_cluster;
+
+  int ret;
+  librados::IoCtx* ioctx;
+  librados::Rados* cluster;
+  libradosstriper::RadosStriper* striper;
+};
+
+class ParallelMultiStriperTest {
+public:
+  ~ParallelMultiStriperTest() {
+    MultiStriperTest::destory();
+    for (auto r : refs) {
+      delete r;
+    }
+  }
+
+  void sync_read(char *, const size_t, const size_t);
+  void sync_write(char *, const size_t, const size_t);
+  void async_read(char *, const size_t, const size_t);
+  void async_write(char *, const size_t, const size_t);
+  void access(function<int(rados_striper_t&)>, const size_t);
+
+  mutex m;
+  vector<MultiStriperTest *> refs;
 };
 
 #endif

@@ -12,8 +12,12 @@
  * 
  */
 
+#include <boost/lexical_cast.hpp>
 #include <iostream>
 #include <errno.h>
+#include <vector>
+
+using std::vector;
 
 #include "include/types.h"
 #include "common/Clock.h"
@@ -61,6 +65,107 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
 void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers)
 {
   lock_info(ioctx, oid, name, lockers, NULL, NULL);
+}
+
+
+class StriperLock {
+public:
+  StriperLock(const string& lock_name)
+    : lock(new Lock(lock_name)),
+      ioctx(new IoCtx),
+      cluster(new Rados) {}
+
+  ~StriperLock() {
+    delete lock;
+    delete ioctx;
+    delete cluster;
+  }
+
+  static void destory() {
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+  }
+
+  void init() {
+    connect_cluster_pp(*cluster);
+    cluster->ioctx_create(pool_name.c_str(), *ioctx);
+  }
+
+void write_and_lock(const char *oid, bufferlist& bl) {
+    ioctx->write(oid, bl, bl.length(), 0);
+    lock_ret = lock->lock_shared(ioctx, oid);
+  }
+
+  static string pool_name;
+  static Rados s_cluster;
+
+  Lock* lock;
+  IoCtx* ioctx;
+  Rados* cluster;
+  int lock_ret;
+};
+
+string StriperLock::pool_name;
+Rados StriperLock::s_cluster;
+
+TEST (ClsLock, TestMaxStriperSharedLock) {
+  StriperLock::pool_name = get_temp_pool_name();
+  create_one_pool_pp(StriperLock::pool_name, StriperLock::s_cluster);
+
+  std::string max_locks_str;
+  StriperLock::s_cluster.conf_get("max_striper_locks_per_obj", max_locks_str);
+  auto max_locks = boost::lexical_cast<uint64_t>(max_locks_str);
+
+  char oid[] = "striper_lock_test";
+  bufferlist bl;
+
+  vector<StriperLock *> locks;
+
+  /// test for shared locks which named "striper.lock"
+  {
+    for(size_t i = 0; i < max_locks + 1; i++) {
+      auto lock = new StriperLock("striper.lock");
+      lock->init();
+      lock->write_and_lock(oid, bl);
+      locks.push_back(lock);
+    }
+
+    ASSERT_EQ(max_locks + 1, locks.size());
+    ASSERT_EQ(
+      1,
+      std::count_if(
+        locks.begin(),
+        locks.end(),
+        [](StriperLock *x) {
+          return x->lock_ret == -EBUSY;
+        }));
+  }
+
+  locks.clear();
+
+  /// test for shared locks which do not named "striper.lock"
+  {
+    for(size_t i = 0; i < max_locks + 1; i++) {
+      auto lock = new StriperLock(StriperLock::pool_name);
+      lock->init();
+      lock->write_and_lock(oid, bl);
+      locks.push_back(lock);
+    }
+
+    ASSERT_EQ(max_locks + 1, locks.size());
+    ASSERT_EQ(
+      0,
+      std::count_if(
+        locks.begin(),
+        locks.end(),
+        [](StriperLock *x) {
+          return x->lock_ret == -EBUSY;
+        }));
+  }
+
+  for( auto lock : locks)
+    delete lock;
+
+  StriperLock::destory();
 }
 
 TEST(ClsLock, TestMultiLocking) {
