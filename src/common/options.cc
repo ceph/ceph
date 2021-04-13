@@ -7209,6 +7209,10 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_data_notify_interval_msec", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(200)
     .set_description("data changes notification interval to followers"),
+    .set_long_description(
+        "In multisite, radosgw will occasionally broadcast new entries in its "
+        "data changes log to peer zones, so they can prioritize sync of some "
+        "of the most recent changes. Can be disabled with 0.")
 
     Option("rgw_torrent_origin", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -7222,7 +7226,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Enable dynamic resharding")
     .set_long_description(
-        "If true, RGW will dynamicall increase the number of shards in buckets that have "
+        "If true, RGW will dynamically increase the number of shards in buckets that have "
         "a high number of objects per shard.")
     .add_see_also("rgw_max_objs_per_shard")
     .add_see_also("rgw_max_dynamic_shards"),
