@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <algorithm>
 #include <sys/time.h>
+#include <sys/file.h>
 
 #include "common/admin_socket.h"
 #include "common/ceph_context.h"

@@ -155,6 +155,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
   ObjectState& os,
   ceph::os::Transaction& txn)
 {
+  logger().debug("{}", __func__);
   struct connect_ctx_t {
     ObjectContext::watch_key_t key;
     crimson::net::ConnectionRef conn;

@@ -17,6 +17,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def normalize_image_digest(digest: str, default_registry: str) -> str:
+    # normal case:
+    #   ceph/ceph -> docker.io/ceph/ceph
+    # edge cases that shouldn't ever come up:
+    #   ubuntu -> docker.io/ubuntu    (ubuntu alias for library/ubuntu)
+    # no change:
+    #   quay.ceph.io/ceph/ceph -> ceph
+    #   docker.io/ubuntu -> no change
+    bits = digest.split('/')
+    if '.' not in bits[0] or len(bits) < 3:
+        digest = 'docker.io/' + digest
+    return digest
+
+
 class UpgradeState:
     def __init__(self,
                  target_name: str,
@@ -171,7 +185,7 @@ class CephadmUpgrade:
                 raise OrchestratorError(version_error)
             target_name = self.mgr.container_image_base + ':v' + version
         elif image:
-            target_name = image
+            target_name = normalize_image_digest(image, self.mgr.default_registry)
         else:
             raise OrchestratorError('must specify either image or version')
         if self.upgrade_state:

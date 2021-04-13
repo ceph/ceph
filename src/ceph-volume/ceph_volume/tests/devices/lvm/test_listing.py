@@ -106,7 +106,7 @@ class TestFullReport(object):
                          lv_path='/dev/VolGroup/lv', vg_name='VolGroup')
         volumes = []
         volumes.append(osd)
-        monkeypatch.setattr(lvm.listing.api, 'get_first_pv', lambda **kwargs: pv)
+        monkeypatch.setattr(lvm.listing.api, 'get_single_pv', lambda **kwargs: pv)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
                             volumes)
 
@@ -126,7 +126,7 @@ class TestFullReport(object):
         volumes = []
         volumes.append(osd)
         volumes.append(journal)
-        monkeypatch.setattr(lvm.listing.api,'get_first_pv',lambda **kwargs:pv)
+        monkeypatch.setattr(lvm.listing.api,'get_single_pv',lambda **kwargs:pv)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
                             volumes)
 

@@ -98,7 +98,7 @@ Build-Depends: automake,
                python3-setuptools,
                python3-sphinx,
 # Make-Check   python3-werkzeug,
-               python3-setuptools,
+               python3-yaml,
 # Crimson      ragel,
 # Make-Check   socat,
 # Crimson      systemtap-sdt-dev,
@@ -526,7 +526,8 @@ Description: debugging symbols for rbd-fuse
 
 Package: ceph-immutable-object-cache
 Architecture: linux-any
-Depends: librados2 (= ${binary:Version}),
+Depends: ceph-common (= ${binary:Version}),
+         librados2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: Ceph daemon for immutable object cache

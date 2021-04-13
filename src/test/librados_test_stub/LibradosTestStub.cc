@@ -1455,7 +1455,7 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
     watcher.name = entity_name_t::CLIENT(w.watcher_id);
     watcher.cookie = w.cookie;
     watcher.timeout_seconds = w.timeout_seconds;
-    watcher.addr.parse(w.addr, 0);
+    watcher.addr.parse(w.addr);
     watchers->entries.push_back(watcher);
   }
 

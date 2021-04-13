@@ -43,6 +43,7 @@ from io import StringIO
 from threading import Thread, RLock
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from pathlib import Path
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
@@ -52,6 +53,7 @@ DEFAULT_PROMETHEUS_IMAGE = 'docker.io/prom/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'docker.io/prom/node-exporter:v0.18.1'
 DEFAULT_GRAFANA_IMAGE = 'docker.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_ALERT_MANAGER_IMAGE = 'docker.io/prom/alertmanager:v0.20.0'
+DEFAULT_REGISTRY = 'docker.io'   # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
 LATEST_STABLE_RELEASE = 'pacific'
@@ -933,6 +935,15 @@ class CustomContainer(object):
                     bind[index] = 'source={}'.format(os.path.join(
                         data_dir, match.group(1)))
         return binds
+
+##################################
+
+
+def touch(file_path: str, uid: Optional[int] = None, gid: Optional[int] = None) -> None:
+    Path(file_path).touch()
+    if uid and gid:
+        os.chown(file_path, uid, gid)
+
 
 ##################################
 
@@ -2164,6 +2175,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+            touch(os.path.join(data_dir_root, 'data', 'grafana.db'), uid, gid)
         elif daemon_type == 'alertmanager':
             data_dir_root = get_data_dir(fsid, ctx.data_dir,
                                          daemon_type, daemon_id)
@@ -2350,6 +2362,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
+            mounts[os.path.join(data_dir, 'data/grafana.db')] = '/var/lib/grafana/grafana.db:Z'
         elif daemon_type == 'alertmanager':
             mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/etc/alertmanager:Z'
 
@@ -2978,10 +2991,10 @@ def get_unit_file(ctx, fsid):
     # type: (CephadmContext, str) -> str
     extra_args = ''
     if isinstance(ctx.container_engine, Podman):
-        extra_args = ('ExecStartPre=-/bin/rm -f /%t/%n-pid /%t/%n-cid\n'
-                      'ExecStopPost=-/bin/rm -f /%t/%n-pid /%t/%n-cid\n'
+        extra_args = ('ExecStartPre=-/bin/rm -f %t/%n-pid %t/%n-cid\n'
+                      'ExecStopPost=-/bin/rm -f %t/%n-pid %t/%n-cid\n'
                       'Type=forking\n'
-                      'PIDFile=/%t/%n-pid\n')
+                      'PIDFile=%t/%n-pid\n')
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             extra_args += 'Delegate=yes\n'
 
@@ -3274,6 +3287,20 @@ def command_inspect_image(ctx):
     return 0
 
 
+def normalize_image_digest(digest):
+    # normal case:
+    #   ceph/ceph -> docker.io/ceph/ceph
+    # edge cases that shouldn't ever come up:
+    #   ubuntu -> docker.io/ubuntu    (ubuntu alias for library/ubuntu)
+    # no change:
+    #   quay.ceph.io/ceph/ceph -> ceph
+    #   docker.io/ubuntu -> no change
+    bits = digest.split('/')
+    if '.' not in bits[0] or len(bits) < 3:
+        digest = DEFAULT_REGISTRY + '/' + digest
+    return digest
+
+
 def get_image_info_from_inspect(out, image):
     # type: (str, str) -> Dict[str, Union[str,List[str]]]
     image_id, digests = out.split(',', 1)
@@ -3283,7 +3310,7 @@ def get_image_info_from_inspect(out, image):
         'image_id': normalize_container_id(image_id)
     }  # type: Dict[str, Union[str,List[str]]]
     if digests:
-        r['repo_digests'] = digests[1:-1].split(' ')
+        r['repo_digests'] = list(map(normalize_image_digest, digests[1:-1].split(' ')))
     return r
 
 ##################################

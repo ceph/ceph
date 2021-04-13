@@ -11,6 +11,8 @@ if(WIN32)
   add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
 endif()
 
+add_subdirectory(options)
+
 set(common_srcs
   AsyncOpTracker.cc
   BackTrace.cc
@@ -25,7 +27,6 @@ set(common_srcs
   Graylog.cc
   HTMLFormatter.cc
   HeartbeatMap.cc
-  Journald.cc
   LogClient.cc
   LogEntry.cc
   ostream_temp.cc
@@ -100,6 +101,11 @@ set(common_srcs
   utf8.c
   util.cc
   version.cc)
+
+if(WITH_SYSTEMD)
+  list(APPEND common_srcs
+    Journald.cc)
+endif()
 
 if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND common_srcs
@@ -179,9 +185,9 @@ add_library(common-common-objs OBJECT
 target_include_directories(common-common-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 # for options.cc
 target_compile_definitions(common-common-objs PRIVATE
-  "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
-  "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
-  "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
+  "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
+  "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
+  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
 set(common_mountcephfs_srcs
   armor.c
