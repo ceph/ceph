@@ -250,14 +250,11 @@
 /* we have a recent nasm and are x86_64 */
 #cmakedefine HAVE_NASM_X64
 
-/* nasm can also build the isa-l:avx2 */
-#cmakedefine HAVE_NASM_X64_AVX2
-
 /* nasm can also build the isa-l:avx512 */
 #cmakedefine HAVE_NASM_X64_AVX512
 
-/* Define if isa-l is compiled for arm64 */
-#cmakedefine HAVE_ARMV8_SIMD
+/* Define if the erasure code isa-l plugin is compiled */
+#cmakedefine WITH_EC_ISA_PLUGIN
 
 /* Define to 1 if strerror_r returns char *. */
 #cmakedefine STRERROR_R_CHAR_P 1
@@ -326,9 +323,6 @@
 #cmakedefine CEPH_LITTLE_ENDIAN
 
 #cmakedefine MGR_PYTHON_EXECUTABLE "@MGR_PYTHON_EXECUTABLE@"
-
-/* the default value of "mgr_disabled_module" option */
-#cmakedefine MGR_DISABLED_MODULES "@MGR_DISABLED_MODULES@"
 
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
