@@ -1527,7 +1527,7 @@ do_rgw()
     # Start server
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20 --debug-ms=1"
+        RGWDEBUG="--debug-rgw=1 --debug-ms=0"
     fi
 
     local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"

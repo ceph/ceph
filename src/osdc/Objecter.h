@@ -1645,6 +1645,10 @@ public:
   std::atomic<bool> initialized{false};
 
 private:
+  struct fastfail {
+    std::unordered_set<pg_t> pgs;
+    std::shared_mutex lock;
+  } ffpgs;
   std::atomic<uint64_t> last_tid{0};
   std::atomic<unsigned> inflight_ops{0};
   std::atomic<int> client_inc{-1};
@@ -1920,6 +1924,7 @@ public:
     std::variant<std::unique_ptr<OpComp>, fu2::unique_function<OpSig>,
 		 Context*> onfinish;
     uint64_t ontimeout = 0;
+    uint64_t onfastfail = 0;
 
     ceph_tid_t tid = 0;
     int attempts = 0;
@@ -2446,6 +2451,7 @@ public:
 
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
+  ceph::timespan objecter_fastfail_timeout;
 
   MOSDOp *_prepare_osd_op(Op *op);
   void _send_op(Op *op);
