@@ -399,6 +399,7 @@ endif()
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
+add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
   find_package(yaml-cpp 0.6.0)

@@ -1,4 +1,5 @@
 set(common_options_srcs build_options.cc)
+set(legacy_options_headers)
 
 # to mimic the behavior of file(CONFIGURE ...)
 file(GENERATE OUTPUT configure_file.cmake
@@ -25,17 +26,20 @@ function(add_options name)
   set(yaml_file ${CMAKE_CURRENT_BINARY_DIR}/${name}.yaml)
   file_configure("${yaml_in_file}"
     "${yaml_file}" @ONLY)
-  set(src_file "${name}_options.cc")
-  add_custom_command(
-    OUTPUT ${src_file}
+  set(cc_file "${name}_options.cc")
+  set(h_file "${PROJECT_BINARY_DIR}/include/${name}_legacy_options.h")
+  add_custom_command(PRE_BUILD
+    OUTPUT ${cc_file} ${h_file}
     COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py
       --input ${yaml_file}
-      --output ${src_file}
+      --output ${cc_file}
+      --legacy ${h_file}
       --name ${name}
-    DEPENDS ${yaml_file})
-  list(APPEND common_options_srcs
-    ${src_file})
+      DEPENDS ${yaml_file})
+  list(APPEND common_options_srcs ${cc_file})
   set(common_options_srcs ${common_options_srcs} PARENT_SCOPE)
+  list(APPEND legacy_options_headers ${h_file})
+  set(legacy_options_headers ${legacy_options_headers} PARENT_SCOPE)
 endfunction()
 
 set(osd_erasure_code_plugins "jerasure" "lrc")
@@ -92,3 +96,5 @@ add_options(rgw)
 
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
+add_custom_target(legacy-option-headers
+  DEPENDS ${legacy_options_headers})
