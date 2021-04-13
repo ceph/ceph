@@ -20,6 +20,7 @@ scrape_configs:
 {% for mgr in mgr_scrape_list %}
       - '{{ mgr }}'
 {% endfor %}
+
 {% if nodes %}
   - job_name: 'node'
     static_configs:
@@ -27,5 +28,15 @@ scrape_configs:
     - targets: ['{{ node.url }}']
       labels:
         instance: '{{ node.hostname }}'
+{% endfor %}
+{% endif %}
+
+{% if haproxy_targets %}
+  - job_name: 'haproxy'
+    static_configs:
+{% for haproxy in haproxy_targets %}
+      - targets: [{{ haproxy.url }}]
+        labels:
+	  instance: '{{ haproxy.service }}'
 {% endfor %}
 {% endif %}
