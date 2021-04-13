@@ -30,6 +30,14 @@ pools for storing data. A pool provides you with:
 To organize data into pools, you can list, create, and remove pools.
 You can also view the utilization statistics for each pool.
 
+Pool Names
+==========
+
+Pool names beginning with ``.`` are reserved for use by Ceph's internal
+operations. Please do not create or manipulate pools with these names.
+
+
+
 List Pools
 ==========
 

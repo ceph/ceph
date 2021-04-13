@@ -121,6 +121,21 @@ this to your ``ceph.conf``:
     [mon]
         mgr_initial_modules = dashboard balancer
 
+Module Pool
+-----------
+
+The manager creates a pool for use by its module to store state. The name of
+this pool is ``.mgr`` (with the leading ``.`` indicating a reserved pool
+name).
+
+.. note::
+
+   Prior to Quincy, the ``devicehealth`` module created a
+   ``device_health_metrics`` pool to store device SMART statistics. With
+   Quincy, this pool is automatically renamed to be the common manager module
+   pool.
+
+
 Calling module commands
 -----------------------
 
