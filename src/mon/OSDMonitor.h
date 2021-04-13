@@ -825,9 +825,21 @@ public:
   void trigger_degraded_stretch_mode(const set<int>& dead_buckets,
 				     const set<string>& live_zones);
   /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_degraded_stretch_mode();
+  /**
    * Set recovery stretch mode in the OSDMap, resetting pool size back to normal
    */
   void trigger_recovery_stretch_mode();
+  /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_recovery_stretch_mode();
+  /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_healthy_stretch_mode();
   /**
    * Tells the OSD there's a new pg digest, in case it's interested.
    * (It's interested when in recovering stretch mode.)
