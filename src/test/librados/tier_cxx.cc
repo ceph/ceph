@@ -1587,11 +1587,11 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
       ASSERT_EQ(0, ioctx.aio_operate("foo", completion1, &op1, &read_bl));
       ioctx.snap_set_read(librados::SNAP_HEAD);
 
-      completion->wait_for_safe();
+      completion->wait_for_complete();
       ASSERT_EQ(0, completion->get_return_value());
       completion->release();
 
-      completion1->wait_for_safe();
+      completion1->wait_for_complete();
       ASSERT_EQ(0, completion1->get_return_value());
       completion1->release();
     }
@@ -1605,7 +1605,7 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
       ASSERT_EQ(0, ioctx.aio_operate(
         "foo", completion, &op,
         librados::OPERATION_IGNORE_CACHE, NULL));
-      completion->wait_for_safe();
+      completion->wait_for_complete();
       ASSERT_EQ(0, completion->get_return_value());
       completion->release();
     }
