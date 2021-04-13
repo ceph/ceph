@@ -48,6 +48,7 @@ add_tracing_library(os_tp objectstore.tp 1.0.0)
 add_tracing_library(bluestore_tp bluestore.tp 1.0.0)
 add_tracing_library(rgw_op_tp rgw_op.tp 1.0.0)
 add_tracing_library(rgw_rados_tp rgw_rados.tp 1.0.0)
+add_tracing_library(zipkin_tp zipkin.tp 1.0.0)
 
 install(TARGETS rados_tp osd_tp os_tp rgw_rados_tp rgw_op_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
 if(WITH_RBD)
