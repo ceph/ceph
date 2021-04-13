@@ -202,7 +202,7 @@ Connection::create_auth(crimson::auth::method_t protocol,
 seastar::future<std::optional<Connection::auth_result_t>>
 Connection::do_auth_single(Connection::request_t what)
 {
-  auto m = make_message<MAuth>();
+  auto m = crimson::net::make_message<MAuth>();
   m->protocol = auth->get_protocol();
   auth->prepare_build_request();
   switch (what) {
@@ -220,7 +220,7 @@ Connection::do_auth_single(Connection::request_t what)
     assert(0);
   }
   logger().info("sending {}", *m);
-  return conn->send(m).then([this] {
+  return conn->send(std::move(m)).then([this] {
     logger().info("waiting");
     return reply.get_shared_future();
   }).then([this] (Ref<MAuthReply> m) {
@@ -265,7 +265,7 @@ Connection::do_auth(Connection::request_t what) {
 seastar::future<Connection::auth_result_t> Connection::authenticate_v2()
 {
   auth_start = seastar::lowres_system_clock::now();
-  return conn->send(make_message<MMonGetMap>()).then([this] {
+  return conn->send(crimson::net::make_message<MMonGetMap>()).then([this] {
     auth_done.emplace();
     return auth_done->get_future();
   });
