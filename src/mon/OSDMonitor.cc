@@ -895,6 +895,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       } else {
 	mon->set_recovery_stretch_mode();
       }
+    } else {
+      mon->set_healthy_stretch_mode();
     }
     if (marked_osd_down &&
 	(!osdmap.degraded_stretch_mode || osdmap.recovering_stretch_mode)) {
