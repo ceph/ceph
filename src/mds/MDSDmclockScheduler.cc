@@ -743,7 +743,7 @@ void MDSDmclockScheduler::mds_unlock()
 int MDSDmclockScheduler::mds_is_locked_by_me()
 {
   if (mds != nullptr) {
-    return mds->mds_lock.is_locked_by_me();
+    return ceph_mutex_is_locked_by_me(mds->mds_lock);
   }
   return 1;
 }
