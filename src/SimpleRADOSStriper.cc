@@ -46,7 +46,7 @@
 
 using ceph::bufferlist;
 
-#define dout_subsys ceph_subsys_client
+#define dout_subsys ceph_subsys_cephsqlite
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << ioctx.get_instance_id() << ": SimpleRADOSStriper: " << __func__ << ": " << oid << ": "
 #define d(lvl) ldout((CephContext*)ioctx.cct(), (lvl))
