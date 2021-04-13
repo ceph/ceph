@@ -425,7 +425,8 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
     if (map.active_gid != 0 && map.active_name != g_conf()->name.get_id()) {
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
-      if (!py_module_registry.is_standby_running()) {
+      if (!py_module_registry.is_standby_running() &&
+	  g_conf().get_val<bool>("mgr_standby_modules")) {
         py_module_registry.standby_start(monc, finisher);
       }
     }
