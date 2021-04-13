@@ -421,10 +421,10 @@ void Heartbeat::Connection::reset()
   }
 }
 
-seastar::future<> Heartbeat::Connection::send(MessageRef msg)
+seastar::future<> Heartbeat::Connection::send(MessageURef msg)
 {
   assert(is_connected);
-  return conn->send(msg);
+  return conn->send(std::move(msg));
 }
 
 void Heartbeat::Connection::validate()
