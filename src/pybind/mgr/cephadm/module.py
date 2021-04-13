@@ -1979,12 +1979,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             deps = [d.name() for d in daemons if d.daemon_type == 'haproxy']
         else:
             need = {
-                'prometheus': ['mgr', 'alertmanager', 'node-exporter'],
+                'prometheus': ['mgr', 'alertmanager', 'node-exporter', 'ingress'],
                 'grafana': ['prometheus'],
                 'alertmanager': ['mgr', 'alertmanager'],
             }
             for dep_type in need.get(daemon_type, []):
-                for dd in self.cache.get_daemons_by_service(dep_type):
+                for dd in self.cache.get_daemons_by_type(dep_type):
                     deps.append(dd.name())
         return sorted(deps)
 
