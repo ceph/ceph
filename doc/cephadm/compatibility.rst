@@ -38,11 +38,11 @@ changes in the near future:
 
 - RGW
 
-Cephadm support for the following features is still under development:
+Cephadm support for the following features is still under development and may see breaking
+changes in future releases:
 
-- RGW-HA
+- Ingress
 - Cephadm exporter daemon
 - cephfs-mirror
 
 In case you encounter issues, see also :ref:`cephadm-pause`.
-
