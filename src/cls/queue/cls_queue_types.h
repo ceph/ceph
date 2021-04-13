@@ -84,6 +84,17 @@ struct cls_queue_marker
 };
 WRITE_CLASS_ENCODER(cls_queue_marker)
 
+inline constexpr bool operator==(const cls_queue_marker& lhs,
+                                 const cls_queue_marker& rhs)
+{
+  return lhs.offset == rhs.offset && lhs.gen == rhs.gen;
+}
+inline constexpr bool operator!=(const cls_queue_marker& lhs,
+                                 const cls_queue_marker& rhs)
+{
+  return lhs.offset != rhs.offset || lhs.gen != rhs.gen;
+}
+
 struct cls_queue_head
 {
   uint64_t max_head_size = QUEUE_HEAD_SIZE_1K;

@@ -645,7 +645,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	} // chains loop
       } // else -- chains not empty
     } // entries loop
-    if (transitioned_objects_cache[index] && entries.size() > 0) {
+    if (transitioned_objects_cache[index]) {
       ret = io_manager.drain_ios();
       if (ret < 0) {
         goto done;

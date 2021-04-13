@@ -280,7 +280,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   }
 
   op_ret.is_truncated = true;
-  uint64_t chunk_size = 1024;
+  constexpr uint64_t chunk_size = 65536;
   uint64_t contiguous_data_size = 0, size_to_read = 0;
   bool wrap_around = false;
 
