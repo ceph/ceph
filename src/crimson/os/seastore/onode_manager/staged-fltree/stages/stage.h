@@ -456,6 +456,24 @@ struct staged {
       return container_t::erase_at(mut, container, _index, p_left_bound);
     }
 
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender(NodeExtentMutable* p_mut) {
+      assert(_index + 1 == container.keys());
+      return typename container_t::template Appender<KT>(p_mut, container);
+    }
+
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender_opened(NodeExtentMutable* p_mut) {
+      if constexpr (!IS_BOTTOM) {
+        assert(_index + 1 == container.keys());
+        return typename container_t::template Appender<KT>(p_mut, container, true);
+      } else {
+        ceph_abort("impossible path");
+      }
+    }
+
     void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
       container.encode(p_node_start, encoded);
       ceph::encode(_index, encoded);
@@ -776,6 +794,22 @@ struct staged {
       return container_t::erase(mut, container, p_left_bound);
     }
 
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender(NodeExtentMutable* p_mut) {
+      return typename container_t::template Appender<KT>(p_mut, container, false);
+    }
+
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender_opened(NodeExtentMutable* p_mut) {
+      if constexpr (!IS_BOTTOM) {
+        return typename container_t::template Appender<KT>(p_mut, container, true);
+      } else {
+        ceph_abort("impossible path");
+      }
+    }
+
     void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
       container.encode(p_node_start, encoded);
       uint8_t is_end = _is_end;
@@ -847,6 +881,9 @@ struct staged {
    *   (!IS_BOTTOM) trim_at(mut, trimmed) -> trim_size
    * erase:
    *   erase(mut, p_left_bound) -> erase_size
+   * merge:
+   *   get_appender(p_mut) -> Appender
+   *   (!IS_BOTTOM)get_appender_opened(p_mut) -> Appender
    * denc:
    *   encode(p_node_start, encoded)
    *   decode(p_node_start, delta) -> iterator_t
@@ -1266,7 +1303,7 @@ struct staged {
     char* p_insert = const_cast<char*>(range.p_end);
     const value_t* p_value = nullptr;
     StagedAppender<KT> appender;
-    appender.init(&mut, p_insert);
+    appender.init_empty(&mut, p_insert);
     appender.append(key, value, p_value);
     [[maybe_unused]] const char* p_insert_front = appender.wrap();
     assert(p_insert_front == range.p_start);
@@ -1524,6 +1561,7 @@ struct staged {
     bool is_end() const { return iter->is_end(); }
     bool in_progress() const {
       assert(valid());
+      assert(!is_end());
       if constexpr (!IS_BOTTOM) {
         if (this->_nxt.valid()) {
           if (this->_nxt.index() == 0) {
@@ -1883,10 +1921,35 @@ struct staged {
     }
     bool in_progress() const { return require_wrap_nxt; }
     // TODO: pass by reference
-    void init(NodeExtentMutable* p_mut, char* p_start) {
+    void init_empty(NodeExtentMutable* p_mut, char* p_start) {
       assert(!valid());
       appender = typename container_t::template Appender<KT>(p_mut, p_start);
       _index = 0;
+    }
+    void init_tail(NodeExtentMutable* p_mut,
+                   const container_t& container,
+                   match_stage_t stage) {
+      assert(!valid());
+      auto iter = iterator_t(container);
+      iter.seek_last();
+      if (stage == STAGE) {
+        appender = iter.template get_appender<KT>(p_mut);
+        _index = iter.index() + 1;
+        if constexpr (!IS_BOTTOM) {
+          assert(!this->_nxt.valid());
+        }
+      } else {
+        assert(stage < STAGE);
+        if constexpr (!IS_BOTTOM) {
+          appender = iter.template get_appender_opened<KT>(p_mut);
+          _index = iter.index();
+          require_wrap_nxt = true;
+          auto nxt_container = iter.get_nxt_container();
+          this->_nxt.init_tail(p_mut, nxt_container, stage);
+        } else {
+          ceph_abort("impossible path");
+        }
+      }
     }
     // possible to make src_iter end if to_index == INDEX_END
     void append_until(StagedIterator& src_iter, index_t& to_index) {
@@ -1933,7 +1996,7 @@ struct staged {
       if constexpr (!IS_BOTTOM) {
         require_wrap_nxt = true;
         auto [p_mut, p_append] = appender->open_nxt(paritial_key);
-        this->_nxt.init(p_mut, p_append);
+        this->_nxt.init_empty(p_mut, p_append);
         return this->_nxt;
       } else {
         ceph_abort("impossible path");
@@ -1945,7 +2008,7 @@ struct staged {
       if constexpr (!IS_BOTTOM) {
         require_wrap_nxt = true;
         auto [p_mut, p_append] = appender->open_nxt(key);
-        this->_nxt.init(p_mut, p_append);
+        this->_nxt.init_empty(p_mut, p_append);
         return this->_nxt;
       } else {
         ceph_abort("impossible path");
@@ -1997,7 +2060,7 @@ struct staged {
         // cannot append the current item as-a-whole
         index_t to_index_nxt = INDEX_END;
         NXT_STAGE_T::template _append_range<KT>(
-            src_iter.nxt(), appender.open_nxt(src_iter.get_key()), to_index_nxt);
+            src_iter.get_nxt(), appender.open_nxt(src_iter.get_key()), to_index_nxt);
         ++src_iter;
         appender.wrap_nxt();
       } else {
@@ -2232,8 +2295,28 @@ struct staged {
   static std::tuple<match_stage_t, node_offset_t> evaluate_merge(
       const full_key_t<KeyT::VIEW>& left_pivot_index,
       const container_t& right_container) {
-    // TODO
-    ceph_abort("not implemented");
+    auto r_iter = iterator_t(right_container);
+    r_iter.seek_at(0);
+    node_offset_t compensate = r_iter.header_size();
+    auto cmp = compare_to<KeyT::VIEW>(left_pivot_index, r_iter.get_key());
+    if (cmp == MatchKindCMP::EQ) {
+      if constexpr (!IS_BOTTOM) {
+        // the index is equal, compensate and look at the lower stage
+        compensate += r_iter.size_to_nxt();
+        auto r_nxt_container = r_iter.get_nxt_container();
+        auto [ret_stage, ret_compensate] = NXT_STAGE_T::evaluate_merge(
+            left_pivot_index, r_nxt_container);
+        compensate += ret_compensate;
+        return {ret_stage, compensate};
+      } else {
+        ceph_abort("impossible path: left_pivot_key == right_first_key");
+      }
+    } else if (cmp == MatchKindCMP::LT) {
+      // ok, do merge here
+      return {STAGE, compensate};
+    } else {
+      ceph_abort("impossible path: left_pivot_key < right_first_key");
+    }
   }
 };
 
