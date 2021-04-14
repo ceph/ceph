@@ -14,7 +14,6 @@ MemoryDenyWriteExecute=true
 NoNewPrivileges=true
 # ceph-fuse requires access to /dev fuse device
 PrivateDevices=no
-ProtectClock=true
 ProtectControlGroups=true
 ProtectHostname=true
 ProtectKernelLogs=true
