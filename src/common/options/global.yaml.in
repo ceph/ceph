@@ -1986,6 +1986,30 @@ options:
   default: 15_min
   services:
   - mon
+- name: mon_warn_on_insecure_global_id_reclaim
+  type: bool
+  level: advanced
+  desc: issue AUTH_INSECURE_GLOBAL_ID_RECLAIM health warning if any connected
+    clients are insecurely reclaiming global_id
+  default: true
+  services:
+  - mon
+  see_also:
+  - mon_warn_on_insecure_global_id_reclaim_allowed
+  - auth_allow_insecure_global_id_reclaim
+  - auth_expose_insecure_global_id_reclaim
+- name: mon_warn_on_insecure_global_id_reclaim_allowed
+  type: bool
+  level: advanced
+  desc: issue AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED health warning if insecure
+    global_id reclaim is allowed
+  default: true
+  services:
+  - mon
+  see_also:
+  - mon_warn_on_insecure_global_id_reclaim
+  - auth_allow_insecure_global_id_reclaim
+  - auth_expose_insecure_global_id_reclaim
 - name: mon_warn_on_msgr2_not_enabled
   type: bool
   level: advanced
@@ -2777,11 +2801,44 @@ options:
 - name: auth_mon_ticket_ttl
   type: float
   level: advanced
-  default: 12_hr
+  default: 72_hr
 - name: auth_service_ticket_ttl
   type: float
   level: advanced
   default: 1_hr
+- name: auth_allow_insecure_global_id_reclaim
+  type: bool
+  level: advanced
+  desc: Allow reclaiming global_id without presenting a valid ticket proving
+    previous possession of that global_id
+  long_desc: Allowing unauthorized global_id (re)use poses a security risk.
+    Unfortunately, older clients may omit their ticket on reconnects and
+    therefore rely on this being allowed for preserving their global_id for
+    the lifetime of the client instance. Setting this value to false would
+    immediately prevent new connections from those clients (assuming
+    auth_expose_insecure_global_id_reclaim set to true) and eventually break
+    existing sessions as well (regardless of auth_expose_insecure_global_id_reclaim
+    setting).
+  default: true
+  see_also:
+  - mon_warn_on_insecure_global_id_reclaim
+  - mon_warn_on_insecure_global_id_reclaim_allowed
+  - auth_expose_insecure_global_id_reclaim
+- name: auth_expose_insecure_global_id_reclaim
+  type: bool
+  level: advanced
+  desc: Force older clients that may omit their ticket on reconnects to
+    reconnect as part of establishing a session
+  long_desc: 'In permissive mode (auth_allow_insecure_global_id_reclaim set
+    to true), this helps with identifying clients that are not patched. In
+    enforcing mode (auth_allow_insecure_global_id_reclaim set to false), this
+    is a fail-fast mechanism: don''t establish a session that will almost
+    inevitably be broken later.'
+  default: true
+  see_also:
+  - mon_warn_on_insecure_global_id_reclaim
+  - mon_warn_on_insecure_global_id_reclaim_allowed
+  - auth_allow_insecure_global_id_reclaim
 - name: auth_debug
   type: bool
   level: dev

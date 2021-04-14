@@ -4440,9 +4440,13 @@ void Monitor::_ms_dispatch(Message *m)
 
   if (s->auth_handler) {
     s->entity_name = s->auth_handler->get_entity_name();
+    s->global_id = s->auth_handler->get_global_id();
+    s->global_id_status = s->auth_handler->get_global_id_status();
   }
-  dout(20) << " entity " << s->entity_name
-	   << " caps " << s->caps.get_str() << dendl;
+  dout(20) << " entity_name " << s->entity_name
+	   << " global_id " << s->global_id
+	   << " (" << s->global_id_status
+	   << ") caps " << s->caps.get_str() << dendl;
 
   if (!session_stretch_allowed(s, op)) {
     return;
@@ -4493,6 +4497,34 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     dout(5) << __func__ << " " << op->get_req()->get_source_inst()
             << " is not authenticated, dropping " << *(op->get_req())
             << dendl;
+    return;
+  }
+
+  // global_id_status == NONE: all sessions for auth_none and krb,
+  // mon <-> mon sessions (including proxied sessions) for cephx
+  ceph_assert(s->global_id_status == global_id_status_t::NONE ||
+              s->global_id_status == global_id_status_t::NEW_OK ||
+              s->global_id_status == global_id_status_t::NEW_NOT_EXPOSED ||
+              s->global_id_status == global_id_status_t::RECLAIM_OK ||
+              s->global_id_status == global_id_status_t::RECLAIM_INSECURE);
+
+  // let mon_getmap through for "ping" (which doesn't reconnect)
+  // and "tell" (which reconnects but doesn't attempt to preserve
+  // its global_id and stays in NEW_NOT_EXPOSED, retrying until
+  // ->send_attempts reaches 0)
+  if (cct->_conf->auth_expose_insecure_global_id_reclaim &&
+      s->global_id_status == global_id_status_t::NEW_NOT_EXPOSED &&
+      op->get_req()->get_type() != CEPH_MSG_MON_GET_MAP) {
+    dout(5) << __func__ << " " << op->get_req()->get_source_inst()
+            << " may omit old_ticket on reconnects, discarding "
+            << *op->get_req() << " and forcing reconnect" << dendl;
+    ceph_assert(s->con && !s->proxy_con);
+    s->con->mark_down();
+    {
+      std::lock_guard l(session_map_lock);
+      remove_session(s);
+    }
+    op->mark_zap();
     return;
   }
 
@@ -6365,14 +6397,14 @@ int Monitor::handle_auth_request(
     // are supported by the client if we require it.  for msgr2 that
     // is not necessary.
 
+    bool is_new_global_id = false;
     if (!con->peer_global_id) {
       con->peer_global_id = authmon()->_assign_global_id();
       if (!con->peer_global_id) {
 	dout(1) << __func__ << " failed to assign global_id" << dendl;
 	return -EBUSY;
       }
-      dout(10) << __func__ << "  assigned global_id " << con->peer_global_id
-	       << dendl;
+      is_new_global_id = true;
     }
 
     // set up partial session
@@ -6382,11 +6414,10 @@ int Monitor::handle_auth_request(
 
     r = s->auth_handler->start_session(
       entity_name,
-      auth_meta->get_connection_secret_length(),
+      con->peer_global_id,
+      is_new_global_id,
       reply,
-      &con->peer_caps_info,
-      &auth_meta->session_key,
-      &auth_meta->connection_secret);
+      &con->peer_caps_info);
   } else {
     priv = con->get_priv();
     if (!priv) {
@@ -6399,7 +6430,6 @@ int Monitor::handle_auth_request(
       p,
       auth_meta->get_connection_secret_length(),
       reply,
-      &con->peer_global_id,
       &con->peer_caps_info,
       &auth_meta->session_key,
       &auth_meta->connection_secret);
