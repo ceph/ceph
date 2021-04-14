@@ -19,6 +19,7 @@
 #include "crimson/os/seastore/omap_manager/btree/btree_omap_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 #include "crimson/os/seastore/onode_manager.h"
+#include "crimson/os/seastore/object_data_handler.h"
 
 namespace {
   seastar::logger& logger() {
@@ -169,7 +170,19 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
   size_t len,
   uint32_t op_flags)
 {
-  return read_errorator::make_ready_future<ceph::bufferlist>();
+  return repeat_with_onode<ceph::bufferlist>(
+    ch,
+    oid,
+    [=](auto &t, auto &onode) {
+      return ObjectDataHandler().read(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  t,
+	  onode,
+	},
+	offset,
+	len);
+    });
 }
 
 SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
@@ -213,10 +226,10 @@ seastar::future<struct stat> SeaStore::stat(
       struct stat st;
       auto &olayout = onode.get_layout();
       st.st_size = olayout.size;
-      st.st_blksize = 4096;
+      st.st_blksize = transaction_manager->get_block_size();
       st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
       st.st_nlink = 1;
-      return seastar::make_ready_future<struct stat>();
+      return seastar::make_ready_future<struct stat>(st);
     }).handle_error(
       crimson::ct_error::assert_all{
 	"Invalid error in SeaStore::stat"
@@ -631,12 +644,29 @@ SeaStore::tm_ret SeaStore::_write(
   internal_context_t &ctx,
   OnodeRef &onode,
   uint64_t offset, size_t len,
-  ceph::bufferlist &&bl,
+  ceph::bufferlist &&_bl,
   uint32_t fadvise_flags)
 {
-  logger().debug("{}: {} {} ~ {}",
+  logger().debug("SeaStore::{}: {} {} ~ {}",
                 __func__, *onode, offset, len);
-  return tm_ertr::now();
+  {
+    auto &object_size = onode->get_mutable_layout(*ctx.transaction).size;
+    object_size = std::max<uint64_t>(
+      offset + len,
+      object_size);
+  }
+  return seastar::do_with(
+    std::move(_bl),
+    [=, &ctx, &onode](auto &bl) {
+      return ObjectDataHandler().write(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  *onode,
+	},
+	offset,
+	bl);
+    });
 }
 
 SeaStore::tm_ret SeaStore::_omap_set_values(
@@ -754,9 +784,16 @@ SeaStore::tm_ret SeaStore::_truncate(
   OnodeRef &onode,
   uint64_t size)
 {
-  logger().debug("{} onode={} size={}",
+  logger().debug("SeaStore::{} onode={} size={}",
                 __func__, *onode, size);
-  return tm_ertr::now();
+  onode->get_mutable_layout(*ctx.transaction).size = size;
+  return ObjectDataHandler().truncate(
+    ObjectDataHandler::context_t{
+      *transaction_manager,
+      *ctx.transaction,
+      *onode
+    },
+    size);
 }
 
 SeaStore::tm_ret SeaStore::_setattrs(
