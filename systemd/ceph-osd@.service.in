@@ -18,7 +18,6 @@ MemoryDenyWriteExecute=true
 # Need NewPrivileges via `sudo smartctl`
 NoNewPrivileges=false
 PrivateTmp=true
-ProtectClock=true
 ProtectControlGroups=true
 ProtectHome=true
 ProtectHostname=true
