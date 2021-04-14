@@ -151,7 +151,7 @@ void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length) {
   }
 }
 
-bool ZonedAllocator::zoned_get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) {
+bool ZonedAllocator::get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) {
   // TODO: make 0.25 tunable
   if (static_cast<double>(num_free) / size > 0.25) {
     return false;
@@ -164,7 +164,7 @@ bool ZonedAllocator::zoned_get_zones_to_clean(std::deque<uint64_t> *zones_to_cle
   return true;
 }
 
-void ZonedAllocator::zoned_set_zone_states(std::vector<zone_state_t> &&_zone_states) {
+void ZonedAllocator::set_zone_states(std::vector<zone_state_t> &&_zone_states) {
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << dendl;
   zone_states = std::move(_zone_states);
