@@ -31,7 +31,8 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
       // The last 32 bits of |blk_size| is holding the actual block size.
       block_size((blk_size & 0x00000000ffffffff)),
       zone_size(((blk_size & 0x0000ffff00000000) >> 32) * 1024 * 1024),
-      starting_zone_num((blk_size & 0xffff000000000000) >> 48),
+      first_seq_zone_num((blk_size >> 48) & 0xffff),
+      starting_zone_num(first_seq_zone_num),
       num_zones(size / zone_size),
       num_zones_to_clean(0) {
   ldout(cct, 10) << __func__ << " size 0x" << std::hex << size
@@ -177,8 +178,67 @@ bool ZonedAllocator::get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) {
   return true;
 }
 
+bool ZonedAllocator::low_on_space(void) {
+  ldout(cct, 10) << __func__ << dendl;
 
+  ceph_assert(zones_to_clean.empty());
 
+  uint64_t conventional_size = first_seq_zone_num * zone_size;
+  uint64_t sequential_size = size - conventional_size;
+  uint64_t sequential_num_free = num_free - conventional_size;
+  double free_ratio = static_cast<double>(sequential_num_free) / sequential_size;
+
+  ldout(cct, 10) << __func__ << " free size " << sequential_num_free
+		 << " total size " << sequential_size
+		 << " free ratio is " << free_ratio << dendl;
+
+   // TODO: make 0.25 tunable
+  if (free_ratio > 0.25) {
+    ldout(cct, 10) << __func__ << " no need to clean" << dendl;
+     return false;
+   }
+  ldout(cct, 10) << __func__<< " running out of free space!" << dendl;
+  return true;
+}
+
+void ZonedAllocator::find_zones_to_clean(void) {
+  ldout(cct, 10) << __func__ << dendl;
+
+  if (num_zones_to_clean || !low_on_space())
+    return;
+
+  ceph_assert(zones_to_clean.empty());
+  
+  // TODO: make this tunable; handle the case when there aren't this many zones
+  // to clean.
+  const int64_t num_zones_to_clean_at_once = 1;
+
+  std::vector<uint64_t> idx(num_zones);
+  std::iota(idx.begin(), idx.end(), 0);
+  
+  if (cct->_conf->subsys.should_gather<ceph_subsys_bluestore, 40>()) {
+    for (size_t i = 0; i < zone_states.size(); ++i) {
+      dout(40) << __func__ << " zone " << i << zone_states[i] << dendl;
+    }
+  }
+
+  std::partial_sort(idx.begin(), idx.begin() + num_zones_to_clean_at_once, idx.end(),
+		    [this](uint64_t i1, uint64_t i2) {
+		      return zone_states[i1].num_dead_bytes > zone_states[i2].num_dead_bytes;
+		    });
+
+  ldout(cct, 10) << __func__ << " the zone that needs cleaning is "
+		 << *idx.begin() << " num_dead_bytes = " << zone_states[*idx.begin()].num_dead_bytes
+		 << dendl;
+
+  zones_to_clean = {idx.begin(), idx.begin() + num_zones_to_clean_at_once};
+  num_zones_to_clean = num_zones_to_clean_at_once;
+
+  // TODO: handle the case of disk being full.
+  ceph_assert(!zones_to_clean.empty());
+  ceph_assert(num_zones_to_clean != 0);
+}
+ 
 void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states) {
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << dendl;
