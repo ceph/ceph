@@ -20,18 +20,18 @@
 
 ZonedAllocator::ZonedAllocator(CephContext* cct,
 			       int64_t size,
-			       int64_t block_size,
+			       int64_t blk_size,
 			       const std::string& name)
-    : Allocator(name, size, block_size),
+    : Allocator(name, size, blk_size),
       cct(cct),
       num_free(0),
       size(size),
       // To avoid interface changes, we piggyback zone size and the first
-      // sequential zone number onto the first 32 bits of 64-bit |block_size|.
-      // The last 32 bits of |block_size| is holding the actual block size.
-      block_size((block_size & 0x00000000ffffffff)),
-      zone_size(((block_size & 0x0000ffff00000000) >> 32) * 1024 * 1024),
-      starting_zone_num((block_size & 0xffff000000000000) >> 48),
+      // sequential zone number onto the first 32 bits of 64-bit |blk_size|.
+      // The last 32 bits of |blk_size| is holding the actual block size.
+      block_size((blk_size & 0x00000000ffffffff)),
+      zone_size(((blk_size & 0x0000ffff00000000) >> 32) * 1024 * 1024),
+      starting_zone_num((blk_size & 0xffff000000000000) >> 48),
       num_zones(size / zone_size),
       num_zones_to_clean(0) {
   ldout(cct, 10) << __func__ << " size 0x" << std::hex << size
