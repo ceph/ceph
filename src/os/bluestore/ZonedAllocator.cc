@@ -102,6 +102,8 @@ int64_t ZonedAllocator::allocate(
 		 << " located at zone " << zone_num
 		 << " and zone offset " << offset % zone_size << dendl;
 
+  find_zones_to_clean();
+
   extents->emplace_back(bluestore_pextent_t(offset, want_size));
   return want_size;
 }
@@ -173,17 +175,9 @@ void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length) {
   }
 }
 
-bool ZonedAllocator::get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) {
-  // TODO: make 0.25 tunable
-  if (static_cast<double>(num_free) / size > 0.25) {
-    return false;
-  }
-  {
-    std::lock_guard l(lock);
-    // TODO: populate |zones_to_clean| with the numbers of zones that should be
-    // cleaned.
-  }
-  return true;
+const std::set<uint64_t> *ZonedAllocator::get_zones_to_clean(void) {
+  ldout(cct, 10) << __func__ << dendl;
+  return num_zones_to_clean ? &zones_to_clean : nullptr;
 }
 
 bool ZonedAllocator::low_on_space(void) {
@@ -245,10 +239,18 @@ void ZonedAllocator::find_zones_to_clean(void) {
   // TODO: handle the case of disk being full.
   ceph_assert(!zones_to_clean.empty());
   ceph_assert(num_zones_to_clean != 0);
+
+  cleaner_lock->lock();
+  cleaner_cond->notify_one();
+  cleaner_lock->unlock();
 }
  
-void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states) {
+void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states,
+				ceph::mutex *_cleaner_lock,
+				ceph::condition_variable *_cleaner_cond) {
   std::lock_guard l(lock);
+  cleaner_lock = _cleaner_lock;
+  cleaner_cond = _cleaner_cond;
   ldout(cct, 10) << __func__ << dendl;
   zone_states = std::move(_zone_states);
 }
