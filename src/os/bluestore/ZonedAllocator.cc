@@ -99,6 +99,18 @@ int64_t ZonedAllocator::allocate(
 
 void ZonedAllocator::release(const interval_set<uint64_t>& release_set) {
   std::lock_guard l(lock);
+  for (auto p = cbegin(release_set); p != cend(release_set); ++p) {
+    auto offset = p.get_start();
+    auto length = p.get_len();
+    ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length << dendl;
+    uint64_t zone_num = offset / zone_size;
+    uint64_t num_dead = std::min(zone_size - offset % zone_size, length);
+    for ( ; length; ++zone_num) {
+      increment_num_dead_bytes(zone_num, num_dead);
+      length -= num_dead;
+      num_dead = std::min(zone_size, length);
+    }
+  }
 }
 
 uint64_t ZonedAllocator::get_free() {
