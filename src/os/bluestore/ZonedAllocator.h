@@ -50,7 +50,7 @@ class ZonedAllocator : public Allocator {
     return zone_size - get_write_pointer(zone_num);
   }
 
-  inline void advance_write_pointer(uint64_t zone_num, uint64_t want_size) {
+  inline void increment_write_pointer(uint64_t zone_num, uint64_t want_size) {
     zone_states[zone_num].increment_write_pointer(want_size);
   }
 

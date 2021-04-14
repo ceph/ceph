@@ -75,11 +75,11 @@ int64_t ZonedAllocator::allocate(
 
   uint64_t offset = get_offset(zone_num);
 
-  ldout(cct, 10) << __func__ << " advancing zone " << std::hex
+  ldout(cct, 10) << __func__ << " incrementing zone " << std::hex
 		 << zone_num << " write pointer from " << offset
 		 << " to " << offset + want_size << dendl;
 
-  advance_write_pointer(zone_num, want_size);
+  increment_write_pointer(zone_num, want_size);
   if (get_remaining_space(zone_num) == 0) {
     starting_zone_num = zone_num + 1;
   }
@@ -136,7 +136,7 @@ void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length) {
 
   ceph_assert(get_write_pointer(zone_num) == write_pointer);
   ceph_assert(remaining_space <= length);
-  advance_write_pointer(zone_num, remaining_space);
+  increment_write_pointer(zone_num, remaining_space);
 
   ldout(cct, 40) << __func__ << " set zone 0x" << std::hex
 		 << zone_num << " write pointer to 0x" << zone_size << dendl;
@@ -145,7 +145,7 @@ void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length) {
   ceph_assert(length % zone_size == 0);
 
   for ( ; length; length -= zone_size) {
-    advance_write_pointer(++zone_num, zone_size);
+    increment_write_pointer(++zone_num, zone_size);
     ldout(cct, 40) << __func__ << " set zone 0x" << std::hex
 		   << zone_num << " write pointer to 0x" << zone_size << dendl;
   }
