@@ -1525,6 +1525,11 @@ do_rgw()
         fi
     fi
     # Start server
+    if [ "$cephadm" -gt 0 ]; then
+        ceph_adm orch apply rgw rgwTest
+        return
+    fi
+
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20 --debug-ms=1"
