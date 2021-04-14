@@ -21,6 +21,11 @@
 #define PROCPREFIX
 #endif
 
+#include <fcntl.h>
+#ifndef F_OFD_SETLK
+#define F_OFD_SETLK F_SETLK 
+#endif 
+
 #include <sys/stat.h>
 #ifndef ACCESSPERMS
 #define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
