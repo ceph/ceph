@@ -4,6 +4,9 @@ overrides:
     - \(PG_AVAILABILITY\)
     wait-for-scrub: false
     conf:
+      mon:
+        mon_warn_on_insecure_global_id_reclaim: false
+        mon_warn_on_insecure_global_id_reclaim_allowed: false
       client:
         setuser: ceph
         setgroup: ceph
