@@ -32,7 +32,8 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
       block_size((block_size & 0x00000000ffffffff)),
       zone_size(((block_size & 0x0000ffff00000000) >> 32) * 1024 * 1024),
       starting_zone_num((block_size & 0xffff000000000000) >> 48),
-      num_zones(size / zone_size) {
+      num_zones(size / zone_size),
+      num_zones_to_clean(0) {
   ldout(cct, 10) << __func__ << " size 0x" << std::hex << size
 		 << " zone size 0x" << zone_size << std::dec
 		 << " number of zones " << num_zones
@@ -168,6 +169,19 @@ void ZonedAllocator::set_zone_states(std::vector<zone_state_t> &&_zone_states) {
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << dendl;
   zone_states = std::move(_zone_states);
+}
+
+void ZonedAllocator::mark_zones_to_clean_free(void) {
+  std::lock_guard l(lock);
+  ldout(cct, 10) << __func__ << dendl;
+  for (auto zone_num : zones_to_clean) {
+    ldout(cct, 10) << __func__ << " zone " << zone_num << " is now clean" << dendl;
+    num_free += zone_states[zone_num].write_pointer;
+    zone_states[zone_num].num_dead_bytes = 0;
+    zone_states[zone_num].write_pointer = 0;
+  }
+  zones_to_clean.clear();
+  num_zones_to_clean = 0;
 }
 
 void ZonedAllocator::shutdown() {
