@@ -703,6 +703,12 @@ class NFSServiceSpec(ServiceSpec):
             url += self.rados_config_name()
         return url
 
+    def get_port_start(self) -> List[int]:
+        return [self.get_port()]
+
+    def get_port(self) -> int:
+        return 2049
+
 
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
 

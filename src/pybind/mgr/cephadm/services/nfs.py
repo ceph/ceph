@@ -51,6 +51,8 @@ class NFSService(CephService):
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
 
+        port = daemon_spec.ports[0]
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context = dict(user=rados_user,
@@ -58,7 +60,8 @@ class NFSService(CephService):
                            pool=spec.pool,
                            namespace=spec.namespace if spec.namespace else '',
                            rgw_user=rgw_user,
-                           url=spec.rados_config_location())
+                           url=spec.rados_config_location(),
+                           port=port)
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
         # generate the cephadm config json
