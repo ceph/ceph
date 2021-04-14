@@ -3693,6 +3693,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
+      memcpy(pi->fscrypt_priv, m->fscrypt_priv, sizeof(pi->fscrypt_priv));
     }
     if (in->is_file() &&
         (dirty & CEPH_CAP_FILE_WR) &&
