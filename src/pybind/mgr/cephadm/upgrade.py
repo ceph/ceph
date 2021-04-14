@@ -80,6 +80,7 @@ class CephadmUpgrade:
         'UPGRADE_FAILED_PULL',
         'UPGRADE_REDEPLOY_DAEMON',
         'UPGRADE_BAD_TARGET_VERSION',
+        'UPGRADE_EXCEPTION'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -250,7 +251,16 @@ class CephadmUpgrade:
         :return:
         """
         if self.upgrade_state and not self.upgrade_state.paused:
-            self._do_upgrade()
+            try:
+                self._do_upgrade()
+            except Exception as e:
+                self._fail_upgrade('UPGRADE_EXCEPTION', {
+                    'severity': 'error',
+                    'summary': 'Upgrade: failed due to an unexpected exception',
+                    'count': 1,
+                    'detail': [f'Unexpected exception occurred during upgrade process: {str(e)}'],
+                })
+                return False
             return True
         return False
 
