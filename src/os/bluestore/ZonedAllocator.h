@@ -34,6 +34,7 @@ class ZonedAllocator : public Allocator {
   uint64_t size;
   uint64_t block_size;
   uint64_t zone_size;
+  uint64_t first_seq_zone_num;
   uint64_t starting_zone_num;
   uint64_t num_zones;
   std::vector<zone_state_t> zone_states;
@@ -93,6 +94,10 @@ public:
   void init_rm_free(uint64_t offset, uint64_t length) override;
 
   void shutdown() override;
+
+private:
+  bool low_on_space(void);
+  void find_zones_to_clean(void);
 };
 
 #endif
