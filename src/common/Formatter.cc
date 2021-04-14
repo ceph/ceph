@@ -19,6 +19,7 @@
 #include "include/buffer.h"
 
 #include <fmt/format.h>
+#include <algorithm>
 #include <set>
 #include <limits>
 
