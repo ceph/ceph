@@ -102,6 +102,8 @@ public:
 		std::vector<std::pair<string, string>>*) const override;
 
   std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
+  void mark_zones_to_clean_free(const std::set<uint64_t> *zones_to_clean, 
+				KeyValueDB *kvdb);
 };
 
 #endif
