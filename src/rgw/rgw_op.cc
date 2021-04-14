@@ -3904,7 +3904,7 @@ void RGWPutObj::execute(optional_yield y)
     if (copy_source.empty()) {
       len = get_data(data);
     } else {
-      uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
+      off_t cur_lst = min<off_t>(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
       op_ret = get_data(fst, cur_lst, data);
       if (op_ret < 0)
         return;
