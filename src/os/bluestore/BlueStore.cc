@@ -5443,7 +5443,9 @@ int BlueStore::_init_alloc()
     ceph_assert(a);
     auto f = dynamic_cast<ZonedFreelistManager*>(fm);
     ceph_assert(f);
-    a->init_alloc(f->get_zone_states(db));
+    a->init_alloc(f->get_zone_states(db),
+		  &zoned_cleaner_lock,
+		  &zoned_cleaner_cond);
   }
 
   uint64_t num = 0, bytes = 0;
@@ -12339,9 +12341,13 @@ void BlueStore::_zoned_cleaner_thread() {
   ceph_assert(!zoned_cleaner_started);
   zoned_cleaner_started = true;
   zoned_cleaner_cond.notify_all();
-  std::deque<uint64_t> zones_to_clean;
+  auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+  ceph_assert(a);
+  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+  ceph_assert(f);
   while (true) {
-    if (zoned_cleaner_queue.empty()) {
+    const auto *zones_to_clean = a->get_zones_to_clean();
+    if (!zones_to_clean) {
       if (zoned_cleaner_stop) {
 	break;
       }
@@ -12349,12 +12355,12 @@ void BlueStore::_zoned_cleaner_thread() {
       zoned_cleaner_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
-      zones_to_clean.swap(zoned_cleaner_queue);
       l.unlock();
-      while (!zones_to_clean.empty()) {
-	_zoned_clean_zone(zones_to_clean.front());
-	zones_to_clean.pop_front();
+      for (auto zone_num : *zones_to_clean) {
+	_zoned_clean_zone(zone_num);
       }
+      f->mark_zones_to_clean_free(zones_to_clean, db);
+      a->mark_zones_to_clean_free();
       l.lock();
     }
   }
@@ -14052,17 +14058,6 @@ int BlueStore::_do_alloc_write(
     return -ENOSPC;
   }
   _collect_allocation_stats(need, min_alloc_size, prealloc.size());
-
-  if (bdev->is_smr()) {
-    auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
-    ceph_assert(a);
-    std::deque<uint64_t> zones_to_clean;
-    if (a->get_zones_to_clean(&zones_to_clean)) {
-      std::lock_guard l{zoned_cleaner_lock};
-      zoned_cleaner_queue.swap(zones_to_clean);
-      zoned_cleaner_cond.notify_one();
-    }
-  }
 
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();

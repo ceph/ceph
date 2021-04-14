@@ -41,6 +41,9 @@ class ZonedAllocator : public Allocator {
   std::set<uint64_t> zones_to_clean;
   std::atomic<int64_t> num_zones_to_clean;
 
+  ceph::mutex *cleaner_lock = nullptr;
+  ceph::condition_variable *cleaner_cond = nullptr;
+
   inline uint64_t get_offset(uint64_t zone_num) const {
     return zone_num * zone_size + get_write_pointer(zone_num);
   }
@@ -86,8 +89,11 @@ public:
   void dump(std::function<void(uint64_t offset,
                                uint64_t length)> notify) override;
 
-  void init_alloc(std::vector<zone_state_t> &&_zone_states);
-  bool get_zones_to_clean(std::deque<uint64_t> *zones_to_clean);
+  void init_alloc(std::vector<zone_state_t> &&_zone_states,
+		  ceph::mutex *_cleaner_lock,
+		  ceph::condition_variable *_cleaner_cond);
+
+  const std::set<uint64_t> *get_zones_to_clean(void);
   void mark_zones_to_clean_free(void);
 
   void init_add_free(uint64_t offset, uint64_t length) override;
