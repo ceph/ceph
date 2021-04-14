@@ -79,8 +79,8 @@ public:
   void dump(std::function<void(uint64_t offset,
                                uint64_t length)> notify) override;
 
-  void zoned_set_zone_states(std::vector<zone_state_t> &&_zone_states);
-  bool zoned_get_zones_to_clean(std::deque<uint64_t> *zones_to_clean);
+  void set_zone_states(std::vector<zone_state_t> &&_zone_states);
+  bool get_zones_to_clean(std::deque<uint64_t> *zones_to_clean);
 
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
