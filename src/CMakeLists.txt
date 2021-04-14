@@ -11,6 +11,17 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 if(NOT CMAKE_INSTALL_RPATH)
   set(CMAKE_INSTALL_RPATH "${CEPH_INSTALL_FULL_PKGLIBDIR}")
 endif()
+# for rbdmap-generator
+find_package(PkgConfig QUIET REQUIRED)
+pkg_get_variable(SYSTEMD_SYSTEM_GENERATOR_DIR "systemd" "systemd_system_generator_dir")
+if(NOT SYSTEMD_SYSTEM_GENERATOR_DIR)
+  pkg_get_variable(SYSTEMD_SYSTEM_GENERATOR_DIR "systemd" "systemdsystemgeneratordir")
+  if(NOT SYSTEMD_SYSTEM_GENERATOR_DIR)
+    set(SYSTEMD_SYSTEM_GENERATOR_DIR "${CMAKE_INSTALL_LIBDIR}/systemd/system-generators")
+  endif()
+endif()
+set(SYSTEMD_SYSTEM_GENERATOR_DIR "${SYSTEMD_SYSTEM_GENERATOR_DIR}"
+  CACHE PATH "Location for systemd system unit generators")
 
 # to be compatible with configure_files shared with autoconfig
 set(bindir ${CMAKE_INSTALL_FULL_BINDIR})
@@ -899,6 +910,8 @@ if(WITH_RBD)
     rbd-replay-many
     rbdmap
     DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(PROGRAMS rbdmap-generator
+    DESTINATION ${SYSTEMD_SYSTEM_GENERATOR_DIR})
   add_subdirectory(rbd_replay)
 endif(WITH_RBD)
 

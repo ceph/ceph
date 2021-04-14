@@ -1,0 +1,8 @@
+[Unit]
+Description=Map RBD devices
+After=remote-fs-pre.target rbdmap-pre.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+[Install]
+WantedBy=multi-user.target

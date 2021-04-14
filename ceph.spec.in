@@ -1425,6 +1425,7 @@ cmake .. \
     -DCMAKE_INSTALL_DOCDIR:PATH=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR:PATH=%{_includedir} \
     -DSYSTEMD_SYSTEM_UNIT_DIR:PATH=%{_unitdir} \
+    -DSYSTEMD_SYSTEM_GENERATOR_DIR:PATH=%{_systemdgeneratordir} \
     -DWITH_MANPAGE:BOOL=ON \
     -DWITH_PYTHON3:STRING=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=OFF \
@@ -1762,11 +1763,11 @@ exit 0
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%{_bindir}/rbdmap
 %{_bindir}/rgw-gap-list
 %{_bindir}/rgw-gap-list-comparator
 %{_bindir}/rgw-orphan-list
 %{_bindir}/rgw-restore-bucket-index
+%{_systemdgeneratordir}/rbdmap-generator
 %{_sbindir}/mount.ceph
 %if 0%{?suse_version} && 0%{?suse_version} < 1550
 /sbin/mount.ceph
@@ -1791,7 +1792,6 @@ exit 0
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_mandir}/man8/rbd.8*
-%{_mandir}/man8/rbdmap.8*
 %{_mandir}/man8/rbd-replay.8*
 %{_mandir}/man8/rbd-replay-many.8*
 %{_mandir}/man8/rbd-replay-prep.8*
@@ -1807,7 +1807,9 @@ exit 0
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
-%{_unitdir}/rbdmap.service
+%{_mandir}/man8/rbdmap-generator.8*
+%{_unitdir}/rbdmap.target
+%{_unitdir}/rbdmap-pre.target
 %dir %{_udevrulesdir}
 %{_udevrulesdir}/50-rbd.rules
 %attr(3770,ceph,ceph) %dir %{_localstatedir}/log/ceph/
