@@ -45,7 +45,7 @@ curl-based installation
   
   .. prompt:: bash #
 
-   curl --silent --remote-name --location https://github.com/ceph/ceph/raw/octopus/src/cephadm/cephadm
+   curl --silent --remote-name --location https://github.com/ceph/ceph/raw/pacific/src/cephadm/cephadm
 
   Make the ``cephadm`` script executable:
 
