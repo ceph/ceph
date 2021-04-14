@@ -205,8 +205,55 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   search_position_t merge(NodeExtentMutable& mut, NodeImpl& _right_node,
                           match_stage_t merge_stage, node_offset_t merge_size) override {
-    // TODO
-    ceph_abort("not implemented");
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
+    auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
+    if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
+      {
+        std::ostringstream sos;
+        dump(sos);
+        logger().debug("OTree::Layout::Merge: -- left node dump\n{}", sos.str());
+      }
+      {
+        std::ostringstream sos;
+        right_node.dump(sos);
+        logger().debug("OTree::Layout::Merge: -- right node dump\n{}", sos.str());
+      }
+    }
+
+    assert(!is_level_tail());
+    assert(!is_keys_empty());
+    auto& left_node_stage = extent.read();
+    position_t left_last_pos;
+    STAGE_T::template get_largest_slot<true, false, false>(
+        left_node_stage, &left_last_pos, nullptr, nullptr);
+
+    typename STAGE_T::template StagedAppender<KeyT::VIEW> left_appender;
+    left_appender.init_tail(&mut, left_node_stage, merge_stage);
+
+    assert(!right_node.is_keys_empty());
+    auto& right_node_stage = right_node.extent.read();
+    typename STAGE_T::StagedIterator right_append_at;
+    right_append_at.set(right_node_stage);
+
+    auto pos_end = position_t::end();
+    STAGE_T::template append_until<KeyT::VIEW>(
+        right_append_at, left_appender, pos_end, STAGE);
+    assert(right_append_at.is_end());
+    left_appender.wrap();
+
+    if (right_node.is_level_tail()) {
+      node_stage_t::update_is_level_tail(mut, left_node_stage, true);
+      build_name();
+    }
+
+    if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().debug("OTree::Layout::Merge: -- merged node dump\n{}", sos.str());
+    }
+    assert(merge_size == filled_size());
+    return normalize(std::move(left_last_pos));
   }
 
   ertr::future<NodeExtentMutable>
@@ -601,7 +648,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     auto append_at = split_at;
     // TODO(cross-node string dedup)
     typename STAGE_T::template StagedAppender<KEY_TYPE> right_appender;
-    right_appender.init(&right_mut, right_mut.get_write());
+    right_appender.init_empty(&right_mut, right_mut.get_write());
     const value_t* p_value = nullptr;
     if (!is_insert_left) {
       // right node: append [start(append_at), insert_pos)

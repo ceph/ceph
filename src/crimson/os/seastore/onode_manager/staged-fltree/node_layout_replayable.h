@@ -94,8 +94,15 @@ struct NodeLayoutReplayableT {
       NodeExtentMutable& mut,
       const node_stage_t& node_stage) {
     assert(!node_stage.is_level_tail());
-    // TODO
-    ceph_abort("not implemented");
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      auto [r_stage, r_last_pos] = update_last_to_tail(mut, node_stage);
+      std::ignore = r_stage;
+      return r_last_pos;
+    } else {
+      node_stage_t::update_is_level_tail(mut, node_stage, true);
+      // no need to calculate the last pos
+      return position_t::end();
+    }
   }
 
  private:

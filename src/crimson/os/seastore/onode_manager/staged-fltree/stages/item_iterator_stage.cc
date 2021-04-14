@@ -103,6 +103,22 @@ ITER_TEMPLATE(node_type_t::INTERNAL);
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
+APPEND_T::Appender(NodeExtentMutable* p_mut,
+                   const item_iterator_t& iter,
+                   bool open) : p_mut{p_mut}
+{
+  assert(!iter.has_next());
+  if (open) {
+    p_append = const_cast<char*>(iter.get_key().p_start());
+    p_offset_while_open = const_cast<char*>(iter.item_range.p_end);
+  } else {
+    // XXX: this doesn't need to advance the iter to last
+    p_append = const_cast<char*>(iter.p_items_start);
+  }
+}
+
+template <node_type_t NODE_TYPE>
+template <KeyT KT>
 bool APPEND_T::append(const ITER_T& src, index_t& items)
 {
   auto p_end = src.p_end();
