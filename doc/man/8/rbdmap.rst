@@ -20,8 +20,9 @@ Description
 operations on one or more RBD (RADOS Block Device) images. While the script can be
 run manually by the system administrator at any time, the principal use case is
 automatic mapping/mounting of RBD images at boot time (and unmounting/unmapping
-at shutdown), as triggered by the init system (a systemd unit file,
-``rbdmap.service`` is included with the ceph-common package for this purpose).
+at shutdown), as triggered by the init system. If systemd is used,
+:program:`rbdmap-generator`\(8) should be preferred. Note that the config file
+recognized by this script is a subset of that recognized by rbdmap-generator.
 
 The script takes a single argument, which can be either "map" or "unmap".
 In either case, the script parses a configuration file (defaults to ``/etc/ceph/rbdmap``,
@@ -126,3 +127,4 @@ See also
 ========
 
 :doc:`rbd <rbd>`\(8),
+:doc:`rbdmap-generator <rbdmap-generator>`\(8)
