@@ -8,6 +8,7 @@ from mgr_module import HandleCommandResult
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
+from cephadm.services.ingress import IngressSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
 
 logger = logging.getLogger(__name__)
@@ -245,10 +246,25 @@ class PrometheusService(CephadmService):
             addr = self.mgr.inventory.get_addr(dd.hostname)
             alertmgr_targets.append("'{}:9093'".format(addr.split(':')[0]))
 
+        # scrape haproxies
+        haproxy_targets = []
+        for dd in self.mgr.cache.get_daemons_by_type('ingress'):
+            if dd.service_name() in self.mgr.spec_store:
+                spec = cast(IngressSpec, self.mgr.spec_store[dd.service_name()].spec)
+                assert dd.hostname is not None
+                deps.append(dd.name())
+                if dd.daemon_type == 'haproxy':
+                    addr = self.mgr.inventory.get_addr(dd.hostname)
+                    haproxy_targets.append({
+                        "url": f"'{addr.split(':')[0]}:{spec.monitor_port}'",
+                        "service": dd.service_name(),
+                    })
+
         # generate the prometheus configuration
         context = {
             'alertmgr_targets': alertmgr_targets,
             'mgr_scrape_list': mgr_scrape_list,
+            'haproxy_targets': haproxy_targets,
             'nodes': nodes,
         }
         r = {

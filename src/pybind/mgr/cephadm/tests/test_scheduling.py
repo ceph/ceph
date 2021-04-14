@@ -6,7 +6,7 @@ from typing import NamedTuple, List, Dict
 import pytest
 
 from ceph.deployment.hostspec import HostSpec
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError, IngressSpec
 
 from cephadm.module import HostAssignment
 from cephadm.schedule import DaemonPlacement
@@ -187,21 +187,48 @@ test_explicit_scheduler_results = [
 ]
 
 
+@pytest.mark.parametrize("dp,n,result",
+    [   # noqa: E128
+        (
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80]),
+            0,
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80]),
+        ),
+        (
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80]),
+            2,
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[82]),
+        ),
+        (
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[80, 90]),
+            2,
+            DaemonPlacement(daemon_type='mgr', hostname='host1', ports=[82, 92]),
+        ),
+    ])
+def test_daemon_placement_renumber(dp, n, result):
+    assert dp.renumber_ports(n) == result
+
+
 @pytest.mark.parametrize(
     'dp,dd,result',
     [
         (
-            DaemonPlacement(hostname='host1'),
+            DaemonPlacement(daemon_type='mgr', hostname='host1'),
             DaemonDescription('mgr', 'a', 'host1'),
             True
         ),
         (
-            DaemonPlacement(hostname='host1', name='a'),
+            DaemonPlacement(daemon_type='mgr', hostname='host1', name='a'),
             DaemonDescription('mgr', 'a', 'host1'),
             True
         ),
         (
-            DaemonPlacement(hostname='host1', name='a'),
+            DaemonPlacement(daemon_type='mon', hostname='host1', name='a'),
+            DaemonDescription('mgr', 'a', 'host1'),
+            False
+        ),
+        (
+            DaemonPlacement(daemon_type='mgr', hostname='host1', name='a'),
             DaemonDescription('mgr', 'b', 'host1'),
             False
         ),
@@ -364,7 +391,7 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(hosts=['smithi060']),
             ['smithi060'],
             [],
-            ['smithi060'], ['smithi060'], []
+            ['mgr:smithi060'], ['mgr:smithi060'], []
         ),
         # all_hosts
         NodeAssignmentTest(
@@ -375,7 +402,9 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('mgr', 'a', 'host1'),
                 DaemonDescription('mgr', 'b', 'host2'),
             ],
-            ['host1', 'host2', 'host3'], ['host3'], []
+            ['mgr:host1', 'mgr:host2', 'mgr:host3'],
+            ['mgr:host3'],
+            []
         ),
         # all_hosts + count_per_host
         NodeAssignmentTest(
@@ -386,8 +415,8 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('mds', 'a', 'host1'),
                 DaemonDescription('mds', 'b', 'host2'),
             ],
-            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3'],
-            ['host3', 'host1', 'host2', 'host3'],
+            ['mds:host1', 'mds:host2', 'mds:host3', 'mds:host1', 'mds:host2', 'mds:host3'],
+            ['mds:host3', 'mds:host1', 'mds:host2', 'mds:host3'],
             []
         ),
         # count that is bigger than the amount of hosts. Truncate to len(hosts)
@@ -397,7 +426,9 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(count=4),
             'host1 host2 host3'.split(),
             [],
-            ['host1', 'host2', 'host3'], ['host1', 'host2', 'host3'], []
+            ['mgr:host1', 'mgr:host2', 'mgr:host3'],
+            ['mgr:host1', 'mgr:host2', 'mgr:host3'],
+            []
         ),
         # count that is bigger than the amount of hosts; wrap around.
         NodeAssignmentTest(
@@ -405,8 +436,8 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(count=6),
             'host1 host2 host3'.split(),
             [],
-            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3'],
-            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3'],
+            ['mds:host1', 'mds:host2', 'mds:host3', 'mds:host1', 'mds:host2', 'mds:host3'],
+            ['mds:host1', 'mds:host2', 'mds:host3', 'mds:host1', 'mds:host2', 'mds:host3'],
             []
         ),
         # count + partial host list
@@ -418,7 +449,9 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('mgr', 'a', 'host1'),
                 DaemonDescription('mgr', 'b', 'host2'),
             ],
-            ['host3'], ['host3'], ['mgr.a', 'mgr.b']
+            ['mgr:host3'],
+            ['mgr:host3'],
+            ['mgr.a', 'mgr.b']
         ),
         # count + partial host list (with colo)
         NodeAssignmentTest(
@@ -426,10 +459,12 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(count=3, hosts=['host3']),
             'host1 host2 host3'.split(),
             [
-                DaemonDescription('mgr', 'a', 'host1'),
-                DaemonDescription('mgr', 'b', 'host2'),
+                DaemonDescription('mds', 'a', 'host1'),
+                DaemonDescription('mds', 'b', 'host2'),
             ],
-            ['host3', 'host3', 'host3'], ['host3', 'host3', 'host3'], ['mgr.a', 'mgr.b']
+            ['mds:host3', 'mds:host3', 'mds:host3'],
+            ['mds:host3', 'mds:host3', 'mds:host3'],
+            ['mds.a', 'mds.b']
         ),
         # count 1 + partial host list
         NodeAssignmentTest(
@@ -440,7 +475,9 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('mgr', 'a', 'host1'),
                 DaemonDescription('mgr', 'b', 'host2'),
             ],
-            ['host3'], ['host3'], ['mgr.a', 'mgr.b']
+            ['mgr:host3'],
+            ['mgr:host3'],
+            ['mgr.a', 'mgr.b']
         ),
         # count + partial host list + existing
         NodeAssignmentTest(
@@ -450,7 +487,9 @@ class NodeAssignmentTest(NamedTuple):
             [
                 DaemonDescription('mgr', 'a', 'host1'),
             ],
-            ['host3'], ['host3'], ['mgr.a']
+            ['mgr:host3'],
+            ['mgr:host3'],
+            ['mgr.a']
         ),
         # count + partial host list + existing (deterministic)
         NodeAssignmentTest(
@@ -460,7 +499,9 @@ class NodeAssignmentTest(NamedTuple):
             [
                 DaemonDescription('mgr', 'a', 'host1'),
             ],
-            ['host1'], [], []
+            ['mgr:host1'],
+            [],
+            []
         ),
         # count + partial host list + existing (deterministic)
         NodeAssignmentTest(
@@ -470,7 +511,9 @@ class NodeAssignmentTest(NamedTuple):
             [
                 DaemonDescription('mgr', 'a', 'host2'),
             ],
-            ['host1'], ['host1'], ['mgr.a']
+            ['mgr:host1'],
+            ['mgr:host1'],
+            ['mgr.a']
         ),
         # label only
         NodeAssignmentTest(
@@ -478,7 +521,9 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(label='foo'),
             'host1 host2 host3'.split(),
             [],
-            ['host1', 'host2', 'host3'], ['host1', 'host2', 'host3'], []
+            ['mgr:host1', 'mgr:host2', 'mgr:host3'],
+            ['mgr:host1', 'mgr:host2', 'mgr:host3'],
+            []
         ),
         # label + count (truncate to host list)
         NodeAssignmentTest(
@@ -486,7 +531,9 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(count=4, label='foo'),
             'host1 host2 host3'.split(),
             [],
-            ['host1', 'host2', 'host3'], ['host1', 'host2', 'host3'], []
+            ['mgr:host1', 'mgr:host2', 'mgr:host3'],
+            ['mgr:host1', 'mgr:host2', 'mgr:host3'],
+            []
         ),
         # label + count (with colo)
         NodeAssignmentTest(
@@ -494,8 +541,8 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(count=6, label='foo'),
             'host1 host2 host3'.split(),
             [],
-            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3'],
-            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3'],
+            ['mds:host1', 'mds:host2', 'mds:host3', 'mds:host1', 'mds:host2', 'mds:host3'],
+            ['mds:host1', 'mds:host2', 'mds:host3', 'mds:host1', 'mds:host2', 'mds:host3'],
             []
         ),
         # label only + count_per_hst
@@ -504,10 +551,10 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(label='foo', count_per_host=3),
             'host1 host2 host3'.split(),
             [],
-            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3',
-             'host1', 'host2', 'host3'],
-            ['host1', 'host2', 'host3', 'host1', 'host2', 'host3',
-             'host1', 'host2', 'host3'],
+            ['mds:host1', 'mds:host2', 'mds:host3', 'mds:host1', 'mds:host2', 'mds:host3',
+             'mds:host1', 'mds:host2', 'mds:host3'],
+            ['mds:host1', 'mds:host2', 'mds:host3', 'mds:host1', 'mds:host2', 'mds:host3',
+             'mds:host1', 'mds:host2', 'mds:host3'],
             []
         ),
         # host_pattern
@@ -516,7 +563,9 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(host_pattern='mgr*'),
             'mgrhost1 mgrhost2 datahost'.split(),
             [],
-            ['mgrhost1', 'mgrhost2'], ['mgrhost1', 'mgrhost2'], []
+            ['mgr:mgrhost1', 'mgr:mgrhost2'],
+            ['mgr:mgrhost1', 'mgr:mgrhost2'],
+            []
         ),
         # host_pattern + count_per_host
         NodeAssignmentTest(
@@ -524,8 +573,8 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(host_pattern='mds*', count_per_host=3),
             'mdshost1 mdshost2 datahost'.split(),
             [],
-            ['mdshost1', 'mdshost2', 'mdshost1', 'mdshost2', 'mdshost1', 'mdshost2'],
-            ['mdshost1', 'mdshost2', 'mdshost1', 'mdshost2', 'mdshost1', 'mdshost2'],
+            ['mds:mdshost1', 'mds:mdshost2', 'mds:mdshost1', 'mds:mdshost2', 'mds:mdshost1', 'mds:mdshost2'],
+            ['mds:mdshost1', 'mds:mdshost2', 'mds:mdshost1', 'mds:mdshost2', 'mds:mdshost1', 'mds:mdshost2'],
             []
         ),
         # label + count_per_host + ports
@@ -534,10 +583,10 @@ class NodeAssignmentTest(NamedTuple):
             PlacementSpec(count=6, label='foo'),
             'host1 host2 host3'.split(),
             [],
-            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
-             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
-            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
-             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
+            ['rgw:host1(*:80)', 'rgw:host2(*:80)', 'rgw:host3(*:80)',
+             'rgw:host1(*:81)', 'rgw:host2(*:81)', 'rgw:host3(*:81)'],
+            ['rgw:host1(*:80)', 'rgw:host2(*:80)', 'rgw:host3(*:80)',
+             'rgw:host1(*:81)', 'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             []
         ),
         # label + count_per_host + ports (+ xisting)
@@ -550,10 +599,10 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('rgw', 'b', 'host2', ports=[80]),
                 DaemonDescription('rgw', 'c', 'host1', ports=[82]),
             ],
-            ['host1(*:80)', 'host2(*:80)', 'host3(*:80)',
-             'host1(*:81)', 'host2(*:81)', 'host3(*:81)'],
-            ['host1(*:80)', 'host3(*:80)',
-             'host2(*:81)', 'host3(*:81)'],
+            ['rgw:host1(*:80)', 'rgw:host2(*:80)', 'rgw:host3(*:80)',
+             'rgw:host1(*:81)', 'rgw:host2(*:81)', 'rgw:host3(*:81)'],
+            ['rgw:host1(*:80)', 'rgw:host3(*:80)',
+             'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             ['rgw.c']
         ),
         # cephadm.py teuth case
@@ -565,7 +614,7 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('mgr', 'y', 'host1'),
                 DaemonDescription('mgr', 'x', 'host2'),
             ],
-            ['host1(name=y)', 'host2(name=x)'],
+            ['mgr:host1(name=y)', 'mgr:host2(name=x)'],
             [], []
         ),
     ])
@@ -731,7 +780,7 @@ def test_node_assignment3(service_type, placement, hosts,
 
 class NodeAssignmentTest4(NamedTuple):
     spec: ServiceSpec
-    networks: Dict[str, Dict[str, List[str]]]
+    networks: Dict[str, Dict[str, Dict[str, List[str]]]]
     daemons: List[DaemonDescription]
     expected: List[str]
     expected_add: List[str]
@@ -748,18 +797,69 @@ class NodeAssignmentTest4(NamedTuple):
                 networks=['10.0.0.0/8'],
             ),
             {
-                'host1': {'10.0.0.0/8': ['10.0.0.1']},
-                'host2': {'10.0.0.0/8': ['10.0.0.2']},
-                'host3': {'192.168.0.0/16': ['192.168.0.1']},
+                'host1': {'10.0.0.0/8': {'eth0': ['10.0.0.1']}},
+                'host2': {'10.0.0.0/8': {'eth0': ['10.0.0.2']}},
+                'host3': {'192.168.0.0/16': {'eth0': ['192.168.0.1']}},
             },
             [],
-            ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
-             'host1(10.0.0.1:81)', 'host2(10.0.0.2:81)',
-             'host1(10.0.0.1:82)', 'host2(10.0.0.2:82)'],
-            ['host1(10.0.0.1:80)', 'host2(10.0.0.2:80)',
-             'host1(10.0.0.1:81)', 'host2(10.0.0.2:81)',
-             'host1(10.0.0.1:82)', 'host2(10.0.0.2:82)'],
+            ['rgw:host1(10.0.0.1:80)', 'rgw:host2(10.0.0.2:80)',
+             'rgw:host1(10.0.0.1:81)', 'rgw:host2(10.0.0.2:81)',
+             'rgw:host1(10.0.0.1:82)', 'rgw:host2(10.0.0.2:82)'],
+            ['rgw:host1(10.0.0.1:80)', 'rgw:host2(10.0.0.2:80)',
+             'rgw:host1(10.0.0.1:81)', 'rgw:host2(10.0.0.2:81)',
+             'rgw:host1(10.0.0.1:82)', 'rgw:host2(10.0.0.2:82)'],
             []
+        ),
+        NodeAssignmentTest4(
+            IngressSpec(
+                service_type='ingress',
+                service_id='rgw.foo',
+                frontend_port=443,
+                monitor_port=8888,
+                virtual_ip='10.0.0.20/8',
+                backend_service='rgw.foo',
+                placement=PlacementSpec(label='foo'),
+                networks=['10.0.0.0/8'],
+            ),
+            {
+                'host1': {'10.0.0.0/8': {'eth0': ['10.0.0.1']}},
+                'host2': {'10.0.0.0/8': {'eth1': ['10.0.0.2']}},
+                'host3': {'192.168.0.0/16': {'eth2': ['192.168.0.1']}},
+            },
+            [],
+            ['haproxy:host1(10.0.0.1:443,8888)', 'haproxy:host2(10.0.0.2:443,8888)',
+             'keepalived:host1', 'keepalived:host2'],
+            ['haproxy:host1(10.0.0.1:443,8888)', 'haproxy:host2(10.0.0.2:443,8888)',
+             'keepalived:host1', 'keepalived:host2'],
+            []
+        ),
+        NodeAssignmentTest4(
+            IngressSpec(
+                service_type='ingress',
+                service_id='rgw.foo',
+                frontend_port=443,
+                monitor_port=8888,
+                virtual_ip='10.0.0.20/8',
+                backend_service='rgw.foo',
+                placement=PlacementSpec(label='foo'),
+                networks=['10.0.0.0/8'],
+            ),
+            {
+                'host1': {'10.0.0.0/8': {'eth0': ['10.0.0.1']}},
+                'host2': {'10.0.0.0/8': {'eth1': ['10.0.0.2']}},
+                'host3': {'192.168.0.0/16': {'eth2': ['192.168.0.1']}},
+            },
+            [
+                DaemonDescription('haproxy', 'a', 'host1', ip='10.0.0.1',
+                                  ports=[443, 8888]),
+                DaemonDescription('keepalived', 'b', 'host2'),
+                DaemonDescription('keepalived', 'c', 'host3'),
+            ],
+            ['haproxy:host1(10.0.0.1:443,8888)', 'haproxy:host2(10.0.0.2:443,8888)',
+             'keepalived:host1', 'keepalived:host2'],
+            ['haproxy:host2(10.0.0.2:443,8888)',
+             'keepalived:host1'],
+            ['keepalived.c']
         ),
     ])
 def test_node_assignment4(spec, networks, daemons,
@@ -770,6 +870,8 @@ def test_node_assignment4(spec, networks, daemons,
         daemons=daemons,
         allow_colo=True,
         networks=networks,
+        primary_daemon_type='haproxy' if spec.service_type == 'ingress' else spec.service_type,
+        per_host_daemon_type='keepalived' if spec.service_type == 'ingress' else None,
     ).place()
 
     got = [str(p) for p in all_slots]

@@ -12,42 +12,46 @@ T = TypeVar('T')
 
 
 class DaemonPlacement(NamedTuple):
+    daemon_type: str
     hostname: str
     network: str = ''   # for mons only
     name: str = ''
     ip: Optional[str] = None
-    port: Optional[int] = None
+    ports: List[int] = []
 
     def __str__(self) -> str:
-        res = self.hostname
+        res = self.daemon_type + ':' + self.hostname
         other = []
         if self.network:
             other.append(f'network={self.network}')
         if self.name:
             other.append(f'name={self.name}')
-        if self.port:
-            other.append(f'{self.ip or "*"}:{self.port}')
+        if self.ports:
+            other.append(f'{self.ip or "*"}:{self.ports[0] if len(self.ports) == 1 else ",".join(map(str, self.ports))}')
         if other:
             res += '(' + ' '.join(other) + ')'
         return res
 
-    def renumber_port(self, n: int) -> 'DaemonPlacement':
+    def renumber_ports(self, n: int) -> 'DaemonPlacement':
         return DaemonPlacement(
+            self.daemon_type,
             self.hostname,
             self.network,
             self.name,
             self.ip,
-            (self.port + n) if self.port is not None else None
+            [p + n for p in self.ports],
         )
 
     def matches_daemon(self, dd: DaemonDescription) -> bool:
+        if self.daemon_type != dd.daemon_type:
+            return False
         if self.hostname != dd.hostname:
             return False
         # fixme: how to match against network?
         if self.name and self.name != dd.daemon_id:
             return False
-        if self.port:
-            if [self.port] != dd.ports:
+        if self.ports:
+            if self.ports != dd.ports:
                 return False
             if self.ip != dd.ip:
                 return False
@@ -60,19 +64,23 @@ class HostAssignment(object):
                  spec,  # type: ServiceSpec
                  hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
-                 networks: Dict[str, Dict[str, List[str]]] = {},
+                 networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  allow_colo: bool = False,
+                 primary_daemon_type: Optional[str] = None,
+                 per_host_daemon_type: Optional[str] = None,
                  ):
         assert spec
         self.spec = spec  # type: ServiceSpec
+        self.primary_daemon_type = primary_daemon_type or spec.service_type
         self.hosts: List[orchestrator.HostSpec] = hosts
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
         self.networks = networks
         self.allow_colo = allow_colo
-        self.port_start = spec.get_port_start()
+        self.per_host_daemon_type = per_host_daemon_type
+        self.ports_start = spec.get_port_start()
 
     def hosts_by_label(self, label: str) -> List[orchestrator.HostSpec]:
         return [h for h in self.hosts if label in h.labels]
@@ -116,6 +124,35 @@ class HostAssignment(object):
                     f'Cannot place {self.spec.one_line_str()}: No matching '
                     f'hosts for label {self.spec.placement.label}')
 
+    def place_per_host_daemons(
+            self,
+            slots: List[DaemonPlacement],
+            to_add: List[DaemonPlacement],
+            to_remove: List[orchestrator.DaemonDescription],
+    ) -> Tuple[List[DaemonPlacement], List[DaemonPlacement], List[orchestrator.DaemonDescription]]:
+        if self.per_host_daemon_type:
+            host_slots = [
+                DaemonPlacement(daemon_type=self.per_host_daemon_type,
+                                hostname=hostname)
+                for hostname in set([s.hostname for s in slots])
+            ]
+            existing = [
+                d for d in self.daemons if d.daemon_type == self.per_host_daemon_type
+            ]
+            slots += host_slots
+            for dd in existing:
+                found = False
+                for p in host_slots:
+                    if p.matches_daemon(dd):
+                        host_slots.remove(p)
+                        found = True
+                        break
+                if not found:
+                    to_remove.append(dd)
+            to_add += host_slots
+
+        return slots, to_add, to_remove
+
     def place(self):
         # type: () -> Tuple[List[DaemonPlacement], List[DaemonPlacement], List[orchestrator.DaemonDescription]]
         """
@@ -137,7 +174,7 @@ class HostAssignment(object):
         def expand_candidates(ls: List[DaemonPlacement], num: int) -> List[DaemonPlacement]:
             r = []
             for offset in range(num):
-                r.extend([dp.renumber_port(offset) for dp in ls])
+                r.extend([dp.renumber_ports(offset) for dp in ls])
             return r
 
         # consider enough slots to fulfill target count-per-host or count
@@ -151,11 +188,11 @@ class HostAssignment(object):
             per_host = 1 + ((count - 1) // len(candidates))
             candidates = expand_candidates(candidates, per_host)
 
-        # consider active daemons first
+        # consider active (primary) daemons first
         daemons = [
-            d for d in self.daemons if d.is_active
+            d for d in self.daemons if d.is_active and d.daemon_type == self.primary_daemon_type
         ] + [
-            d for d in self.daemons if not d.is_active
+            d for d in self.daemons if not d.is_active and d.daemon_type == self.primary_daemon_type
         ]
 
         # sort candidates into existing/used slots that already have a
@@ -185,7 +222,7 @@ class HostAssignment(object):
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
-            return candidates, others, to_remove
+            return self.place_per_host_daemons(candidates, others, to_remove)
 
         # The number of new slots that need to be selected in order to fulfill count
         need = count - len(existing)
@@ -194,17 +231,19 @@ class HostAssignment(object):
         if need <= 0:
             to_remove.extend(existing[count:])
             del existing_slots[count:]
-            return existing_slots, [], to_remove
+            return self.place_per_host_daemons(existing_slots, [], to_remove)
 
         # ask the scheduler to select additional slots
         to_add = others[:need]
         logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
             existing, to_add))
-        return existing_slots + to_add, to_add, to_remove
+        return self.place_per_host_daemons(existing_slots + to_add, to_add, to_remove)
 
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
         for subnet in subnets:
-            ips = self.networks.get(hostname, {}).get(subnet, [])
+            ips: List[str] = []
+            for iface, ips in self.networks.get(hostname, {}).get(subnet, {}).items():
+                ips.extend(ips)
             if ips:
                 return sorted(ips)[0]
         return None
@@ -212,18 +251,21 @@ class HostAssignment(object):
     def get_candidates(self) -> List[DaemonPlacement]:
         if self.spec.placement.hosts:
             ls = [
-                DaemonPlacement(hostname=h.hostname, network=h.network, name=h.name,
-                                port=self.port_start)
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=h.hostname, network=h.network, name=h.name,
+                                ports=self.ports_start)
                 for h in self.spec.placement.hosts
             ]
         elif self.spec.placement.label:
             ls = [
-                DaemonPlacement(hostname=x.hostname, port=self.port_start)
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=x.hostname, ports=self.ports_start)
                 for x in self.hosts_by_label(self.spec.placement.label)
             ]
         elif self.spec.placement.host_pattern:
             ls = [
-                DaemonPlacement(hostname=x, port=self.port_start)
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=x, ports=self.ports_start)
                 for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
             ]
         elif (
@@ -231,7 +273,8 @@ class HostAssignment(object):
                 or self.spec.placement.count_per_host is not None
         ):
             ls = [
-                DaemonPlacement(hostname=x.hostname, port=self.port_start)
+                DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                hostname=x.hostname, ports=self.ports_start)
                 for x in self.hosts
             ]
         else:
@@ -245,8 +288,9 @@ class HostAssignment(object):
             for p in orig:
                 ip = self.find_ip_on_host(p.hostname, self.spec.networks)
                 if ip:
-                    ls.append(DaemonPlacement(hostname=p.hostname, network=p.network,
-                                              name=p.name, port=p.port, ip=ip))
+                    ls.append(DaemonPlacement(daemon_type=self.primary_daemon_type,
+                                              hostname=p.hostname, network=p.network,
+                                              name=p.name, ports=p.ports, ip=ip))
                 else:
                     logger.debug(
                         f'Skipping {p.hostname} with no IP in network(s) {self.spec.networks}'
@@ -254,10 +298,14 @@ class HostAssignment(object):
 
         if self.filter_new_host:
             old = ls.copy()
-            ls = [h for h in ls if self.filter_new_host(h.hostname)]
-            for h in list(set(old) - set(ls)):
-                logger.info(
-                    f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
+            ls = []
+            for h in old:
+                if self.filter_new_host(h.hostname):
+                    ls.append(h)
+                else:
+                    logger.info(
+                        f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
+            if len(old) > len(ls):
                 logger.debug('Filtered %s down to %s' % (old, ls))
 
         # shuffle for pseudo random selection

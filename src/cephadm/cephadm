@@ -810,6 +810,14 @@ class Keepalived(object):
         ]
         return envs
 
+    @staticmethod
+    def get_prestart():
+        return (
+            '# keepalived needs IP forwarding and non-local bind\n'
+            'sysctl net.ipv4.ip_forward=1\n'
+            'sysctl net.ipv4.ip_nonlocal_bind=1\n'
+        )
+
     def extract_uid_gid_keepalived(self):
         # better directory for this?
         return extract_uid_gid(self.ctx, file_path='/var/lib')
@@ -2712,6 +2720,8 @@ def deploy_daemon_units(
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
             _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
+        elif daemon_type == Keepalived.daemon_type:
+            f.write(Keepalived.get_prestart())
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
@@ -3428,7 +3438,10 @@ def prepare_mon_addresses(
     if not ctx.skip_mon_network:
         # make sure IP is configured locally, and then figure out the
         # CIDR network
-        for net, ips in list_networks(ctx).items():
+        for net, ifaces in list_networks(ctx).items():
+            ips: List[str] = []
+            for iface, ls in ifaces.items():
+                ips.extend(ls)
             if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
                     [ipaddress.ip_address(ip) for ip in ips]:
                 mon_network = net
@@ -4533,7 +4546,7 @@ def command_logs(ctx):
 
 
 def list_networks(ctx):
-    # type: (CephadmContext) -> Dict[str,List[str]]
+    # type: (CephadmContext) -> Dict[str,Dict[str,List[str]]]
 
     # sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
     # so we'll need to use a regex to parse 'ip' command output.
@@ -4556,17 +4569,20 @@ def _list_ipv4_networks(ctx: CephadmContext):
 
 
 def _parse_ipv4_route(out):
-    r = {}  # type: Dict[str,List[str]]
-    p = re.compile(r'^(\S+) (.*)scope link (.*)src (\S+)')
+    r = {}  # type: Dict[str,Dict[str,List[str]]]
+    p = re.compile(r'^(\S+) dev (\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
         m = p.findall(line)
         if not m:
             continue
         net = m[0][0]
-        ip = m[0][3]
+        iface = m[0][1]
+        ip = m[0][4]
         if net not in r:
-            r[net] = []
-        r[net].append(ip)
+            r[net] = {}
+        if iface not in r[net]:
+            r[net][iface] = []
+        r[net][iface].append(ip)
     return r
 
 
@@ -4580,27 +4596,39 @@ def _list_ipv6_networks(ctx: CephadmContext):
 
 
 def _parse_ipv6_route(routes, ips):
-    r = {}  # type: Dict[str,List[str]]
+    r = {}  # type: Dict[str,Dict[str,List[str]]]
     route_p = re.compile(r'^(\S+) dev (\S+) proto (\S+) metric (\S+) .*pref (\S+)$')
     ip_p = re.compile(r'^\s+inet6 (\S+)/(.*)scope (.*)$')
+    iface_p = re.compile(r'^(\d+): (\S+): (.*)$')
     for line in routes.splitlines():
         m = route_p.findall(line)
         if not m or m[0][0].lower() == 'default':
             continue
         net = m[0][0]
+        if '/' not in net:  # only consider networks with a mask
+            continue
+        iface = m[0][1]
         if net not in r:
-            r[net] = []
+            r[net] = {}
+        if iface not in r[net]:
+            r[net][iface] = []
 
+    iface = None
     for line in ips.splitlines():
         m = ip_p.findall(line)
         if not m:
+            m = iface_p.findall(line)
+            if m:
+                # drop @... suffix, if present
+                iface = m[0][1].split('@')[0]
             continue
         ip = m[0][0]
         # find the network it belongs to
         net = [n for n in r.keys()
                if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net:
-            r[net[0]].append(ip)
+            assert(iface)
+            r[net[0]][iface].append(ip)
 
     return r
 

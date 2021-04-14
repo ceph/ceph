@@ -106,7 +106,13 @@ def is_repo_digest(image_name: str) -> bool:
 
 def resolve_ip(hostname: str) -> str:
     try:
-        return socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]
+        r = socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME,
+                               type=socket.SOCK_STREAM)
+        # pick first v4 IP, if present
+        for a in r:
+            if a[0] == socket.AF_INET:
+                return a[4][0]
+        return r[0][4][0]
     except socket.gaierror as e:
         raise OrchestratorError(f"Cannot resolve ip for host {hostname}: {e}")
 

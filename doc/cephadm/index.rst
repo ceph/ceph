@@ -20,11 +20,6 @@ either via the Ceph command-line interface (CLI) or via the dashboard (GUI).
 ``cephadm`` is new in Ceph release v15.2.0 (Octopus) and does not support older
 versions of Ceph.
 
-.. note::
-
-   Cephadm is new.  Please read about :ref:`cephadm-stability` before
-   using cephadm to deploy a production system.
-
 .. toctree::
     :maxdepth: 1
 
