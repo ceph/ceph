@@ -36,6 +36,8 @@
 #include "common/PriorityCache.h"
 #include "Allocator.h"
 #include "FreelistManager.h"
+#include "ZonedAllocator.h"
+#include "ZonedFreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
@@ -5437,7 +5439,11 @@ int BlueStore::_init_alloc()
   ceph_assert(shared_alloc.a != NULL);
 
   if (bdev->is_smr()) {
-    shared_alloc.a->zoned_set_zone_states(fm->get_zone_states(db));
+    auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+    ceph_assert(a);
+    auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+    ceph_assert(f);
+    a->zoned_set_zone_states(f->get_zone_states(db));
   }
 
   uint64_t num = 0, bytes = 0;
@@ -14046,8 +14052,10 @@ int BlueStore::_do_alloc_write(
   _collect_allocation_stats(need, min_alloc_size, prealloc.size());
 
   if (bdev->is_smr()) {
+    auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+    ceph_assert(a);
     std::deque<uint64_t> zones_to_clean;
-    if (shared_alloc.a->zoned_get_zones_to_clean(&zones_to_clean)) {
+    if (a->zoned_get_zones_to_clean(&zones_to_clean)) {
       std::lock_guard l{zoned_cleaner_lock};
       zoned_cleaner_queue.swap(zones_to_clean);
       zoned_cleaner_cond.notify_one();
