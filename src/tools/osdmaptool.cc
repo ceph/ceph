@@ -469,7 +469,7 @@ int main(int argc, const char **argv)
     }
     int rounds = 0;
     struct timespec round_start;
-    int r = clock_gettime(CLOCK_MONOTONIC, &round_start);
+    [[maybe_unused]] int r = clock_gettime(CLOCK_MONOTONIC, &round_start);
     assert(r == 0);
     do {
       random_device_t rd;
