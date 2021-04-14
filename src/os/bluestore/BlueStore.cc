@@ -12364,6 +12364,8 @@ void BlueStore::_zoned_cleaner_thread() {
 
 void BlueStore::_zoned_clean_zone(uint64_t zone_num) {
   dout(10) << __func__ << " cleaning zone " << zone_num << dendl;
+  // TODO: (1) copy live objects from zone_num to a new zone, (2) issue a RESET
+  // ZONE operation to the device for the corresponding zone.
 }
 
 bluestore_deferred_op_t *BlueStore::_get_deferred_op(
