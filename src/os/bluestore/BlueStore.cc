@@ -5443,7 +5443,7 @@ int BlueStore::_init_alloc()
     ceph_assert(a);
     auto f = dynamic_cast<ZonedFreelistManager*>(fm);
     ceph_assert(f);
-    a->set_zone_states(f->get_zone_states(db));
+    a->init_alloc(f->get_zone_states(db));
   }
 
   uint64_t num = 0, bytes = 0;

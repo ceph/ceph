@@ -85,7 +85,7 @@ public:
   void dump(std::function<void(uint64_t offset,
                                uint64_t length)> notify) override;
 
-  void set_zone_states(std::vector<zone_state_t> &&_zone_states);
+  void init_alloc(std::vector<zone_state_t> &&_zone_states);
   bool get_zones_to_clean(std::deque<uint64_t> *zones_to_clean);
   void mark_zones_to_clean_free(void);
 
