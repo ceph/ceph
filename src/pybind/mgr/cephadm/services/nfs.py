@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 class NFSService(CephService):
     TYPE = 'nfs'
 
+    def allow_colo(self) -> bool:
+        return True
+
     def config(self, spec: NFSServiceSpec, daemon_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
         assert spec.pool
