@@ -142,6 +142,20 @@ html.writer-html5 .rst-content table.docutils th,
   margin-left: 24px;
 }
 
+.rst-content section ol li>p,
+.rst-content section ol li>p:last-child,
+.rst-content section ul li>p,
+.rst-content section ul li>p:last-child {
+  margin-bottom: 12px;
+}
+
+.rst-content section ol li>p:only-child,
+.rst-content section ol li>p:only-child:last-child,
+.rst-content section ul li>p:only-child,
+.rst-content section ul li>p:only-child:last-child {
+  margin-bottom: 0;
+}
+
 /* versions */
 .injected .rst-versions.rst-badge {
   left: 0;
@@ -173,4 +187,8 @@ html.writer-html5 .rst-content table.docutils th,
 
 .columns-3 > div {
   width: 33.33%;
+}
+
+div[class*="highlight-"] {
+  margin-bottom: 12px;
 }
