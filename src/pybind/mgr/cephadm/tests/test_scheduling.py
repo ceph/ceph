@@ -589,6 +589,17 @@ class NodeAssignmentTest(NamedTuple):
              'rgw:host1(*:81)', 'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             []
         ),
+        NodeAssignmentTest(
+            'nfs',
+            PlacementSpec(count=6, label='foo'),
+            'host1 host2 host3'.split(),
+            [],
+            ['nfs:host1(*:2049)', 'nfs:host2(*:2049)', 'nfs:host3(*:2049)',
+             'nfs:host1(*:2050)', 'nfs:host2(*:2050)', 'nfs:host3(*:2050)'],
+            ['nfs:host1(*:2049)', 'nfs:host2(*:2049)', 'nfs:host3(*:2049)',
+             'nfs:host1(*:2050)', 'nfs:host2(*:2050)', 'nfs:host3(*:2050)'],
+            []
+        ),
         # label + count_per_host + ports (+ xisting)
         NodeAssignmentTest(
             'rgw',
@@ -604,6 +615,21 @@ class NodeAssignmentTest(NamedTuple):
             ['rgw:host1(*:80)', 'rgw:host3(*:80)',
              'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             ['rgw.c']
+        ),
+        NodeAssignmentTest(
+            'nfs',
+            PlacementSpec(count=6, label='foo'),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('nfs', 'a', 'host1', ports=[2050]),
+                DaemonDescription('nfs', 'b', 'host2', ports=[2049]),
+                DaemonDescription('nfs', 'c', 'host1', ports=[2051]),
+            ],
+            ['nfs:host1(*:2049)', 'nfs:host2(*:2049)', 'nfs:host3(*:2049)',
+             'nfs:host1(*:2050)', 'nfs:host2(*:2050)', 'nfs:host3(*:2050)'],
+            ['nfs:host1(*:2049)', 'nfs:host3(*:2049)',
+             'nfs:host2(*:2050)', 'nfs:host3(*:2050)'],
+            ['nfs.c']
         ),
         # cephadm.py teuth case
         NodeAssignmentTest(
@@ -622,16 +648,25 @@ def test_node_assignment(service_type, placement, hosts, daemons,
                          expected, expected_add, expected_remove):
     service_id = None
     allow_colo = False
+    args = {}
     if service_type == 'rgw':
         service_id = 'realm.zone'
         allow_colo = True
     elif service_type == 'mds':
         service_id = 'myfs'
         allow_colo = True
+    elif service_type == 'nfs':
+        service_id = 'foo'
+        allow_colo = True
+        args = {
+            'pool': 'nfs-ganesha',
+            'namespace': 'foo'
+        }
 
     spec = ServiceSpec(service_type=service_type,
                        service_id=service_id,
-                       placement=placement)
+                       placement=placement,
+                       **args)
 
     all_slots, to_add, to_remove = HostAssignment(
         spec=spec,
