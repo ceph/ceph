@@ -126,6 +126,7 @@ struct InodeStat {
   uint64_t size = 0, max_size = 0;
   uint64_t change_attr = 0;
   uint64_t truncate_size = 0;
+  uint8_t fscrypt_priv[CEPH_FSCRYPT_PRIVATE_SIZE] = {0};
   uint32_t truncate_seq = 0;
   uint32_t mode = 0, uid = 0, gid = 0, nlink = 0;
   frag_info_t dirstat;
@@ -157,7 +158,7 @@ struct InodeStat {
   void decode(ceph::buffer::list::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(6, p);
+      DECODE_START(7, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -213,6 +214,9 @@ struct InodeStat {
       }
       if (struct_v >= 6) {
         decode(fscrypt, p);
+      }
+      if (struct_v >= 7) {
+	decode_raw(fscrypt_priv, p);
       }
       DECODE_FINISH(p);
     }

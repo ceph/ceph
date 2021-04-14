@@ -4043,6 +4043,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(file_i->rstat.rsnaps, bl);
     encode(snap_metadata, bl);
     encode(file_i->fscrypt, bl);
+    encode_raw(file_i->fscrypt_priv, bl);
     ENCODE_FINISH(bl);
   }
   else {
