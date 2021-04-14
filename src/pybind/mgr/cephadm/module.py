@@ -25,7 +25,7 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
-    HostPlacementSpec
+    HostPlacementSpec, IngressSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -47,9 +47,9 @@ from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
     RbdMirrorService, CrashService, CephadmService, CephfsMirrorService
+from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
-from .services.ha_rgw import HA_RGWService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -421,7 +421,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, CrashService, IscsiService,
-            HA_RGWService, CustomContainerService, CephadmExporter, CephfsMirrorService
+            IngressService, CustomContainerService, CephadmExporter, CephfsMirrorService
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -1577,12 +1577,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
                 deleted=self.spec_store.spec_deleted.get(nm, None),
+                virtual_ip=spec.get_virtual_ip(),
+                ports=spec.get_port_start(),
             )
             if service_type == 'nfs':
                 spec = cast(NFSServiceSpec, spec)
                 sm[nm].rados_config_location = spec.rados_config_location()
-            if spec.service_type == 'ha-rgw':
-                # ha-rgw has 2 daemons running per host
+            if spec.service_type == 'ingress':
+                # ingress has 2 daemons running per host
                 sm[nm].size *= 2
 
         # factor daemons into status
@@ -1952,16 +1954,38 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             previews_for_specs.update({host: osd_reports})
         return previews_for_specs
 
-    def _calc_daemon_deps(self, daemon_type: str, daemon_id: str) -> List[str]:
-        need = {
-            'prometheus': ['mgr', 'alertmanager', 'node-exporter'],
-            'grafana': ['prometheus'],
-            'alertmanager': ['mgr', 'alertmanager'],
-        }
+    def _calc_daemon_deps(self,
+                          spec: Optional[ServiceSpec],
+                          daemon_type: str,
+                          daemon_id: str) -> List[str]:
         deps = []
-        for dep_type in need.get(daemon_type, []):
-            for dd in self.cache.get_daemons_by_service(dep_type):
-                deps.append(dd.name())
+        if daemon_type == 'haproxy':
+            # because cephadm creates new daemon instances whenever
+            # port or ip changes, identifying daemons by name is
+            # sufficient to detect changes.
+            if not spec:
+                return []
+            ingress_spec = cast(IngressSpec, spec)
+            assert ingress_spec.backend_service
+            daemons = self.cache.get_daemons_by_service(ingress_spec.backend_service)
+            deps = [d.name() for d in daemons]
+        elif daemon_type == 'keepalived':
+            # because cephadm creates new daemon instances whenever
+            # port or ip changes, identifying daemons by name is
+            # sufficient to detect changes.
+            if not spec:
+                return []
+            daemons = self.cache.get_daemons_by_service(spec.service_name())
+            deps = [d.name() for d in daemons if d.daemon_type == 'haproxy']
+        else:
+            need = {
+                'prometheus': ['mgr', 'alertmanager', 'node-exporter', 'ingress'],
+                'grafana': ['prometheus'],
+                'alertmanager': ['mgr', 'alertmanager'],
+            }
+            for dep_type in need.get(daemon_type, []):
+                for dd in self.cache.get_daemons_by_type(dep_type):
+                    deps.append(dd.name())
         return sorted(deps)
 
     @forall_hosts
@@ -2017,11 +2041,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 self.cephadm_services[service_type].config(spec, daemon_id)
                 did_config = True
 
-            port = spec.get_port_start()
             daemon_spec = self.cephadm_services[service_type].make_daemon_spec(
                 host, daemon_id, network, spec,
                 # NOTE: this does not consider port conflicts!
-                ports=[port] if port else None)
+                ports=spec.get_port_start())
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
             args.append(daemon_spec)
@@ -2106,7 +2129,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'mgr': PlacementSpec(count=2),
                 'mds': PlacementSpec(count=2),
                 'rgw': PlacementSpec(count=2),
-                'ha-rgw': PlacementSpec(count=2),
+                'ingress': PlacementSpec(count=2),
                 'iscsi': PlacementSpec(count=1),
                 'rbd-mirror': PlacementSpec(count=2),
                 'cephfs-mirror': PlacementSpec(count=1),
@@ -2169,7 +2192,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return self._apply(spec)
 
     @handle_orch_error
-    def apply_ha_rgw(self, spec: ServiceSpec) -> str:
+    def apply_ingress(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

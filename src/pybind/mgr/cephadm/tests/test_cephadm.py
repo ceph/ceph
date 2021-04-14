@@ -148,7 +148,8 @@ class TestCephadm(object):
                             'service_id': 'r.z',
                             'service_name': 'rgw.r.z',
                             'service_type': 'rgw',
-                            'status': {'created': mock.ANY, 'running': 1, 'size': 1},
+                            'status': {'created': mock.ANY, 'running': 1, 'size': 1,
+                                       'ports': [80]},
                         }
                     ]
                     for o in out:
