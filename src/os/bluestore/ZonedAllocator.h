@@ -56,6 +56,10 @@ class ZonedAllocator : public Allocator {
     zone_states[zone_num].increment_write_pointer(want_size);
   }
 
+  inline void increment_num_dead_bytes(uint64_t zone_num, uint64_t length) {
+    zone_states[zone_num].increment_num_dead_bytes(length);
+  }
+
   inline bool fits(uint64_t want_size, uint64_t zone_num) const {
     return want_size <= get_remaining_space(zone_num);
   }
