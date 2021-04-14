@@ -210,3 +210,7 @@ class CephTimeline(Directive):
 def setup(app):
     app.add_directive('ceph_releases', CephReleases)
     app.add_directive('ceph_timeline', CephTimeline)
+    return {
+        'parallel_read_safe': True,
+        'parallel_write_safe': True
+    }
