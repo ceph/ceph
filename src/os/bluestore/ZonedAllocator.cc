@@ -127,7 +127,7 @@ void ZonedAllocator::dump(std::function<void(uint64_t offset,
 }
 
 // This just increments |num_free|.  The actual free space is added by
-// set_zone_states, as it updates the write pointer for each zone.
+// init_alloc, as it updates the write pointer for each zone.
 void ZonedAllocator::init_add_free(uint64_t offset, uint64_t length) {
   ldout(cct, 40) << __func__ << " " << std::hex
 		 << offset << "~" << length << dendl;
@@ -177,7 +177,9 @@ bool ZonedAllocator::get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) {
   return true;
 }
 
-void ZonedAllocator::set_zone_states(std::vector<zone_state_t> &&_zone_states) {
+
+
+void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states) {
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << dendl;
   zone_states = std::move(_zone_states);
