@@ -36,5 +36,5 @@ TEST(DecayCounter, steady)
    */
   double expected = -1*std::log(0.5)/rate*max*duration;
   std::cerr << "t " << total << " e " << expected << std::endl;
-  ASSERT_LT(std::abs(total-expected)/expected, 0.01);
+  ASSERT_LT(std::abs(total-expected)/expected, 0.05);
 }
