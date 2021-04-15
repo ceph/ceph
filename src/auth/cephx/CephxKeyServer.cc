@@ -30,7 +30,7 @@ using ceph::bufferlist;
 using ceph::Formatter;
 
 bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
-			    ExpiringCryptoKey& secret, uint64_t& secret_id) const
+				       CryptoKey& secret, uint64_t& secret_id) const
 {
   auto iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end()) { 
@@ -49,21 +49,11 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
     ++riter;   // "current" key has expired, use "next" key instead
 
   secret_id = riter->first;
-  secret = riter->second;
-  ldout(cct, 30) << "get_service_secret service " << ceph_entity_type_name(service_id)
-	   << " id " << secret_id << " " << secret << dendl;
-  return true;
-}
+  secret = riter->second.key;
 
-bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
-				CryptoKey& secret, uint64_t& secret_id) const
-{
-  ExpiringCryptoKey e;
-
-  if (!get_service_secret(cct, service_id, e, secret_id))
-    return false;
-
-  secret = e.key;
+  ldout(cct, 30) << __func__ << " service "
+		 << ceph_entity_type_name(service_id) << " secret_id "
+		 << secret_id << " " << riter->second << dendl;
   return true;
 }
 

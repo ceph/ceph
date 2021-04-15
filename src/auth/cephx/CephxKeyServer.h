@@ -94,8 +94,6 @@ struct KeyServerData {
   }
 
   bool get_service_secret(CephContext *cct, uint32_t service_id,
-			  ExpiringCryptoKey& secret, uint64_t& secret_id) const;
-  bool get_service_secret(CephContext *cct, uint32_t service_id,
 			  CryptoKey& secret, uint64_t& secret_id) const;
   bool get_service_secret(CephContext *cct, uint32_t service_id,
 			  uint64_t secret_id, CryptoKey& secret) const;
