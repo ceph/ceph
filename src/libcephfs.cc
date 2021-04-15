@@ -27,6 +27,7 @@
 #include "common/version.h"
 #include "mon/MonClient.h"
 #include "include/str_list.h"
+#include "include/stringify.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/ceph_assert.h"
@@ -502,6 +503,15 @@ extern "C" int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
     return -EINVAL;
   }
   return cmount->conf_get(option, buf, len);
+}
+
+extern "C" int ceph_set_mount_timeout(struct ceph_mount_info *cmount, uint32_t timeout) {
+  if (cmount->is_mounted()) {
+    return -EINVAL;
+  }
+
+  auto timeout_str = stringify(timeout);
+  return ceph_conf_set(cmount, "client_mount_timeout", timeout_str.c_str());
 }
 
 extern "C" int ceph_mds_command(struct ceph_mount_info *cmount,
