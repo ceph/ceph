@@ -95,7 +95,7 @@ void WriteLog<I>::complete_read(
 }
 
 template <typename I>
-void WriteLog<I>::initialize_pool(Context *on_finish,
+bool WriteLog<I>::initialize_pool(Context *on_finish,
                                   pwl::DeferredContexts &later) {
   CephContext *cct = m_image_ctx.cct;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
@@ -117,7 +117,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
       m_cache_state->empty = true;
       /* TODO: filter/replace errnos that are meaningless to the caller */
       on_finish->complete(-errno);
-      return;
+      return false;
     }
 
     bdev = BlockDevice::create(cct, this->m_log_pool_name, aio_cache_cb,
@@ -126,7 +126,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
     if (r < 0) {
       delete bdev;
       on_finish->complete(-1);
-      return;
+      return false;
     }
     m_cache_state->present = true;
     m_cache_state->clean = true;
@@ -173,7 +173,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
      if (r < 0) {
        delete bdev;
        on_finish->complete(r);
-       return;
+       return false;
      }
      load_existing_entries(later);
      if (m_first_free_entry < m_first_valid_entry) {
@@ -192,6 +192,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
      m_cache_state->clean = this->m_dirty_log_entries.empty();
      m_cache_state->empty = m_log_entries.empty();
   }
+  return true;
 }
 
 template <typename I>
