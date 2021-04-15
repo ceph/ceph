@@ -67,7 +67,7 @@ WRITE_CLASS_ENCODER(SnapPayload)
 
 class MClientRequest final : public MMDSOp {
 private:
-  static constexpr int HEAD_VERSION = 5;
+  static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -100,6 +100,9 @@ public:
   filepath path, path2;
   std::string alternate_name;
   std::vector<uint64_t> gid_list;
+
+  std::vector<uint8_t> fscrypt_auth;
+  std::vector<uint8_t> fscrypt_file;
 
   /* XXX HACK */
   mutable bool queued_for_replay = false;
@@ -240,6 +243,10 @@ public:
       decode(gid_list, p);
     if (header.version >= 5)
       decode(alternate_name, p);
+    if (header.version >= 6) {
+      decode(fscrypt_auth, p);
+      decode(fscrypt_file, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -262,6 +269,8 @@ public:
     encode(stamp, payload);
     encode(gid_list, payload);
     encode(alternate_name, payload);
+    encode(fscrypt_auth, payload);
+    encode(fscrypt_file, payload);
   }
 
   std::string_view get_type_name() const override { return "creq"; }

@@ -5026,6 +5026,12 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   __u32 mask = req->head.args.setattr.mask;
   __u32 access_mask = MAY_WRITE;
 
+  // No changes to encrypted inodes from legacy clients
+  if (!cur->get_inode()->fscrypt_file.empty() && req->get_header().version < 6) {
+    respond_to_request(mdr, -CEPHFS_EPERM);
+    return;
+  }
+
   // xlock inode
   if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_BTIME|CEPH_SETATTR_KILL_SGUID))
     lov.add_xlock(&cur->authlock);
@@ -5109,6 +5115,10 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
       pi.inode->size = req->head.args.setattr.size;
       pi.inode->rstat.rbytes = pi.inode->size;
     }
+    if (req->get_header().version >= 6) {
+      pi.inode->fscrypt_file = req->fscrypt_file;
+    }
+
     pi.inode->mtime = mdr->get_op_stamp();
 
     // adjust client's max_size?
