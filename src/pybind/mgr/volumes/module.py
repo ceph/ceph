@@ -359,7 +359,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'nfs cluster create '
-                   'name=type,type=CephString '
                    f'name=clusterid,type=CephString,goodchars={goodchars} '
                    'name=placement,type=CephString,req=false ',
             'desc': "Create an NFS Cluster",
@@ -717,7 +716,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @mgr_cmd_wrap
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
-        return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'], export_type=cmd['type'],
+        return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'],
                                            placement=cmd.get('placement', None))
 
     @mgr_cmd_wrap

@@ -118,7 +118,7 @@ class TestNFS(MgrTestCase):
         '''
         # Disable any running nfs ganesha daemon
         self._check_nfs_server_status()
-        self._nfs_cmd('cluster', 'create', self.export_type, self.cluster_id)
+        self._nfs_cmd('cluster', 'create', self.cluster_id)
         # Check for expected status and daemon name (nfs.<cluster_id>)
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster deployment failed')
 
@@ -295,8 +295,7 @@ class TestNFS(MgrTestCase):
         '''
         Test idempotency of cluster create and delete commands.
         '''
-        self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.export_type,
-                                                           self.cluster_id])
+        self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.cluster_id])
         self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'delete', self.cluster_id])
 
     def test_create_cluster_with_invalid_cluster_id(self):
@@ -305,21 +304,8 @@ class TestNFS(MgrTestCase):
         '''
         try:
             invalid_cluster_id = '/cluster_test'  # Only [A-Za-z0-9-_.] chars are valid
-            self._nfs_cmd('cluster', 'create', self.export_type, invalid_cluster_id)
+            self._nfs_cmd('cluster', 'create', invalid_cluster_id)
             self.fail(f"Cluster successfully created with invalid cluster id {invalid_cluster_id}")
-        except CommandFailedError as e:
-            # Command should fail for test to pass
-            if e.exitstatus != errno.EINVAL:
-                raise
-
-    def test_create_cluster_with_invalid_export_type(self):
-        '''
-        Test nfs cluster deployment failure with invalid export type.
-        '''
-        try:
-            invalid_export_type = 'rgw'  # Only cephfs is valid
-            self._nfs_cmd('cluster', 'create', invalid_export_type, self.cluster_id)
-            self.fail(f"Cluster successfully created with invalid export type {invalid_export_type}")
         except CommandFailedError as e:
             # Command should fail for test to pass
             if e.exitstatus != errno.EINVAL:
