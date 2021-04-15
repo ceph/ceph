@@ -1141,7 +1141,7 @@ start_ganesha() {
     ceph_adm mgr module enable test_orchestrator
     ceph_adm orch set backend test_orchestrator
     ceph_adm test_orchestrator load_data -i $CEPH_ROOT/src/pybind/mgr/test_orchestrator/dummy_data.json
-    prun ceph_adm nfs cluster create cephfs $cluster_id
+    prun ceph_adm nfs cluster create $cluster_id
     prun ceph_adm nfs export create cephfs "a" $cluster_id "/cephfs"
 
     for name in a b c d e f g h i j k l m n o p
@@ -1424,7 +1424,7 @@ if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
     pseudo_path="/cephfs"
     if [ "$cephadm" -gt 0 ]; then
         cluster_id="vstart"
-        prun ceph_adm nfs cluster create cephfs $cluster_id
+        prun ceph_adm nfs cluster create $cluster_id
         prun ceph_adm nfs export create cephfs "a" $cluster_id $pseudo_path
         port="2049"
     else
