@@ -2381,7 +2381,7 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @param handle the watcher handle we are notifying
  * @param notifier_id the unique client id for the notifier
  * @param data payload from the notifier
- * @param datalen length of payload buffer
+ * @param data_len length of payload buffer
  */
 typedef void (*rados_watchcb2_t)(void *arg,
 				 uint64_t notify_id,
@@ -2400,6 +2400,7 @@ typedef void (*rados_watchcb2_t)(void *arg,
  * we may have missed notify events.
  *
  * @param pre opaque user-defined value provided to rados_watch2()
+ * @param cookie the internal id assigned to the watch session
  * @param err error code
  */
   typedef void (*rados_watcherrcb_t)(void *pre, uint64_t cookie, int err);

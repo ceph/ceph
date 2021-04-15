@@ -96,7 +96,7 @@ for target in $sphinx_targets; do
             ;;
         livehtml)
             $vdir/bin/pip install --quiet sphinx-autobuild
-            $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' "$@" \
+            $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' -b dirhtml "$@" \
                                        $TOPDIR/doc $TOPDIR/build-doc/output/html
             ;;
     esac

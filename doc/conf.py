@@ -6,10 +6,6 @@ import sys
 import yaml
 import sphinx.util
 
-from sphinx.domains.python import PyField
-from sphinx.locale import _
-from sphinx.util.docfields import Field
-
 
 top_level = \
     os.path.dirname(
@@ -123,6 +119,7 @@ extensions = [
     'breathe',
     'ceph_commands',
     'ceph_releases',
+    'ceph_confval',
     'sphinxcontrib.openapi'
     ]
 
@@ -240,36 +237,3 @@ def setup(app):
                 generate_state_diagram(['src/osd/PeeringState.h',
                                         'src/osd/PeeringState.cc'],
                                        'doc/dev/peering_graph.generated.dot'))
-
-    app.add_object_type(
-        'confval',
-        'confval',
-        objname='configuration value',
-        indextemplate='pair: %s; configuration value',
-        doc_field_types=[
-            PyField(
-                'type',
-                label=_('Type'),
-                has_arg=False,
-                names=('type',),
-                bodyrolename='class'
-            ),
-            Field(
-                'default',
-                label=_('Default'),
-                has_arg=False,
-                names=('default',),
-            ),
-            Field(
-                'required',
-                label=_('Required'),
-                has_arg=False,
-                names=('required',),
-            ),
-            Field(
-                'example',
-                label=_('Example'),
-                has_arg=False,
-            )
-        ]
-    )
