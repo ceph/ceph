@@ -16,7 +16,7 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <type> <clusterid> [<placement>]
+    $ ceph nfs cluster create <clusterid> [<placement>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``clusterid``, and a common NFS Ganesha config RADOS object.
@@ -27,10 +27,6 @@ This creates a common recovery pool for all NFS Ganesha daemons, new user based 
 
    Currently, NFS Ganesha daemon deployed by cephadm listens on the standard
    port. So only one daemon will be deployed on a host.
-
-``<type>`` signifies the export type, which corresponds to the NFS Ganesha file
-system abstraction layer (FSAL). Permissible values are ``"cephfs`` or
-``rgw``, but currently only ``cephfs`` is supported.
 
 ``<clusterid>`` is an arbitrary string by which this NFS Ganesha cluster will be
 known.
