@@ -741,6 +741,7 @@ $CMONDEBUG
         $(format_conf "${extra_conf}")
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
+        auth allow insecure global id reclaim = false
 EOF
 }
 
