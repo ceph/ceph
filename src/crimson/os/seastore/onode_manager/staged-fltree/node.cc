@@ -95,12 +95,17 @@ void tree_cursor_t::assert_next_to(
 #endif
 }
 
+template <bool FORCE_MERGE>
 tree_cursor_t::future<Ref<tree_cursor_t>>
 tree_cursor_t::erase(context_t c, bool get_next)
 {
   assert(is_tracked());
-  return ref_leaf_node->erase(c, position, get_next);
+  return ref_leaf_node->erase<FORCE_MERGE>(c, position, get_next);
 }
+template tree_cursor_t::future<Ref<tree_cursor_t>>
+tree_cursor_t::erase<true>(context_t, bool);
+template tree_cursor_t::future<Ref<tree_cursor_t>>
+tree_cursor_t::erase<false>(context_t, bool);
 
 MatchKindCMP tree_cursor_t::compare_to(
     const tree_cursor_t& o, value_magic_t magic) const
@@ -488,18 +493,21 @@ Node::get_next_cursor_from_parent(context_t c)
   return parent_info().ptr->get_next_cursor(c, parent_info().position);
 }
 
+template <bool FORCE_MERGE>
 node_future<>
 Node::try_merge_adjacent(context_t c, bool update_parent_index)
 {
   impl->validate_non_empty();
   assert(!is_root());
   Ref<Node> this_ref = this;
-  if (!impl->is_size_underflow()) {
-    if (update_parent_index) {
-      return fix_parent_index(c);
-    } else {
-      parent_info().ptr->validate_child_tracked(*this);
-      return node_ertr::now();
+  if constexpr (!FORCE_MERGE) {
+    if (!impl->is_size_underflow()) {
+      if (update_parent_index) {
+        return fix_parent_index(c);
+      } else {
+        parent_info().ptr->validate_child_tracked(*this);
+        return node_ertr::now();
+      }
     }
   }
 
@@ -583,6 +591,8 @@ Node::try_merge_adjacent(context_t c, bool update_parent_index)
     // XXX: rebalance
   });
 }
+template node_future<> Node::try_merge_adjacent<true>(context_t, bool);
+template node_future<> Node::try_merge_adjacent<false>(context_t, bool);
 
 node_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
 {
@@ -1637,6 +1647,7 @@ LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
   }
 }
 
+template <bool FORCE_MERGE>
 node_future<Ref<tree_cursor_t>>
 LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
 {
@@ -1702,13 +1713,17 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
           next_pos.is_end() ? update_parent_index = true
                             : update_parent_index = false;
         }
-        return try_merge_adjacent(c, update_parent_index);
+        return try_merge_adjacent<FORCE_MERGE>(c, update_parent_index);
       }
     }).safe_then([next_cursor] {
       return next_cursor;
     });
   });
 }
+template node_future<Ref<tree_cursor_t>>
+LeafNode::erase<true>(context_t, const search_position_t&, bool);
+template node_future<Ref<tree_cursor_t>>
+LeafNode::erase<false>(context_t, const search_position_t&, bool);
 
 node_future<> LeafNode::extend_value(
     context_t c, const search_position_t& pos, value_size_t extend_size)

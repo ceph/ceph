@@ -11,6 +11,7 @@
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/dummy.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_layout.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
@@ -23,6 +24,7 @@ using namespace crimson::os::seastore::onode;
 
 namespace {
   constexpr bool IS_DUMMY_SYNC = false;
+  using DummyManager = DummyNodeExtentManager<IS_DUMMY_SYNC>;
 
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
@@ -486,25 +488,35 @@ class TestTree {
     });
   }
 
-  seastar::future<> split(const ghobject_t& key, const test_item_t& value,
-                          const split_expectation_t& expected) {
-    return seastar::async([this, key, value, expected] {
-      TestBtree tree_clone(NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
+  seastar::future<> split_merge(
+      const ghobject_t& key,
+      const test_item_t& value,
+      const split_expectation_t& expected,
+      std::optional<ghobject_t> next_key) {
+    return seastar::async([this, key, value, expected, next_key] {
+      // clone
+      auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
+      auto p_dummy = static_cast<DummyManager*>(ref_dummy.get());
+      TestBtree tree_clone(std::move(ref_dummy));
       auto ref_t_clone = make_test_transaction();
       Transaction& t_clone = *ref_t_clone;
       tree_clone.test_clone_from(t_clone, t, tree).unsafe_get0();
 
-      logger().info("insert {}:", key_hobj_t(key));
+      // insert and split
+      logger().info("\n\nINSERT-SPLIT {}:", key_hobj_t(key));
       auto [cursor, success] = tree_clone.insert(
           t_clone, key, {value.get_payload_size()}).unsafe_get0();
       initialize_cursor_from_item(t, key, value, cursor, success);
 
-      std::ostringstream oss;
-      tree_clone.dump(t_clone, oss);
-      logger().info("dump new root:\n{}", oss.str());
+      {
+        std::ostringstream oss;
+        tree_clone.dump(t_clone, oss);
+        logger().info("dump new root:\n{}", oss.str());
+      }
       EXPECT_EQ(tree_clone.height(t_clone).unsafe_get0(), 2);
 
-      for (auto& [k, v, c] : insert_history) {
+      for (auto& [k, val] : insert_history) {
+        auto& [v, c] = val;
         auto result = tree_clone.find(t_clone, k).unsafe_get0();
         EXPECT_NE(result, tree_clone.end());
         validate_cursor_from_item(k, v, result);
@@ -513,6 +525,39 @@ class TestTree {
       EXPECT_NE(result, tree_clone.end());
       validate_cursor_from_item(key, value, result);
       EXPECT_TRUE(last_split.match(expected));
+      EXPECT_EQ(p_dummy->size(), 3);
+
+      // erase and merge
+      logger().info("\n\nERASE-MERGE {}:", key_hobj_t(key));
+      auto nxt_cursor = cursor.erase<true>(t_clone).unsafe_get0();
+
+      {
+        // track root again to dump
+        auto begin = tree_clone.begin(t_clone).unsafe_get0();
+        std::ignore = begin;
+        std::ostringstream oss;
+        tree_clone.dump(t_clone, oss);
+        logger().info("dump root:\n{}", oss.str());
+      }
+
+      if (next_key.has_value()) {
+        auto found = insert_history.find(*next_key);
+        ceph_assert(found != insert_history.end());
+        validate_cursor_from_item(
+            *next_key, std::get<0>(found->second), nxt_cursor);
+      } else {
+        EXPECT_TRUE(nxt_cursor.is_end());
+      }
+
+      for (auto& [k, val] : insert_history) {
+        auto& [v, c] = val;
+        auto result = tree_clone.find(t_clone, k).unsafe_get0();
+        EXPECT_NE(result, tree_clone.end());
+        validate_cursor_from_item(k, v, result);
+      }
+
+      EXPECT_EQ(tree_clone.height(t_clone).unsafe_get0(), 1);
+      EXPECT_EQ(p_dummy->size(), 1);
     });
   }
 
@@ -526,7 +571,7 @@ class TestTree {
       auto [cursor, success] = tree.insert(
           t, key, {value.get_payload_size()}).unsafe_get0();
       initialize_cursor_from_item(t, key, value, cursor, success);
-      insert_history.emplace_back(key, value, cursor);
+      insert_history.emplace(key, std::make_tuple(value, cursor));
     });
   }
 
@@ -537,13 +582,13 @@ class TestTree {
   context_t c;
   TestBtree tree;
   Values<test_item_t> values;
-  std::vector<std::tuple<
-    ghobject_t, test_item_t, TestBtree::Cursor>> insert_history;
+  std::map<ghobject_t,
+           std::tuple<test_item_t, TestBtree::Cursor>> insert_history;
 };
 
 struct c_dummy_test_t : public seastar_test_suite_t {};
 
-TEST_F(c_dummy_test_t, 4_split_leaf_node)
+TEST_F(c_dummy_test_t, 4_split_merge_leaf_node)
 {
   run_async([this] {
     {
@@ -553,119 +598,158 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       auto value = test.create_value(1144);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left front at stage 2, 1, 0\n");
-      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), value,
-                 {2u, 2u, true, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), value,
-                 {2u, 1u, true, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), value,
-                 {2u, 0u, true, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), value,
+                       {2u, 2u, true, InsertType::BEGIN},
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), value,
+                       {2u, 1u, true, InsertType::BEGIN},
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), value,
+                       {2u, 0u, true, InsertType::BEGIN},
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), value,
-                 {2u, 0u, true, InsertType::LAST}).get0();
-      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), value,
-                 {2u, 1u, true, InsertType::LAST}).get0();
-      test.split(make_ghobj(2, 3, 3, "ns3", "oid3", 3, 3), value,
-                 {2u, 2u, true, InsertType::LAST}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), value,
-                 {2u, 1u, true, InsertType::LAST}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), value,
-                 {2u, 0u, true, InsertType::LAST}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), value,
+                       {2u, 0u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), value,
+                       {2u, 1u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(2, 3, 3, "ns3", "oid3", 3, 3), value,
+                       {2u, 2u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), value,
+                       {2u, 1u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), value,
+                       {2u, 0u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
 
       auto value0 = test.create_value(1416);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value0,
-                 {2u, 0u, false, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value0,
-                 {2u, 1u, false, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), value0,
-                 {2u, 2u, false, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value0,
-                 {2u, 1u, false, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value0,
-                 {2u, 0u, false, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value0,
+                       {2u, 0u, false, InsertType::BEGIN},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value0,
+                       {2u, 1u, false, InsertType::BEGIN},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), value0,
+                       {2u, 2u, false, InsertType::BEGIN},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value0,
+                       {2u, 1u, false, InsertType::BEGIN},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value0,
+                       {2u, 0u, false, InsertType::BEGIN},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
-      test.split(make_ghobj(4, 4, 4, "ns4", "oid4", 5, 5), value0,
-                 {2u, 0u, false, InsertType::LAST}).get0();
-      test.split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), value0,
-                 {2u, 1u, false, InsertType::LAST}).get0();
-      test.split(make_ghobj(5, 5, 5, "ns3", "oid3", 3, 3), value0,
-                 {2u, 2u, false, InsertType::LAST}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns4", "oid4", 5, 5), value0,
+                       {2u, 0u, false, InsertType::LAST},
+                       std::nullopt).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), value0,
+                       {2u, 1u, false, InsertType::LAST},
+                       std::nullopt).get0();
+      test.split_merge(make_ghobj(5, 5, 5, "ns3", "oid3", 3, 3), value0,
+                       {2u, 2u, false, InsertType::LAST},
+                       std::nullopt).get0();
 
       auto value1 = test.create_value(316);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left middle at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), value1,
-                 {1u, 0u, true, InsertType::MID}).get0();
-      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), value1,
-                 {1u, 1u, true, InsertType::MID}).get0();
-      test.split(make_ghobj(2, 2, 3, "ns3", "oid3", 3, 3), value1,
-                 {1u, 2u, true, InsertType::MID}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), value1,
-                 {1u, 1u, true, InsertType::MID}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), value1,
-                 {1u, 0u, true, InsertType::MID}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), value1,
+                       {1u, 0u, true, InsertType::MID},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), value1,
+                       {1u, 1u, true, InsertType::MID},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(2, 2, 3, "ns3", "oid3", 3, 3), value1,
+                       {1u, 2u, true, InsertType::MID},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), value1,
+                       {1u, 1u, true, InsertType::MID},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), value1,
+                       {1u, 0u, true, InsertType::MID},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 2, 2)}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage 0, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 5, 5), value1,
-                 {1u, 0u, true, InsertType::LAST}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), value1,
-                 {1u, 1u, true, InsertType::LAST}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 1, 1), value1,
-                 {1u, 0u, true, InsertType::LAST}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 5, 5), value1,
+                       {1u, 0u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), value1,
+                       {1u, 1u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3", 1, 1), value1,
+                       {1u, 0u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns3", "oid3", 2, 2)}).get0();
 
       auto value2 = test.create_value(452);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 5, 5), value2,
-                 {1u, 0u, false, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid4", 3, 3), value2,
-                 {1u, 1u, false, InsertType::BEGIN}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 1, 1), value2,
-                 {1u, 0u, false, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3", 5, 5), value2,
+                       {1u, 0u, false, InsertType::BEGIN},
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid4", 3, 3), value2,
+                       {1u, 1u, false, InsertType::BEGIN},
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 1, 1), value2,
+                       {1u, 0u, false, InsertType::BEGIN},
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 2, 2)}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right middle at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value2,
-                 {1u, 0u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value2,
-                 {1u, 1u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), value2,
-                 {1u, 2u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value2,
-                 {1u, 1u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value2,
-                 {1u, 0u, false, InsertType::MID}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value2,
+                       {1u, 0u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value2,
+                       {1u, 1u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), value2,
+                       {1u, 2u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value2,
+                       {1u, 1u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value2,
+                       {1u, 0u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
 
       auto value3 = test.create_value(834);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right middle at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value3,
-                 {0u, 0u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value3,
-                 {0u, 1u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), value3,
-                 {0u, 2u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value3,
-                 {0u, 1u, false, InsertType::MID}).get0();
-      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value3,
-                 {0u, 0u, false, InsertType::MID}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), value3,
+                       {0u, 0u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), value3,
+                       {0u, 1u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), value3,
+                       {0u, 2u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), value3,
+                       {0u, 1u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), value3,
+                       {0u, 0u, false, InsertType::MID},
+                       {make_ghobj(4, 4, 4, "ns2", "oid2", 2, 2)}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right front at stage 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 2, 3), value3,
-                 {0u, 0u, false, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 2, 3), value3,
+                       {0u, 0u, false, InsertType::BEGIN},
+                       {make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3)}).get0();
 
       auto value4 = test.create_value(572);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left back at stage 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), value4,
-                 {0u, 0u, true, InsertType::LAST}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), value4,
+                       {0u, 0u, true, InsertType::LAST},
+                       {make_ghobj(3, 3, 3, "ns2", "oid2", 4, 4)}).get0();
     }
 
     {
@@ -674,14 +758,17 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       auto value = test.create_value(1996);
       logger().info("\n---------------------------------------------"
                     "\nsplit at [0, 0, 0]; insert to left front at stage 2, 1, 0\n");
-      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), value,
-                 {2u, 2u, true, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), value,
+                       {2u, 2u, true, InsertType::BEGIN},
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
       EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
-      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), value,
-                 {2u, 1u, true, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), value,
+                       {2u, 1u, true, InsertType::BEGIN},
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
       EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
-      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), value,
-                 {2u, 0u, true, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), value,
+                       {2u, 0u, true, InsertType::BEGIN},
+                       {make_ghobj(2, 2, 2, "ns2", "oid2", 2, 2)}).get0();
       EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
     }
 
@@ -697,14 +784,17 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       auto value = test.create_value(1640);
       logger().info("\n---------------------------------------------"
                     "\nsplit at [END, END, END]; insert to right at stage 0, 1, 2\n");
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4), value,
-                 {0u, 0u, false, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4), value,
+                       {0u, 0u, false, InsertType::BEGIN},
+                       std::nullopt).get0();
       EXPECT_TRUE(last_split.match_split_pos({1, {0, {1}}}));
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3), value,
-                 {1u, 1u, false, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3), value,
+                       {1u, 1u, false, InsertType::BEGIN},
+                       std::nullopt).get0();
       EXPECT_TRUE(last_split.match_split_pos({1, {1, {0}}}));
-      test.split(make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3), value,
-                 {2u, 2u, false, InsertType::BEGIN}).get0();
+      test.split_merge(make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3), value,
+                       {2u, 2u, false, InsertType::BEGIN},
+                       std::nullopt).get0();
       EXPECT_TRUE(last_split.match_split_pos({2, {0, {0}}}));
     }
   });
