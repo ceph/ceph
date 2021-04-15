@@ -129,6 +129,7 @@ class tree_cursor_t final
   void assert_next_to(const tree_cursor_t&, value_magic_t) const;
 
   /// Erases the key-value pair from tree.
+  template <bool FORCE_MERGE = false>
   future<Ref<tree_cursor_t>> erase(context_t, bool get_next);
 
   MatchKindCMP compare_to(const tree_cursor_t&, value_magic_t) const;
@@ -431,6 +432,7 @@ class Node
 
   node_future<> apply_split_to_parent(context_t, Ref<Node>, bool);
   node_future<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);
+  template <bool FORCE_MERGE = false>
   node_future<> try_merge_adjacent(context_t, bool);
   node_future<> erase_node(context_t, Ref<Node>&&);
   node_future<> fix_parent_index(context_t);
@@ -626,6 +628,7 @@ class LeafNode final : public Node {
    * If get_next is true, returns the cursor pointing to the next key-value
    * pair that followed the erased element, which can be nullptr if is end.
    */
+  template <bool FORCE_MERGE>
   node_future<Ref<tree_cursor_t>> erase(
       context_t, const search_position_t&, bool get_next);
 

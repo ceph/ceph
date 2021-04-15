@@ -71,6 +71,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   static constexpr size_t ALIGNMENT = 4096;
  public:
   ~DummyNodeExtentManager() override = default;
+  std::size_t size() const { return allocate_map.size(); }
+
  protected:
   bool is_read_isolated() const override { return false; }
 

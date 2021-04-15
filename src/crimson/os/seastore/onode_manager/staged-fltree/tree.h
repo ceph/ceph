@@ -110,10 +110,11 @@ class Btree {
       });
     }
 
+    template <bool FORCE_MERGE = false>
     btree_future<Cursor> erase(Transaction& t) {
       assert(!is_end());
       auto this_obj = *this;
-      return p_cursor->erase(p_tree->get_context(t), true
+      return p_cursor->erase<FORCE_MERGE>(p_tree->get_context(t), true
       ).safe_then([this_obj, this] (Ref<tree_cursor_t> next_cursor) {
         assert(p_cursor->is_invalid());
         if (next_cursor) {
