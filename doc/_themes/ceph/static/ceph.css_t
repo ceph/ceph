@@ -16,6 +16,7 @@
 
 .top-bar > div[role=navigation] > ul {
   border-top: 5px solid #9C4850;
+  padding: 0 1em;
 }
 
 .top-bar > div[role=navigation] > hr {
