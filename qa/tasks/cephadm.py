@@ -471,7 +471,7 @@ def ceph_bootstrap(ctx, config):
         # this doesn't block until they are all stopped...
         #ctx.cluster.run(args=['sudo', 'systemctl', 'stop', 'ceph.target'])
 
-        # so, stop them individually
+        # stop the daemons we know
         for role in ctx.daemons.resolve_role_list(None, CEPH_ROLE_TYPES, True):
             cluster, type_, id_ = teuthology.split_role(role)
             try:
@@ -479,6 +479,16 @@ def ceph_bootstrap(ctx, config):
             except Exception:
                 log.exception(f'Failed to stop "{role}"')
                 raise
+
+        # tear down anything left (but leave the logs behind)
+        ctx.cluster.run(args=[
+            'sudo',
+            ctx.cephadm,
+            'rm-cluster',
+            '--fsid', fsid,
+            '--force',
+            '--keep-logs',
+        ])
 
         # clean up /etc/ceph
         ctx.cluster.run(args=[
