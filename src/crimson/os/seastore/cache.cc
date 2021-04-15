@@ -114,7 +114,7 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
     intrusive_ptr_release(&*prev);
     add_to_dirty(next);
   } else if (prev->is_dirty()) {
-    assert(prev->dirty_from == next->dirty_from);
+    assert(prev->get_dirty_from() == next->get_dirty_from());
     assert(prev->primary_ref_list_hook.is_linked());
     auto prev_it = dirty.iterator_to(*prev);
     dirty.insert(prev_it, *next);
@@ -454,17 +454,18 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     CachedExtentRef cand;
-    if (i->dirty_from != journal_seq_t() && i->dirty_from < seq) {
+    if (i->get_dirty_from() != journal_seq_t() && i->get_dirty_from() < seq) {
       logger().debug(
 	"Cache::get_next_dirty_extents: next {}",
 	*i);
-      if (!(ret.empty() || ret.back()->dirty_from <= i->dirty_from)) {
+      if (!(ret.empty() ||
+	    ret.back()->get_dirty_from() <= i->get_dirty_from())) {
 	logger().debug(
 	  "Cache::get_next_dirty_extents: last {}, next {}",
 	  *ret.back(),
 	  *i);
       }
-      assert(ret.empty() || ret.back()->dirty_from <= i->dirty_from);
+      assert(ret.empty() || ret.back()->get_dirty_from() <= i->get_dirty_from());
       bytes_so_far += i->get_length();
       ret.push_back(&*i);
     } else {

@@ -496,7 +496,7 @@ public:
     return out;
   }
 
-  /// returns extents with dirty_from < seq
+  /// returns extents with get_dirty_from() < seq
   using get_next_dirty_extents_ertr = crimson::errorator<>;
   using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
     std::vector<CachedExtentRef>>;
@@ -504,12 +504,12 @@ public:
     journal_seq_t seq,
     size_t max_bytes);
 
-  /// returns std::nullopt if no dirty extents or dirty_from for oldest
+  /// returns std::nullopt if no dirty extents or get_dirty_from() for oldest
   std::optional<journal_seq_t> get_oldest_dirty_from() const {
     if (dirty.empty()) {
       return std::nullopt;
     } else {
-      auto oldest = dirty.begin()->dirty_from;
+      auto oldest = dirty.begin()->get_dirty_from();
       if (oldest == journal_seq_t()) {
 	return std::nullopt;
       } else {
@@ -526,7 +526,7 @@ private:
   /**
    * dirty
    *
-   * holds refs to dirty extents.  Ordered by CachedExtent::dirty_from.
+   * holds refs to dirty extents.  Ordered by CachedExtent::get_dirty_from().
    */
   CachedExtent::list dirty;
 
