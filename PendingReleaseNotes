@@ -11,6 +11,11 @@
 
 >=16.0.0
 --------
+* volumes/nfs: The ``cephfs`` cluster type has been removed from the
+  ``nfs cluster create`` subcommand. Clusters deployed by cephadm can
+  support an NFS export of both ``rgw`` and ``cephfs`` from a single
+  NFS cluster instance.
+
 * mgr-pg_autoscaler: Autoscaler will now start out by scaling each
   pool to have a full complements of pgs from the start and will only
   decrease it when other pools need more pgs due to increased usage.
