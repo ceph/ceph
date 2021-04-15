@@ -94,7 +94,8 @@ struct KeyServerData {
   }
 
   bool get_service_secret(CephContext *cct, uint32_t service_id,
-			  CryptoKey& secret, uint64_t& secret_id) const;
+			  CryptoKey& secret, uint64_t& secret_id,
+			  double& ttl) const;
   bool get_service_secret(CephContext *cct, uint32_t service_id,
 			  uint64_t secret_id, CryptoKey& secret) const;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
@@ -199,7 +200,8 @@ class KeyServer : public KeyStore {
   void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, 
 			       const AuthTicket& parent_ticket,
-			       CephXSessionAuthInfo& info);
+			       CephXSessionAuthInfo& info,
+			       double ttl);
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
 	AuthCapsInfo& caps) const;
 public:
@@ -223,8 +225,8 @@ public:
 			      uint64_t secret_id);
 
   /* get current secret for specific service type */
-  bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
-			  uint64_t& secret_id) const;
+  bool get_service_secret(uint32_t service_id, CryptoKey& secret,
+			  uint64_t& secret_id, double& ttl) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
 			  CryptoKey& secret) const override;
 
