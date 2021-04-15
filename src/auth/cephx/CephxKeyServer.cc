@@ -450,9 +450,9 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
 
 int KeyServer::build_session_auth_info(uint32_t service_id,
 				       const AuthTicket& parent_ticket,
-				       CephXSessionAuthInfo& info,
-				       CryptoKey& service_secret,
-				       uint64_t secret_id)
+				       const CryptoKey& service_secret,
+				       uint64_t secret_id,
+				       CephXSessionAuthInfo& info)
 {
   info.service_secret = service_secret;
   info.secret_id = secret_id;

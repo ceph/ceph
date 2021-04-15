@@ -6199,7 +6199,7 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
     }
 
     ret = key_server.build_session_auth_info(
-      service_id, auth_ticket_info.ticket, info, secret, (uint64_t)-1);
+      service_id, auth_ticket_info.ticket, secret, (uint64_t)-1, info);
     if (ret < 0) {
       dout(0) << __func__ << " failed to build mon session_auth_info "
 	      << cpp_strerror(ret) << dendl;
