@@ -1,6 +1,8 @@
 # # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import unittest
+
 from .. import DEFAULT_VERSION
 from ..api.doc import SchemaType
 from ..controllers import ApiController, ControllerDoc, Endpoint, EndpointDoc, RESTController
@@ -112,3 +114,117 @@ class DocsTest(ControllerTestCase):
     def test_gen_tags(self):
         outcome = Docs()._gen_tags(False)[0]
         self.assertEqual({'description': 'Group description', 'name': 'FooGroup'}, outcome)
+
+
+class TestEndpointDocWrapper(unittest.TestCase):
+    def test_wrong_param_types(self):
+        with self.assertRaises(Exception):
+            EndpointDoc(description=False)
+        with self.assertRaises(Exception):
+            EndpointDoc(group=False)
+        with self.assertRaises(Exception):
+            EndpointDoc(parameters='wrong parameters')
+        with self.assertRaises(Exception):
+            EndpointDoc(responses='wrong response')
+
+        def dummy_func():
+            pass
+        with self.assertRaises(Exception):
+            EndpointDoc(parameters={'parameter': 'wrong parameter'})(dummy_func)
+
+    def test_split_dict(self):
+        edoc = EndpointDoc()
+        data = {
+            'name1': (int, 'description1'),
+            'dict_param': ({'name2': (int, 'description2')}, 'description_dict'),
+            'list_param': ([int, float], 'description_list')
+        }
+        expected = [
+            {
+                'name': 'name1',
+                'description': 'description1',
+                'required': True,
+                'nested': False,
+                'type': int
+            },
+            {
+                'name': 'dict_param',
+                'description': 'description_dict',
+                'required': True,
+                'nested': False,
+                'type': dict,
+                'nested_params': [
+                    {
+                        'name': 'name2',
+                        'description': 'description2',
+                        'required': True,
+                        'nested': True,
+                        'type': int
+                    }
+                ]
+            },
+            {
+                'name': 'list_param',
+                'description':
+                'description_list',
+                'required': True,
+                'nested': False,
+                'type': [int, float]
+            }
+        ]
+
+        res = edoc._split_dict(data, False)
+        self.assertEqual(res, expected)
+
+    def test_split_param(self):
+        edoc = EndpointDoc()
+        name = 'foo'
+        p_type = int
+        description = 'description'
+        default_value = 1
+        expected = {
+            'name': name,
+            'description': description,
+            'required': True,
+            'nested': False,
+            'default': default_value,
+            'type': p_type,
+        }
+        res = edoc._split_param(name, p_type, description, default_value=default_value)
+        self.assertEqual(res, expected)
+
+    def test_split_param_nested(self):
+        edoc = EndpointDoc()
+        name = 'foo'
+        p_type = {'name2': (int, 'description2')}, 'description_dict'
+        description = 'description'
+        default_value = 1
+        expected = {
+            'name': name,
+            'description': description,
+            'required': True,
+            'nested': True,
+            'default': default_value,
+            'type': type(p_type),
+            'nested_params': [
+                {
+                    'name': 'name2',
+                    'description': 'description2',
+                    'required': True,
+                    'nested': True,
+                    'type': int
+                }
+            ]
+        }
+        res = edoc._split_param(name, p_type, description, default_value=default_value,
+                                nested=True)
+        self.assertEqual(res, expected)
+
+    def test_split_list(self):
+        edoc = EndpointDoc()
+        data = [('foo', int), ('foo', float)]
+        expected = []
+
+        res = edoc._split_list(data, True)
+
+        self.assertEqual(res, expected)
