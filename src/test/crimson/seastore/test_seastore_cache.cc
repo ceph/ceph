@@ -66,7 +66,7 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   auto get_transaction() {
-    return make_transaction();
+    return cache.create_transaction();
   }
 
   seastar::future<> set_up_fut() final {
@@ -74,7 +74,7 @@ struct cache_test_t : public seastar_test_suite_t {
     ).safe_then(
       [this] {
 	return seastar::do_with(
-	  make_transaction(),
+	  cache.create_transaction(),
 	  [this](auto &transaction) {
 	    cache.init();
 	    return cache.mkfs(*transaction).safe_then(

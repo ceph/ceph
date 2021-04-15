@@ -243,6 +243,10 @@ struct journal_seq_t {
 };
 WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
 WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
+constexpr journal_seq_t JOURNAL_SEQ_MIN{
+  0,
+  paddr_t{0, 0}
+};
 
 std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq);
 

@@ -90,6 +90,22 @@ public:
   Cache(SegmentManager &segment_manager);
   ~Cache();
 
+  /// Creates empty transaction
+  TransactionRef create_transaction() {
+    return std::make_unique<Transaction>(
+      get_dummy_ordering_handle(),
+      false
+    );
+  }
+
+  /// Creates empty weak transaction
+  TransactionRef create_weak_transaction() {
+    return std::make_unique<Transaction>(
+      get_dummy_ordering_handle(),
+      true
+    );
+  }
+
   /**
    * drop_from_cache
    *
