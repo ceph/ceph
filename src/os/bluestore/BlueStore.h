@@ -1153,6 +1153,7 @@ public:
     void get_omap_tail(std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
 
+#ifdef HAVE_LIBZBD
     // Return the offset of an object on disk.  This function is intended *only*
     // for use with zoned storage devices because in these devices, the objects
     // are laid out contiguously on disk, which is not the case in general.
@@ -1162,6 +1163,8 @@ public:
       return extent_map.extent_map.begin()->blob->
 	  get_blob().calc_offset(0, nullptr);
     }
+#endif
+    
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1579,6 +1582,7 @@ public:
     std::set<OnodeRef> onodes;     ///< these need to be updated/written
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
+#ifdef HAVE_LIBZBD
     // A map from onode to a vector of object offset.  For new objects created
     // in the transaction we append the new offset to the vector, for
     // overwritten objects we append the negative of the previous ondisk offset
@@ -1589,7 +1593,8 @@ public:
     // different zones.  See update_cleaning_metadata function for how this map
     // is used.
     std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
-
+#endif
+    
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
@@ -1662,6 +1667,7 @@ public:
       onodes.erase(o);
     }
 
+#ifdef HAVE_LIBZBD
     void zoned_note_new_object(OnodeRef &o) {
       auto [_, ok] = zoned_onode_to_offset_map.emplace(
 	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->zoned_get_ondisk_starting_offset()}));
@@ -1685,6 +1691,7 @@ public:
 	it->second.push_back(-offset);
       }
     }
+#endif
 
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
@@ -1988,6 +1995,8 @@ public:
       return NULL;
     }
   };
+
+#ifdef HAVE_LIBZBD
   struct ZonedCleanerThread : public Thread {
     BlueStore *store;
     explicit ZonedCleanerThread(BlueStore *s) : store(s) {}
@@ -1996,7 +2005,8 @@ public:
       return nullptr;
     }
   };
-
+#endif
+  
   struct BigDeferredWriteContext {
     uint64_t off = 0;     // original logical offset
     uint32_t b_off = 0;   // blob relative offset
@@ -2087,12 +2097,14 @@ private:
   std::deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
   bool kv_finalize_in_progress = false;
 
+#ifdef HAVE_LIBZBD
   ZonedCleanerThread zoned_cleaner_thread;
   ceph::mutex zoned_cleaner_lock = ceph::make_mutex("BlueStore::zoned_cleaner_lock");
   ceph::condition_variable zoned_cleaner_cond;
   bool zoned_cleaner_started = false;
   bool zoned_cleaner_stop = false;
   std::deque<uint64_t> zoned_cleaner_queue;
+#endif
 
   PerfCounters *logger = nullptr;
 
@@ -2383,11 +2395,13 @@ private:
   int _setup_block_symlink_or_file(std::string name, std::string path, uint64_t size,
 				   bool create);
 
+#ifdef HAVE_LIBZBD
   // Functions related to zoned storage.
   uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
   int _zoned_check_config_settings();
   void _zoned_update_cleaning_metadata(TransContext *txc);
   std::string _zoned_get_prefix(uint64_t offset);
+#endif
 
 public:
   utime_t get_deferred_last_submitted() {
@@ -2458,10 +2472,12 @@ private:
   void _kv_sync_thread();
   void _kv_finalize_thread();
 
+#ifdef HAVE_LIBZBD
   void _zoned_cleaner_start();
   void _zoned_cleaner_stop();
   void _zoned_cleaner_thread();
   void _zoned_clean_zone(uint64_t zone_num);
+#endif
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
   void _deferred_queue(TransContext *txc);
