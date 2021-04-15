@@ -9153,6 +9153,12 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_min(0)
     .set_description("interval to restart failed mirror instances")
     .set_long_description("Interval in seconds to restart failed mirror instances. Setting to zero (0) disables restarting failed mirror instances."),
+
+    Option("cephfs_mirror_mount_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_min(0)
+    .set_description("timeout for mounting primary/seconday ceph file system")
+    .set_long_description("Timeout in seconds for mounting primary or secondary (remote) ceph file system by the cephfs-mirror daemon. Setting this to a higher value could result in the mirror daemon getting stalled when mounting a file system if the cluster is not reachable. This option is used to override the usual client_mount_timeout."),
     });
 }
 
