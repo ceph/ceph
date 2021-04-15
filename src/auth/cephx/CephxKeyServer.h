@@ -220,9 +220,9 @@ public:
 			      CephXSessionAuthInfo& info);
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
-			      CephXSessionAuthInfo& info,
-			      CryptoKey& service_secret,
-			      uint64_t secret_id);
+			      const CryptoKey& service_secret,
+			      uint64_t secret_id,
+			      CephXSessionAuthInfo& info);
 
   /* get current secret for specific service type */
   bool get_service_secret(uint32_t service_id, CryptoKey& secret,
