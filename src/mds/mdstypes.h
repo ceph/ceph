@@ -590,6 +590,7 @@ struct inode_t {
   uint64_t   max_size_ever = 0; // max size the file has ever been
   uint32_t   truncate_seq = 0;
   uint64_t   truncate_size = 0, truncate_from = 0;
+  uint8_t    fscrypt_priv[CEPH_FSCRYPT_PRIVATE_SIZE] = {0};
   uint32_t   truncate_pending = 0;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
@@ -637,7 +638,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(17, 6, bl);
+  ENCODE_START(18, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -693,14 +694,14 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_ephemeral_distributed_pin, bl);
 
   encode(fscrypt, bl);
-
+  encode_raw(fscrypt_priv, bl);
   ENCODE_FINISH(bl);
 }
 
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -804,6 +805,11 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
     fscrypt = 0;
   }
 
+  if (struct_v >= 18) {
+    decode_raw(fscrypt_priv, p);
+  } else {
+    memset(fscrypt_priv, '\0', sizeof(fscrypt_priv));
+  }
   DECODE_FINISH(p);
 }
 

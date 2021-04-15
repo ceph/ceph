@@ -50,6 +50,15 @@ class JSONObj;
 // --------------------------------------
 // ino
 
+/*
+ * The MDS provides some (opaque) per-inode storage that fscrypt-enabled
+ * clients can stash data in.  The Linux fscrypt sources define
+ * FS_CRYPTO_BLOCK_SIZE as 16 bytes, which is a minimum blocksize for
+ * encryption. Allow one block per inode for this, so that that data can
+ * be encrypted.
+ */
+#define CEPH_FSCRYPT_PRIVATE_SIZE	16
+
 typedef uint64_t _inodeno_t;
 
 struct inodeno_t {
