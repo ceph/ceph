@@ -635,7 +635,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(17, 6, bl);
+  ENCODE_START(18, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -691,14 +691,15 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_ephemeral_distributed_pin, bl);
 
   encode(!fscrypt_auth.empty(), bl);
-
+  encode(fscrypt_auth, bl);
+  encode(fscrypt_file, bl);
   ENCODE_FINISH(bl);
 }
 
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -798,9 +799,13 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 
   if (struct_v >= 17) {
     bool fscrypt_flag;
-    decode(fscrypt_flag, p);
+    decode(fscrypt_flag, p); // ignored
   }
 
+  if (struct_v >= 18) {
+    decode(fscrypt_auth, p);
+    decode(fscrypt_file, p);
+  }
   DECODE_FINISH(p);
 }
 
