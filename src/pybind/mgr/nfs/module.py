@@ -9,8 +9,6 @@ from .cluster import NFSCluster
 
 log = logging.getLogger(__name__)
 
-goodchars = '[A-Za-z0-9-_.]'
-
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = []
