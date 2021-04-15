@@ -218,23 +218,26 @@ int CephxServiceHandler::handle_request(
 	break;
       }
 
-      info.ticket.init_timestamps(ceph_clock_now(),
-				  cct->_conf->auth_mon_ticket_ttl);
+      double ttl;
+      if (!key_server->get_service_secret(CEPH_ENTITY_TYPE_AUTH,
+					  info.service_secret, info.secret_id,
+					  ttl)) {
+        ldout(cct, 0) << " could not get service secret for auth subsystem" << dendl;
+        ret = -EIO;
+        break;
+      }
+
+      info.service_id = CEPH_ENTITY_TYPE_AUTH;
       info.ticket.name = entity_name;
       info.ticket.global_id = global_id;
-      info.validity += cct->_conf->auth_mon_ticket_ttl;
+      info.ticket.init_timestamps(ceph_clock_now(), ttl);
+      info.validity.set_from_double(ttl);
 
       key_server->generate_secret(session_key);
 
       info.session_key = session_key;
       if (psession_key) {
 	*psession_key = session_key;
-      }
-      info.service_id = CEPH_ENTITY_TYPE_AUTH;
-      if (!key_server->get_service_secret(CEPH_ENTITY_TYPE_AUTH, info.service_secret, info.secret_id)) {
-        ldout(cct, 0) << " could not get service secret for auth subsystem" << dendl;
-        ret = -EIO;
-        break;
       }
 
       vector<CephXSessionAuthInfo> info_vec;
@@ -296,7 +299,6 @@ int CephxServiceHandler::handle_request(
 		service_id,
 		info.ticket,
 		svc_info);
-	      svc_info.validity += cct->_conf->auth_service_ticket_ttl;
 	      info_vec.push_back(svc_info);
 	    }
 	  }
@@ -366,7 +368,6 @@ int CephxServiceHandler::handle_request(
 	    service_err = r;
 	    continue;
 	  }
-          info.validity += cct->_conf->auth_service_ticket_ttl;
           info_vec.push_back(info);
 	  ++found_services;
         }
