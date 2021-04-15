@@ -767,22 +767,15 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
 class LocalCephManager(CephManager):
-    def __init__(self):
-        # Deliberately skip parent init, only inheriting from it to get
-        # util methods like osd_dump that sit on top of raw_cluster_cmd
-        self.controller = LocalRemote()
-
+    def __init__(self, controller, ctx):
+        self.controller = controller
+        self.ctx = ctx
+        self.cluster = 'ceph'
         # A minority of CephManager fns actually bother locking for when
         # certain teuthology tests want to run tasks in parallel
         self.lock = threading.RLock()
-
-        self.log = lambda x: log.debug(x)
-
-        # Don't bother constructing a map of pools: it should be empty
-        # at test cluster start, and in any case it would be out of date
-        # in no time.  The attribute needs to exist for some of the CephManager
-        # methods to work though.
         self.pools = {}
+        self.log = lambda x: log.debug(x)
 
     def find_remote(self, daemon_type, daemon_id):
         """
@@ -805,6 +798,16 @@ class LocalCephManager(CephManager):
             args.append(watch_channel)
         proc = self.controller.run(args=args, wait=False, stdout=StringIO(),
                                    shell=shell)
+        return proc
+
+    def do_rados(self, cmd, pool=None, namespace=None, remote=None, **kwargs):
+        args = ['rados', '--cluster', self.cluster]
+        if pool is not None:
+            args += ['--pool', pool]
+        if namespace is not None:
+            args += ['--namespace', namespace]
+        args.extend(cmd)
+        proc = self.controller.run(args=args, wait=False, **kwargs)
         return proc
 
     def run_cluster_cmd(self, **kwargs):
@@ -852,12 +855,13 @@ class LocalCephCluster(CephCluster):
     def __init__(self, ctx):
         # Deliberately skip calling CephCluster constructor
         self._ctx = ctx
-        self.mon_manager = LocalCephManager()
+        self.controller = LocalRemote()
+        self.mon_manager = LocalCephManager(self.controller, ctx)
         self._conf = defaultdict(dict)
 
     @property
     def admin_remote(self):
-        return LocalRemote()
+        return self.controller
 
     def get_config(self, key, service_type=None):
         if service_type is None:
@@ -972,9 +976,9 @@ class LocalFilesystem(LocalMDSCluster, Filesystem):
         self.fs_config = fs_config
         self.ec_profile = fs_config.get('ec_profile')
 
-        self.mon_manager = LocalCephManager()
-
         self.client_remote = LocalRemote()
+
+        self.mon_manager = LocalCephManager(self.client_remote, ctx)
 
         self._conf = defaultdict(dict)
 
