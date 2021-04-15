@@ -5053,8 +5053,10 @@ void RGWCopyObj::progress_cb(off_t ofs)
   if (!s->cct->_conf->rgw_copy_obj_progress)
     return;
 
-  if (ofs - last_ofs < s->cct->_conf->rgw_copy_obj_progress_every_bytes)
+  if (ofs - last_ofs <
+      static_cast<off_t>(s->cct->_conf->rgw_copy_obj_progress_every_bytes)) {
     return;
+  }
 
   send_partial_response(ofs);
 
