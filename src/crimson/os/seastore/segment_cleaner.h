@@ -251,6 +251,9 @@ public:
   class ExtentCallbackInterface {
   public:
     virtual ~ExtentCallbackInterface() = default;
+
+    virtual TransactionRef create_transaction() = 0;
+
     /**
      * get_next_dirty_extent
      *

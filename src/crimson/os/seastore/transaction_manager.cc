@@ -73,7 +73,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this](auto addr) {
     segment_cleaner->set_journal_head(addr);
     return seastar::do_with(
-      make_weak_transaction(),
+      create_weak_transaction(),
       [this](auto &t) {
 	return cache->init_cached_extents(*t, [this](auto &t, auto &e) {
 	  return lba_manager->init_cached_extent(t, e);

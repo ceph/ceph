@@ -86,13 +86,13 @@ public:
   close_ertr::future<> close();
 
   /// Creates empty transaction
-  TransactionRef create_transaction() {
-    return make_transaction();
+  TransactionRef create_transaction() final {
+    return cache->create_transaction();
   }
 
-  /// Creates weak transaction
+  /// Creates empty weak transaction
   TransactionRef create_weak_transaction() {
-    return make_weak_transaction();
+    return cache->create_weak_transaction();
   }
 
   /**

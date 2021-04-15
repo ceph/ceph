@@ -113,8 +113,7 @@ public:
 
 private:
   friend class Cache;
-  friend Ref make_transaction();
-  friend Ref make_weak_transaction();
+  friend Ref make_test_transaction();
 
   /**
    * If set, *this may not be used to perform writes and will not provide
@@ -155,17 +154,12 @@ public:
 };
 using TransactionRef = Transaction::Ref;
 
-inline TransactionRef make_transaction() {
+/// Should only be used with dummy staged-fltree node extent manager
+inline TransactionRef make_test_transaction() {
   return std::make_unique<Transaction>(
     get_dummy_ordering_handle(),
     false
   );
-}
-
-inline TransactionRef make_weak_transaction() {
-  return std::make_unique<Transaction>(
-    get_dummy_ordering_handle(),
-    true);
 }
 
 }
