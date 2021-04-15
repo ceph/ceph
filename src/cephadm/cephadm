@@ -5385,10 +5385,13 @@ def command_rm_cluster(ctx):
                       ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
     # rm data
     call_throws(ctx, ['rm', '-rf', ctx.data_dir + '/' + ctx.fsid])
-    # rm logs
-    call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
-    call_throws(ctx, ['rm', '-rf', ctx.log_dir +  # noqa: W504
-                      '/*.wants/ceph-%s@*' % ctx.fsid])
+
+    if not ctx.keep_logs:
+        # rm logs
+        call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
+        call_throws(ctx, ['rm', '-rf', ctx.log_dir +  # noqa: W504
+                          '/*.wants/ceph-%s@*' % ctx.fsid])
+
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
@@ -7478,6 +7481,10 @@ def _get_parser():
         '--force',
         action='store_true',
         help='proceed, even though this may destroy valuable data')
+    parser_rm_cluster.add_argument(
+        '--keep-logs',
+        action='store_true',
+        help='do not remove log files')
 
     parser_run = subparsers.add_parser(
         'run', help='run a ceph daemon, in a container, in the foreground')
