@@ -1,4 +1,12 @@
 tasks:
+- vip:
+
+# make sure cephadm notices the new IP
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+
+# deploy rgw + ingress
 - cephadm.apply:
     specs:
       - service_type: rgw
@@ -16,21 +24,37 @@ tasks:
           backend_service: rgw.foo
           frontend_port: 9000
           monitor_port: 9001
-          virtual_ip: {{VIP}}
+          virtual_ip: "{{VIP0}}/{{VIPPREFIXLEN}}"
+- cephadm.wait_for_service:
+    service: rgw.foo
+- cephadm.wait_for_service:
+    service: ingress.rgw.foo
+
+# take each component down in turn and ensure things still work
 - cephadm.shell:
     host.a:
       - |
-        while ! ceph orch ls | grep ^rgw.foo | grep 4/4; do sleep 1; done
-        while ! ceph orch ls | grep ^ingress.rgw.foo | grep 2/2; do sleep 1; done
-        curl http://{{VIP}}/
+        echo "Check while healthy..."
+        curl http://{{VIP0}}:9000/
 
         # stop each rgw in turn
-        for rgw in `ceph orch ps | grep ^rgw.foo.`; do
+        echo "Check with each rgw stopped in turn..."
+        for rgw in `ceph orch ps | grep ^rgw.foo. | awk '{print $1}'`; do
           ceph orch daemon stop $rgw
-          while ! ceph orch ls | grep ^rgw.foo | grep 3/4; do sleep 1; done
-          curl http://{{VIP}}/
+          while ! ceph orch ps | grep $rgw | grep stopped; do sleep 1 ; done
+          while ! curl http://{{VIP0}}:9000/ ; do sleep 1 ; done
           ceph orch daemon start $rgw
-          while ! ceph orch ls | grep ^rgw.foo | grep 4/4; do sleep 1; done
+          while ! ceph orch ps | grep $rgw | grep running; do sleep 1 ; done
         done
-- sleep:
-    interval: 60
+
+        # stop each haproxy in turn
+        echo "Check with each haproxy down in turn..."
+        for haproxy in `ceph orch ps | grep ^haproxy.rgw.foo. | awk '{print $1}'`; do
+          ceph orch daemon stop $haproxy
+          while ! ceph orch ps | grep $haproxy | grep stopped; do sleep 1 ; done
+          while ! curl http://{{VIP0}}:9000/ ; do sleep 1 ; done
+          ceph orch daemon start $haproxy
+          while ! ceph orch ps | grep $haproxy | grep running; do sleep 1 ; done
+        done
+
+        while ! curl http://{{VIP0}}:9000/ ; do sleep 1 ; done
