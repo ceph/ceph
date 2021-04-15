@@ -22,6 +22,7 @@ from teuthology.config import config as teuth_config
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
+from tasks.vip import subst_vip
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
@@ -958,12 +959,12 @@ def shell(ctx, config):
         if isinstance(cmd, list):
             for c in cmd:
                 _shell(ctx, cluster_name, remote,
-                       ['bash', '-c', c],
+                       ['bash', '-c', subst_vip(ctx, c)],
                        extra_cephadm_args=env)
         else:
             assert isinstance(cmd, str)
             _shell(ctx, cluster_name, remote,
-                   ['bash', '-ex', '-c', cmd],
+                   ['bash', '-ex', '-c', subst_vip(ctx, cmd)],
                    extra_cephadm_args=env)
 
 
@@ -990,6 +991,8 @@ def apply(ctx, config):
 
     specs = config.get('specs', [])
     y = '\n---\n'.join(map(yaml.dump, specs))
+
+    y = subst_vip(ctx, y)
 
     log.info(f'Applying spec:\n{y}')
     _shell(
