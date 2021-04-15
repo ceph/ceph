@@ -108,6 +108,15 @@ int mount(RadosRef cluster, const Filesystem &filesystem, bool cross_check_fscid
     return r;
   }
 
+  // mount timeout applies for local and remote mounts.
+  auto mount_timeout = g_ceph_context->_conf.get_val<std::chrono::seconds>
+    ("cephfs_mirror_mount_timeout").count();
+  r = ceph_set_mount_timeout(cmi, mount_timeout);
+  if (r < 0) {
+    derr << ": mount error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   r = ceph_init(cmi);
   if (r < 0) {
     derr << ": mount error: " << cpp_strerror(r) << dendl;
