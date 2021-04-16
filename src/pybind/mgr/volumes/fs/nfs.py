@@ -869,9 +869,7 @@ class NFSCluster:
                  f"{self.pool_ns}")
 
     @cluster_setter
-    def create_nfs_cluster(self, export_type, cluster_id, placement):
-        if export_type != 'cephfs':
-            return -errno.EINVAL, "", f"Invalid export type: {export_type}"
+    def create_nfs_cluster(self, cluster_id, placement):
         try:
             pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
 
