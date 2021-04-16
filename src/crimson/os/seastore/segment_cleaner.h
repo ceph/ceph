@@ -625,7 +625,6 @@ private:
     }
 
     void maybe_wake_on_space_used() {
-      cleaner.log_gc_state("GCProcess::maybe_wake_on_space_used");
       if (cleaner.gc_should_run()) {
 	wake();
       }
