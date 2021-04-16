@@ -4983,6 +4983,9 @@ int RGWCopyObj::verify_permission(optional_yield y)
 	rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
 				   *md_directive);
 
+      if (tagging_directive) {
+        rgw_add_to_iam_environment(s->env, "s3:x-amz-tagging-directive", *tagging_directive);
+      }
       auto e = dest_iam_policy->eval(s->env, *s->auth.identity,
                                      rgw::IAM::s3PutObject,
                                      ARN(dest_object->get_obj()));
@@ -5096,6 +5099,7 @@ void RGWCopyObj::execute(optional_yield y)
   dest_object->set_atomic(s->obj_ctx);
 
   encode_delete_at_attr(delete_at, attrs);
+  encode_obj_tags_attr(obj_tags.get(), attrs);
 
   if (!s->system_request) { // no quota enforcement for system requests
     // get src object size (cached in obj_ctx from verify_permission())
@@ -5138,6 +5142,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   if_match,
 	   if_nomatch,
 	   attrs_mod,
+     tagging_mod,
 	   copy_if_newer,
 	   attrs,
 	   RGWObjCategory::Main,

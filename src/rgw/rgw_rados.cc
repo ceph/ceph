@@ -2856,6 +2856,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* const char *if_match */
                NULL, /* const char *if_nomatch */
                RGWRados::ATTRSMOD_NONE,
+               RGWRados::ATTRSMOD_NONE,
                true, /* bool copy_if_newer */
                state->attrset,
                RGWObjCategory::Main,
@@ -2950,6 +2951,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        false,         /* bool high_precision_time */
                        nullptr,       /* const char *if_match */
                        nullptr,       /* const char *if_nomatch */
+                       RGWRados::ATTRSMOD_NONE,
                        RGWRados::ATTRSMOD_NONE,
                        true,          /* bool copy_if_newer */
                        no_attrs,
@@ -4177,6 +4179,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               AttrsMod tagging_mod,
                bool copy_if_newer,
                rgw::sal::RGWAttrs& attrs,
                RGWObjCategory category,
@@ -4253,7 +4256,22 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   src_attrs.erase(RGW_ATTR_DELETE_AT);
 
+  bufferlist tagging;
+  if (attrs.find(RGW_ATTR_TAGS) != attrs.end()) {
+    tagging = attrs[RGW_ATTR_TAGS];
+  }
+
   set_copy_attrs(src_attrs, attrs, attrs_mod);
+
+  switch (tagging_mod) {
+    case RGWRados::ATTRSMOD_NONE:
+      attrs[RGW_ATTR_TAGS] = src_attrs[RGW_ATTR_TAGS];
+      break;
+    case RGWRados::ATTRSMOD_REPLACE:
+      attrs[RGW_ATTR_TAGS] = tagging;
+      break;
+  }
+
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
   attrs.erase(RGW_ATTR_SOURCE_ZONE);

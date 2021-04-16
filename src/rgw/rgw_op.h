@@ -1487,6 +1487,8 @@ protected:
   std::string_view copy_source;
   // Not actually required
   std::optional<std::string_view> md_directive;
+  std::optional<std::string_view> tagging_directive;
+  std::unique_ptr <RGWObjTags> obj_tags;
 
   off_t ofs;
   off_t len;
@@ -1505,6 +1507,7 @@ protected:
   ceph::real_time src_mtime;
   ceph::real_time mtime;
   rgw::sal::AttrsMod attrs_mod;
+  rgw::sal::AttrsMod tagging_mod;
   string source_zone;
   string etag;
 
@@ -1532,6 +1535,7 @@ public:
     mod_ptr = NULL;
     unmod_ptr = NULL;
     attrs_mod = rgw::sal::ATTRSMOD_NONE;
+    tagging_mod = rgw::sal::ATTRSMOD_NONE;
     last_ofs = 0;
     olh_epoch = 0;
     copy_if_newer = false;
