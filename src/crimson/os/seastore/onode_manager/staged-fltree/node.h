@@ -435,6 +435,7 @@ class Node
   template <bool FORCE_MERGE = false>
   node_future<> try_merge_adjacent(context_t, bool);
   node_future<> erase_node(context_t, Ref<Node>&&);
+  template <bool FORCE_MERGE = false>
   node_future<> fix_parent_index(context_t);
   node_future<NodeExtentMutable> rebuild_extent(context_t);
   node_future<> retire(context_t, Ref<Node>&&);
@@ -518,8 +519,10 @@ class InternalNode final : public Node {
 
   node_future<> erase_child(context_t, Ref<Node>&&);
 
+  template <bool FORCE_MERGE = false>
   node_future<> fix_index(context_t, Ref<Node>);
 
+  template <bool FORCE_MERGE = false>
   node_future<> apply_children_merge(
       context_t, Ref<Node>&& left, Ref<Node>&& right, bool update_index);
 
