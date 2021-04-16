@@ -114,13 +114,13 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
 
 static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
 			      CephContext* const cct,
-                              rgw::sal::RGWStore* store,
+                              rgw::sal::Store* store,
                               const std::string& uid,
                               const uint32_t perm)
 {
   RGWUserInfo grant_user;
   ACLGrant grant;
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
 
   user = store->get_user(rgw_user(uid));
   if (user->load_by_id(dpp, null_yield) < 0) {
@@ -135,7 +135,7 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
 }
 
 int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
-					     rgw::sal::RGWStore* store,
+					     rgw::sal::Store* store,
                                              const std::vector<std::string>& uids,
                                              const uint32_t perm)
 {
@@ -178,7 +178,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
 
 
 int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
-					 rgw::sal::RGWStore* store,
+					 rgw::sal::Store* store,
                                          const rgw_user& id,
                                          const std::string& name,
                                          const char* read_list,
@@ -303,7 +303,7 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
 }
 
 void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
-						  rgw::sal::RGWStore* store,
+						  rgw::sal::Store* store,
                                                   const std::vector<std::string>& uids,
                                                   const uint32_t perm)
 {
@@ -314,7 +314,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
       grant.set_group(ACL_GROUP_ALL_USERS, perm);
       acl.add_grant(&grant);
     } else  {
-      std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(uid));
+      std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(uid));
 
       if (user->load_by_id(dpp, null_yield) < 0) {
         ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
@@ -330,7 +330,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
 }
 
 bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
-					      rgw::sal::RGWStore* store,
+					      rgw::sal::Store* store,
                                               const rgw_user& id,
                                               const std::string& name,
                                               const std::string& acl_str)

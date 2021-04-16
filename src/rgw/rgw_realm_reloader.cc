@@ -26,7 +26,7 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(rgw::sal::RGWStore*& store, std::map<std::string, std::string>& service_map_meta,
+RGWRealmReloader::RGWRealmReloader(rgw::sal::Store*& store, std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends)
   : store(store),
     service_map_meta(service_map_meta),
@@ -90,7 +90,7 @@ void RGWRealmReloader::reload()
   rgw_log_usage_finalize();
 
   // destroy the existing store
-  RGWStoreManager::close_storage(store);
+  StoreManager::close_storage(store);
   store = nullptr;
 
   ldout(cct, 1) << "Store closed" << dendl;
@@ -106,7 +106,7 @@ void RGWRealmReloader::reload()
   while (!store) {
     // recreate and initialize a new store
     store =
-      RGWStoreManager::get_storage(&dp, cct,
+      StoreManager::get_storage(&dp, cct,
 				   "rados",
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
@@ -117,7 +117,7 @@ void RGWRealmReloader::reload()
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
-    rgw::sal::RGWStore* store_cleanup = nullptr;
+    rgw::sal::Store* store_cleanup = nullptr;
     {
       std::unique_lock lock{mutex};
 
@@ -150,7 +150,7 @@ void RGWRealmReloader::reload()
       ldout(cct, 4) << "Got another notification, restarting RGWRados "
           "initialization." << dendl;
 
-      RGWStoreManager::close_storage(store_cleanup);
+      StoreManager::close_storage(store_cleanup);
     }
   }
 

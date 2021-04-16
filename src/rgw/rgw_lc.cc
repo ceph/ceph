@@ -239,7 +239,7 @@ void *RGWLC::LCWorker::entry() {
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, rgw::sal::RGWStore *_store) {
+void RGWLC::initialize(CephContext *_cct, rgw::sal::Store* _store) {
   cct = _cct;
   store = _store;
   sal_lc = store->get_lifecycle();
@@ -368,12 +368,12 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days,
   return (timediff >= cmp);
 }
 
-static bool pass_object_lock_check(rgw::sal::RGWStore* store, rgw::sal::RGWObject* obj, RGWObjectCtx& ctx, const DoutPrefixProvider *dpp)
+static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj, RGWObjectCtx& ctx, const DoutPrefixProvider *dpp)
 {
   if (!obj->get_bucket()->get_info().obj_lock_enabled()) {
     return true;
   }
-  std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op = obj->get_read_op(&ctx);
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op(&ctx);
   int ret = read_op->prepare(null_yield, dpp);
   if (ret < 0) {
     if (ret == -ENOENT) {
@@ -416,17 +416,17 @@ static bool pass_object_lock_check(rgw::sal::RGWStore* store, rgw::sal::RGWObjec
 }
 
 class LCObjsLister {
-  rgw::sal::RGWStore *store;
-  rgw::sal::RGWBucket* bucket;
-  rgw::sal::RGWBucket::ListParams list_params;
-  rgw::sal::RGWBucket::ListResults list_results;
+  rgw::sal::Store* store;
+  rgw::sal::Bucket* bucket;
+  rgw::sal::Bucket::ListParams list_params;
+  rgw::sal::Bucket::ListResults list_results;
   string prefix;
   vector<rgw_bucket_dir_entry>::iterator obj_iter;
   rgw_bucket_dir_entry pre_obj;
   int64_t delay_ms;
 
 public:
-  LCObjsLister(rgw::sal::RGWStore *_store, rgw::sal::RGWBucket* _bucket) :
+  LCObjsLister(rgw::sal::Store* _store, rgw::sal::Bucket* _bucket) :
       store(_store), bucket(_bucket) {
     list_params.list_versions = bucket->versioned();
     list_params.allow_unordered = true;
@@ -508,13 +508,13 @@ struct op_env {
   using LCWorker = RGWLC::LCWorker;
 
   lc_op op;
-  rgw::sal::RGWStore *store;
+  rgw::sal::Store* store;
   LCWorker* worker;
-  rgw::sal::RGWBucket* bucket;
+  rgw::sal::Bucket* bucket;
   LCObjsLister& ol;
 
-  op_env(lc_op& _op, rgw::sal::RGWStore *_store, LCWorker* _worker,
-	 rgw::sal::RGWBucket* _bucket, LCObjsLister& _ol)
+  op_env(lc_op& _op, rgw::sal::Store* _store, LCWorker* _worker,
+	 rgw::sal::Bucket* _bucket, LCObjsLister& _ol)
     : op(_op), store(_store), worker(_worker), bucket(_bucket),
       ol(_ol) {}
 }; /* op_env */
@@ -529,12 +529,12 @@ struct lc_op_ctx {
   boost::optional<std::string> next_key_name;
   ceph::real_time effective_mtime;
 
-  rgw::sal::RGWStore *store;
-  rgw::sal::RGWBucket* bucket;
+  rgw::sal::Store* store;
+  rgw::sal::Bucket* bucket;
   lc_op& op; // ok--refers to expanded env.op
   LCObjsLister& ol;
 
-  std::unique_ptr<rgw::sal::RGWObject> obj;
+  std::unique_ptr<rgw::sal::Object> obj;
   RGWObjectCtx rctx;
   const DoutPrefixProvider *dpp;
   WorkQ* wq;
@@ -574,8 +574,8 @@ static int remove_expired_obj(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool
     obj_key.instance = "null";
   }
 
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
-  std::unique_ptr<rgw::sal::RGWObject> obj;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  std::unique_ptr<rgw::sal::Object> obj;
 
   ret = store->get_bucket(nullptr, bucket_info, &bucket);
   if (ret < 0) {
@@ -583,7 +583,7 @@ static int remove_expired_obj(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool
   }
 
   obj = bucket->get_object(obj_key);
-  std::unique_ptr<rgw::sal::RGWObject::DeleteOp> del_op = obj->get_delete_op(&oc.rctx);
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(&oc.rctx);
 
   del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner.set_id(rgw_user {meta.owner});
@@ -820,14 +820,14 @@ static inline bool worker_should_stop(time_t stop_at, bool once)
   return !once && stop_at < time(nullptr);
 }
 
-int RGWLC::handle_multipart_expiration(rgw::sal::RGWBucket* target,
+int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 				       const multimap<string, lc_op>& prefix_map,
 				       LCWorker* worker, time_t stop_at, bool once)
 {
   MultipartMetaFilter mp_filter;
   int ret;
-  rgw::sal::RGWBucket::ListParams params;
-  rgw::sal::RGWBucket::ListResults results;
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
   auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   params.list_versions = false;
   /* lifecycle processing does not depend on total order, so can
@@ -913,9 +913,9 @@ int RGWLC::handle_multipart_expiration(rgw::sal::RGWBucket* target,
   return 0;
 }
 
-static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::RGWObject* obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
+static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
 {
-  std::unique_ptr<rgw::sal::RGWObject::ReadOp> rop = obj->get_read_op(&ctx);
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op(&ctx);
 
   return rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, null_yield);
 }
@@ -1432,7 +1432,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 			     time_t stop_at, bool once)
 {
   RGWLifecycleConfiguration  config(cct);
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   string no_ns, list_versions;
   vector<rgw_bucket_dir_entry> objs;
   vector<std::string> result;
@@ -1949,7 +1949,7 @@ static std::string get_lc_shard_name(const rgw_bucket& bucket){
 }
 
 template<typename F>
-static int guard_lc_modify(rgw::sal::RGWStore* store,
+static int guard_lc_modify(rgw::sal::Store* store,
 			   rgw::sal::Lifecycle* sal_lc,
 			   const rgw_bucket& bucket, const string& cookie,
 			   const F& f) {
@@ -1998,11 +1998,11 @@ static int guard_lc_modify(rgw::sal::RGWStore* store,
   return ret;
 }
 
-int RGWLC::set_bucket_config(rgw::sal::RGWBucket* bucket,
-                         const rgw::sal::RGWAttrs& bucket_attrs,
+int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
+                         const rgw::sal::Attrs& bucket_attrs,
                          RGWLifecycleConfiguration *config)
 {
-  rgw::sal::RGWAttrs attrs = bucket_attrs;
+  rgw::sal::Attrs attrs = bucket_attrs;
   bufferlist lc_bl;
   config->encode(lc_bl);
 
@@ -2025,10 +2025,10 @@ int RGWLC::set_bucket_config(rgw::sal::RGWBucket* bucket,
   return ret;
 }
 
-int RGWLC::remove_bucket_config(rgw::sal::RGWBucket* bucket,
-                                const rgw::sal::RGWAttrs& bucket_attrs)
+int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
+                                const rgw::sal::Attrs& bucket_attrs)
 {
-  rgw::sal::RGWAttrs attrs = bucket_attrs;
+  rgw::sal::Attrs attrs = bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
   int ret = bucket->set_instance_attrs(this, attrs, null_yield);
 
@@ -2058,9 +2058,9 @@ RGWLC::~RGWLC()
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(rgw::sal::RGWStore* store,
+int fix_lc_shard_entry(rgw::sal::Store* store,
 		       rgw::sal::Lifecycle* sal_lc,
-		       rgw::sal::RGWBucket* bucket)
+		       rgw::sal::Bucket* bucket)
 {
   if (auto aiter = bucket->get_attrs().find(RGW_ATTR_LC);
       aiter == bucket->get_attrs().end()) {

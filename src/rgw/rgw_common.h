@@ -45,10 +45,10 @@ namespace ceph {
 }
 
 namespace rgw::sal {
-  class RGWUser;
-  class RGWBucket;
-  class RGWObject;
-  using RGWAttrs = std::map<std::string, ceph::buffer::list>;
+  class User;
+  class Bucket;
+  class Object;
+  using Attrs = std::map<std::string, ceph::buffer::list>;
 }
 
 using ceph::crypto::MD5;
@@ -1529,11 +1529,11 @@ struct req_state : DoutPrefixProvider {
   string bucket_tenant;
   string bucket_name;
 
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
-  std::unique_ptr<rgw::sal::RGWObject> object;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  std::unique_ptr<rgw::sal::Object> object;
   string src_tenant_name;
   string src_bucket_name;
-  std::unique_ptr<rgw::sal::RGWObject> src_object;
+  std::unique_ptr<rgw::sal::Object> src_object;
   ACLOwner bucket_owner;
   ACLOwner owner;
 
@@ -1552,7 +1552,7 @@ struct req_state : DoutPrefixProvider {
 
   bool has_bad_meta{false};
 
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
 
   struct {
     /* TODO(rzarzynski): switch out to the static_ptr for both members. */
@@ -1641,7 +1641,7 @@ struct req_state : DoutPrefixProvider {
   ~req_state();
 
 
-  void set_user(std::unique_ptr<rgw::sal::RGWUser>& u) { user.swap(u); }
+  void set_user(std::unique_ptr<rgw::sal::User>& u) { user.swap(u); }
   bool is_err() const { return err.is_err(); }
 
   // implements DoutPrefixProvider
@@ -2167,7 +2167,7 @@ extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, st
 					       int perm);
 extern int verify_object_lock(
   const DoutPrefixProvider* dpp,
-  const rgw::sal::RGWAttrs& attrs,
+  const rgw::sal::Attrs& attrs,
   const bool bypass_perm,
   const bool bypass_governance_mode);
 

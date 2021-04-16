@@ -14,7 +14,7 @@
 #include "rgw_acl.h"
 
 class RGWUserCtl;
-namespace rgw { namespace sal { class RGWStore; } }
+namespace rgw { namespace sal { class Store; } }
 
 class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
@@ -84,7 +84,7 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
-  int rebuild(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, ACLOwner *owner,
+  int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Store* store, ACLOwner *owner,
 	      RGWAccessControlPolicy& dest, std::string &err_msg);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
@@ -98,7 +98,7 @@ public:
     int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
     return ret;
   }
-  int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
+  int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 			  const RGWEnv *env, ACLOwner& _owner);
 };
 

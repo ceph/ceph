@@ -374,7 +374,7 @@ public:
 
 void RGWPSCreateNotif_ObjStore::execute(optional_yield y)
 {
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
 
   auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->create_notification(topic_name, events, y);
@@ -411,7 +411,7 @@ void RGWPSDeleteNotif_ObjStore::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->remove_notification(topic_name, y);
   if (op_ret < 0) {
@@ -450,7 +450,7 @@ public:
 
 void RGWPSListNotifs_ObjStore::execute(optional_yield y)
 {
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->get_topics(&result);
   if (op_ret < 0) {
@@ -496,7 +496,7 @@ public:
 };
 
 // factory for ceph specific PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::RGWStore *store,
+RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::Store* store,
 						struct req_state* const s,
 						const rgw::auth::StrategyRegistry& auth_registry,
 						const std::string& frontend_prefix)

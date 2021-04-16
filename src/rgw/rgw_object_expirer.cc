@@ -32,16 +32,16 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static rgw::sal::RGWStore *store = NULL;
+static rgw::sal::Store* store = NULL;
 
 class StoreDestructor {
-  rgw::sal::RGWStore *store;
+  rgw::sal::Store* store;
 
 public:
-  explicit StoreDestructor(rgw::sal::RGWStore *_s) : store(_s) {}
+  explicit StoreDestructor(rgw::sal::Store* _s) : store(_s) {}
   ~StoreDestructor() {
     if (store) {
-      RGWStoreManager::close_storage(store);
+      StoreManager::close_storage(store);
     }
   }
 };
@@ -81,7 +81,7 @@ int main(const int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
-  store = RGWStoreManager::get_storage(&dp, g_ceph_context, "rados", false, false, false, false, false);
+  store = StoreManager::get_storage(&dp, g_ceph_context, "rados", false, false, false, false, false);
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;

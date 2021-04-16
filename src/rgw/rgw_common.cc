@@ -1496,7 +1496,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s
 }
 
 
-int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::RGWAttrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
+int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::Attrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
   auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
   if (aiter != attrs.end()) {
     RGWObjectRetention obj_retention;

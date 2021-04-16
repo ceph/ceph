@@ -13,7 +13,7 @@
 
 #include "rgw/rgw_rados.h"
 
-namespace rgw { namespace sal { class RGWStore; } }
+namespace rgw { namespace sal { class Store; } }
 
 class RGWRole
 {
@@ -28,7 +28,7 @@ class RGWRole
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 
   CephContext *cct;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   string id;
   string name;
   string path;
@@ -50,7 +50,7 @@ class RGWRole
 
 public:
   RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store,
+          rgw::sal::Store* store,
           string name,
           string path,
           string trust_policy,
@@ -73,7 +73,7 @@ public:
   }
 
   RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store,
+          rgw::sal::Store* store,
           string name,
           string tenant)
   : cct(cct),
@@ -84,14 +84,14 @@ public:
   }
 
   RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store,
+          rgw::sal::Store* store,
           string id)
   : cct(cct),
     store(store),
     id(std::move(id)) {}
 
   RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store)
+          rgw::sal::Store* store)
   : cct(cct),
     store(store) {}
 
@@ -158,7 +158,7 @@ public:
   static const string& get_info_oid_prefix();
   static const string& get_path_oid_prefix();
   static int get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
-				      rgw::sal::RGWStore *store,
+				      rgw::sal::Store* store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,

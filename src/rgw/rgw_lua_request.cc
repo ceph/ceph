@@ -24,7 +24,7 @@ constexpr const char* RequestLogAction{"Log"};
 
 int RequestLog(lua_State* L) 
 {
-  const auto store = reinterpret_cast<rgw::sal::RGWRadosStore*>(lua_touserdata(L, lua_upvalueindex(1)));
+  const auto store = reinterpret_cast<rgw::sal::RadosStore*>(lua_touserdata(L, lua_upvalueindex(1)));
   const auto rest = reinterpret_cast<RGWREST*>(lua_touserdata(L, lua_upvalueindex(2)));
   const auto olog = reinterpret_cast<OpsLogSocket*>(lua_touserdata(L, lua_upvalueindex(3)));
   const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(4)));
@@ -171,7 +171,7 @@ struct BucketMetaTable : public EmptyMetaTable {
   static std::string TableName() {return "Bucket";}
   static std::string Name() {return TableName() + "Meta";}
 
-  using Type = rgw::sal::RGWBucket;
+  using Type = rgw::sal::Bucket;
 
   static int IndexClosure(lua_State* L) {
     const auto bucket = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
@@ -213,7 +213,7 @@ struct ObjectMetaTable : public EmptyMetaTable {
   static const std::string TableName() {return "Object";}
   static std::string Name() {return TableName() + "Meta";}
   
-  using Type = rgw::sal::RGWObject;
+  using Type = rgw::sal::Object;
 
   static int IndexClosure(lua_State* L) {
     const auto obj = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(1)));
@@ -769,7 +769,7 @@ struct RequestMetaTable : public EmptyMetaTable {
 };
 
 int execute(
-    rgw::sal::RGWStore* store,
+    rgw::sal::Store* store,
     RGWREST* rest,
     OpsLogSocket* olog,
     req_state* s, 

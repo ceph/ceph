@@ -368,7 +368,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
                                               const string& display_name,
                                               RGWUserInfo& user_info) const      /* out */
 {
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(acct_user);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(acct_user);
   user->get_info().display_name = display_name;
   user->get_info().type = TYPE_WEB;
   user->get_info().max_buckets =
@@ -392,7 +392,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(federated_user);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(federated_user);
 
   //Check in oidc namespace
   if (user->load_by_id(dpp, null_yield) >= 0) {
@@ -591,7 +591,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
     new_acct_user.tenant = new_acct_user.id;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(new_acct_user);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(new_acct_user);
   user->get_info().display_name = info.acct_name;
   if (info.acct_type) {
     //ldap/keystone for s3 users
@@ -622,7 +622,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   auto implicit_value = implicit_tenant_context.get_value();
   bool implicit_tenant = implicit_value.implicit_tenants_for_(implicit_tenant_bit);
   bool split_mode = implicit_value.is_split_mode();
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
 
   /* Normally, empty "tenant" field of acct_user means the authenticated
    * identity has the legacy, global tenant. However, due to inclusion

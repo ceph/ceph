@@ -409,7 +409,7 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
   }
 }
 
-RGWDataAccess::RGWDataAccess(rgw::sal::RGWStore *_store) : store(_store)
+RGWDataAccess::RGWDataAccess(rgw::sal::Store* _store) : store(_store)
 {
 }
 
@@ -433,7 +433,7 @@ int RGWDataAccess::Bucket::finish_init()
 
 int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = sd->store->get_bucket(dpp, nullptr, tenant, name, &bucket, y);
   if (ret < 0) {
     return ret;
@@ -466,7 +466,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
                                const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
-  rgw::sal::RGWStore *store = sd->store;
+  rgw::sal::Store* store = sd->store;
   CephContext *cct = store->ctx();
 
   string tag;
@@ -477,9 +477,9 @@ int RGWDataAccess::Object::put(bufferlist& data,
   rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   RGWObjectCtx obj_ctx(store);
-  std::unique_ptr<rgw::sal::RGWBucket> b;
+  std::unique_ptr<rgw::sal::Bucket> b;
   store->get_bucket(NULL, bucket_info, &b);
-  std::unique_ptr<rgw::sal::RGWObject> obj = b->get_object(key);
+  std::unique_ptr<rgw::sal::Object> obj = b->get_object(key);
 
   auto& owner = bucket->policy.get_owner();
 

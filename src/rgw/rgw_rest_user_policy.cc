@@ -118,7 +118,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
 
   bufferlist bl = bufferlist::static_from_string(policy);
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
 
   op_ret = user->load_by_id(s, s->yield);
   if (op_ret < 0) {
@@ -126,7 +126,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
     return;
   }
 
-  rgw::sal::RGWAttrs uattrs;
+  rgw::sal::Attrs uattrs;
   op_ret = user->read_attrs(s, s->yield, &uattrs);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -200,8 +200,8 @@ void RGWGetUserPolicy::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
-  rgw::sal::RGWAttrs uattrs;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  rgw::sal::Attrs uattrs;
   op_ret = user->read_attrs(s, s->yield, &uattrs);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
@@ -264,8 +264,8 @@ void RGWListUserPolicies::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
-  rgw::sal::RGWAttrs uattrs;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  rgw::sal::Attrs uattrs;
   op_ret = user->read_attrs(s, s->yield, &uattrs);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
@@ -326,14 +326,14 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
   op_ret = user->load_by_id(s, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
-  rgw::sal::RGWAttrs uattrs;
+  rgw::sal::Attrs uattrs;
   op_ret = user->read_attrs(this, s->yield, &uattrs);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
