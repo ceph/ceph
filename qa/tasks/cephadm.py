@@ -481,14 +481,17 @@ def ceph_bootstrap(ctx, config):
                 raise
 
         # tear down anything left (but leave the logs behind)
-        ctx.cluster.run(args=[
-            'sudo',
-            ctx.cephadm,
-            'rm-cluster',
-            '--fsid', fsid,
-            '--force',
-            '--keep-logs',
-        ])
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                ctx.cephadm,
+                'rm-cluster',
+                '--fsid', fsid,
+                '--force',
+                '--keep-logs',
+            ],
+            check_status=False,  # may fail if upgrading from old cephadm
+        )
 
         # clean up /etc/ceph
         ctx.cluster.run(args=[
