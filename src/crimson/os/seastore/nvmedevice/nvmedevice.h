@@ -24,6 +24,85 @@ namespace ceph {
 
 namespace crimson::os::seastore::nvme_device {
 
+/*
+ * NVMe protocol structures (nvme_XX, identify_XX)
+ *
+ * All structures relative to NVMe protocol are following NVMe protocol v1.4
+ * (latest). NVMe is protocol for fast interfacing between user and SSD device.
+ * We selectively adopted features among various NVMe features to ease
+ * implementation. And also, NVMeBlockDevice provides generic command submission
+ * APIs for IO and Admin commands. Please use pass_through_io() and pass_admin()
+ * to do it.
+ *
+ * For more information about NVMe protocol, refer https://nvmexpress.org/
+ */
+
+struct nvme_identify_command_t {
+  uint32_t common_dw[10];
+  uint32_t cns : 8;
+  uint32_t reserved : 8;
+  uint32_t cntroller_id : 16;
+
+  static const uint8_t CNS_NAMESPACE = 0x00;
+  static const uint8_t CNS_CONTROLLER = 0x01;
+};
+
+struct nvme_admin_command_t {
+  union
+  {
+    nvme_passthru_cmd common_cmd;
+    nvme_identify_command_t identify_cmd;
+  };
+
+  static const uint8_t OPCODE_IDENTIFY = 0x06;
+};
+
+struct nvme_version_t {
+  uint32_t major_ver : 16;
+  uint32_t minor_ver : 8;
+  uint32_t tertiary_ver : 8;
+};
+
+struct admin_command_support_t {
+  uint16_t unused : 5;
+  uint16_t support_directives : 1;
+  uint16_t unused2 : 10;
+};
+
+struct identify_controller_data_t {
+  union
+  {
+    struct
+    {
+      uint8_t raw[1024];
+    };
+    struct
+    {
+      uint8_t unused[80];
+      nvme_version_t version;
+      uint8_t unused2[172];
+      admin_command_support_t oacs;
+    };
+  };
+};
+
+struct identify_namespace_data_t {
+  union
+  {
+    struct
+    {
+      uint8_t raw[4096];
+    };
+    struct
+    {
+      uint8_t unused[64];
+      uint16_t npwg;
+      uint16_t npwa;
+    };
+  };
+};
+
+using NVMePassThroughCommand = nvme_passthru_cmd;
 
 using read_ertr = crimson::errorator<
   crimson::ct_error::input_output_error,
@@ -44,6 +123,11 @@ using open_ertr = crimson::errorator<
 
 using nvme_command_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
+
+struct io_context_t {
+  iocb cb;
+  bool done = false;
+};
 
 /*
  * Interface between NVMe SSD and its user.
@@ -95,9 +179,17 @@ public:
     uint64_t offset,
     bufferptr &bptr) = 0;
 
+  /*
+   * Multi-stream write
+   *
+   * Give hint to device about classification of data whose life time is similar
+   * with each other. Data with same stream value will be managed together in
+   * SSD for better write performance.
+   */
   virtual write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &bptr) = 0;
+    bufferptr &bptr,
+    uint16_t stream = 0) = 0;
 
   // TODO
   virtual int discard(uint64_t offset, uint64_t len) { return 0; }
@@ -105,9 +197,104 @@ public:
   virtual open_ertr::future<> open(
       const std::string& path,
       seastar::open_flags mode) = 0;
-
   virtual seastar::future<> close() = 0;
 
+  /*
+   * For passsing through nvme IO or Admin command to SSD
+   * Caller can construct and execute its own nvme command
+   */
+  virtual nvme_command_ertr::future<> pass_through_io(
+    NVMePassThroughCommand& command) { return nvme_command_ertr::now(); }
+  virtual nvme_command_ertr::future<> pass_admin(
+    nvme_admin_command_t& command) { return nvme_command_ertr::now(); }
+
+  /*
+   * End-to-End Data Protection
+   *
+   * NVMe device keeps track of data integrity similar with checksum. Client can
+   * offload checksuming to NVMe device to reduce its CPU utilization
+   */
+   virtual write_ertr::future<> protected_write(
+    uint64_t offset,
+    bufferptr &bptr,
+    uint16_t stream = 0) { return write_ertr::now(); }
+
+  /*
+   * Data Health
+   *
+   * Returns list of LBAs which have almost corrupted data. Data of the LBAs
+   * will be corrupted very soon. Caller can overwrite, unmap or refresh data to
+   * protect data
+   */
+   virtual nvme_command_ertr::future<> get_data_health(
+     std::list<uint64_t>& fragile_lbas) { return nvme_command_ertr::now(); }
+
+  /*
+   * Recovery Level
+   *
+   * Regulate magnitude of SSD-internal data recovery. Caller can get good read
+   * latency with lower magnitude.
+   */
+   virtual nvme_command_ertr::future<> set_data_recovery_level(
+     uint32_t level) { return nvme_command_ertr::now(); }
+
+  /*
+   * Predictable Latency
+   *
+   * NVMe device can guarantee IO latency within pre-defined time window. This
+   * functionality will be analyzed soon.
+   */
+};
+
+/*
+ * Implementation of NVMeBlockDevice with POSIX APIs
+ *
+ * NormalNBD provides NVMe SSD interfaces through POSIX APIs which is generally
+ * available at most operating environment.
+ */
+class NormalNBD : public NVMeBlockDevice {
+public:
+  NormalNBD() {}
+  ~NormalNBD() override {}
+
+  open_ertr::future<> open(
+    const std::string &in_path,
+    seastar::open_flags mode) override;
+
+  write_ertr::future<> write(
+    uint64_t offset,
+    bufferptr &bptr,
+    uint16_t stream = 0) override;
+
+  read_ertr::future<> read(
+    uint64_t offset,
+    bufferptr &bptr) override;
+
+  nvme_command_ertr::future<> pass_through_io(
+    NVMePassThroughCommand& command) override;
+
+  nvme_command_ertr::future<> pass_admin(
+    nvme_admin_command_t& command) override;
+
+  seastar::future<> close() override;
+
+private:
+  seastar::file_desc fd = seastar::file_desc::from_fd(-1);
+  std::vector<seastar::file_desc> stream_fd;
+  nvme_version_t protocol_version;
+  bool support_multistream = false;
+  std::vector<::io_context_t> ctx;
+  std::thread completion_poller;
+  bool exit = false;
+
+  uint32_t write_life_not_set = 0;
+  uint32_t write_life_max = 1;
+
+  nvme_command_ertr::future<> identify_controller(
+    identify_controller_data_t& controller_data);
+  nvme_command_ertr::future<> identify_namespace(
+    identify_namespace_data_t& namespace_data);
+  void open_for_io(const std::string& in_path, seastar::open_flags mode);
 };
 
 
@@ -122,17 +309,18 @@ public:
     }
   }
 
-  open_ertr::future<> open(const std::string &in_path, seastar::open_flags mode);
+  open_ertr::future<> open(const std::string &in_path, seastar::open_flags mode) override;
 
   write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &bptr);
+    bufferptr &bptr,
+    uint16_t stream = 0) override;
 
   read_ertr::future<> read(
     uint64_t offset,
-    bufferptr &bptr);
+    bufferptr &bptr) override;
 
-  seastar::future<> close();
+  seastar::future<> close() override;
 
   char *buf;
   size_t size;

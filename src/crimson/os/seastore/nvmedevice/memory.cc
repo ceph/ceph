@@ -44,7 +44,8 @@ TestMemory::open(const std::string &in_path, seastar::open_flags mode)
 write_ertr::future<>
 TestMemory::write(
   uint64_t offset,
-  bufferptr &bptr)
+  bufferptr &bptr,
+  uint16_t stream)
 {
   ceph_assert(buf);
   logger().debug(
