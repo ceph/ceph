@@ -1734,7 +1734,7 @@ void CInode::decode_lock_idft(bufferlist::const_iterator& p)
 {
   inode_ptr _inode;
 
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   if (is_auth()) {
     bool replica_dirty;
     decode(replica_dirty, p);
@@ -1786,7 +1786,7 @@ void CInode::decode_lock_idft(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ifile(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   if (is_auth()) {
     encode(get_inode()->version, bl); 
     encode(get_inode()->ctime, bl); 
@@ -1800,6 +1800,7 @@ void CInode::encode_lock_ifile(bufferlist& bl)
       encode(get_inode()->truncate_size, bl); 
       encode(get_inode()->client_ranges, bl); 
       encode(get_inode()->inline_data, bl); 
+      encode_raw(get_inode()->fscrypt_priv, bl);
     }    
   } else {
     // treat flushing as dirty when rejoining cache
@@ -1852,6 +1853,8 @@ void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
       decode(_inode->truncate_size, p);
       decode(_inode->client_ranges, p);
       decode(_inode->inline_data, p);
+      if (struct_v >= 2)
+	decode_raw(_inode->fscrypt_priv, p);
     }
   } else {
     bool replica_dirty;
