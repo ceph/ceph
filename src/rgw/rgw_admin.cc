@@ -2753,8 +2753,6 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
                      time_t *pofs)
 {
 #define MAX_TOTP_SKEW_HOURS (24 * 7)
-  ceph_assert(pins.size() == 2);
-
   time_t start_time = ceph::real_clock::to_time_t(now);
   time_t time_ofs = 0, time_ofs_abs = 0;
   time_t step_size = totp.step_size;
@@ -9121,6 +9119,7 @@ next:
 
     if (totp_pin.size() != 2) {
       cerr << "ERROR: missing two --totp-pin params (--totp-pin=<first> --totp-pin=<second>)" << std::endl;
+      return EINVAL;
     }
 
     rados::cls::otp::otp_info_t config;
