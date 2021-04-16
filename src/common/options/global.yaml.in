@@ -3136,7 +3136,6 @@ options:
   type: float
   level: advanced
   default: 72_hr
-  default: 12_hr
   with_legacy: true
 - name: auth_service_ticket_ttl
   type: float
