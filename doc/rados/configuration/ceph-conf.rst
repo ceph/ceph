@@ -198,7 +198,7 @@ configuration value is used. Ceph metavariables are similar to variable expansio
 
 Ceph supports the following metavariables: 
 
-.. confval:: $cluster
+.. describe:: $cluster
 
    Expands to the Ceph Storage Cluster name. Useful when running
    multiple Ceph Storage Clusters on the same hardware.
@@ -206,13 +206,13 @@ Ceph supports the following metavariables:
    :example: ``/etc/ceph/$cluster.keyring``
    :default: ``ceph``
 
-.. confval:: $type
+.. describe:: $type
 
    Expands to a daemon or process type (e.g., ``mds``, ``osd``, or ``mon``)
 
    :example: ``/var/lib/ceph/$type``
 
-.. confval:: $id
+.. describe:: $id
 
    Expands to the daemon or client identifier. For
    ``osd.0``, this would be ``0``; for ``mds.a``, it would
@@ -220,17 +220,17 @@ Ceph supports the following metavariables:
 
    :example: ``/var/lib/ceph/$type/$cluster-$id``
 
-.. confval:: $host
+.. describe:: $host
 
    Expands to the host name where the process is running.
 
-.. confval:: $name
+.. describe:: $name
 
    Expands to ``$type.$id``.
 
    :example: ``/var/run/ceph/$cluster-$name.asok``
 
-.. confval:: $pid
+.. describe:: $pid
 
    Expands to daemon pid.
 
