@@ -4517,18 +4517,6 @@ options:
   level: advanced
   default: 500
   with_legacy: true
-- name: osd_mon_ack_timeout
-  type: float
-  level: advanced
-  default: 30
-- name: osd_stats_ack_timeout_factor
-  type: float
-  level: advanced
-  default: 2
-- name: osd_stats_ack_timeout_decay
-  type: float
-  level: advanced
-  default: 0.9
 # Max number of snap intervals to report to mgr in pg_stat_t
 - name: osd_max_snap_prune_intervals_per_epoch
   type: uint
