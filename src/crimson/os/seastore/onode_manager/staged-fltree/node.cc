@@ -603,6 +603,7 @@ node_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
   return parent_info().ptr->erase_child(c, std::move(this_ref));
 }
 
+template <bool FORCE_MERGE = false>
 node_future<> Node::fix_parent_index(context_t c)
 {
   assert(!is_root());
@@ -611,8 +612,10 @@ node_future<> Node::fix_parent_index(context_t c)
   parent->do_untrack_child(*this);
   // the rest of parent tracks should be correct
   parent->validate_tracked_children();
-  return parent->fix_index(c, this);
+  return parent->fix_index<FORCE_MERGE>(c, this);
 }
+template node_future<> Node::fix_parent_index<true>(context_t);
+template node_future<> Node::fix_parent_index<false>(context_t);
 
 node_future<Ref<Node>> Node::load(
     context_t c, laddr_t addr, bool expect_is_level_tail)
@@ -887,6 +890,7 @@ node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
   });
 }
 
+template <bool FORCE_MERGE>
 node_future<> InternalNode::fix_index(context_t c, Ref<Node> child)
 {
   impl->validate_non_empty();
@@ -934,12 +938,13 @@ node_future<> InternalNode::fix_index(context_t c, Ref<Node> child)
       } else {
         // for non-root, maybe need merge adjacent or fix parent,
         // because the filled node size may be reduced.
-        return try_merge_adjacent(c, update_parent_index);
+        return try_merge_adjacent<FORCE_MERGE>(c, update_parent_index);
       }
     }
   });
 }
 
+template <bool FORCE_MERGE>
 node_future<> InternalNode::apply_children_merge(
     context_t c, Ref<Node>&& left_child,
     Ref<Node>&& right_child, bool update_index)
@@ -999,7 +1004,7 @@ node_future<> InternalNode::apply_children_merge(
                left_child = std::move(left_child)] () mutable {
     Ref<InternalNode> this_ref = this;
     if (update_index) {
-      return left_child->fix_parent_index(c
+      return left_child->fix_parent_index<FORCE_MERGE>(c
       ).safe_then([c, this, this_ref = std::move(this_ref)] {
         // I'm all good but:
         // - my number of keys is reduced by 1
@@ -1020,11 +1025,15 @@ node_future<> InternalNode::apply_children_merge(
       if (is_root()) {
         return try_downgrade_root(c, std::move(this_ref));
       } else {
-        return try_merge_adjacent(c, false);
+        return try_merge_adjacent<FORCE_MERGE>(c, false);
       }
     }
   });
 }
+template node_future<> InternalNode::apply_children_merge<true>(
+    context_t, Ref<Node>&&, Ref<Node>&&, bool);
+template node_future<> InternalNode::apply_children_merge<false>(
+    context_t, Ref<Node>&&, Ref<Node>&&, bool);
 
 node_future<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
     context_t c, const search_position_t& pos)
@@ -1522,6 +1531,8 @@ void InternalNode::track_erase(
     p_node->as_child<VALIDATE>(new_pos, this);
   }
 }
+template void InternalNode::track_erase<true>(const search_position_t&, match_stage_t);
+template void InternalNode::track_erase<false>(const search_position_t&, match_stage_t);
 
 void InternalNode::track_make_tail(const search_position_t& last_pos)
 {

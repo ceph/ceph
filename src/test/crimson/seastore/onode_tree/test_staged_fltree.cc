@@ -829,12 +829,16 @@ class DummyChildPool {
     laddr_t laddr() const override { return _laddr; }
     bool is_level_tail() const override { return _is_level_tail; }
     std::optional<key_view_t> get_pivot_index() const override { return {key_view}; }
-    bool is_extent_valid() const override { return true; }
+    bool is_extent_valid() const override { return _is_extent_valid; }
     const std::string& get_name() const override { return name; }
     search_position_t make_tail() override {
       _is_level_tail = true;
       build_name();
       return search_position_t::end();
+    }
+    ertr::future<> retire_extent(context_t) override {
+      _is_extent_valid = false;
+      return ertr::now();
     }
 
    protected:
@@ -867,8 +871,6 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     ertr::future<NodeExtentMutable> rebuild_extent(context_t) override {
       ceph_abort("impossible path"); }
-    ertr::future<> retire_extent(context_t) override {
-      ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
       ceph_abort("impossible path"); }
     std::ostream& dump(std::ostream&) const override {
@@ -897,6 +899,7 @@ class DummyChildPool {
     bool _is_level_tail;
     laddr_t _laddr;
     std::string name;
+    bool _is_extent_valid = true;
 
     key_view_t key_view;
     void* p_mem_key_view;
@@ -905,6 +908,8 @@ class DummyChildPool {
   class DummyChild final : public Node {
    public:
     ~DummyChild() override = default;
+
+    key_view_t get_pivot_key() const { return *impl->get_pivot_index(); }
 
     node_future<> populate_split(
         context_t c, std::set<Ref<DummyChild>>& splitable_nodes) {
@@ -953,6 +958,27 @@ class DummyChildPool {
       auto fut = populate_split(c, splitable_nodes);
       ceph_assert(splitable_nodes.size() == 0);
       return fut;
+    }
+
+    node_future<> merge(context_t c, Ref<DummyChild>&& this_ref) {
+      return parent_info().ptr->get_child_peers(c, parent_info().position
+      ).safe_then([c, this_ref = std::move(this_ref), this] (auto lr_nodes) mutable {
+        auto& [lnode, rnode] = lr_nodes;
+        if (rnode) {
+          lnode.reset();
+          Ref<DummyChild> r_dummy(static_cast<DummyChild*>(rnode.get()));
+          rnode.reset();
+          pool.untrack_node(r_dummy);
+          assert(r_dummy->use_count() == 1);
+          return do_merge(c, std::move(this_ref), std::move(r_dummy), true);
+        } else {
+          ceph_assert(lnode);
+          Ref<DummyChild> l_dummy(static_cast<DummyChild*>(lnode.get()));
+          pool.untrack_node(this_ref);
+          assert(this_ref->use_count() == 1);
+          return do_merge(c, std::move(l_dummy), std::move(this_ref), false);
+        }
+      });
     }
 
     bool match_pos(const search_position_t& pos) const {
@@ -1008,8 +1034,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     node_future<> do_get_tree_stats(context_t, tree_stats_t&) override {
       ceph_abort("impossible path"); }
-    bool is_tracking() const override {
-      ceph_abort("impossible path"); }
+    bool is_tracking() const override { return false; }
     void track_merge(Ref<Node>, match_stage_t, search_position_t&) override {
       ceph_abort("impossible path"); }
 
@@ -1020,6 +1045,23 @@ class DummyChildPool {
     }
 
     bool can_split() const { return impl->get_keys().size() > 1; }
+
+    static node_future<> do_merge(
+        context_t c, Ref<DummyChild>&& left, Ref<DummyChild>&& right, bool stole_key) {
+      assert(right->use_count() == 1);
+      assert(left->impl->get_keys().size() == 1);
+      assert(right->impl->get_keys().size() == 1);
+      bool left_is_tail = right->impl->is_level_tail();
+      const std::set<ghobject_t>* p_keys;
+      if (stole_key) {
+        p_keys = &right->impl->get_keys();
+      } else {
+        p_keys = &left->impl->get_keys();
+      }
+      left->impl->reset(*p_keys, left_is_tail);
+      return left->parent_info().ptr->apply_children_merge<true>(
+          c, std::move(left), std::move(right), !stole_key);
+    }
 
     DummyChildImpl* impl;
     DummyChildPool& pool;
@@ -1038,9 +1080,9 @@ class DummyChildPool {
     reset();
 
     // create tree
-    auto ref_nm = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
-    p_nm = ref_nm.get();
-    p_btree.emplace(std::move(ref_nm));
+    auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
+    p_dummy = static_cast<DummyManager*>(ref_dummy.get());
+    p_btree.emplace(std::move(ref_dummy));
     return DummyChild::create_initial(get_context(), keys, *this, *p_btree->root_tracker
     ).safe_then([this](auto initial_child) {
       // split
@@ -1068,26 +1110,41 @@ class DummyChildPool {
     });
   }
 
-  seastar::future<> test_split(ghobject_t key, search_position_t pos,
-                               const split_expectation_t& expected) {
+  seastar::future<> split_merge(ghobject_t key, search_position_t pos,
+                                const split_expectation_t& expected) {
     return seastar::async([this, key, pos, expected] {
-      logger().info("insert {} at {}:", key_hobj_t(key), pos);
+      // clone
       DummyChildPool pool_clone;
       pool_clone_in_progress = &pool_clone;
-      auto ref_nm = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
-      pool_clone.p_nm = ref_nm.get();
-      pool_clone.p_btree.emplace(std::move(ref_nm));
+      auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
+      pool_clone.p_dummy = static_cast<DummyManager*>(ref_dummy.get());
+      pool_clone.p_btree.emplace(std::move(ref_dummy));
       pool_clone.p_btree->test_clone_from(
         pool_clone.t(), t(), *p_btree).unsafe_get0();
       pool_clone_in_progress = nullptr;
+
+      // insert and split
+      logger().info("\n\nINSERT-SPLIT {} at pos({}):", key_hobj_t(key), pos);
       auto node_to_split = pool_clone.get_node_by_pos(pos);
       node_to_split->insert_and_split(
         pool_clone.get_context(), key, pool_clone.splitable_nodes).unsafe_get0();
-      std::ostringstream oss;
-      pool_clone.p_btree->dump(pool_clone.t(), oss);
-      logger().info("dump new root:\n{}", oss.str());
+      {
+        std::ostringstream oss;
+        pool_clone.p_btree->dump(pool_clone.t(), oss);
+        logger().info("dump new root:\n{}", oss.str());
+      }
       EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 3);
       EXPECT_TRUE(last_split.match(expected));
+      EXPECT_EQ(pool_clone.p_dummy->size(), 3);
+
+      // erase and merge
+      auto pivot_key = node_to_split->get_pivot_key();
+      logger().info("\n\nERASE-MERGE {}:", node_to_split->get_name());
+      assert(pivot_key.compare_to(key_hobj_t(key)) == MatchKindCMP::EQ);
+      node_to_split->merge(
+          pool_clone.get_context(), std::move(node_to_split)).unsafe_get0();
+      EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 2);
+      EXPECT_EQ(pool_clone.p_dummy->size(), 1);
     });
   }
 
@@ -1098,7 +1155,7 @@ class DummyChildPool {
       ceph_assert(!p_btree->test_is_clean());
       tracked_children.clear();
       ceph_assert(p_btree->test_is_clean());
-      p_nm = nullptr;
+      p_dummy = nullptr;
       p_btree.reset();
     } else {
       ceph_assert(!p_btree.has_value());
@@ -1111,6 +1168,11 @@ class DummyChildPool {
     tracked_children.insert(node);
   }
 
+  void untrack_node(Ref<DummyChild> node) {
+    auto ret = tracked_children.erase(node);
+    ceph_assert(ret == 1);
+  }
+
   Ref<DummyChild> get_node_by_pos(const search_position_t& pos) const {
     auto iter = std::find_if(
         tracked_children.begin(), tracked_children.end(), [&pos](auto& child) {
@@ -1121,15 +1183,15 @@ class DummyChildPool {
   }
 
   context_t get_context() {
-    ceph_assert(p_nm != nullptr);
-    return {*p_nm, vb, t()};
+    ceph_assert(p_dummy != nullptr);
+    return {*p_dummy, vb, t()};
   }
 
   Transaction& t() const { return *ref_t; }
 
   std::set<Ref<DummyChild>> tracked_children;
   std::optional<TestBtree> p_btree;
-  NodeExtentManager* p_nm = nullptr;
+  DummyManager* p_dummy = nullptr;
   ValueBuilderImpl<TestValue> vb;
   TransactionRef ref_t = make_test_transaction();
 
@@ -1141,7 +1203,7 @@ class DummyChildPool {
 
 }
 
-TEST_F(c_dummy_test_t, 5_split_internal_node)
+TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
 {
   run_async([this] {
     DummyChildPool pool;
@@ -1168,65 +1230,65 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}},
-                      {2u, 0u, false, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}},
-                      {2u, 1u, false, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), {2, {0, {0}}},
-                      {2u, 2u, false, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), {2, {0, {0}}},
-                      {2u, 1u, false, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "ns2", "oid2" + padding, 1, 1), {2, {0, {0}}},
-                      {2u, 0u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}},
+                       {2u, 0u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}},
+                       {2u, 1u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), {2, {0, {0}}},
+                       {2u, 2u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), {2, {0, {0}}},
+                       {2u, 1u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(4, 4, 4, "ns2", "oid2" + padding, 1, 1), {2, {0, {0}}},
+                       {2u, 0u, false, InsertType::BEGIN}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right middle at stage 0, 1, 2, 1, 0\n");
-      pool.test_split(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5), {3, {0, {0}}},
-                      {2u, 0u, false, InsertType::MID}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), {3, {0, {0}}},
-                      {2u, 1u, false, InsertType::MID}).get();
-      pool.test_split(make_ghobj(4, 4, 5, "ns3", "oid3", 3, 3), {3, {0, {0}}},
-                      {2u, 2u, false, InsertType::MID}).get();
-      pool.test_split(make_ghobj(5, 5, 5, "ns1", "oid1", 3, 3), {3, {0, {0}}},
-                      {2u, 1u, false, InsertType::MID}).get();
-      pool.test_split(make_ghobj(5, 5, 5, "ns2", "oid2" + padding, 1, 1), {3, {0, {0}}},
-                      {2u, 0u, false, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5), {3, {0, {0}}},
+                       {2u, 0u, false, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), {3, {0, {0}}},
+                       {2u, 1u, false, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(4, 4, 5, "ns3", "oid3", 3, 3), {3, {0, {0}}},
+                       {2u, 2u, false, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(5, 5, 5, "ns1", "oid1", 3, 3), {3, {0, {0}}},
+                       {2u, 1u, false, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(5, 5, 5, "ns2", "oid2" + padding, 1, 1), {3, {0, {0}}},
+                       {2u, 0u, false, InsertType::MID}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
-      pool.test_split(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 5, 5), search_position_t::end(),
+      pool.split_merge(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 5, 5), search_position_t::end() ,
                       {2u, 0u, false, InsertType::LAST}).get();
-      pool.test_split(make_ghobj(5, 5, 5, "ns5", "oid5", 3, 3), search_position_t::end(),
-                      {2u, 1u, false, InsertType::LAST}).get();
-      pool.test_split(make_ghobj(6, 6, 6, "ns3", "oid3", 3, 3), search_position_t::end(),
-                      {2u, 2u, false, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(5, 5, 5, "ns5", "oid5", 3, 3), search_position_t::end(),
+                       {2u, 1u, false, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(6, 6, 6, "ns3", "oid3", 3, 3), search_position_t::end(),
+                       {2u, 2u, false, InsertType::LAST}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left front at stage 2, 1, 0\n");
-      pool.test_split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), {0, {0, {0}}},
-                      {0u, 2u, true, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), {0, {0, {0}}},
-                      {0u, 1u, true, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 1, 1), {0, {0, {0}}},
-                      {0u, 0u, true, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), {0, {0, {0}}},
+                       {0u, 2u, true, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), {0, {0, {0}}},
+                       {0u, 1u, true, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 1, 1), {0, {0, {0}}},
+                       {0u, 0u, true, InsertType::BEGIN}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left middle at stage 0, 1, 2, 1, 0\n");
-      pool.test_split(make_ghobj(2, 2, 2, "ns4", "oid4" + padding, 5, 5), {1, {0, {0}}},
-                      {0u, 0u, true, InsertType::MID}).get();
-      pool.test_split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), {1, {0, {0}}},
-                      {0u, 1u, true, InsertType::MID}).get();
-      pool.test_split(make_ghobj(2, 2, 3, "ns3", "oid3" + std::string(80, '_'), 3, 3), {1, {0, {0}}},
+      pool.split_merge(make_ghobj(2, 2, 2, "ns4", "oid4" + padding, 5, 5), {1, {0, {0}}},
+                       {0u, 0u, true, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), {1, {0, {0}}},
+                       {0u, 1u, true, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(2, 2, 3, "ns3", "oid3" + std::string(80, '_'), 3, 3), {1, {0, {0}}} ,
                       {0u, 2u, true, InsertType::MID}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), {1, {0, {0}}},
-                      {0u, 1u, true, InsertType::MID}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 1, 1), {1, {0, {0}}},
-                      {0u, 0u, true, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), {1, {0, {0}}},
+                       {0u, 1u, true, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 1, 1), {1, {0, {0}}},
+                       {0u, 0u, true, InsertType::MID}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left back at stage 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 3, 4), {1, {2, {2}}},
-                      {0u, 0u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 3, 4), {1, {2, {2}}},
+                       {0u, 0u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1241,19 +1303,19 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}},
-                      {2u, 0u, true, InsertType::LAST}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}},
-                      {2u, 1u, true, InsertType::LAST}).get();
-      pool.test_split(make_ghobj(3, 4, 4, "n", "o", 3, 3), {2, {0, {0}}},
-                      {2u, 2u, true, InsertType::LAST}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "n", "o", 3, 3), {2, {0, {0}}},
-                      {2u, 1u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}},
+                       {2u, 0u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}},
+                       {2u, 1u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(3, 4, 4, "n", "o", 3, 3), {2, {0, {0}}},
+                       {2u, 2u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(4, 4, 4, "n", "o", 3, 3), {2, {0, {0}}},
+                       {2u, 1u, true, InsertType::LAST}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left middle at stage 2\n");
-      pool.test_split(make_ghobj(2, 3, 3, "n", "o", 3, 3), {1, {0, {0}}},
-                      {2u, 2u, true, InsertType::MID}).get();
+      pool.split_merge(make_ghobj(2, 3, 3, "n", "o", 3, 3), {1, {0, {0}}},
+                       {2u, 2u, true, InsertType::MID}).get();
     }
 
     {
@@ -1268,8 +1330,8 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage (0, 1, 2, 1,) 0\n");
-      pool.test_split(make_ghobj(4, 4, 4, "n", "o", 2, 2), {2, {0, {0}}},
-                      {2u, 0u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(4, 4, 4, "n", "o", 2, 2), {2, {0, {0}}},
+                       {2u, 0u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1284,12 +1346,12 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}},
-                      {1u, 0u, false, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
-                      {1u, 1u, false, InsertType::BEGIN}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 1, 1), {1, {1, {0}}},
-                      {1u, 0u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}},
+                       {1u, 0u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
+                       {1u, 1u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 1, 1), {1, {1, {0}}},
+                       {1u, 0u, false, InsertType::BEGIN}).get();
     }
 
     {
@@ -1308,10 +1370,10 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage 0, 1\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}},
-                      {1u, 0u, true, InsertType::LAST}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
-                      {1u, 1u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}},
+                       {1u, 0u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
+                       {1u, 1u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1329,8 +1391,8 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage (0, 1,) 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 2, 2), {1, {1, {0}}},
-                      {1u, 0u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3", 2, 2), {1, {1, {0}}},
+                       {1u, 0u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1344,8 +1406,8 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right front at stage 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 2, 3), {1, {1, {1}}},
-                      {0u, 0u, false, InsertType::BEGIN}).get();
+      pool.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 2, 3), {1, {1, {1}}},
+                       {0u, 0u, false, InsertType::BEGIN}).get();
     }
 
     // Impossible to split at {0, 0, 0}
