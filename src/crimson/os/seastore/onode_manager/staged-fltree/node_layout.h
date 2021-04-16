@@ -378,7 +378,24 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void get_prev_slot(search_position_t& pos,
                      key_view_t* p_index_key = nullptr,
                      const value_t** pp_value = nullptr) const override {
-    ceph_abort("not implemented");
+    assert(!is_keys_empty());
+    assert(!pos.is_end());
+    auto& _pos = cast_down<STAGE>(pos);
+#ifndef NDEBUG
+    auto nxt_pos = _pos;
+#endif
+    if (!p_index_key && pp_value) {
+      STAGE_T::template get_prev_slot<false, true>(
+          extent.read(), _pos, nullptr, pp_value);
+    } else {
+      ceph_abort("not implemented");
+    }
+#ifndef NDEBUG
+    auto _nxt_pos = _pos;
+    STAGE_T::template get_next_slot<false, false>(
+        extent.read(), _nxt_pos, nullptr, nullptr);
+    assert(nxt_pos == _nxt_pos);
+#endif
   }
 
   void get_next_slot(search_position_t& pos,
