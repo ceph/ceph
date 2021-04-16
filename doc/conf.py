@@ -226,6 +226,18 @@ for c in pybinds:
 openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
 
+# ceph_confval
+ceph_confval_imports = [os.path.join(top_level,
+                                     'src/common/options',
+                                     yaml + '.yaml.in')
+                        for yaml in ['global',
+                                     'immutable-object-cache',
+                                     'mds',
+                                     'mds-client',
+                                     'rbd',
+                                     'rbd-mirror',
+                                     'rgw']]
+
 
 # handles edit-on-github and old version warning display
 def setup(app):

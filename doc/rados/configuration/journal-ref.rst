@@ -30,93 +30,10 @@ Filestore is preferred for new deployments.
 
 Ceph OSD Daemons recognize the following journal settings: 
 
-
 .. confval:: journal_dio
-
-   Enables direct i/o to the journal. Requires ``journal block
-   align`` set to ``true``.
-
-   :type: Boolean
-   :required: Yes when using ``aio``.
-   :default: ``true``
-
-
-
 .. confval:: journal_aio
-
-   .. versionchanged:: 0.61 Cuttlefish
-
-   Enables using ``libaio`` for asynchronous writes to the journal.
-   Requires ``journal dio`` set to ``true``.
-
-   :type: Boolean
-   :required: No.
-   :default: Version 0.61 and later, ``true``. Version 0.60 and earlier, ``false``.
-
-
 .. confval:: journal_block_align
-
-   Block aligns write operations. Required for ``dio`` and ``aio``.
-
-   :type: Boolean
-   :required: Yes when using ``dio`` and ``aio``.
-   :default: ``true``
-
-
 .. confval:: journal_max_write_bytes
-
-   The maximum number of bytes the journal will write at
-   any one time.
-
-   :type: Integer
-   :required: No
-   :default: ``10 << 20``
-
-
 .. confval:: journal_max_write_entries
-
-   The maximum number of entries the journal will write at
-   any one time.
-
-   :type: Integer
-   :required: No
-   :default: ``100``
-
-
-.. confval:: journal_queue_max_ops
-
-   The maximum number of operations allowed in the queue at
-   any one time.
-
-   :type: Integer
-   :required: No
-   :default: ``500``
-
-
-.. confval:: journal_queue_max_bytes
-
-   The maximum number of bytes allowed in the queue at
-   any one time.
-
-   :type: Integer
-   :required: No
-   :default: ``10 << 20``
-
-
 .. confval:: journal_align_min_size
-
-   Align data payloads greater than the specified minimum.
-
-   :type: Integer
-   :required: No
-   :default: ``64 << 10``
-
-
 .. confval:: journal_zero_on_create
-
-   Causes the file store to overwrite the entire journal with
-   ``0``'s during ``mkfs``.
-
-   :type: Boolean
-   :required: No
-   :default: ``false``

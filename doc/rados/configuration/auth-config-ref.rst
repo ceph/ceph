@@ -145,37 +145,8 @@ Enablement
 
 
 .. confval:: auth_cluster_required
-
-   If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
-   ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
-   each other. Valid settings are ``cephx`` or ``none``.
-
-  :type: String
-  :required: No
-  :default: ``cephx``.
-
-
 .. confval:: auth_service_required
-
-   If enabled, the Ceph Storage Cluster daemons require Ceph Clients
-   to authenticate with the Ceph Storage Cluster in order to access
-   Ceph services. Valid settings are ``cephx`` or ``none``.
-
-   :type: String
-   :required: No
-   :default: ``cephx``.
-
-
 .. confval:: auth_client_required
-
-   If enabled, the Ceph Client requires the Ceph Storage Cluster to
-   authenticate with the Ceph Client. Valid settings are ``cephx``
-   or ``none``.
-
-   :type: String
-   :required: No
-   :default: ``cephx``.
-
 
 .. index:: keys; keyring
 
@@ -205,33 +176,10 @@ To perform this step manually, execute the following::
 You may specify the key itself in the Ceph configuration file using the ``key``
 setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 
-
 .. confval:: keyring
-
-   The path to the keyring file.
-
-  :type: String
-  :required: No
-  :default: ``/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin``
-
-
+   :default: /etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin
 .. confval:: keyfile
-
-   The path to a key file (i.e,. a file containing only the key).
-
-   :type: String
-   :required: No
-   :default: None
-
-
 .. confval:: key
-
-   The key (i.e., the text string of the key itself). Not recommended.
-
-   :type: String
-   :required: No
-   :default: None
-
 
 Daemon Keyrings
 ---------------
@@ -299,61 +247,14 @@ Note that even with signatures enabled data is not encrypted in
 flight.
 
 .. confval:: cephx_require_signatures
-
-   If set to ``true``, Ceph requires signatures on all message
-   traffic between the Ceph Client and the Ceph Storage Cluster, and
-   between daemons comprising the Ceph Storage Cluster.
-
-   Ceph Argonaut and Linux kernel versions prior to 3.19 do
-   not support signatures; if such clients are in use this
-   option can be turned off to allow them to connect.
-
-  :type: Boolean
-  :required: No
-  :default: ``false``
-
-
 .. confval:: cephx_cluster_require_signatures
-
-   If set to ``true``, Ceph requires signatures on all message
-   traffic between Ceph daemons comprising the Ceph Storage Cluster.
-
-   :type: Boolean
-   :required: No
-   :default: ``false``
-
-
 .. confval:: cephx_service_require_signatures
-
-   If set to ``true``, Ceph requires signatures on all message
-   traffic between Ceph Clients and the Ceph Storage Cluster.
-
-   :type: Boolean
-   :required: No
-   :default: ``false``
-
-
 .. confval:: cephx_sign_messages
-
-   If the Ceph version supports message signing, Ceph will sign
-   all messages so they are more difficult to spoof.
-
-   :type: Boolean
-   :default: ``true``
-
 
 Time to Live
 ------------
 
 .. confval:: auth_service_ticket_ttl
-
-   When the Ceph Storage Cluster sends a Ceph Client a ticket for
-   authentication, the Ceph Storage Cluster assigns the ticket a
-   time to live.
-
-   :type: Double
-   :default: ``60*60``
-
 
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
 .. _Operating a Cluster: ../../operations/operating
