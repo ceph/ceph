@@ -1002,11 +1002,9 @@ def apply(ctx, config):
     cluster_name = config.get('cluster', 'ceph')
 
     specs = config.get('specs', [])
-    y = '\n---\n'.join(map(yaml.dump, specs))
+    y = subst_vip(ctx, yaml.dump_all(specs))
 
-    y = subst_vip(ctx, y)
-
-    log.info(f'Applying spec:\n{y}')
+    log.info(f'Applying spec(s):\n{y}')
     _shell(
         ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
         ['ceph', 'orch', 'apply', '-i', '-'],
