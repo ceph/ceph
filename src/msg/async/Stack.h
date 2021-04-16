@@ -32,6 +32,7 @@ class ConnectedSocketImpl {
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
+  virtual void set_priority(int sd, int prio, int domain) = 0;
 };
 
 class ConnectedSocket;
@@ -121,6 +122,10 @@ class ConnectedSocket {
   /// Get file descriptor
   int fd() const {
     return _csi->fd();
+  }
+
+  void set_priority(int sd, int prio, int domain) {
+    _csi->set_priority(sd, prio, domain);
   }
 
   explicit operator bool() const {

@@ -281,6 +281,7 @@ OPTION(mon_osd_force_trim_to, OPT_INT)   // force mon to trim maps to this point
 OPTION(mon_mds_force_trim_to, OPT_INT)   // force mon to trim mdsmaps to this point (dangerous)
 OPTION(mon_mds_skip_sanity, OPT_BOOL)  // skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
 OPTION(mon_osd_snap_trim_queue_warn_on, OPT_INT)
+OPTION(mon_use_min_delay_socket, OPT_BOOL)
 
 // monitor debug options
 OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL) // consider deprecated commands as obsolete
