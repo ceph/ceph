@@ -1,7 +1,8 @@
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpecValidationError, ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.hostspec import SpecValidationError
 
 try:
     from typing import Optional, List, Dict, Any, Union
@@ -121,7 +122,7 @@ class DeviceSelection(object):
         return repr(self) == repr(other)
 
 
-class DriveGroupValidationError(ServiceSpecValidationError):
+class DriveGroupValidationError(SpecValidationError):
     """
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
     if it was raised in a different mgr module.
