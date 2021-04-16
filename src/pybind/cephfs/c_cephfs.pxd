@@ -50,6 +50,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_conf_get(ceph_mount_info *cmount, const char *option, char *buf, size_t len)
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value)
+    int ceph_set_mount_timeout(ceph_mount_info *cmount, uint32_t timeout)
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
     int ceph_select_filesystem(ceph_mount_info *cmount, const char *fs_name)
