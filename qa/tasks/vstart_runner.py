@@ -182,6 +182,22 @@ class LocalRemoteProcess(object):
         self.check_status = check_status
         self.exitstatus = self.returncode = None
 
+    def _write_stdout(self, out):
+        if isinstance(self.stdout, StringIO):
+            self.stdout.write(out.decode(errors='ignore'))
+        elif self.stdout is None:
+            pass
+        else:
+            self.stdout.write(out)
+
+    def _write_stderr(self, err):
+        if isinstance(self.stderr, StringIO):
+            self.stderr.write(err.decode(errors='ignore'))
+        elif self.stderr is None:
+            pass
+        else:
+            self.stderr.write(err)
+
     def wait(self):
         if self.finished:
             # Avoid calling communicate() on a dead process because it'll
@@ -193,18 +209,8 @@ class LocalRemoteProcess(object):
 
         out, err = self.subproc.communicate()
         out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
-        if isinstance(self.stdout, StringIO):
-            self.stdout.write(out.decode(errors='ignore'))
-        elif self.stdout is None:
-            pass
-        else:
-            self.stdout.write(out)
-        if isinstance(self.stderr, StringIO):
-            self.stderr.write(err.decode(errors='ignore'))
-        elif self.stderr is None:
-            pass
-        else:
-            self.stderr.write(err)
+        self._write_stdout(out)
+        self._write_stderr(err)
 
         self.exitstatus = self.returncode = self.subproc.returncode
 
@@ -222,19 +228,11 @@ class LocalRemoteProcess(object):
 
         if self.subproc.poll() is not None:
             out, err = self.subproc.communicate()
-            if isinstance(self.stdout, StringIO):
-                self.stdout.write(out.decode(errors='ignore'))
-            elif self.stdout is None:
-                pass
-            else:
-                self.stdout.write(out)
-            if isinstance(self.stderr, StringIO):
-                self.stderr.write(err.decode(errors='ignore'))
-            elif self.stderr is None:
-                pass
-            else:
-                self.stderr.write(err)
+            self._write_stdout(out)
+            self._write_stderr(err)
+
             self.exitstatus = self.returncode = self.subproc.returncode
+
             return True
         else:
             return False
