@@ -1981,7 +1981,7 @@ options:
   level: advanced
   desc: The difference in connection score allowed before a peon stops ignoring out-of-quorum
     PROPOSEs
-  default: 0
+  default: 0.0005
   services:
   - mon
 - name: mon_warn_on_degraded_stretch_mode
@@ -1995,10 +1995,10 @@ options:
   type: float
   level: advanced
   desc: the ratio of up OSDs at which a degraded stretch cluster enters recovery
-  default: 0
+  default: 0.6
   services:
   - mon
-  min: 0
+  min: 0.51
   max: 1
 - name: mon_stretch_recovery_min_wait
   type: float
@@ -4234,7 +4234,7 @@ options:
     OSD for rotational device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
     = mclock_scheduler
-  default: 5
+  default: 5.2
   flags:
   - runtime
 - name: osd_mclock_cost_per_byte_usec_ssd
@@ -4245,7 +4245,7 @@ options:
     OSD for solid state device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
     = mclock_scheduler
-  default: 0
+  default: 0.011
   flags:
   - runtime
 - name: osd_mclock_max_capacity_iops
@@ -4478,7 +4478,7 @@ options:
 - name: osd_heartbeat_min_healthy_ratio
   type: float
   level: advanced
-  default: 0
+  default: 0.33
   with_legacy: true
 # (seconds) how often to ping monitor if no peers
 - name: osd_mon_heartbeat_interval
