@@ -909,7 +909,7 @@ private:
 
   //parquet request 
   bool m_parquet_type;
-  s3selectEngine::rgw_s3select_api* m_rgw_api;
+  std::unique_ptr<s3selectEngine::rgw_s3select_api> m_rgw_api;
   size_t m_request_range;//a request for range may statisfy by several calls to send_response_date (call back)
   std::string requested_buffer;
   std::string range_req_str;
