@@ -29,6 +29,8 @@ options:
   type: addr
   level: basic
   desc: public-facing address to bind to
+  fmt_desc: The IP address for the public (front-side) network.
+   Set for each daemon.
   services:
   - mon
   - mds
@@ -56,11 +58,20 @@ options:
   - mon
   flags:
   - startup
+  fmt_desc: In some dynamic deployments the Ceph MON daemon might bind
+   to an IP address locally that is different from the ``public_addr``
+   advertised to other peers in the network. The environment must ensure
+   that routing rules are set correctly. If ``public_bind_addr`` is set
+   the Ceph Monitor daemon will bind to it locally and use ``public_addr``
+   in the monmaps to advertise its address to peers. This behavior is limited
+   to the Monitor daemon.
   with_legacy: true
 - name: cluster_addr
   type: addr
   level: basic
   desc: cluster-facing address to bind to
+  fmt_desc: The IP address for the cluster (back-side) network.
+   Set for each daemon.
   tags:
   - network
   services:
@@ -72,6 +83,10 @@ options:
   type: str
   level: advanced
   desc: Network(s) from which to choose a public address to bind to
+  fmt_desc: The IP address and netmask of the public (front-side) network
+   (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
+   comma-separated subnets. The format of it looks like
+   ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
   tags:
   - network
   services:
@@ -102,6 +117,10 @@ options:
   type: str
   level: advanced
   desc: Network(s) from which to choose a cluster address to bind to
+  fmt_desc: The IP address and netmask of the cluster (back-side) network
+   (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
+   comma-separated subnets. The format of it looks like
+   ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
   tags:
   - network
   services:
@@ -846,6 +865,7 @@ options:
   desc: Authentication key
   long_desc: A CephX authentication key, base64 encoded.  It normally looks something
     like 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='.
+  fmt_desc: The key (i.e., the text string of the key itself). Not recommended.
   see_also:
   - keyfile
   - keyring
@@ -859,6 +879,7 @@ options:
   desc: Path to a file containing a key
   long_desc: The file should contain a CephX authentication key and optionally a trailing
     newline, but nothing else.
+  fmt_desc: The path to a key file (i.e,. a file containing only the key).
   see_also:
   - key
   flags:
@@ -872,6 +893,9 @@ options:
   long_desc: A keyring file is an INI-style formatted file where the section names
     are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property
     with CephX authentication key as the value.
+  # please note, document are generated without accessing to the CMake
+  # variables, so please update the document manually with a representive
+  # default value using the ":default:" option of ".. confval::" directive.
   default: @keyring_paths@
   see_also:
   - key
@@ -1022,12 +1046,19 @@ options:
   type: bool
   level: advanced
   desc: Disable Nagle's algorithm and send queued network traffic immediately
+  fmt_desc: Ceph enables ``ms_tcp_nodelay`` so that each request is sent
+   immediately (no buffering). Disabling `Nagle's algorithm`_
+   increases network traffic, which can introduce latency. If you
+   experience large numbers of small packets, you may try
+   disabling ``ms_tcp_nodelay``.
   default: true
   with_legacy: true
 - name: ms_tcp_rcvbuf
   type: size
   level: advanced
   desc: Size of TCP socket receive buffer
+  fmt_desc: The size of the socket buffer on the receiving end of a network
+   connection. Disable by default.
   default: 0
   with_legacy: true
 - name: ms_tcp_prefetch_max_size
@@ -1109,6 +1140,7 @@ options:
   type: bool
   level: advanced
   desc: Bind servers to IPv4 address(es)
+  fmt_desc: Enables Ceph daemons to bind to IPv4 addresses.
   default: true
   see_also:
   - ms_bind_ipv6
@@ -1116,6 +1148,7 @@ options:
   type: bool
   level: advanced
   desc: Bind servers to IPv6 address(es)
+  fmt_desc: Enables Ceph daemons to bind to IPv6 addresses.
   default: false
   see_also:
   - ms_bind_ipv4
@@ -1143,12 +1176,14 @@ options:
   type: int
   level: advanced
   desc: Lowest port number to bind daemon(s) to
+  fmt_desc: The minimum port number to which an OSD or MDS daemon will bind.
   default: 6800
   with_legacy: true
 - name: ms_bind_port_max
   type: int
   level: advanced
   desc: Highest port number to bind daemon(s) to
+  fmt_desc: The maximum port number to which an OSD or MDS daemon will bind.
   default: 7300
   with_legacy: true
 # FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
@@ -3055,6 +3090,9 @@ options:
   type: str
   level: advanced
   desc: authentication methods required by the cluster
+  fmt_desc: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
+   ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
+   each other. Valid settings are ``cephx`` or ``none``.
   default: cephx
   with_legacy: true
 # required by daemons of clients
@@ -3062,6 +3100,9 @@ options:
   type: str
   level: advanced
   desc: authentication methods required by service daemons
+  fmt_desc: If enabled, the Ceph Storage Cluster daemons require Ceph Clients
+   to authenticate with the Ceph Storage Cluster in order to access
+   Ceph services. Valid settings are ``cephx`` or ``none``.
   default: cephx
   with_legacy: true
 # what clients require of daemons
@@ -3069,6 +3110,9 @@ options:
   type: str
   level: advanced
   desc: authentication methods allowed by clients
+  fmt_desc: If enabled, the Ceph Client requires the Ceph Storage Cluster to
+   authenticate with the Ceph Client. Valid settings are ``cephx``
+   or ``none``.
   default: cephx, none
   with_legacy: true
 # deprecated; default value for above if they are not defined.
@@ -3097,6 +3141,13 @@ options:
   type: bool
   level: advanced
   default: false
+  fmt_desc: If set to ``true``, Ceph requires signatures on all message
+   traffic between the Ceph Client and the Ceph Storage Cluster, and
+   between daemons comprising the Ceph Storage Cluster.
+
+   Ceph Argonaut and Linux kernel versions prior to 3.19 do
+   not support signatures; if such clients are in use this
+   option can be turned off to allow them to connect.
   with_legacy: true
 - name: cephx_require_version
   type: int
@@ -3108,6 +3159,8 @@ options:
   type: bool
   level: advanced
   default: false
+  fmt_desc:    If set to ``true``, Ceph requires signatures on all message
+   traffic between Ceph daemons comprising the Ceph Storage Cluster.
   with_legacy: true
 - name: cephx_cluster_require_version
   type: int
@@ -3119,6 +3172,8 @@ options:
   type: bool
   level: advanced
   default: false
+  fmt_desc: If set to ``true``, Ceph requires signatures on all message
+   traffic between Ceph Clients and the Ceph Storage Cluster.
   with_legacy: true
 - name: cephx_service_require_version
   type: int
@@ -3131,6 +3186,8 @@ options:
   type: bool
   level: advanced
   default: true
+  fmt_desc: If the Ceph version supports message signing, Ceph will sign
+   all messages so they are more difficult to spoof.
   with_legacy: true
 - name: auth_mon_ticket_ttl
   type: float
@@ -3142,6 +3199,9 @@ options:
   type: float
   level: advanced
   default: 1_hr
+  fmt_desc: When the Ceph Storage Cluster sends a Ceph Client a ticket for
+   authentication, the Ceph Storage Cluster assigns the ticket a
+   time to live.
   with_legacy: true
 - name: auth_allow_insecure_global_id_reclaim
   type: bool
@@ -7675,11 +7735,16 @@ options:
   type: bool
   level: dev
   default: true
+  fmt_desc: Enables direct i/o to the journal. Requires ``journal block
+   align`` set to ``true``.
   with_legacy: true
 - name: journal_aio
   type: bool
   level: dev
   default: true
+  fmt_desc: Enables using ``libaio`` for asynchronous writes to the journal.
+   Requires ``journal dio`` set to ``true``. Version 0.61 and later, ``true``.
+   Version 0.60 and earlier, ``false``.
   with_legacy: true
 - name: journal_force_aio
   type: bool
@@ -7695,6 +7760,7 @@ options:
   type: bool
   level: dev
   default: true
+  fmt_desc: Block aligns write operations. Required for ``dio`` and ``aio``.
   with_legacy: true
 - name: journal_write_header_frequency
   type: uint
@@ -7705,12 +7771,16 @@ options:
   type: size
   level: advanced
   desc: Max bytes in flight to journal
+  fmt_desc: The maximum number of bytes the journal will write at
+   any one time.
   default: 10_M
   with_legacy: true
 - name: journal_max_write_entries
   type: int
   level: advanced
   desc: Max IOs in flight to journal
+  fmt_desc: The maximum number of entries the journal will write at
+   any one time.
   default: 100
   with_legacy: true
 # Target range for journal fullness
@@ -7741,6 +7811,7 @@ options:
   type: size
   level: dev
   default: 64_K
+  fmt_desc: Align data payloads greater than the specified minimum.
   with_legacy: true
 - name: journal_replay_from
   type: int
@@ -7760,6 +7831,8 @@ options:
   type: bool
   level: dev
   default: false
+  fmt_desc: Causes the file store to overwrite the entire journal with
+   ``0``'s during ``mkfs``.
   with_legacy: true
 # assume journal is not corrupt
 - name: journal_ignore_corruption
