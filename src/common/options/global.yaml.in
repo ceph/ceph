@@ -5208,7 +5208,6 @@ options:
   level: advanced
   default: 30
   with_legacy: true
-  with_legacy: true
 - name: osd_delete_sleep
   type: float
   level: advanced
