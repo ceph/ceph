@@ -6491,7 +6491,7 @@ options:
   type: uint
   level: dev
   desc: Max pinned cache entries we consider before giving up
-  default: 64
+  default: 1000
   with_legacy: true
 - name: bluestore_cache_type
   type: str
