@@ -5,7 +5,7 @@
 .. index:: mclock; configuration
 
 Mclock profiles mask the low level details from users, making it
-easier for them to configure mclock.  
+easier for them to configure mclock.
 
 To use mclock, you must provide the following input parameters:
 
@@ -18,7 +18,7 @@ lower-level mclock and Ceph parameters. The parameters applied by the mclock
 profile make it possible to tune the QoS between client I/O, recovery/backfill
 operations, and other background operations (for example, scrub, snap trim, and
 PG deletion). These background activities are considered best-effort internal
-clients of Ceph. 
+clients of Ceph.
 
 
 .. index:: mclock; profile definition
@@ -39,7 +39,7 @@ some Ceph-configuration parameters are transparently applied.
 
 The low-level mclock resource control parameters are the *reservation*,
 *limit*, and *weight* that provide control of the resource shares, as
-described in the `OSD Config Reference`_.
+described in the :ref:`dmclock-qos` section.
 
 
 .. index:: mclock; profile types
@@ -64,14 +64,14 @@ mclock profiles can be broadly classified into two types,
     This profile allocates equal reservation to client ops and background
     recovery ops.
 
-- **Custom**: This profile gives users complete control over all mclock and
-  Ceph configuration parameters. Using this profile is not recommended without
+- **Custom**: This profile gives users complete control over all the mclock
+  configuration parameters. Using this profile is not recommended without
   a deep understanding of mclock and related Ceph-configuration options.
 
 .. note:: Across the built-in profiles, internal clients of mclock (for example
-          "scrub", "snap trim", and "pg deletion") are given slightly lower 
-          reservations, but higher weight and no limit. This ensures that 
-          these operations are able to complete quickly if there are no other 
+          "scrub", "snap trim", and "pg deletion") are given slightly lower
+          reservations, but higher weight and no limit. This ensures that
+          these operations are able to complete quickly if there are no other
           competing services.
 
 
@@ -111,8 +111,8 @@ there might be instances that necessitate giving higher allocations to either
 client ops or recovery ops. In order to deal with such a situation, you can
 enable one of the alternate built-in profiles mentioned above.
 
-If a built-in profile is active, the following Ceph config sleep options will
-be disabled,
+If any mClock profile (including "custom") is active, the following Ceph config
+sleep options will be disabled,
 
 - ``osd_recovery_sleep``
 - ``osd_recovery_sleep_hdd``
@@ -154,7 +154,7 @@ Any existing benchmarking tool can be used for this purpose. The following
 steps use the *Ceph Benchmarking Tool* (cbt_). Regardless of the tool
 used, the steps described below remain the same.
 
-As already described in the `OSD Config Reference`_ section, the number of
+As already described in the :ref:`dmclock-qos` section, the number of
 shards and the bluestore's throttle parameters have an impact on the mclock op
 queues. Therefore, it is critical to set these values carefully in order to
 maximize the impact of the mclock scheduler.
@@ -366,6 +366,3 @@ mClock Config Options
 :Type: Float
 :Default: ``0.011``
 
-
-
-.. _OSD Config Reference: ../osd-config-ref#dmclock-qos
