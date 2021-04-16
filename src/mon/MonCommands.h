@@ -410,6 +410,10 @@ COMMAND("fs feature ls",
         "list available cephfs features to be set/unset",
 	"mds", "r")
 
+COMMAND("fs lsflags name=fs_name,type=CephString",
+	"list the flags set on a ceph filesystem",
+	"fs", "r")
+
 COMMAND("fs required_client_features "
         "name=fs_name,type=CephString "
         "name=subop,type=CephChoices,strings=add|rm "
