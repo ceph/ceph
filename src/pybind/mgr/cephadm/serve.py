@@ -544,17 +544,6 @@ class CephadmServe:
             # host
             return len(self.mgr.cache.networks[host].get(public_network, [])) > 0
 
-        def virtual_ip_allowed(host):
-            # type: (str) -> bool
-            # Verify that it is possible to use Virtual IPs in the host
-            try:
-                if self.mgr.cache.facts[host]['kernel_parameters']['net.ipv4.ip_nonlocal_bind'] == '0':
-                    return False
-            except KeyError:
-                return False
-
-            return True
-
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr._hosts_with_daemon_inventory(),
@@ -562,7 +551,6 @@ class CephadmServe:
             networks=self.mgr.cache.networks,
             filter_new_host=(
                 matches_network if service_type == 'mon'
-                else virtual_ip_allowed if service_type == 'ingress'
                 else None
             ),
             allow_colo=svc.allow_colo(),

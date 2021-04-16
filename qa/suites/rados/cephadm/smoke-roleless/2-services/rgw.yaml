@@ -8,5 +8,5 @@ tasks:
           host_pattern: "*"
         spec:
           rgw_frontend_port: 8000
-- sleep:
-    interval: 60
+- cephadm.wait_for_service:
+    service: rgw.foo
