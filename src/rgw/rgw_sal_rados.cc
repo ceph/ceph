@@ -1142,12 +1142,18 @@ int RGWRadosObject::modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, 
 
 int RGWRadosObject::delete_obj_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, const char *attr_name, optional_yield y)
 {
+  rgw_obj target = get_obj();
+  int r = get_obj_attrs(rctx, y, dpp, &target);
+  if (r < 0) {
+    return r;
+  }
+
   RGWAttrs rmattr;
   bufferlist bl;
 
   set_atomic(rctx);
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, rctx, nullptr, &rmattr, y);
+  return set_obj_attrs(dpp, rctx, nullptr, &rmattr, y, &target);
 }
 
 int RGWRadosObject::copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket,
