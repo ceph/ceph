@@ -75,6 +75,7 @@ const char** MgrStandby::get_tracked_conf_keys() const
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
+    "mgr_standby_modules",
     "host",
     "fsid",
     NULL
@@ -96,6 +97,17 @@ void MgrStandby::handle_conf_change(
       changed.count("host") ||
       changed.count("fsid")) {
     _update_log_config();
+  }
+  if (changed.count("mgr_standby_modules") && !active_mgr) {
+    if (g_conf().get_val<bool>("mgr_standby_modules") != py_module_registry.have_standby_modules()) {
+      dout(1) << "mgr_standby_modules now "
+	      << (int)g_conf().get_val<bool>("mgr_standby_modules")
+	      << ", standby modules are "
+	      << (py_module_registry.have_standby_modules() ? "":"not ")
+	      << "active, respawning"
+	      << dendl;
+      respawn();
+    }
   }
 }
 
