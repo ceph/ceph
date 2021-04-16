@@ -319,6 +319,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='docker.io',
             desc='Registry to which we should normalize unqualified image names',
         ),
+        Option(
+            'max_count_per_host',
+            type='int',
+            default=10,
+            desc='max number of daemons per service per host',
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -342,6 +348,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.daemon_cache_timeout = 0
             self.facts_cache_timeout = 0
             self.host_check_interval = 0
+            self.max_count_per_host = 0
             self.mode = ''
             self.container_image_base = ''
             self.container_image_prometheus = ''
@@ -2148,6 +2155,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 spec.placement.count < 1:
             raise OrchestratorError('cannot scale %s service below 1' % (
                 spec.service_type))
+
+        host_count = len(self.inventory.keys())
+        max_count = self.max_count_per_host
+
+        if spec.placement.count is not None:
+            if spec.service_type in ['mon', 'mgr']:
+                if spec.placement.count > max(5, host_count):
+                    raise OrchestratorError(
+                        (f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {max(5, host_count)}.'))
+            elif spec.service_type != 'osd':
+                if spec.placement.count > (max_count * host_count):
+                    raise OrchestratorError((f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {host_count*max_count} ({host_count}x{max_count}).'
+                                             + ' This limit can be adjusted by changing the mgr/cephadm/max_count_per_host config option'))
+
+        if spec.placement.count_per_host is not None and spec.placement.count_per_host > max_count and spec.service_type != 'osd':
+            raise OrchestratorError((f'The maximum count_per_host allowed is {max_count}.'
+                                     + ' This limit can be adjusted by changing the mgr/cephadm/max_count_per_host config option'))
 
         HostAssignment(
             spec=spec,
