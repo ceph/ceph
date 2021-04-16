@@ -116,6 +116,8 @@ int MgrStandby::init()
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
 
+  cct->_conf.add_observer(this);
+
   std::lock_guard l(lock);
 
   // Start finisher
