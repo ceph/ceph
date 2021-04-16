@@ -17,7 +17,8 @@
 #define CEPH_MMDSMAP_H
 
 #include "msg/Message.h"
-#include "mds/MDSMap.h"
+#include "mds/MDSMapV1.h"
+#include "mds/MDSMapV2.h"
 #include "include/ceph_features.h"
 
 class MMDSMap final : public SafeMessage {
@@ -73,10 +74,15 @@ public:
 	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
 	!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       // reencode for old clients.
-      MDSMap m;
-      m.decode(encoded);
+      std::unique_ptr<MDSMap> m;
+      if (!HAVE_FEATURE(features, SERVER_PACIFIC)) {
+        m = std::make_unique<MDSMapV1>();
+      } else {
+        m = std::make_unique<MDSMapV2>();
+      }
+      m->decode(encoded);
       encoded.clear();
-      m.encode(encoded, features);
+      m->encode(encoded, features);
     }
     encode(encoded, payload);
     encode(map_fs_name, payload);

@@ -406,10 +406,15 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
        * know which FS it was part of. Nor does this matter. Sending an empty
        * MDSMap is sufficient for getting the MDS to respawn.
        */
-      MDSMap null_map;
-      null_map.epoch = fsmap.epoch;
-      null_map.compat = fsmap.compat;
-      auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+      std::unique_ptr<MDSMap> null_map;
+      if (!HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_PACIFIC)) {
+	null_map = std::make_unique<MDSMapV1>();
+      } else {
+	null_map = std::make_unique<MDSMapV2>();
+      }
+      null_map->epoch = fsmap.epoch;
+      null_map->compat = fsmap.compat;
+      auto m = make_message<MMDSMap>(mon.monmap->fsid, *null_map);
       mon.send_reply(op, m.detach());
       return true;
     } else {
@@ -706,10 +711,15 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       wait_for_finished_proposal(op, new LambdaContext([op, this](int r){
         if (r >= 0) {
           const auto& fsmap = get_fsmap();
-          MDSMap null_map;
-          null_map.epoch = fsmap.epoch;
-          null_map.compat = fsmap.compat;
-          auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+	  std::unique_ptr<MDSMap> null_map;
+	  if (!HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_PACIFIC)) {
+	    null_map = std::make_unique<MDSMapV1>();
+	  } else {
+	    null_map = std::make_unique<MDSMapV2>();
+	  }
+          null_map->epoch = fsmap.epoch;
+          null_map->compat = fsmap.compat;
+          auto m = make_message<MMDSMap>(mon.monmap->fsid, *null_map);
           mon.send_reply(op, m.detach());
         } else {
           dispatch(op);        // try again
@@ -901,11 +911,24 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
+<<<<<<< HEAD
     MDSMap null_map;
     null_map.epoch = fsmap.epoch;
     null_map.compat = fsmap.compat;
     auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
     mon.send_reply(op, m.detach());
+=======
+    std::unique_ptr<MDSMap> null_map;
+    if (!HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_PACIFIC)) {
+      null_map = std::make_unique<MDSMapV1>();
+    } else {
+      null_map = std::make_unique<MDSMapV2>();
+    }
+    null_map->epoch = fsmap.epoch;
+    null_map->compat = fsmap.compat;
+    auto m = make_message<MMDSMap>(mon->monmap->fsid, *null_map);
+    mon->send_reply(op, m.detach());
+>>>>>>> f7d08db182c... mds: MDSMap versions
   } else {
     auto beacon = make_message<MMDSBeacon>(mon.monmap->fsid,
         m->get_global_id(), m->get_name(), fsmap.get_epoch(),
@@ -1762,9 +1785,15 @@ void MDSMonitor::check_sub(Subscription *sub)
     dout(10) << __func__ << ": is_mds=" << is_mds << ", fscid= " << fscid << dendl;
 
     // Work out the effective latest epoch
-    const MDSMap *mds_map = nullptr;
-    MDSMap null_map;
-    null_map.compat = fsmap.compat;
+    std::unique_ptr<MDSMap> null_map;
+    std::unique_ptr<const MDSMap> mds_map;
+    if (!HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_PACIFIC)) {
+      null_map = std::make_unique<MDSMapV1>();
+    } else {
+      null_map = std::make_unique<MDSMapV2>();
+    }
+
+    null_map->compat = fsmap.compat;
     if (fscid == FS_CLUSTER_ID_NONE) {
       // For a client, we should have already dropped out
       ceph_assert(is_mds);
@@ -1772,18 +1801,18 @@ void MDSMonitor::check_sub(Subscription *sub)
       auto it = fsmap.standby_daemons.find(mds_gid);
       if (it != fsmap.standby_daemons.end()) {
         // For an MDS, we need to feed it an MDSMap with its own state in
-        null_map.mds_info[mds_gid] = it->second;
-        null_map.epoch = fsmap.standby_epochs.at(mds_gid);
+        null_map->mds_info[mds_gid] = it->second;
+        null_map->epoch = fsmap.standby_epochs.at(mds_gid);
       } else {
-        null_map.epoch = fsmap.epoch;
+        null_map->epoch = fsmap.epoch;
       }
-      mds_map = &null_map;
+      mds_map = std::move(null_map);
     } else {
       // Check the effective epoch 
-      mds_map = &fsmap.get_filesystem(fscid)->mds_map;
+      mds_map.reset(&fsmap.get_filesystem(fscid)->mds_map);
     }
 
-    ceph_assert(mds_map != nullptr);
+    ceph_assert(mds_map);
     dout(10) << __func__ << " selected MDS map epoch " <<
       mds_map->epoch << " for namespace " << fscid << " for subscriber "
       << sub->session->name << " who wants epoch " << sub->next << dendl;
