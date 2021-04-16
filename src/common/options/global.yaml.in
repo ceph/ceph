@@ -1688,7 +1688,6 @@ options:
   default: 10
   services:
   - mon
-  - mon
   with_legacy: true
 - name: mon_osd_laggy_halflife
   type: int
