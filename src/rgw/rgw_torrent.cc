@@ -37,13 +37,13 @@ seed::~seed()
   store = NULL;
 }
 
-void seed::init(struct req_state *p_req, rgw::sal::RGWStore *p_store)
+void seed::init(struct req_state *p_req, rgw::sal::Store* p_store)
 {
   s = p_req;
   store = p_store;
 }
 
-int seed::get_torrent_file(rgw::sal::RGWObject* object,
+int seed::get_torrent_file(rgw::sal::Object* object,
                            uint64_t &total_len,
                            ceph::bufferlist &bl_data,
                            rgw_obj &obj)

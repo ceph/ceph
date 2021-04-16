@@ -166,7 +166,7 @@ static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
   return mgr;
 }
 
-static RGWRESTMgr *rest_filter(rgw::sal::RGWStore* store, int dialect, RGWRESTMgr *orig)
+static RGWRESTMgr *rest_filter(rgw::sal::Store* store, int dialect, RGWRESTMgr *orig)
 {
   RGWSyncModuleInstanceRef sync_module = store->get_sync_module();
   if (sync_module) {
@@ -332,8 +332,8 @@ int radosgw_Main(int argc, const char **argv)
 #endif
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
-  rgw::sal::RGWStore *store =
-    RGWStoreManager::get_storage(&dp, g_ceph_context,
+  rgw::sal::Store* store =
+    StoreManager::get_storage(&dp, g_ceph_context,
 				 "rados",
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
@@ -682,7 +682,7 @@ int radosgw_Main(int argc, const char **argv)
 
   delete olog;
 
-  RGWStoreManager::close_storage(store);
+  StoreManager::close_storage(store);
   rgw::auth::s3::LDAPEngine::shutdown();
   rgw_tools_cleanup();
   rgw_shutdown_resolver();

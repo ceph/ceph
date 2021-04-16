@@ -22,7 +22,7 @@
 
 /// purge all log shards for the given mdlog
 class PurgeLogShardsCR : public RGWShardCollectCR {
-  rgw::sal::RGWRadosStore *const store;
+  rgw::sal::RadosStore* const store;
   const RGWMetadataLog* mdlog;
   const int num_shards;
   rgw_raw_obj obj;
@@ -31,7 +31,7 @@ class PurgeLogShardsCR : public RGWShardCollectCR {
   static constexpr int max_concurrent = 16;
 
  public:
-  PurgeLogShardsCR(rgw::sal::RGWRadosStore *store, const RGWMetadataLog* mdlog,
+  PurgeLogShardsCR(rgw::sal::RadosStore* store, const RGWMetadataLog* mdlog,
                    const rgw_pool& pool, int num_shards)
     : RGWShardCollectCR(store->ctx(), max_concurrent),
       store(store), mdlog(mdlog), num_shards(num_shards), obj(pool, "")
@@ -55,7 +55,7 @@ class PurgePeriodLogsCR : public RGWCoroutine {
     RGWSI_Zone *zone;
     RGWSI_MDLog *mdlog;
   } svc;
-  rgw::sal::RGWRadosStore *const store;
+  rgw::sal::RadosStore* const store;
   RGWMetadataManager *const metadata;
   RGWObjVersionTracker objv;
   Cursor cursor;
@@ -63,7 +63,7 @@ class PurgePeriodLogsCR : public RGWCoroutine {
   epoch_t *last_trim_epoch; //< update last trim on success
 
  public:
-  PurgePeriodLogsCR(rgw::sal::RGWRadosStore *store, epoch_t realm_epoch, epoch_t *last_trim)
+  PurgePeriodLogsCR(rgw::sal::RadosStore* store, epoch_t realm_epoch, epoch_t *last_trim)
     : RGWCoroutine(store->ctx()), store(store), metadata(store->ctl()->meta.mgr),
       realm_epoch(realm_epoch), last_trim_epoch(last_trim) {
     svc.zone = store->svc()->zone;
@@ -136,7 +136,7 @@ using connection_map = std::map<std::string, std::unique_ptr<RGWRESTConn>>;
 
 /// construct a RGWRESTConn for each zone in the realm
 template <typename Zonegroups>
-connection_map make_peer_connections(rgw::sal::RGWRadosStore *store,
+connection_map make_peer_connections(rgw::sal::RadosStore* store,
                                      const Zonegroups& zonegroups)
 {
   connection_map connections;
@@ -202,14 +202,14 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
 
 struct TrimEnv {
   const DoutPrefixProvider *dpp;
-  rgw::sal::RGWRadosStore *const store;
+  rgw::sal::RadosStore* const store;
   RGWHTTPManager *const http;
   int num_shards;
   const rgw_zone_id& zone;
   Cursor current; //< cursor to current period
   epoch_t last_trim_epoch{0}; //< epoch of last mdlog that was purged
 
-  TrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http, int num_shards)
+  TrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http, int num_shards)
     : dpp(dpp), store(store), http(http), num_shards(num_shards),
       zone(store->svc()->zone->zone_id()),
       current(store->svc()->mdlog->get_period_history()->get_current())
@@ -222,7 +222,7 @@ struct MasterTrimEnv : public TrimEnv {
   /// last trim marker for each shard, only applies to current period's mdlog
   std::vector<std::string> last_trim_markers;
 
-  MasterTrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http, int num_shards)
+  MasterTrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http, int num_shards)
     : TrimEnv(dpp, store, http, num_shards),
       last_trim_markers(num_shards)
   {
@@ -237,7 +237,7 @@ struct PeerTrimEnv : public TrimEnv {
   /// last trim timestamp for each shard, only applies to current period's mdlog
   std::vector<ceph::real_time> last_trim_timestamps;
 
-  PeerTrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http, int num_shards)
+  PeerTrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http, int num_shards)
     : TrimEnv(dpp, store, http, num_shards),
       last_trim_timestamps(num_shards)
   {}
@@ -600,7 +600,7 @@ int MetaPeerTrimCR::operate()
 }
 
 class MetaTrimPollCR : public RGWCoroutine {
-  rgw::sal::RGWRadosStore *const store;
+  rgw::sal::RadosStore* const store;
   const utime_t interval; //< polling interval
   const rgw_raw_obj obj;
   const std::string name{"meta_trim"}; //< lock name
@@ -611,7 +611,7 @@ class MetaTrimPollCR : public RGWCoroutine {
   virtual RGWCoroutine* alloc_cr() = 0;
 
  public:
-  MetaTrimPollCR(rgw::sal::RGWRadosStore *store, utime_t interval)
+  MetaTrimPollCR(rgw::sal::RadosStore* store, utime_t interval)
     : RGWCoroutine(store->ctx()), store(store), interval(interval),
       obj(store->svc()->zone->get_zone_params().log_pool, RGWMetadataLogHistory::oid),
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
@@ -656,7 +656,7 @@ class MetaMasterTrimPollCR : public MetaTrimPollCR  {
     return new MetaMasterTrimCR(env);
   }
  public:
-  MetaMasterTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
+  MetaMasterTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
                        int num_shards, utime_t interval)
     : MetaTrimPollCR(store, interval),
       env(dpp, store, http, num_shards)
@@ -669,14 +669,14 @@ class MetaPeerTrimPollCR : public MetaTrimPollCR {
     return new MetaPeerTrimCR(env);
   }
  public:
-  MetaPeerTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
+  MetaPeerTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
                      int num_shards, utime_t interval)
     : MetaTrimPollCR(store, interval),
       env(dpp, store, http, num_shards)
   {}
 };
 
-RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
+RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
                                       int num_shards, utime_t interval)
 {
   if (store->svc()->zone->is_meta_master()) {
@@ -687,20 +687,20 @@ RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::R
 
 
 struct MetaMasterAdminTrimCR : private MasterTrimEnv, public MetaMasterTrimCR {
-  MetaMasterAdminTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http, int num_shards)
+  MetaMasterAdminTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http, int num_shards)
     : MasterTrimEnv(dpp, store, http, num_shards),
       MetaMasterTrimCR(*static_cast<MasterTrimEnv*>(this))
   {}
 };
 
 struct MetaPeerAdminTrimCR : private PeerTrimEnv, public MetaPeerTrimCR {
-  MetaPeerAdminTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http, int num_shards)
+  MetaPeerAdminTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http, int num_shards)
     : PeerTrimEnv(dpp, store, http, num_shards),
       MetaPeerTrimCR(*static_cast<PeerTrimEnv*>(this))
   {}
 };
 
-RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store,
+RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
                                             RGWHTTPManager *http,
                                             int num_shards)
 {

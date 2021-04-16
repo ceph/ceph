@@ -236,7 +236,7 @@ bool RGWOIDCProvider::validate_input()
 }
 
 int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp,
-				   rgw::sal::RGWStore* store,
+				   rgw::sal::Store* store,
 				   const string& tenant,
 				   vector<RGWOIDCProvider>& providers)
 {

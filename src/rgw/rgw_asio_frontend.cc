@@ -417,7 +417,7 @@ class AsioFrontend {
   void stop();
   void join();
   void pause();
-  void unpause(rgw::sal::RGWStore* store, rgw_auth_registry_ptr_t);
+  void unpause(rgw::sal::Store* store, rgw_auth_registry_ptr_t);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -631,7 +631,7 @@ class ExpandMetaVar {
   map<string, string> meta_map;
 
 public:
-  ExpandMetaVar(rgw::sal::Zone *zone_svc) {
+  ExpandMetaVar(rgw::sal::Zone* zone_svc) {
     meta_map["realm"] = zone_svc->get_realm().get_name();
     meta_map["realm_id"] = zone_svc->get_realm().get_id();
     meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
@@ -1015,7 +1015,7 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause(rgw::sal::RGWStore* const store,
+void AsioFrontend::unpause(rgw::sal::Store* const store,
                            rgw_auth_registry_ptr_t auth_registry)
 {
   env.store = store;
@@ -1079,7 +1079,7 @@ void RGWAsioFrontend::pause_for_new_config()
 }
 
 void RGWAsioFrontend::unpause_with_new_config(
-  rgw::sal::RGWStore* const store,
+  rgw::sal::Store* const store,
   rgw_auth_registry_ptr_t auth_registry
 ) {
   impl->unpause(store, std::move(auth_registry));

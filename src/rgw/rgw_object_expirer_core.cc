@@ -193,7 +193,7 @@ int RGWObjExpStore::objexp_hint_trim(const string& oid,
 int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 
   int ret = store->get_bucket(dpp, nullptr, rgw_bucket(hint.tenant, hint.bucket_name, hint.bucket_id), &bucket, null_yield);
   if (-ENOENT == ret) {
@@ -213,7 +213,7 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
     key.instance = "null";
   }
 
-  std::unique_ptr<rgw::sal::RGWObject> obj = bucket->get_object(key);
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
   obj->set_atomic(&rctx);
   ret = obj->delete_object(dpp, &rctx, null_yield);
 
@@ -298,7 +298,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(&static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
+  int ret = l.lock_exclusive(&static_cast<rgw::sal::RadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */
     ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
     return false;
@@ -334,7 +334,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
     marker = out_marker;
   } while (truncated);
 
-  l.unlock(&static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
+  l.unlock(&static_cast<rgw::sal::RadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
   return done;
 }
 

@@ -108,7 +108,7 @@ private:
   bufferlist bl;  // bufflist ready to send
 
   struct req_state *s{nullptr};
-  rgw::sal::RGWStore *store{nullptr};
+  rgw::sal::Store* store{nullptr};
   SHA1 h;
 
   TorrentBencode dencode;
@@ -117,8 +117,8 @@ public:
   ~seed();
 
   int get_params();
-  void init(struct req_state *p_req, rgw::sal::RGWStore *p_store);
-  int get_torrent_file(rgw::sal::RGWObject* object,
+  void init(struct req_state *p_req, rgw::sal::Store* p_store);
+  int get_torrent_file(rgw::sal::Object* object,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,
                        rgw_obj &obj);

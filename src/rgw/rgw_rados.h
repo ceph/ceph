@@ -224,20 +224,20 @@ public:
 };
 
 class RGWObjectCtx {
-  rgw::sal::RGWStore *store;
+  rgw::sal::Store* store;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
   void *s{nullptr};
 
   std::map<rgw_obj, RGWObjState> objs_state;
 public:
-  explicit RGWObjectCtx(rgw::sal::RGWStore *_store) : store(_store) {}
-  explicit RGWObjectCtx(rgw::sal::RGWStore *_store, void *_s) : store(_store), s(_s) {}
+  explicit RGWObjectCtx(rgw::sal::Store* _store) : store(_store) {}
+  explicit RGWObjectCtx(rgw::sal::Store* _store, void *_s) : store(_store), s(_s) {}
 
   void *get_private() {
     return s;
   }
 
-  rgw::sal::RGWStore *get_store() {
+  rgw::sal::Store* get_store() {
     return store;
   }
 
@@ -344,8 +344,8 @@ class RGWCoroutinesManagerRegistry;
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
 namespace rgw { namespace sal {
-  class RGWStore;
-  class RGWRadosStore;
+  class Store;
+  class RadosStore;
   class MPRadosSerializer;
   class LCRadosSerializer;
 } }
@@ -383,7 +383,7 @@ class RGWRados
   friend class BucketIndexLockGuard;
   friend class rgw::sal::MPRadosSerializer;
   friend class rgw::sal::LCRadosSerializer;
-  friend class rgw::sal::RGWRadosStore;
+  friend class rgw::sal::RadosStore;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
@@ -400,7 +400,7 @@ class RGWRados
   ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
   SafeTimer *timer;
 
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore* store;
   RGWGC *gc;
   RGWLC *lc;
   RGWObjectExpirer *obj_expirer;
@@ -545,7 +545,7 @@ public:
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
-  void set_store(rgw::sal::RGWRadosStore *_store) {
+  void set_store(rgw::sal::RadosStore* _store) {
     store = _store;
   }
 
@@ -1039,18 +1039,18 @@ public:
                                const std::string& obj_delim,
                                std::function<int(const rgw_bucket_dir_entry&)> handler);
 
-  bool swift_versioning_enabled(rgw::sal::RGWBucket* bucket) const;
+  bool swift_versioning_enabled(rgw::sal::Bucket* bucket) const;
 
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
                             const rgw_user& user,               /* in */
-                            rgw::sal::RGWBucket* bucket,        /* in */
-                            rgw::sal::RGWObject* obj,           /* in */
+                            rgw::sal::Bucket* bucket,        /* in */
+                            rgw::sal::Object* obj,           /* in */
                             const DoutPrefixProvider *dpp,      /* in/out */ 
                             optional_yield y);                  /* in */                
   int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
-                               rgw::sal::RGWBucket* bucket,     /* in */
-                               rgw::sal::RGWObject* obj,        /* in */
+                               rgw::sal::Bucket* bucket,     /* in */
+                               rgw::sal::Object* obj,        /* in */
                                bool& restored,                 /* out */
                                const DoutPrefixProvider *dpp);     /* in/out */                
   int copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
@@ -1058,7 +1058,7 @@ public:
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
                               const rgw_user& user_id,
-                              rgw::sal::RGWObject* dest_obj,
+                              rgw::sal::Object* dest_obj,
                               ceph::real_time *mtime);
 
   enum AttrsMod {
@@ -1067,13 +1067,13 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw::sal::RGWObject* obj, const DoutPrefixProvider *dpp, optional_yield y);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw::sal::Object* obj, const DoutPrefixProvider *dpp, optional_yield y);
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
-               rgw::sal::RGWObject* src_obj,
+               rgw::sal::Object* src_obj,
                const RGWBucketInfo *src_bucket_info,
                real_time *src_mtime,
                uint64_t *psize,
@@ -1092,10 +1092,10 @@ public:
                        const rgw_user& user_id,
                        req_info *info,
                        const rgw_zone_id& source_zone,
-                       rgw::sal::RGWObject* dest_obj,
-                       rgw::sal::RGWObject* src_obj,
-		       rgw::sal::RGWBucket* dest_bucket,
-		       rgw::sal::RGWBucket* src_bucket,
+                       rgw::sal::Object* dest_obj,
+                       rgw::sal::Object* src_obj,
+		       rgw::sal::Bucket* dest_bucket,
+		       rgw::sal::Bucket* src_bucket,
 		       std::optional<rgw_placement_rule> dest_placement,
                        ceph::real_time *src_mtime,
                        ceph::real_time *mtime,
@@ -1106,7 +1106,7 @@ public:
                        const char *if_nomatch,
                        AttrsMod attrs_mod,
                        bool copy_if_newer,
-                       rgw::sal::RGWAttrs& attrs,
+                       rgw::sal::Attrs& attrs,
                        RGWObjCategory category,
                        std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
@@ -1136,10 +1136,10 @@ public:
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
-               rgw::sal::RGWObject* dest_obj,
-               rgw::sal::RGWObject* src_obj,
-               rgw::sal::RGWBucket* dest_bucket,
-               rgw::sal::RGWBucket* src_bucket,
+               rgw::sal::Object* dest_obj,
+               rgw::sal::Object* src_obj,
+               rgw::sal::Bucket* dest_bucket,
+               rgw::sal::Bucket* src_bucket,
                const rgw_placement_rule& dest_placement,
                ceph::real_time *src_mtime,
                ceph::real_time *mtime,
@@ -1163,10 +1163,10 @@ public:
                optional_yield y);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
-               rgw::sal::RGWBucket* bucket,
+               rgw::sal::Bucket* bucket,
                const rgw_placement_rule& dest_placement,
 	       RGWRados::Object::Read& read_op, off_t end,
-               rgw::sal::RGWObject* dest_obj,
+               rgw::sal::Object* dest_obj,
 	       ceph::real_time *mtime,
 	       ceph::real_time set_mtime,
                map<string, bufferlist>& attrs,
@@ -1177,8 +1177,8 @@ public:
                optional_yield y);
   
   int transition_obj(RGWObjectCtx& obj_ctx,
-                     rgw::sal::RGWBucket* bucket,
-                     rgw::sal::RGWObject& obj,
+                     rgw::sal::Bucket* bucket,
+                     rgw::sal::Object& obj,
                      const rgw_placement_rule& placement_rule,
                      const real_time& mtime,
                      uint64_t olh_epoch,

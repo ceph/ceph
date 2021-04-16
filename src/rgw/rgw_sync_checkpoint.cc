@@ -82,7 +82,7 @@ std::ostream& operator<<(std::ostream& out, const BucketIndexShardsManager& rhs)
 }
 
 int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
-                                  rgw::sal::RGWRadosStore *store,
+                                  rgw::sal::RadosStore* store,
                                   const RGWBucketInfo& bucket_info,
                                   const RGWBucketInfo& source_bucket_info,
                                   const rgw_sync_bucket_pipe& pipe,
@@ -146,7 +146,7 @@ int source_bilog_markers(RGWSI_Zone* zone_svc,
 } // anonymous namespace
 
 int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
-                               rgw::sal::RGWRadosStore *store,
+                               rgw::sal::RadosStore* store,
                                const RGWBucketSyncPolicyHandler& policy,
                                const RGWBucketInfo& info,
                                std::optional<rgw_zone_id> opt_source_zone,

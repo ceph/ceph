@@ -456,7 +456,7 @@ class PSSubscription {
   public:
     InitBucketLifecycleCR(RGWDataSyncCtx *_sc,
            PSConfigRef& _conf,
-           rgw::sal::RGWBucket* _bucket) : RGWCoroutine(_sc->cct),
+           rgw::sal::Bucket* _bucket) : RGWCoroutine(_sc->cct),
                                                      sc(_sc), sync_env(_sc->env),
                                                      conf(_conf) {
       lc_config.bucket = _bucket;

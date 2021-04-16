@@ -856,7 +856,7 @@ namespace rgw {
     
     std::string uid; // should match user.user_id, iiuc
 
-    std::unique_ptr<rgw::sal::RGWUser> user;
+    std::unique_ptr<rgw::sal::User> user;
     RGWAccessKey key; // XXXX acc_key
 
     static std::atomic<uint32_t> fs_inst_counter;
@@ -984,7 +984,7 @@ namespace rgw {
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
 
-    int authorize(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store) {
+    int authorize(const DoutPrefixProvider *dpp, rgw::sal::Store* store) {
       int ret = store->get_user_by_access_key(dpp, key.id, null_yield, &user);
       if (ret == 0) {
 	RGWAccessKey* k = user->get_info().get_key(key.id);
@@ -1331,7 +1331,7 @@ public:
   uint32_t d_count;
   bool rcb_eof; // caller forced early stop in readdir cycle
 
-  RGWListBucketsRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWListBucketsRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 			void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), offset(_offset),
@@ -1392,7 +1392,7 @@ public:
     sent_data = true;
   }
 
-  void send_response_data(rgw::sal::RGWBucketList& buckets) override {
+  void send_response_data(rgw::sal::BucketList& buckets) override {
     if (!sent_data)
       return;
     auto& m = buckets.get_buckets();
@@ -1461,7 +1461,7 @@ public:
   uint32_t d_count;
   bool rcb_eof; // caller forced early stop in readdir cycle
 
-  RGWReaddirRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWReaddirRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 		    void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), offset(_offset),
@@ -1785,7 +1785,7 @@ public:
   bool valid;
   bool has_children;
 
-  RGWRMdirCheck (CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWRMdirCheck (CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		 const RGWFileHandle* _rgw_fh)
     : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), valid(false),
       has_children(false) {
@@ -1864,7 +1864,7 @@ class RGWCreateBucketRequest : public RGWLibRequest,
 public:
   const std::string& bucket_name;
 
-  RGWCreateBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWCreateBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 			std::string& _bname)
     : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname) {
     op = this;
@@ -1929,7 +1929,7 @@ class RGWDeleteBucketRequest : public RGWLibRequest,
 public:
   const std::string& bucket_name;
 
-  RGWDeleteBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWDeleteBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 			std::string& _bname)
     : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname) {
     op = this;
@@ -1981,7 +1981,7 @@ public:
   buffer::list& bl; /* XXX */
   size_t bytes_written;
 
-  RGWPutObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWPutObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		  const std::string& _bname, const std::string& _oname,
 		  buffer::list& _bl)
     : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname),
@@ -2073,7 +2073,7 @@ public:
   size_t read_resid; /* initialize to len, <= sizeof(ulp_buffer) */
   bool do_hexdump = false;
 
-  RGWReadRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWReadRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		 RGWFileHandle* _rgw_fh, uint64_t off, uint64_t len,
 		 void *_ulp_buffer)
     : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), ulp_buffer(_ulp_buffer),
@@ -2166,7 +2166,7 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
 
-  RGWDeleteObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWDeleteObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		      const std::string& _bname, const std::string& _oname)
     : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname) {
     op = this;
@@ -2217,7 +2217,7 @@ public:
 
   static constexpr uint32_t FLAG_NONE = 0x000;
 
-  RGWStatObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWStatObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		    const std::string& _bname, const std::string& _oname,
 		    uint32_t _flags)
     : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname),
@@ -2310,7 +2310,7 @@ public:
   std::map<std::string, buffer::list> attrs;
   RGWLibFS::BucketStats& bs;
 
-  RGWStatBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWStatBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		       const std::string& _path,
 		       RGWLibFS::BucketStats& _stats)
     : RGWLibRequest(_cct, std::move(_user)), bs(_stats) {
@@ -2385,7 +2385,7 @@ public:
   bool is_dir;
   bool exact_matched;
 
-  RGWStatLeafRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWStatLeafRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		     RGWFileHandle* _rgw_fh, const std::string& _path)
     : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), path(_path),
       matched(false), is_dir(false), exact_matched(false) {
@@ -2501,8 +2501,8 @@ public:
   size_t bytes_written;
   bool eio;
 
-  RGWWriteRequest(rgw::sal::RGWStore* store,
-		  std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWWriteRequest(rgw::sal::Store* store,
+		  std::unique_ptr<rgw::sal::User> _user,
 		  RGWFileHandle* _fh, const std::string& _bname,
 		  const std::string& _oname)
     : RGWLibContinuedReq(store->ctx(), std::move(_user)),
@@ -2595,7 +2595,7 @@ public:
   const std::string& src_name;
   const std::string& dst_name;
 
-  RGWCopyObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWCopyObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		    RGWFileHandle* _src_parent, RGWFileHandle* _dst_parent,
 		    const std::string& _src_name, const std::string& _dst_name)
     : RGWLibRequest(_cct, std::move(_user)), src_parent(_src_parent),
@@ -2682,7 +2682,7 @@ public:
   const std::string& obj_name;
 
   RGWGetAttrsRequest(CephContext* _cct,
-		     std::unique_ptr<rgw::sal::RGWUser> _user,
+		     std::unique_ptr<rgw::sal::User> _user,
 		     const std::string& _bname, const std::string& _oname)
     : RGWLibRequest(_cct, std::move(_user)), RGWGetAttrs(),
       bucket_name(_bname), obj_name(_oname) {
@@ -2737,7 +2737,7 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
 
-  RGWSetAttrsRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWSetAttrsRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
 		     const std::string& _bname, const std::string& _oname)
     : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname) {
     op = this;
@@ -2793,14 +2793,14 @@ public:
   const std::string& obj_name;
 
   RGWRMAttrsRequest(CephContext* _cct,
-		     std::unique_ptr<rgw::sal::RGWUser> _user,
+		     std::unique_ptr<rgw::sal::User> _user,
 		     const std::string& _bname, const std::string& _oname)
     : RGWLibRequest(_cct, std::move(_user)), RGWRMAttrs(),
       bucket_name(_bname), obj_name(_oname) {
     op = this;
   }
 
-  const rgw::sal::RGWAttrs& get_attrs() {
+  const rgw::sal::Attrs& get_attrs() {
     return attrs;
   }
 
@@ -2848,7 +2848,7 @@ class RGWGetClusterStatReq : public RGWLibRequest,
         public RGWGetClusterStat {
 public:
   struct rados_cluster_stat_t& stats_req;
-  RGWGetClusterStatReq(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
+  RGWGetClusterStatReq(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
                        rados_cluster_stat_t& _stats):
   RGWLibRequest(_cct, std::move(_user)), stats_req(_stats){
     op = this;

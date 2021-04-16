@@ -214,7 +214,7 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
 {
   std::string bucket_name;
   bool delete_children;
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
@@ -282,7 +282,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
     }
   }
   if (use_http_params) {
-    std::unique_ptr<rgw::sal::RGWBucket> bucket;
+    std::unique_ptr<rgw::sal::Bucket> bucket;
     op_ret = store->get_bucket(s, nullptr, uid.tenant, bucket_name, &bucket, s->yield);
     if (op_ret < 0) {
       return;

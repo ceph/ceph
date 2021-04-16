@@ -158,7 +158,7 @@ class RGWPeriodPusher::CRThread {
 };
 
 
-RGWPeriodPusher::RGWPeriodPusher(rgw::sal::RGWStore* store,
+RGWPeriodPusher::RGWPeriodPusher(rgw::sal::Store* store,
 				 optional_yield y)
   : cct(store->ctx()), store(store)
 {
@@ -170,7 +170,7 @@ RGWPeriodPusher::RGWPeriodPusher(rgw::sal::RGWStore* store,
   // always send out the current period on startup
   RGWPeriod period;
   // XXX dang
-  int r = period.init(cct, static_cast<rgw::sal::RGWRadosStore *>(store)->svc()->sysobj, realm_id, y, realm.get_name());
+  int r = period.init(cct, static_cast<rgw::sal::RadosStore* >(store)->svc()->sysobj, realm_id, y, realm.get_name());
   if (r < 0) {
     lderr(cct) << "failed to load period for realm " << realm_id << dendl;
     return;
@@ -295,7 +295,7 @@ void RGWPeriodPusher::pause()
   store = nullptr;
 }
 
-void RGWPeriodPusher::resume(rgw::sal::RGWStore* store)
+void RGWPeriodPusher::resume(rgw::sal::Store* store)
 {
   std::lock_guard<std::mutex> lock(mutex);
   this->store = store;

@@ -30,7 +30,7 @@ namespace rgw {
     OpsLogSocket* olog;
     rgw::LDAPHelper* ldh{nullptr};
     RGWREST rest; // XXX needed for RGWProcessEnv
-    rgw::sal::RGWStore* store;
+    rgw::sal::Store* store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
@@ -38,7 +38,7 @@ namespace rgw {
       {}
     ~RGWLib() {}
 
-    rgw::sal::RGWStore* get_store() { return store; }
+    rgw::sal::Store* get_store() { return store; }
 
     RGWLibFrontend* get_fe() { return fe; }
 
@@ -74,7 +74,7 @@ namespace rgw {
       return user_info;
     }
 
-    int set_uid(rgw::sal::RGWStore* store, const rgw_user& uid);
+    int set_uid(rgw::sal::Store* store, const rgw_user& uid);
 
     int write_data(const char *buf, int len);
     int read_data(char *buf, int len);
@@ -121,21 +121,21 @@ namespace rgw {
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
-    static int init_from_header(rgw::sal::RGWStore *store,
+    static int init_from_header(rgw::sal::Store* store,
 				struct req_state *s);
   }; /* RGWHandler_Lib */
 
   class RGWLibRequest : public RGWRequest,
 			public RGWHandler_Lib {
   private:
-    std::unique_ptr<rgw::sal::RGWUser> tuser; // Don't use this.  It's empty except during init.
+    std::unique_ptr<rgw::sal::User> tuser; // Don't use this.  It's empty except during init.
   public:
     CephContext* cct;
 
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
-    RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user)
+    RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user)
       :  RGWRequest(rgwlib.get_store()->get_new_req_id()),
 	 tuser(std::move(_user)), cct(_cct)
       {}
@@ -189,7 +189,7 @@ namespace rgw {
   public:
 
     RGWLibContinuedReq(CephContext* _cct,
-		       std::unique_ptr<rgw::sal::RGWUser> _user)
+		       std::unique_ptr<rgw::sal::User> _user)
       :  RGWLibRequest(_cct, std::move(_user)), io_ctx(),
 	 rstate(_cct, &io_ctx.get_env(), id),
 	 rados_ctx(rgwlib.get_store(), &rstate)
@@ -207,7 +207,7 @@ namespace rgw {
 	    << get_state()->trans_id.c_str() << dendl;
       }
 
-    inline rgw::sal::RGWStore* get_store() { return store; }
+    inline rgw::sal::Store* get_store() { return store; }
     inline RGWLibIO& get_io() { return io_ctx; }
     inline RGWObjectCtx& get_octx() { return rados_ctx; }
 
