@@ -6,7 +6,8 @@ from typing import NamedTuple, List, Dict
 import pytest
 
 from ceph.deployment.hostspec import HostSpec
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError, IngressSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, IngressSpec
+from ceph.deployment.hostspec import SpecValidationError
 
 from cephadm.module import HostAssignment
 from cephadm.schedule import DaemonPlacement
@@ -164,7 +165,7 @@ def run_scheduler_test(results, mk_spec, hosts, daemons, key_elems):
 #       |   |   | |     + expected result
 #       |   |   | |     |
 test_explicit_scheduler_results = [
-    (k("*   *   0 *"), error(ServiceSpecValidationError, 'num/count must be > 1')),
+    (k("*   *   0 *"), error(SpecValidationError, 'num/count must be > 1')),
     (k("*   e   N l"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts for label mylabel')),
     (k("*   e   N p"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts')),
     (k("*   e   N h"), error(OrchestratorValidationError, 'placement spec is empty: no hosts, no label, no pattern, no count')),
@@ -908,7 +909,7 @@ def test_bad_placements(placement):
     try:
         PlacementSpec.from_string(placement.split(' '))
         assert False
-    except ServiceSpecValidationError:
+    except SpecValidationError:
         pass
 
 
