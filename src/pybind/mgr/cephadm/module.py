@@ -2283,17 +2283,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'target_version': image_info.ceph_version,
             'needs_update': dict(),
             'up_to_date': list(),
+            'non_ceph_image_daemons': list()
         }
         for host, dm in self.cache.daemons.items():
             for name, dd in dm.items():
                 if image_info.image_id == dd.container_image_id:
                     r['up_to_date'].append(dd.name())
-                else:
+                elif dd.daemon_type in (CEPH_TYPES + GATEWAY_TYPES):
                     r['needs_update'][dd.name()] = {
                         'current_name': dd.container_image_name,
                         'current_id': dd.container_image_id,
                         'current_version': dd.version,
                     }
+                else:
+                    r['non_ceph_image_daemons'].append(dd.name())
         if self.use_repo_digest and image_info.repo_digests:
             # FIXME: we assume the first digest is the best one to use
             r['target_digest'] = image_info.repo_digests[0]
