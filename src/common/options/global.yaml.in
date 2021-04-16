@@ -1729,6 +1729,7 @@ options:
   type: int
   level: advanced
   desc: halflife of OSD 'lagginess' factor
+  fmt_desc: The number of seconds laggy estimates will decay.
   default: 1_hr
   services:
   - mon
@@ -1740,6 +1741,7 @@ options:
   long_desc: 1.0 means that an OSD marking itself back up (because it was marked down
     but not actually dead) means a 100% laggy_probability; 0.0 effectively disables
     tracking of laggy_probability.
+  fmt_desc: The weight for new samples in laggy estimation decay.
   default: 0.3
   services:
   - mon
@@ -1750,6 +1752,10 @@ options:
   type: int
   level: advanced
   desc: cap value for period for OSD to be marked for laggy_interval calculation
+  fmt_desc: Maximum value of ``laggy_interval`` in laggy estimations (in seconds).
+              Monitor uses an adaptive approach to evaluate the ``laggy_interval`` of
+              a certain OSD. This value will be used to calculate the grace time for
+              that OSD.
   default: 5_min
   services:
   - mon
@@ -1765,6 +1771,7 @@ options:
     that it isn't marked down again.  laggy_probability is an estimated probability
     that the given OSD is down because it is laggy (not actually down), and laggy_interval
     is an estiate on how long it stays down when it is laggy.
+  fmt_desc: If set to ``true``, Ceph will scale based on laggy estimations.
   default: true
   services:
   - mon
@@ -1777,6 +1784,7 @@ options:
   type: bool
   level: advanced
   desc: increase the mon_osd_down_out_interval if an OSD appears to be laggy
+  fmt_desc: If set to ``true``, Ceph will scaled based on laggy estimations.
   default: true
   services:
   - mon
@@ -1787,6 +1795,8 @@ options:
   type: bool
   level: advanced
   desc: mark any OSD that comes up 'in'
+  fmt_desc: Ceph will mark any booting Ceph OSD Daemons as ``in``
+              the Ceph Storage Cluster.
   default: false
   services:
   - mon
@@ -1795,6 +1805,8 @@ options:
   type: bool
   level: advanced
   desc: mark any OSD that comes up that was automatically marked 'out' back 'in'
+  fmt_desc: Ceph will mark booting Ceph OSD Daemons auto marked ``out``
+              of the Ceph Storage Cluster as ``in`` the cluster.
   default: true
   services:
   - mon
@@ -1805,6 +1817,8 @@ options:
   type: bool
   level: advanced
   desc: mark any new OSD that comes up 'in'
+  fmt_desc: Ceph will mark booting new Ceph OSD Daemons as ``in`` the
+              Ceph Storage Cluster.
   default: true
   services:
   - mon
@@ -1821,6 +1835,8 @@ options:
   type: int
   level: advanced
   desc: mark any OSD 'out' that has been 'down' for this long (seconds)
+  fmt_desc: The number of seconds Ceph waits before marking a Ceph OSD Daemon
+              ``down`` and ``out`` if it doesn't respond.
   default: 10_min
   services:
   - mon
@@ -1830,6 +1846,10 @@ options:
   level: advanced
   desc: do not automatically mark OSDs 'out' if an entire subtree of this size is
     down
+  fmt_desc: The smallest :term:`CRUSH` unit type that Ceph will **not**
+              automatically mark out. For instance, if set to ``host`` and if
+              all OSDs of a host are down, Ceph will not automatically mark out
+              these OSDs.
   default: rack
   services:
   - mon
@@ -1841,6 +1861,8 @@ options:
   type: float
   level: advanced
   desc: do not automatically mark OSDs 'out' if fewer than this many OSDs are 'up'
+  fmt_desc: The minimum ratio of ``up`` Ceph OSD Daemons before Ceph will
+              mark Ceph OSD Daemons ``down``.
   default: 0.3
   services:
   - mon
@@ -1851,6 +1873,8 @@ options:
   type: float
   level: advanced
   desc: do not automatically mark OSDs 'out' if fewer than this many OSDs are 'in'
+  fmt_desc: The minimum ratio of ``in`` Ceph OSD Daemons before Ceph will
+              mark Ceph OSD Daemons ``out``.
   default: 0.75
   services:
   - mon
@@ -2244,6 +2268,8 @@ options:
   type: int
   level: advanced
   desc: time before OSDs who do not report to the mons are marked down (seconds)
+  fmt_desc: The grace period in seconds before declaring
+              unresponsive Ceph OSD Daemons ``down``.
   default: 15_min
   services:
   - mon
@@ -2708,6 +2734,8 @@ options:
   level: advanced
   desc: number of OSDs from different subtrees who need to report a down OSD for it
     to count
+  fmt_desc: The minimum number of Ceph OSD Daemons required to report a
+              ``down`` Ceph OSD Daemon.
   default: 2
   services:
   - mon
@@ -2717,6 +2745,9 @@ options:
   type: str
   level: advanced
   desc: in which level of parent bucket the reporters are counted
+  fmt_desc: In which level of parent bucket the reporters are counted. The OSDs
+              send failure reports to monitors if they find a peer that is not responsive.
+              Monitors mark the reported ``OSD`` out and then ``down`` after a grace period.
   default: host
   services:
   - mon
@@ -4484,6 +4515,7 @@ options:
   type: int
   level: dev
   desc: Interval (in seconds) between peer pings
+  fmt_desc: How often an Ceph OSD Daemon pings its peers (in seconds).
   default: 6
   min: 1
   max: 1_min
@@ -4494,6 +4526,10 @@ options:
   type: int
   level: advanced
   default: 20
+  fmt_desc: The elapsed time when a Ceph OSD Daemon hasn't shown a heartbeat
+              that the Ceph Storage Cluster considers it ``down``.
+              This setting must be set in both the [mon] and [osd] or [global]
+              sections so that it is read by both monitor and OSD daemons.
   with_legacy: true
 - name: osd_heartbeat_stale
   type: int
@@ -4547,18 +4583,25 @@ options:
   type: int
   level: advanced
   default: 30
+  fmt_desc: How often the Ceph OSD Daemon pings a Ceph Monitor if it has no
+              Ceph OSD Daemon peers.
   with_legacy: true
 - name: osd_mon_heartbeat_stat_stale
   type: int
   level: advanced
   desc: Stop reporting on heartbeat ping times not updated for this many seconds.
   long_desc: Stop reporting on old heartbeat information unless this is set to zero
+  fmt_desc: Stop reporting on heartbeat ping times which haven't been updated for
+              this many seconds.  Set to zero to disable this action.
   default: 1_hr
 # failures, up_thru, boot.
 - name: osd_mon_report_interval
   type: int
   level: advanced
   desc: Frequency of OSD reports to mon for peer failures, fullness status changes
+  fmt_desc: The number of seconds a Ceph OSD Daemon may wait
+              from startup or another reportable event before reporting
+              to a Ceph Monitor.
   default: 5
   with_legacy: true
 # max updates in flight
