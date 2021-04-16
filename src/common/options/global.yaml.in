@@ -6507,7 +6507,7 @@ options:
   type: float
   level: dev
   desc: Ratio of bluestore cache to devote to metadata
-  default: 0.4
+  default: 0.45
   see_also:
   - bluestore_cache_size
   with_legacy: true
@@ -6515,7 +6515,7 @@ options:
   type: float
   level: dev
   desc: Ratio of bluestore cache to devote to kv database (rocksdb)
-  default: 0
+  default: 0.45
   see_also:
   - bluestore_cache_size
   with_legacy: true
@@ -6523,7 +6523,7 @@ options:
   type: float
   level: dev
   desc: Ratio of bluestore cache to devote to kv onode column family (rocksdb)
-  default: 0
+  default: 0.04
   see_also:
   - bluestore_cache_size
 - name: bluestore_cache_autotune
