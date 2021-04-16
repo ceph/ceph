@@ -13,6 +13,7 @@ options:
   - common
   flags:
   - no_mon_update
+  with_legacy: true
 - name: fsid
   type: uuid
   level: basic
@@ -35,6 +36,7 @@ options:
   - mgr
   flags:
   - startup
+  with_legacy: true
 - name: public_addrv
   type: addrvec
   level: basic
@@ -46,6 +48,7 @@ options:
   - mgr
   flags:
   - startup
+  with_legacy: true
 - name: public_bind_addr
   type: addr
   level: advanced
@@ -53,6 +56,7 @@ options:
   - mon
   flags:
   - startup
+  with_legacy: true
 - name: cluster_addr
   type: addr
   level: basic
@@ -63,6 +67,7 @@ options:
   - osd
   flags:
   - startup
+  with_legacy: true
 - name: public_network
   type: str
   level: advanced
@@ -76,6 +81,7 @@ options:
   - mgr
   flags:
   - startup
+  with_legacy: true
 - name: public_network_interface
   type: str
   level: advanced
@@ -102,6 +108,7 @@ options:
   - osd
   flags:
   - startup
+  with_legacy: true
 - name: cluster_network_interface
   type: str
   level: advanced
@@ -195,6 +202,7 @@ options:
   flags:
   - no_mon_update
   - startup
+  with_legacy: true
 - name: lockdep_force_backtrace
   type: bool
   level: dev
@@ -206,6 +214,7 @@ options:
   - lockdep
   flags:
   - startup
+  with_legacy: true
 - name: run_dir
   type: str
   level: advanced
@@ -217,6 +226,7 @@ options:
   - admin_socket
   flags:
   - startup
+  with_legacy: true
 - name: admin_socket
   type: str
   level: advanced
@@ -226,6 +236,8 @@ options:
   - common
   flags:
   - startup
+  # default changed by common_preinit()
+  with_legacy: true
 - name: admin_socket_mode
   type: str
   level: advanced
@@ -236,6 +248,7 @@ options:
   - admin_socket
   flags:
   - startup
+  with_legacy: true
 - name: daemonize
   type: bool
   level: advanced
@@ -255,6 +268,8 @@ options:
   flags:
   - no_mon_update
   - startup
+  # default changed by common_preinit()
+  with_legacy: true
 - name: setuser
   type: str
   level: advanced
@@ -271,6 +286,7 @@ options:
   - setgroup
   flags:
   - startup
+  with_legacy: true
 - name: setgroup
   type: str
   level: advanced
@@ -287,6 +303,7 @@ options:
   - setuser
   flags:
   - startup
+  with_legacy: true
 - name: setuser_match_path
   type: str
   level: advanced
@@ -309,6 +326,7 @@ options:
   - setgroup
   flags:
   - startup
+  with_legacy: true
 - name: pid_file
   type: str
   level: advanced
@@ -322,6 +340,7 @@ options:
   - mds
   flags:
   - startup
+  with_legacy: true
 - name: chdir
   type: str
   level: advanced
@@ -338,6 +357,7 @@ options:
   flags:
   - no_mon_update
   - startup
+  with_legacy: true
 - name: fatal_signal_handlers
   type: bool
   level: advanced
@@ -353,6 +373,7 @@ options:
   - mds
   flags:
   - startup
+  with_legacy: true
 - name: crash_dir
   type: str
   level: advanced
@@ -360,14 +381,17 @@ options:
   default: /var/lib/ceph/crash
   flags:
   - startup
+  with_legacy: true
 - name: restapi_log_level
   type: str
   level: advanced
   desc: default set by python code
+  with_legacy: true
 - name: restapi_base_url
   type: str
   level: advanced
   desc: default set by python code
+  with_legacy: true
 - name: erasure_code_dir
   type: str
   level: advanced
@@ -378,6 +402,7 @@ options:
   - osd
   flags:
   - startup
+  with_legacy: true
 - name: log_file
   type: str
   level: basic
@@ -389,6 +414,8 @@ options:
   - err_to_stderr
   - log_to_syslog
   - err_to_syslog
+  # default changed by common_preinit()
+  with_legacy: true
 - name: log_max_new
   type: int
   level: advanced
@@ -396,6 +423,8 @@ options:
   default: 1000
   see_also:
   - log_max_recent
+  # default changed by common_preinit()
+  with_legacy: true
 - name: log_max_recent
   type: int
   level: advanced
@@ -408,6 +437,8 @@ options:
     or assertion failure, all entries will be dumped to the log.
   default: 500
   daemon_default: 10000
+  # default changed by common_preinit()
+  with_legacy: true
 - name: log_to_file
   type: bool
   level: basic
@@ -415,18 +446,21 @@ options:
   default: true
   see_also:
   - log_file
+  with_legacy: true
 - name: log_to_stderr
   type: bool
   level: basic
   desc: send log lines to stderr
   default: true
   daemon_default: false
+  with_legacy: true
 - name: err_to_stderr
   type: bool
   level: basic
   desc: send critical error log lines to stderr
   default: false
   daemon_default: true
+  with_legacy: true
 - name: log_stderr_prefix
   type: str
   level: advanced
@@ -441,16 +475,19 @@ options:
   level: basic
   desc: send log lines to syslog facility
   default: false
+  with_legacy: true
 - name: err_to_syslog
   type: bool
   level: basic
   desc: send critical error log lines to syslog facility
   default: false
+  with_legacy: true
 - name: log_flush_on_exit
   type: bool
   level: advanced
   desc: set a process exit handler to ensure the log is flushed on exit
   default: false
+  with_legacy: true
 - name: log_stop_at_utilization
   type: float
   level: basic
@@ -460,6 +497,7 @@ options:
   - log_file
   min: 0
   max: 1
+  with_legacy: true
 - name: log_to_graylog
   type: bool
   level: basic
@@ -469,6 +507,7 @@ options:
   - err_to_graylog
   - log_graylog_host
   - log_graylog_port
+  with_legacy: true
 - name: err_to_graylog
   type: bool
   level: basic
@@ -478,6 +517,7 @@ options:
   - log_to_graylog
   - log_graylog_host
   - log_graylog_port
+  with_legacy: true
 - name: log_graylog_host
   type: str
   level: basic
@@ -487,6 +527,7 @@ options:
   - log_to_graylog
   - err_to_graylog
   - log_graylog_port
+  with_legacy: true
 - name: log_graylog_port
   type: int
   level: basic
@@ -494,6 +535,7 @@ options:
   default: 12201
   see_also:
   - log_graylog_host
+  with_legacy: true
 - name: log_to_journald
   type: bool
   level: basic
@@ -518,6 +560,11 @@ options:
   - service
   services:
   - common
+# options will take k/v pairs, or single-item that will be assumed as general
+# default for all, regardless of channel.
+# e.g., "info" would be taken as the same as "default=info"
+# also, "default=daemon audit=local0" would mean
+#    "default all to 'daemon', override 'audit' with 'local0'
 - name: clog_to_monitors
   type: str
   level: advanced
@@ -525,6 +572,7 @@ options:
   default: default=true
   flags:
   - runtime
+  with_legacy: true
 - name: clog_to_syslog
   type: str
   level: advanced
@@ -532,6 +580,7 @@ options:
   default: 'false'
   flags:
   - runtime
+  with_legacy: true
 - name: clog_to_syslog_level
   type: str
   level: advanced
@@ -541,6 +590,7 @@ options:
   - clog_to_syslog
   flags:
   - runtime
+  with_legacy: true
 - name: clog_to_syslog_facility
   type: str
   level: advanced
@@ -550,6 +600,7 @@ options:
   - clog_to_syslog
   flags:
   - runtime
+  with_legacy: true
 - name: clog_to_graylog
   type: str
   level: advanced
@@ -566,6 +617,7 @@ options:
   - clog_to_graylog
   flags:
   - runtime
+  with_legacy: true
 - name: clog_to_graylog_port
   type: str
   level: advanced
@@ -575,6 +627,7 @@ options:
   - clog_to_graylog
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_stderr
   type: bool
   level: advanced
@@ -586,6 +639,7 @@ options:
   - log_stderr_prefix
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_syslog
   type: str
   level: advanced
@@ -595,6 +649,7 @@ options:
   - mon
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_syslog_level
   type: str
   level: advanced
@@ -606,6 +661,7 @@ options:
   - mon_cluster_log_to_syslog
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_syslog_facility
   type: str
   level: advanced
@@ -617,6 +673,7 @@ options:
   - mon_cluster_log_to_syslog
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_file
   type: bool
   level: advanced
@@ -628,6 +685,7 @@ options:
   - mon_cluster_log_file
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_file
   type: str
   level: advanced
@@ -642,6 +700,7 @@ options:
   - mon_cluster_log_to_file
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_file_level
   type: str
   level: advanced
@@ -653,6 +712,7 @@ options:
   - mon_cluster_log_file
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_graylog
   type: str
   level: advanced
@@ -662,6 +722,7 @@ options:
   - mon
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_graylog_host
   type: str
   level: advanced
@@ -673,6 +734,7 @@ options:
   - mon_cluster_log_to_graylog
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_graylog_port
   type: str
   level: advanced
@@ -684,6 +746,7 @@ options:
   - mon_cluster_log_to_graylog
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cluster_log_to_journald
   type: str
   level: advanced
@@ -700,6 +763,7 @@ options:
     dangerous, and/or cause permanent data loss
   flags:
   - runtime
+  with_legacy: true
 - name: plugin_dir
   type: str
   level: advanced
@@ -715,11 +779,15 @@ options:
   level: advanced
   desc: Use Intel ISA-L accelerated zlib implementation if available
   default: false
+  with_legacy: true
+# regular zlib compression level, not applicable to isa-l optimized version
 - name: compressor_zlib_level
   type: int
   level: advanced
   desc: Zlib compression level to use
   default: 5
+  with_legacy: true
+# regular zlib compression winsize, not applicable to isa-l optimized version
 - name: compressor_zlib_winsize
   type: int
   level: advanced
@@ -727,21 +795,26 @@ options:
   default: -15
   min: -15
   max: 32
+  with_legacy: true
+# regular zstd compression level
 - name: compressor_zstd_level
   type: int
   level: advanced
   desc: Zstd compression level to use
   default: 1
+  with_legacy: true
 - name: qat_compressor_enabled
   type: bool
   level: advanced
   desc: Enable Intel QAT acceleration support for compression if available
   default: false
+  with_legacy: true
 - name: plugin_crypto_accelerator
   type: str
   level: advanced
   desc: Crypto accelerator library to use
   default: crypto_isal
+  with_legacy: true
 - name: openssl_engine_opts
   type: str
   level: advanced
@@ -749,12 +822,14 @@ options:
   long_desc: 'Pass opts in this way: engine_id=engine1,dynamic_path=/some/path/engine1.so,default_algorithms=DIGESTS:engine_id=engine2,dynamic_path=/some/path/engine2.so,default_algorithms=CIPHERS,other_ctrl=other_value'
   flags:
   - startup
+  with_legacy: true
 - name: mempool_debug
   type: bool
   level: dev
   default: false
   flags:
   - no_mon_update
+  with_legacy: true
 - name: thp
   type: bool
   level: dev
@@ -777,6 +852,7 @@ options:
   flags:
   - no_mon_update
   - startup
+  with_legacy: true
 - name: keyfile
   type: str
   level: advanced
@@ -788,6 +864,7 @@ options:
   flags:
   - no_mon_update
   - startup
+  with_legacy: true
 - name: keyring
   type: str
   level: advanced
@@ -802,6 +879,7 @@ options:
   flags:
   - no_mon_update
   - startup
+  with_legacy: true
 - name: heartbeat_interval
   type: int
   level: advanced
@@ -809,6 +887,7 @@ options:
   default: 5
   flags:
   - startup
+  with_legacy: true
 - name: heartbeat_file
   type: str
   level: advanced
@@ -819,16 +898,19 @@ options:
   - heartbeat_interval
   flags:
   - startup
+  with_legacy: true
 - name: heartbeat_inject_failure
   type: int
   level: dev
   default: 0
+  with_legacy: true
 - name: perf
   type: bool
   level: advanced
   desc: Enable internal performance metrics
   long_desc: If enabled, collect and expose internal health metrics
   default: true
+  with_legacy: true
 - name: ms_type
   type: str
   level: advanced
@@ -836,6 +918,7 @@ options:
   default: async+posix
   flags:
   - startup
+  with_legacy: true
 - name: ms_public_type
   type: str
   level: advanced
@@ -845,6 +928,7 @@ options:
   - ms_type
   flags:
   - startup
+  with_legacy: true
 - name: ms_cluster_type
   type: str
   level: advanced
@@ -854,6 +938,7 @@ options:
   - ms_type
   flags:
   - startup
+  with_legacy: true
 - name: ms_mon_cluster_mode
   type: str
   level: basic
@@ -932,26 +1017,31 @@ options:
     connecting from.  This is useful if a client is behind some sort of NAT and we
     want to see it identified by its local (not NATed) address.
   default: true
+  with_legacy: true
 - name: ms_tcp_nodelay
   type: bool
   level: advanced
   desc: Disable Nagle's algorithm and send queued network traffic immediately
   default: true
+  with_legacy: true
 - name: ms_tcp_rcvbuf
   type: size
   level: advanced
   desc: Size of TCP socket receive buffer
   default: 0
+  with_legacy: true
 - name: ms_tcp_prefetch_max_size
   type: size
   level: advanced
   desc: Maximum amount of data to prefetch out of the socket receive buffer
   default: 4_K
+  with_legacy: true
 - name: ms_initial_backoff
   type: float
   level: advanced
   desc: Initial backoff after a network error is detected (seconds)
   default: 0.2
+  with_legacy: true
 - name: ms_max_backoff
   type: float
   level: advanced
@@ -959,46 +1049,55 @@ options:
   default: 15
   see_also:
   - ms_initial_backoff
+  with_legacy: true
 - name: ms_crc_data
   type: bool
   level: dev
   desc: Set and/or verify crc32c checksum on data payload sent over network
   default: true
+  with_legacy: true
 - name: ms_crc_header
   type: bool
   level: dev
   desc: Set and/or verify crc32c checksum on header payload sent over network
   default: true
+  with_legacy: true
 - name: ms_die_on_bad_msg
   type: bool
   level: dev
   desc: Induce a daemon crash/exit when a bad network message is received
   default: false
+  with_legacy: true
 - name: ms_die_on_unhandled_msg
   type: bool
   level: dev
   desc: Induce a daemon crash/exit when an unrecognized message is received
   default: false
+  with_legacy: true
 - name: ms_die_on_old_message
   type: bool
   level: dev
   desc: Induce a daemon crash/exit when a old, undecodable message is received
   default: false
+  with_legacy: true
 - name: ms_die_on_skipped_message
   type: bool
   level: dev
   desc: Induce a daemon crash/exit if sender skips a message sequence number
   default: false
+  with_legacy: true
 - name: ms_die_on_bug
   type: bool
   level: dev
   desc: Induce a crash/exit on various bugs (for testing purposes)
   default: false
+  with_legacy: true
 - name: ms_dispatch_throttle_bytes
   type: size
   level: advanced
   desc: Limit messages that are read off the network but still being processed
   default: 100_M
+  with_legacy: true
 - name: ms_bind_exclude_lo_iface
   type: bool
   level: advanced
@@ -1020,6 +1119,7 @@ options:
   default: false
   see_also:
   - ms_bind_ipv4
+  with_legacy: true
 - name: ms_bind_prefer_ipv4
   type: bool
   level: advanced
@@ -1044,106 +1144,129 @@ options:
   level: advanced
   desc: Lowest port number to bind daemon(s) to
   default: 6800
+  with_legacy: true
 - name: ms_bind_port_max
   type: int
   level: advanced
   desc: Highest port number to bind daemon(s) to
   default: 7300
+  with_legacy: true
 # FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
 - name: ms_bind_retry_count
   type: int
   level: advanced
   desc: Number of attempts to make while bind(2)ing to a port
   default: @ms_bind_retry_count@
+  with_legacy: true
 # FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
 - name: ms_bind_retry_delay
   type: int
   level: advanced
   desc: Delay between bind(2) attempts (seconds)
   default: @ms_bind_retry_delay@
+  with_legacy: true
 - name: ms_bind_before_connect
   type: bool
   level: advanced
   desc: Call bind(2) on client sockets
   default: false
+  with_legacy: true
 - name: ms_tcp_listen_backlog
   type: int
   level: advanced
   desc: Size of queue of incoming connections for accept(2)
   default: 512
+  with_legacy: true
 - name: ms_connection_ready_timeout
   type: uint
   level: advanced
   desc: Time before we declare a not yet ready connection as dead (seconds)
   default: 10
+  with_legacy: true
 - name: ms_connection_idle_timeout
   type: uint
   level: advanced
   desc: Time before an idle connection is closed (seconds)
   default: 900
+  with_legacy: true
 - name: ms_pq_max_tokens_per_priority
   type: uint
   level: dev
   default: 16_M
+  with_legacy: true
 - name: ms_pq_min_cost
   type: size
   level: dev
   default: 64_K
+  with_legacy: true
 - name: ms_inject_socket_failures
   type: uint
   level: dev
   desc: Inject a socket failure every Nth socket operation
   default: 0
+  with_legacy: true
 - name: ms_inject_delay_type
   type: str
   level: dev
   desc: Entity type to inject delays for
   flags:
   - runtime
+  with_legacy: true
 - name: ms_inject_delay_max
   type: float
   level: dev
   desc: Max delay to inject
   default: 1
+  with_legacy: true
 - name: ms_inject_delay_probability
   type: float
   level: dev
   default: 0
+  with_legacy: true
 - name: ms_inject_internal_delays
   type: float
   level: dev
   desc: Inject various internal delays to induce races (seconds)
   default: 0
+  with_legacy: true
 - name: ms_blackhole_osd
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: ms_blackhole_mon
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: ms_blackhole_mds
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: ms_blackhole_mgr
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: ms_blackhole_client
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: ms_dump_on_send
   type: bool
   level: advanced
   desc: Hexdump message to debug log on message send
   default: false
+  with_legacy: true
 - name: ms_dump_corrupt_message_level
   type: int
   level: advanced
   desc: Log level at which to hexdump corrupt messages we receive
   default: 1
+  with_legacy: true
+# number of worker processing threads for async messenger created on init
 - name: ms_async_op_threads
   type: uint
   level: advanced
@@ -1151,129 +1274,173 @@ options:
   default: 3
   min: 1
   max: 24
+  with_legacy: true
 - name: ms_async_rdma_device_name
   type: str
   level: advanced
+  with_legacy: true
 - name: ms_async_rdma_enable_hugepage
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: ms_async_rdma_buffer_size
   type: size
   level: advanced
   default: 128_K
+  with_legacy: true
 - name: ms_async_rdma_send_buffers
   type: uint
   level: advanced
   default: 1_K
+  with_legacy: true
+# size of the receive buffer pool, 0 is unlimited
 - name: ms_async_rdma_receive_buffers
   type: uint
   level: advanced
   default: 32_K
+  with_legacy: true
+# max number of wr in srq
 - name: ms_async_rdma_receive_queue_len
   type: uint
   level: advanced
   default: 4_K
+  with_legacy: true
+# support srq
 - name: ms_async_rdma_support_srq
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: ms_async_rdma_port_num
   type: uint
   level: advanced
   default: 1
+  with_legacy: true
 - name: ms_async_rdma_polling_us
   type: uint
   level: advanced
   default: 1000
+  with_legacy: true
 - name: ms_async_rdma_gid_idx
   type: int
   level: advanced
   desc: use gid_idx to select GID for choosing RoCEv1 or RoCEv2
   default: 0
+  with_legacy: true
+# GID format: "fe80:0000:0000:0000:7efe:90ff:fe72:6efe", no zero folding
 - name: ms_async_rdma_local_gid
   type: str
   level: advanced
+  with_legacy: true
+# 0=RoCEv1, 1=RoCEv2, 2=RoCEv1.5
 - name: ms_async_rdma_roce_ver
   type: int
   level: advanced
   default: 1
+  with_legacy: true
+# in RoCE, this means PCP
 - name: ms_async_rdma_sl
   type: int
   level: advanced
   default: 3
+  with_legacy: true
+# in RoCE, this means DSCP
 - name: ms_async_rdma_dscp
   type: int
   level: advanced
   default: 96
+  with_legacy: true
+# when there are enough accept failures, indicating there are unrecoverable failures,
+# just do ceph_abort() . Here we make it configurable.
 - name: ms_max_accept_failures
   type: int
   level: advanced
   desc: The maximum number of consecutive failed accept() calls before considering
     the daemon is misconfigured and abort it.
   default: 4
+  with_legacy: true
+# rdma connection management
 - name: ms_async_rdma_cm
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: ms_async_rdma_type
   type: str
   level: advanced
   default: ib
+  with_legacy: true
 - name: ms_dpdk_port_id
   type: int
   level: advanced
   default: 0
+  with_legacy: true
+# it is modified in unittest so that use SAFE_OPTION to declare
 - name: ms_dpdk_coremask
   type: str
   level: advanced
   default: '0xF'
   see_also:
   - ms_async_op_threads
+  with_legacy: true
 - name: ms_dpdk_memory_channel
   type: str
   level: advanced
   default: '4'
+  with_legacy: true
 - name: ms_dpdk_hugepages
   type: str
   level: advanced
+  with_legacy: true
 - name: ms_dpdk_pmd
   type: str
   level: advanced
+  with_legacy: true
 - name: ms_dpdk_host_ipv4_addr
   type: str
   level: advanced
+  with_legacy: true
 - name: ms_dpdk_gateway_ipv4_addr
   type: str
   level: advanced
+  with_legacy: true
 - name: ms_dpdk_netmask_ipv4_addr
   type: str
   level: advanced
+  with_legacy: true
 - name: ms_dpdk_lro
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: ms_dpdk_hw_flow_control
   type: bool
   level: advanced
   default: true
+  with_legacy: true
+# Weighing of a hardware network queue relative to a software queue (0=no work, 1=     equal share)")
 - name: ms_dpdk_hw_queue_weight
   type: float
   level: advanced
   default: 1
+  with_legacy: true
 - name: ms_dpdk_debug_allow_loopback
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: ms_dpdk_rx_buffer_count_per_core
   type: int
   level: advanced
   default: 8192
+  with_legacy: true
 - name: inject_early_sigterm
   type: bool
   level: dev
   desc: send ourselves a SIGTERM early during startup
   default: false
+  with_legacy: true
 - name: mon_enable_op_tracker
   type: bool
   level: advanced
@@ -1332,6 +1499,8 @@ options:
   - mon
   flags:
   - no_mon_update
+  with_legacy: true
+# list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster
 - name: mon_initial_members
   type: str
   level: advanced
@@ -1340,24 +1509,31 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+  with_legacy: true
+# compact leveldb on ceph-mon start
 - name: mon_compact_on_start
   type: bool
   level: advanced
   default: false
   services:
   - mon
+  with_legacy: true
+# trigger leveldb compaction on bootstrap
 - name: mon_compact_on_bootstrap
   type: bool
   level: advanced
   default: false
   services:
   - mon
+  with_legacy: true
+# compact (a prefix) when we trim old states
 - name: mon_compact_on_trim
   type: bool
   level: advanced
   default: true
   services:
   - mon
+  with_legacy: true
 - name: mon_osdmap_full_prune_enabled
   type: bool
   level: advanced
@@ -1410,6 +1586,7 @@ options:
   default: 500
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_cache_size_min
   type: size
   level: advanced
@@ -1417,6 +1594,7 @@ options:
   default: 128_M
   services:
   - mon
+  with_legacy: true
 - name: mon_memory_target
   type: size
   level: basic
@@ -1427,6 +1605,7 @@ options:
   - mon
   flags:
   - runtime
+  with_legacy: true
 - name: mon_memory_autotune
   type: bool
   level: basic
@@ -1436,6 +1615,7 @@ options:
   - mon
   flags:
   - runtime
+  with_legacy: true
 - name: mon_cpu_threads
   type: int
   level: advanced
@@ -1443,6 +1623,7 @@ options:
   default: 4
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_mapping_pgs_per_chunk
   type: int
   level: dev
@@ -1450,6 +1631,7 @@ options:
   default: 4096
   services:
   - mon
+  with_legacy: true
 - name: mon_clean_pg_upmaps_per_chunk
   type: uint
   level: dev
@@ -1457,6 +1639,7 @@ options:
   default: 256
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_max_creating_pgs
   type: int
   level: advanced
@@ -1464,6 +1647,7 @@ options:
   default: 1024
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_max_initial_pgs
   type: int
   level: advanced
@@ -1480,6 +1664,7 @@ options:
   default: 5
   services:
   - mon
+  with_legacy: true
 - name: mon_session_timeout
   type: int
   level: advanced
@@ -1487,6 +1672,7 @@ options:
   default: 5_min
   services:
   - mon
+  with_legacy: true
 - name: mon_subscribe_interval
   type: float
   level: dev
@@ -1494,6 +1680,7 @@ options:
   default: 1_day
   services:
   - mon
+  with_legacy: true
 - name: mon_delta_reset_interval
   type: float
   level: advanced
@@ -1502,6 +1689,7 @@ options:
   services:
   - mon
   - mon
+  with_legacy: true
 - name: mon_osd_laggy_halflife
   type: int
   level: advanced
@@ -1509,6 +1697,7 @@ options:
   default: 1_hr
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_laggy_weight
   type: float
   level: advanced
@@ -1521,6 +1710,7 @@ options:
   - mon
   min: 0
   max: 1
+  with_legacy: true
 - name: mon_osd_laggy_max_interval
   type: int
   level: advanced
@@ -1528,6 +1718,7 @@ options:
   default: 5_min
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_adjust_heartbeat_grace
   type: bool
   level: advanced
@@ -1546,6 +1737,7 @@ options:
   - mon_osd_laggy_halflife
   - mon_osd_laggy_weight
   - mon_osd_laggy_max_interval
+  with_legacy: true
 - name: mon_osd_adjust_down_out_interval
   type: bool
   level: advanced
@@ -1555,6 +1747,7 @@ options:
   - mon
   see_also:
   - mon_osd_adjust_heartbeat_grace
+  with_legacy: true
 - name: mon_osd_auto_mark_in
   type: bool
   level: advanced
@@ -1562,6 +1755,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_auto_mark_auto_out_in
   type: bool
   level: advanced
@@ -1571,6 +1765,7 @@ options:
   - mon
   see_also:
   - mon_osd_down_out_interval
+  with_legacy: true
 - name: mon_osd_auto_mark_new_in
   type: bool
   level: advanced
@@ -1578,6 +1773,7 @@ options:
   default: true
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_destroyed_out_interval
   type: int
   level: advanced
@@ -1585,6 +1781,7 @@ options:
   default: 10_min
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_down_out_interval
   type: int
   level: advanced
@@ -1592,6 +1789,7 @@ options:
   default: 10_min
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_down_out_subtree_limit
   type: str
   level: advanced
@@ -1613,6 +1811,7 @@ options:
   - mon
   see_also:
   - mon_osd_down_out_interval
+  with_legacy: true
 - name: mon_osd_min_in_ratio
   type: float
   level: advanced
@@ -1622,6 +1821,7 @@ options:
   - mon
   see_also:
   - mon_osd_down_out_interval
+  with_legacy: true
 - name: mon_osd_warn_op_age
   type: float
   level: advanced
@@ -1629,6 +1829,7 @@ options:
   default: 32
   services:
   - mgr
+  with_legacy: true
 - name: mon_osd_warn_num_repaired
   type: uint
   level: advanced
@@ -1644,6 +1845,7 @@ options:
   default: 128
   services:
   - mgr
+  with_legacy: true
 - name: mon_osd_prime_pg_temp
   type: bool
   level: dev
@@ -1651,6 +1853,7 @@ options:
   default: true
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_prime_pg_temp_max_time
   type: float
   level: dev
@@ -1658,6 +1861,7 @@ options:
   default: 0.5
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_prime_pg_temp_max_estimate
   type: float
   level: advanced
@@ -1666,6 +1870,7 @@ options:
   default: 0.25
   services:
   - mon
+  with_legacy: true
 - name: mon_stat_smooth_intervals
   type: uint
   level: advanced
@@ -1682,6 +1887,7 @@ options:
   default: 5
   services:
   - mon
+  with_legacy: true
 - name: mon_election_default_strategy
   type: uint
   level: advanced
@@ -1698,6 +1904,7 @@ options:
   default: 5
   services:
   - mon
+  with_legacy: true
 - name: mon_lease_renew_interval_factor
   type: float
   level: advanced
@@ -1711,6 +1918,7 @@ options:
   - mon_lease
   min: 0
   max: 0.9999999
+  with_legacy: true
 - name: mon_lease_ack_timeout_factor
   type: float
   level: advanced
@@ -1722,6 +1930,7 @@ options:
   - mon_lease
   min: 1.0001
   max: 100
+  with_legacy: true
 - name: mon_accept_timeout_factor
   type: float
   level: advanced
@@ -1732,6 +1941,7 @@ options:
   - mon
   see_also:
   - mon_lease
+  with_legacy: true
 - name: mon_elector_ping_timeout
   type: float
   level: advanced
@@ -1823,6 +2033,8 @@ options:
   default: 0.05
   services:
   - mon
+  with_legacy: true
+# exponential backoff for clock drift warnings
 - name: mon_clock_drift_warn_backoff
   type: float
   level: advanced
@@ -1831,6 +2043,8 @@ options:
   default: 5
   services:
   - mon
+  with_legacy: true
+# on leader, timecheck (clock drift check) interval (seconds)
 - name: mon_timecheck_interval
   type: float
   level: advanced
@@ -1838,6 +2052,8 @@ options:
   default: 5_min
   services:
   - mon
+  with_legacy: true
+# on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
 - name: mon_timecheck_skew_interval
   type: float
   level: advanced
@@ -1848,6 +2064,7 @@ options:
   - mon
   see_also:
   - mon_timecheck_interval
+  with_legacy: true
 - name: mon_pg_stuck_threshold
   type: int
   level: advanced
@@ -1914,6 +2131,7 @@ options:
   default: 0.5
   services:
   - mgr
+  with_legacy: true
 - name: mon_cache_target_full_warn_ratio
   type: float
   level: advanced
@@ -1925,6 +2143,7 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+  with_legacy: true
 - name: mon_osd_full_ratio
   type: float
   level: advanced
@@ -1933,6 +2152,7 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+  with_legacy: true
 - name: mon_osd_backfillfull_ratio
   type: float
   level: advanced
@@ -1940,6 +2160,7 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+  with_legacy: true
 - name: mon_osd_nearfull_ratio
   type: float
   level: advanced
@@ -1948,6 +2169,7 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+  with_legacy: true
 - name: mon_osd_initial_require_min_compat_client
   type: str
   level: advanced
@@ -1955,6 +2177,7 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+  with_legacy: true
 - name: mon_allow_pool_delete
   type: bool
   level: advanced
@@ -1962,6 +2185,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_fake_pool_delete
   type: bool
   level: advanced
@@ -1969,6 +2193,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_globalid_prealloc
   type: uint
   level: advanced
@@ -1979,6 +2204,7 @@ options:
   default: 10000
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_report_timeout
   type: int
   level: advanced
@@ -1986,6 +2212,7 @@ options:
   default: 15_min
   services:
   - mon
+  with_legacy: true
 - name: mon_warn_on_insecure_global_id_reclaim
   type: bool
   level: advanced
@@ -2029,6 +2256,7 @@ options:
   - mgr
   see_also:
   - mon_crush_min_required_version
+  with_legacy: true
 - name: mon_crush_min_required_version
   type: str
   level: advanced
@@ -2038,6 +2266,7 @@ options:
   - mgr
   see_also:
   - mon_warn_on_legacy_crush_tunables
+  with_legacy: true
 - name: mon_warn_on_crush_straw_calc_version_zero
   type: bool
   level: advanced
@@ -2046,6 +2275,7 @@ options:
   default: true
   services:
   - mgr
+  with_legacy: true
 - name: mon_warn_on_osd_down_out_interval_zero
   type: bool
   level: advanced
@@ -2059,6 +2289,7 @@ options:
   - mgr
   see_also:
   - mon_osd_down_out_interval
+  with_legacy: true
 - name: mon_warn_on_cache_pools_without_hit_sets
   type: bool
   level: advanced
@@ -2067,6 +2298,7 @@ options:
   default: true
   services:
   - mgr
+  with_legacy: true
 - name: mon_warn_on_pool_no_app
   type: bool
   level: dev
@@ -2106,6 +2338,7 @@ options:
   default: false
   services:
   - mgr
+  with_legacy: true
 - name: mon_warn_on_too_few_osds
   type: bool
   level: advanced
@@ -2146,6 +2379,7 @@ options:
   default: 500
   services:
   - mon
+  with_legacy: true
 - name: mon_max_log_epochs
   type: int
   level: advanced
@@ -2153,6 +2387,7 @@ options:
   default: 500
   services:
   - mon
+  with_legacy: true
 - name: mon_max_mdsmap_epochs
   type: int
   level: advanced
@@ -2160,6 +2395,7 @@ options:
   default: 500
   services:
   - mon
+  with_legacy: true
 - name: mon_max_mgrmap_epochs
   type: int
   level: advanced
@@ -2174,6 +2410,7 @@ options:
   default: 10000
   services:
   - mon
+  with_legacy: true
 - name: mon_probe_timeout
   type: float
   level: advanced
@@ -2181,6 +2418,7 @@ options:
   default: 2
   services:
   - mon
+  with_legacy: true
 - name: mon_client_bytes
   type: size
   level: advanced
@@ -2188,6 +2426,7 @@ options:
   default: 100_M
   services:
   - mon
+  with_legacy: true
 - name: mon_daemon_bytes
   type: size
   level: advanced
@@ -2195,6 +2434,7 @@ options:
   default: 400_M
   services:
   - mon
+  with_legacy: true
 - name: mon_mgr_proxy_client_bytes_ratio
   type: float
   level: dev
@@ -2210,6 +2450,7 @@ options:
   default: 50
   services:
   - mon
+  with_legacy: true
 - name: mon_max_log_entries_per_event
   type: int
   level: advanced
@@ -2217,30 +2458,38 @@ options:
   default: 4096
   services:
   - mon
+  with_legacy: true
+# min pgs per osd for reweight-by-pg command
 - name: mon_reweight_min_pgs_per_osd
   type: uint
   level: advanced
   default: 10
   services:
   - mgr
+  with_legacy: true
+# min bytes per osd for reweight-by-utilization command
 - name: mon_reweight_min_bytes_per_osd
   type: size
   level: advanced
   default: 100_M
   services:
   - mgr
+  with_legacy: true
+# max osds to change per reweight-by-* command
 - name: mon_reweight_max_osds
   type: int
   level: advanced
   default: 4
   services:
   - mgr
+  with_legacy: true
 - name: mon_reweight_max_change
   type: float
   level: advanced
   default: 0.05
   services:
   - mgr
+  with_legacy: true
 - name: mon_health_to_clog
   type: bool
   level: advanced
@@ -2248,6 +2497,7 @@ options:
   default: true
   services:
   - mon
+  with_legacy: true
 - name: mon_health_to_clog_interval
   type: int
   level: advanced
@@ -2257,17 +2507,20 @@ options:
   - mon
   see_also:
   - mon_health_to_clog
+  with_legacy: true
 - name: mon_health_to_clog_tick_interval
   type: float
   level: dev
   default: 1_min
   services:
   - mon
+  with_legacy: true
 - name: mon_health_detail_to_clog
   type: bool
   level: dev
   desc: log health detail to cluster log
   default: true
+  with_legacy: true
 - name: mon_health_max_detail
   type: uint
   level: advanced
@@ -2290,6 +2543,7 @@ options:
   default: 5
   services:
   - mon
+  with_legacy: true
 - name: mon_data_avail_warn
   type: int
   level: advanced
@@ -2297,6 +2551,7 @@ options:
   default: 30
   services:
   - mon
+  with_legacy: true
 - name: mon_data_size_warn
   type: size
   level: advanced
@@ -2304,6 +2559,7 @@ options:
   default: 15_G
   services:
   - mon
+  with_legacy: true
 - name: mon_warn_pg_not_scrubbed_ratio
   type: float
   level: advanced
@@ -2312,6 +2568,7 @@ options:
   see_also:
   - osd_scrub_max_interval
   min: 0
+  with_legacy: true
 - name: mon_warn_pg_not_deep_scrubbed_ratio
   type: float
   level: advanced
@@ -2320,6 +2577,7 @@ options:
   see_also:
   - osd_deep_scrub_interval
   min: 0
+  with_legacy: true
 - name: mon_scrub_interval
   type: secs
   level: advanced
@@ -2335,6 +2593,7 @@ options:
   default: 5_min
   services:
   - mon
+  with_legacy: true
 - name: mon_scrub_max_keys
   type: int
   level: advanced
@@ -2342,6 +2601,8 @@ options:
   default: 100
   services:
   - mon
+  with_legacy: true
+# probability of injected crc mismatch [0.0, 1.0]
 - name: mon_scrub_inject_crc_mismatch
   type: float
   level: dev
@@ -2349,6 +2610,8 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+# probability of injected missing keys [0.0, 1.0]
 - name: mon_scrub_inject_missing_keys
   type: float
   level: dev
@@ -2356,6 +2619,7 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
 - name: mon_config_key_max_entry_size
   type: size
   level: advanced
@@ -2363,6 +2627,7 @@ options:
   default: 64_K
   services:
   - mon
+  with_legacy: true
 - name: mon_sync_timeout
   type: float
   level: advanced
@@ -2370,6 +2635,7 @@ options:
   default: 1_min
   services:
   - mon
+  with_legacy: true
 - name: mon_sync_max_payload_size
   type: size
   level: advanced
@@ -2377,6 +2643,7 @@ options:
   default: 1_M
   services:
   - mon
+  with_legacy: true
 - name: mon_sync_max_payload_keys
   type: int
   level: advanced
@@ -2384,6 +2651,7 @@ options:
   default: 2000
   services:
   - mon
+  with_legacy: true
 - name: mon_sync_debug
   type: bool
   level: dev
@@ -2391,6 +2659,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_inject_sync_get_chunk_delay
   type: float
   level: dev
@@ -2398,6 +2667,7 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_min_down_reporters
   type: uint
   level: advanced
@@ -2426,6 +2696,8 @@ options:
   default: 32768
   services:
   - mon
+  with_legacy: true
+# force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous)
 - name: mon_osd_force_trim_to
   type: int
   level: dev
@@ -2433,6 +2705,8 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+# force mon to trim mdsmaps to this point (dangerous)
 - name: mon_mds_force_trim_to
   type: int
   level: dev
@@ -2440,6 +2714,8 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+# skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
 - name: mon_mds_skip_sanity
   type: bool
   level: advanced
@@ -2447,6 +2723,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_debug_extra_checks
   type: bool
   level: dev
@@ -2472,6 +2749,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_debug_dump_transactions
   type: bool
   level: dev
@@ -2481,6 +2759,7 @@ options:
   - mon
   see_also:
   - mon_debug_dump_location
+  with_legacy: true
 - name: mon_debug_dump_json
   type: bool
   level: dev
@@ -2490,6 +2769,7 @@ options:
   - mon
   see_also:
   - mon_debug_dump_transactions
+  with_legacy: true
 - name: mon_debug_dump_location
   type: str
   level: dev
@@ -2499,6 +2779,7 @@ options:
   - mon
   see_also:
   - mon_debug_dump_transactions
+  with_legacy: true
 - name: mon_debug_no_require_pacific
   type: bool
   level: dev
@@ -2524,6 +2805,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_debug_no_initial_persistent_features
   type: bool
   level: dev
@@ -2533,6 +2815,7 @@ options:
   - mon
   flags:
   - cluster_create
+  with_legacy: true
 - name: mon_inject_transaction_delay_max
   type: float
   level: dev
@@ -2540,6 +2823,8 @@ options:
   default: 10
   services:
   - mon
+  with_legacy: true
+# range [0, 1]
 - name: mon_inject_transaction_delay_probability
   type: float
   level: dev
@@ -2547,6 +2832,7 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
 - name: mon_inject_pg_merge_bounce_probability
   type: float
   level: dev
@@ -2554,6 +2840,7 @@ options:
   default: 0
   services:
   - mon
+# kill the sync provider at a specific point in the work flow
 - name: mon_sync_provider_kill_at
   type: int
   level: dev
@@ -2561,6 +2848,8 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+# kill the sync requester at a specific point in the work flow
 - name: mon_sync_requester_kill_at
   type: int
   level: dev
@@ -2568,6 +2857,8 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+# force monitor to join quorum even if it has been previously removed from the map
 - name: mon_force_quorum_join
   type: bool
   level: advanced
@@ -2575,6 +2866,8 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
+# type of keyvaluedb backend
 - name: mon_keyvaluedb
   type: str
   level: advanced
@@ -2587,12 +2880,15 @@ options:
   - rocksdb
   flags:
   - create
+  with_legacy: true
+# UNSAFE -- TESTING ONLY! Allows addition of a cache tier with preexisting snaps
 - name: mon_debug_unsafe_allow_tier_with_nonempty_snaps
   type: bool
   level: dev
   default: false
   services:
   - mon
+  with_legacy: true
 - name: mon_osd_blocklist_default_expire
   type: float
   level: advanced
@@ -2600,6 +2896,7 @@ options:
   default: 1_hr
   services:
   - mon
+  with_legacy: true
 - name: mon_mds_blocklist_interval
   type: float
   level: dev
@@ -2629,6 +2926,7 @@ options:
   default: true
   services:
   - mon
+  with_legacy: true
 - name: mon_smart_report_timeout
   type: uint
   level: advanced
@@ -2662,60 +2960,78 @@ options:
   default: 7_day
   services:
   - mon
+# how often (in commits) to stash a full copy of the PaxosService state
 - name: paxos_stash_full_interval
   type: int
   level: advanced
   default: 25
   services:
   - mon
+  with_legacy: true
+# max paxos iterations before we must first sync the monitor stores
 - name: paxos_max_join_drift
   type: int
   level: advanced
   default: 10
   services:
   - mon
+  with_legacy: true
+# gather updates for this long before proposing a map update
 - name: paxos_propose_interval
   type: float
   level: advanced
   default: 1
   services:
   - mon
+  with_legacy: true
+# min time to gather updates for after period of inactivity
 - name: paxos_min_wait
   type: float
   level: advanced
   default: 0.05
   services:
   - mon
+  with_legacy: true
+# minimum number of paxos states to keep around
 - name: paxos_min
   type: int
   level: advanced
   default: 500
   services:
   - mon
+  with_legacy: true
+# number of extra proposals tolerated before trimming
 - name: paxos_trim_min
   type: int
   level: advanced
   default: 250
   services:
   - mon
+  with_legacy: true
+# maximum amount of versions to trim during a single proposal (0 disables it)
 - name: paxos_trim_max
   type: int
   level: advanced
   default: 500
   services:
   - mon
+  with_legacy: true
+# minimum amount of versions to trigger a trim (0 disables it)
 - name: paxos_service_trim_min
   type: uint
   level: advanced
   default: 250
   services:
   - mon
+  with_legacy: true
+# maximum amount of versions to trim during a single proposal (0 disables it)
 - name: paxos_service_trim_max
   type: uint
   level: advanced
   default: 500
   services:
   - mon
+  with_legacy: true
 - name: paxos_service_trim_max_multiplier
   type: uint
   level: advanced
@@ -2733,30 +3049,40 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+# required of mon, mds, osd daemons
 - name: auth_cluster_required
   type: str
   level: advanced
   desc: authentication methods required by the cluster
   default: cephx
+  with_legacy: true
+# required by daemons of clients
 - name: auth_service_required
   type: str
   level: advanced
   desc: authentication methods required by service daemons
   default: cephx
+  with_legacy: true
+# what clients require of daemons
 - name: auth_client_required
   type: str
   level: advanced
   desc: authentication methods allowed by clients
   default: cephx, none
+  with_legacy: true
+# deprecated; default value for above if they are not defined.
 - name: auth_supported
   type: str
   level: advanced
   desc: authentication methods required (deprecated)
+  with_legacy: true
 - name: max_rotating_auth_attempts
   type: int
   level: advanced
   desc: number of attempts to initialize rotating keys before giving up
   default: 10
+  with_legacy: true
 - name: rotating_keys_bootstrap_timeout
   type: int
   level: advanced
@@ -2771,41 +3097,52 @@ options:
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: cephx_require_version
   type: int
   level: advanced
   desc: Cephx version required (1 = pre-mimic, 2 = mimic+)
   default: 2
+  with_legacy: true
 - name: cephx_cluster_require_signatures
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: cephx_cluster_require_version
   type: int
   level: advanced
   desc: Cephx version required by the cluster from clients (1 = pre-mimic, 2 = mimic+)
   default: 2
+  with_legacy: true
 - name: cephx_service_require_signatures
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: cephx_service_require_version
   type: int
   level: advanced
   desc: Cephx version required from ceph services (1 = pre-mimic, 2 = mimic+)
   default: 2
+  with_legacy: true
+# Default to signing session messages if supported
 - name: cephx_sign_messages
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: auth_mon_ticket_ttl
   type: float
   level: advanced
   default: 72_hr
+  default: 12_hr
+  with_legacy: true
 - name: auth_service_ticket_ttl
   type: float
   level: advanced
   default: 1_hr
+  with_legacy: true
 - name: auth_allow_insecure_global_id_reclaim
   type: bool
   level: advanced
@@ -2824,6 +3161,7 @@ options:
   - mon_warn_on_insecure_global_id_reclaim
   - mon_warn_on_insecure_global_id_reclaim_allowed
   - auth_expose_insecure_global_id_reclaim
+  with_legacy: true
 - name: auth_expose_insecure_global_id_reclaim
   type: bool
   level: advanced
@@ -2839,52 +3177,70 @@ options:
   - mon_warn_on_insecure_global_id_reclaim
   - mon_warn_on_insecure_global_id_reclaim_allowed
   - auth_allow_insecure_global_id_reclaim
+  with_legacy: true
+# if true, assert when weird things happen
 - name: auth_debug
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# how many mons to try to connect to in parallel during hunt
 - name: mon_client_hunt_parallel
   type: uint
   level: advanced
   default: 3
+  with_legacy: true
+# try new mon every N seconds until we connect
 - name: mon_client_hunt_interval
   type: float
   level: advanced
   default: 3
+  with_legacy: true
+# send logs every N seconds
 - name: mon_client_log_interval
   type: float
   level: advanced
   desc: How frequently we send queued cluster log messages to mon
   default: 1
+  with_legacy: true
+# ping every N seconds
 - name: mon_client_ping_interval
   type: float
   level: advanced
   default: 10
+  with_legacy: true
+# fail if we don't hear back
 - name: mon_client_ping_timeout
   type: float
   level: advanced
   default: 30
+  with_legacy: true
 - name: mon_client_hunt_interval_backoff
   type: float
   level: advanced
   default: 1.5
+  with_legacy: true
 - name: mon_client_hunt_interval_min_multiple
   type: float
   level: advanced
   default: 1
+  with_legacy: true
 - name: mon_client_hunt_interval_max_multiple
   type: float
   level: advanced
   default: 10
+  with_legacy: true
 - name: mon_client_max_log_entries_per_message
   type: int
   level: advanced
   default: 1000
+  with_legacy: true
 - name: mon_client_directed_command_retry
   type: int
   level: dev
   desc: Number of times to try sending a command directed at a specific monitor
   default: 2
+  with_legacy: true
 - name: mon_max_pool_pg_num
   type: uint
   level: advanced
@@ -2903,63 +3259,81 @@ options:
   default: 0
   services:
   - mgr
+# whitespace-separated list of key=value pairs describing crush location
 - name: crush_location
   type: str
   level: advanced
+  with_legacy: true
 - name: crush_location_hook
   type: str
   level: advanced
+  with_legacy: true
 - name: crush_location_hook_timeout
   type: int
   level: advanced
   default: 10
+  with_legacy: true
 - name: objecter_tick_interval
   type: float
   level: dev
   default: 5
+  with_legacy: true
+# before we ask for a map
 - name: objecter_timeout
   type: float
   level: advanced
   desc: Seconds before in-flight op is considered 'laggy' and we query mon for the
     latest OSDMap
   default: 10
+  with_legacy: true
 - name: objecter_inflight_op_bytes
   type: size
   level: advanced
   desc: Max in-flight data in bytes (both directions)
   default: 100_M
+  with_legacy: true
 - name: objecter_inflight_ops
   type: uint
   level: advanced
   desc: Max in-flight operations
   default: 1_K
+  with_legacy: true
+# num of completion locks per each session, for serializing same object responses
 - name: objecter_completion_locks_per_session
   type: uint
   level: dev
   default: 32
+  with_legacy: true
+# suppress watch pings
 - name: objecter_inject_no_watch_ping
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# ignore the first reply for each write, and resend the osd op instead
 - name: objecter_retry_writes_after_first_reply
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: objecter_debug_inject_relock_delay
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filer_max_purge_ops
   type: uint
   level: advanced
   desc: Max in-flight operations for purging a striped range (e.g., MDS journal)
   default: 10
+  with_legacy: true
 - name: filer_max_truncate_ops
   type: uint
   level: advanced
   desc: Max in-flight operations for truncating/deleting a striped sequence (e.g.,
     MDS journal)
   default: 128
+  with_legacy: true
 - name: journaler_write_head_interval
   type: int
   level: advanced
@@ -3028,21 +3402,25 @@ options:
   level: advanced
   desc: Timeout (in seconds) for smarctl to run, default is set to 5
   default: 5
+# verify backend can support configured max object name length
 - name: osd_check_max_object_name_len_on_startup
   type: bool
   level: dev
   default: true
+  with_legacy: true
 - name: osd_max_backfills
   type: uint
   level: advanced
-  desc: 'Maximum number of concurrent local and remote backfills or recoveries per
-    OSD '
+  desc: Maximum number of concurrent local and remote backfills or recoveries per
+    OSD
   long_desc: There can be osd_max_backfills local reservations AND the same remote
     reservations per OSD. So a value of 1 lets this OSD participate as 1 PG primary
     in recovery and 1 shard of another recovering PG.
   default: 1
   flags:
   - runtime
+  with_legacy: true
+# Minimum recovery priority (255 = max, smaller = lower)
 - name: osd_min_recovery_priority
   type: int
   level: advanced
@@ -3051,28 +3429,33 @@ options:
     work (e.g., rebalancing) below this threshold and focus solely on higher priority
     work (e.g., replicating degraded objects).
   default: 0
+  with_legacy: true
 - name: osd_backfill_retry_interval
   type: float
   level: advanced
   desc: how frequently to retry backfill reservations after being denied (e.g., due
     to a full OSD)
   default: 30
+  with_legacy: true
 - name: osd_recovery_retry_interval
   type: float
   level: advanced
   desc: how frequently to retry recovery reservations after being denied (e.g., due
     to a full OSD)
   default: 30
+  with_legacy: true
 - name: osd_agent_max_ops
   type: int
   level: advanced
   desc: maximum concurrent tiering operations for tiering agent
   default: 4
+  with_legacy: true
 - name: osd_agent_max_low_ops
   type: int
   level: advanced
   desc: maximum concurrent low-priority tiering operations for tiering agent
   default: 2
+  with_legacy: true
 - name: osd_agent_min_evict_effort
   type: float
   level: advanced
@@ -3080,16 +3463,19 @@ options:
   default: 0.1
   min: 0
   max: 0.99
+  with_legacy: true
 - name: osd_agent_quantize_effort
   type: float
   level: advanced
   desc: size of quantize unit for eviction effort
   default: 0.1
+  with_legacy: true
 - name: osd_agent_delay_time
   type: float
   level: advanced
   desc: how long agent should sleep if it has no work to do
   default: 5
+  with_legacy: true
 - name: osd_find_best_info_ignore_history_les
   type: bool
   level: dev
@@ -3100,22 +3486,28 @@ options:
     of a PG's contents even when it is in fact old and stale, typically leading to
     data loss (by believing a stale PG is up to date).
   default: false
+  with_legacy: true
+# decay atime and hist histograms after how many objects go by
 - name: osd_agent_hist_halflife
   type: int
   level: advanced
   desc: halflife of agent atime and temp histograms
   default: 1000
+  with_legacy: true
+# decay atime and hist histograms after how many objects go by
 - name: osd_agent_slop
   type: float
   level: advanced
   desc: slop factor to avoid switching tiering flush and eviction mode
   default: 0.02
+  with_legacy: true
 - name: osd_uuid
   type: uuid
   level: advanced
   desc: uuid label for a new OSD
   flags:
   - create
+  with_legacy: true
 - name: osd_data
   type: str
   level: advanced
@@ -3123,6 +3515,7 @@ options:
   default: /var/lib/ceph/osd/$cluster-$id
   flags:
   - no_mon_update
+  with_legacy: true
 - name: osd_journal
   type: str
   level: advanced
@@ -3130,6 +3523,7 @@ options:
   default: /var/lib/ceph/osd/$cluster-$id/journal
   flags:
   - no_mon_update
+  with_legacy: true
 - name: osd_journal_size
   type: size
   level: advanced
@@ -3137,16 +3531,23 @@ options:
   default: 5_K
   flags:
   - create
+  with_legacy: true
 - name: osd_journal_flush_on_shutdown
   type: bool
   level: advanced
   desc: flush FileStore journal contents during clean OSD shutdown
   default: true
+  with_legacy: true
 - name: osd_compact_on_start
   type: bool
   level: advanced
   desc: compact OSD's object store's OMAP on start
   default: false
+# flags for specific control purpose during osd mount() process.
+# e.g., can be 1 to skip over replaying journal
+# or 2 to skip over mounting omap or 3 to skip over both.
+# This might be helpful in case the journal is totally corrupted
+# and we still want to bring the osd daemon back normally, etc.
 - name: osd_os_flags
   type: uint
   level: dev
@@ -3161,11 +3562,13 @@ options:
     when attempting to write to the cluster.
   default: 90
   min: 4
+  with_legacy: true
 - name: osd_max_pgls
   type: uint
   level: advanced
   desc: maximum number of results when listing objects in a pool
   default: 1_K
+  with_legacy: true
 - name: osd_client_message_size_cap
   type: size
   level: advanced
@@ -3173,11 +3576,13 @@ options:
   long_desc: If this value is exceeded, the OSD will not read any new client data
     off of the network until memory is freed.
   default: 500_M
+  with_legacy: true
 - name: osd_client_message_cap
   type: uint
   level: advanced
   desc: maximum number of in-flight client requests
   default: 0
+  with_legacy: true
 - name: osd_crush_update_weight_set
   type: bool
   level: advanced
@@ -3188,6 +3593,8 @@ options:
     will leave it to the balancer to (slowly, presumably) adjust weights to approach
     the new target value.
   default: true
+  with_legacy: true
+# 1 = host
 - name: osd_crush_chooseleaf_type
   type: int
   level: dev
@@ -3195,28 +3602,35 @@ options:
   default: 1
   flags:
   - cluster_create
+  with_legacy: true
+# try to use gmt for hitset archive names if all osds in cluster support it
 - name: osd_pool_use_gmt_hitset
   type: bool
   level: dev
   desc: use UTC for hitset timestamps
   long_desc: This setting only exists for compatibility with hammer (and older) clusters.
   default: true
+  with_legacy: true
 - name: osd_crush_update_on_start
   type: bool
   level: advanced
   desc: update OSD CRUSH location on startup
   default: true
+  with_legacy: true
 - name: osd_class_update_on_start
   type: bool
   level: advanced
   desc: set OSD device class on startup
   default: true
+  with_legacy: true
 - name: osd_crush_initial_weight
   type: float
   level: advanced
   desc: if >= 0, initial CRUSH weight for newly created OSDs
   long_desc: If this value is negative, the size of the OSD in TiB is used.
   default: -1
+  with_legacy: true
+# whether turn on fast read on the pool or not
 - name: osd_pool_default_ec_fast_read
   type: bool
   level: advanced
@@ -3224,6 +3638,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: osd_pool_default_crush_rule
   type: int
   level: advanced
@@ -3315,6 +3730,8 @@ options:
   - osd
   flags:
   - startup
+  with_legacy: true
+# Allows the "peered" state for recovery and backfill below min_size
 - name: osd_allow_recovery_below_min_size
   type: bool
   level: dev
@@ -3322,6 +3739,7 @@ options:
   default: true
   services:
   - osd
+  with_legacy: true
 - name: osd_pool_default_flags
   type: int
   level: dev
@@ -3329,6 +3747,8 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+# use new pg hashing to prevent pool/pg overlap
 - name: osd_pool_default_flag_hashpspool
   type: bool
   level: advanced
@@ -3336,6 +3756,8 @@ options:
   default: true
   services:
   - mon
+  with_legacy: true
+# pool can't be deleted
 - name: osd_pool_default_flag_nodelete
   type: bool
   level: advanced
@@ -3343,6 +3765,8 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
+# pool's pg and pgp num can't be changed
 - name: osd_pool_default_flag_nopgchange
   type: bool
   level: advanced
@@ -3350,6 +3774,8 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
+# pool's size and min size can't be changed
 - name: osd_pool_default_flag_nosizechange
   type: bool
   level: advanced
@@ -3357,6 +3783,7 @@ options:
   default: false
   services:
   - mon
+  with_legacy: true
 - name: osd_pool_default_hit_set_bloom_fpp
   type: float
   level: advanced
@@ -3365,30 +3792,40 @@ options:
   - mon
   see_also:
   - osd_tier_default_cache_hit_set_type
+  with_legacy: true
 - name: osd_pool_default_cache_target_dirty_ratio
   type: float
   level: advanced
   default: 0.4
+  with_legacy: true
 - name: osd_pool_default_cache_target_dirty_high_ratio
   type: float
   level: advanced
   default: 0.6
+  with_legacy: true
 - name: osd_pool_default_cache_target_full_ratio
   type: float
   level: advanced
   default: 0.8
+  with_legacy: true
+# seconds
 - name: osd_pool_default_cache_min_flush_age
   type: int
   level: advanced
   default: 0
+  with_legacy: true
+# seconds
 - name: osd_pool_default_cache_min_evict_age
   type: int
   level: advanced
   default: 0
+  with_legacy: true
+# max size to check for eviction
 - name: osd_pool_default_cache_max_evict_check_size
   type: int
   level: advanced
   default: 10
+  with_legacy: true
 - name: osd_pool_default_pg_autoscale_mode
   type: str
   level: advanced
@@ -3411,26 +3848,36 @@ options:
   - osd_heartbeat_grace
   flags:
   - runtime
+  with_legacy: true
+# min target size for a HitSet
 - name: osd_hit_set_min_size
   type: int
   level: advanced
   default: 1000
+  with_legacy: true
+# max target size for a HitSet
 - name: osd_hit_set_max_size
   type: int
   level: advanced
   default: 100000
+  with_legacy: true
+# rados namespace for hit_set tracking
 - name: osd_hit_set_namespace
   type: str
   level: advanced
   default: .ceph-internal
+  with_legacy: true
+# conservative default throttling values
 - name: osd_tier_promote_max_objects_sec
   type: uint
   level: advanced
   default: 25
+  with_legacy: true
 - name: osd_tier_promote_max_bytes_sec
   type: size
   level: advanced
   default: 5_M
+  with_legacy: true
 - name: osd_tier_default_cache_mode
   type: str
   level: advanced
@@ -3487,28 +3934,35 @@ options:
   default: 1
   flags:
   - startup
+  with_legacy: true
 - name: osd_map_dedup
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: osd_map_cache_size
   type: int
   level: advanced
   default: 50
+  with_legacy: true
 - name: osd_map_message_max
   type: int
   level: advanced
   desc: maximum number of OSDMaps to include in a single message
   default: 40
+  with_legacy: true
 - name: osd_map_message_max_bytes
   type: size
   level: advanced
   desc: maximum number of bytes worth of OSDMaps to include in a single message
   default: 10_M
+  with_legacy: true
+# cap on # of inc maps we send to peers, clients
 - name: osd_map_share_max_epochs
   type: int
   level: advanced
   default: 40
+  with_legacy: true
 - name: osd_pg_epoch_max_lag_factor
   type: float
   level: advanced
@@ -3520,30 +3974,39 @@ options:
   type: float
   level: dev
   default: 0
+  with_legacy: true
 - name: osd_inject_failure_on_pg_removal
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
 - name: osd_max_markdown_period
   type: int
   level: advanced
   default: 10_min
+  with_legacy: true
 - name: osd_max_markdown_count
   type: int
   level: advanced
   default: 5
+  with_legacy: true
 - name: osd_op_pq_max_tokens_per_priority
   type: uint
   level: advanced
   default: 4_M
+  with_legacy: true
 - name: osd_op_pq_min_cost
   type: size
   level: advanced
   default: 64_K
+  with_legacy: true
+# preserve clone_overlap during recovery/migration
 - name: osd_recover_clone_overlap
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: osd_num_cache_shards
   type: size
   level: advanced
@@ -3557,6 +4020,7 @@ options:
   default: 0
   flags:
   - startup
+  with_legacy: true
 - name: osd_op_num_threads_per_shard_hdd
   type: int
   level: advanced
@@ -3565,6 +4029,7 @@ options:
   - osd_op_num_threads_per_shard
   flags:
   - startup
+  with_legacy: true
 - name: osd_op_num_threads_per_shard_ssd
   type: int
   level: advanced
@@ -3573,12 +4038,14 @@ options:
   - osd_op_num_threads_per_shard
   flags:
   - startup
+  with_legacy: true
 - name: osd_op_num_shards
   type: int
   level: advanced
   default: 0
   flags:
   - startup
+  with_legacy: true
 - name: osd_op_num_shards_hdd
   type: int
   level: advanced
@@ -3587,6 +4054,7 @@ options:
   - osd_op_num_shards
   flags:
   - startup
+  with_legacy: true
 - name: osd_op_num_shards_ssd
   type: int
   level: advanced
@@ -3595,12 +4063,20 @@ options:
   - osd_op_num_shards
   flags:
   - startup
+  with_legacy: true
 - name: osd_skip_data_digest
   type: bool
   level: dev
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
+# PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
+# mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
+# and "mclock_client" are based on the mClock/dmClock algorithm
+# (Gulati, et al. 2010). "mclock_opclass" prioritizes based on the
+# class the operation belongs to. "mclock_client" does the same but
+# also works to ienforce fairness between clients. "debug_random"
+# chooses among all four with equal probability.
 - name: osd_op_queue
   type: str
   level: advanced
@@ -3614,6 +4090,8 @@ options:
   - wpq
   - mclock_scheduler
   - debug_random
+  with_legacy: true
+# Min priority to go to strict queue. (low, high)
 - name: osd_op_queue_cut_off
   type: str
   level: advanced
@@ -3628,6 +4106,7 @@ options:
   - low
   - high
   - debug_random
+  with_legacy: true
 - name: osd_mclock_scheduler_client_res
   type: uint
   level: advanced
@@ -3820,14 +4299,20 @@ options:
   - custom
   flags:
   - runtime
+# do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 - name: osd_ignore_stale_divergent_priors
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# Set to true for testing.  Users should NOT set this.
+# If set to true even after reading enough shards to
+# decode the object, any error will be reported.
 - name: osd_read_ec_check_for_errors
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 # Only use clone_overlap for recovery if there are fewer than
 # osd_recover_clone_overlap_limit entries in the overlap set
 - name: osd_recover_clone_overlap_limit
@@ -3841,22 +4326,27 @@ options:
   level: dev
   desc: Feed a pullee, and force primary to pull a currently missing object from it
   default: -1
+  with_legacy: true
 - name: osd_backfill_scan_min
   type: int
   level: advanced
   default: 64
+  with_legacy: true
 - name: osd_backfill_scan_max
   type: int
   level: advanced
   default: 512
+  with_legacy: true
 - name: osd_op_thread_timeout
   type: int
   level: advanced
   default: 15
+  with_legacy: true
 - name: osd_op_thread_suicide_timeout
   type: int
   level: advanced
   default: 150
+  with_legacy: true
 - name: osd_recovery_sleep
   type: float
   level: advanced
@@ -3864,6 +4354,7 @@ options:
   default: 0
   flags:
   - runtime
+  with_legacy: true
 - name: osd_recovery_sleep_hdd
   type: float
   level: advanced
@@ -3871,6 +4362,7 @@ options:
   default: 0.1
   flags:
   - runtime
+  with_legacy: true
 - name: osd_recovery_sleep_ssd
   type: float
   level: advanced
@@ -3880,6 +4372,7 @@ options:
   - osd_recovery_sleep
   flags:
   - runtime
+  with_legacy: true
 - name: osd_recovery_sleep_hybrid
   type: float
   level: advanced
@@ -3895,6 +4388,7 @@ options:
   level: advanced
   desc: Time in seconds to sleep before next snap trim (overrides values below)
   default: 0
+  with_legacy: true
 - name: osd_snap_trim_sleep_hdd
   type: float
   level: advanced
@@ -3915,14 +4409,17 @@ options:
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: osd_command_thread_timeout
   type: int
   level: advanced
   default: 10_min
+  with_legacy: true
 - name: osd_command_thread_suicide_timeout
   type: int
   level: advanced
   default: 15_min
+  with_legacy: true
 - name: osd_heartbeat_interval
   type: int
   level: dev
@@ -3930,10 +4427,14 @@ options:
   default: 6
   min: 1
   max: 1_min
+  with_legacy: true
+# (seconds) how long before we decide a peer has failed
+# This setting is read by the MONs and OSDs and has to be set to a equal value in both settings of the configuration
 - name: osd_heartbeat_grace
   type: int
   level: advanced
   default: 20
+  with_legacy: true
 - name: osd_heartbeat_stale
   type: int
   level: advanced
@@ -3942,59 +4443,82 @@ options:
     them down. The primary benefit is that OSD doesn't need to keep a flood of blocked
     heartbeat messages around in memory.
   default: 10_min
+# minimum number of peers
 - name: osd_heartbeat_min_peers
   type: int
   level: advanced
   default: 10
+  with_legacy: true
+# prio the heartbeat tcp socket and set dscp as CS6 on it if true
 - name: osd_heartbeat_use_min_delay_socket
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# the minimum size of OSD heartbeat messages to send
 - name: osd_heartbeat_min_size
   type: size
   level: advanced
   desc: Minimum heartbeat packet size in bytes. Will add dummy payload if heartbeat
     packet is smaller than this.
   default: 2000
+  with_legacy: true
+# max number of parallel snap trims/pg
 - name: osd_pg_max_concurrent_snap_trims
   type: uint
   level: advanced
   default: 2
+  with_legacy: true
+# max number of trimming pgs
 - name: osd_max_trimming_pgs
   type: uint
   level: advanced
   default: 2
+  with_legacy: true
+# minimum number of peers that must be reachable to mark ourselves
+# back up after being wrongly marked down.
 - name: osd_heartbeat_min_healthy_ratio
   type: float
   level: advanced
   default: 0
+  with_legacy: true
+# (seconds) how often to ping monitor if no peers
 - name: osd_mon_heartbeat_interval
   type: int
   level: advanced
   default: 30
+  with_legacy: true
 - name: osd_mon_heartbeat_stat_stale
   type: int
   level: advanced
   desc: Stop reporting on heartbeat ping times not updated for this many seconds.
   long_desc: Stop reporting on old heartbeat information unless this is set to zero
   default: 1_hr
+# failures, up_thru, boot.
 - name: osd_mon_report_interval
   type: int
   level: advanced
   desc: Frequency of OSD reports to mon for peer failures, fullness status changes
   default: 5
+  with_legacy: true
+# max updates in flight
 - name: osd_mon_report_max_in_flight
   type: int
   level: advanced
   default: 2
+  with_legacy: true
+# (second) how often to send beacon message to monitor
 - name: osd_beacon_report_interval
   type: int
   level: advanced
   default: 5_min
+  with_legacy: true
+# report pg stats for any given pg at least this often
 - name: osd_pg_stat_report_interval_max
   type: int
   level: advanced
   default: 500
+  with_legacy: true
 - name: osd_mon_ack_timeout
   type: float
   level: advanced
@@ -4007,11 +4531,13 @@ options:
   type: float
   level: advanced
   default: 0.9
+# Max number of snap intervals to report to mgr in pg_stat_t
 - name: osd_max_snap_prune_intervals_per_epoch
   type: uint
   level: dev
   desc: Max number of snap intervals to report to mgr in pg_stat_t
   default: 512
+  with_legacy: true
 - name: osd_default_data_pool_replay_window
   type: int
   level: advanced
@@ -4020,10 +4546,12 @@ options:
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: osd_recovery_delay_start
   type: float
   level: advanced
   default: 0
+  with_legacy: true
 - name: osd_recovery_max_active
   type: uint
   level: advanced
@@ -4035,6 +4563,7 @@ options:
   - osd_recovery_max_active_ssd
   flags:
   - runtime
+  with_legacy: true
 - name: osd_recovery_max_active_hdd
   type: uint
   level: advanced
@@ -4046,6 +4575,7 @@ options:
   - osd_recovery_max_active_ssd
   flags:
   - runtime
+  with_legacy: true
 - name: osd_recovery_max_active_ssd
   type: uint
   level: advanced
@@ -4057,49 +4587,66 @@ options:
   - osd_recovery_max_active_hdd
   flags:
   - runtime
+  with_legacy: true
 - name: osd_recovery_max_single_start
   type: uint
   level: advanced
   default: 1
+  with_legacy: true
+# max size of push chunk
 - name: osd_recovery_max_chunk
   type: size
   level: advanced
   default: 8_M
+  with_legacy: true
+# max number of omap entries per chunk; 0 to disable limit
 - name: osd_recovery_max_omap_entries_per_chunk
   type: uint
   level: advanced
   default: 8096
+  with_legacy: true
+# max size of a COPYFROM chunk
 - name: osd_copyfrom_max_chunk
   type: size
   level: advanced
   default: 8_M
+  with_legacy: true
+# push cost per object
 - name: osd_push_per_object_cost
   type: size
   level: advanced
   default: 1000
+  with_legacy: true
+# max size of push message
 - name: osd_max_push_cost
   type: size
   level: advanced
   default: 8_M
+  with_legacy: true
+# max objects in single push op
 - name: osd_max_push_objects
   type: uint
   level: advanced
   default: 10
+  with_legacy: true
 - name: osd_max_scrubs
   type: int
   level: advanced
   desc: Maximum concurrent scrubs on a single OSD
   default: 1
+  with_legacy: true
 - name: osd_scrub_during_recovery
   type: bool
   level: advanced
   desc: Allow scrubbing when PGs on the OSD are undergoing recovery
   default: false
+  with_legacy: true
 - name: osd_repair_during_recovery
   type: bool
   level: advanced
   desc: Allow requested repairing when PGs on the OSD are undergoing recovery
   default: false
+  with_legacy: true
 - name: osd_scrub_begin_hour
   type: int
   level: advanced
@@ -4110,6 +4657,7 @@ options:
   - osd_scrub_end_hour
   min: 0
   max: 23
+  with_legacy: true
 - name: osd_scrub_end_hour
   type: int
   level: advanced
@@ -4120,6 +4668,7 @@ options:
   - osd_scrub_begin_hour
   min: 0
   max: 23
+  with_legacy: true
 - name: osd_scrub_begin_week_day
   type: int
   level: advanced
@@ -4131,6 +4680,7 @@ options:
   - osd_scrub_end_week_day
   min: 0
   max: 6
+  with_legacy: true
 - name: osd_scrub_end_week_day
   type: int
   level: advanced
@@ -4142,11 +4692,14 @@ options:
   - osd_scrub_begin_week_day
   min: 0
   max: 6
+  with_legacy: true
 - name: osd_scrub_load_threshold
   type: float
   level: advanced
   desc: Allow scrubbing when system load divided by number of CPUs is below this value
   default: 0.5
+  with_legacy: true
+# if load is low
 - name: osd_scrub_min_interval
   type: float
   level: advanced
@@ -4154,6 +4707,8 @@ options:
   default: 1_day
   see_also:
   - osd_scrub_max_interval
+  with_legacy: true
+# regardless of load
 - name: osd_scrub_max_interval
   type: float
   level: advanced
@@ -4161,6 +4716,8 @@ options:
   default: 7_day
   see_also:
   - osd_scrub_min_interval
+  with_legacy: true
+# randomize the scheduled scrub in the span of [min,min*(1+randomize_ratio))
 - name: osd_scrub_interval_randomize_ratio
   type: float
   level: advanced
@@ -4170,6 +4727,8 @@ options:
   default: 0.5
   see_also:
   - osd_scrub_min_interval
+  with_legacy: true
+# the probability to back off the scheduled scrub
 - name: osd_scrub_backoff_ratio
   type: float
   level: dev
@@ -4177,6 +4736,7 @@ options:
   long_desc: This is the precentage of ticks that do NOT schedule scrubs, 66% means
     that 1 out of 3 ticks will schedule scrubs
   default: 0.66
+  with_legacy: true
 - name: osd_scrub_chunk_min
   type: int
   level: advanced
@@ -4184,6 +4744,7 @@ options:
   default: 5
   see_also:
   - osd_scrub_chunk_max
+  with_legacy: true
 - name: osd_scrub_chunk_max
   type: int
   level: advanced
@@ -4191,11 +4752,15 @@ options:
   default: 25
   see_also:
   - osd_scrub_chunk_min
+  with_legacy: true
+# sleep between [deep]scrub ops
 - name: osd_scrub_sleep
   type: float
   level: advanced
   desc: Duration to inject a delay during scrubbing
   default: 0
+  with_legacy: true
+# more sleep between [deep]scrub ops
 - name: osd_scrub_extended_sleep
   type: float
   level: advanced
@@ -4206,11 +4771,15 @@ options:
   - osd_scrub_end_hour
   - osd_scrub_begin_week_day
   - osd_scrub_end_week_day
+  with_legacy: true
+# whether auto-repair inconsistencies upon deep-scrubbing
 - name: osd_scrub_auto_repair
   type: bool
   level: advanced
   desc: Automatically repair damaged objects detected during scrub
   default: false
+  with_legacy: true
+# only auto-repair when number of errors is below this threshold
 - name: osd_scrub_auto_repair_num_errors
   type: uint
   level: advanced
@@ -4218,6 +4787,7 @@ options:
   default: 5
   see_also:
   - osd_scrub_auto_repair
+  with_legacy: true
 - name: osd_scrub_max_preemptions
   type: uint
   level: advanced
@@ -4231,6 +4801,7 @@ options:
   level: advanced
   desc: Deep scrub each PG (i.e., verify data checksums) at least this often
   default: 7_day
+  with_legacy: true
 - name: osd_deep_scrub_randomize_ratio
   type: float
   level: advanced
@@ -4239,22 +4810,27 @@ options:
   long_desc: This prevents a deep scrub 'stampede' by spreading deep scrubs so they
     are uniformly distributed over the week
   default: 0.15
+  with_legacy: true
 - name: osd_deep_scrub_stride
   type: size
   level: advanced
   desc: Number of bytes to read from an object at a time during deep scrub
   default: 512_K
+  with_legacy: true
 - name: osd_deep_scrub_keys
   type: int
   level: advanced
   desc: Number of keys to read from an object at a time during deep scrub
   default: 1024
+  with_legacy: true
+# objects must be this old (seconds) before we update the whole-object digest on scrub
 - name: osd_deep_scrub_update_digest_min_age
   type: int
   level: advanced
   desc: Update overall object digest only if object was last modified longer ago than
     this
   default: 2_hr
+  with_legacy: true
 - name: osd_deep_scrub_large_omap_object_key_threshold
   type: uint
   level: advanced
@@ -4264,6 +4840,7 @@ options:
   - osd
   see_also:
   - osd_deep_scrub_large_omap_object_value_sum_threshold
+  with_legacy: true
 - name: osd_deep_scrub_large_omap_object_value_sum_threshold
   type: size
   level: advanced
@@ -4273,49 +4850,65 @@ options:
   - osd
   see_also:
   - osd_deep_scrub_large_omap_object_key_threshold
+  with_legacy: true
+# where rados plugins are stored
 - name: osd_class_dir
   type: str
   level: advanced
   default: @CMAKE_INSTALL_LIBDIR@/rados-classes
+  with_legacy: true
 - name: osd_open_classes_on_start
   type: bool
   level: advanced
   default: true
+  with_legacy: true
+# list of object classes allowed to be loaded (allow all: *)
 - name: osd_class_load_list
   type: str
   level: advanced
   default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
     user version cas cmpomap queue 2pc_queue fifo
+  with_legacy: true
+# list of object classes with default execute perm (allow all: *)
 - name: osd_class_default_list
   type: str
   level: advanced
   default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
     user version cas cmpomap queue 2pc_queue fifo
+  with_legacy: true
 - name: osd_check_for_log_corruption
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: osd_use_stale_snap
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: osd_rollback_to_cluster_snap
   type: str
   level: advanced
+  with_legacy: true
 - name: osd_default_notify_timeout
   type: uint
   level: advanced
   desc: default number of seconds after which notify propagation times out. used if
     a client has not specified other value
   default: 30
+  with_legacy: true
 - name: osd_kill_backfill_at
   type: int
   level: dev
   default: 0
+  with_legacy: true
+# Bounds how infrequently a new map epoch will be persisted for a pg
+# make this < map_cache_size!
 - name: osd_pg_epoch_persisted_max_stale
   type: uint
   level: advanced
   default: 40
+  with_legacy: true
 - name: osd_target_pg_log_entries_per_osd
   type: uint
   level: dev
@@ -4325,6 +4918,7 @@ options:
   see_also:
   - osd_max_pg_log_entries
   - osd_min_pg_log_entries
+  with_legacy: true
 - name: osd_min_pg_log_entries
   type: uint
   level: dev
@@ -4336,6 +4930,7 @@ options:
   - osd_max_pg_log_entries
   - osd_pg_log_dups_tracked
   - osd_target_pg_log_entries_per_osd
+  with_legacy: true
 - name: osd_max_pg_log_entries
   type: uint
   level: dev
@@ -4347,6 +4942,7 @@ options:
   - osd_min_pg_log_entries
   - osd_pg_log_dups_tracked
   - osd_target_pg_log_entries_per_osd
+  with_legacy: true
 - name: osd_pg_log_dups_tracked
   type: uint
   level: dev
@@ -4359,6 +4955,7 @@ options:
   see_also:
   - osd_min_pg_log_entries
   - osd_max_pg_log_entries
+  with_legacy: true
 - name: osd_object_clean_region_max_num_intervals
   type: int
   level: dev
@@ -4369,10 +4966,13 @@ options:
   default: 10
   services:
   - osd
+  with_legacy: true
+# max entries factor before force recovery
 - name: osd_force_recovery_pg_log_entries_factor
   type: float
   level: dev
   default: 1.3
+  with_legacy: true
 - name: osd_pg_log_trim_min
   type: uint
   level: dev
@@ -4382,6 +4982,7 @@ options:
   see_also:
   - osd_max_pg_log_entries
   - osd_min_pg_log_entries
+  with_legacy: true
 - name: osd_force_auth_primary_missing_objects
   type: uint
   level: advanced
@@ -4416,149 +5017,199 @@ options:
   see_also:
   - osd_min_pg_log_entries
   - osd_max_pg_log_entries
+  with_legacy: true
+# how many seconds old makes an op complaint-worthy
 - name: osd_op_complaint_time
   type: float
   level: advanced
   default: 30
+  with_legacy: true
 - name: osd_command_max_records
   type: int
   level: advanced
   default: 256
+  with_legacy: true
+# max peer osds to report that are blocking our progress
 - name: osd_max_pg_blocked_by
   type: uint
   level: advanced
   default: 16
+  with_legacy: true
 - name: osd_op_log_threshold
   type: int
   level: advanced
   default: 5
+  with_legacy: true
 - name: osd_backoff_on_unfound
   type: bool
   level: advanced
   default: true
+  with_legacy: true
+# [mainly for debug?] object unreadable/writeable
 - name: osd_backoff_on_degraded
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# [debug] pg peering
 - name: osd_backoff_on_peering
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: osd_debug_shutdown
   type: bool
   level: dev
   desc: Turn up debug levels during shutdown
   default: false
+  with_legacy: true
+# crash osd if client ignores a backoff; useful for debugging
 - name: osd_debug_crash_on_ignored_backoff
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_inject_dispatch_delay_probability
   type: float
   level: dev
   default: 0
+  with_legacy: true
 - name: osd_debug_inject_dispatch_delay_duration
   type: float
   level: dev
   default: 0.1
+  with_legacy: true
 - name: osd_debug_drop_ping_probability
   type: float
   level: dev
   default: 0
+  with_legacy: true
 - name: osd_debug_drop_ping_duration
   type: int
   level: dev
   default: 0
+  with_legacy: true
 - name: osd_debug_op_order
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_verify_missing_on_start
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_verify_snaps
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_verify_stray_on_activate
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_skip_full_check_in_backfill_reservation
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_reject_backfill_probability
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# inject failure during copyfrom completion
 - name: osd_debug_inject_copyfrom_error
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_misdirected_ops
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_skip_full_check_in_recovery
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_random_push_read_error
   type: float
   level: dev
   default: 0
+  with_legacy: true
 - name: osd_debug_verify_cached_snaps
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_deep_scrub_sleep
   type: float
   level: dev
   desc: Inject an expensive sleep during deep scrub IO to make it easier to induce
     preemption
   default: 0
+  with_legacy: true
 - name: osd_debug_no_acting_change
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: osd_debug_no_purge_strays
   type: bool
   level: dev
   default: false
+  with_legacy: truen
 - name: osd_debug_pretend_recovery_active
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# enable/disable OSD op tracking
 - name: osd_enable_op_tracker
   type: bool
   level: advanced
   default: true
+  with_legacy: true
+# The number of shards for holding the ops
 - name: osd_num_op_tracker_shard
   type: uint
   level: advanced
   default: 32
+  with_legacy: true
+# Max number of completed ops to track
 - name: osd_op_history_size
   type: uint
   level: advanced
   default: 20
+  with_legacy: true
+# Oldest completed op to track
 - name: osd_op_history_duration
   type: uint
   level: advanced
   default: 600
+  with_legacy: true
+# Max number of slow ops to track
 - name: osd_op_history_slow_op_size
   type: uint
   level: advanced
   default: 20
+  with_legacy: true
+# track the op if over this threshold
 - name: osd_op_history_slow_op_threshold
   type: float
   level: advanced
   default: 10
+  with_legacy: true
+# to adjust various transactions that batch smaller items
 - name: osd_target_transaction_size
   type: int
   level: advanced
   default: 30
+  with_legacy: true
+  with_legacy: true
 - name: osd_delete_sleep
   type: float
   level: advanced
@@ -4581,10 +5232,12 @@ options:
   desc: Time in seconds to sleep before next removal transaction when data is on HDD
     and journal is on SSD
   default: 1
+# what % full makes an OSD "full" (failsafe)
 - name: osd_failsafe_full_ratio
   type: float
   level: advanced
   default: 0.97
+  with_legacy: true
 - name: osd_fast_shutdown
   type: bool
   level: advanced
@@ -4593,6 +5246,7 @@ options:
     when it receives a SIGINT or SIGTERM or when shutting down for any other reason.  That
     slow shutdown is primarilyy useful for doing memory leak checking with valgrind.
   default: true
+  with_legacy: true
 - name: osd_fast_shutdown_notify_mon
   type: bool
   level: advanced
@@ -4603,124 +5257,169 @@ options:
   see_also:
   - osd_fast_shutdown
   - osd_mon_shutdown_timeout
+  with_legacy: true
+# immediately mark OSDs as down once they refuse to accept connections
 - name: osd_fast_fail_on_connection_refused
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: osd_pg_object_context_cache_count
   type: int
   level: advanced
   default: 64
+  with_legacy: true
+# true if LTTng-UST tracepoints should be enabled
 - name: osd_tracing
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# true if function instrumentation should use LTTng
 - name: osd_function_tracing
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# use fast info attr, if we can
 - name: osd_fast_info
   type: bool
   level: advanced
   default: true
+  with_legacy: true
+# determines whether PGLog::check() compares written out log to stored log
 - name: osd_debug_pg_log_writeout
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# Max number of loop before we reset thread-pool's handle
 - name: osd_loop_before_reset_tphandle
   type: uint
   level: advanced
   default: 64
+  with_legacy: true
+# default timeout while caling WaitInterval on an empty queue
 - name: threadpool_default_timeout
   type: int
   level: advanced
   default: 1_min
+  with_legacy: true
+# default wait time for an empty queue before pinging the hb timeout
 - name: threadpool_empty_queue_max_wait
   type: int
   level: advanced
   default: 2
+  with_legacy: true
 - name: leveldb_log_to_ceph_log
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: leveldb_write_buffer_size
   type: size
   level: advanced
   default: 8_M
+  with_legacy: true
 - name: leveldb_cache_size
   type: size
   level: advanced
   default: 128_M
+  with_legacy: true
 - name: leveldb_block_size
   type: size
   level: advanced
   default: 0
+  with_legacy: true
 - name: leveldb_bloom_size
   type: int
   level: advanced
   default: 0
+  with_legacy: true
 - name: leveldb_max_open_files
   type: int
   level: advanced
   default: 0
+  with_legacy: true
 - name: leveldb_compression
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: leveldb_paranoid
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: leveldb_log
   type: str
   level: advanced
   default: /dev/null
+  with_legacy: true
 - name: leveldb_compact_on_mount
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: rocksdb_log_to_ceph_log
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: rocksdb_cache_size
   type: size
   level: advanced
   default: 512_M
   flags:
   - runtime
+  with_legacy: true
+# ratio of cache for row (vs block)
 - name: rocksdb_cache_row_ratio
   type: float
   level: advanced
   default: 0
+  with_legacy: true
+# rocksdb block cache shard bits, 4 bit -> 16 shards
 - name: rocksdb_cache_shard_bits
   type: int
   level: advanced
   default: 4
+  with_legacy: true
+# 'lru' or 'clock'
 - name: rocksdb_cache_type
   type: str
   level: advanced
   default: binned_lru
+  with_legacy: true
 - name: rocksdb_block_size
   type: size
   level: advanced
   default: 4_K
+  with_legacy: true
+# Enabling this will have 5-10% impact on performance for the stats collection
 - name: rocksdb_perf
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 - name: rocksdb_collect_compaction_stats
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 - name: rocksdb_collect_extended_stats
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 - name: rocksdb_collect_memory_stats
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: rocksdb_delete_range_threshold
   type: uint
   level: advanced
@@ -4802,99 +5501,141 @@ options:
   type: str
   level: advanced
   default: write_buffer_size=33554432,compression=kNoCompression,level_compaction_dynamic_level_bytes=true
+  with_legacy: true
+# osd_*_priority adjust the relative priority of client io, recovery io,
+# snaptrim io, etc
+#
+# osd_*_priority determines the ratio of available io between client and
+# recovery.  Each option may be set between
+# 1..63.
 - name: osd_client_op_priority
   type: uint
   level: advanced
   default: 63
+  with_legacy: true
 - name: osd_recovery_op_priority
   type: uint
   level: advanced
   desc: Priority to use for recovery operations if not specified for the pool
   default: 3
+  with_legacy: true
 - name: osd_peering_op_priority
   type: uint
   level: dev
   default: 255
+  with_legacy: true
 - name: osd_snap_trim_priority
   type: uint
   level: advanced
   default: 5
+  with_legacy: true
 - name: osd_snap_trim_cost
   type: size
   level: advanced
   default: 1_M
+  with_legacy: true
 - name: osd_pg_delete_priority
   type: uint
   level: advanced
   default: 5
+  with_legacy: true
 - name: osd_pg_delete_cost
   type: size
   level: advanced
   default: 1_M
+  with_legacy: true
 - name: osd_scrub_priority
   type: uint
   level: advanced
   desc: Priority for scrub operations in work queue
   default: 5
+  with_legacy: true
 - name: osd_scrub_cost
   type: size
   level: advanced
   desc: Cost for scrub operations in work queue
   default: 50_M
+  with_legacy: true
+# set requested scrub priority higher than scrub priority to make the
+# requested scrubs jump the queue of scheduled scrubs
 - name: osd_requested_scrub_priority
   type: uint
   level: advanced
   default: 120
+  with_legacy: true
 - name: osd_recovery_priority
   type: uint
   level: advanced
   desc: Priority of recovery in the work queue
   long_desc: Not related to a pool's recovery_priority
   default: 5
+  with_legacy: true
+# set default cost equal to 20MB io
 - name: osd_recovery_cost
   type: size
   level: advanced
   default: 20_M
+  with_legacy: true
+# osd_recovery_op_warn_multiple scales the normal warning threshold,
+# osd_op_complaint_time, so that slow recovery ops won't cause noise
 - name: osd_recovery_op_warn_multiple
   type: uint
   level: advanced
   default: 16
+  with_legacy: true
+# Max time to wait between notifying mon of shutdown and shutting down
 - name: osd_mon_shutdown_timeout
   type: float
   level: advanced
   default: 5
+  with_legacy: true
+# crash if the OSD has stray PG refs on shutdown
 - name: osd_shutdown_pgref_assert
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# OSD's maximum object size
 - name: osd_max_object_size
   type: size
   level: advanced
   default: 128_M
+  with_legacy: true
+# max rados object name len
 - name: osd_max_object_name_len
   type: uint
   level: advanced
   default: 2_K
+  with_legacy: true
+# max rados object namespace len
 - name: osd_max_object_namespace_len
   type: uint
   level: advanced
   default: 256
+  with_legacy: true
+# max rados attr name len; cannot go higher than 100 chars for file system backends
 - name: osd_max_attr_name_len
   type: uint
   level: advanced
   default: 100
+  with_legacy: true
 - name: osd_max_attr_size
   type: uint
   level: advanced
   default: 0
+  with_legacy: true
 - name: osd_max_omap_entries_per_request
   type: uint
   level: advanced
   default: 1_K
+  with_legacy: true
 - name: osd_max_omap_bytes_per_request
   type: size
   level: advanced
   default: 1_G
+  with_legacy: true
+# osd_recovery_op_warn_multiple scales the normal warning threshold,
+# osd_op_complaint_time, so that slow recovery ops won't cause noise
 - name: osd_max_write_op_reply_len
   type: size
   level: advanced
@@ -4902,6 +5643,7 @@ options:
   long_desc: This value caps the amount of data (per op; a request may have many ops)
     that will be sent back to the client and recorded in the PG log.
   default: 32
+  with_legacy: true
 - name: osd_objectstore
   type: str
   level: advanced
@@ -4914,42 +5656,56 @@ options:
   - kstore
   flags:
   - create
+  with_legacy: true
+# true if LTTng-UST tracepoints should be enabled
 - name: osd_objectstore_tracing
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: osd_objectstore_fuse
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: osd_bench_small_size_max_iops
   type: uint
   level: advanced
   default: 100
+  with_legacy: true
 - name: osd_bench_large_size_max_throughput
   type: size
   level: advanced
   default: 100_M
+  with_legacy: true
 - name: osd_bench_max_block_size
   type: size
   level: advanced
   default: 64_M
+  with_legacy: true
+# duration of 'osd bench', capped at 30s to avoid triggering timeouts
 - name: osd_bench_duration
   type: uint
   level: advanced
   default: 30
+  with_legacy: true
+# create a blkin trace for all osd requests
 - name: osd_blkin_trace_all
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+# create a blkin trace for all objecter requests
 - name: osdc_blkin_trace_all
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: osd_discard_disconnected_ops
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: osd_memory_target
   type: size
   level: basic
@@ -5020,14 +5776,17 @@ options:
   type: size
   level: advanced
   default: 1_G
+  with_legacy: true
 - name: memstore_page_set
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: memstore_page_size
   type: size
   level: advanced
   default: 64_K
+  with_legacy: true
 - name: memstore_debug_omit_block_device_write
   type: bool
   level: dev
@@ -5035,66 +5794,88 @@ options:
   default: false
   see_also:
   - bluestore_debug_omit_block_device_write
+  with_legacy: true
 - name: objectstore_blackhole
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bdev_debug_inflight_ios
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# if N>0, then ~ 1/N IOs will complete before we crash on flush
 - name: bdev_inject_crash
   type: int
   level: dev
   default: 0
+  with_legacy: true
+# wait N more seconds on flush
 - name: bdev_inject_crash_flush_delay
   type: int
   level: dev
   default: 2
+  with_legacy: true
 - name: bdev_aio
   type: bool
   level: advanced
   default: true
+  with_legacy: true
+# milliseconds
 - name: bdev_aio_poll_ms
   type: int
   level: advanced
   default: 250
+  with_legacy: true
 - name: bdev_aio_max_queue_depth
   type: int
   level: advanced
   default: 1024
+  with_legacy: true
 - name: bdev_aio_reap_max
   type: int
   level: advanced
   default: 16
+  with_legacy: true
 - name: bdev_block_size
   type: size
   level: advanced
   default: 4_K
+  with_legacy: true
 - name: bdev_debug_aio
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bdev_debug_aio_suicide_timeout
   type: float
   level: dev
   default: 1_min
+  with_legacy: true
 - name: bdev_debug_aio_log_age
   type: float
   level: dev
   default: 5
+  with_legacy: true
+# if yes, osd will unbind all NVMe devices from kernel driver and bind them
+# to the uio_pci_generic driver. The purpose is to prevent the case where
+# NVMe driver is loaded while osd is running.
 - name: bdev_nvme_unbind_from_kernel
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bdev_enable_discard
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bdev_async_discard
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
@@ -5112,39 +5893,54 @@ options:
   level: advanced
   desc: Allocation unit size for DB and WAL devices
   default: 1_M
+  with_legacy: true
 - name: bluefs_shared_alloc_size
   type: size
   level: advanced
   desc: Allocation unit size for primary/shared device
   default: 64_K
+  with_legacy: true
 - name: bluefs_max_prefetch
   type: size
   level: advanced
   default: 1_M
+  with_legacy: true
+# alloc when we get this low
 - name: bluefs_min_log_runway
   type: size
   level: advanced
   default: 1_M
+  with_legacy: true
+# alloc this much at a time
 - name: bluefs_max_log_runway
   type: size
   level: advanced
   default: 4_M
+  with_legacy: true
+# before we consider
 - name: bluefs_log_compact_min_ratio
   type: float
   level: advanced
   default: 5
+  with_legacy: true
+# before we consider
 - name: bluefs_log_compact_min_size
   type: size
   level: advanced
   default: 16_M
+  with_legacy: true
+# ignore flush until its this big
 - name: bluefs_min_flush_size
   type: size
   level: advanced
   default: 512_K
+  with_legacy: true
+# sync or async log compaction
 - name: bluefs_compact_log_sync
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bluefs_buffered_io
   type: bool
   level: advanced
@@ -5155,10 +5951,12 @@ options:
     enough to hold blocks from the compressed SST files itself, they can be read from
     page cache instead of from the disk.
   default: true
+  with_legacy: true
 - name: bluefs_sync_write
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bluefs_allocator
   type: str
   level: dev
@@ -5168,11 +5966,13 @@ options:
   - stupid
   - avl
   - hybrid
+  with_legacy: true
 - name: bluefs_log_replay_check_allocations
   type: bool
   level: advanced
   desc: Enables checks for allocations consistency during log replay
   default: true
+  with_legacy: true
 - name: bluefs_replay_recovery
   type: bool
   level: dev
@@ -5181,10 +5981,12 @@ options:
     unreadable. This options enables heuristics that scans devices for missing data.
     DO NOT ENABLE BY DEFAULT
   default: false
+  with_legacy: true
 - name: bluefs_replay_recovery_disable_compact
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bluefs_check_for_zeros
   type: bool
   level: dev
@@ -5197,6 +5999,7 @@ options:
   - bluestore_retry_disk_reads
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_bluefs
   type: bool
   level: dev
@@ -5207,6 +6010,8 @@ options:
   default: true
   flags:
   - create
+  with_legacy: true
+# mirror to normal Env for debug
 - name: bluestore_bluefs_env_mirror
   type: bool
   level: dev
@@ -5214,6 +6019,7 @@ options:
   default: false
   flags:
   - create
+  with_legacy: true
 - name: bluestore_bluefs_min
   type: size
   level: advanced
@@ -5259,6 +6065,7 @@ options:
   level: advanced
   desc: How frequently (in seconds) to dump allocator onBlueFS space allocation failure
   default: 0
+  with_legacy: true
 - name: bluestore_spdk_mem
   type: size
   level: dev
@@ -5284,12 +6091,19 @@ options:
   level: dev
   desc: Time period to wait if there is no completed I/O from polling
   default: 5
+# If you want to use spdk driver, you need to specify NVMe serial number here
+# with "spdk:" prefix.
+# Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
+# get the serial number of Intel(R) Fultondale NVMe controllers.
+# Example:
+# bluestore_block_path = spdk:55cd2e404bd73932
 - name: bluestore_block_path
   type: str
   level: dev
   desc: Path to block device/file
   flags:
   - create
+  with_legacy: true
 - name: bluestore_block_size
   type: size
   level: dev
@@ -5297,6 +6111,7 @@ options:
   default: 100_G
   flags:
   - create
+  with_legacy: true
 - name: bluestore_block_create
   type: bool
   level: dev
@@ -5307,12 +6122,15 @@ options:
   - bluestore_block_size
   flags:
   - create
+  with_legacy: true
 - name: bluestore_block_db_path
   type: str
   level: dev
   desc: Path for db block device
   flags:
   - create
+  with_legacy: true
+# rocksdb ssts (hot/warm)
 - name: bluestore_block_db_size
   type: uint
   level: dev
@@ -5320,6 +6138,7 @@ options:
   default: 0
   flags:
   - create
+  with_legacy: true
 - name: bluestore_block_db_create
   type: bool
   level: dev
@@ -5330,12 +6149,15 @@ options:
   - bluestore_block_db_size
   flags:
   - create
+  with_legacy: true
 - name: bluestore_block_wal_path
   type: str
   level: dev
   desc: Path to block device/file backing bluefs wal
   flags:
   - create
+  with_legacy: true
+# rocksdb wal
 - name: bluestore_block_wal_size
   type: size
   level: dev
@@ -5343,6 +6165,7 @@ options:
   default: 96_M
   flags:
   - create
+  with_legacy: true
 - name: bluestore_block_wal_create
   type: bool
   level: dev
@@ -5353,6 +6176,8 @@ options:
   - bluestore_block_wal_size
   flags:
   - create
+  with_legacy: true
+# whether preallocate space if block/db_path/wal_path is file rather that block device.
 - name: bluestore_block_preallocate_file
   type: bool
   level: dev
@@ -5360,6 +6185,7 @@ options:
   default: false
   flags:
   - create
+  with_legacy: true
 - name: bluestore_ignore_data_csum
   type: bool
   level: dev
@@ -5367,6 +6193,7 @@ options:
   default: false
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_csum_type
   type: str
   level: advanced
@@ -5383,6 +6210,7 @@ options:
   - xxhash64
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_retry_disk_reads
   type: uint
   level: advanced
@@ -5394,6 +6222,7 @@ options:
   max: 255
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_min_alloc_size
   type: uint
   level: advanced
@@ -5407,6 +6236,7 @@ options:
   default: 0
   flags:
   - create
+  with_legacy: true
 - name: bluestore_min_alloc_size_hdd
   type: size
   level: advanced
@@ -5416,6 +6246,7 @@ options:
   - bluestore_min_alloc_size
   flags:
   - create
+  with_legacy: true
 - name: bluestore_min_alloc_size_ssd
   type: size
   level: advanced
@@ -5425,6 +6256,7 @@ options:
   - bluestore_min_alloc_size
   flags:
   - create
+  with_legacy: true
 - name: bluestore_max_alloc_size
   type: size
   level: advanced
@@ -5432,6 +6264,7 @@ options:
   default: 0
   flags:
   - create
+  with_legacy: true
 - name: bluestore_prefer_deferred_size
   type: size
   level: advanced
@@ -5442,6 +6275,7 @@ options:
   default: 0
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_prefer_deferred_size_hdd
   type: size
   level: advanced
@@ -5451,6 +6285,7 @@ options:
   - bluestore_prefer_deferred_size
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_prefer_deferred_size_ssd
   type: size
   level: advanced
@@ -5460,6 +6295,7 @@ options:
   - bluestore_prefer_deferred_size
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_mode
   type: str
   level: advanced
@@ -5476,6 +6312,7 @@ options:
   - force
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_algorithm
   type: str
   level: advanced
@@ -5492,6 +6329,7 @@ options:
   - lz4
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_min_blob_size
   type: size
   level: advanced
@@ -5501,6 +6339,7 @@ options:
   default: 0
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_min_blob_size_hdd
   type: size
   level: advanced
@@ -5510,6 +6349,7 @@ options:
   - bluestore_compression_min_blob_size
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_min_blob_size_ssd
   type: size
   level: advanced
@@ -5520,6 +6360,7 @@ options:
   - bluestore_compression_min_blob_size
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_max_blob_size
   type: size
   level: advanced
@@ -5529,6 +6370,7 @@ options:
   default: 0
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_max_blob_size_hdd
   type: size
   level: advanced
@@ -5538,6 +6380,7 @@ options:
   - bluestore_compression_max_blob_size
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_compression_max_blob_size_ssd
   type: size
   level: advanced
@@ -5548,18 +6391,25 @@ options:
   - bluestore_compression_max_blob_size
   flags:
   - runtime
+  with_legacy: true
+# Specifies minimum expected amount of saved allocation units
+# per single blob to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_blob_threshold
   type: int
   level: dev
   default: 0
   flags:
   - runtime
+  with_legacy: true
+# Specifies minimum expected amount of saved allocation units
+# per all blobsb to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_total_threshold
   type: int
   level: dev
   default: 0
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_max_blob_size
   type: size
   level: dev
@@ -5570,6 +6420,7 @@ options:
   default: 0
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_max_blob_size_hdd
   type: size
   level: dev
@@ -5578,6 +6429,7 @@ options:
   - bluestore_max_blob_size
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_max_blob_size_ssd
   type: size
   level: dev
@@ -5586,6 +6438,10 @@ options:
   - bluestore_max_blob_size
   flags:
   - runtime
+  with_legacy: true
+# Require the net gain of compression at least to be at this ratio,
+# otherwise we don't compress.
+# And ask for compressing at least 12.5%(1/8) off, by default.
 - name: bluestore_compression_required_ratio
   type: float
   level: advanced
@@ -5595,42 +6451,50 @@ options:
   default: 0.875
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_extent_map_shard_max_size
   type: size
   level: dev
   desc: Max size (bytes) for a single extent map shard before splitting
   default: 1200
+  with_legacy: true
 - name: bluestore_extent_map_shard_target_size
   type: size
   level: dev
   desc: Target size (bytes) for a single extent map shard
   default: 500
+  with_legacy: true
 - name: bluestore_extent_map_shard_min_size
   type: size
   level: dev
   desc: Min size (bytes) for a single extent map shard before merging
   default: 150
+  with_legacy: true
 - name: bluestore_extent_map_shard_target_size_slop
   type: float
   level: dev
   desc: Ratio above/below target for a shard when trying to align to an existing extent
     or blob boundary
   default: 0.2
+  with_legacy: true
 - name: bluestore_extent_map_inline_shard_prealloc_size
   type: size
   level: dev
   desc: Preallocated buffer for inline shards
   default: 256
+  with_legacy: true
 - name: bluestore_cache_trim_interval
   type: float
   level: advanced
   desc: How frequently we trim the bluestore cache
   default: 0.05
+  with_legacy: true
 - name: bluestore_cache_trim_max_skip_pinned
   type: uint
   level: dev
   desc: Max pinned cache entries we consider before giving up
   default: 64
+  with_legacy: true
 - name: bluestore_cache_type
   type: str
   level: dev
@@ -5639,16 +6503,19 @@ options:
   enum_values:
   - 2q
   - lru
+  with_legacy: true
 - name: bluestore_2q_cache_kin_ratio
   type: float
   level: dev
   desc: 2Q paper suggests .5
   default: 0.5
+  with_legacy: true
 - name: bluestore_2q_cache_kout_ratio
   type: float
   level: dev
   desc: 2Q paper suggests .5
   default: 0.5
+  with_legacy: true
 - name: bluestore_cache_size
   type: size
   level: dev
@@ -5656,6 +6523,7 @@ options:
   long_desc: This includes data and metadata cached by BlueStore as well as memory
     devoted to rocksdb's cache(s).
   default: 0
+  with_legacy: true
 - name: bluestore_cache_size_hdd
   type: size
   level: dev
@@ -5663,6 +6531,7 @@ options:
   default: 1_G
   see_also:
   - bluestore_cache_size
+  with_legacy: true
 - name: bluestore_cache_size_ssd
   type: size
   level: dev
@@ -5670,6 +6539,7 @@ options:
   default: 3_G
   see_also:
   - bluestore_cache_size
+  with_legacy: true
 - name: bluestore_cache_meta_ratio
   type: float
   level: dev
@@ -5677,6 +6547,7 @@ options:
   default: 0.4
   see_also:
   - bluestore_cache_size
+  with_legacy: true
 - name: bluestore_cache_kv_ratio
   type: float
   level: dev
@@ -5684,6 +6555,7 @@ options:
   default: 0
   see_also:
   - bluestore_cache_size
+  with_legacy: true
 - name: bluestore_cache_kv_onode_ratio
   type: float
   level: dev
@@ -5711,6 +6583,7 @@ options:
   level: dev
   desc: The period (in second) for logging allocation statistics.
   default: 1_day
+  with_legacy: true
 - name: bluestore_kvbackend
   type: str
   level: dev
@@ -5718,6 +6591,7 @@ options:
   default: rocksdb
   flags:
   - create
+  with_legacy: true
 - name: bluestore_allocator
   type: str
   level: advanced
@@ -5730,40 +6604,48 @@ options:
   - avl
   - hybrid
   - zoned
+  with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
   level: dev
   desc: Block (and bits) per database key
   default: 128
+  with_legacy: true
 - name: bluestore_bitmapallocator_blocks_per_zone
   type: size
   level: dev
   default: 1_K
+  with_legacy: true
 - name: bluestore_bitmapallocator_span_size
   type: size
   level: dev
   default: 1_K
+  with_legacy: true
 - name: bluestore_max_deferred_txc
   type: uint
   level: advanced
   desc: Max transactions with deferred writes that can accumulate before we force
     flush deferred writes
   default: 32
+  with_legacy: true
 - name: bluestore_max_defer_interval
   type: float
   level: advanced
   desc: max duration to force deferred submit
   default: 3
+  with_legacy: true
 - name: bluestore_rocksdb_options
   type: str
   level: advanced
   desc: Full set of rocksdb settings to override
   default: compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152,max_background_compactions=2,max_total_wal_size=1073741824
+  with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
   level: advanced
   desc: An addition to bluestore_rocksdb_options. Allows setting rocksdb options without
     repeating the existing defaults.
+  with_legacy: true
 - name: bluestore_rocksdb_cf
   type: bool
   level: advanced
@@ -5801,41 +6683,49 @@ options:
   level: dev
   desc: Run fsck at mount
   default: false
+  with_legacy: true
 - name: bluestore_fsck_on_mount_deep
   type: bool
   level: dev
   desc: Run deep fsck at mount when bluestore_fsck_on_mount is set to true
   default: false
+  with_legacy: true
 - name: bluestore_fsck_quick_fix_on_mount
   type: bool
   level: dev
   desc: Do quick-fix for the store at mount
   default: false
+  with_legacy: true
 - name: bluestore_fsck_on_umount
   type: bool
   level: dev
   desc: Run fsck at umount
   default: false
+  with_legacy: true
 - name: bluestore_fsck_on_umount_deep
   type: bool
   level: dev
   desc: Run deep fsck at umount when bluestore_fsck_on_umount is set to true
   default: false
+  with_legacy: true
 - name: bluestore_fsck_on_mkfs
   type: bool
   level: dev
   desc: Run fsck after mkfs
   default: true
+  with_legacy: true
 - name: bluestore_fsck_on_mkfs_deep
   type: bool
   level: dev
   desc: Run deep fsck after mkfs
   default: false
+  with_legacy: true
 - name: bluestore_sync_submit_transaction
   type: bool
   level: dev
   desc: Try to submit metadata transaction to rocksdb in queuing thread context
   default: false
+  with_legacy: true
 - name: bluestore_fsck_read_bytes_cap
   type: size
   level: advanced
@@ -5843,11 +6733,13 @@ options:
   default: 64_M
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_fsck_quick_fix_threads
   type: int
   level: advanced
   desc: Number of additional threads to perform quick-fix (shallow fsck) command
   default: 2
+  with_legacy: true
 - name: bluestore_throttle_bytes
   type: size
   level: advanced
@@ -5855,6 +6747,7 @@ options:
   default: 64_M
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_throttle_deferred_bytes
   type: size
   level: advanced
@@ -5862,6 +6755,7 @@ options:
   default: 128_M
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_throttle_cost_per_io
   type: size
   level: advanced
@@ -5869,6 +6763,7 @@ options:
   default: 0
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_throttle_cost_per_io_hdd
   type: uint
   level: advanced
@@ -5878,6 +6773,7 @@ options:
   - bluestore_throttle_cost_per_io
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_throttle_cost_per_io_ssd
   type: uint
   level: advanced
@@ -5887,6 +6783,7 @@ options:
   - bluestore_throttle_cost_per_io
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_deferred_batch_ops
   type: uint
   level: advanced
@@ -5896,6 +6793,7 @@ options:
   max: 65535
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_deferred_batch_ops_hdd
   type: uint
   level: advanced
@@ -5907,6 +6805,7 @@ options:
   max: 65535
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_deferred_batch_ops_ssd
   type: uint
   level: advanced
@@ -5918,16 +6817,19 @@ options:
   max: 65535
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_nid_prealloc
   type: int
   level: dev
   desc: Number of unique object ids to preallocate at a time
   default: 1024
+  with_legacy: true
 - name: bluestore_blobid_prealloc
   type: uint
   level: dev
   desc: Number of unique blob ids to preallocate at a time
   default: 10_K
+  with_legacy: true
 - name: bluestore_clone_cow
   type: bool
   level: advanced
@@ -5936,6 +6838,7 @@ options:
   default: true
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_default_buffered_read
   type: bool
   level: advanced
@@ -5943,6 +6846,7 @@ options:
   default: true
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_default_buffered_write
   type: bool
   level: advanced
@@ -5950,124 +6854,151 @@ options:
   default: false
   flags:
   - runtime
+  with_legacy: true
 - name: bluestore_debug_no_reuse_blocks
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_small_allocations
   type: int
   level: dev
   default: 0
+  with_legacy: true
 - name: bluestore_debug_too_many_blobs_threshold
   type: int
   level: dev
   default: 24576
+  with_legacy: true
 - name: bluestore_debug_freelist
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_prefill
   type: float
   level: dev
   desc: simulate fragmentation
   default: 0
+  with_legacy: true
 - name: bluestore_debug_prefragment_max
   type: size
   level: dev
   default: 1_M
+  with_legacy: true
 - name: bluestore_debug_inject_read_err
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_randomize_serial_transaction
   type: int
   level: dev
   default: 0
+  with_legacy: true
 - name: bluestore_debug_omit_block_device_write
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_fsck_abort
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_omit_kv_commit
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_permit_any_bdev_label
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_random_read_err
   type: float
   level: dev
   default: 0
+  with_legacy: true
 - name: bluestore_debug_inject_bug21040
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: bluestore_debug_inject_csum_err_probability
   type: float
   level: dev
   desc: inject crc verification errors into bluestore device reads
   default: 0
+  with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pool_stats
   type: bool
   level: advanced
   desc: Make fsck error (instead of warn) when bluestore lacks per-pool stats, e.g.,
     after an upgrade
   default: false
+  with_legacy: true
 - name: bluestore_warn_on_bluefs_spillover
   type: bool
   level: advanced
   desc: Enable health indication on bluefs slow device usage
   default: true
+  with_legacy: true
 - name: bluestore_warn_on_legacy_statfs
   type: bool
   level: advanced
   desc: Enable health indication on lack of per-pool statfs reporting from bluestore
   default: true
+  with_legacy: true
 - name: bluestore_warn_on_spurious_read_errors
   type: bool
   level: advanced
   desc: Enable health indication when spurious read errors are observed by OSD
   default: true
+  with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
   desc: Make fsck error (instead of warn) when objects without per-pool omap are found
   default: false
+  with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pg_omap
   type: bool
   level: advanced
   desc: Make fsck error (instead of warn) when objects without per-pg omap are found
   default: false
+  with_legacy: true
 - name: bluestore_warn_on_no_per_pool_omap
   type: bool
   level: advanced
   desc: Enable health indication on lack of per-pool omap
   default: true
+  with_legacy: true
 - name: bluestore_warn_on_no_per_pg_omap
   type: bool
   level: advanced
   desc: Enable health indication on lack of per-pg omap
   default: false
+  with_legacy: true
 - name: bluestore_log_op_age
   type: float
   level: advanced
   desc: log operation if it's slower than this age (seconds)
   default: 5
+  with_legacy: true
 - name: bluestore_log_omap_iterator_age
   type: float
   level: advanced
   desc: log omap iteration operation if it's slower than this age (seconds)
   default: 5
+  with_legacy: true
 - name: bluestore_log_collection_list_age
   type: float
   level: advanced
   desc: log collection list operation if it's slower than this age (seconds)
   default: 1_min
+  with_legacy: true
 - name: bluestore_debug_enforce_settings
   type: str
   level: dev
@@ -6080,6 +7011,7 @@ options:
   - default
   - hdd
   - ssd
+  with_legacy: true
 - name: bluestore_avl_alloc_bf_threshold
   type: uint
   level: dev
@@ -6129,6 +7061,7 @@ options:
   - rocksdb_original
   - use_some_extra
   - fit_to_fast
+  with_legacy: true
 - name: bluestore_volume_selection_reserved_factor
   type: float
   level: advanced
@@ -6138,6 +7071,7 @@ options:
   default: 2
   flags:
   - startup
+  with_legacy: true
 - name: bluestore_volume_selection_reserved
   type: int
   level: advanced
@@ -6147,6 +7081,7 @@ options:
   default: 0
   flags:
   - startup
+  with_legacy: true
 - name: bdev_ioring
   type: bool
   level: advanced
@@ -6171,58 +7106,72 @@ options:
   default: 10
   flags:
   - runtime
+  with_legacy: true
 - name: kstore_max_ops
   type: uint
   level: advanced
   default: 512
+  with_legacy: true
 - name: kstore_max_bytes
   type: size
   level: advanced
   default: 64_M
+  with_legacy: true
 - name: kstore_backend
   type: str
   level: advanced
   default: rocksdb
+  with_legacy: true
 - name: kstore_rocksdb_options
   type: str
   level: advanced
   desc: Options to pass through when RocksDB is used as the KeyValueDB for kstore.
   default: compression=kNoCompression
+  with_legacy: true
 - name: kstore_fsck_on_mount
   type: bool
   level: advanced
   desc: Whether or not to run fsck on mount for kstore.
   default: false
+  with_legacy: true
 - name: kstore_fsck_on_mount_deep
   type: bool
   level: advanced
   desc: Whether or not to run deep fsck on mount for kstore
   default: true
+  with_legacy: true
 - name: kstore_nid_prealloc
   type: uint
   level: advanced
   default: 1_K
+  with_legacy: true
 - name: kstore_sync_transaction
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: kstore_sync_submit_transaction
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: kstore_onode_map_size
   type: uint
   level: advanced
   default: 1_K
+  with_legacy: true
 - name: kstore_default_stripe_size
   type: size
   level: advanced
   default: 64_K
+  with_legacy: true
+# rocksdb options that will be used for omap(if omap_backend is rocksdb)
 - name: filestore_rocksdb_options
   type: str
   level: dev
   desc: Options to pass through when RocksDB is used as the KeyValueDB for filestore.
   default: max_background_jobs=10,compaction_readahead_size=2097152,compression=kNoCompression
+  with_legacy: true
 - name: filestore_omap_backend
   type: str
   level: dev
@@ -6231,430 +7180,573 @@ options:
   enum_values:
   - leveldb
   - rocksdb
+  with_legacy: true
 - name: filestore_omap_backend_path
   type: str
   level: dev
   desc: The path where the filestore KeyValueDB should store it's database(s).
+  with_legacy: true
+# filestore wb throttle limits
 - name: filestore_wbthrottle_enable
   type: bool
   level: advanced
   desc: Enabling throttling of operations to backing file system
   default: true
+  with_legacy: true
 - name: filestore_wbthrottle_btrfs_bytes_start_flusher
   type: size
   level: advanced
   desc: Start flushing (fsyncing) when this many bytes are written(btrfs)
   default: 40_M
+  with_legacy: true
 - name: filestore_wbthrottle_btrfs_bytes_hard_limit
   type: size
   level: advanced
   desc: Block writes when this many bytes haven't been flushed (fsynced) (btrfs)
   default: 400_M
+  with_legacy: true
 - name: filestore_wbthrottle_btrfs_ios_start_flusher
   type: uint
   level: advanced
   desc: Start flushing (fsyncing) when this many IOs are written (brtrfs)
   default: 500
+  with_legacy: true
 - name: filestore_wbthrottle_btrfs_ios_hard_limit
   type: uint
   level: advanced
   desc: Block writes when this many IOs haven't been flushed (fsynced) (btrfs)
   default: 5000
+  with_legacy: true
 - name: filestore_wbthrottle_btrfs_inodes_start_flusher
   type: uint
   level: advanced
   desc: Start flushing (fsyncing) when this many distinct inodes have been modified
     (btrfs)
   default: 500
+  with_legacy: true
 - name: filestore_wbthrottle_xfs_bytes_start_flusher
   type: size
   level: advanced
   desc: Start flushing (fsyncing) when this many bytes are written(xfs)
   default: 40_M
+  with_legacy: true
 - name: filestore_wbthrottle_xfs_bytes_hard_limit
   type: size
   level: advanced
   desc: Block writes when this many bytes haven't been flushed (fsynced) (xfs)
   default: 400_M
+  with_legacy: true
 - name: filestore_wbthrottle_xfs_ios_start_flusher
   type: uint
   level: advanced
   desc: Start flushing (fsyncing) when this many IOs are written (xfs)
   default: 500
+  with_legacy: true
 - name: filestore_wbthrottle_xfs_ios_hard_limit
   type: uint
   level: advanced
   desc: Block writes when this many IOs haven't been flushed (fsynced) (xfs)
   default: 5000
+  with_legacy: true
 - name: filestore_wbthrottle_xfs_inodes_start_flusher
   type: uint
   level: advanced
   desc: Start flushing (fsyncing) when this many distinct inodes have been modified
     (xfs)
   default: 500
+  with_legacy: true
+# These must be less than the fd limit
 - name: filestore_wbthrottle_btrfs_inodes_hard_limit
   type: uint
   level: advanced
   desc: Block writing when this many inodes have outstanding writes (btrfs)
   default: 5000
+  with_legacy: true
 - name: filestore_wbthrottle_xfs_inodes_hard_limit
   type: uint
   level: advanced
   desc: Block writing when this many inodes have outstanding writes (xfs)
   default: 5000
+  with_legacy: true
+# Introduce a O_DSYNC write in the filestore
 - name: filestore_odsync_write
   type: bool
   level: dev
   desc: Write with O_DSYNC
   default: false
+  with_legacy: true
+# Tests index failure paths
 - name: filestore_index_retry_probability
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Allow object read error injection
 - name: filestore_debug_inject_read_err
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_debug_random_read_err
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Expensive debugging check on sync
 - name: filestore_debug_omap_check
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_omap_header_cache_size
   type: size
   level: dev
   default: 1_K
+  with_legacy: true
+# Use omap for xattrs for attrs over
+# filestore_max_inline_xattr_size or
 - name: filestore_max_inline_xattr_size
   type: size
   level: dev
   default: 0
+  with_legacy: true
 - name: filestore_max_inline_xattr_size_xfs
   type: size
   level: dev
   default: 64_K
+  with_legacy: true
 - name: filestore_max_inline_xattr_size_btrfs
   type: size
   level: dev
   default: 2_K
+  with_legacy: true
 - name: filestore_max_inline_xattr_size_other
   type: size
   level: dev
   default: 512
+  with_legacy: true
+# for more than filestore_max_inline_xattrs attrs
 - name: filestore_max_inline_xattrs
   type: uint
   level: dev
   default: 0
+  with_legacy: true
 - name: filestore_max_inline_xattrs_xfs
   type: uint
   level: dev
   default: 10
+  with_legacy: true
 - name: filestore_max_inline_xattrs_btrfs
   type: uint
   level: dev
   default: 10
+  with_legacy: true
 - name: filestore_max_inline_xattrs_other
   type: uint
   level: dev
   default: 2
+  with_legacy: true
 - name: filestore_max_xattr_value_size
   type: size
   level: dev
   default: 0
+  with_legacy: true
 - name: filestore_max_xattr_value_size_xfs
   type: size
   level: dev
   default: 64_K
+  with_legacy: true
 - name: filestore_max_xattr_value_size_btrfs
   type: size
   level: dev
   default: 64_K
+  with_legacy: true
+# ext4 allows 4k xattrs total including some smallish extra fields and the
+# keys.  We're allowing 2 512 inline attrs in addition some some filestore
+# replay attrs.  After accounting for those, we still need to fit up to
+# two attrs of this value.  That means we need this value to be around 1k
+# to be safe.  This is hacky, but it's not worth complicating the code
+# to work around ext4's total xattr limit.
 - name: filestore_max_xattr_value_size_other
   type: size
   level: dev
   default: 1_K
+  with_legacy: true
+# track sloppy crcs
 - name: filestore_sloppy_crc
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_sloppy_crc_block_size
   type: size
   level: dev
   default: 64_K
+  with_legacy: true
 - name: filestore_max_alloc_hint_size
   type: size
   level: dev
   default: 1_M
+  with_legacy: true
+# seconds
 - name: filestore_max_sync_interval
   type: float
   level: advanced
   desc: Period between calls to syncfs(2) and journal trims (seconds)
   default: 5
+  with_legacy: true
+# seconds
 - name: filestore_min_sync_interval
   type: float
   level: dev
   desc: Minimum period between calls to syncfs(2)
   default: 0.01
+  with_legacy: true
 - name: filestore_btrfs_snap
   type: bool
   level: dev
   default: true
+  with_legacy: true
 - name: filestore_btrfs_clone_range
   type: bool
   level: advanced
   desc: Use btrfs clone_range ioctl to efficiently duplicate objects
   default: true
+  with_legacy: true
+# zfsonlinux is still unstable
 - name: filestore_zfs_snap
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_fsync_flushes_journal_data
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# (try to) use fiemap
 - name: filestore_fiemap
   type: bool
   level: advanced
   desc: Use fiemap ioctl(2) to determine which parts of objects are sparse
   default: false
+  with_legacy: true
 - name: filestore_punch_hole
   type: bool
   level: advanced
   desc: Use fallocate(2) FALLOC_FL_PUNCH_HOLE to efficiently zero ranges of objects
   default: false
+  with_legacy: true
+# (try to) use seek_data/hole
 - name: filestore_seek_data_hole
   type: bool
   level: advanced
   desc: Use lseek(2) SEEK_HOLE and SEEK_DATA to determine which parts of objects are
     sparse
   default: false
+  with_legacy: true
 - name: filestore_splice
   type: bool
   level: advanced
   desc: Use splice(2) to more efficiently copy data between files
   default: false
+  with_legacy: true
 - name: filestore_fadvise
   type: bool
   level: advanced
   desc: Use posix_fadvise(2) to pass hints to file system
   default: true
+  with_legacy: true
+# collect device partition information for management application to use
 - name: filestore_collect_device_partition_information
   type: bool
   level: advanced
   desc: Collect metadata about the backing file system on OSD startup
   default: true
+  with_legacy: true
+# (try to) use extsize for alloc hint NOTE: extsize seems to trigger
+# data corruption in xfs prior to kernel 3.5.  filestore will
+# implicitly disable this if it cannot confirm the kernel is newer
+# than that.
+# NOTE: This option involves a tradeoff: When disabled, fragmentation is
+# worse, but large sequential writes are faster. When enabled, large
+# sequential writes are slower, but fragmentation is reduced.
 - name: filestore_xfs_extsize
   type: bool
   level: advanced
   desc: Use XFS extsize ioctl(2) to hint allocator about expected write sizes
   default: false
+  with_legacy: true
 - name: filestore_journal_parallel
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_journal_writeahead
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_journal_trailing
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_queue_max_ops
   type: uint
   level: advanced
   desc: Max IO operations in flight
   default: 50
+  with_legacy: true
 - name: filestore_queue_max_bytes
   type: size
   level: advanced
   desc: Max (written) bytes in flight
   default: 100_M
+  with_legacy: true
 - name: filestore_caller_concurrency
   type: int
   level: dev
   default: 10
+  with_legacy: true
+# Expected filestore throughput in B/s
 - name: filestore_expected_throughput_bytes
   type: float
   level: advanced
   desc: Expected throughput of backend device (aids throttling calculations)
   default: 209715200
+  with_legacy: true
+# Expected filestore throughput in ops/s
 - name: filestore_expected_throughput_ops
   type: float
   level: advanced
   desc: Expected through of backend device in IOPS (aids throttling calculations)
   default: 200
+  with_legacy: true
+# Filestore max delay multiple.  Defaults to 0 (disabled)
 - name: filestore_queue_max_delay_multiple
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Filestore high delay multiple.  Defaults to 0 (disabled)
 - name: filestore_queue_high_delay_multiple
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Filestore max delay multiple ops.  Defaults to 0 (disabled)
 - name: filestore_queue_max_delay_multiple_bytes
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Filestore high delay multiple bytes.  Defaults to 0 (disabled)
 - name: filestore_queue_high_delay_multiple_bytes
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Filestore max delay multiple ops.  Defaults to 0 (disabled)
 - name: filestore_queue_max_delay_multiple_ops
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Filestore high delay multiple ops.  Defaults to 0 (disabled)
 - name: filestore_queue_high_delay_multiple_ops
   type: float
   level: dev
   default: 0
+  with_legacy: true
 - name: filestore_queue_low_threshhold
   type: float
   level: dev
   default: 0.3
+  with_legacy: true
 - name: filestore_queue_high_threshhold
   type: float
   level: dev
+  with_legacy: true
   default: 0.9
 - name: filestore_op_threads
   type: int
   level: advanced
   desc: Threads used to apply changes to backing file system
   default: 2
+  with_legacy: true
 - name: filestore_op_thread_timeout
   type: int
   level: advanced
   desc: Seconds before a worker thread is considered stalled
   default: 1_min
+  with_legacy: true
 - name: filestore_op_thread_suicide_timeout
   type: int
   level: advanced
   desc: Seconds before a worker thread is considered dead
   default: 3_min
+  with_legacy: true
 - name: filestore_commit_timeout
   type: float
   level: advanced
   desc: Seconds before backing file system is considered hung
   default: 10_min
+  with_legacy: true
 - name: filestore_fiemap_threshold
   type: size
   level: dev
   default: 4_K
+  with_legacy: true
 - name: filestore_merge_threshold
   type: int
   level: dev
   default: -10
+  with_legacy: true
 - name: filestore_split_multiple
   type: int
   level: dev
   default: 2
+  with_legacy: true
 - name: filestore_split_rand_factor
   type: uint
   level: dev
   default: 20
+  with_legacy: true
 - name: filestore_update_to
   type: int
   level: dev
   default: 1000
+  with_legacy: true
 - name: filestore_blackhole
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: filestore_fd_cache_size
   type: int
   level: dev
   default: 128
+  with_legacy: true
 - name: filestore_fd_cache_shards
   type: int
   level: dev
   default: 16
+  with_legacy: true
 - name: filestore_ondisk_finisher_threads
   type: int
   level: dev
   default: 1
+  with_legacy: true
 - name: filestore_apply_finisher_threads
   type: int
   level: dev
   default: 1
+  with_legacy: true
+# file onto which store transaction dumps
 - name: filestore_dump_file
   type: str
   level: dev
+  with_legacy: true
+# inject a failure at the n'th opportunity
 - name: filestore_kill_at
   type: int
   level: dev
   default: 0
+  with_legacy: true
+# artificially stall for N seconds in op queue thread
 - name: filestore_inject_stall
   type: int
   level: dev
   default: 0
+  with_legacy: true
+# fail/crash on EIO
 - name: filestore_fail_eio
   type: bool
   level: dev
   default: true
+  with_legacy: true
 - name: filestore_debug_verify_split
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: journal_dio
   type: bool
   level: dev
   default: true
+  with_legacy: true
 - name: journal_aio
   type: bool
   level: dev
   default: true
+  with_legacy: true
 - name: journal_force_aio
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: journal_block_size
   type: size
   level: dev
   default: 4_K
+  with_legacy: true
 - name: journal_block_align
   type: bool
   level: dev
   default: true
+  with_legacy: true
 - name: journal_write_header_frequency
   type: uint
   level: dev
   default: 0
+  with_legacy: true
 - name: journal_max_write_bytes
   type: size
   level: advanced
   desc: Max bytes in flight to journal
   default: 10_M
+  with_legacy: true
 - name: journal_max_write_entries
   type: int
   level: advanced
   desc: Max IOs in flight to journal
   default: 100
+  with_legacy: true
+# Target range for journal fullness
 - name: journal_throttle_low_threshhold
   type: float
   level: dev
   default: 0.6
+  with_legacy: true
 - name: journal_throttle_high_threshhold
   type: float
   level: dev
   default: 0.9
+  with_legacy: true
+# Multiple over expected at high_threshhold. Defaults to 0 (disabled).
 - name: journal_throttle_high_multiple
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# Multiple over expected at max.  Defaults to 0 (disabled).
 - name: journal_throttle_max_multiple
   type: float
   level: dev
   default: 0
+  with_legacy: true
+# align data payloads >= this.
 - name: journal_align_min_size
   type: size
   level: dev
   default: 64_K
+  with_legacy: true
 - name: journal_replay_from
   type: int
   level: dev
   default: 0
+  with_legacy: true
 - name: mgr_stats_threshold
   type: int
   level: advanced
@@ -6668,18 +7760,25 @@ options:
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# assume journal is not corrupt
 - name: journal_ignore_corruption
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# using ssd disk as journal, whether support discard nouse journal-data.
 - name: journal_discard
   type: bool
   level: dev
   default: false
+  with_legacy: true
+# fio data directory for fio-objectstore
 - name: fio_dir
   type: str
   level: advanced
   default: /tmp/fio
+  with_legacy: true
 - name: rados_mon_op_timeout
   type: secs
   level: advanced
@@ -6696,10 +7795,12 @@ options:
   min: 0
   flags:
   - runtime
+# true if LTTng-UST tracepoints should be enabled
 - name: rados_tracing
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: cephadm_path
   type: str
   level: advanced
@@ -6880,10 +7981,12 @@ options:
   type: bool
   level: advanced
   default: true
+  with_legacy: true
 - name: event_tracing
   type: bool
   level: advanced
   default: false
+  with_legacy: true
 - name: bluestore_tracing
   type: bool
   level: advanced
@@ -6898,6 +8001,7 @@ options:
   type: bool
   level: dev
   default: false
+  with_legacy: true
 - name: debug_asserts_on_shutdown
   type: bool
   level: dev
@@ -6908,6 +8012,7 @@ options:
   level: dev
   desc: allow commands 'assert' and 'abort' via asok for testing crash dumps etc
   default: false
+  with_legacy: true
 - name: target_max_misplaced_ratio
   type: float
   level: basic

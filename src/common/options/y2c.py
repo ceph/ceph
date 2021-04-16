@@ -6,6 +6,7 @@ import math
 import os
 import sys
 
+# flake8: noqa: E127
 
 def type_to_cxx(t):
     return f'Option::TYPE_{t.upper()}'
@@ -185,6 +186,21 @@ def yaml_to_cxx(opt, indent):
     return cxx
 
 
+def type_to_h(t):
+    if t == 'uint':
+        return 'OPT_U32'
+    return f'OPT_{t.upper()}'
+
+
+def yaml_to_h(opt):
+    if opt.get('with_legacy', False):
+        name = opt['name']
+        typ = opt['type']
+        htyp = type_to_h(typ)
+        return f'OPTION({name}, {htyp})'
+    else:
+        return ''
+
 TEMPLATE_CC = '''#include "common/options.h"
 {headers}
 
@@ -208,21 +224,24 @@ def translate(opts):
         name = os.path.split(opts.input)[-1]
         name = name.rsplit('.', 1)[0]
     name = name.replace('-', '_')
-    with open(opts.input) as infile, open(opts.output, 'w') as outfile:
+    # noqa: E127
+    with open(opts.input) as infile, \
+         open(opts.output, 'w') as cc_file, \
+         open(opts.legacy, 'w') as h_file:
         yml = yaml.safe_load(infile)
         headers = yml.get('headers', '')
-        outfile.write(prelude.format(name=name, headers=headers))
+        cc_file.write(prelude.format(name=name, headers=headers))
         options = yml['options']
         for option in options:
             try:
-                cxx = yaml_to_cxx(option, opts.indent)
-                outfile.write(cxx)
-                outfile.write('\n')
+                cc_file.write(yaml_to_cxx(option, opts.indent) + '\n')
+                if option.get('with_legacy', False):
+                    h_file.write(yaml_to_h(option) + '\n')
             except ValueError as e:
                 print(f'failed to translate option "{name}": {e}',
                       file=sys.stderr)
                 return 1
-        outfile.write(epilogue.replace("}}", "}"))
+        cc_file.write(epilogue.replace("}}", "}"))
 
 
 def readable_size(value, typ):
@@ -302,6 +321,9 @@ def main():
     parser.add_argument('-o', '--output', dest='output',
                         default='options',
                         help='the path to the generated .cc file')
+    parser.add_argument('--legacy', dest='legacy',
+                        default='legacy_options',
+                        help='the path to the generated legacy .h file')
     parser.add_argument('--indent', type=int,
                         default=4,
                         help='the number of spaces added before each line')

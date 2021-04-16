@@ -2,6 +2,8 @@
 ---
 
 options:
+# According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html),
+# An ACL can have up to 100 grants.
 - name: rgw_acl_grants_max_num
   type: int
   level: advanced
@@ -9,6 +11,9 @@ options:
   default: 100
   services:
   - rgw
+  with_legacy: true
+# According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
+# An cors can have up to 100 rules.
 - name: rgw_cors_rules_max_num
   type: int
   level: advanced
@@ -16,6 +21,10 @@ options:
   default: 100
   services:
   - rgw
+  with_legacy: true
+# According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
+# Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000
+# objects in a single HTTP request.
 - name: rgw_delete_multi_obj_max_num
   type: int
   level: advanced
@@ -23,6 +32,8 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
+# According to AWS S3, An website routing config can have up to 50 rules.
 - name: rgw_website_routing_rules_max_num
   type: int
   level: advanced
@@ -30,6 +41,7 @@ options:
   default: 50
   services:
   - rgw
+  with_legacy: true
 - name: rgw_rados_tracing
   type: bool
   level: advanced
@@ -56,6 +68,7 @@ options:
   default: 4_M
   services:
   - rgw
+  with_legacy: true
 - name: rgw_put_obj_min_window_size
   type: size
   level: advanced
@@ -70,6 +83,7 @@ options:
   see_also:
   - rgw_put_obj_max_window_size
   - rgw_max_chunk_size
+  with_legacy: true
 - name: rgw_put_obj_max_window_size
   type: size
   level: advanced
@@ -82,6 +96,7 @@ options:
   see_also:
   - rgw_put_obj_min_window_size
   - rgw_max_chunk_size
+  with_legacy: true
 - name: rgw_max_put_size
   type: size
   level: advanced
@@ -92,6 +107,7 @@ options:
   default: 5_G
   services:
   - rgw
+  with_legacy: true
 - name: rgw_max_put_param_size
   type: size
   level: advanced
@@ -99,6 +115,7 @@ options:
   default: 1_M
   services:
   - rgw
+  with_legacy: true
 - name: rgw_max_attr_size
   type: size
   level: advanced
@@ -106,6 +123,7 @@ options:
   default: 0
   services:
   - rgw
+  with_legacy: true
 - name: rgw_max_attr_name_len
   type: size
   level: advanced
@@ -113,6 +131,7 @@ options:
   default: 0
   services:
   - rgw
+  with_legacy: true
 - name: rgw_max_attrs_num_in_req
   type: uint
   level: advanced
@@ -120,6 +139,14 @@ options:
   default: 0
   services:
   - rgw
+  with_legacy: true
+# override max bucket index shards in zone configuration (if not zero)
+#
+# Represents the number of shards for the bucket index object, a value of zero
+# indicates there is no sharding. By default (no sharding, the name of the object
+# is '.dir.{marker}', with sharding, the name is '.dir.{markder}.{sharding_id}',
+# sharding_id is zero-based value. It is not recommended to set a too large value
+# (e.g. thousand) as it increases the cost for bucket listing.
 - name: rgw_override_bucket_index_max_shards
   type: uint
   level: dev
@@ -130,6 +157,8 @@ options:
   default: 0
   services:
   - rgw
+  with_legacy: true
+# Represents the maximum AIO pending requests for the bucket index object shards.
 - name: rgw_bucket_index_max_aio
   type: uint
   level: advanced
@@ -137,6 +166,8 @@ options:
   default: 128
   services:
   - rgw
+  with_legacy: true
+# whether or not the quota/gc threads should be started
 - name: rgw_enable_quota_threads
   type: bool
   level: advanced
@@ -152,6 +183,7 @@ options:
   see_also:
   - rgw_enable_gc_threads
   - rgw_enable_lc_threads
+  with_legacy: true
 - name: rgw_enable_gc_threads
   type: bool
   level: advanced
@@ -167,6 +199,7 @@ options:
   see_also:
   - rgw_enable_quota_threads
   - rgw_enable_lc_threads
+  with_legacy: true
 - name: rgw_enable_lc_threads
   type: bool
   level: advanced
@@ -183,6 +216,7 @@ options:
   see_also:
   - rgw_enable_gc_threads
   - rgw_enable_quota_threads
+  with_legacy: true
 - name: rgw_data
   type: str
   level: advanced
@@ -194,6 +228,7 @@ options:
   - rgw
   flags:
   - no_mon_update
+  with_legacy: true
 - name: rgw_enable_apis
   type: str
   level: advanced
@@ -201,6 +236,7 @@ options:
   default: s3, s3website, swift, swift_auth, admin, sts, iam, notifications
   services:
   - rgw
+  with_legacy: true
 - name: rgw_cache_enabled
   type: bool
   level: advanced
@@ -214,6 +250,7 @@ options:
   - rgw
   see_also:
   - rgw_cache_lru_size
+  with_legacy: true
 - name: rgw_cache_lru_size
   type: int
   level: advanced
@@ -224,6 +261,7 @@ options:
   - rgw
   see_also:
   - rgw_cache_enabled
+  with_legacy: true
 - name: rgw_socket_path
   type: str
   level: advanced
@@ -232,6 +270,7 @@ options:
   - rgw
   see_also:
   - rgw_fcgi_socket_backlog
+  with_legacy: true
 - name: rgw_host
   type: str
   level: advanced
@@ -241,6 +280,7 @@ options:
   see_also:
   - rgw_port
   - rgw_fcgi_socket_backlog
+  with_legacy: true
 - name: rgw_port
   type: str
   level: basic
@@ -250,6 +290,7 @@ options:
   see_also:
   - rgw_host
   - rgw_fcgi_socket_backlog
+  with_legacy: true
 - name: rgw_dns_name
   type: str
   level: advanced
@@ -258,6 +299,7 @@ options:
     configured via zonegroup configuration.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_dns_s3website_name
   type: str
   level: advanced
@@ -266,6 +308,7 @@ options:
     zonegroup configuration.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_numa_node
   type: int
   level: advanced
@@ -283,6 +326,7 @@ options:
     contain the name of the provider. This name will be placed in http header 'Server'.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_content_length_compat
   type: bool
   level: advanced
@@ -292,6 +336,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_relaxed_region_enforcement
   type: bool
   level: advanced
@@ -309,12 +354,14 @@ options:
   default: 00:00-06:00
   services:
   - rgw
+  with_legacy: true
 - name: rgw_lc_lock_max_time
   type: int
   level: dev
   default: 90
   services:
   - rgw
+  with_legacy: true
 - name: rgw_lc_thread_delay
   type: int
   level: advanced
@@ -332,6 +379,7 @@ options:
   default: 3
   services:
   - rgw
+  with_legacy: true
 - name: rgw_lc_max_wp_worker
   type: int
   level: advanced
@@ -341,6 +389,7 @@ options:
   default: 3
   services:
   - rgw
+  with_legacy: true
 - name: rgw_lc_max_objs
   type: int
   level: advanced
@@ -350,6 +399,7 @@ options:
   default: 32
   services:
   - rgw
+  with_legacy: true
 - name: rgw_lc_max_rules
   type: uint
   level: advanced
@@ -358,12 +408,14 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_lc_debug_interval
   type: int
   level: dev
   default: -1
   services:
   - rgw
+  with_legacy: true
 - name: rgw_mp_lock_max_time
   type: int
   level: advanced
@@ -379,11 +431,13 @@ options:
   level: dev
   services:
   - rgw
+  with_legacy: true
 - name: rgw_request_uri
   type: str
   level: dev
   services:
   - rgw
+  with_legacy: true
 - name: rgw_ignore_get_invalid_range
   type: bool
   level: advanced
@@ -393,6 +447,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_swift_url
   type: str
   level: advanced
@@ -403,6 +458,7 @@ options:
   - rgw
   see_also:
   - rgw_swift_auth_entry
+  with_legacy: true
 - name: rgw_swift_url_prefix
   type: str
   level: advanced
@@ -411,6 +467,7 @@ options:
   default: swift
   services:
   - rgw
+  with_legacy: true
 - name: rgw_swift_auth_url
   type: str
   level: advanced
@@ -419,6 +476,7 @@ options:
     not using internal swift auth).
   services:
   - rgw
+  with_legacy: true
 - name: rgw_swift_auth_entry
   type: str
   level: advanced
@@ -429,6 +487,7 @@ options:
   - rgw
   see_also:
   - rgw_swift_url
+  with_legacy: true
 - name: rgw_swift_tenant_name
   type: str
   level: advanced
@@ -438,6 +497,7 @@ options:
   - rgw
   see_also:
   - rgw_swift_account_in_url
+  with_legacy: true
 - name: rgw_swift_account_in_url
   type: bool
   level: advanced
@@ -448,6 +508,7 @@ options:
   - rgw
   see_also:
   - rgw_swift_tenant_name
+  with_legacy: true
 - name: rgw_swift_enforce_content_length
   type: bool
   level: advanced
@@ -457,12 +518,14 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_url
   type: str
   level: basic
   desc: The URL to the Keystone server.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_token
   type: str
   level: advanced
@@ -470,6 +533,7 @@ options:
     requests.'
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_token_path
   type: str
   level: advanced
@@ -477,72 +541,84 @@ options:
     the Keystone requests.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_user
   type: str
   level: advanced
   desc: Keystone admin user.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_password
   type: str
   level: advanced
   desc: 'DEPRECATED: Keystone admin password.'
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_password_path
   type: str
   level: advanced
   desc: Path to a file containing the Keystone admin password.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_tenant
   type: str
   level: advanced
   desc: Keystone admin user tenant.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_project
   type: str
   level: advanced
   desc: Keystone admin user project (for Keystone v3).
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_admin_domain
   type: str
   level: advanced
   desc: Keystone admin user domain (for Keystone v3).
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_user
   type: str
   level: advanced
   desc: Keystone user to access barbican secrets.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_password
   type: str
   level: advanced
   desc: Keystone password for barbican user.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_tenant
   type: str
   level: advanced
   desc: Keystone barbican user tenant (Keystone v2.0).
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_project
   type: str
   level: advanced
   desc: Keystone barbican user project (Keystone v3).
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_domain
   type: str
   level: advanced
   desc: Keystone barbican user domain.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_api_version
   type: int
   level: advanced
@@ -550,6 +626,7 @@ options:
   default: 2
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_accepted_roles
   type: str
   level: advanced
@@ -557,12 +634,14 @@ options:
   default: Member, admin
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_accepted_admin_roles
   type: str
   level: advanced
   desc: List of roles allowing user to gain admin privileges (Keystone).
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_token_cache_size
   type: int
   level: advanced
@@ -572,6 +651,7 @@ options:
   default: 10000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_verify_ssl
   type: bool
   level: advanced
@@ -579,6 +659,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_keystone_implicit_tenants
   type: str
   level: advanced
@@ -597,6 +678,7 @@ options:
   - '0'
   - '1'
   - none
+  with_legacy: true
 - name: rgw_cross_domain_policy
   type: str
   level: advanced
@@ -606,12 +688,14 @@ options:
   default: <allow-access-from domain="*" secure="false" />
   services:
   - rgw
+  with_legacy: true
 - name: rgw_healthcheck_disabling_path
   type: str
   level: dev
   desc: Swift health check api can be disabled if a file can be accessed in this path.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_s3_auth_use_rados
   type: bool
   level: advanced
@@ -619,6 +703,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_s3_auth_use_keystone
   type: bool
   level: advanced
@@ -626,6 +711,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_s3_auth_order
   type: str
   level: advanced
@@ -637,12 +723,15 @@ options:
   default: sts, external, local
   services:
   - rgw
+  with_legacy: true
 - name: rgw_barbican_url
   type: str
   level: advanced
   desc: URL to barbican server.
   services:
   - rgw
+  with_legacy: true
+# OpenLDAP-style LDAP parameter strings
 - name: rgw_ldap_uri
   type: str
   level: advanced
@@ -650,6 +739,7 @@ options:
   default: ldaps://<ldap.your.domain>
   services:
   - rgw
+  with_legacy: true
 - name: rgw_ldap_binddn
   type: str
   level: advanced
@@ -657,6 +747,7 @@ options:
   default: uid=admin,cn=users,dc=example,dc=com
   services:
   - rgw
+  with_legacy: true
 - name: rgw_ldap_searchdn
   type: str
   level: advanced
@@ -664,6 +755,7 @@ options:
   default: cn=users,cn=accounts,dc=example,dc=com
   services:
   - rgw
+  with_legacy: true
 - name: rgw_ldap_dnattr
   type: str
   level: advanced
@@ -671,6 +763,7 @@ options:
   default: uid
   services:
   - rgw
+  with_legacy: true
 - name: rgw_ldap_secret
   type: str
   level: advanced
@@ -678,6 +771,7 @@ options:
   default: /etc/openldap/secret
   services:
   - rgw
+  with_legacy: true
 - name: rgw_s3_auth_use_ldap
   type: bool
   level: advanced
@@ -685,24 +779,28 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_ldap_searchfilter
   type: str
   level: advanced
   desc: LDAP search filter.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_opa_url
   type: str
   level: advanced
   desc: URL to OPA server.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_opa_token
   type: str
   level: advanced
   desc: The Bearer token OPA uses to authenticate client requests.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_opa_verify_ssl
   type: bool
   level: advanced
@@ -710,6 +808,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_use_opa_authz
   type: bool
   level: advanced
@@ -717,6 +816,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_admin_entry
   type: str
   level: advanced
@@ -724,6 +824,7 @@ options:
   default: admin
   services:
   - rgw
+  with_legacy: true
 - name: rgw_enforce_swift_acls
   type: bool
   level: advanced
@@ -733,6 +834,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_swift_token_expiration
   type: int
   level: advanced
@@ -740,6 +842,7 @@ options:
   default: 1_day
   services:
   - rgw
+  with_legacy: true
 - name: rgw_print_continue
   type: bool
   level: advanced
@@ -749,6 +852,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_print_prohibited_content_length
   type: bool
   level: advanced
@@ -758,6 +862,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_remote_addr_param
   type: str
   level: advanced
@@ -772,6 +877,7 @@ options:
   - rgw
   see_also:
   - rgw_enable_ops_log
+  with_legacy: true
 - name: rgw_op_thread_timeout
   type: int
   level: dev
@@ -779,12 +885,14 @@ options:
   default: 10_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_op_thread_suicide_timeout
   type: int
   level: dev
   default: 0
   services:
   - rgw
+  with_legacy: true
 - name: rgw_thread_pool_size
   type: int
   level: basic
@@ -796,6 +904,7 @@ options:
   default: 512
   services:
   - rgw
+  with_legacy: true
 - name: rgw_num_control_oids
   type: int
   level: advanced
@@ -808,6 +917,7 @@ options:
   default: 8
   services:
   - rgw
+  with_legacy: true
 - name: rgw_verify_ssl
   type: bool
   level: advanced
@@ -820,30 +930,43 @@ options:
   - rgw
   see_also:
   - rgw_keystone_verify_ssl
+  with_legacy: true
+# The following are tunables for caches of RGW NFS (and other file
+# client) objects.
+#
+# The file handle cache is a partitioned hash table
+# (fhcache_partitions), each with a closed hash part and backing
+# b-tree mapping.  The number of partions is expected to be a small
+# prime, the cache size something larger but less than 5K, the total
+# size of the cache is n_part *  cache_size.
 - name: rgw_nfs_lru_lanes
   type: int
   level: advanced
   default: 5
   services:
   - rgw
+  with_legacy: true
 - name: rgw_nfs_lru_lane_hiwat
   type: int
   level: advanced
   default: 911
   services:
   - rgw
+  with_legacy: true
 - name: rgw_nfs_fhcache_partitions
   type: int
   level: advanced
   default: 3
   services:
   - rgw
+  with_legacy: true
 - name: rgw_nfs_fhcache_size
   type: int
   level: advanced
   default: 2017
   services:
   - rgw
+  with_legacy: true
 - name: rgw_nfs_namespace_expire_secs
   type: int
   level: advanced
@@ -851,6 +974,7 @@ options:
   services:
   - rgw
   min: 1
+  with_legacy: true
 - name: rgw_nfs_max_gc
   type: int
   level: advanced
@@ -858,12 +982,15 @@ options:
   services:
   - rgw
   min: 1
+  with_legacy: true
 - name: rgw_nfs_write_completion_interval_s
   type: int
   level: advanced
   default: 10
   services:
   - rgw
+  with_legacy: true
+# use fast S3 attrs from bucket index--currently assumes NFS mounts are immutable
 - name: rgw_nfs_s3_fast_attrs
   type: bool
   level: advanced
@@ -872,6 +999,8 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
+# overrides for librgw/nfs
 - name: rgw_nfs_run_gc_threads
   type: bool
   level: advanced
@@ -879,6 +1008,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_nfs_run_lc_threads
   type: bool
   level: advanced
@@ -886,6 +1016,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_nfs_run_quota_threads
   type: bool
   level: advanced
@@ -893,6 +1024,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_nfs_run_sync_thread
   type: bool
   level: advanced
@@ -900,6 +1032,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_rados_pool_autoscale_bias
   type: float
   level: advanced
@@ -936,6 +1069,7 @@ options:
   see_also:
   - rgw_zonegroup
   - rgw_realm
+  with_legacy: true
 - name: rgw_zone_root_pool
   type: str
   level: advanced
@@ -948,6 +1082,7 @@ options:
   - rgw_zonegroup_root_pool
   - rgw_realm_root_pool
   - rgw_period_root_pool
+  with_legacy: true
 - name: rgw_default_zone_info_oid
   type: str
   level: advanced
@@ -956,6 +1091,7 @@ options:
   default: default.zone
   services:
   - rgw
+  with_legacy: true
 - name: rgw_region
   type: str
   level: advanced
@@ -965,6 +1101,7 @@ options:
   - rgw
   see_also:
   - rgw_zonegroup
+  with_legacy: true
 - name: rgw_region_root_pool
   type: str
   level: advanced
@@ -975,6 +1112,7 @@ options:
   - rgw
   see_also:
   - rgw_zonegroup_root_pool
+  with_legacy: true
 - name: rgw_default_region_info_oid
   type: str
   level: advanced
@@ -986,6 +1124,7 @@ options:
   - rgw
   see_also:
   - rgw_default_zonegroup_info_oid
+  with_legacy: true
 - name: rgw_zonegroup
   type: str
   level: advanced
@@ -995,6 +1134,7 @@ options:
   see_also:
   - rgw_zone
   - rgw_realm
+  with_legacy: true
 - name: rgw_zonegroup_root_pool
   type: str
   level: advanced
@@ -1008,17 +1148,20 @@ options:
   - rgw_zone_root_pool
   - rgw_realm_root_pool
   - rgw_period_root_pool
+  with_legacy: true
 - name: rgw_default_zonegroup_info_oid
   type: str
   level: advanced
   default: default.zonegroup
   services:
   - rgw
+  with_legacy: true
 - name: rgw_realm
   type: str
   level: advanced
   services:
   - rgw
+  with_legacy: true
 - name: rgw_realm_root_pool
   type: str
   level: advanced
@@ -1031,12 +1174,14 @@ options:
   - rgw_zonegroup_root_pool
   - rgw_zone_root_pool
   - rgw_period_root_pool
+  with_legacy: true
 - name: rgw_default_realm_info_oid
   type: str
   level: advanced
   default: default.realm
   services:
   - rgw
+  with_legacy: true
 - name: rgw_period_root_pool
   type: str
   level: advanced
@@ -1050,12 +1195,14 @@ options:
   - rgw_zonegroup_root_pool
   - rgw_zone_root_pool
   - rgw_realm_root_pool
+  with_legacy: true
 - name: rgw_period_latest_epoch_info_oid
   type: str
   level: dev
   default: .latest_epoch
   services:
   - rgw
+  with_legacy: true
 - name: rgw_log_nonexistent_bucket
   type: bool
   level: advanced
@@ -1068,6 +1215,8 @@ options:
   - rgw
   see_also:
   - rgw_enable_ops_log
+  with_legacy: true
+# man date to see codes (a subset are supported)
 - name: rgw_log_object_name
   type: str
   level: advanced
@@ -1079,6 +1228,7 @@ options:
   - rgw
   see_also:
   - rgw_enable_ops_log
+  with_legacy: true
 - name: rgw_log_object_name_utc
   type: bool
   level: advanced
@@ -1091,6 +1241,7 @@ options:
   see_also:
   - rgw_enable_ops_log
   - rgw_log_object_name
+  with_legacy: true
 - name: rgw_usage_max_shards
   type: int
   level: advanced
@@ -1102,6 +1253,7 @@ options:
   - rgw
   see_also:
   - rgw_enable_usage_log
+  with_legacy: true
 - name: rgw_usage_max_user_shards
   type: int
   level: advanced
@@ -1113,6 +1265,8 @@ options:
   see_also:
   - rgw_enable_usage_log
   min: 1
+  with_legacy: true
+# enable logging every rgw operation
 - name: rgw_enable_ops_log
   type: bool
   level: advanced
@@ -1125,6 +1279,8 @@ options:
   - rgw_log_object_name
   - rgw_ops_log_rados
   - rgw_ops_log_socket_path
+  with_legacy: true
+# enable logging bandwidth usage
 - name: rgw_enable_usage_log
   type: bool
   level: advanced
@@ -1134,6 +1290,8 @@ options:
   - rgw
   see_also:
   - rgw_usage_max_shards
+  with_legacy: true
+# whether ops log should go to rados
 - name: rgw_ops_log_rados
   type: bool
   level: advanced
@@ -1144,6 +1302,8 @@ options:
   - rgw
   see_also:
   - rgw_enable_ops_log
+  with_legacy: true
+# path to unix domain socket where ops log can go
 - name: rgw_ops_log_socket_path
   type: str
   level: advanced
@@ -1155,6 +1315,8 @@ options:
   see_also:
   - rgw_enable_ops_log
   - rgw_ops_log_data_backlog
+  with_legacy: true
+# max data backlog for ops log
 - name: rgw_ops_log_data_backlog
   type: size
   level: advanced
@@ -1169,6 +1331,8 @@ options:
   see_also:
   - rgw_enable_ops_log
   - rgw_ops_log_socket_path
+  with_legacy: true
+# socket  backlog for fcgi
 - name: rgw_fcgi_socket_backlog
   type: int
   level: advanced
@@ -1181,6 +1345,7 @@ options:
   see_also:
   - rgw_host
   - rgw_socket_path
+  with_legacy: true
 - name: rgw_usage_log_flush_threshold
   type: int
   level: advanced
@@ -1195,6 +1360,7 @@ options:
   see_also:
   - rgw_enable_usage_log
   - rgw_usage_log_tick_interval
+  with_legacy: true
 - name: rgw_usage_log_tick_interval
   type: int
   level: advanced
@@ -1208,6 +1374,7 @@ options:
   see_also:
   - rgw_enable_usage_log
   - rgw_usage_log_flush_threshold
+  with_legacy: true
 - name: rgw_init_timeout
   type: int
   level: basic
@@ -1218,6 +1385,7 @@ options:
   default: 5_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_mime_types_file
   type: str
   level: basic
@@ -1228,6 +1396,7 @@ options:
   default: /etc/mime.types
   services:
   - rgw
+  with_legacy: true
 - name: rgw_gc_max_objs
   type: int
   level: advanced
@@ -1242,6 +1411,8 @@ options:
   - rgw_gc_processor_max_time
   - rgw_gc_processor_period
   - rgw_gc_max_concurrent_io
+  with_legacy: true
+# wait time before object may be handled by gc, recommended lower limit is 30 mins
 - name: rgw_gc_obj_min_wait
   type: int
   level: advanced
@@ -1258,6 +1429,7 @@ options:
   - rgw_gc_processor_max_time
   - rgw_gc_processor_period
   - rgw_gc_max_concurrent_io
+  with_legacy: true
 - name: rgw_gc_processor_max_time
   type: int
   level: advanced
@@ -1277,6 +1449,7 @@ options:
   - rgw_gc_obj_min_wait
   - rgw_gc_processor_period
   - rgw_gc_max_concurrent_io
+  with_legacy: true
 - name: rgw_gc_processor_period
   type: int
   level: advanced
@@ -1293,6 +1466,7 @@ options:
   - rgw_gc_processor_max_time
   - rgw_gc_max_concurrent_io
   - rgw_gc_max_trim_chunk
+  with_legacy: true
 - name: rgw_gc_max_concurrent_io
   type: int
   level: advanced
@@ -1307,6 +1481,7 @@ options:
   - rgw_gc_obj_min_wait
   - rgw_gc_processor_max_time
   - rgw_gc_max_trim_chunk
+  with_legacy: true
 - name: rgw_gc_max_trim_chunk
   type: int
   level: advanced
@@ -1319,6 +1494,7 @@ options:
   - rgw_gc_obj_min_wait
   - rgw_gc_processor_max_time
   - rgw_gc_max_concurrent_io
+  with_legacy: true
 - name: rgw_gc_max_deferred_entries_size
   type: uint
   level: advanced
@@ -1326,6 +1502,7 @@ options:
   default: 3_K
   services:
   - rgw
+  with_legacy: true
 - name: rgw_gc_max_queue_size
   type: uint
   level: advanced
@@ -1338,6 +1515,7 @@ options:
   see_also:
   - osd_max_object_size
   - rgw_gc_max_deferred_entries_size
+  with_legacy: true
 - name: rgw_gc_max_deferred
   type: uint
   level: advanced
@@ -1345,6 +1523,7 @@ options:
   default: 50
   services:
   - rgw
+  with_legacy: true
 - name: rgw_s3_success_create_obj_status
   type: int
   level: advanced
@@ -1354,6 +1533,7 @@ options:
   default: 0
   services:
   - rgw
+  with_legacy: true
 - name: rgw_s3_client_max_sig_ver
   type: int
   level: advanced
@@ -1373,6 +1553,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_obj_stripe_size
   type: size
   level: advanced
@@ -1383,6 +1564,8 @@ options:
   default: 4_M
   services:
   - rgw
+  with_legacy: true
+# list of extended attrs that can be set on objects (beyond the default)
 - name: rgw_extended_http_attrs
   type: str
   level: advanced
@@ -1392,6 +1575,7 @@ options:
     set, these attributes will return as HTTP fields when doing GET/HEAD on the object.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_exit_timeout_secs
   type: int
   level: advanced
@@ -1400,6 +1584,7 @@ options:
   default: 2_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_get_obj_window_size
   type: size
   level: advanced
@@ -1408,6 +1593,7 @@ options:
   default: 16_M
   services:
   - rgw
+  with_legacy: true
 - name: rgw_get_obj_max_req_size
   type: size
   level: advanced
@@ -1416,6 +1602,7 @@ options:
   default: 4_M
   services:
   - rgw
+  with_legacy: true
 - name: rgw_relaxed_s3_bucket_names
   type: bool
   level: advanced
@@ -1424,6 +1611,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_defer_to_bucket_acls
   type: str
   level: advanced
@@ -1433,6 +1621,7 @@ options:
     users that have full control permission on the bucket have access to the object.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_list_buckets_max_chunk
   type: int
   level: advanced
@@ -1443,6 +1632,7 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_md_log_max_shards
   type: int
   level: advanced
@@ -1453,6 +1643,7 @@ options:
   default: 64
   services:
   - rgw
+  with_legacy: true
 - name: rgw_curl_buffersize
   type: int
   level: dev
@@ -1463,12 +1654,14 @@ options:
   - rgw
   min: 1024
   max: 524288
+  with_legacy: true
 - name: rgw_curl_wait_timeout_ms
   type: int
   level: dev
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_curl_low_speed_limit
   type: int
   level: advanced
@@ -1478,6 +1671,7 @@ options:
   default: 1024
   services:
   - rgw
+  with_legacy: true
 - name: rgw_curl_low_speed_time
   type: int
   level: advanced
@@ -1487,6 +1681,7 @@ options:
   default: 5_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_copy_obj_progress
   type: bool
   level: advanced
@@ -1495,6 +1690,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_copy_obj_progress_every_bytes
   type: size
   level: advanced
@@ -1502,6 +1698,7 @@ options:
   default: 1_M
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_obj_etag_verify
   type: bool
   level: advanced
@@ -1513,6 +1710,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_obj_tombstone_cache_size
   type: int
   level: advanced
@@ -1523,6 +1721,7 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_data_log_window
   type: int
   level: advanced
@@ -1533,6 +1732,7 @@ options:
   default: 30
   services:
   - rgw
+  with_legacy: true
 - name: rgw_data_log_changes_size
   type: int
   level: dev
@@ -1542,6 +1742,7 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_data_log_num_shards
   type: int
   level: advanced
@@ -1552,12 +1753,14 @@ options:
   default: 128
   services:
   - rgw
+  with_legacy: true
 - name: rgw_data_log_obj_prefix
   type: str
   level: dev
   default: data_log
   services:
   - rgw
+  with_legacy: true
 - name: rgw_bucket_quota_ttl
   type: int
   level: advanced
@@ -1566,6 +1769,7 @@ options:
   default: 10_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_bucket_quota_soft_threshold
   type: float
   level: basic
@@ -1577,6 +1781,7 @@ options:
   default: 0.95
   services:
   - rgw
+  with_legacy: true
 - name: rgw_bucket_quota_cache_size
   type: int
   level: advanced
@@ -1585,6 +1790,7 @@ options:
   default: 10000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_bucket_default_quota_max_objects
   type: int
   level: basic
@@ -1594,6 +1800,7 @@ options:
   default: -1
   services:
   - rgw
+  with_legacy: true
 - name: rgw_bucket_default_quota_max_size
   type: int
   level: advanced
@@ -1603,6 +1810,7 @@ options:
   default: -1
   services:
   - rgw
+  with_legacy: true
 - name: rgw_expose_bucket
   type: bool
   level: advanced
@@ -1612,6 +1820,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_frontends
   type: str
   level: basic
@@ -1622,6 +1831,7 @@ options:
   default: beast port=7480
   services:
   - rgw
+  with_legacy: true
 - name: rgw_frontend_defaults
   type: str
   level: advanced
@@ -1638,6 +1848,7 @@ options:
   default: 3_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_user_quota_sync_interval
   type: int
   level: advanced
@@ -1647,6 +1858,7 @@ options:
   default: 1_day
   services:
   - rgw
+  with_legacy: true
 - name: rgw_user_quota_sync_idle_users
   type: bool
   level: advanced
@@ -1655,6 +1867,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_user_quota_sync_wait_time
   type: int
   level: advanced
@@ -1663,6 +1876,7 @@ options:
   default: 1_day
   services:
   - rgw
+  with_legacy: true
 - name: rgw_user_default_quota_max_objects
   type: int
   level: basic
@@ -1672,6 +1886,7 @@ options:
   default: -1
   services:
   - rgw
+  with_legacy: true
 - name: rgw_user_default_quota_max_size
   type: int
   level: basic
@@ -1681,6 +1896,7 @@ options:
   default: -1
   services:
   - rgw
+  with_legacy: true
 - name: rgw_multipart_min_part_size
   type: size
   level: advanced
@@ -1690,6 +1906,7 @@ options:
   default: 5_M
   services:
   - rgw
+  with_legacy: true
 - name: rgw_multipart_part_upload_limit
   type: int
   level: advanced
@@ -1697,6 +1914,7 @@ options:
   default: 10000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_max_slo_entries
   type: int
   level: advanced
@@ -1704,6 +1922,7 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_olh_pending_timeout_sec
   type: int
   level: dev
@@ -1714,6 +1933,7 @@ options:
   default: 1_hr
   services:
   - rgw
+  with_legacy: true
 - name: rgw_user_max_buckets
   type: int
   level: basic
@@ -1724,6 +1944,7 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_objexp_gc_interval
   type: uint
   level: advanced
@@ -1731,6 +1952,7 @@ options:
   default: 600
   services:
   - rgw
+  with_legacy: true
 - name: rgw_objexp_hints_num_shards
   type: uint
   level: advanced
@@ -1739,12 +1961,15 @@ options:
   default: 127
   services:
   - rgw
+  with_legacy: true
+# maximum number of entries in a single operation when processing objexp data
 - name: rgw_objexp_chunk_size
   type: uint
   level: dev
   default: 100
   services:
   - rgw
+  with_legacy: true
 - name: rgw_enable_static_website
   type: bool
   level: basic
@@ -1755,6 +1980,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_user_unique_email
   type: bool
   level: basic
@@ -1773,6 +1999,7 @@ options:
     (e.g., http_x_forwarded_for).
   services:
   - rgw
+  with_legacy: true
 - name: rgw_num_async_rados_threads
   type: int
   level: advanced
@@ -1783,6 +2010,7 @@ options:
   default: 32
   services:
   - rgw
+  with_legacy: true
 - name: rgw_md_notify_interval_msec
   type: int
   level: advanced
@@ -1793,6 +2021,7 @@ options:
   default: 200
   services:
   - rgw
+  with_legacy: true
 - name: rgw_run_sync_thread
   type: bool
   level: advanced
@@ -1800,12 +2029,14 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_lease_period
   type: int
   level: dev
   default: 2_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_log_trim_interval
   type: int
   level: advanced
@@ -1814,6 +2045,7 @@ options:
   default: 20_min
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_log_trim_max_buckets
   type: int
   level: advanced
@@ -1860,12 +2092,14 @@ options:
   default: 0
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_meta_inject_err_probability
   type: float
   level: dev
   default: 0
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_trace_history_size
   type: size
   level: advanced
@@ -1874,6 +2108,7 @@ options:
   default: 4_K
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_trace_per_node_log_size
   type: int
   level: advanced
@@ -1882,6 +2117,7 @@ options:
   default: 32
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sync_trace_servicemap_update_interval
   type: int
   level: advanced
@@ -1890,6 +2126,7 @@ options:
   default: 10
   services:
   - rgw
+  with_legacy: true
 - name: rgw_period_push_interval
   type: float
   level: advanced
@@ -1898,6 +2135,7 @@ options:
   default: 2
   services:
   - rgw
+  with_legacy: true
 - name: rgw_period_push_interval_max
   type: float
   level: advanced
@@ -1907,6 +2145,7 @@ options:
   default: 30
   services:
   - rgw
+  with_legacy: true
 - name: rgw_safe_max_objects_per_shard
   type: int
   level: advanced
@@ -1919,6 +2158,8 @@ options:
   - rgw
   see_also:
   - rgw_shard_warning_threshold
+  with_legacy: true
+# pct of safe max at which to warn
 - name: rgw_shard_warning_threshold
   type: float
   level: advanced
@@ -1930,6 +2171,7 @@ options:
   - rgw
   see_also:
   - rgw_safe_max_objects_per_shard
+  with_legacy: true
 - name: rgw_swift_versioning_enabled
   type: bool
   level: advanced
@@ -1937,6 +2179,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_swift_custom_header
   type: str
   level: advanced
@@ -1946,6 +2189,7 @@ options:
     info and it will be available when listing the bucket.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_swift_need_stats
   type: bool
   level: advanced
@@ -1953,6 +2197,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_reshard_num_logs
   type: uint
   level: advanced
@@ -2017,6 +2262,7 @@ options:
   - rgw
   see_also:
   - rgw_crypt_require_ssl
+  with_legacy: true
 - name: rgw_crypt_require_ssl
   type: bool
   level: advanced
@@ -2024,11 +2270,14 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
+# base64 encoded key for encryption of rgw objects
 - name: rgw_crypt_default_encryption_key
   type: str
   level: dev
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_s3_kms_backend
   type: str
   level: advanced
@@ -2042,15 +2291,19 @@ options:
   - vault
   - testing
   - kmip
+  with_legacy: true
+# extra keys that may be used for aws:kms
+# defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
 - name: rgw_crypt_s3_kms_encryption_keys
   type: str
   level: dev
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_vault_auth
   type: str
   level: advanced
-  desc: 'Type of authentication method to be used with Vault. '
+  desc: Type of authentication method to be used with Vault.
   default: token
   services:
   - rgw
@@ -2061,6 +2314,7 @@ options:
   enum_values:
   - token
   - agent
+  with_legacy: true
 - name: rgw_crypt_vault_token_file
   type: str
   level: advanced
@@ -2072,6 +2326,7 @@ options:
   - rgw_crypt_s3_kms_backend
   - rgw_crypt_vault_auth
   - rgw_crypt_vault_addr
+  with_legacy: true
 - name: rgw_crypt_vault_addr
   type: str
   level: advanced
@@ -2082,6 +2337,8 @@ options:
   - rgw_crypt_s3_kms_backend
   - rgw_crypt_vault_auth
   - rgw_crypt_vault_prefix
+  with_legacy: true
+# Optional URL prefix to Vault secret path
 - name: rgw_crypt_vault_prefix
   type: str
   level: advanced
@@ -2093,6 +2350,8 @@ options:
   - rgw_crypt_s3_kms_backend
   - rgw_crypt_vault_addr
   - rgw_crypt_vault_auth
+  with_legacy: true
+# kv, transit or other supported secret engines
 - name: rgw_crypt_vault_secret_engine
   type: str
   level: advanced
@@ -2104,6 +2363,8 @@ options:
   - rgw_crypt_s3_kms_backend
   - rgw_crypt_vault_auth
   - rgw_crypt_vault_addr
+  with_legacy: true
+#  Vault Namespace (only availabe in Vault Enterprise Version)
 - name: rgw_crypt_vault_namespace
   type: str
   level: advanced
@@ -2114,48 +2375,56 @@ options:
   - rgw_crypt_s3_kms_backend
   - rgw_crypt_vault_auth
   - rgw_crypt_vault_addr
+  with_legacy: true
 - name: rgw_crypt_kmip_addr
   type: str
   level: advanced
   desc: kmip server address
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_ca_path
   type: str
   level: advanced
   desc: ca for kmip servers
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_username
   type: str
   level: advanced
   desc: when authenticating via username
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_password
   type: str
   level: advanced
   desc: optional w/ username
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_client_cert
   type: str
   level: advanced
   desc: connect using client certificate
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_client_key
   type: str
   level: advanced
   desc: connect using client certificate
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_kms_key_template
   type: str
   level: advanced
   desc: sse-kms; kmip key names
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_s3_key_template
   type: str
   level: advanced
@@ -2163,6 +2432,7 @@ options:
   default: $keyid
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_suppress_logs
   type: bool
   level: advanced
@@ -2170,6 +2440,7 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
 - name: rgw_list_bucket_min_readahead
   type: int
   level: advanced
@@ -2177,6 +2448,7 @@ options:
   default: 1000
   services:
   - rgw
+  with_legacy: true
 - name: rgw_rest_getusage_op_compat
   type: bool
   level: advanced
@@ -2184,6 +2456,8 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
+# The following are tunables for torrent data
 - name: rgw_torrent_flag
   type: bool
   level: advanced
@@ -2192,30 +2466,35 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_torrent_tracker
   type: str
   level: advanced
   desc: Torrent field announce and announce list
   services:
   - rgw
+  with_legacy: true
 - name: rgw_torrent_createby
   type: str
   level: advanced
   desc: torrent field created by
   services:
   - rgw
+  with_legacy: true
 - name: rgw_torrent_comment
   type: str
   level: advanced
   desc: Torrent field comment
   services:
   - rgw
+  with_legacy: true
 - name: rgw_torrent_encoding
   type: str
   level: advanced
   desc: torrent field encoding
   services:
   - rgw
+  with_legacy: true
 - name: rgw_data_notify_interval_msec
   type: int
   level: advanced
@@ -2229,12 +2508,14 @@ options:
   desc: Torrent origin
   services:
   - rgw
+  with_legacy: true
 - name: rgw_torrent_sha_unit
   type: size
   level: advanced
   default: 512_K
   services:
   - rgw
+  with_legacy: true
 - name: rgw_dynamic_resharding
   type: bool
   level: basic
@@ -2340,6 +2621,7 @@ options:
   default: sts
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sts_key
   type: str
   level: advanced
@@ -2348,6 +2630,8 @@ options:
   default: sts
   services:
   - rgw
+  with_legacy: true
+# should we try to use sts for s3?
 - name: rgw_s3_auth_use_sts
   type: bool
   level: advanced
@@ -2355,6 +2639,7 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sts_max_session_duration
   type: uint
   level: advanced
@@ -2363,6 +2648,7 @@ options:
   default: 43200
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sts_min_session_duration
   type: uint
   level: advanced
@@ -2370,6 +2656,7 @@ options:
   default: 900
   services:
   - rgw
+  with_legacy: true
 - name: rgw_max_listing_results
   type: uint
   level: advanced
@@ -2390,6 +2677,7 @@ options:
   long_desc: URL for introspecting an STS Web Token.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sts_client_id
   type: str
   level: advanced
@@ -2397,6 +2685,7 @@ options:
   long_desc: Client Id needed for introspecting a Web Token.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_sts_client_secret
   type: str
   level: advanced
@@ -2404,6 +2693,7 @@ options:
   long_desc: Client Secret needed for introspecting a Web Token.
   services:
   - rgw
+  with_legacy: true
 - name: rgw_max_concurrent_requests
   type: int
   level: basic

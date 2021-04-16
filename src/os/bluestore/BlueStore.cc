@@ -5292,7 +5292,7 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only)
     }
     // being able to allocate in units less than bdev block size 
     // seems to be a bad idea.
-    ceph_assert( cct->_conf->bdev_block_size <= (int64_t)min_alloc_size);
+    ceph_assert(cct->_conf->bdev_block_size <= min_alloc_size);
 
     uint64_t alloc_size = min_alloc_size;
     if (bdev->is_smr()) {

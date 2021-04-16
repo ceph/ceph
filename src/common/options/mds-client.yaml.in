@@ -9,6 +9,7 @@ options:
   default: 16_K
   services:
   - mds_client
+  with_legacy: true
 - name: client_cache_mid
   type: float
   level: advanced
@@ -16,6 +17,7 @@ options:
   default: 0.75
   services:
   - mds_client
+  with_legacy: true
 - name: client_use_random_mds
   type: bool
   level: dev
@@ -23,6 +25,7 @@ options:
   default: false
   services:
   - mds_client
+  with_legacy: true
 - name: client_mount_timeout
   type: float
   level: advanced
@@ -30,6 +33,7 @@ options:
   default: 5_min
   services:
   - mds_client
+  with_legacy: true
 - name: client_tick_interval
   type: secs
   level: dev
@@ -43,6 +47,7 @@ options:
   desc: file containing trace of client operations
   services:
   - mds_client
+  with_legacy: true
 - name: client_readahead_min
   type: size
   level: advanced
@@ -50,6 +55,7 @@ options:
   default: 128_K
   services:
   - mds_client
+  with_legacy: true
 - name: client_readahead_max_bytes
   type: size
   level: advanced
@@ -57,6 +63,8 @@ options:
   default: 0
   services:
   - mds_client
+  with_legacy: true
+# as multiple of file layout period (object size * num stripes)
 - name: client_readahead_max_periods
   type: int
   level: advanced
@@ -64,6 +72,7 @@ options:
   default: 4
   services:
   - mds_client
+  with_legacy: true
 - name: client_reconnect_stale
   type: bool
   level: advanced
@@ -78,6 +87,7 @@ options:
   default: .snap
   services:
   - mds_client
+  with_legacy: true
 - name: client_mountpoint
   type: str
   level: advanced
@@ -92,6 +102,7 @@ options:
   default: -1
   services:
   - mds_client
+  with_legacy: true
 - name: client_mount_gid
   type: int
   level: advanced
@@ -99,24 +110,28 @@ options:
   default: -1
   services:
   - mds_client
+  with_legacy: true
 - name: client_notify_timeout
   type: int
   level: dev
   default: 10
   services:
   - mds_client
+  with_legacy: true
 - name: osd_client_watch_timeout
   type: int
   level: dev
   default: 30
   services:
   - mds_client
+  with_legacy: true
 - name: client_caps_release_delay
   type: int
   level: dev
   default: 5
   services:
   - mds_client
+  with_legacy: true
 - name: client_quota_df
   type: bool
   level: advanced
@@ -124,6 +139,7 @@ options:
   default: true
   services:
   - mds_client
+  with_legacy: true
 - name: client_oc
   type: bool
   level: advanced
@@ -131,6 +147,7 @@ options:
   default: true
   services:
   - mds_client
+  with_legacy: true
 - name: client_oc_size
   type: size
   level: advanced
@@ -140,6 +157,8 @@ options:
   - mds_client
   flags:
   - runtime
+  with_legacy: true
+# MB * n  (dirty OR tx.. bigish)
 - name: client_oc_max_dirty
   type: size
   level: advanced
@@ -149,6 +168,8 @@ options:
   - mds_client
   flags:
   - runtime
+  with_legacy: true
+# target dirty (keep this smallish)
 - name: client_oc_target_dirty
   type: size
   level: advanced
@@ -158,6 +179,7 @@ options:
   - mds_client
   flags:
   - runtime
+  with_legacy: true
 - name: client_oc_max_dirty_age
   type: float
   level: advanced
@@ -167,6 +189,7 @@ options:
   - mds_client
   flags:
   - runtime
+  with_legacy: true
 - name: client_oc_max_objects
   type: int
   level: advanced
@@ -176,18 +199,23 @@ options:
   - mds_client
   flags:
   - runtime
+  with_legacy: true
+# check if MDS reply contains wanted caps
 - name: client_debug_getattr_caps
   type: bool
   level: dev
   default: false
   services:
   - mds_client
+  with_legacy: true
+# always read synchronously (go to osds)
 - name: client_debug_force_sync_read
   type: bool
   level: dev
   default: false
   services:
   - mds_client
+  with_legacy: true
 - name: client_debug_inject_tick_delay
   type: secs
   level: dev
@@ -200,30 +228,37 @@ options:
   default: 4_K
   services:
   - mds_client
+  with_legacy: true
+# synthetic client bug for testing
 - name: client_inject_release_failure
   type: bool
   level: dev
   default: false
   services:
   - mds_client
+  with_legacy: true
+# synthetic client bug for testing
 - name: client_inject_fixed_oldest_tid
   type: bool
   level: dev
   default: false
   services:
   - mds_client
+  with_legacy: true
 - name: client_metadata
   type: str
   level: advanced
   desc: metadata key=value comma-delimited pairs appended to session metadata
   services:
   - mds_client
+  with_legacy: true
 - name: client_acl_type
   type: str
   level: advanced
   desc: ACL type to enforce (none or "posix_acl")
   services:
   - mds_client
+  with_legacy: true
 - name: client_permissions
   type: bool
   level: advanced
@@ -231,6 +266,7 @@ options:
   default: true
   services:
   - mds_client
+  with_legacy: true
 - name: client_dirsize_rbytes
   type: bool
   level: advanced
@@ -241,6 +277,7 @@ options:
   default: true
   services:
   - mds_client
+  with_legacy: true
 - name: client_force_lazyio
   type: bool
   level: advanced
@@ -360,12 +397,14 @@ options:
   default: true
   services:
   - mds_client
+# the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
 - name: client_try_dentry_invalidate
   type: bool
   level: dev
   default: false
   services:
   - mds_client
+  with_legacy: true
 - name: client_die_on_failed_remount
   type: bool
   level: dev
@@ -390,12 +429,14 @@ options:
   default: true
   services:
   - mds_client
+  with_legacy: true
 - name: client_use_faked_inos
   type: bool
   level: dev
   default: false
   services:
   - mds_client
+  with_legacy: true
 - name: client_fs
   type: str
   level: advanced
@@ -422,6 +463,8 @@ options:
   default: 0
   services:
   - mds_client
+  with_legacy: true
+# XXX: mon
 - name: debug_allow_any_pool_priority
   type: bool
   level: dev
@@ -429,6 +472,7 @@ options:
   default: false
   services:
   - mds_client
+  with_legacy: true
 - name: client_asio_thread_count
   type: uint
   level: advanced

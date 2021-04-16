@@ -185,7 +185,7 @@ md_config_t::md_config_t(ConfigValues& values,
 #define OPTION(name, type) \
     {STRINGIFY(name), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
-#include "common/legacy_config_opts.h"
+#include "options/legacy_config_opts.h"
 #undef OPTION
 #undef SAFE_OPTION
   };
