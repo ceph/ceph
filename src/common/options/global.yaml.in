@@ -6018,46 +6018,11 @@ options:
   flags:
   - create
   with_legacy: true
-- name: bluestore_bluefs_min
-  type: size
-  level: advanced
-  desc: minimum disk space allocated to BlueFS (e.g., at mkfs)
-  default: 1_G
-- name: bluestore_bluefs_min_free
-  type: size
-  level: advanced
-  default: 1_G
-  desc: minimum free space allocated to BlueFS
 - name: bluestore_bluefs_max_free
   type: size
   level: advanced
   default: 10_G
   desc: Maximum free space allocated to BlueFS
-- name: bluestore_bluefs_min_ratio
-  type: float
-  level: advanced
-  default: 0.02
-  desc: Minimum fraction of free space devoted to BlueFS
-- name: bluestore_bluefs_max_ratio
-  type: float
-  level: advanced
-  default: 0.9
-  desc: Maximum fraction of free storage devoted to BlueFS
-- name: bluestore_bluefs_gift_ratio
-  type: float
-  level: advanced
-  default: 0.02
-  desc: Maximum fraction of free space to give to BlueFS at once
-- name: bluestore_bluefs_reclaim_ratio
-  type: float
-  level: advanced
-  default: 0.2
-  desc: Maximum fraction of free space to reclaim from BlueFS at once
-- name: bluestore_bluefs_balance_interval
-  type: float
-  level: advanced
-  default: 1
-  desc: How frequently (in seconds) to balance free space between BlueFS and BlueStore
 - name: bluestore_bluefs_alloc_failure_dump_interval
   type: float
   level: advanced
