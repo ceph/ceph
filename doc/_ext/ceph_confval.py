@@ -36,6 +36,18 @@ def setup(app):
             )
         ]
     )
+    app.add_object_type(
+        'confval_section',
+        'confval_section',
+        objname='configuration section',
+        indextemplate='pair: %s; configuration section',
+        doc_field_types=[
+            Field(
+                'example',
+                label=_('Example'),
+                has_arg=False,
+            )]
+    )
     return {
         'version': 'builtin',
         'parallel_read_safe': True,
