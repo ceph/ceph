@@ -3473,3 +3473,25 @@ TEST(LibCephFS, UtimensatATFDCWD) {
   ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, SetMountTimeoutPostMount) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(-EINVAL, ceph_set_mount_timeout(cmount, 5));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SetMountTimeout) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_set_mount_timeout(cmount, 5));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ceph_shutdown(cmount);
+}
