@@ -201,6 +201,7 @@ def yaml_to_h(opt):
     else:
         return ''
 
+
 TEMPLATE_CC = '''#include "common/options.h"
 {headers}
 
@@ -210,6 +211,26 @@ std::vector<Option> get_{name}_options() {{
   }});
 }}
 '''
+
+
+# PyYAML doesn't check for duplicates even though the YAML spec says
+# that mapping keys must be unique and that duplicates must be treated
+# as an error.  See https://github.com/yaml/pyyaml/issues/165.
+#
+# This workaround breaks merge keys -- in "<<: *xyz", duplicate keys
+# from xyz mapping raise an error instead of being discarded.
+class UniqueKeySafeLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        mapping = super().construct_mapping(node, deep)
+        keys = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in keys:
+                raise yaml.constructor.ConstructorError(None, None,
+                                                        "found duplicate key",
+                                                        key_node.start_mark)
+            keys.add(key)
+        return mapping
 
 
 def translate(opts):
@@ -228,7 +249,7 @@ def translate(opts):
     with open(opts.input) as infile, \
          open(opts.output, 'w') as cc_file, \
          open(opts.legacy, 'w') as h_file:
-        yml = yaml.safe_load(infile)
+        yml = yaml.load(infile, Loader=UniqueKeySafeLoader)
         headers = yml.get('headers', '')
         cc_file.write(prelude.format(name=name, headers=headers))
         options = yml['options']
@@ -292,7 +313,7 @@ def readable_millisecs(value, typ):
 
 def readable(opts):
     with open(opts.input) as infile, open(opts.output, 'w') as outfile:
-        yml = yaml.safe_load(infile)
+        yml = yaml.load(infile, Loader=UniqueKeySafeLoader)
         options = yml['options']
         for option in options:
             typ = option['type']
