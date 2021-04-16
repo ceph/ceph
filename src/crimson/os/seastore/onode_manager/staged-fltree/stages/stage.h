@@ -1545,6 +1545,49 @@ struct staged {
     }
   }
 
+  template <bool GET_KEY, bool GET_VAL>
+  static void get_prev_slot(
+      const container_t& container,         // IN
+      position_t& pos,                      // IN&OUT
+      full_key_t<KeyT::VIEW>* p_index_key,  // OUT
+      const value_t** pp_value) {           // OUT
+    assert(pos != position_t::begin());
+    assert(!pos.is_end());
+    auto& index = pos.index;
+    auto iter = iterator_t(container);
+    if constexpr (!IS_BOTTOM) {
+      auto& nxt_pos = pos.nxt;
+      if (nxt_pos == NXT_STAGE_T::position_t::begin()) {
+        assert(index);
+        --index;
+        iter.seek_at(index);
+        auto nxt_container = iter.get_nxt_container();
+        NXT_STAGE_T::template get_largest_slot<true, GET_KEY, GET_VAL>(
+            nxt_container, &nxt_pos, p_index_key, pp_value);
+      } else {
+        iter.seek_at(index);
+        auto nxt_container = iter.get_nxt_container();
+        NXT_STAGE_T::template get_prev_slot<GET_KEY, GET_VAL>(
+            nxt_container, nxt_pos, p_index_key, pp_value);
+      }
+    } else {
+      assert(index);
+      --index;
+      iter.seek_at(index);
+      if constexpr (GET_VAL) {
+        assert(pp_value);
+        *pp_value = iter.get_p_value();
+      } else {
+        assert(!pp_value);
+      }
+    }
+    if constexpr (GET_KEY) {
+      p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
+    }
+  }
+
   struct _BaseEmpty {};
   class _BaseWithNxtIterator {
    protected:
