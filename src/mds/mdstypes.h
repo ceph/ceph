@@ -295,7 +295,7 @@ struct dmclock_info_t
 
   dmclock_info_t() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(mds_reservation, bl);
     encode(mds_limit, bl);
@@ -303,18 +303,19 @@ struct dmclock_info_t
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
     decode(mds_reservation, p);
     decode(mds_limit, p);
     decode(mds_weight, p);
     DECODE_FINISH(p);
   }
+
   bool is_valid() const {
     return mds_reservation > 0 && mds_limit > 0 && mds_weight > 0;
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<dmclock_info_t *>& ls);
+  static void generate_test_instances(std::list<dmclock_info_t *>& ls);
 };
 WRITE_CLASS_ENCODER(dmclock_info_t)
 
@@ -568,7 +569,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(17, 6, bl);
+  ENCODE_START(18, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -632,7 +633,7 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -697,7 +698,7 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
     backtrace_version = 0; // force update backtrace
   if (struct_v >= 11)
     decode(quota, p);
-  if (struct_v >= 17)
+  if (struct_v >= 18)
     decode(dmclock_info, p);
 
   if (struct_v >= 12) {

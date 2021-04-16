@@ -185,7 +185,7 @@ void dmclock_info_t::dump(Formatter *f) const
   f->dump_float("dmclock_mds_weight", mds_weight);
 }
 
-void dmclock_info_t::generate_test_instances(list<dmclock_info_t *>& ls)
+void dmclock_info_t::generate_test_instances(std::list<dmclock_info_t *>& ls)
 {
   ls.push_back(new dmclock_info_t);
   ls.push_back(new dmclock_info_t);
