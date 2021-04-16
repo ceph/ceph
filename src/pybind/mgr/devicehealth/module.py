@@ -165,7 +165,7 @@ class Module(MgrModule):
         (daemon_type, daemon_id) = who.split('.')
         return self.scrape_daemon(daemon_type, daemon_id)
 
-    @CLICommand('device scrape-daemon-health-metrics',
+    @CLICommand('device scrape-health-metrics',
                 perm='r')
     def do_scrape_health_metrics(self, devid: Optional[str] = None) -> Tuple[int, str, str]:
         '''
