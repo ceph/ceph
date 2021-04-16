@@ -83,9 +83,9 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           return lba_manager->scan_mapped_space(
             *t,
             [this](paddr_t addr, extent_len_t len) {
-              logger().debug("TransactionManager::mount: marking {}~{} used",
-                           addr,
-                           len);
+              logger().trace("TransactionManager::mount: marking {}~{} used",
+			     addr,
+			     len);
               segment_cleaner->mark_space_used(
                 addr,
                 len ,
