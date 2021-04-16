@@ -1110,6 +1110,48 @@ bool AWSv4ComplMulti::is_signature_mismatched()
   }
 }
 
+/* we must not be over-eager reading past the chunk header
+ * there are 3 cases,
+ * 1 we don't know how much data.  it is not safe to read
+ *	more than the min size of the "next" chunk header
+ * 2 we know how much data.  it is not safe to read more than
+ *	the data sie + the min size of the "next" chunk
+ * 3 there is no next header.  carefully sneak up on crlf.
+ */
+static inline size_t safely_extractible_meta_size(const char * piece,
+	size_t psize, size_t max_space, size_t mid_size, size_t min_size) {
+	std::string_view piece_view{piece, psize};
+	size_t r;
+	size_t semi_pos = piece_view.find(";");
+	if (semi_pos == std::string_view::npos || semi_pos <= 2) {
+		r = mid_size;
+		if (r < psize + min_size) r = psize + min_size;
+	} else {
+		r = std::strtoull(piece_view.data()+2, nullptr, 16);
+		if (r)
+			r += min_size;
+		else if (piece[psize-1] != '\r')
+			r = psize + 2;
+		else
+			r = psize + 1;
+	}
+	if (r > max_space) r = max_space;
+	if (r < psize) r = psize;
+	return r - psize;
+}
+
+/* a valid metabuf header starts and ends with crlf
+ * but we don't gotta be all schmatzy about finding that;
+ * an isolated lf isn't valid in the header, so
+ * finding one far enough in is good enuf.
+ */
+static inline bool got_complete_metabuf_header(const char * piece,
+	size_t psize) {
+	std::string_view piece_view{piece, psize};
+	size_t pos = piece_view.rfind("\n");
+	return pos != std::string_view::npos && pos > 2;
+}
+
 size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
 {
   /* Buffer stores only parsed stream. Raw values reflect the stream
@@ -1117,19 +1159,25 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
   size_t buf_pos = 0;
 
   if (chunk_meta.is_new_chunk_in_stream(stream_pos)) {
-    /* Verify signature of the previous chunk. We aren't doing that for new
-     * one as the procedure requires calculation of payload hash. This code
-     * won't be triggered for the last, zero-length chunk. Instead, is will
-     * be checked in the complete() method.  */
-    if (stream_pos >= ChunkMeta::META_MAX_SIZE && is_signature_mismatched()) {
+    /* Verify signature of the previous chunk, if there is one.  We can't
+     * do that for new one as the procedure requires calculation of payload
+     * hash. This code won't be triggered for the last, zero-length chunk.
+     * Instead, it will be checked in the complete() method.  */
+    if (stream_pos && is_signature_mismatched()) {
       throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
     }
 
     /* We don't have metadata for this range. This means a new chunk, so we
      * need to parse a fresh portion of the stream. Let's start. */
-    size_t to_extract = parsing_buf.capacity() - parsing_buf.size();
     do {
+      size_t to_extract;
       const size_t orig_size = parsing_buf.size();
+      to_extract = safely_extractible_meta_size(parsing_buf.data(), orig_size,
+	parsing_buf.capacity() - orig_size, 
+	ChunkMeta::META_MID_SIZE, ChunkMeta::META_MIN_SIZE);
+
+      if (!to_extract) break;
+
       parsing_buf.resize(parsing_buf.size() + to_extract);
       const size_t received = io_base_t::recv_body(parsing_buf.data() + orig_size,
                                                    to_extract);
@@ -1139,8 +1187,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
       }
 
       stream_pos += received;
-      to_extract -= received;
-    } while (to_extract > 0);
+    } while (!got_complete_metabuf_header(parsing_buf.data(), parsing_buf.size()));
 
     size_t consumed;
     std::tie(chunk_meta, consumed) = \
