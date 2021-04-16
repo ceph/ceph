@@ -11,3 +11,4 @@ overrides:
         osd op complaint time: 180
         rados mon op timeout: 15m
         rados osd op timeout: 15m
+        rotating keys bootstrap timeout: 15
