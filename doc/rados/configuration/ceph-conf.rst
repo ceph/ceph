@@ -72,24 +72,20 @@ contact the monitors, authenticate, and retrieve the cluster-stored
 configuration, they may need to be stored locally on the node and set
 in a local configuration file.  These options include:
 
-  - ``mon_host``, the list of monitors for the cluster
-  - ``mon_host_override``, the list of monitors for the cluster to
-    **initially** contact when beginning a new instance of communication with the
-    Ceph cluster.  This overrides the known monitor list derived from MonMap
-    updates sent to older Ceph instances (like librados cluster handles).  It is
-    expected this option is primarily useful for debugging.
-  - ``mon_dns_srv_name`` (default: `ceph-mon`), the name of the DNS
-    SRV record to check to identify the cluster monitors via DNS
-  - ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
-    similar options that define which local directory the daemon
-    stores its data in.
-  - ``keyring``, ``keyfile``, and/or ``key``, which can be used to
-    specify the authentication credential to use to authenticate with
-    the monitor.  Note that in most cases the default keyring location
-    is in the data directory specified above.
+.. confval:: mon_host
+.. confval:: mon_host_override
+
+- :confval:`mon_dns_srv_name`
+- ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
+  similar options that define which local directory the daemon
+  stores its data in.
+- :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be used to
+  specify the authentication credential to use to authenticate with
+  the monitor.  Note that in most cases the default keyring location
+  is in the data directory specified above.
 
 In the vast majority of cases the default values of these are
-appropriate, with the exception of the ``mon_host`` option that
+appropriate, with the exception of the :confval:`mon_host` option that
 identifies the addresses of the cluster's monitors.  When DNS is used
 to identify monitors a local ceph configuration file can be avoided
 entirely.
