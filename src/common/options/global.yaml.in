@@ -180,6 +180,7 @@ options:
   type: str
   level: advanced
   desc: name of DNS SRV record to check for monitor addresses
+  fmt_desc: the service name used querying the DNS for the monitor hosts/addresses
   default: ceph-mon
   tags:
   - network
@@ -4337,6 +4338,8 @@ options:
   long_desc: This option specifies the cost factor to consider in usec per OSD. This
     is considered by the mclock scheduler to set an additional cost factor in QoS
     calculations. Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: Cost per IO in microseconds to consider per OSD (overrides _ssd
+    and _hdd if non-zero)
   default: 0
   flags:
   - runtime
@@ -4347,6 +4350,8 @@ options:
   long_desc: This option specifies the cost factor to consider in usec per OSD for
     rotational device type. This is considered by the mclock_scheduler to set an additional
     cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: Cost per IO in microseconds to consider per OSD (for rotational
+    media)
   default: 25000
   flags:
   - runtime
@@ -4358,6 +4363,8 @@ options:
     solid state device type. This is considered by the mclock_scheduler to set an
     additional cost factor in QoS calculations. Only considered for osd_op_queue =
     mclock_scheduler
+  fmt_desc: Cost per IO in microseconds to consider per OSD (for solid state
+    media)
   default: 50
   flags:
   - runtime
@@ -4369,6 +4376,8 @@ options:
   long_desc: This option specifies the cost per byte to consider in microseconds per
     OSD. This is considered by the mclock scheduler to set an additional cost factor
     in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: Cost per byte in microseconds to consider per OSD (overrides _ssd
+    and _hdd if non-zero)
   default: 0
   flags:
   - runtime
@@ -4380,6 +4389,8 @@ options:
     OSD for rotational device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
     = mclock_scheduler
+  fmt_desc: Cost per byte in microseconds to consider per OSD (for rotational
+    media)
   default: 5.2
   flags:
   - runtime
@@ -4391,6 +4402,8 @@ options:
     OSD for solid state device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
     = mclock_scheduler
+  fmt_desc: Cost per byte in microseconds to consider per OSD (for solid state
+    media)
   default: 0.011
   flags:
   - runtime
@@ -4402,6 +4415,8 @@ options:
   long_desc: This option specifies the max osd capacity in iops per OSD. Helps in
     QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
     = mclock_scheduler
+  fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD
+    (overrides _ssd and _hdd if non-zero)
   default: 0
   flags:
   - runtime
@@ -4413,6 +4428,8 @@ options:
   long_desc: This option specifies the max OSD capacity in iops per OSD. Helps in
     QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
     = mclock_scheduler
+  fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
+    rotational media)
   default: 315
   flags:
   - runtime
@@ -4424,6 +4441,8 @@ options:
   long_desc: This option specifies the max OSD capacity in iops per OSD. Helps in
     QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
     = mclock_scheduler
+  fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
+    solid state media)
   default: 21500
   flags:
   - runtime
@@ -4433,6 +4452,14 @@ options:
   desc: Which mclock profile to use
   long_desc: This option specifies the mclock profile to enable - one among the set
     of built-in profiles or a custom profile. Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: |
+    This sets the type of mclock profile to use for providing QoS
+    based on operations belonging to different classes (background
+    recovery, scrub, snaptrim, client op, osd subop). Once a built-in
+    profile is enabled, the lower level mclock resource control
+    parameters [*reservation, weight, limit*] and some Ceph
+    configuration parameters are set transparently. Note that the
+    above does not apply for the *custom* profile.
   default: high_client_ops
   see_also:
   - osd_op_queue
