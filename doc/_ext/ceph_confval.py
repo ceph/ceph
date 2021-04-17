@@ -208,7 +208,7 @@ def setup(app) -> Dict[str, Any]:
     app.add_directive('confval', CephOption)
     app.add_object_type(
         'confval_option',
-        'confval_option',
+        'confval',
         objname='configuration value',
         indextemplate='pair: %s; configuration value',
         doc_field_types=[

@@ -78,16 +78,16 @@ Bind configuration options
 Two new configuration options control whether the v1 and/or v2
 protocol is used:
 
-  * ``ms_bind_msgr1`` [default: true] controls whether a daemon binds
+  * :confval:`ms_bind_msgr1` [default: true] controls whether a daemon binds
     to a port speaking the v1 protocol
-  * ``ms_bind_msgr2`` [default: true] controls whether a daemon binds
+  * :confval:`ms_bind_msgr2` [default: true] controls whether a daemon binds
     to a port speaking the v2 protocol
 
 Similarly, two options control whether IPv4 and IPv6 addresses are used:
 
-  * ``ms_bind_ipv4`` [default: true] controls whether a daemon binds
+  * :confval:`ms_bind_ipv4` [default: true] controls whether a daemon binds
     to an IPv4 address
-  * ``ms_bind_ipv6`` [default: false] controls whether a daemon binds
+  * :confval:`ms_bind_ipv6` [default: false] controls whether a daemon binds
     to an IPv6 address
 
 .. note:: The ability to bind to multiple ports has paved the way for
