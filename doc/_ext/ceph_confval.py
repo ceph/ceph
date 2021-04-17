@@ -50,6 +50,9 @@ TEMPLATE = '''
 {%- elif opt.max is defined %}
    :max: ``{{ opt.max }}``
 {%- endif %}
+{%- if opt.see_also %}
+   :see also: {{ opt.see_also | map('ref_confval') | join(', ') }}
+{%- endif %}
 {% if opt.note %}
    .. note::
       {{ opt.note }}
@@ -128,12 +131,17 @@ def literal(name) -> str:
         return f'<empty string>'
 
 
+def ref_confval(name) -> str:
+    return f':confval:`{name}`'
+
+
 def jinja_template() -> jinja2.Template:
     env = jinja2.Environment()
     env.filters['eval_size'] = eval_size
     env.filters['readable_duration'] = readable_duration
     env.filters['readable_num'] = readable_num
     env.filters['literal'] = literal
+    env.filters['ref_confval'] = ref_confval
     return env.from_string(TEMPLATE)
 
 
