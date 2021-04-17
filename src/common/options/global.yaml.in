@@ -3616,6 +3616,9 @@ options:
   type: uuid
   level: advanced
   desc: uuid label for a new OSD
+  fmt_desc: The universally unique identifier (UUID) for the Ceph OSD Daemon.
+  note: The ``osd_uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
+    applies to the entire cluster.
   flags:
   - create
   with_legacy: true
@@ -3623,6 +3626,9 @@ options:
   type: str
   level: advanced
   desc: path to OSD data
+  fmt_desc: The path to the OSDs data. You must create the directory when
+    deploying Ceph. You should mount a drive for OSD data at this
+    mount point. We do not recommend changing the default.
   default: /var/lib/ceph/osd/$cluster-$id
   flags:
   - no_mon_update
@@ -3631,6 +3637,10 @@ options:
   type: str
   level: advanced
   desc: path to OSD journal (when FileStore backend is in use)
+  fmt_desc: The path to the OSD's journal. This may be a path to a file or a
+    block device (such as a partition of an SSD). If it is a file,
+    you must create the directory to contain it. We recommend using a
+    separate fast device when the ``osd_data`` drive is an HDD.
   default: /var/lib/ceph/osd/$cluster-$id/journal
   flags:
   - no_mon_update
@@ -3639,6 +3649,7 @@ options:
   type: size
   level: advanced
   desc: size of FileStore journal (in MiB)
+  fmt_desc: The size of the journal in megabytes.
   default: 5_K
   flags:
   - create
@@ -3671,6 +3682,7 @@ options:
   long_desc: This setting prevents clients from doing very large writes to RADOS.  If
     you set this to a value below what clients expect, they will receive an error
     when attempting to write to the cluster.
+  fmt_desc: The maximum size of a write in megabytes.
   default: 90
   min: 4
   with_legacy: true
@@ -3688,6 +3700,7 @@ options:
   desc: maximum memory to devote to in-flight client requests
   long_desc: If this value is exceeded, the OSD will not read any new client data
     off of the network until memory is freed.
+  fmt_desc: The largest client data message allowed in memory.
   default: 500_M
   with_legacy: true
 - name: osd_client_message_cap
@@ -4806,12 +4819,18 @@ options:
   type: int
   level: advanced
   desc: Maximum concurrent scrubs on a single OSD
+  fmt_desc: The maximum number of simultaneous scrub operations for
+    a Ceph OSD Daemon.
   default: 1
   with_legacy: true
 - name: osd_scrub_during_recovery
   type: bool
   level: advanced
   desc: Allow scrubbing when PGs on the OSD are undergoing recovery
+  fmt_desc: Allow scrub during recovery. Setting this to ``false`` will disable
+    scheduling new scrub (and deep--scrub) while there is active recovery.
+    Already running scrubs will be continued. This might be useful to reduce
+    load on busy clusters.
   default: false
   with_legacy: true
 - name: osd_repair_during_recovery
@@ -4825,6 +4844,13 @@ options:
   level: advanced
   desc: Restrict scrubbing to this hour of the day or later
   long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
+  fmt_desc: This restricts scrubbing to this hour of the day or later.
+    Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0``
+    to allow scrubbing the entire day.  Along with ``osd_scrub_end_hour``, they define a time
+    window, in which the scrubs can happen.
+    But a scrub will be performed
+    no matter whether the time window allows or not, as long as the placement
+    group's scrub interval exceeds ``osd_scrub_max_interval``.
   default: 0
   see_also:
   - osd_scrub_end_hour
@@ -4836,6 +4862,12 @@ options:
   level: advanced
   desc: Restrict scrubbing to hours of the day earlier than this
   long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
+  fmt_desc: This restricts scrubbing to the hour earlier than this.
+    Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing
+    for the entire day.  Along with ``osd_scrub_begin_hour``, they define a time
+    window, in which the scrubs can happen. But a scrub will be performed
+    no matter whether the time window allows or not, as long as the placement
+    group's scrub interval exceeds ``osd_scrub_max_interval``.
   default: 0
   see_also:
   - osd_scrub_begin_hour
@@ -4848,6 +4880,13 @@ options:
   desc: Restrict scrubbing to this day of the week or later
   long_desc: 0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0
     for the entire week.
+  fmt_desc: This restricts scrubbing to this day of the week or later.
+    0  = Sunday, 1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0``
+    and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
+    Along with ``osd_scrub_end_week_day``, they define a time window in which
+    scrubs can happen. But a scrub will be performed
+    no matter whether the time window allows or not, when the PG's
+    scrub interval exceeds ``osd_scrub_max_interval``.
   default: 0
   see_also:
   - osd_scrub_end_week_day
@@ -4860,6 +4899,13 @@ options:
   desc: Restrict scrubbing to days of the week earlier than this
   long_desc: 0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0
     for the entire week.
+  fmt_desc: This restricts scrubbing to days of the week earlier than this.
+    0 = Sunday, 1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0``
+    and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
+    Along with ``osd_scrub_begin_week_day``, they define a time
+    window, in which the scrubs can happen. But a scrub will be performed
+    no matter whether the time window allows or not, as long as the placement
+    group's scrub interval exceeds ``osd_scrub_max_interval``.
   default: 0
   see_also:
   - osd_scrub_begin_week_day
@@ -4870,6 +4916,9 @@ options:
   type: float
   level: advanced
   desc: Allow scrubbing when system load divided by number of CPUs is below this value
+  fmt_desc: The normalized maximum load. Ceph will not scrub when the system load
+    (as defined by ``getloadavg() / number of online CPUs``) is higher than this number.
+    Default is ``0.5``.
   default: 0.5
   with_legacy: true
 # if load is low
@@ -4877,6 +4926,8 @@ options:
   type: float
   level: advanced
   desc: Scrub each PG no more often than this interval
+  fmt_desc: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
+    when the Ceph Storage Cluster load is low.
   default: 1_day
   see_also:
   - osd_scrub_max_interval
@@ -4886,6 +4937,8 @@ options:
   type: float
   level: advanced
   desc: Scrub each PG no less often than this interval
+  fmt_desc: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
+    irrespective of cluster load.
   default: 7_day
   see_also:
   - osd_scrub_min_interval
@@ -4897,6 +4950,12 @@ options:
   desc: Ratio of scrub interval to randomly vary
   long_desc: This prevents a scrub 'stampede' by randomly varying the scrub intervals
     so that they are soon uniformly distributed over the week
+  fmt_desc: Add a random delay to ``osd_scrub_min_interval`` when scheduling
+    the next scrub job for a PG. The delay is a random
+    value less than ``osd_scrub_min_interval`` \*
+    ``osd_scrub_interval_randomized_ratio``. The default setting
+    spreads scrubs throughout the allowed time
+    window of ``[1, 1.5]`` \* ``osd_scrub_min_interval``.
   default: 0.5
   see_also:
   - osd_scrub_min_interval
@@ -4914,6 +4973,8 @@ options:
   type: int
   level: advanced
   desc: Minimum number of objects to scrub in a single chunk
+  fmt_desc: The minimal number of object store chunks to scrub during single operation.
+    Ceph blocks writes to single chunk during scrub.
   default: 5
   see_also:
   - osd_scrub_chunk_max
@@ -4922,6 +4983,7 @@ options:
   type: int
   level: advanced
   desc: Maximum number of objects to scrub in a single chunk
+  fmt_desc: The maximum number of object store chunks to scrub during single operation.
   default: 25
   see_also:
   - osd_scrub_chunk_min
@@ -4931,6 +4993,8 @@ options:
   type: float
   level: advanced
   desc: Duration to inject a delay during scrubbing
+  fmt_desc: Time to sleep before scrubbing the next group of chunks. Increasing this value will slow
+    down the overall rate of scrubbing so that client operations will be less impacted.
   default: 0
   with_legacy: true
 # more sleep between [deep]scrub ops
@@ -4950,6 +5014,9 @@ options:
   type: bool
   level: advanced
   desc: Automatically repair damaged objects detected during scrub
+  fmt_desc: Setting this to ``true`` will enable automatic PG repair when errors
+    are found by scrubs or deep-scrubs.  However, if more than
+    ``osd_scrub_auto_repair_num_errors`` errors are found a repair is NOT performed.
   default: false
   with_legacy: true
 # only auto-repair when number of errors is below this threshold
@@ -4957,6 +5024,7 @@ options:
   type: uint
   level: advanced
   desc: Maximum number of detected errors to automatically repair
+  fmt_desc: Auto repair will not occur if more than this many errors are found.
   default: 5
   see_also:
   - osd_scrub_auto_repair
@@ -4973,6 +5041,8 @@ options:
   type: float
   level: advanced
   desc: Deep scrub each PG (i.e., verify data checksums) at least this often
+  fmt_desc: The interval for "deep" scrubbing (fully reading all data). The
+    ``osd_scrub_load_threshold`` does not affect this setting.
   default: 7_day
   with_legacy: true
 - name: osd_deep_scrub_randomize_ratio
@@ -4988,6 +5058,7 @@ options:
   type: size
   level: advanced
   desc: Number of bytes to read from an object at a time during deep scrub
+  fmt_desc: Read size when doing a deep scrub.
   default: 512_K
   with_legacy: true
 - name: osd_deep_scrub_keys
@@ -5029,6 +5100,7 @@ options:
   type: str
   level: advanced
   default: @CMAKE_INSTALL_LIBDIR@/rados-classes
+  fmt_desc: The class path for RADOS class plug-ins.
   with_legacy: true
 - name: osd_open_classes_on_start
   type: bool
@@ -5781,6 +5853,7 @@ options:
   type: size
   level: advanced
   default: 128_M
+  fmt_desc: The maximum size of a RADOS object in bytes.
   with_legacy: true
 # max rados object name len
 - name: osd_max_object_name_len
