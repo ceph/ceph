@@ -119,14 +119,14 @@ they apply to.
 
 These sections include:
 
-.. confval:: global
+.. confval_section:: global
 
    Settings under ``global`` affect all daemons and clients
    in a Ceph Storage Cluster.
 
    :example: ``log_file = /var/log/ceph/$cluster-$type.$id.log``
 
-.. confval:: mon
+.. confval_section:: mon
 
    Settings under ``mon`` affect all ``ceph-mon`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -134,7 +134,7 @@ These sections include:
 
    :example: ``mon_cluster_log_to_syslog = true``
 
-.. confval:: mgr
+.. confval_section:: mgr
 
    Settings in the ``mgr`` section affect all ``ceph-mgr`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -142,7 +142,7 @@ These sections include:
 
    :example: ``mgr_stats_period = 10``
 
-.. confval:: osd
+.. confval_section:: osd
 
    Settings under ``osd`` affect all ``ceph-osd`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -150,7 +150,7 @@ These sections include:
 
    :example: ``osd_op_queue = wpq``
 
-.. confval:: mds
+.. confval_section:: mds
 
    Settings in the ``mds`` section affect all ``ceph-mds`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -158,7 +158,7 @@ These sections include:
 
    :example: ``mds_cache_memory_limit = 10G``
 
-.. confval:: client
+.. confval_section:: client
 
    Settings under ``client`` affect all Ceph Clients
    (e.g., mounted Ceph File Systems, mounted Ceph Block Devices,
@@ -198,7 +198,7 @@ configuration value is used. Ceph metavariables are similar to variable expansio
 
 Ceph supports the following metavariables: 
 
-.. confval:: $cluster
+.. describe:: $cluster
 
    Expands to the Ceph Storage Cluster name. Useful when running
    multiple Ceph Storage Clusters on the same hardware.
@@ -206,13 +206,13 @@ Ceph supports the following metavariables:
    :example: ``/etc/ceph/$cluster.keyring``
    :default: ``ceph``
 
-.. confval:: $type
+.. describe:: $type
 
    Expands to a daemon or process type (e.g., ``mds``, ``osd``, or ``mon``)
 
    :example: ``/var/lib/ceph/$type``
 
-.. confval:: $id
+.. describe:: $id
 
    Expands to the daemon or client identifier. For
    ``osd.0``, this would be ``0``; for ``mds.a``, it would
@@ -220,17 +220,17 @@ Ceph supports the following metavariables:
 
    :example: ``/var/lib/ceph/$type/$cluster-$id``
 
-.. confval:: $host
+.. describe:: $host
 
    Expands to the host name where the process is running.
 
-.. confval:: $name
+.. describe:: $name
 
    Expands to ``$type.$id``.
 
    :example: ``/var/run/ceph/$cluster-$name.asok``
 
-.. confval:: $pid
+.. describe:: $pid
 
    Expands to daemon pid.
 

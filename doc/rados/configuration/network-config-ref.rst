@@ -288,25 +288,7 @@ addresses or override ``public_network`` settings using the ``public_addr``
 setting for a specific daemon.
 
 .. confval:: public_network
-
-   The IP address and netmask of the public (front-side) network
-   (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
-   comma-separated subnets.
-
-   :type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
-   :required: No
-   :default: N/A
-
 .. confval:: public_addr
-
-   The IP address for the public (front-side) network.
-   Set for each daemon.
-
-   :type: IP Address
-   :required: No
-   :default: N/A
-
-
 
 Cluster Network
 ---------------
@@ -318,25 +300,7 @@ settings using the ``cluster_addr`` setting for specific OSD daemons.
 
 
 .. confval:: cluster_network
-
-   The IP address and netmask of the cluster (back-side) network
-   (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
-   comma-separated subnets.
-
-   :type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
-   :required: No
-   :default: N/A
-
-
 .. confval:: cluster_addr
-
-   The IP address for the cluster (back-side) network.
-   Set for each daemon.
-
-   :type: Address
-   :required: No
-   :default: N/A
-
 
 Bind
 ----
@@ -348,83 +312,19 @@ allows you to use the configured port range.
 You may also enable Ceph daemons to bind to IPv6 addresses instead of IPv4
 addresses.
 
-
 .. confval:: ms_bind_port_min
-
-   The minimum port number to which an OSD or MDS daemon will bind.
-
-   :type: 32-bit Integer
-   :default: ``6800``
-   :required: No
-
 .. confval:: ms_bind_port_max
-
-   The maximum port number to which an OSD or MDS daemon will bind.
-
-   :type: 32-bit Integer
-   :default: ``7300``
-   :required: No
-
 .. confval:: ms_bind_ipv4
-
-   Enables Ceph daemons to bind to IPv4 addresses.
-
-   :type: Boolean
-   :default: ``true``
-   :Required: No
-
 .. confval:: ms_bind_ipv6
-
-   Enables Ceph daemons to bind to IPv6 addresses.
-
-   :type: Boolean
-   :default: ``false``
-   :required: No
-
 .. confval:: public_bind_addr
-
-   In some dynamic deployments the Ceph MON daemon might bind
-   to an IP address locally that is different from the ``public_addr``
-   advertised to other peers in the network. The environment must ensure
-   that routing rules are set correctly. If ``public_bind_addr`` is set
-   the Ceph Monitor daemon will bind to it locally and use ``public_addr``
-   in the monmaps to advertise its address to peers. This behavior is limited
-   to the Monitor daemon.
-
-   :type: IP Address
-   :required: No
-   :default: N/A
-
-
 
 TCP
 ---
 
 Ceph disables TCP buffering by default.
 
-
 .. confval:: ms_tcp_nodelay
-
-   Ceph enables ``ms_tcp_nodelay`` so that each request is sent
-   immediately (no buffering). Disabling `Nagle's algorithm`_
-   increases network traffic, which can introduce latency. If you
-   experience large numbers of small packets, you may try
-   disabling ``ms_tcp_nodelay``.
-
-   :type: Boolean
-   :required: No
-   :default: ``true``
-
-
 .. confval:: ms_tcp_rcvbuf
-
-   The size of the socket buffer on the receiving end of a network
-   connection. Disable by default.
-
-   :type: 32-bit Integer
-   :required: No
-   :default: ``0``
-
 
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
