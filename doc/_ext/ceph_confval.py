@@ -239,8 +239,8 @@ def setup(app) -> Dict[str, Any]:
         ]
     )
     app.add_object_type(
-        'confval_section',
-        'confval_section',
+        'confsec',
+        'confsec',
         objname='configuration section',
         indextemplate='pair: %s; configuration section',
         doc_field_types=[
