@@ -115,14 +115,14 @@ they apply to.
 
 These sections include:
 
-.. confval_section:: global
+.. confsec:: global
 
    Settings under ``global`` affect all daemons and clients
    in a Ceph Storage Cluster.
 
    :example: ``log_file = /var/log/ceph/$cluster-$type.$id.log``
 
-.. confval_section:: mon
+.. confsec:: mon
 
    Settings under ``mon`` affect all ``ceph-mon`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -130,7 +130,7 @@ These sections include:
 
    :example: ``mon_cluster_log_to_syslog = true``
 
-.. confval_section:: mgr
+.. confsec:: mgr
 
    Settings in the ``mgr`` section affect all ``ceph-mgr`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -138,7 +138,7 @@ These sections include:
 
    :example: ``mgr_stats_period = 10``
 
-.. confval_section:: osd
+.. confsec:: osd
 
    Settings under ``osd`` affect all ``ceph-osd`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -146,7 +146,7 @@ These sections include:
 
    :example: ``osd_op_queue = wpq``
 
-.. confval_section:: mds
+.. confsec:: mds
 
    Settings in the ``mds`` section affect all ``ceph-mds`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -154,7 +154,7 @@ These sections include:
 
    :example: ``mds_cache_memory_limit = 10G``
 
-.. confval_section:: client
+.. confsec:: client
 
    Settings under ``client`` affect all Ceph Clients
    (e.g., mounted Ceph File Systems, mounted Ceph Block Devices,
@@ -170,7 +170,7 @@ Sections may also specify an individual daemon or client name.  For example,
 Any given daemon will draw its settings from the global section, the
 daemon or client type section, and the section sharing its name.
 Settings in the most-specific section take precedence, so for example
-if the same option is specified in both ``global``, ``mon``, and
+if the same option is specified in both :confsec:`global`, :confsec:`mon`, and
 ``mon.foo`` on the same source (i.e., in the same configurationfile),
 the ``mon.foo`` value will be used.
 
@@ -639,6 +639,6 @@ These changes are as follows:
     bad option ==== bad value
 
 - Before Octopus, if no section name was specified in the configuration file,
-  all options would be set as though they were within the ``global`` section. This is
+  all options would be set as though they were within the :confsec:`global` section. This is
   now discouraged. Since Octopus, only a single option is allowed for
   configuration files without a section name.
