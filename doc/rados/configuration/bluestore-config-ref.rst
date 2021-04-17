@@ -312,11 +312,14 @@ family is smaller and can compact independent of others.
 OSDs deployed in Pacific or later use RocksDB sharding by default.
 If Ceph is upgraded to Pacific from a previous version, sharding is off.
 
-To enable sharding and apply the Pacific defaults, stop an OSD and run::
+To enable sharding and apply the Pacific defaults, stop an OSD and run
 
     .. prompt:: bash #
 
-      ceph-bluestore-tool --path <data path> --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" reshard
+      ceph-bluestore-tool \
+        --path <data path> \
+        --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
+        reshard
 
 .. confval:: bluestore_rocksdb_cf
 .. confval:: bluestore_rocksdb_cfs
