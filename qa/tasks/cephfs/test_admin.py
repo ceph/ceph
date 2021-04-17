@@ -310,6 +310,11 @@ class TestConfigCommands(CephFSTestCase):
         out = self.fs.mds_asok(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
 
+    def test_mds_dump_cache_asok(self):
+        cache_file = "cache_file"
+        timeout = "1"
+        self.fs.rank_asok(['dump', 'cache', cache_file, timeout])
+
     def test_mds_config_tell(self):
         test_key = "mds_max_purge_ops"
         test_val = "123"
