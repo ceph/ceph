@@ -171,6 +171,11 @@ options:
   type: str
   level: advanced
   desc: monitor(s) to use overriding the MonMap
+  fmt_desc: the list of monitors for the cluster to
+    **initially** contact when beginning a new instance of communication with the
+    Ceph cluster.  This overrides the known monitor list derived from MonMap
+    updates sent to older Ceph instances (like librados cluster handles).  It is
+    expected this option is primarily useful for debugging.
   services:
   - common
   flags:
