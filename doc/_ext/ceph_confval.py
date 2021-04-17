@@ -38,6 +38,26 @@ TEMPLATE = '''
    :default: ``{{ default }}``
   {%- endif -%}
 {%- endif %}
+{%- if opt.enum_values %}
+   :valid choices:{% for enum_value in opt.enum_values -%}
+{{" -" | indent(18, not loop.first) }} {{ enum_value | literal }}
+{% endfor %}
+{%- endif %}
+{%- if opt.min is defined and opt.max is defined %}
+   :allowed range: ``[{{ opt.min }}, {{ opt.max }}]``
+{%- elif opt.min is defined %}
+   :min: ``{{ opt.min }}``
+{%- elif opt.max is defined %}
+   :max: ``{{ opt.max }}``
+{%- endif %}
+{% if opt.note %}
+   .. note::
+      {{ opt.note }}
+{%- endif -%}
+{%- if opt.warning %}
+   .. warning::
+      {{ opt.warning }}
+{%- endif %}
 '''
 
 
@@ -101,11 +121,19 @@ def readable_num(value: str, typ: str) -> str:
     raise e
 
 
+def literal(name) -> str:
+    if name:
+        return f'``{name}``'
+    else:
+        return f'<empty string>'
+
+
 def jinja_template() -> jinja2.Template:
     env = jinja2.Environment()
     env.filters['eval_size'] = eval_size
     env.filters['readable_duration'] = readable_duration
     env.filters['readable_num'] = readable_num
+    env.filters['literal'] = literal
     return env.from_string(TEMPLATE)
 
 
