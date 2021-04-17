@@ -167,13 +167,13 @@ of priorities.  If priority information is not available, the
 ``bluestore_cache_meta_ratio`` and ``bluestore_cache_kv_ratio`` options are
 used as fallbacks.
 
-.. conf_val:: bluestore_cache_autotune
-.. conf_val:: osd_memory_target
-.. conf_val:: bluestore_cache_autotune_interval
-.. conf_val:: osd_memory_base
-.. conf_val:: osd_memory_expected_fragmentation
-.. conf_val:: osd_memory_cache_min
-.. conf_val:: osd_memory_cache_resize_interval
+.. confval:: bluestore_cache_autotune
+.. confval:: osd_memory_target
+.. confval:: bluestore_cache_autotune_interval
+.. confval:: osd_memory_base
+.. confval:: osd_memory_expected_fragmentation
+.. confval:: osd_memory_cache_min
+.. confval:: osd_memory_cache_resize_interval
 
 
 Manual Cache Sizing
@@ -208,11 +208,11 @@ device) as well as the meta and kv ratios.
 The data fraction can be calculated by
 ``<effective_cache_size> * (1 - bluestore_cache_meta_ratio - bluestore_cache_kv_ratio)``
 
-.. conf_val:: bluestore_cache_size
-.. conf_val:: bluestore_cache_size_hdd
-.. conf_val:: bluestore_cache_size_ssd
-.. conf_val:: bluestore_cache_meta_ratio
-.. conf_val:: bluestore_cache_kv_ratio
+.. confval:: bluestore_cache_size
+.. confval:: bluestore_cache_size_hdd
+.. confval:: bluestore_cache_size_ssd
+.. confval:: bluestore_cache_meta_ratio
+.. confval:: bluestore_cache_kv_ratio
 
 Checksums
 =========
@@ -243,7 +243,7 @@ The *checksum algorithm* can be set either via a per-pool
 
   ceph osd pool set <pool-name> csum_type <algorithm>
 
-.. conf_val:: bluestore_csum_type
+.. confval:: bluestore_csum_type
 
 Inline Compression
 ==================
