@@ -5800,6 +5800,18 @@ options:
   desc: When tcmalloc and cache autotuning is enabled, try to keep this many bytes
     mapped in memory.
   long_desc: The minimum value must be at least equal to osd_memory_base + osd_memory_cache_min.
+  fmt_desc: |
+    When TCMalloc is available and cache autotuning is enabled, try to
+    keep this many bytes mapped in memory. Note: This may not exactly
+    match the RSS memory usage of the process.  While the total amount
+    of heap memory mapped by the process should usually be close
+    to this target, there is no guarantee that the kernel will actually
+    reclaim  memory that has been unmapped.  During initial development,
+    it was found that some kernels result in the OSD's RSS memory
+    exceeding the mapped memory by up to 20%.  It is hypothesised
+    however, that the kernel generally may be more aggressive about
+    reclaiming unmapped memory when there is a high amount of memory
+    pressure.  Your mileage may vary.
   default: 4_G
   see_also:
   - bluestore_cache_autotune
@@ -5824,6 +5836,10 @@ options:
   level: dev
   desc: When tcmalloc and cache autotuning is enabled, estimate the minimum amount
     of memory in bytes the OSD will need.
+  fmt_desc: When TCMalloc and cache autotuning are enabled, estimate the minimum
+    amount of memory in bytes the OSD will need.  This is used to help
+    the autotuner estimate the expected aggregate memory consumption of
+    the caches.
   default: 768_M
   see_also:
   - bluestore_cache_autotune
@@ -5834,6 +5850,10 @@ options:
   level: dev
   desc: When tcmalloc and cache autotuning is enabled, estimate the percent of memory
     fragmentation.
+  fmt_desc: When TCMalloc and cache autotuning is enabled, estimate the
+    percentage of memory fragmentation.  This is used to help the
+    autotuner estimate the expected aggregate memory consumption
+    of the caches.
   default: 0.15
   see_also:
   - bluestore_cache_autotune
@@ -5846,6 +5866,10 @@ options:
   level: dev
   desc: When tcmalloc and cache autotuning is enabled, set the minimum amount of memory
     used for caches.
+  fmt_desc: |
+    When TCMalloc and cache autotuning are enabled, set the minimum
+    amount of memory used for caches. Note: Setting this value too
+    low can result in significant cache thrashing.
   default: 128_M
   see_also:
   - bluestore_cache_autotune
@@ -5857,6 +5881,11 @@ options:
   level: dev
   desc: When tcmalloc and cache autotuning is enabled, wait this many seconds between
     resizing caches.
+  fmt_desc: When TCMalloc and cache autotuning are enabled, wait this many
+    seconds between resizing caches.  This setting changes the total
+    amount of memory available for BlueStore to use for caching.  Note
+    that setting this interval too small can result in memory allocator
+    thrashing and lower performance.
   default: 1
   see_also:
   - bluestore_cache_autotune
@@ -6253,6 +6282,7 @@ options:
   desc: Default checksum algorithm to use
   long_desc: crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants
     use only a subset of the bits for more compact (but less reliable) checksumming.
+  fmt_desc: The default checksum algorithm to use.
   default: crc32c
   enum_values:
   - none
@@ -6357,6 +6387,14 @@ options:
     when clients hint that data is compressible.  ''aggressive'' means use compression
     unless clients hint that data is not compressible.  This option is used when the
     per-pool property for the compression mode is not present.'
+  fmt_desc: The default policy for using compression if the per-pool property
+    ``compression_mode`` is not set. ``none`` means never use
+    compression. ``passive`` means use compression when
+    :c:func:`clients hint <rados_set_alloc_hint>` that data is
+    compressible.  ``aggressive`` means use compression unless
+    clients hint that data is not compressible.  ``force`` means use
+    compression under all circumstances even if the clients hint that
+    the data is not compressible.
   default: none
   enum_values:
   - none
@@ -6373,6 +6411,10 @@ options:
   long_desc: This controls the default compressor to use (if any) if the per-pool
     property is not set.  Note that zstd is *not* recommended for bluestore due to
     high CPU overhead when compressing small amounts of data.
+  fmt_desc: The default compressor to use (if any) if the per-pool property
+    ``compression_algorithm`` is not set. Note that ``zstd`` is *not*
+    recommended for BlueStore due to high CPU overhead when
+    compressing small amounts of data.
   default: snappy
   enum_values:
   - ''
@@ -6389,6 +6431,9 @@ options:
   desc: Maximum chunk size to apply compression to when random access is expected
     for an object.
   long_desc: Chunks larger than this are broken into smaller chunks before being compressed
+  fmt_desc: Chunks smaller than this are never compressed.
+    The per-pool property ``compression_min_blob_size`` overrides
+    this setting.
   default: 0
   flags:
   - runtime
@@ -6397,6 +6442,8 @@ options:
   type: size
   level: advanced
   desc: Default value of bluestore_compression_min_blob_size for rotational media
+  fmt_desc: Default value of ``bluestore compression min blob size``
+    for rotational media.
   default: 8_K
   see_also:
   - bluestore_compression_min_blob_size
@@ -6408,6 +6455,8 @@ options:
   level: advanced
   desc: Default value of bluestore_compression_min_blob_size for non-rotational (solid
     state) media
+  fmt_desc: Default value of ``bluestore compression min blob size``
+    for non-rotational (solid state) media.
   default: 8_K
   see_also:
   - bluestore_compression_min_blob_size
@@ -6420,6 +6469,10 @@ options:
   desc: Maximum chunk size to apply compression to when non-random access is expected
     for an object.
   long_desc: Chunks larger than this are broken into smaller chunks before being compressed
+  fmt_desc: Chunks larger than this value are broken into smaller blobs of at most
+    ``bluestore_compression_max_blob_size`` bytes before being compressed.
+    The per-pool property ``compression_max_blob_size`` overrides
+    this setting.
   default: 0
   flags:
   - runtime
@@ -6428,6 +6481,8 @@ options:
   type: size
   level: advanced
   desc: Default value of bluestore_compression_max_blob_size for rotational media
+  fmt_desc: Default value of ``bluestore compression max blob size``
+    for rotational media.
   default: 64_K
   see_also:
   - bluestore_compression_max_blob_size
@@ -6439,6 +6494,8 @@ options:
   level: advanced
   desc: Default value of bluestore_compression_max_blob_size for non-rotational (solid
     state) media
+  fmt_desc: Default value of ``bluestore compression max blob size``
+    for non-rotational (SSD, NVMe) media.
   default: 64_K
   see_also:
   - bluestore_compression_max_blob_size
@@ -6501,6 +6558,10 @@ options:
   desc: Compression ratio required to store compressed data
   long_desc: If we compress data and get less than this we discard the result and
     store the original uncompressed data.
+  fmt_desc: The ratio of the size of the data chunk after
+    compression relative to the original size must be at
+    least this small in order to store the compressed
+    version.
   default: 0.875
   flags:
   - runtime
@@ -6575,12 +6636,17 @@ options:
   desc: Cache size (in bytes) for BlueStore
   long_desc: This includes data and metadata cached by BlueStore as well as memory
     devoted to rocksdb's cache(s).
+  fmt_desc: The amount of memory BlueStore will use for its cache.  If zero,
+    ``bluestore_cache_size_hdd`` or ``bluestore_cache_size_ssd`` will
+    be used instead.
   default: 0
   with_legacy: true
 - name: bluestore_cache_size_hdd
   type: size
   level: dev
   desc: Default bluestore_cache_size for rotational media
+  fmt_desc: The default amount of memory BlueStore will use for its cache when
+    backed by an HDD.
   default: 1_G
   see_also:
   - bluestore_cache_size
@@ -6589,6 +6655,8 @@ options:
   type: size
   level: dev
   desc: Default bluestore_cache_size for non-rotational (solid state) media
+  fmt_desc: The default amount of memory BlueStore will use for its cache when
+    backed by an SSD.
   default: 3_G
   see_also:
   - bluestore_cache_size
@@ -6604,7 +6672,7 @@ options:
 - name: bluestore_cache_kv_ratio
   type: float
   level: dev
-  desc: Ratio of bluestore cache to devote to kv database (rocksdb)
+  desc: Ratio of bluestore cache to devote to key/value database (RocksDB)
   default: 0.45
   see_also:
   - bluestore_cache_size
@@ -6620,6 +6688,8 @@ options:
   type: bool
   level: dev
   desc: Automatically tune the ratio of caches while respecting min values.
+  fmt_desc: Automatically tune the space ratios assigned to various BlueStore
+    caches while respecting minimum values.
   default: true
   see_also:
   - bluestore_cache_size
@@ -6628,6 +6698,11 @@ options:
   type: float
   level: dev
   desc: The number of seconds to wait between rebalances when cache autotune is enabled.
+  fmt_desc: |
+    The number of seconds to wait between rebalances when cache autotune
+    is enabled.  This setting changes how quickly the allocation ratios of
+    various caches are recomputed.  Note:  Setting this interval too small
+    can result in high CPU usage and lower performance.
   default: 5
   see_also:
   - bluestore_cache_autotune
@@ -6703,6 +6778,9 @@ options:
   type: bool
   level: advanced
   desc: Enable use of rocksdb column families for bluestore metadata
+  fmt_desc: Enables sharding of BlueStore's RocksDB.
+    When ``true``, ``bluestore_rocksdb_cfs`` is used.
+    Only applied when OSD is doing ``--mkfs``.
   default: true
   verbatim: |
     #ifdef WITH_SEASTAR
@@ -6730,6 +6808,10 @@ options:
     ] ] '')'' ]. Example: ''I=write_buffer_size=1048576 O(6) m(7,10-)''. Interval
     [hash_begin..hash_end) defines characters to use for hash calculation. Recommended
     hash ranges: O(0-13) P(0-8) m(0-16). Sharding of S,T,C,M,B prefixes is inadvised'
+  fmt_desc: Definition of BlueStore's RocksDB sharding.
+    The optimal value depends on multiple factors, and modification is invadvisable.
+    This setting is used only when OSD is doing ``--mkfs``.
+    Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
 - name: bluestore_fsck_on_mount
   type: bool
