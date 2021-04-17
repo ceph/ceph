@@ -280,92 +280,15 @@ QoS requirements are being met.
 mClock Config Options
 =====================
 
-``osd_mclock_profile``
-
-:Description: This sets the type of mclock profile to use for providing QoS
-              based on operations belonging to different classes (background
-              recovery, scrub, snaptrim, client op, osd subop). Once a built-in
-              profile is enabled, the lower level mclock resource control
-              parameters [*reservation, weight, limit*] and some Ceph
-              configuration parameters are set transparently. Note that the
-              above does not apply for the *custom* profile.
-
-:Type: String
-:Valid Choices: high_client_ops, high_recovery_ops, balanced, custom
-:Default: ``high_client_ops``
-
-``osd_mclock_max_capacity_iops``
-
-:Description: Max IOPS capacity (at 4KiB block size) to consider per OSD
-              (overrides _ssd and _hdd if non-zero)
-
-:Type: Float
-:Default: ``0.0``
-
-``osd_mclock_max_capacity_iops_hdd``
-
-:Description: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
-              rotational media)
-
-:Type: Float
-:Default: ``315.0``
-
-``osd_mclock_max_capacity_iops_ssd``
-
-:Description: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
-              solid state media)
-
-:Type: Float
-:Default: ``21500.0``
-
-``osd_mclock_cost_per_io_usec``
-
-:Description: Cost per IO in microseconds to consider per OSD (overrides _ssd
-              and _hdd if non-zero)
-
-:Type: Float
-:Default: ``0.0``
-
-``osd_mclock_cost_per_io_usec_hdd``
-
-:Description: Cost per IO in microseconds to consider per OSD (for rotational
-              media)
-
-:Type: Float
-:Default: ``25000.0``
-
-``osd_mclock_cost_per_io_usec_ssd``
-
-:Description: Cost per IO in microseconds to consider per OSD (for solid state
-              media)
-
-:Type: Float
-:Default: ``50.0``
-
-``osd_mclock_cost_per_byte_usec``
-
-:Description: Cost per byte in microseconds to consider per OSD (overrides _ssd
-              and _hdd if non-zero)
-
-:Type: Float
-:Default: ``0.0``
-
-``osd_mclock_cost_per_byte_usec_hdd``
-
-:Description: Cost per byte in microseconds to consider per OSD (for rotational
-              media)
-
-:Type: Float
-:Default: ``5.2``
-
-``osd_mclock_cost_per_byte_usec_ssd``
-
-:Description: Cost per byte in microseconds to consider per OSD (for solid state
-              media)
-
-:Type: Float
-:Default: ``0.011``
-
-
+.. confval:: osd_mclock_profile
+.. confval:: osd_mclock_max_capacity_iops
+.. confval:: osd_mclock_max_capacity_iops_hdd
+.. confval:: osd_mclock_max_capacity_iops_ssd
+.. confval:: osd_mclock_cost_per_io_usec
+.. confval:: osd_mclock_cost_per_io_usec_hdd
+.. confval:: osd_mclock_cost_per_io_usec_ssd
+.. confval:: osd_mclock_cost_per_byte_usec
+.. confval:: osd_mclock_cost_per_byte_usec_hdd
+.. confval:: osd_mclock_cost_per_byte_usec_ssd
 
 .. _OSD Config Reference: ../osd-config-ref#dmclock-qos
