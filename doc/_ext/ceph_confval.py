@@ -25,7 +25,7 @@ TEMPLATE = '''
    :type: ``{{opt.type}}``
 {%- if default %}
   {%- if opt.type == 'size' %}
-   :default: ``{{ default | eval_size | filesizeformat(true) }}``
+   :default: ``{{ default | eval_size | iec_size }}``
   {%- elif opt.type == 'secs' %}
    :default: ``{{ default | readable_duration(opt.type) }}``
   {%- elif opt.type in ('uint', 'int', 'float') %}
@@ -107,9 +107,25 @@ def do_plain_num(value: str, typ: str) -> str:
         return str(int(value))
 
 
+def iec_size(value: int) -> str:
+    units = dict(Ei=60,
+                 Pi=50,
+                 Ti=40,
+                 Gi=30,
+                 Mi=20,
+                 Ki=10,
+                 B=0)
+    for unit, bits in units.items():
+        m = 1 << bits
+        if value % m == 0:
+            value //= m
+            return f'{value}{unit}'
+    raise Exception(f'iec_size() failed to convert {value}')
+
+
 def do_fileize_num(value: str, typ: str) -> str:
     v = eval_size(value)
-    return jinja2.filters.do_filesizeformat(v)
+    return iec_size(v)
 
 
 def readable_num(value: str, typ: str) -> str:
@@ -138,6 +154,7 @@ def ref_confval(name) -> str:
 def jinja_template() -> jinja2.Template:
     env = jinja2.Environment()
     env.filters['eval_size'] = eval_size
+    env.filters['iec_size'] = iec_size
     env.filters['readable_duration'] = readable_duration
     env.filters['readable_num'] = readable_num
     env.filters['literal'] = literal
