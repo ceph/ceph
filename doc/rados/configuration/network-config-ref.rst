@@ -326,6 +326,18 @@ Ceph disables TCP buffering by default.
 .. confval:: ms_tcp_nodelay
 .. confval:: ms_tcp_rcvbuf
 
+General Settings
+----------------
+
+.. confval:: ms_type
+.. confval:: ms_async_op_threads
+.. confval:: ms_initial_backoff
+.. confval:: ms_max_backoff
+.. confval:: ms_die_on_bad_msg
+.. confval:: ms_dispatch_throttle_bytes
+.. confval:: ms_inject_socket_failures
+
+
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
 .. _hardware recommendations: ../../../start/hardware-recommendations
