@@ -44,7 +44,6 @@ To optimize the performance of your cluster, refer to the following:
    FileStore Settings <filestore-config-ref>
    Journal Settings <journal-ref>
    Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
-   Messaging Settings <ms-ref>
    General Settings <general-config-ref>
 
    

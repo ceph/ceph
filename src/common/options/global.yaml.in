@@ -945,6 +945,9 @@ options:
   type: str
   level: advanced
   desc: Messenger implementation to use for network communication
+  fmt_desc: Transport type used by Async Messenger. Can be ``async+posix``,
+    ``async+dpdk`` or ``async+rdma``. Posix uses standard TCP/IP networking and is
+    default. Other transports may be experimental and support may be limited.
   default: async+posix
   flags:
   - startup
@@ -1077,12 +1080,14 @@ options:
   type: float
   level: advanced
   desc: Initial backoff after a network error is detected (seconds)
+  fmt_desc: The initial time to wait before reconnecting on a fault.
   default: 0.2
   with_legacy: true
 - name: ms_max_backoff
   type: float
   level: advanced
   desc: Maximum backoff after a network error before retrying (seconds)
+  fmt_desc: The maximum time to wait before reconnecting on a fault.
   default: 15
   see_also:
   - ms_initial_backoff
@@ -1103,6 +1108,7 @@ options:
   type: bool
   level: dev
   desc: Induce a daemon crash/exit when a bad network message is received
+  fmt_desc: Debug option; do not configure.
   default: false
   with_legacy: true
 - name: ms_die_on_unhandled_msg
@@ -1133,6 +1139,7 @@ options:
   type: size
   level: advanced
   desc: Limit messages that are read off the network but still being processed
+  fmt_desc: Throttles total size of messages waiting to be dispatched.
   default: 100_M
   with_legacy: true
 - name: ms_bind_exclude_lo_iface
@@ -1244,6 +1251,7 @@ options:
   type: uint
   level: dev
   desc: Inject a socket failure every Nth socket operation
+  fmt_desc: Debug option; do not configure.
   default: 0
   with_legacy: true
 - name: ms_inject_delay_type
@@ -1312,6 +1320,10 @@ options:
   type: uint
   level: advanced
   desc: Threadpool size for AsyncMessenger (ms_type=async)
+  fmt_desc: Initial number of worker threads used by each Async Messenger instance.
+    Should be at least equal to highest number of replicas, but you can
+    decrease it if you are low on CPU core count and/or you host a lot of
+    OSDs on single server.
   default: 3
   min: 1
   max: 24
