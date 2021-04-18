@@ -179,12 +179,12 @@ void is_intended_refcount_state(librados::IoCtx& src_ioctx,
     }
     dst_refcount = refs.count();
   }
-  for (int tries = 0; tries < 10; ++tries) {
+  for (int tries = 0; tries < 15; ++tries) {
     r = cls_cas_references_chunk(src_ioctx, src_oid, dst_oid);
     if (r == -ENOENT || r == -ENOLINK) {
       src_refcount = 0;
     } else if (r == -EBUSY) {
-      sleep(15);
+      sleep(20);
       continue;
     } else {
       src_refcount = r;
