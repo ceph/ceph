@@ -211,13 +211,19 @@ pool created above, the following YAML file can be used after ensuring that the
            imageFeatures: layering
            csi.storage.k8s.io/provisioner-secret-name: csi-rbd-secret
            csi.storage.k8s.io/provisioner-secret-namespace: default
+           csi.storage.k8s.io/controller-expand-secret-name: csi-rbd-secret
+           csi.storage.k8s.io/controller-expand-secret-namespace: default
            csi.storage.k8s.io/node-stage-secret-name: csi-rbd-secret
            csi.storage.k8s.io/node-stage-secret-namespace: default
         reclaimPolicy: Delete
+        allowVolumeExpansion: true
         mountOptions:
            - discard
         EOF
         $ kubectl apply -f csi-rbd-sc.yaml
+
+Note that in Kubernetes v1.14 and v1.15 volume expansion feature was in alpha
+status and required enabling `ExpandCSIVolumes` feature gate.
 
 Create a `PersistentVolumeClaim`
 --------------------------------
