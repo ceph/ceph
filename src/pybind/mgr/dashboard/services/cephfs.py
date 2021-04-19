@@ -161,6 +161,32 @@ class CephFS(object):
         logger.info("Removing directory: %s", path)
         self.cfs.rmdir(path)
 
+    def recursive_rm_dir(self, path):
+        """
+        Recursive remove a directory
+        :param path: The path of the directory.
+        """
+        if path == os.sep:
+            raise Exception('Cannot remove root directory "/"')
+        if not self.dir_exists(path):
+            return
+        logger.info("Recursive removing directory: %s", path)
+        handle = self.cfs.opendir(path)
+        while True:
+            de = self.cfs.readdir(handle)
+            if de is None:
+                break
+            dent_name = de.d_name.decode()
+            if dent_name == "." or  dent_name == "..":
+                continue
+            new_path = path + "/" + dent_name
+            if de.is_dir():
+                self.recursive_rm_dir(new_path)
+            else:
+                self.cfs.unlink(new_path)
+        self.cfs.closedir(handle)
+        self.cfs.rmdir(path)
+
     def mk_snapshot(self, path, name=None, mode=0o755):
         """
         Create a snapshot.

@@ -421,6 +421,16 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         cfs.rm_dir(path)
 
+    @RESTController.Resource('DELETE', path='/tree')
+    def recursive_rm_tree(self, fs_id, path):
+        """
+        Recursive remove a directory.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.recursive_rm_dir(path)
+
     @RESTController.Resource('PUT', path='/quota')
     @allow_empty_body
     def quota(self, fs_id, path, max_bytes=None, max_files=None):
