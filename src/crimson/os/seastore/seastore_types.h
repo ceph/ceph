@@ -59,7 +59,7 @@ std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 // may be negative for relative offsets
 using segment_off_t = int32_t;
 constexpr segment_off_t NULL_SEG_OFF =
-  std::numeric_limits<segment_id_t>::max();
+  std::numeric_limits<segment_off_t>::max();
 
 std::ostream &offset_to_stream(std::ostream &, const segment_off_t &t);
 
