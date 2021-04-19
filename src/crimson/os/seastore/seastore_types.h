@@ -335,6 +335,7 @@ enum class extent_types_t : uint8_t {
   ONODE_BLOCK_STAGED = 6,
   COLL_BLOCK = 7,
   OBJECT_DATA_BLOCK = 8,
+  RETIRED_PLACEHOLDER = 9,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,

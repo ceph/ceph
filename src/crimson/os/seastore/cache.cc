@@ -32,7 +32,7 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
-Cache::retire_extent_ret Cache::retire_extent_if_cached(
+Cache::retire_extent_ret Cache::retire_extent(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
   if (auto ext = t.write_set.find_offset(addr); ext != t.write_set.end()) {
@@ -167,6 +167,9 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     return alloc_new_extent<collection_manager::CollectionNode>(t, length);
   case extent_types_t::OBJECT_DATA_BLOCK:
     return alloc_new_extent<ObjectDataBlock>(t, length);
+  case extent_types_t::RETIRED_PLACEHOLDER:
+    ceph_assert(0 == "impossible");
+    return CachedExtentRef();
   case extent_types_t::TEST_BLOCK:
     return alloc_new_extent<TestBlock>(t, length);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
@@ -273,6 +276,22 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     retire_extent(i);
   }
 
+  for (auto &&i : t.retired_uncached) {
+    CachedExtentRef to_retire;
+    if (query_cache_for_extent(i.first, &to_retire) ==
+	Transaction::get_extent_ret::ABSENT) {
+      to_retire = CachedExtent::make_cached_extent_ref<
+	RetiredExtentPlaceholder
+	>(i.second);
+      to_retire->set_paddr(i.first);
+    }
+
+    t.retired_set.insert(to_retire);
+    extents.insert(*to_retire);
+    to_retire->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
+    retired_extent_gate.add_extent(*to_retire);
+  }
+
   record.extents.reserve(t.fresh_block_list.size());
   for (auto &i: t.fresh_block_list) {
     logger().debug("try_construct_record: fresh block {}", *i);
@@ -344,11 +363,6 @@ void Cache::complete_commit(
 	i->get_paddr(),
 	i->get_length());
     }
-    for (auto &i: t.retired_uncached) {
-      cleaner->mark_space_free(
-	i.first,
-	i.second);
-    }
   }
 
   for (auto &i: t.mutated_block_list) {
@@ -360,6 +374,7 @@ void Cache::complete_commit(
     logger().debug("try_construct_record: retiring {}", *i);
     i->dirty_from_or_retired_at = last_commit;
   }
+
   retired_extent_gate.prune();
 }
 
@@ -573,6 +588,9 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
+    case extent_types_t::RETIRED_PLACEHOLDER:
+      ceph_assert(0 == "impossible");
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::TEST_BLOCK:
       return get_extent<TestBlock>(offset, length
       ).safe_then([](auto extent) {
