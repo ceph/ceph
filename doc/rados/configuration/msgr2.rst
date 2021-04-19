@@ -134,27 +134,17 @@ Connection mode configuration options
 
 For most connections, there are options that control which modes are used:
 
-* ``ms_cluster_mode`` is the connection mode (or permitted modes) used
-  for intra-cluster communication between Ceph daemons.  If multiple
-  modes are listed, the modes listed first are preferred.
-* ``ms_service_mode`` is a list of permitted modes for clients to use
-  when connecting to the cluster.
-* ``ms_client_mode`` is a list of connection modes, in order of
-  preference, for clients to use (or allow) when talking to a Ceph
-  cluster.
+.. confval:: ms_cluster_mode
+.. confval:: ms_service_mode
+.. confval:: ms_client_mode
 
 There are a parallel set of options that apply specifically to
 monitors, allowing administrators to set different (usually more
 secure) requirements on communication with the monitors.
 
-* ``ms_mon_cluster_mode`` is the connection mode (or permitted modes)
-  to use between monitors.
-* ``ms_mon_service_mode`` is a list of permitted modes for clients or
-  other Ceph daemons to use when connecting to monitors.
-* ``ms_mon_client_mode`` is a list of connection modes, in order of
-  preference, for clients or non-monitor daemons to use when
-  connecting to monitors.
-
+.. confval:: ms_mon_cluster_mode
+.. confval:: ms_mon_service_mode
+.. confval:: ms_mon_client_mode
 
 Transitioning from v1-only to v2-plus-v1
 ----------------------------------------
