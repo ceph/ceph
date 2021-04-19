@@ -114,6 +114,26 @@ Once generated, store the new `ConfigMap` object in Kubernetes::
 
         $ kubectl apply -f csi-config-map.yaml
 
+Recent versions of `ceph-csi` also require an additional `ConfigMap` object to
+define Key Management Service (KMS) provider details.  If KMS isn't set up, put
+an empty configuration in a `csi-kms-config-map.yaml` file or refer to examples
+at https://github.com/ceph/ceph-csi/tree/master/examples/kms::
+
+        $ cat <<EOF > csi-kms-config-map.yaml
+        ---
+        apiVersion: v1
+        kind: ConfigMap
+        data:
+          config.json: |-
+            {}
+        metadata:
+          name: ceph-csi-encryption-kms-config
+        EOF
+
+Once generated, store the new `ConfigMap` object in Kubernetes::
+
+        $ kubectl apply -f csi-kms-config-map.yaml
+
 Generate `ceph-csi` cephx `Secret`
 ----------------------------------
 
