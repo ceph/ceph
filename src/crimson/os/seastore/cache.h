@@ -548,8 +548,14 @@ private:
   /// Add dirty extent to dirty list
   void add_to_dirty(CachedExtentRef ref);
 
+  /// Remove from dirty list
+  void remove_from_dirty(CachedExtentRef ref);
+
   /// Remove extent from extents handling dirty and refcounting
   void remove_extent(CachedExtentRef ref);
+
+  /// Retire extent, move reference to retired_extent_gate
+  void retire_extent(CachedExtentRef ref);
 
   /// Replace prev with next
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
