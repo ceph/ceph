@@ -1286,6 +1286,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         :param host: host name
         """
         assert_valid_host(spec.hostname)
+        # make sure hostname is resolvable before trying to make a connection
+        try:
+            utils.resolve_ip(spec.addr)
+        except OrchestratorError as e:
+            msg = str(e) + f'''
+You may need to supply an address for {spec.addr}
+
+Please make sure that the host is reachable and accepts connections using the cephadm SSH key
+To add the cephadm SSH key to the host:
+> ceph cephadm get-pub-key > ~/ceph.pub
+> ssh-copy-id -f -i ~/ceph.pub {self.ssh_user}@{spec.addr}
+
+To check that the host is reachable open a new shell with the --no-hosts flag:
+> cephadm shell --no-hosts
+
+Then run the following:
+> ceph cephadm get-ssh-config > ssh_config
+> ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
+> chmod 0600 ~/cephadm_private_key
+> ssh -F ssh_config -i ~/cephadm_private_key {self.ssh_user}@{spec.addr}'''
+            raise OrchestratorError(msg)
+
         out, err, code = CephadmServe(self)._run_cephadm(spec.hostname, cephadmNoImage, 'check-host',
                                                          ['--expect-hostname', spec.hostname],
                                                          addr=spec.addr,
