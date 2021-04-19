@@ -208,6 +208,7 @@ pool created above, the following YAML file can be used after ensuring that the
         parameters:
            clusterID: b9127830-b0cc-4e34-aa47-9d1a2e9949a8
            pool: kubernetes
+           imageFeatures: layering
            csi.storage.k8s.io/provisioner-secret-name: csi-rbd-secret
            csi.storage.k8s.io/provisioner-secret-namespace: default
            csi.storage.k8s.io/node-stage-secret-name: csi-rbd-secret
