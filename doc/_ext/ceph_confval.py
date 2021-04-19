@@ -25,7 +25,7 @@ TEMPLATE = '''
    :type: ``{{opt.type}}``
 {%- if default %}
   {%- if opt.type == 'size' %}
-   :default: ``{{ default | eval_size | filesizeformat(true) }}``
+   :default: ``{{ default | eval_size | iec_size }}``
   {%- elif opt.type == 'secs' %}
    :default: ``{{ default | readable_duration(opt.type) }}``
   {%- elif opt.type in ('uint', 'int', 'float') %}
@@ -37,6 +37,29 @@ TEMPLATE = '''
   {%- else %}
    :default: ``{{ default }}``
   {%- endif -%}
+{%- endif %}
+{%- if opt.enum_values %}
+   :valid choices:{% for enum_value in opt.enum_values -%}
+{{" -" | indent(18, not loop.first) }} {{ enum_value | literal }}
+{% endfor %}
+{%- endif %}
+{%- if opt.min is defined and opt.max is defined %}
+   :allowed range: ``[{{ opt.min }}, {{ opt.max }}]``
+{%- elif opt.min is defined %}
+   :min: ``{{ opt.min }}``
+{%- elif opt.max is defined %}
+   :max: ``{{ opt.max }}``
+{%- endif %}
+{%- if opt.see_also %}
+   :see also: {{ opt.see_also | map('ref_confval') | join(', ') }}
+{%- endif %}
+{% if opt.note %}
+   .. note::
+      {{ opt.note }}
+{%- endif -%}
+{%- if opt.warning %}
+   .. warning::
+      {{ opt.warning }}
 {%- endif %}
 '''
 
@@ -84,9 +107,25 @@ def do_plain_num(value: str, typ: str) -> str:
         return str(int(value))
 
 
+def iec_size(value: int) -> str:
+    units = dict(Ei=60,
+                 Pi=50,
+                 Ti=40,
+                 Gi=30,
+                 Mi=20,
+                 Ki=10,
+                 B=0)
+    for unit, bits in units.items():
+        m = 1 << bits
+        if value % m == 0:
+            value //= m
+            return f'{value}{unit}'
+    raise Exception(f'iec_size() failed to convert {value}')
+
+
 def do_fileize_num(value: str, typ: str) -> str:
     v = eval_size(value)
-    return jinja2.filters.do_filesizeformat(v)
+    return iec_size(v)
 
 
 def readable_num(value: str, typ: str) -> str:
@@ -101,11 +140,25 @@ def readable_num(value: str, typ: str) -> str:
     raise e
 
 
+def literal(name) -> str:
+    if name:
+        return f'``{name}``'
+    else:
+        return f'<empty string>'
+
+
+def ref_confval(name) -> str:
+    return f':confval:`{name}`'
+
+
 def jinja_template() -> jinja2.Template:
     env = jinja2.Environment()
     env.filters['eval_size'] = eval_size
+    env.filters['iec_size'] = iec_size
     env.filters['readable_duration'] = readable_duration
     env.filters['readable_num'] = readable_num
+    env.filters['literal'] = literal
+    env.filters['ref_confval'] = ref_confval
     return env.from_string(TEMPLATE)
 
 
@@ -172,7 +225,7 @@ def setup(app) -> Dict[str, Any]:
     app.add_directive('confval', CephOption)
     app.add_object_type(
         'confval_option',
-        'confval_option',
+        'confval',
         objname='configuration value',
         indextemplate='pair: %s; configuration value',
         doc_field_types=[
@@ -203,8 +256,8 @@ def setup(app) -> Dict[str, Any]:
         ]
     )
     app.add_object_type(
-        'confval_section',
-        'confval_section',
+        'confsec',
+        'confsec',
         objname='configuration section',
         indextemplate='pair: %s; configuration section',
         doc_field_types=[

@@ -52,53 +52,13 @@ speed multiplied by ``filestore_max_sync_interval``. However, the most common
 practice is to partition the journal drive (often an SSD), and mount it such
 that Ceph uses the entire partition for the journal.
 
-
-``osd_uuid``
-
-:Description: The universally unique identifier (UUID) for the Ceph OSD Daemon.
-:Type: UUID
-:Default: The UUID.
-:Note: The ``osd_uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
-       applies to the entire cluster.
-
-
-``osd_data``
-
-:Description: The path to the OSDs data. You must create the directory when
-              deploying Ceph. You should mount a drive for OSD data at this
-              mount point. We do not recommend changing the default.
-
-:Type: String
-:Default: ``/var/lib/ceph/osd/$cluster-$id``
-
-
-``osd_max_write_size``
-
-:Description: The maximum size of a write in megabytes.
-:Type: 32-bit Integer
-:Default: ``90``
-
-
-``osd_max_object_size``
-
-:Description: The maximum size of a RADOS object in bytes.
-:Type: 32-bit Unsigned Integer
-:Default: 128MB
-
-
-``osd_client_message_size_cap``
-
-:Description: The largest client data message allowed in memory.
-:Type: 64-bit Unsigned Integer
-:Default: 500MB default. ``500*1024L*1024L``
-
-
-``osd_class_dir``
-
-:Description: The class path for RADOS class plug-ins.
-:Type: String
-:Default: ``$libdir/rados-classes``
-
+.. confval:: osd_uuid
+.. confval:: osd_data
+.. confval:: osd_max_write_size
+.. confval:: osd_max_object_size
+.. confval:: osd_client_message_size_cap
+.. confval:: osd_class_dir
+   :default: $libdir/rados-classes
 
 .. index:: OSD; file system
 
@@ -157,24 +117,8 @@ A value of 10 gigabytes is common in practice::
 	osd_journal_size = 10240
 
 
-``osd_journal``
-
-:Description: The path to the OSD's journal. This may be a path to a file or a
-              block device (such as a partition of an SSD). If it is a file,
-              you must create the directory to contain it. We recommend using a
-              separate fast device when the ``osd_data`` drive is an HDD.
-
-:Type: String
-:Default: ``/var/lib/ceph/osd/$cluster-$id/journal``
-
-
-``osd_journal_size``
-
-:Description: The size of the journal in megabytes.
-
-:Type: 32-bit Integer
-:Default: ``5120``
-
+.. confval:: osd_journal
+.. confval:: osd_journal_size
 
 See `Journal Config Reference`_ for additional details.
 
@@ -212,188 +156,23 @@ performance. You can adjust the following settings to increase or decrease
 scrubbing operations.
 
 
-``osd_max_scrubs``
-
-:Description: The maximum number of simultaneous scrub operations for
-              a Ceph OSD Daemon.
-
-:Type: 32-bit Int
-:Default: ``1``
-
-``osd_scrub_begin_hour``
-
-:Description: This restricts scrubbing to this hour of the day or later.
-              Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0``
-              to allow scrubbing the entire day.  Along with ``osd_scrub_end_hour``, they define a time
-              window, in which the scrubs can happen.
-              But a scrub will be performed
-              no matter whether the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd_scrub_max_interval``.
-:Type: Integer in the range of 0 to 23
-:Default: ``0``
-
-
-``osd_scrub_end_hour``
-
-:Description: This restricts scrubbing to the hour earlier than this.
-              Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing
-              for the entire day.  Along with ``osd_scrub_begin_hour``, they define a time
-              window, in which the scrubs can happen. But a scrub will be performed
-              no matter whether the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd_scrub_max_interval``.
-:Type: Integer in the range of 0 to 23
-:Default: ``0``
-
-
-``osd_scrub_begin_week_day``
-
-:Description: This restricts scrubbing to this day of the week or later.
-              0  = Sunday, 1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0``
-              and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
-              Along with ``osd_scrub_end_week_day``, they define a time window in which
-              scrubs can happen. But a scrub will be performed
-              no matter whether the time window allows or not, when the PG's
-              scrub interval exceeds ``osd_scrub_max_interval``.
-:Type: Integer in the range of 0 to 6
-:Default: ``0``
-
-
-``osd_scrub_end_week_day``
-
-:Description: This restricts scrubbing to days of the week earlier than this.
-              0 = Sunday, 1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0``
-              and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
-              Along with ``osd_scrub_begin_week_day``, they define a time
-              window, in which the scrubs can happen. But a scrub will be performed
-              no matter whether the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd_scrub_max_interval``.
-:Type: Integer in the range of 0 to 6
-:Default: ``0``
-
-
-``osd scrub during recovery``
-
-:Description: Allow scrub during recovery. Setting this to ``false`` will disable
-              scheduling new scrub (and deep--scrub) while there is active recovery.
-              Already running scrubs will be continued. This might be useful to reduce
-              load on busy clusters.
-:Type: Boolean
-:Default: ``false``
-
-
-``osd_scrub_thread_timeout``
-
-:Description: The maximum time in seconds before timing out a scrub thread.
-:Type: 32-bit Integer
-:Default: ``60``
-
-
-``osd_scrub_finalize_thread_timeout``
-
-:Description: The maximum time in seconds before timing out a scrub finalize
-              thread.
-
-:Type: 32-bit Integer
-:Default: ``10*60``
-
-
-``osd_scrub_load_threshold``
-
-:Description: The normalized maximum load. Ceph will not scrub when the system load
-              (as defined by ``getloadavg() / number of online CPUs``) is higher than this number.
-              Default is ``0.5``.
-
-:Type: Float
-:Default: ``0.5``
-
-
-``osd_scrub_min_interval``
-
-:Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
-              when the Ceph Storage Cluster load is low.
-
-:Type: Float
-:Default: Once per day. ``24*60*60``
-
-.. _osd_scrub_max_interval:
-
-``osd_scrub_max_interval``
-
-:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
-              irrespective of cluster load.
-
-:Type: Float
-:Default: Once per week. ``7*24*60*60``
-
-
-``osd_scrub_chunk_min``
-
-:Description: The minimal number of object store chunks to scrub during single operation.
-              Ceph blocks writes to single chunk during scrub.
-
-:Type: 32-bit Integer
-:Default: 5
-
-
-``osd_scrub_chunk_max``
-
-:Description: The maximum number of object store chunks to scrub during single operation.
-
-:Type: 32-bit Integer
-:Default: 25
-
-
-``osd_scrub_sleep``
-
-:Description: Time to sleep before scrubbing the next group of chunks. Increasing this value will slow
-              down the overall rate of scrubbing so that client operations will be less impacted.
-
-:Type: Float
-:Default: 0
-
-
-``osd_deep_scrub_interval``
-
-:Description: The interval for "deep" scrubbing (fully reading all data). The
-              ``osd_scrub_load_threshold`` does not affect this setting.
-
-:Type: Float
-:Default: Once per week.  ``7*24*60*60``
-
-
-``osd_scrub_interval_randomize_ratio``
-
-:Description: Add a random delay to ``osd_scrub_min_interval`` when scheduling
-              the next scrub job for a PG. The delay is a random
-              value less than ``osd_scrub_min_interval`` \*
-              ``osd_scrub_interval_randomized_ratio``. The default setting
-              spreads scrubs throughout the allowed time
-              window of ``[1, 1.5]`` \* ``osd_scrub_min_interval``.
-:Type: Float
-:Default: ``0.5``
-
-``osd_deep_scrub_stride``
-
-:Description: Read size when doing a deep scrub.
-:Type: 32-bit Integer
-:Default: 512 KB. ``524288``
-
-
-``osd_scrub_auto_repair``
-
-:Description: Setting this to ``true`` will enable automatic PG repair when errors
-              are found by scrubs or deep-scrubs.  However, if more than
-              ``osd_scrub_auto_repair_num_errors`` errors are found a repair is NOT performed.
-:Type: Boolean
-:Default: ``false``
-
-
-``osd_scrub_auto_repair_num_errors``
-
-:Description: Auto repair will not occur if more than this many errors are found.
-:Type: 32-bit Integer
-:Default: ``5``
-
+.. confval:: osd_max_scrubs
+.. confval:: osd_scrub_begin_hour
+.. confval:: osd_scrub_end_hour
+.. confval:: osd_scrub_begin_week_day
+.. confval:: osd_scrub_end_week_day
+.. confval:: osd_scrub_during_recovery
+.. confval:: osd_scrub_load_threshold
+.. confval:: osd_scrub_min_interval
+.. confval:: osd_scrub_max_interval
+.. confval:: osd_scrub_chunk_min
+.. confval:: osd_scrub_chunk_max
+.. confval:: osd_scrub_sleep
+.. confval:: osd_deep_scrub_interval
+.. confval:: osd_scrub_interval_randomize_ratio
+.. confval:: osd_deep_scrub_stride
+.. confval:: osd_scrub_auto_repair
+.. confval:: osd_scrub_auto_repair_num_errors
 
 .. index:: OSD; operations settings
 

@@ -68,7 +68,7 @@ order for monitor cluster to function properly.
 MON_MSGR2_NOT_ENABLED
 _____________________
 
-The ``ms_bind_msgr2`` option is enabled but one or more monitors is
+The :confval:`ms_bind_msgr2` option is enabled but one or more monitors is
 not configured to bind to a v2 port in the cluster's monmap.  This
 means that features specific to the msgr2 protocol (e.g., encryption)
 are not available on some or all connections.
@@ -1141,9 +1141,9 @@ _______________
 
 One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
 within every configured interval specified by
-:ref:`osd_scrub_max_interval <osd_scrub_max_interval>` globally. This
+:confval:`osd_scrub_max_interval` globally. This
 interval can be overriden on per-pool basis with
-:ref:`scrub_max_interval <scrub_max_interval>`. The warning triggers when
+:confval:`scrub_max_interval`. The warning triggers when
 ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
 scrub since it was due.
 
@@ -1159,7 +1159,7 @@ PG_NOT_DEEP_SCRUBBED
 ____________________
 
 One or more PGs has not been deep scrubbed recently.  PGs are normally
-scrubbed every ``osd_deep_scrub_interval`` seconds, and this warning
+scrubbed every :confval:`osd_deep_scrub_interval` seconds, and this warning
 triggers when ``mon_warn_pg_not_deep_scrubbed_ratio`` percentage of interval has elapsed
 without a scrub since it was due.
 
