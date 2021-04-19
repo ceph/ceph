@@ -1723,7 +1723,6 @@ options:
   default: 10
   services:
   - mon
-  - mon
   with_legacy: true
 - name: mon_osd_laggy_halflife
   type: int
@@ -2041,7 +2040,7 @@ options:
   level: advanced
   desc: The difference in connection score allowed before a peon stops ignoring out-of-quorum
     PROPOSEs
-  default: 0
+  default: 0.0005
   services:
   - mon
 - name: mon_warn_on_degraded_stretch_mode
@@ -2055,10 +2054,10 @@ options:
   type: float
   level: advanced
   desc: the ratio of up OSDs at which a degraded stretch cluster enters recovery
-  default: 0
+  default: 0.6
   services:
   - mon
-  min: 0
+  min: 0.51
   max: 1
 - name: mon_stretch_recovery_min_wait
   type: float
@@ -4326,7 +4325,7 @@ options:
     OSD for rotational device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
     = mclock_scheduler
-  default: 5
+  default: 5.2
   flags:
   - runtime
 - name: osd_mclock_cost_per_byte_usec_ssd
@@ -4337,7 +4336,7 @@ options:
     OSD for solid state device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
     = mclock_scheduler
-  default: 0
+  default: 0.011
   flags:
   - runtime
 - name: osd_mclock_max_capacity_iops
@@ -4575,7 +4574,7 @@ options:
 - name: osd_heartbeat_min_healthy_ratio
   type: float
   level: advanced
-  default: 0
+  default: 0.33
   with_legacy: true
 # (seconds) how often to ping monitor if no peers
 - name: osd_mon_heartbeat_interval
@@ -4621,18 +4620,6 @@ options:
   level: advanced
   default: 500
   with_legacy: true
-- name: osd_mon_ack_timeout
-  type: float
-  level: advanced
-  default: 30
-- name: osd_stats_ack_timeout_factor
-  type: float
-  level: advanced
-  default: 2
-- name: osd_stats_ack_timeout_decay
-  type: float
-  level: advanced
-  default: 0.9
 # Max number of snap intervals to report to mgr in pg_stat_t
 - name: osd_max_snap_prune_intervals_per_epoch
   type: uint
@@ -6121,46 +6108,11 @@ options:
   flags:
   - create
   with_legacy: true
-- name: bluestore_bluefs_min
-  type: size
-  level: advanced
-  desc: minimum disk space allocated to BlueFS (e.g., at mkfs)
-  default: 1_G
-- name: bluestore_bluefs_min_free
-  type: size
-  level: advanced
-  default: 1_G
-  desc: minimum free space allocated to BlueFS
 - name: bluestore_bluefs_max_free
   type: size
   level: advanced
   default: 10_G
   desc: Maximum free space allocated to BlueFS
-- name: bluestore_bluefs_min_ratio
-  type: float
-  level: advanced
-  default: 0.02
-  desc: Minimum fraction of free space devoted to BlueFS
-- name: bluestore_bluefs_max_ratio
-  type: float
-  level: advanced
-  default: 0.9
-  desc: Maximum fraction of free storage devoted to BlueFS
-- name: bluestore_bluefs_gift_ratio
-  type: float
-  level: advanced
-  default: 0.02
-  desc: Maximum fraction of free space to give to BlueFS at once
-- name: bluestore_bluefs_reclaim_ratio
-  type: float
-  level: advanced
-  default: 0.2
-  desc: Maximum fraction of free space to reclaim from BlueFS at once
-- name: bluestore_bluefs_balance_interval
-  type: float
-  level: advanced
-  default: 1
-  desc: How frequently (in seconds) to balance free space between BlueFS and BlueStore
 - name: bluestore_bluefs_alloc_failure_dump_interval
   type: float
   level: advanced
@@ -6645,7 +6597,7 @@ options:
   type: float
   level: dev
   desc: Ratio of bluestore cache to devote to metadata
-  default: 0.4
+  default: 0.45
   see_also:
   - bluestore_cache_size
   with_legacy: true
@@ -6653,7 +6605,7 @@ options:
   type: float
   level: dev
   desc: Ratio of bluestore cache to devote to kv database (rocksdb)
-  default: 0
+  default: 0.45
   see_also:
   - bluestore_cache_size
   with_legacy: true
@@ -6661,7 +6613,7 @@ options:
   type: float
   level: dev
   desc: Ratio of bluestore cache to devote to kv onode column family (rocksdb)
-  default: 0
+  default: 0.04
   see_also:
   - bluestore_cache_size
 - name: bluestore_cache_autotune

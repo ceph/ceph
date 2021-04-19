@@ -128,7 +128,7 @@ def set_enum_allowed(values):
     if values is None:
         return ''
     param = ', '.join(f'"{v}"' for v in values)
-    return f'.set_enum_allowed({{{param}}})'
+    return f'.set_enum_allowed({{{param}}})\n'
 
 
 def add_flags(flags):
