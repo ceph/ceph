@@ -30,6 +30,23 @@ tasks:
       - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
       - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
 
+- print: "**** verifying SMART data exists"
+
+- cephadm.shell:
+    mon.a:
+      # debugging
+      - ceph device ls
+      # ensure something is scraped
+      - ceph device scrape-health-metrics
+      # more than 0 devices
+      - ceph device ls --format=json | jq -e  '. | length > 0'
+      # dump metrics
+      - "for devid in $(ceph device ls --format=json | jq -r  '.[].devid'); do ceph device get-health-metrics $devid; done"
+      # check scraped sanity
+      - "for devid in $(ceph device ls --format=json | jq -r  '.[].devid'); do ceph device get-health-metrics $devid | jq -e '. | length > 0'; done"
+      # check device_health_metrics pool exists
+      - rados --pool=device_health_metrics ls | wc -l
+
 - print: "**** done cephadm.shell ceph config set mgr..."
 
 - print: "**** done start parallel"
