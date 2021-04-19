@@ -393,6 +393,8 @@ def ceph_bootstrap(ctx, config):
             cmd += ['--skip-dashboard']
         if config.get('skip_monitoring_stack'):
             cmd += ['--skip-monitoring-stack']
+        if config.get('single_host_defaults'):
+            cmd += ['--single-host-defaults']
         # bootstrap makes the keyring root 0600, so +r it for our purposes
         cmd += [
             run.Raw('&&'),

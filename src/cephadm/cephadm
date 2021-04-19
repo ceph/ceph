@@ -2540,7 +2540,14 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
 
     ports = ports or []
     if any([port_in_use(ctx, port) for port in ports]):
-        raise Error("TCP Port(s) '{}' required for {} already in use".format(','.join(map(str, ports)), daemon_type))
+        if daemon_type == 'mgr':
+            # non-fatal for mgr when we are in mgr_standby_modules=false, but we can't
+            # tell whether that is the case here.
+            logger.warning(
+                f"ceph-mgr TCP port(s) {','.join(map(str, ports))} already in use"
+            )
+        else:
+            raise Error("TCP Port(s) '{}' required for {} already in use".format(','.join(map(str, ports)), daemon_type))
 
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     if reconfig and not os.path.exists(data_dir):
@@ -3832,6 +3839,7 @@ def prepare_bootstrap_config(
     cp.set('global', 'fsid', fsid)
     cp.set('global', 'mon_host', mon_addr)
     cp.set('global', 'container_image', image)
+
     if not cp.has_section('mon'):
         cp.add_section('mon')
     if (
@@ -3839,6 +3847,30 @@ def prepare_bootstrap_config(
             and not cp.has_option('mon', 'auth allow insecure global id reclaim')
     ):
         cp.set('mon', 'auth_allow_insecure_global_id_reclaim', 'false')
+
+    if ctx.single_host_defaults:
+        logger.info('Adjusting default settings to suit single-host cluster...')
+        # replicate across osds, not hosts
+        if (
+                not cp.has_option('global', 'osd_crush_choose_leaf_type')
+                and not cp.has_option('global', 'osd crush choose leaf type')
+        ):
+            cp.set('global', 'osd_crush_choose_leaf_type', '0')
+        # replica 2x
+        if (
+                not cp.has_option('global', 'osd_pool_default_size')
+                and not cp.has_option('global', 'osd pool default size')
+        ):
+            cp.set('global', 'osd_pool_default_size', '2')
+        # disable mgr standby modules (so we can colocate multiple mgrs on one host)
+        if not cp.has_section('mgr'):
+            cp.add_section('mgr')
+        if (
+                not cp.has_option('mgr', 'mgr_standby_modules')
+                and not cp.has_option('mgr', 'mgr standby modules')
+        ):
+            cp.set('mgr', 'mgr_standby_modules', 'false')
+
     cpf = StringIO()
     cp.write(cpf)
     config = cpf.getvalue()
@@ -7764,6 +7796,10 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--cluster-network',
         help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
+    parser_bootstrap.add_argument(
+        '--single-host-defaults',
+        action='store_true',
+        help='adjust configuration defaults to suit a single-host cluster')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

@@ -98,6 +98,10 @@ public:
    */
   bool handle_mgr_map(const MgrMap &mgr_map_);
 
+  bool have_standby_modules() const {
+    return !!standby_modules;
+  }
+
   void init();
 
   void upgrade_config(
