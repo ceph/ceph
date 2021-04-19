@@ -188,9 +188,6 @@ public:
 
   /// note receipt of a ping
   void got_ping(utime_t t);
-  utime_t get_last_ping() const {
-    return last_ping;
-  }
 
   /// True if currently connected
   bool is_connected() const {
