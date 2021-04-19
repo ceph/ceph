@@ -72,24 +72,20 @@ contact the monitors, authenticate, and retrieve the cluster-stored
 configuration, they may need to be stored locally on the node and set
 in a local configuration file.  These options include:
 
-  - ``mon_host``, the list of monitors for the cluster
-  - ``mon_host_override``, the list of monitors for the cluster to
-    **initially** contact when beginning a new instance of communication with the
-    Ceph cluster.  This overrides the known monitor list derived from MonMap
-    updates sent to older Ceph instances (like librados cluster handles).  It is
-    expected this option is primarily useful for debugging.
-  - ``mon_dns_srv_name`` (default: `ceph-mon`), the name of the DNS
-    SRV record to check to identify the cluster monitors via DNS
-  - ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
-    similar options that define which local directory the daemon
-    stores its data in.
-  - ``keyring``, ``keyfile``, and/or ``key``, which can be used to
-    specify the authentication credential to use to authenticate with
-    the monitor.  Note that in most cases the default keyring location
-    is in the data directory specified above.
+.. confval:: mon_host
+.. confval:: mon_host_override
+
+- :confval:`mon_dns_srv_name`
+- ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
+  similar options that define which local directory the daemon
+  stores its data in.
+- :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be used to
+  specify the authentication credential to use to authenticate with
+  the monitor.  Note that in most cases the default keyring location
+  is in the data directory specified above.
 
 In the vast majority of cases the default values of these are
-appropriate, with the exception of the ``mon_host`` option that
+appropriate, with the exception of the :confval:`mon_host` option that
 identifies the addresses of the cluster's monitors.  When DNS is used
 to identify monitors a local ceph configuration file can be avoided
 entirely.
@@ -119,14 +115,14 @@ they apply to.
 
 These sections include:
 
-.. confval_section:: global
+.. confsec:: global
 
    Settings under ``global`` affect all daemons and clients
    in a Ceph Storage Cluster.
 
    :example: ``log_file = /var/log/ceph/$cluster-$type.$id.log``
 
-.. confval_section:: mon
+.. confsec:: mon
 
    Settings under ``mon`` affect all ``ceph-mon`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -134,7 +130,7 @@ These sections include:
 
    :example: ``mon_cluster_log_to_syslog = true``
 
-.. confval_section:: mgr
+.. confsec:: mgr
 
    Settings in the ``mgr`` section affect all ``ceph-mgr`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -142,7 +138,7 @@ These sections include:
 
    :example: ``mgr_stats_period = 10``
 
-.. confval_section:: osd
+.. confsec:: osd
 
    Settings under ``osd`` affect all ``ceph-osd`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -150,7 +146,7 @@ These sections include:
 
    :example: ``osd_op_queue = wpq``
 
-.. confval_section:: mds
+.. confsec:: mds
 
    Settings in the ``mds`` section affect all ``ceph-mds`` daemons in
    the Ceph Storage Cluster, and override the same setting in
@@ -158,7 +154,7 @@ These sections include:
 
    :example: ``mds_cache_memory_limit = 10G``
 
-.. confval_section:: client
+.. confsec:: client
 
    Settings under ``client`` affect all Ceph Clients
    (e.g., mounted Ceph File Systems, mounted Ceph Block Devices,
@@ -174,7 +170,7 @@ Sections may also specify an individual daemon or client name.  For example,
 Any given daemon will draw its settings from the global section, the
 daemon or client type section, and the section sharing its name.
 Settings in the most-specific section take precedence, so for example
-if the same option is specified in both ``global``, ``mon``, and
+if the same option is specified in both :confsec:`global`, :confsec:`mon`, and
 ``mon.foo`` on the same source (i.e., in the same configurationfile),
 the ``mon.foo`` value will be used.
 
@@ -335,62 +331,70 @@ like
 
 Every configuration option is typed with one of the types below:
 
-``int``
+.. describe:: int
 
-:Description: 64-bit signed integer, Some SI prefixes are supported, like "K", "M", "G",
-              "T", "P", "E", meaning, respectively, 10\ :sup:`3`, 10\ :sup:`6`,
-              10\ :sup:`9`, etc.  And "B" is the only supported unit. So, "1K", "1M", "128B" and "-1" are all valid
-              option values. Some times, a negative value implies "unlimited" when it comes to
-              an option for threshold or limit.
-:Example: ``42``, ``-1``
+   64-bit signed integer, Some SI prefixes are supported, like "K", "M", "G",
+   "T", "P", "E", meaning, respectively, 10\ :sup:`3`, 10\ :sup:`6`,
+   10\ :sup:`9`, etc.  And "B" is the only supported unit. So, "1K", "1M", "128B" and "-1" are all valid
+   option values. Some times, a negative value implies "unlimited" when it comes to
+   an option for threshold or limit.
 
-``uint``
+   :example: ``42``, ``-1``
 
-:Description: It is almost identical to ``integer``. But a negative value will be rejected.
-:Example: ``256``, ``0``
+.. describe:: uint
 
-``str``
+   It is almost identical to ``integer``. But a negative value will be rejected.
 
-:Description: Free style strings encoded in UTF-8, but some characters are not allowed. Please
-              reference the above notes for the details.
-:Example: ``"hello world"``, ``"i love \#"``, ``yet-another-name``
+   :example: ``256``, ``0``
 
-``boolean``
+.. describe:: str
 
-:Description: one of the two values ``true`` or ``false``. But an integer is also accepted,
-              where "0" implies ``false``, and any non-zero values imply ``true``.
-:Example: ``true``, ``false``, ``1``, ``0``
+   Free style strings encoded in UTF-8, but some characters are not allowed. Please
+   reference the above notes for the details.
 
-``addr``
+   :example: ``"hello world"``, ``"i love \#"``, ``yet-another-name``
 
-:Description: a single address optionally prefixed with ``v1``, ``v2`` or ``any`` for the messenger
-              protocol. If the prefix is not specified, ``v2`` protocol is used. Please see
-              :ref:`address_formats` for more details.
-:Example: ``v1:1.2.3.4:567``, ``v2:1.2.3.4:567``, ``1.2.3.4:567``, ``2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567``, ``[::1]:6789``
+.. describe:: boolean
 
-``addrvec``
+   one of the two values ``true`` or ``false``. But an integer is also accepted,
+   where "0" implies ``false``, and any non-zero values imply ``true``.
 
-:Description: a set of addresses separated by ",". The addresses can be optionally quoted with ``[`` and ``]``.
-:Example: ``[v1:1.2.3.4:567,v2:1.2.3.4:568]``, ``v1:1.2.3.4:567,v1:1.2.3.14:567``  ``[2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567], [2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::568]``
+   :example: ``true``, ``false``, ``1``, ``0``
 
-``uuid``
+.. describe:: addr
 
-:Description: the string format of a uuid defined by `RFC4122 <https://www.ietf.org/rfc/rfc4122.txt>`_.
-              And some variants are also supported, for more details, see
-              `Boost document <https://www.boost.org/doc/libs/1_74_0/libs/uuid/doc/uuid.html#String%20Generator>`_.
-:Example: ``f81d4fae-7dec-11d0-a765-00a0c91e6bf6``
+   a single address optionally prefixed with ``v1``, ``v2`` or ``any`` for the messenger
+   protocol. If the prefix is not specified, ``v2`` protocol is used. Please see
+   :ref:`address_formats` for more details.
 
-``size``
+   :example: ``v1:1.2.3.4:567``, ``v2:1.2.3.4:567``, ``1.2.3.4:567``, ``2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567``, ``[::1]:6789``
 
-:Description: denotes a 64-bit unsigned integer. Both SI prefixes and IEC prefixes are
-              supported. And "B" is the only supported unit. A negative value will be
-              rejected.
-:Example: ``1Ki``, ``1K``, ``1KiB`` and ``1B``.
+.. describe:: addrvec
 
-``secs``
+   a set of addresses separated by ",". The addresses can be optionally quoted with ``[`` and ``]``.
 
-:Description: denotes a duration of time. By default the unit is second if not specified.
-              Following units of time are supported:
+   :example: ``[v1:1.2.3.4:567,v2:1.2.3.4:568]``, ``v1:1.2.3.4:567,v1:1.2.3.14:567``  ``[2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567], [2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::568]``
+
+.. describe:: uuid
+
+   the string format of a uuid defined by `RFC4122 <https://www.ietf.org/rfc/rfc4122.txt>`_.
+   And some variants are also supported, for more details, see
+   `Boost document <https://www.boost.org/doc/libs/1_74_0/libs/uuid/doc/uuid.html#String%20Generator>`_.
+
+   :example: ``f81d4fae-7dec-11d0-a765-00a0c91e6bf6``
+
+.. describe:: size
+
+   denotes a 64-bit unsigned integer. Both SI prefixes and IEC prefixes are
+   supported. And "B" is the only supported unit. A negative value will be
+   rejected.
+
+   :example: ``1Ki``, ``1K``, ``1KiB`` and ``1B``.
+
+.. describe:: secs
+
+   denotes a duration of time. By default the unit is second if not specified.
+   Following units of time are supported:
 
               * second: "s", "sec", "second", "seconds"
               * minute: "m", "min", "minute", "minutes"
@@ -399,7 +403,8 @@ Every configuration option is typed with one of the types below:
               * week: "w", "wk", "week", "weeks"
               * month: "mo", "month", "months"
               * year: "y", "yr", "year", "years"
-:Example: ``1 m``, ``1m`` and ``1 week``
+
+   :example: ``1 m``, ``1m`` and ``1 week``
 
 .. _ceph-conf-database:
 
@@ -643,6 +648,6 @@ These changes are as follows:
     bad option ==== bad value
 
 - Before Octopus, if no section name was specified in the configuration file,
-  all options would be set as though they were within the ``global`` section. This is
+  all options would be set as though they were within the :confsec:`global` section. This is
   now discouraged. Since Octopus, only a single option is allowed for
   configuration files without a section name.
