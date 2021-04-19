@@ -11,6 +11,9 @@
 
 >=16.0.0
 --------
+* mgr/nfs: ``nfs`` module is moved out of volumes plugin. Prior using the
+  ``ceph nfs`` commands, ``nfs`` mgr module must be enabled.
+
 * volumes/nfs: The ``cephfs`` cluster type has been removed from the
   ``nfs cluster create`` subcommand. Clusters deployed by cephadm can
   support an NFS export of both ``rgw`` and ``cephfs`` from a single

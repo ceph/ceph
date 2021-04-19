@@ -11,6 +11,8 @@ Requirements
 -  ``nfs-ganesha``, ``nfs-ganesha-ceph``, ``nfs-ganesha-rados-grace`` and
    ``nfs-ganesha-rados-urls`` packages (version 3.3 and above)
 
+.. note:: From Pacific, the nfs mgr module must be enabled prior to use.
+
 Create NFS Ganesha Cluster
 ==========================
 
