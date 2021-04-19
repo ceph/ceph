@@ -179,7 +179,7 @@ the zone group configuration. For example:
             "http:\/\/rgw1:80"
         ],
         "hostnames": [],
-        "hostnames_s3webzone": [],
+        "hostnames_s3website": [],
         "master_zone": "",
         "zones": [],
         "placement_targets": [],
