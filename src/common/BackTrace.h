@@ -17,7 +17,7 @@ struct BackTrace {
   boost::stacktrace::stacktrace bt;
   const static int max = 32;
 
-  explicit BackTrace(int s);
+  explicit BackTrace(std::size_t s);
   void print(std::ostream& out) const;
   void dump(Formatter *f) const;
   static std::string demangle(const char* name);

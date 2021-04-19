@@ -12,7 +12,7 @@
 
 namespace ceph {
 
-BackTrace::BackTrace(int s)
+BackTrace::BackTrace(std::size_t s)
   : bt{s, max}
 {}
 
