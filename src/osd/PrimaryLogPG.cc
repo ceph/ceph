@@ -3550,7 +3550,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
     refs);
   bool need_inc_ref = false;
   if (!refs.is_empty()) {
-    ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
+    ManifestOpRef mop(std::make_shared<ManifestOp>());
     for (auto c : set_chunk.chunk_map) {
       auto p = refs.find(c.second.oid);
       if (p == refs.end()) {
@@ -3589,6 +3589,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
       }
     }
     if (mop->tids.size()) {
+      mop->cb = new RefCountCallback(ctx, osd_op);
       manifest_ops[ctx->obs->oi.soid] = mop;
       manifest_ops[ctx->obs->oi.soid]->op = ctx->op;
     }
@@ -10432,7 +10433,7 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
    * The operations to make dedup chunks are tracked by a ManifestOp.
    * This op will be finished if all the operations are completed.
    */
-  ManifestOpRef mop(std::make_shared<ManifestOp>(nullptr));
+  ManifestOpRef mop(std::make_shared<ManifestOp>());
 
   // cdc
   std::map<uint64_t, bufferlist> chunks; 
