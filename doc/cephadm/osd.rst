@@ -368,20 +368,24 @@ Example command:
 Advanced OSD Service Specifications
 ===================================
 
-:ref:`orchestrator-cli-service-spec` of type ``osd`` are a way to describe a cluster layout using the properties of disks.
-It gives the user an abstract way tell ceph which disks should turn into an OSD
-with which configuration without knowing the specifics of device names and paths.
+:ref:`orchestrator-cli-service-spec`\s of type ``osd`` are a way to describe a
+cluster layout, using the properties of disks. Service specifications give the
+user an abstract way to tell Ceph which disks should turn into OSDs with which
+configurations, without knowing the specifics of device names and paths.
 
-Instead of doing this
+Service specifications make it possible to define a yaml or json file that can
+be used to reduce the amount of manual work involved in creating OSDs.
+
+For example, instead of running the following command:
 
 .. prompt:: bash [monitor.1]#
 
   ceph orch daemon add osd *<host>*:*<path-to-device>*
 
-for each device and each host, we can define a yaml|json file that allows us to describe
-the layout. Here's the most basic example.
+for each device and each host, we can define a yaml or json file that allows us
+to describe the layout. Here's the most basic example.
 
-Create a file called i.e. osd_spec.yml
+Create a file called (for example) ``osd_spec.yml``:
 
 .. code-block:: yaml
 
@@ -392,32 +396,37 @@ Create a file called i.e. osd_spec.yml
     data_devices:                    <- the type of devices you are applying specs to
       all: true                      <- a filter, check below for a full list
 
-This would translate to:
+This means :
 
-Turn any available(ceph-volume decides what 'available' is) into an OSD on all hosts that match
-the glob pattern '*'. (The glob pattern matches against the registered hosts from `host ls`)
-There will be a more detailed section on host_pattern down below.
+#. Turn any available (ceph-volume decides what 'available' is) into an OSD on
+   all hosts that match the glob pattern '*'. (The glob pattern matches against
+   the registered hosts from `host ls`) A more detailed section on host_pattern
+   is available below.
 
-and pass it to `osd create` like so
+#. Then pass it to `osd create` like this:
 
-.. prompt:: bash [monitor.1]#
+   .. prompt:: bash [monitor.1]#
 
-  ceph orch apply osd -i /path/to/osd_spec.yml
+     ceph orch apply osd -i /path/to/osd_spec.yml
 
-This will go out on all the matching hosts and deploy these OSDs.
+   This instruction will be issued to all the matching hosts, and will deploy
+   these OSDs.
 
-Since we want to have more complex setups, there are more filters than just the 'all' filter.
+   Setups more complex than the one specified by the ``all`` filter are
+   possible. See :ref:`osd_filters` for details.
 
-Also, there is a `--dry-run` flag that can be passed to the `apply osd` command, which gives you a synopsis
-of the proposed layout.
+   A ``--dry-run`` flag can be passed to the ``apply osd`` command to display a
+   synopsis of the proposed layout.
 
 Example
 
 .. prompt:: bash [monitor.1]#
 
-  [monitor.1]# ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
+   ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
 
 
+
+.. _osd_filters:
 
 Filters
 -------
