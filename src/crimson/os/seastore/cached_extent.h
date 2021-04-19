@@ -259,7 +259,7 @@ public:
   paddr_t get_paddr() const { return poffset; }
 
   /// Returns length of extent
-  extent_len_t get_length() const { return ptr.length(); }
+  virtual extent_len_t get_length() const { return ptr.length(); }
 
   /// Returns version, get_version() == 0 iff is_clean()
   extent_version_t get_version() const {
@@ -375,11 +375,14 @@ protected:
     version(other.version),
     poffset(other.poffset) {}
 
+  struct retired_placeholder_t{};
+  CachedExtent(retired_placeholder_t) : state(extent_state_t::RETIRED) {}
 
   friend class Cache;
-  template <typename T>
-  static TCachedExtentRef<T> make_cached_extent_ref(bufferptr &&ptr) {
-    return new T(std::move(ptr));
+  template <typename T, typename... Args>
+  static TCachedExtentRef<T> make_cached_extent_ref(
+    Args&&... args) {
+    return new T(std::forward<Args>(args)...);
   }
 
   CachedExtentRef get_prior_instance() {
@@ -646,6 +649,63 @@ inline retired_extent_gate_t::token_t::~token_t() {
     parent = nullptr;
   }
 }
+
+/**
+ * RetiredExtentPlaceholder
+ *
+ * Cache::retire_extent(Transaction&, paddr_t, extent_len_t) can retire
+ * an extent not currently in cache.  In that case, we need to add a
+ * placeholder to the cache until transactions that might reference
+ * the extent complete as in the case where the extent is already cached.
+ * Cache::complete_commit thus creates a RetiredExtentPlaceholder to
+ * serve that purpose.  ptr is not populated, and state is set to
+ * RETIRED.  Cache interfaces check for RETIRED and return EAGAIN if
+ * encountered, so references to these placeholder extents should not
+ * escape the Cache interface boundary.
+ */
+class RetiredExtentPlaceholder : public CachedExtent {
+  extent_len_t length;
+
+public:
+  template <typename... T>
+  RetiredExtentPlaceholder(extent_len_t length)
+    : CachedExtent(CachedExtent::retired_placeholder_t{}),
+      length(length) {}
+
+  extent_len_t get_length() const final { return length; }
+
+  CachedExtentRef duplicate_for_write() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return CachedExtentRef();
+  }
+
+  ceph::bufferlist get_delta() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return ceph::bufferlist();
+  }
+
+  static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+
+  void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &bl) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+
+  bool is_logical() const final {
+    return false;
+  }
+
+  std::ostream &print_detail(std::ostream &out) const final {
+    return out << "RetiredExtentPlaceholder";
+  }
+
+  void on_delta_write(paddr_t record_block_offset) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+};
 
 /**
  * LogicalCachedExtent

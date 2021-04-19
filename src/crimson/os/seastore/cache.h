@@ -130,10 +130,10 @@ public:
     t.add_to_retired_set(ref);
   }
 
-  /// Declare paddr retired in t, noop if not cached
+  /// Declare paddr retired in t
   using retire_extent_ertr = base_ertr;
   using retire_extent_ret = retire_extent_ertr::future<>;
-  retire_extent_ret retire_extent_if_cached(
+  retire_extent_ret retire_extent(
     Transaction &t, paddr_t addr, extent_len_t length);
 
   /**
@@ -579,19 +579,27 @@ private:
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
 
   Transaction::get_extent_ret query_cache_for_extent(
+    paddr_t offset,
+    CachedExtentRef *out) {
+    if (auto iter = extents.find_offset(offset);
+	iter != extents.end()) {
+      if (out)
+	*out = &*iter;
+      return Transaction::get_extent_ret::PRESENT;
+    } else {
+      return Transaction::get_extent_ret::ABSENT;
+    }
+  }
+
+  Transaction::get_extent_ret query_cache_for_extent(
     Transaction &t,
     paddr_t offset,
     CachedExtentRef *out) {
     auto result = t.get_extent(offset, out);
     if (result != Transaction::get_extent_ret::ABSENT) {
       return result;
-    } else if (auto iter = extents.find_offset(offset);
-	       iter != extents.end()) {
-      if (out)
-	*out = &*iter;
-      return Transaction::get_extent_ret::PRESENT;
     } else {
-      return Transaction::get_extent_ret::ABSENT;
+      return query_cache_for_extent(offset, out);
     }
   }
 

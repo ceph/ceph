@@ -160,7 +160,7 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
       logger().debug(
 	"TransactionManager::dec_ref: offset {} refcount 0",
 	offset);
-      return cache->retire_extent_if_cached(
+      return cache->retire_extent(
 	t, result.addr, result.length
       ).safe_then([] {
 	return ref_ret(
