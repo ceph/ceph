@@ -715,18 +715,18 @@ PG::do_osd_ops(
   auto ox = std::make_unique<OpsExecuter>(
     obc, op_info, get_pool().info, get_backend(), *m);
   return interruptor::do_for_each(
-    m->ops.begin(), m->ops.end(), [obc, m, ox = ox.get()](OSDOp& osd_op) {
+    m->ops.begin(), m->ops.end(), [m, ox = ox.get()](OSDOp& osd_op) {
     logger().debug(
       "do_osd_ops: {} - object {} - handling op {}",
       *m,
-      obc->obs.oi.soid,
+      ox->get_target(),
       ceph_osd_op_name(osd_op.op.op));
     return ox->execute_op(osd_op);
-  }).safe_then_interruptible([this, obc, m, ox = ox.get(), &op_info] {
+  }).safe_then_interruptible([this, m, ox = ox.get(), &op_info] {
     logger().debug(
       "do_osd_ops: {} - object {} all operations successful",
       *m,
-      obc->obs.oi.soid);
+      ox->get_target());
     return std::move(*ox).flush_changes(
       [this, m, &op_info] (auto&& txn,
 			   auto&& obc,
@@ -735,7 +735,7 @@ PG::do_osd_ops(
 	logger().debug(
 	  "do_osd_ops: {} - object {} submitting txn",
 	  *m,
-	  obc->obs.oi.soid);
+	  obc->get_oid());
         fill_op_params_bump_pg_version(osd_op_p, std::move(m), user_modify);
 	return submit_transaction(
           op_info,
@@ -976,7 +976,7 @@ PG::reload_obc(crimson::osd::ObjectContext& obc) const
 
 PG::load_obc_iertr::future<>
 PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
-		    Operation *op, PG::with_obc_func_t &&f)
+		    with_obc_func_t &&f)
 {
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();

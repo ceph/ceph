@@ -13,24 +13,18 @@
 #include <seastar/core/shared_future.hh>
 
 #include "common/dout.h"
-#include "crimson/net/Fwd.h"
+#include "messages/MOSDOp.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
-#include "crimson/osd/object_context.h"
 
 #include "crimson/common/errorator.h"
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
-#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
-#include "crimson/osd/shard_services.h"
-#include "crimson/osd/osdmap_gate.h"
-
 #include "crimson/osd/pg_backend.h"
-#include "crimson/osd/exceptions.h"
-
-#include "messages/MOSDOp.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
+#include "crimson/osd/shard_services.h"
 
 class PG;
 class PGLSFilter;
@@ -166,10 +160,6 @@ private:
     class OSDOp& osd_op,
     const class ObjectState& os);
 
-  const hobject_t &get_target() const {
-    return obc->obs.oi.soid;
-  }
-
   template <class Func>
   auto do_const_op(Func&& f) {
     // TODO: pass backend as read-only
@@ -215,6 +205,10 @@ public:
 
   template <typename MutFunc>
   osd_op_ierrorator::future<> flush_changes(MutFunc&& mut_func) &&;
+
+  const hobject_t &get_target() const {
+    return obc->obs.oi.soid;
+  }
 
   const auto& get_message() const {
     return msg;
