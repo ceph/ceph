@@ -1,5 +1,5 @@
 tasks:
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: tethology_s3select_apr19
       rgw_server: client.0
