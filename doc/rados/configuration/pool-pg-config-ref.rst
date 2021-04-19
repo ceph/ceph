@@ -38,8 +38,6 @@ Ceph configuration file.
 .. confval:: osd_max_pg_log_entries
 .. confval:: osd_default_data_pool_replay_window
 .. confval:: osd_max_pg_per_osd_hard_ratio
-.. confval:: osd_recovery_priority
-.. confval:: osd_recovery_op_priority
 
 .. _pool: ../../operations/pools
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
