@@ -273,8 +273,8 @@ public:
 
   friend struct RefCountCallback;
   struct ManifestOp {
-    RefCountCallback *cb;
-    ceph_tid_t objecter_tid;
+    RefCountCallback *cb = nullptr;
+    ceph_tid_t objecter_tid = 0;
     OpRequestRef op;
     std::map<uint64_t, int> results;
     std::map<uint64_t, ceph_tid_t> tids; 
@@ -284,7 +284,8 @@ public:
     
 
     ManifestOp(RefCountCallback* cb)
-      : cb(cb), objecter_tid(0) {}
+      : cb(cb) {}
+    ManifestOp() = default;
   };
   typedef std::shared_ptr<ManifestOp> ManifestOpRef;
   std::map<hobject_t, ManifestOpRef> manifest_ops;
