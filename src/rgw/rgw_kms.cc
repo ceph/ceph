@@ -252,6 +252,19 @@ protected:
       secret_req.append_header("X-Vault-Namespace", vault_namespace);
     }
 
+    secret_req.set_verify_ssl(cct->_conf->rgw_crypt_vault_verify_ssl);
+
+    if (!cct->_conf->rgw_crypt_vault_ssl_cacert.empty()) {
+      secret_req.set_ca_path(cct->_conf->rgw_crypt_vault_ssl_cacert);
+    }
+
+    if (!cct->_conf->rgw_crypt_vault_ssl_clientcert.empty()) {
+      secret_req.set_client_cert(cct->_conf->rgw_crypt_vault_ssl_clientcert);
+    }
+    if (!cct->_conf->rgw_crypt_vault_ssl_clientkey.empty()) {
+      secret_req.set_client_key(cct->_conf->rgw_crypt_vault_ssl_clientkey);
+    }
+
     res = secret_req.process(null_yield);
     if (res < 0) {
       ldout(cct, 0) << "ERROR: Request to Vault failed with error " << res << dendl;
