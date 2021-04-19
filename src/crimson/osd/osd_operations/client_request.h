@@ -64,8 +64,8 @@ public:
 private:
   interruptible_future<> do_recover_missing(Ref<PG>& pgref);
   interruptible_future<> do_process(
-      Ref<PG>& pg,
-      crimson::osd::ObjectContextRef obc);
+    Ref<PG>& pg,
+    crimson::osd::ObjectContextRef obc);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> &pg);
