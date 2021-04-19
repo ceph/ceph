@@ -31,6 +31,7 @@ class TestNFS(MgrTestCase):
 
     def setUp(self):
         super(TestNFS, self).setUp()
+        self._load_module('nfs')
         self.cluster_id = "test"
         self.export_type = "cephfs"
         self.pseudo_path = "/cephfs"
