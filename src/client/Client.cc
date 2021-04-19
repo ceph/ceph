@@ -161,8 +161,8 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 }
 
 bool Client::is_reserved_vino(vinodeno_t &vino) {
-  if (vino.ino < MDS_INO_SYSTEM_BASE && vino.ino != CEPH_INO_ROOT) {
-    ldout(cct, -1) << __func__ << "attempt to access reserved inode number " << vino << dendl;
+  if (MDS_IS_PRIVATE_INO(vino.ino)) {
+    ldout(cct, -1) << __func__ << " attempt to access reserved inode number " << vino << dendl;
     return true;
   }
   return false;
