@@ -1661,6 +1661,7 @@ options:
   type: int
   level: advanced
   desc: maximum number of OSDMaps to cache in memory
+  fmt_desc: The size of osdmaps cache, not to rely on underlying store's cache
   default: 500
   services:
   - mon
@@ -1991,6 +1992,7 @@ options:
   type: float
   level: advanced
   desc: maximum time for a mon election (seconds)
+  fmt_desc: On election proposer, maximum waiting time for all ACKs in seconds.
   default: 5
   services:
   - mon
@@ -2008,6 +2010,7 @@ options:
   desc: lease interval between quorum monitors (seconds)
   long_desc: This setting controls how sensitive your mon quorum is to intermittent
     network issues or other failures.
+  fmt_desc: The length (in seconds) of the lease on the monitor's versions.
   default: 5
   services:
   - mon
@@ -2018,6 +2021,10 @@ options:
   desc: multiple of mon_lease for the lease renewal interval
   long_desc: Leases must be renewed before they time out.  A smaller value means frequent
     renewals, while a value close to 1 makes a lease expiration more likely.
+  fmt_desc: |
+    ``mon_lease`` \* ``mon_lease_renew_interval_factor`` will be the
+    interval for the Leader to renew the other monitor's leases. The
+    factor should be less than ``1.0``.
   default: 0.6
   services:
   - mon
@@ -2030,6 +2037,8 @@ options:
   type: float
   level: advanced
   desc: multiple of mon_lease for the lease ack interval before calling new election
+  fmt_desc: The Leader will wait ``mon_lease`` \* ``mon_lease_ack_timeout_factor``
+    for the Providers to acknowledge the lease extension.
   default: 2
   services:
   - mon
@@ -2043,6 +2052,9 @@ options:
   level: advanced
   desc: multiple of mon_lease for follower mons to accept proposed state changes before
     calling a new election
+  fmt_desc: The Leader will wait ``mon_lease`` \* ``mon_accept_timeout_factor``
+    for the Requester(s) to accept a Paxos update. It is also used
+    during the Paxos recovery phase for similar purposes.
   default: 2
   services:
   - mon
@@ -2518,6 +2530,7 @@ options:
   type: int
   level: advanced
   desc: min number of OSDMaps to store
+  fmt_desc: Minimum number of OSD map epochs to keep at all times.
   default: 500
   services:
   - mon
@@ -2526,6 +2539,7 @@ options:
   type: int
   level: advanced
   desc: max number of past cluster log epochs to store
+  fmt_desc: Maximum number of Log epochs the monitor should keep.
   default: 500
   services:
   - mon
@@ -2791,6 +2805,9 @@ options:
   type: float
   level: advanced
   desc: timeout before canceling sync if syncing mon does not respond
+  fmt_desc: Number of seconds the monitor will wait for the next update
+    message from its sync provider before it gives up and bootstrap
+    again.
   default: 1_min
   services:
   - mon
@@ -2799,6 +2816,7 @@ options:
   type: size
   level: advanced
   desc: target max message payload for mon sync
+  fmt_desc: The maximum size for a sync payload (in bytes).
   default: 1_M
   services:
   - mon
@@ -2866,6 +2884,9 @@ options:
   type: int
   level: dev
   desc: force mons to trim osdmaps through this epoch
+  fmt_desc: Force monitor to trim osdmaps to this point, even if there is
+    PGs not clean at the specified epoch (0 disables it. dangerous,
+    use with care)
   default: 0
   services:
   - mon
@@ -2875,6 +2896,8 @@ options:
   type: int
   level: dev
   desc: force mons to trim mdsmaps/fsmaps through this epoch
+  fmt_desc: Force monitor to trim mdsmaps to this point (0 disables it.
+    dangerous, use with care)
   default: 0
   services:
   - mon
@@ -3132,6 +3155,9 @@ options:
   default: 25
   services:
   - mon
+  fmt_desc: How often (in commits) to stash a full copy of the PaxosService state.
+    Current this setting only affects ``mds``, ``mon``, ``auth`` and ``mgr``
+    PaxosServices.
   with_legacy: true
 # max paxos iterations before we must first sync the monitor stores
 - name: paxos_max_join_drift
@@ -3140,6 +3166,10 @@ options:
   default: 10
   services:
   - mon
+  fmt_desc: The maximum Paxos iterations before we must first sync the
+    monitor data stores. When a monitor finds that its peer is too
+    far ahead of it, it will first sync with data stores before moving
+    on.
   with_legacy: true
 # gather updates for this long before proposing a map update
 - name: paxos_propose_interval
@@ -3148,6 +3178,8 @@ options:
   default: 1
   services:
   - mon
+  fmt_desc: Gather updates for this time interval before proposing
+    a map update.
   with_legacy: true
 # min time to gather updates for after period of inactivity
 - name: paxos_min_wait
@@ -3156,6 +3188,8 @@ options:
   default: 0.05
   services:
   - mon
+  fmt_desc: The minimum amount of time to gather updates after a period of
+    inactivity.
   with_legacy: true
 # minimum number of paxos states to keep around
 - name: paxos_min
@@ -3164,6 +3198,7 @@ options:
   default: 500
   services:
   - mon
+  fmt_desc: The minimum number of Paxos states to keep around
   with_legacy: true
 # number of extra proposals tolerated before trimming
 - name: paxos_trim_min
@@ -3172,6 +3207,7 @@ options:
   default: 250
   services:
   - mon
+  fmt_desc: Number of extra proposals tolerated before trimming
   with_legacy: true
 # maximum amount of versions to trim during a single proposal (0 disables it)
 - name: paxos_trim_max
@@ -3180,6 +3216,7 @@ options:
   default: 500
   services:
   - mon
+  fmt_desc: The maximum number of extra proposals to trim at a time
   with_legacy: true
 # minimum amount of versions to trigger a trim (0 disables it)
 - name: paxos_service_trim_min
@@ -3188,6 +3225,7 @@ options:
   default: 250
   services:
   - mon
+  fmt_desc: The minimum amount of versions to trigger a trim (0 disables it)
   with_legacy: true
 # maximum amount of versions to trim during a single proposal (0 disables it)
 - name: paxos_service_trim_max
@@ -3196,6 +3234,7 @@ options:
   default: 500
   services:
   - mon
+  fmt_desc: The maximum amount of versions to trim during a single proposal (0 disables it)
   with_legacy: true
 - name: paxos_service_trim_max_multiplier
   type: uint

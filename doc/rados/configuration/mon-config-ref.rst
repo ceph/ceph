@@ -513,187 +513,28 @@ Once synchronization is complete, Ceph performs trimming across the cluster.
 Trimming requires that the placement groups are ``active+clean``.
 
 
-``mon_sync_timeout``
-
-:Description: Number of seconds the monitor will wait for the next update
-              message from its sync provider before it gives up and bootstrap
-              again.
-
-:Type: Double
-:Default: ``60.0``
-
-
-``mon_sync_max_payload_size``
-
-:Description: The maximum size for a sync payload (in bytes).
-:Type: 32-bit Integer
-:Default: ``1048576``
-
-
-``paxos_max_join_drift``
-
-:Description: The maximum Paxos iterations before we must first sync the
-              monitor data stores. When a monitor finds that its peer is too
-              far ahead of it, it will first sync with data stores before moving
-              on.
-
-:Type: Integer
-:Default: ``10``
-
-
-``paxos_stash_full_interval``
-
-:Description: How often (in commits) to stash a full copy of the PaxosService state.
-              Current this setting only affects ``mds``, ``mon``, ``auth`` and ``mgr``
-              PaxosServices.
-
-:Type: Integer
-:Default: ``25``
-
-
-``paxos_propose_interval``
-
-:Description: Gather updates for this time interval before proposing 
-              a map update.
-
-:Type: Double
-:Default: ``1.0``
-
-
-``paxos_min``
-
-:Description: The minimum number of Paxos states to keep around
-:Type: Integer
-:Default: ``500``
-
-
-``paxos_min_wait``
-
-:Description: The minimum amount of time to gather updates after a period of 
-              inactivity.
-
-:Type: Double
-:Default: ``0.05``
-
-
-``paxos_trim_min``
-
-:Description: Number of extra proposals tolerated before trimming
-:Type: Integer
-:Default: ``250``
-
-
-``paxos_trim_max``
-
-:Description: The maximum number of extra proposals to trim at a time
-:Type: Integer
-:Default: ``500``
-
-
-``paxos_service_trim_min``
-
-:Description: The minimum amount of versions to trigger a trim (0 disables it)
-:Type: Integer
-:Default: ``250``
-
-
-``paxos_service_trim_max``
-
-:Description: The maximum amount of versions to trim during a single proposal (0 disables it)
-:Type: Integer
-:Default: ``500``
-
-
-``paxos service trim max multiplier``
-
-:Description: The factor by which paxos service trim max will be multiplied
-              to get a new upper bound when trim sizes are high (0 disables it)
-:Type: Integer
-:Default: ``20``
-
-
-``mon mds force trim to``
-
-:Description: Force monitor to trim mdsmaps to this point (0 disables it.
-              dangerous, use with care)
-
-:Type: Integer
-:Default: ``0``
-
-
-``mon_osd_force_trim_to``
-
-:Description: Force monitor to trim osdmaps to this point, even if there is
-              PGs not clean at the specified epoch (0 disables it. dangerous,
-              use with care)
-
-:Type: Integer
-:Default: ``0``
-
-
-``mon_osd_cache_size``
-
-:Description: The size of osdmaps cache, not to rely on underlying store's cache
-:Type: Integer
-:Default: ``500``
-
-
-``mon_election_timeout``
-
-:Description: On election proposer, maximum waiting time for all ACKs in seconds.
-:Type: Float
-:Default: ``5.00``
-
-
-``mon_lease`` 
-
-:Description: The length (in seconds) of the lease on the monitor's versions.
-:Type: Float
-:Default: ``5.00``
-
-
-``mon_lease_renew_interval_factor``
-
-:Description: ``mon_lease`` \* ``mon_lease_renew_interval_factor`` will be the
-              interval for the Leader to renew the other monitor's leases. The
-              factor should be less than ``1.0``.
-
-:Type: Float
-:Default: ``0.60``
-
-
-``mon_lease_ack_timeout_factor``
-
-:Description: The Leader will wait ``mon_lease`` \* ``mon_lease_ack_timeout_factor``
-              for the Providers to acknowledge the lease extension.
-
-:Type: Float
-:Default: ``2.00``
-
-
-``mon_accept_timeout_factor``
-
-:Description: The Leader will wait ``mon_lease`` \* ``mon_accept_timeout_factor``
-              for the Requester(s) to accept a Paxos update. It is also used
-              during the Paxos recovery phase for similar purposes.
-
-:Type: Float
-:Default: ``2.00``
-
-
-``mon_min_osdmap_epochs`` 
-
-:Description: Minimum number of OSD map epochs to keep at all times.
-:Type: 32-bit Integer
-:Default: ``500``
-
-
-``mon_max_log_epochs`` 
-
-:Description: Maximum number of Log epochs the monitor should keep.
-:Type: 32-bit Integer
-:Default: ``500``
-
+.. confval:: mon_sync_timeout
+.. confval:: mon_sync_max_payload_size
+.. confval:: paxos_max_join_drift
+.. confval:: paxos_stash_full_interval
+.. confval:: paxos_propose_interval
+.. confval:: paxos_min
+.. confval:: paxos_min_wait
+.. confval:: paxos_trim_min
+.. confval:: paxos_trim_max
+.. confval:: paxos_service_trim_min
+.. confval:: paxos_service_trim_max
+.. confval:: paxos_service_trim_max_multiplier
+.. confval:: mon_mds_force_trim_to
+.. confval:: mon_osd_force_trim_to
+.. confval:: mon_osd_cache_size
+.. confval:: mon_election_timeout
+.. confval:: mon_lease
+.. confval:: mon_lease_renew_interval_factor
+.. confval:: mon_lease_ack_timeout_factor
+.. confval:: mon_accept_timeout_factor
+.. confval:: mon_min_osdmap_epochs
+.. confval:: mon_max_log_epochs
 
 
 .. index:: Ceph Monitor; clock
