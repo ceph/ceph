@@ -3339,13 +3339,12 @@ struct SetManifestFinisher : public PrimaryLogPG::OpFinisher {
 
 struct C_SetManifestRefCountDone : public Context {
   PrimaryLogPGRef pg;
-  PrimaryLogPG::ManifestOpRef mop;
   hobject_t soid;
   uint64_t offset;
-  ceph_tid_t tid;
+  ceph_tid_t tid = 0;
   C_SetManifestRefCountDone(PrimaryLogPG *p,
-    PrimaryLogPG::ManifestOpRef mop, hobject_t soid, uint64_t offset) : 
-          pg(p), mop(mop), soid(soid), offset(offset), tid(0) {}
+    hobject_t soid, uint64_t offset) :
+          pg(p), soid(soid), offset(offset) {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
@@ -3568,7 +3567,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
 	auto target_oid = p->first;
 	auto offset = c.first;
 	auto length = c.second.length;	
-	C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, ctx->obs->oi.soid, offset);
+	auto* fin = new C_SetManifestRefCountDone(this, ctx->obs->oi.soid, offset);
 	ceph_tid_t tid = refcount_manifest(ctx->obs->oi.soid, target_oid,
 					    refcount_t::INCREMENT_REF, fin, std::nullopt);
 	fin->tid = tid;
@@ -7083,7 +7082,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
 	  ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
-	  C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, soid, 0);
+	  auto* fin = new C_SetManifestRefCountDone(this, soid, 0);
 	  ceph_tid_t tid = refcount_manifest(soid, target, 
 					      refcount_t::INCREMENT_REF, fin, std::nullopt);
 	  fin->tid = tid;
