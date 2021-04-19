@@ -3645,6 +3645,8 @@ options:
   long_desc: There can be osd_max_backfills local reservations AND the same remote
     reservations per OSD. So a value of 1 lets this OSD participate as 1 PG primary
     in recovery and 1 shard of another recovering PG.
+  fmt_desc: The maximum number of backfills allowed to or from a single OSD.
+    Note that this is applied separately for read and write operations.
   default: 1
   flags:
   - runtime
@@ -3664,6 +3666,7 @@ options:
   level: advanced
   desc: how frequently to retry backfill reservations after being denied (e.g., due
     to a full OSD)
+  fmt_desc: The number of seconds to wait before retrying backfill requests.
   default: 30
   with_legacy: true
 - name: osd_recovery_retry_interval
@@ -4215,16 +4218,19 @@ options:
   type: bool
   level: advanced
   default: true
+  fmt_desc: Enable removing duplicates in the OSD map.
   with_legacy: true
 - name: osd_map_cache_size
   type: int
   level: advanced
   default: 50
+  fmt_desc: The number of OSD maps to keep cached.
   with_legacy: true
 - name: osd_map_message_max
   type: int
   level: advanced
   desc: maximum number of OSDMaps to include in a single message
+  fmt_desc: The maximum map entries allowed per MOSDMap message.
   default: 40
   with_legacy: true
 - name: osd_map_message_max_bytes
@@ -4282,6 +4288,8 @@ options:
   type: bool
   level: advanced
   default: true
+  fmt_desc: Preserves clone overlap during recovery. Should always be set
+    to ``true``.
   with_legacy: true
 - name: osd_num_cache_shards
   type: size
@@ -4359,6 +4367,16 @@ options:
   desc: which operation priority queue algorithm to use
   long_desc: which operation priority queue algorithm to use; mclock_scheduler is
     currently experimental
+  fmt_desc: This sets the type of queue to be used for prioritizing ops
+    within each OSD. Both queues feature a strict sub-queue which is
+    dequeued before the normal queue. The normal queue is different
+    between implementations. The WeightedPriorityQueue (``wpq``)
+    dequeues operations in relation to their priorities to prevent
+    starvation of any queue. WPQ should help in cases where a few OSDs
+    are more overloaded than others. The new mClockQueue
+    (``mclock_scheduler``) prioritizes operations based on which class
+    they belong to (recovery, scrub, snaptrim, client op, osd subop).
+    See `QoS Based on mClock`_. Requires a restart.
   default: wpq
   see_also:
   - osd_op_queue_cut_off
@@ -4375,6 +4393,15 @@ options:
   long_desc: the threshold between high priority ops that use strict priority ordering
     and low priority ops that use a fairness algorithm that may or may not incorporate
     priority
+  fmt_desc: This selects which priority ops will be sent to the strict
+    queue verses the normal queue. The ``low`` setting sends all
+    replication ops and higher to the strict queue, while the ``high``
+    option sends only replication acknowledgment ops and higher to
+    the strict queue. Setting this to ``high`` should help when a few
+    OSDs in the cluster are very busy especially when combined with
+    ``wpq`` in the ``osd_op_queue`` setting. OSDs that are very busy
+    handling replication traffic could starve primary client traffic
+    on these OSDs without these settings. Requires a restart.
   default: high
   see_also:
   - osd_op_queue
@@ -4388,6 +4415,7 @@ options:
   level: advanced
   desc: IO proportion reserved for each client (default)
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO proportion reserved for each client (default).
   default: 1
   see_also:
   - osd_op_queue
@@ -4396,6 +4424,7 @@ options:
   level: advanced
   desc: IO share for each client (default) over reservation
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO share for each client (default) over reservation.
   default: 1
   see_also:
   - osd_op_queue
@@ -4404,6 +4433,7 @@ options:
   level: advanced
   desc: IO limit for each client (default) over reservation
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO limit for each client (default) over reservation.
   default: 999999
   see_also:
   - osd_op_queue
@@ -4412,6 +4442,7 @@ options:
   level: advanced
   desc: IO proportion reserved for background recovery (default)
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO proportion reserved for background recovery (default).
   default: 1
   see_also:
   - osd_op_queue
@@ -4420,6 +4451,7 @@ options:
   level: advanced
   desc: IO share for each background recovery over reservation
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO share for each background recovery over reservation.
   default: 1
   see_also:
   - osd_op_queue
@@ -4428,6 +4460,7 @@ options:
   level: advanced
   desc: IO limit for background recovery over reservation
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO limit for background recovery over reservation.
   default: 999999
   see_also:
   - osd_op_queue
@@ -4436,6 +4469,7 @@ options:
   level: advanced
   desc: IO proportion reserved for background best_effort (default)
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO proportion reserved for background best_effort (default).
   default: 1
   see_also:
   - osd_op_queue
@@ -4444,6 +4478,7 @@ options:
   level: advanced
   desc: IO share for each background best_effort over reservation
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO share for each background best_effort over reservation.
   default: 1
   see_also:
   - osd_op_queue
@@ -4452,6 +4487,7 @@ options:
   level: advanced
   desc: IO limit for background best_effort over reservation
   long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO limit for background best_effort over reservation.
   default: 999999
   see_also:
   - osd_op_queue
@@ -4633,16 +4669,19 @@ options:
   type: int
   level: advanced
   default: 64
+  fmt_desc: The minimum number of objects per backfill scan.
   with_legacy: true
 - name: osd_backfill_scan_max
   type: int
   level: advanced
   default: 512
+  fmt_desc: The maximum number of objects per backfill scan.p
   with_legacy: true
 - name: osd_op_thread_timeout
   type: int
   level: advanced
   default: 15
+  fmt_desc: The Ceph OSD Daemon operation thread timeout in seconds.
   with_legacy: true
 - name: osd_op_thread_suicide_timeout
   type: int
@@ -4653,6 +4692,9 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next recovery or backfill op
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op.
+    Increasing this value will slow down recovery operation while
+    client operations will be less impacted.
   default: 0
   flags:
   - runtime
@@ -4661,6 +4703,8 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next recovery or backfill op for HDDs
+  fmt_desc: Time in seconds to sleep before next recovery or backfill op
+    for HDDs.
   default: 0.1
   flags:
   - runtime
@@ -4669,6 +4713,8 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next recovery or backfill op for SSDs
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op
+    for SSDs.
   default: 0
   see_also:
   - osd_recovery_sleep
@@ -4680,6 +4726,8 @@ options:
   level: advanced
   desc: Time in seconds to sleep before next recovery or backfill op when data is
     on HDD and journal is on SSD
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op
+    when OSD data is on HDD and OSD journal / WAL+DB is on SSD.
   default: 0.025
   see_also:
   - osd_recovery_sleep
@@ -4689,6 +4737,9 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next snap trim (overrides values below)
+  fmt_desc: Time in seconds to sleep before next snap trim op.
+    Increasing this value will slow down snap trimming.
+    This option overrides backend specific variants.
   default: 0
   with_legacy: true
 - name: osd_snap_trim_sleep_hdd
@@ -4700,12 +4751,16 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next snap trim for SSDs
+  fmt_desc: Time in seconds to sleep before next snap trim op
+    for SSD OSDs (including NVMe).
   default: 0
 - name: osd_snap_trim_sleep_hybrid
   type: float
   level: advanced
   desc: Time in seconds to sleep before next snap trim when data is on HDD and journal
     is on SSD
+  fmt_desc: Time in seconds to sleep before next snap trim op
+    when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
   default: 2
 - name: osd_scrub_invalid_stats
   type: bool
@@ -4855,12 +4910,21 @@ options:
   type: float
   level: advanced
   default: 0
+  fmt_desc: After peering completes, Ceph will delay for the specified number
+    of seconds before starting to recover RADOS objects.
   with_legacy: true
 - name: osd_recovery_max_active
   type: uint
   level: advanced
   desc: Number of simultaneous active recovery operations per OSD (overrides _ssd
     and _hdd if non-zero)
+  fmt_desc: The number of active recovery requests per OSD at one time. More
+    requests will accelerate recovery, but the requests places an
+    increased load on the cluster.
+  note: This value is only used if it is non-zero. Normally it
+    is ``0``, which means that the ``hdd`` or ``ssd`` values
+    (below) are used, depending on the type of the primary
+    device backing the OSD.
   default: 0
   see_also:
   - osd_recovery_max_active_hdd
@@ -4873,6 +4937,8 @@ options:
   level: advanced
   desc: Number of simultaneous active recovery operations per OSD (for rotational
     devices)
+  fmt_desc: The number of active recovery requests per OSD at one time, if the
+    primary device is rotational.
   default: 3
   see_also:
   - osd_recovery_max_active
@@ -4885,6 +4951,8 @@ options:
   level: advanced
   desc: Number of simultaneous active recovery operations per OSD (for non-rotational
     solid state devices)
+  fmt_desc: The number of active recovery requests per OSD at one time, if the
+    primary device is non-rotational (i.e., an SSD).
   default: 10
   see_also:
   - osd_recovery_max_active
@@ -4896,12 +4964,15 @@ options:
   type: uint
   level: advanced
   default: 1
+  fmt_desc: The maximum number of recovery operations per OSD that will be
+    newly started when an OSD is recovering.
   with_legacy: true
 # max size of push chunk
 - name: osd_recovery_max_chunk
   type: size
   level: advanced
   default: 8_M
+  fmt_desc: the maximum total size of data chunks a recovery op can carry.
   with_legacy: true
 # max number of omap entries per chunk; 0 to disable limit
 - name: osd_recovery_max_omap_entries_per_chunk
@@ -4920,6 +4991,7 @@ options:
   type: size
   level: advanced
   default: 1000
+  fmt_desc: the overhead for serving a push op
   with_legacy: true
 # max size of push message
 - name: osd_max_push_cost
@@ -5394,6 +5466,8 @@ options:
   type: float
   level: advanced
   default: 30
+  fmt_desc: An operation becomes complaint worthy after the specified number
+    of seconds have elapsed.
   with_legacy: true
 - name: osd_command_max_records
   type: int
@@ -5410,6 +5484,7 @@ options:
   type: int
   level: advanced
   default: 5
+  fmt_desc: How many operations logs to display at once.
   with_legacy: true
 - name: osd_backoff_on_unfound
   type: bool
@@ -5555,12 +5630,14 @@ options:
   type: uint
   level: advanced
   default: 20
+  fmt_desc: The maximum number of completed operations to track.
   with_legacy: true
 # Oldest completed op to track
 - name: osd_op_history_duration
   type: uint
   level: advanced
   default: 600
+  fmt_desc: The oldest completed operation to track.
   with_legacy: true
 # Max number of slow ops to track
 - name: osd_op_history_slow_op_size
@@ -5882,12 +5959,20 @@ options:
   type: uint
   level: advanced
   default: 63
+  fmt_desc: The priority set for client operations.  This value is relative
+    to that of ``osd_recovery_op_priority`` below.  The default
+    strongly favors client ops over recovery.
   with_legacy: true
 - name: osd_recovery_op_priority
   type: uint
   level: advanced
   desc: Priority to use for recovery operations if not specified for the pool
-  fmt_desc: Default priority used for recovery operations if pool doesn't override.
+  fmt_desc: The priority of recovery operations vs client operations, if not specified by the
+    pool's ``recovery_op_priority``.  The default value prioritizes client
+    ops (see above) over recovery ops.  You may adjust the tradeoff of client
+    impact against the time to restore cluster health by lowering this value
+    for increased prioritization of client ops, or by increasing it to favor
+    recovery.
   default: 3
   with_legacy: true
 - name: osd_peering_op_priority
@@ -5899,6 +5984,7 @@ options:
   type: uint
   level: advanced
   default: 5
+  fmt_desc: The priority set for the snap trim work queue.
   with_legacy: true
 - name: osd_snap_trim_cost
   type: size
@@ -5919,6 +6005,10 @@ options:
   type: uint
   level: advanced
   desc: Priority for scrub operations in work queue
+  fmt_desc: The default work queue priority for scheduled scrubs when the
+    pool doesn't specify a value of ``scrub_priority``.  This can be
+    boosted to the value of ``osd_client_op_priority`` when scrubs are
+    blocking client operations.
   default: 5
   with_legacy: true
 - name: osd_scrub_cost
@@ -5933,12 +6023,18 @@ options:
   type: uint
   level: advanced
   default: 120
+  fmt_desc: The priority set for user requested scrub on the work queue.  If
+    this value were to be smaller than ``osd_client_op_priority`` it
+    can be boosted to the value of ``osd_client_op_priority`` when
+    scrub is blocking client operations.
   with_legacy: true
 - name: osd_recovery_priority
   type: uint
   level: advanced
   desc: Priority of recovery in the work queue
   long_desc: Not related to a pool's recovery_priority
+  fmt_desc: The default priority set for recovery work queue.  Not
+    related to a pool's ``recovery_priority``.
   default: 5
   with_legacy: true
 # set default cost equal to 20MB io
