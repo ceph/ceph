@@ -3,14 +3,17 @@
 
 #pragma once
 
-#include <atomic>
-
 class FatalSignal {
 public:
   FatalSignal();
 
 private:
-  void signaled(int signum);
+  static void signaled(int signum);
   static void print_backtrace(int signum);
-  std::atomic<bool> handled = false;
+
+  template <int... SigNums>
+  void install_oneshot_signals_handler();
+
+  template <int SigNum>
+  void install_oneshot_signal_handler();
 };
