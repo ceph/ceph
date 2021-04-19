@@ -981,6 +981,17 @@ class DummyChildPool {
       });
     }
 
+    node_future<> fix_key(context_t c, const ghobject_t& new_key) {
+      const auto& keys = impl->get_keys();
+      ceph_assert(keys.size() == 1);
+      assert(impl->is_level_tail() == false);
+
+      std::set<ghobject_t> new_keys;
+      new_keys.insert(new_key);
+      impl->reset(new_keys, impl->is_level_tail());
+      return fix_parent_index<true>(c);
+    }
+
     bool match_pos(const search_position_t& pos) const {
       ceph_assert(!is_root());
       return pos == parent_info().position;
@@ -1113,15 +1124,8 @@ class DummyChildPool {
   seastar::future<> split_merge(ghobject_t key, search_position_t pos,
                                 const split_expectation_t& expected) {
     return seastar::async([this, key, pos, expected] {
-      // clone
       DummyChildPool pool_clone;
-      pool_clone_in_progress = &pool_clone;
-      auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
-      pool_clone.p_dummy = static_cast<DummyManager*>(ref_dummy.get());
-      pool_clone.p_btree.emplace(std::move(ref_dummy));
-      pool_clone.p_btree->test_clone_from(
-        pool_clone.t(), t(), *p_btree).unsafe_get0();
-      pool_clone_in_progress = nullptr;
+      clone_to(pool_clone);
 
       // insert and split
       logger().info("\n\nINSERT-SPLIT {} at pos({}):", key_hobj_t(key), pos);
@@ -1148,7 +1152,49 @@ class DummyChildPool {
     });
   }
 
+  seastar::future<> fix_index(
+      ghobject_t new_key, search_position_t pos, bool expect_split) {
+    return seastar::async([this, new_key, pos, expect_split] {
+      DummyChildPool pool_clone;
+      clone_to(pool_clone);
+
+      // fix
+      auto node_to_fix = pool_clone.get_node_by_pos(pos);
+      auto old_key = node_to_fix->get_pivot_key().to_ghobj();
+      logger().info("\n\nFIX pos({}) from {} to {}, expect_split={}:",
+                    pos, node_to_fix->get_name(), key_hobj_t(new_key), expect_split);
+      node_to_fix->fix_key(pool_clone.get_context(), new_key).unsafe_get0();
+      if (expect_split) {
+        std::ostringstream oss;
+        pool_clone.p_btree->dump(pool_clone.t(), oss);
+        logger().info("dump new root:\n{}", oss.str());
+        EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 3);
+        EXPECT_EQ(pool_clone.p_dummy->size(), 3);
+      } else {
+        EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 2);
+        EXPECT_EQ(pool_clone.p_dummy->size(), 1);
+      }
+
+      // fix back
+      logger().info("\n\nFIX pos({}) from {} back to {}:",
+                    pos, node_to_fix->get_name(), old_key);
+      node_to_fix->fix_key(pool_clone.get_context(), old_key).unsafe_get0();
+      EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 2);
+      EXPECT_EQ(pool_clone.p_dummy->size(), 1);
+    });
+  }
+
  private:
+  void clone_to(DummyChildPool& pool_clone) {
+    pool_clone_in_progress = &pool_clone;
+    auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
+    pool_clone.p_dummy = static_cast<DummyManager*>(ref_dummy.get());
+    pool_clone.p_btree.emplace(std::move(ref_dummy));
+    pool_clone.p_btree->test_clone_from(
+      pool_clone.t(), t(), *p_btree).unsafe_get0();
+    pool_clone_in_progress = nullptr;
+  }
+
   void reset() {
     ceph_assert(pool_clone_in_progress == nullptr);
     if (tracked_children.size()) {
@@ -1374,6 +1420,16 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
                        {1u, 0u, true, InsertType::LAST}).get();
       pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
                        {1u, 1u, true, InsertType::LAST}).get();
+
+      logger().info("\n---------------------------------------------"
+                    "\nfix end index from stage 0 to 0, 1, 2\n");
+      auto padding1 = std::string(400, '_');
+      pool.fix_index(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5),
+                     {2, {2, {2}}}, false).get();
+      pool.fix_index(make_ghobj(4, 4, 4, "ns5", "oid5" + padding1, 3, 3),
+                     {2, {2, {2}}}, true).get();
+      pool.fix_index(make_ghobj(5, 5, 5, "ns3", "oid3" + padding1, 3, 3),
+                     {2, {2, {2}}}, true).get();
     }
 
     {
@@ -1408,6 +1464,36 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
                     "\nsplit at stage 0; insert to right front at stage 0\n");
       pool.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 2, 3), {1, {1, {1}}},
                        {0u, 0u, false, InsertType::BEGIN}).get();
+
+      logger().info("\n---------------------------------------------"
+                    "\nfix end index from stage 2 to 0, 1, 2\n");
+      auto padding1 = std::string(400, '_');
+      pool.fix_index(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5),
+                     {3, {0, {0}}}, false).get();
+      pool.fix_index(make_ghobj(4, 4, 4, "ns5", "oid5" + padding1, 3, 3),
+                     {3, {0, {0}}}, true).get();
+      pool.fix_index(make_ghobj(5, 5, 5, "ns4", "oid4" + padding1, 3, 3),
+                     {3, {0, {0}}}, true).get();
+    }
+
+    {
+      logger().info("\n---------------------------------------------"
+                    "\nbefore internal node insert (7):\n");
+      auto padding = std::string(323, '_');
+      auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
+      keys.insert(make_ghobj(4, 4, 4, "ns5", "oid5" + padding, 3, 3));
+      keys.insert(make_ghobj(9, 9, 9, "ns~last", "oid~last", 9, 9));
+      pool.build_tree(keys).unsafe_get0();
+
+      logger().info("\n---------------------------------------------"
+                    "\nfix end index from stage 1 to 0, 1, 2\n");
+      auto padding1 = std::string(400, '_');
+      pool.fix_index(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5),
+                     {2, {3, {0}}}, false).get();
+      pool.fix_index(make_ghobj(4, 4, 4, "ns6", "oid6" + padding1, 3, 3),
+                     {2, {3, {0}}}, true).get();
+      pool.fix_index(make_ghobj(5, 5, 5, "ns3", "oid3" + padding1, 3, 3),
+                     {2, {3, {0}}}, true).get();
     }
 
     // Impossible to split at {0, 0, 0}
