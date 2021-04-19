@@ -3910,7 +3910,7 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
    *
    * [1] https://tracker.ceph.com/issues/49922
    */
-  if (_ino < MDS_INO_SYSTEM_BASE && _ino != CEPH_INO_ROOT) {
+  if (MDS_IS_PRIVATE_INO(_ino)) {
     respond_to_request(mdr, -CEPHFS_ESTALE);
     return;
   }
