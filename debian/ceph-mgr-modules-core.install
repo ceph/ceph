@@ -7,6 +7,7 @@ usr/share/ceph/mgr/insights
 usr/share/ceph/mgr/iostat
 usr/share/ceph/mgr/localpool
 usr/share/ceph/mgr/mirroring
+usr/share/ceph/mgr/nfs
 usr/share/ceph/mgr/orchestrator
 usr/share/ceph/mgr/osd_perf_query
 usr/share/ceph/mgr/osd_support
