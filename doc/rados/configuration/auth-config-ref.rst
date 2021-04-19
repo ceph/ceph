@@ -190,27 +190,27 @@ stores daemons keyrings inside their data directory. The default keyring
 locations, and the capabilities necessary for the daemon to function, are shown
 below.
 
-``ceph-mon``
+.. describe:: ceph-mon
 
 :Location: ``$mon_data/keyring``
 :Capabilities: ``mon 'allow *'``
 
-``ceph-osd``
+.. describe:: ceph-osd
 
 :Location: ``$osd_data/keyring``
 :Capabilities: ``mgr 'allow profile osd' mon 'allow profile osd' osd 'allow *'``
 
-``ceph-mds``
+.. describe:: ceph-mds
 
 :Location: ``$mds_data/keyring``
 :Capabilities: ``mds 'allow' mgr 'allow profile mds' mon 'allow profile mds' osd 'allow rwx'``
 
-``ceph-mgr``
+.. describe:: ceph-mgr
 
 :Location: ``$mgr_data/keyring``
 :Capabilities: ``mon 'allow profile mgr' mds 'allow *' osd 'allow *'``
 
-``radosgw``
+.. describe:: radosgw
 
 :Location: ``$rgw_data/keyring``
 :Capabilities: ``mon 'allow rwx' osd 'allow rwx'``
