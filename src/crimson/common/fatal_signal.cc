@@ -58,5 +58,4 @@ void FatalSignal::signaled(int signum)
     break;
   }
   signal(signum, SIG_DFL);
-  seastar::engine().exit(1);
 }
