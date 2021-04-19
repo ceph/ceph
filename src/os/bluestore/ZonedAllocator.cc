@@ -181,8 +181,6 @@ const std::set<uint64_t> *ZonedAllocator::get_zones_to_clean(void) {
 }
 
 bool ZonedAllocator::low_on_space(void) {
-  ldout(cct, 10) << __func__ << dendl;
-
   ceph_assert(zones_to_clean.empty());
 
   uint64_t conventional_size = first_seq_zone_num * zone_size;
@@ -195,16 +193,11 @@ bool ZonedAllocator::low_on_space(void) {
 		 << " free ratio is " << free_ratio << dendl;
 
    // TODO: make 0.25 tunable
-  if (free_ratio > 0.25) {
-    ldout(cct, 10) << __func__ << " no need to clean" << dendl;
-     return false;
-   }
-  ldout(cct, 10) << __func__<< " running out of free space!" << dendl;
-  return true;
+  return free_ratio <= 0.25;
 }
 
 void ZonedAllocator::find_zones_to_clean(void) {
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 40) << __func__ << dendl;
 
   if (num_zones_to_clean || !low_on_space())
     return;
