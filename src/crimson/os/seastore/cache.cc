@@ -86,12 +86,8 @@ void Cache::add_to_dirty(CachedExtentRef ref)
   dirty.push_back(*ref);
 }
 
-void Cache::remove_extent(CachedExtentRef ref)
+void Cache::remove_from_dirty(CachedExtentRef ref)
 {
-  logger().debug("remove_extent: {}", *ref);
-  assert(ref->is_valid());
-  extents.erase(*ref);
-
   if (ref->is_dirty()) {
     ceph_assert(ref->primary_ref_list_hook.is_linked());
     dirty.erase(dirty.s_iterator_to(*ref));
@@ -99,6 +95,14 @@ void Cache::remove_extent(CachedExtentRef ref)
   } else {
     ceph_assert(!ref->primary_ref_list_hook.is_linked());
   }
+}
+
+void Cache::remove_extent(CachedExtentRef ref)
+{
+  logger().debug("remove_extent: {}", *ref);
+  assert(ref->is_valid());
+  remove_from_dirty(ref);
+  extents.erase(*ref);
 }
 
 void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
@@ -255,9 +259,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   // invalidate now invalid blocks
   for (auto &i: t.retired_set) {
     logger().debug("try_construct_record: retiring {}", *i);
-    ceph_assert(i->is_valid());
-    remove_extent(i);
-    i->state = CachedExtent::extent_state_t::INVALID;
+    retire_extent(i);
   }
 
   record.extents.reserve(t.fresh_block_list.size());
