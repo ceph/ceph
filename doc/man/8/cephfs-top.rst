@@ -79,6 +79,14 @@ Descriptions of fields
 
    total size of write IOs
 
+.. describe:: rsp
+
+   speed of read IOs compared with the last refresh
+
+.. describe:: wsp
+
+   speed of write IOs compared with the last refresh
+
 
 Availability
 ============

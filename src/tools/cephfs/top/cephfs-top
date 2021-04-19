@@ -6,6 +6,7 @@ import curses
 import errno
 import json
 import signal
+import time
 
 from collections import OrderedDict
 from datetime import datetime
@@ -82,6 +83,10 @@ CLIENT_METADATA_VALID_METRICS_KEY = "valid_metrics"
 GLOBAL_METRICS_KEY = "global_metrics"
 GLOBAL_COUNTERS_KEY = "global_counters"
 
+last_time = time.time()
+last_read_size = {}
+last_write_size = {}
+
 
 def calc_perc(c):
     if c[0] == 0 and c[1] == 0:
@@ -96,6 +101,13 @@ def calc_lat(c):
 # in MB
 def calc_size(c):
     return round(c[1] / (1024 * 1024), 2)
+
+
+# in MB/s
+def calc_speed(size, duration):
+    if duration == 0:
+        return 0.0
+    return round(size / (duration * 1024 * 1024), 2)
 
 
 def wrap(s, sl):
@@ -224,6 +236,22 @@ class FSTop(object):
             # return empty string for none type
             return ''
 
+    def speed_items(self, item):
+        if item == "READ_IO_SIZES":
+            return "rsp"
+        if item == "WRITE_IO_SIZES":
+            return "wsp"
+        else:
+            # return empty string for none type
+            return ''
+
+    def speed_mtype(self, typ):
+        if typ == MetricType.METRIC_TYPE_SIZE:
+            return "(MB/s)"
+        else:
+            # return empty string for none type
+            return ''
+
     def refresh_top_line_and_build_coord(self):
         if self.topl is None:
             return
@@ -244,6 +272,16 @@ class FSTop(object):
             nlen = len(it) + len(ITEMS_PAD)
             x_coord_map[item] = (xp, nlen)
             xp += nlen
+
+            if item == "READ_IO_SIZES" or item == "WRITE_IO_SIZES":
+                it = f'{self.speed_items(item)}{self.speed_mtype(typ)}'
+                heading.append(it)
+                nlen = len(it) + len(ITEMS_PAD)
+                if item == "READ_IO_SIZES":
+                    x_coord_map["READ_IO_SPEED"] = (xp, nlen)
+                if item == "WRITE_IO_SIZES":
+                    x_coord_map["WRITE_IO_SPEED"] = (xp, nlen)
+                xp += nlen
 
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_END:
             heading.append(item)
@@ -268,6 +306,10 @@ class FSTop(object):
         return True
 
     def refresh_client(self, client_id, metrics, counters, client_meta, x_coord_map, y_coord):
+        global last_time
+        cur_time = time.time()
+        duration = cur_time - last_time
+        last_time = cur_time
         remaining_hlen = self.width - 1
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_START:
             coord = x_coord_map[item]
@@ -293,6 +335,7 @@ class FSTop(object):
                 return
 
         cidx = 0
+        client_id = x_coord_map[FS_TOP_MAIN_WINDOW_COL_CLIENT_ID]
         for item in counters:
             coord = x_coord_map[item]
             hlen = coord[1] - len(ITEMS_PAD)
@@ -302,7 +345,8 @@ class FSTop(object):
             else:
                 remaining_hlen -= coord[1]
             m = metrics[cidx]
-            typ = MAIN_WINDOW_TOP_LINE_METRICS[MGR_STATS_COUNTERS[cidx]]
+            key = MGR_STATS_COUNTERS[cidx]
+            typ = MAIN_WINDOW_TOP_LINE_METRICS[key]
             if item.lower() in client_meta.get(CLIENT_METADATA_VALID_METRICS_KEY, []):
                 if typ == MetricType.METRIC_TYPE_PERCENTAGE:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_perc(m)}', hlen)
@@ -310,6 +354,31 @@ class FSTop(object):
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_lat(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_SIZE:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_size(m)}', hlen)
+                    if remaining_hlen == 0:
+                        return
+                    if key == "READ_IO_SIZES":
+                        coord = x_coord_map["READ_IO_SPEED"]
+                    elif key == "WRITE_IO_SIZES":
+                        coord = x_coord_map["WRITE_IO_SPEED"]
+                    hlen = coord[1] - len(ITEMS_PAD)
+                    hlen = min(hlen, remaining_hlen)
+                    if remaining_hlen < coord[1]:
+                        remaining_hlen = 0
+                    else:
+                        remaining_hlen -= coord[1]
+                    if key == "READ_IO_SIZES":
+                        global last_read_size
+                        last_size = last_read_size.get(client_id, 0)
+                        size = m[1] - last_size
+                        last_read_size[client_id] = m[1]
+                    if key == "WRITE_IO_SIZES":
+                        global last_write_size
+                        last_size = last_write_size.get(client_id, 0)
+                        size = m[1] - last_size
+                        last_write_size[client_id] = m[1]
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       f'{calc_speed(size, duration)}',
+                                       hlen)
                 else:
                     # display 0th element from metric tuple
                     self.mainw.addnstr(y_coord, coord[0], f'{m[0]}', hlen)
