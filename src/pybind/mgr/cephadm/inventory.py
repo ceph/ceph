@@ -247,10 +247,10 @@ class HostCache():
 
     This is needed in order to deploy MONs. As this is mostly read-only.
 
-    4. `last_etc_ceph_ceph_conf` O(hosts)
+    4. `last_client_files` O(hosts)
 
-    Stores the last refresh time for the /etc/ceph/ceph.conf. Used
-    to avoid deploying new configs when failing over to a new mgr.
+    Stores the last digest and owner/mode for files we've pushed to /etc/ceph
+    (ceph.conf or client keyrings).
 
     5. `scheduled_daemon_actions`: O(daemons)
 
@@ -280,7 +280,7 @@ class HostCache():
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
         self.last_host_check = {}      # type: Dict[str, datetime.datetime]
         self.loading_osdspec_preview = set()  # type: Set[str]
-        self.last_etc_ceph_ceph_conf: Dict[str, datetime.datetime] = {}
+        self.last_client_files: Dict[str, Dict[str, Tuple[str, int, int, int]]] = {}
         self.registry_login_queue: Set[str] = set()
 
         self.scheduled_daemon_actions: Dict[str, Dict[str, str]] = {}
@@ -317,6 +317,7 @@ class HostCache():
                     self.devices[host].append(inventory.Device.from_json(d))
                 self.networks[host] = j.get('networks_and_interfaces', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
+                self.last_client_files[host] = j.get('last_client_files', {})
                 for name, ts in j.get('osdspec_last_applied', {}).items():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
@@ -327,9 +328,6 @@ class HostCache():
                     }
                 if 'last_host_check' in j:
                     self.last_host_check[host] = str_to_datetime(j['last_host_check'])
-                if 'last_etc_ceph_ceph_conf' in j:
-                    self.last_etc_ceph_ceph_conf[host] = str_to_datetime(
-                        j['last_etc_ceph_ceph_conf'])
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
 
@@ -394,6 +392,24 @@ class HostCache():
         # type: (str, str, datetime.datetime) -> None
         self.osdspec_last_applied[host][service_name] = ts
 
+    def update_client_file(self,
+                           host: str,
+                           path: str,
+                           digest: str,
+                           mode: int,
+                           uid: int,
+                           gid: int) -> None:
+        if host not in self.last_client_files:
+            self.last_client_files[host] = {}
+        self.last_client_files[host][path] = (digest, mode, uid, gid)
+
+    def removed_client_file(self, host: str, path: str) -> None:
+        if (
+            host in self.last_client_files
+            and path in self.last_client_files[host]
+        ):
+            del self.last_client_files[host][path]
+
     def prime_empty_host(self, host):
         # type: (str) -> None
         """
@@ -409,6 +425,7 @@ class HostCache():
         self.device_refresh_queue.append(host)
         self.osdspec_previews_refresh_queue.append(host)
         self.registry_login_queue.add(host)
+        self.last_client_files[host] = {}
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
@@ -464,8 +481,8 @@ class HostCache():
         if host in self.last_host_check:
             j['last_host_check'] = datetime_to_str(self.last_host_check[host])
 
-        if host in self.last_etc_ceph_ceph_conf:
-            j['last_etc_ceph_ceph_conf'] = datetime_to_str(self.last_etc_ceph_ceph_conf[host])
+        if host in self.last_client_files:
+            j['last_client_files'] = self.last_client_files[host]
         if host in self.scheduled_daemon_actions:
             j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
 
@@ -499,6 +516,8 @@ class HostCache():
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:
             del self.scheduled_daemon_actions[host]
+        if host in self.last_client_files:
+            del self.last_client_files[host]
         self.mgr.set_store(HOST_CACHE_PREFIX + host, None)
 
     def get_hosts(self):
@@ -582,6 +601,9 @@ class HostCache():
                     self.daemon_config_deps[host][name].get('last_config', None)
         return None, None
 
+    def get_host_client_files(self, host: str) -> Dict[str, Tuple[str, int, int, int]]:
+        return self.last_client_files.get(host, {})
+
     def host_needs_daemon_refresh(self, host):
         # type: (str) -> bool
         if host in self.mgr.offline_hosts:
@@ -648,24 +670,6 @@ class HostCache():
             seconds=self.mgr.host_check_interval)
         return host not in self.last_host_check or self.last_host_check[host] < cutoff
 
-    def host_needs_new_etc_ceph_ceph_conf(self, host: str) -> bool:
-        if not self.mgr.manage_etc_ceph_ceph_conf:
-            return False
-        if self.mgr.paused:
-            return False
-        if host in self.mgr.offline_hosts:
-            return False
-        if not self.mgr.last_monmap:
-            return False
-        if host not in self.last_etc_ceph_ceph_conf:
-            return True
-        if self.mgr.last_monmap > self.last_etc_ceph_ceph_conf[host]:
-            return True
-        if self.mgr.extra_ceph_conf_is_newer(self.last_etc_ceph_ceph_conf[host]):
-            return True
-        # already up to date:
-        return False
-
     def osdspec_needs_apply(self, host: str, spec: ServiceSpec) -> bool:
         if (
             host not in self.devices
@@ -679,11 +683,6 @@ class HostCache():
         if not created or created > self.last_device_change[host]:
             return True
         return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host]
-
-    def update_last_etc_ceph_ceph_conf(self, host: str) -> None:
-        if not self.mgr.last_monmap:
-            return
-        self.last_etc_ceph_ceph_conf[host] = datetime_now()
 
     def host_needs_registry_login(self, host: str) -> bool:
         if host in self.mgr.offline_hosts:
