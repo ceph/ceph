@@ -1356,12 +1356,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def add_host_label(self, host: str, label: str) -> str:
         self.inventory.add_label(host, label)
         self.log.info('Added label %s to host %s' % (label, host))
+        self._kick_serve_loop()
         return 'Added label %s to host %s' % (label, host)
 
     @handle_orch_error
     def remove_host_label(self, host: str, label: str) -> str:
         self.inventory.rm_label(host, label)
         self.log.info('Removed label %s to host %s' % (label, host))
+        self._kick_serve_loop()
         return 'Removed label %s from host %s' % (label, host)
 
     def _host_ok_to_stop(self, hostname: str, force: bool = False) -> Tuple[int, str]:
