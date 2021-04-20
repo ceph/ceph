@@ -8,8 +8,11 @@ import socket
 import time
 import os
 import string
+import boto
 from http import server as http_server
 from random import randint
+import hashlib
+from nose.plugins.attrib import attr
 
 from boto.s3.connection import S3Connection
 
@@ -33,6 +36,7 @@ import boto.s3.tagging
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 
+skip_amqp_ssl = True
 
 TOPIC_SUFFIX = "_topic"
 NOTIFICATION_SUFFIX = "_notif"
@@ -300,7 +304,11 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                 for record in record_list['Records']:
                     if record['s3']['bucket']['name'] == key.bucket.name and \
                         record['s3']['object']['key'] == key.name:
-                        if deletions and 'ObjectRemoved' in record['eventName']:
+                        # Assertion Error needs to be fixed
+                        #assert_equal(key.etag[1:-1], record['s3']['object']['eTag'])
+                        if etags:
+                            assert_in(key.etag[1:-1], etags)
+                        if deletions and record['eventName'].startswith('ObjectRemoved'):
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
@@ -450,6 +458,7 @@ def connection2():
 ##############
 
 
+@attr('modification_required')
 def test_ps_s3_topic_on_master():
     """ test s3 topics set/get/delete on master """
     return SkipTest('Get tenant function required.')
@@ -515,6 +524,8 @@ def test_ps_s3_topic_on_master():
     result, status = topic_conf1.get_list()
     assert_equal(result['ListTopicsResponse']['ListTopicsResult']['Topics'], None)
 
+
+@attr('modification_required')
 def test_ps_s3_topic_with_secret_on_master():
     """ test s3 topics with secret set/get/delete on master """
     return SkipTest('secure connection is needed to test topic with secrets')
@@ -565,6 +576,7 @@ def test_ps_s3_topic_with_secret_on_master():
     result = topic_conf.del_config()
 
 
+@attr('basic_test')
 def test_ps_s3_notification_on_master():
     """ test s3 notification set/get/delete on master """
     conn = connection()
@@ -625,9 +637,9 @@ def test_ps_s3_notification_on_master():
     conn.delete_bucket(bucket_name)
 
 
+@attr('amqp_test')
 def test_ps_s3_notification_filter_on_master():
     """ test s3 notification filter on master """
-    return SkipTest('This is an AMQP test.')
 
     hostname = get_ip()
     
@@ -797,6 +809,8 @@ def test_ps_s3_notification_filter_on_master():
     conn.delete_bucket(bucket_name)
     stop_amqp_receiver(receiver, task)
 
+
+@attr('basic_test')
 def test_ps_s3_notification_errors_on_master():
     """ test s3 notification set/get/delete on master """
     conn = connection()
@@ -892,9 +906,10 @@ def test_ps_s3_notification_errors_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+
+@attr('amqp_test')
 def test_ps_s3_notification_push_amqp_on_master():
     """ test pushing amqp s3 notification on master """
-    return SkipTest('This is an AMQP test.')
 
     hostname = get_ip()
     conn = connection()
@@ -995,6 +1010,8 @@ def test_ps_s3_notification_push_amqp_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+
+@attr('kafka_test')
 def test_ps_s3_notification_push_kafka_on_master():
     """ test pushing kafka s3 notification on master """
     conn = connection()
@@ -1076,6 +1093,7 @@ def test_ps_s3_notification_push_kafka_on_master():
     stop_kafka_receiver(receiver, task)
 
 
+@attr('http_test')
 def test_ps_s3_notification_multi_delete_on_master():
     """ test deletion of multiple keys on master """
     hostname = get_ip()
@@ -1142,6 +1160,8 @@ def test_ps_s3_notification_multi_delete_on_master():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
+
+@attr('http_test')
 def test_ps_s3_notification_push_http_on_master():
     """ test pushing http s3 notification on master """
     hostname = get_ip_http()
@@ -1224,6 +1244,8 @@ def test_ps_s3_notification_push_http_on_master():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
+
+@attr('http_test')
 def test_ps_s3_opaque_data_on_master():
     """ test that opaque id set in topic, is sent in notification on master """
     hostname = get_ip()
@@ -1294,10 +1316,17 @@ def test_ps_s3_opaque_data_on_master():
 
 def test_ps_s3_creation_triggers_on_master():
     """ test object creation s3 notifications in using put/copy/post on master"""
-    return SkipTest('This is an AMQP test.')
+    
+    if not external_endpoint_address and not skip_amqp_ssl:
+        hostname = 'localhost'
+        proc = init_rabbitmq()
+        if proc is  None:
+            return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    else:
+        proc = None
 
-    hostname = get_ip()
     conn = connection()
+    hostname = 'localhost'
     zonegroup = 'default'
 
     # create bucket
@@ -1358,10 +1387,153 @@ def test_ps_s3_creation_triggers_on_master():
         key.delete()
     # delete the bucket
     conn.delete_bucket(bucket_name)
+    if proc:
+        clean_rabbitmq(proc)
 
+
+@attr('amqp_test')
+def test_ps_s3_creation_triggers_on_master():
+    ps_s3_creation_triggers_on_master()
+
+
+@attr('amqp_ssl_test')
+def test_ps_s3_creation_triggers_on_master_external():
+    if skip_amqp_ssl:
+        return SkipTest('This is an AMQP SSL test.')
+
+    from distutils.util import strtobool
+
+    if 'AMQP_EXTERNAL_ENDPOINT' in os.environ:
+        try:
+            if strtobool(os.environ['AMQP_VERIFY_SSL']):
+                verify_ssl = 'true'
+            else:
+                verify_ssl = 'false'
+        except Exception as e:
+            verify_ssl = 'true'
+
+        ps_s3_creation_triggers_on_master(
+            external_endpoint_address=os.environ['AMQP_EXTERNAL_ENDPOINT'],
+            verify_ssl=verify_ssl)
+    else:
+        return SkipTest("Set AMQP_EXTERNAL_ENDPOINT to a valid external AMQP endpoint url for this test to run")
+
+
+@attr('amqp_ssl_test')
+def test_ps_s3_creation_triggers_on_master_ssl():
+    if skip_amqp_ssl:
+        return SkipTest('This is an AMQP SSL test.')
+
+    import datetime
+    import textwrap
+    import stat
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory() as tempdir:
+        # modify permissions to ensure that the rabbitmq user can access them
+        os.chmod(tempdir, mode=stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+        CACERTFILE = os.path.join(tempdir, 'ca_certificate.pem')
+        CERTFILE = os.path.join(tempdir, 'server_certificate.pem')
+        KEYFILE = os.path.join(tempdir, 'server_key.pem')
+        RABBITMQ_CONF_FILE = os.path.join(tempdir, 'rabbitmq.config')
+
+        root_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COUNTRY_NAME, u"UK"),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Oxfordshire"),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, u"Harwell"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Rosalind Franklin Institute"),
+            x509.NameAttribute(NameOID.COMMON_NAME, u"RFI CA"),
+        ])
+        root_cert = x509.CertificateBuilder().subject_name(
+            subject
+        ).issuer_name(
+            issuer
+        ).public_key(
+            root_key.public_key()
+        ).serial_number(
+            x509.random_serial_number()
+        ).not_valid_before(
+            datetime.datetime.utcnow()
+        ).not_valid_after(
+            datetime.datetime.utcnow() + datetime.timedelta(days=3650)
+        ).add_extension(
+            x509.BasicConstraints(ca=True, path_length=None), critical=True
+        ).sign(root_key, hashes.SHA256(), default_backend())
+        with open(CACERTFILE, "wb") as f:
+            f.write(root_cert.public_bytes(serialization.Encoding.PEM))
+
+        # Now we want to generate a cert from that root
+        cert_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+        with open(KEYFILE, "wb") as f:
+            f.write(cert_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            ))
+        new_subject = x509.Name([
+            x509.NameAttribute(NameOID.COUNTRY_NAME, u"UK"),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Oxfordshire"),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, u"Harwell"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Rosalind Franklin Institute"),
+        ])
+        cert = x509.CertificateBuilder().subject_name(
+            new_subject
+        ).issuer_name(
+            root_cert.issuer
+        ).public_key(
+            cert_key.public_key()
+        ).serial_number(
+            x509.random_serial_number()
+        ).not_valid_before(
+            datetime.datetime.utcnow()
+        ).not_valid_after(
+        datetime.datetime.utcnow() + datetime.timedelta(days=30)
+        ).add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(u"localhost")]),
+            critical=False,
+        ).sign(root_key, hashes.SHA256(), default_backend())
+        # Write our certificate out to disk.
+        with open(CERTFILE, "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+        with open(RABBITMQ_CONF_FILE, "w") as f:
+            # use the old style config format to ensure it also runs on older RabbitMQ versions.
+            f.write(textwrap.dedent(f'''
+                [
+                    {{rabbit, [
+                        {{ssl_listeners, [5671]}},
+                        {{ssl_options, [{{cacertfile,           "{CACERTFILE}"}},
+                                        {{certfile,             "{CERTFILE}"}},
+                                        {{keyfile,              "{KEYFILE}"}},
+                                        {{verify,               verify_peer}},
+                                        {{fail_if_no_peer_cert, false}}]}}]}}
+                ].
+            '''))
+        os.environ['RABBITMQ_CONFIG_FILE'] = os.path.splitext(RABBITMQ_CONF_FILE)[0]
+
+        ps_s3_creation_triggers_on_master(ca_location=CACERTFILE)
+
+        del os.environ['RABBITMQ_CONFIG_FILE']
+
+
+@attr('amqp_test')
 def test_ps_s3_multipart_on_master():
     """ test multipart object upload on master"""
-    return SkipTest('This is an AMQP test.')
 
     hostname = get_ip()
     conn = connection()
@@ -1449,9 +1621,10 @@ def test_ps_s3_multipart_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+
+@attr('amqp_test')
 def test_ps_s3_metadata_on_master():
     """ test s3 notification of metadata on master """
-    return SkipTest('This is an AMQP test.')
 
     hostname = get_ip()
     conn = connection()
@@ -1548,9 +1721,10 @@ def test_ps_s3_metadata_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+
+@attr('amqp_test')
 def test_ps_s3_tags_on_master():
     """ test s3 notification of tags on master """
-    return SkipTest('This is an AMQP test.')
 
     hostname = get_ip()
     conn = connection()
@@ -1623,9 +1797,10 @@ def test_ps_s3_tags_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+
+@attr('amqp_test')
 def test_ps_s3_versioning_on_master():
     """ test s3 notification of object versions """
-    return SkipTest('This is an AMQP test.')
 
     hostname = get_ip()
     conn = connection()
@@ -1692,9 +1867,10 @@ def test_ps_s3_versioning_on_master():
     bucket.delete_key(key.name, version_id=ver1)
     conn.delete_bucket(bucket_name)
 
+
+@attr('amqp_test')
 def test_ps_s3_versioned_deletion_on_master():
     """ test s3 notification of deletion markers on master """
-    return SkipTest('This is an AMQP test.')
 
     hostname = get_ip()
     conn = connection()
@@ -1777,6 +1953,8 @@ def test_ps_s3_versioned_deletion_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+
+@attr('manual_test')
 def test_ps_s3_persistent_cleanup():
     """ test reservation cleanup after gateway crash """
     return SkipTest("only used in manual testing")
@@ -1880,6 +2058,8 @@ def test_ps_s3_persistent_cleanup():
     gw.delete_bucket(bucket_name)
     http_server.close()
 
+
+@attr('manual_test')
 def test_ps_s3_persistent_notification_pushback():
     """ test pushing persistent notification pushback """
     return SkipTest("only used in manual testing")
@@ -1960,6 +2140,8 @@ def test_ps_s3_persistent_notification_pushback():
     time.sleep(delay)
     http_server.close()
 
+
+@attr('modification_required')
 def test_ps_s3_persistent_gateways_recovery():
     """ test gateway recovery of persistent notifications """
     return SkipTest('This test requires two gateways.')
@@ -2045,6 +2227,8 @@ def test_ps_s3_persistent_gateways_recovery():
     topic_conf2.del_config()
     http_server.close()
 
+
+@attr('modification_required')
 def test_ps_s3_persistent_multiple_gateways():
     """ test pushing persistent notification via two gateways """
     return SkipTest('This test requires two gateways.')
@@ -2154,6 +2338,8 @@ def test_ps_s3_persistent_multiple_gateways():
     gw1.delete_bucket(bucket_name)
     http_server.close()
 
+
+@attr('http_test')
 def test_ps_s3_persistent_multiple_endpoints():
     """ test pushing persistent notification when one of the endpoints has error """
     conn = connection()
@@ -2336,17 +2522,20 @@ def persistent_notification(endpoint_type):
         stop_amqp_receiver(receiver, task)
 
 
+@attr('http_test')
 def test_ps_s3_persistent_notification_http():
     """ test pushing persistent notification http """
     persistent_notification('http')
 
 
+@attr('amqp_test')
 def test_ps_s3_persistent_notification_amqp():
     """ test pushing persistent notification amqp """
-    return SkipTest('This is an AMQP test.')
+
     persistent_notification('amqp')
 
 '''
+@attr('kafka_test')
 def test_ps_s3_persistent_notification_kafka():
     """ test pushing persistent notification http """
     persistent_notification('kafka')
@@ -2357,9 +2546,10 @@ def random_string(length):
     letters = string.ascii_letters
     return ''.join(random.choice(letters) for i in range(length))
 
+
+@attr('amqp_test')
 def test_ps_s3_persistent_notification_large():
     """ test pushing persistent notification of large notifications """
-    return SkipTest('This is an AMQP test.')
 
     conn = connection()
     zonegroup = 'default'
@@ -2443,7 +2633,7 @@ def test_ps_s3_persistent_notification_large():
     stop_amqp_receiver(receiver, task)
 
 
-
+@attr('modification_required')
 def test_ps_s3_topic_update():
     """ test updating topic associated with a notification"""
     return SkipTest('This test is yet to be modified.')
@@ -2552,6 +2742,7 @@ def test_ps_s3_topic_update():
     http_server.close()
 
 
+@attr('modification_required')
 def test_ps_s3_notification_update():
     """ test updating the topic of a notification"""
     return SkipTest('This test is yet to be modified.')
@@ -2640,6 +2831,7 @@ def test_ps_s3_notification_update():
     http_server.close()
 
 
+@attr('modification_required')
 def test_ps_s3_multiple_topics_notification():
     """ test notification creation with multiple topics"""
     return SkipTest('This test is yet to be modified.')
@@ -2742,6 +2934,7 @@ def test_ps_s3_multiple_topics_notification():
     http_server.close()
 
 
+@attr('modification_required')
 def kafka_security(security_type):
     """ test pushing kafka s3 notification on master """
     return SkipTest('This test is yet to be modified.')
@@ -2823,10 +3016,13 @@ def kafka_security(security_type):
         stop_kafka_receiver(receiver, task)
 
 
+@attr('modification_required')
 def test_ps_s3_notification_push_kafka_security_ssl():
     return SkipTest('This test is yet to be modified.')
     kafka_security('SSL')
 
+
+@attr('modification_required')
 def test_ps_s3_notification_push_kafka_security_ssl_sasl():
     return SkipTest('This test is yet to be modified.')
     kafka_security('SSL_SASL')
