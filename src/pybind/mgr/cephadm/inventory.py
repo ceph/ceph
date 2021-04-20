@@ -82,6 +82,12 @@ class Inventory:
             self._inventory[host]['labels'].remove(label)
         self.save()
 
+    def has_label(self, host: str, label: str) -> bool:
+        return (
+            host in self._inventory
+            and label in self._inventory[host].get('labels', [])
+        )
+
     def get_addr(self, host: str) -> str:
         self.assert_host(host)
         return self._inventory[host].get('addr', host)
