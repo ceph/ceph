@@ -1,3 +1,4 @@
+import errno
 import json
 import uuid
 from io import StringIO
@@ -213,6 +214,170 @@ class TestFsNew(TestAdminCommands):
                 pool_names[i], 'cephfs', keys[i], fs_name)
 
 
+class TestRenameCommand(TestAdminCommands):
+    """
+    Tests for rename command.
+    """
+
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 2
+
+    def test_fs_rename(self):
+        """
+        That the file system can be renamed, and the application metadata set on its pools are as expected.
+        """
+        # Renaming the file system breaks this mount as the client uses
+        # file system specific authorization. The client cannot read
+        # or write even if the client's cephx ID caps are updated to access
+        # the new file system name without the client being unmounted and
+        # re-mounted.
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+        client_id = 'test_new_cephfs'
+
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+
+        # authorize a cephx ID access to the renamed file system.
+        # use the ID to write to the file system.
+        self.fs.name = new_fs_name
+        keyring = self.fs.authorize(client_id, ('/', 'rw'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/',
+                             cephfs_name=self.fs.name)
+        filedata, filename = 'some data on fs', 'file_on_fs'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_data_pool_name(), 'cephfs', 'data', new_fs_name)
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_metadata_pool_name(), 'cephfs', 'metadata', new_fs_name)
+
+        # cleanup
+        self.mount_a.umount_wait()
+        self.run_cluster_cmd(f'auth rm client.{client_id}')
+
+    def test_fs_rename_idempotency(self):
+        """
+        That the file system rename operation is idempotent.
+        """
+        # Renaming the file system breaks this mount as the client uses
+        # file system specific authorization.
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+
+        # original file system name does not appear in `fs ls` command
+        self.assertFalse(self.fs.exists())
+        self.fs.name = new_fs_name
+        self.assertTrue(self.fs.exists())
+
+    def test_fs_rename_fs_new_fails_with_old_fsname_existing_pools(self):
+        """
+        That after renaming a file system, creating a file system with
+        old name and existing FS pools fails.
+        """
+        # Renaming the file system breaks this mount as the client uses
+        # file system specific authorization.
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+        data_pool = self.fs.get_data_pool_name()
+        metadata_pool = self.fs.get_metadata_pool_name()
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+
+        try:
+            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool}")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                "invalid error code on creating a new file system with old "
+                "name and existing pools.")
+        else:
+            self.fail("expected creating new file system with old name and "
+                      "existing pools to fail.")
+
+        try:
+            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} --force")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EEXIST,
+                "invalid error code on creating a new file system with old "
+                "name, existing pools and --force flag.")
+        else:
+            self.fail("expected creating new file system with old name, "
+                      "existing pools, and --force flag to fail.")
+
+        try:
+            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} "
+                                 "--allow-dangerous-metadata-overlay")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                "invalid error code on creating a new file system with old name, "
+                "existing pools and --allow-dangerous-metadata-overlay flag.")
+        else:
+            self.fail("expected creating new file system with old name, "
+                      "existing pools, and --allow-dangerous-metadata-overlay flag to fail.")
+
+    def test_fs_rename_fails_without_yes_i_really_mean_it_flag(self):
+        """
+        That renaming a file system without '--yes-i-really-mean-it' flag fails.
+        """
+        try:
+            self.run_cluster_cmd(f"fs rename {self.fs.name} new_fs")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM,
+                "invalid error code on renaming a file system without the  "
+                "'--yes-i-really-mean-it' flag")
+        else:
+            self.fail("expected renaming of file system without the "
+                      "'--yes-i-really-mean-it' flag to fail ")
+
+    def test_fs_rename_fails_for_non_existent_fs(self):
+        """
+        That renaming a non-existent file system fails.
+        """
+        try:
+            self.run_cluster_cmd("fs rename non_existent_fs new_fs --yes-i-really-mean-it")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on renaming a non-existent fs")
+        else:
+            self.fail("expected renaming of a non-existent file system to fail")
+
+    def test_fs_rename_fails_new_name_already_in_use(self):
+        """
+        That renaming a file system fails if the new name refers to an existing file system.
+        """
+        self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
+
+        try:
+            self.run_cluster_cmd(f"fs rename {self.fs.name} {self.fs2.name} --yes-i-really-mean-it")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                             "invalid error code on renaming to a fs name that is already in use")
+        else:
+            self.fail("expected renaming to a new file system name that is already in use to fail.")
+
+    def test_fs_rename_fails_with_mirroring_enabled(self):
+        """
+        That renaming a file system fails if mirroring is enabled on it.
+        """
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+
+        self.run_cluster_cmd(f'fs mirror enable {orig_fs_name}')
+        try:
+            self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM, "invalid error code on renaming a mirrored file system")
+        else:
+            self.fail("expected renaming of a mirrored file system to fail")
+        self.run_cluster_cmd(f'fs mirror disable {orig_fs_name}')
+
+
 class TestRequiredClientFeatures(CephFSTestCase):
     CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 1
@@ -283,6 +448,7 @@ class TestRequiredClientFeatures(CephFSTestCase):
         self.fs.required_client_features('add', '1')
         p = self.fs.required_client_features('rm', '1', stderr=StringIO())
         self.assertIn("removed feature 'reserved' from required_client_features", p.stderr.getvalue())
+
 
 class TestConfigCommands(CephFSTestCase):
     """
@@ -596,6 +762,7 @@ class TestFsAuthorize(CapsHelper):
         mounts = (self.mount_a, )
 
         return filepaths, filedata, mounts, keyring
+
 
 class TestAdminCommandIdempotency(CephFSTestCase):
     """
