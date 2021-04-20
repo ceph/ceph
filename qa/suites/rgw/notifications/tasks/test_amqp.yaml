@@ -1,9 +1,8 @@
 tasks:
-- kafka:
+- rabbitmq:
     client.0:
-      kafka_version: 2.6.0
 - notification-tests:
     client.0:
       force-branch: master
-      extra_attr: ["kafka_test"]
+      extra_attr: ["amqp_test"]
       rgw_server: client.0
