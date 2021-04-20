@@ -953,13 +953,6 @@ void RadosStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
     user_quota = svc()->quota->get_user_quota();
 }
 
-int RadosStore::list_raw_objects(const rgw_pool& pool, const std::string& prefix_filter,
-				    int max, RGWListRawObjsCtx& ctx, list<std::string>& oids,
-				    bool* is_truncated)
-{
-    return rados->list_raw_objects(pool, prefix_filter, max, ctx, oids, is_truncated);
-}
-
 int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled)
 {
     return rados->set_buckets_enabled(buckets, enabled, dpp);
@@ -1004,33 +997,6 @@ int RadosStore::get_config_key_val(std::string name, bufferlist* bl)
   return svc()->config_key->get(name, true, bl);
 }
 
-int RadosStore::put_system_obj(const rgw_pool& pool, const std::string& oid,
-				  bufferlist& data, bool exclusive,
-				  RGWObjVersionTracker* objv_tracker, real_time set_mtime,
-				  optional_yield y, map<std::string, bufferlist>* pattrs)
-{
-  auto obj_ctx = svc()->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, pool, oid, data, exclusive, objv_tracker, set_mtime, y, pattrs);
-}
-
-int RadosStore::get_system_obj(const DoutPrefixProvider* dpp,
-				  const rgw_pool& pool, const std::string& key,
-				  bufferlist& bl,
-				  RGWObjVersionTracker* objv_tracker, real_time* pmtime,
-				  optional_yield y, map<std::string, bufferlist>* pattrs,
-				  rgw_cache_entry_info* cache_info,
-				  boost::optional<obj_version> refresh_version)
-{
-  auto obj_ctx = svc()->sysobj->init_obj_ctx();
-  return rgw_get_system_obj(obj_ctx, pool, key, bl, objv_tracker, pmtime, y, dpp, pattrs, cache_info, refresh_version);
-}
-
-int RadosStore::delete_system_obj(const rgw_pool& pool, const std::string& oid,
-				     RGWObjVersionTracker* objv_tracker, optional_yield y)
-{
-    return rgw_delete_system_obj(svc()->sysobj, pool, oid, objv_tracker, y);
-}
-
 int RadosStore::meta_list_keys_init(const std::string& section, const std::string& marker, void** phandle)
 {
   return ctl()->meta.mgr->list_keys_init(section, marker, phandle);
@@ -1060,6 +1026,136 @@ void RadosStore::finalize(void)
 {
   if (rados)
     rados->finalize();
+}
+
+std::unique_ptr<LuaScriptManager> RadosStore::get_lua_script_manager()
+{
+  return std::unique_ptr<LuaScriptManager>(new RadosLuaScriptManager(this));
+}
+
+std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
+					      std::string tenant,
+					      std::string path,
+					      std::string trust_policy,
+					      std::string max_session_duration_str)
+{
+  return std::unique_ptr<RGWRole>(new RadosRole(this, name, tenant, path, trust_policy, max_session_duration_str));
+}
+
+std::unique_ptr<RGWRole> RadosStore::get_role(std::string id)
+{
+  return std::unique_ptr<RGWRole>(new RadosRole(this, id));
+}
+
+int RadosStore::get_roles(const DoutPrefixProvider *dpp,
+			  optional_yield y,
+			  const std::string& path_prefix,
+			  const std::string& tenant,
+			  vector<std::unique_ptr<RGWRole>>& roles)
+{
+  auto pool = get_zone()->get_params().roles_pool;
+  std::string prefix;
+
+  // List all roles if path prefix is empty
+  if (! path_prefix.empty()) {
+    prefix = tenant + RGWRole::role_path_oid_prefix + path_prefix;
+  } else {
+    prefix = tenant + RGWRole::role_path_oid_prefix;
+  }
+
+  //Get the filtered objects
+  list<std::string> result;
+  bool is_truncated;
+  RGWListRawObjsCtx ctx;
+  do {
+    list<std::string> oids;
+    int r = rados->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: "
+                  << prefix << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    for (const auto& iter : oids) {
+      result.push_back(iter.substr(RGWRole::role_path_oid_prefix.size()));
+    }
+  } while (is_truncated);
+
+  for (const auto& it : result) {
+    //Find the role oid prefix from the end
+    size_t pos = it.rfind(RGWRole::role_oid_prefix);
+    if (pos == std::string::npos) {
+        continue;
+    }
+    // Split the result into path and info_oid + id
+    std::string path = it.substr(0, pos);
+
+    /*Make sure that prefix is part of path (False results could've been returned)
+      because of the role info oid + id appended to the path)*/
+    if(path_prefix.empty() || path.find(path_prefix) != std::string::npos) {
+      //Get id from info oid prefix + id
+      std::string id = it.substr(pos + RGWRole::role_oid_prefix.length());
+
+      std::unique_ptr<rgw::sal::RGWRole> role = get_role(id);
+      int ret = role->read_info(dpp, y);
+      if (ret < 0) {
+        return ret;
+      }
+      roles.push_back(std::move(role));
+    }
+  }
+
+  return 0;
+}
+
+std::unique_ptr<RGWOIDCProvider> RadosStore::get_oidc_provider()
+{
+  return std::unique_ptr<RGWOIDCProvider>(new RadosOIDCProvider(this));
+}
+
+int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
+				   const std::string& tenant,
+				   vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+{
+  std::string prefix = tenant + RGWOIDCProvider::oidc_url_oid_prefix;
+  auto pool = zone.get_params().oidc_pool;
+  auto obj_ctx = svc()->sysobj->init_obj_ctx();
+
+  //Get the filtered objects
+  list<std::string> result;
+  bool is_truncated;
+  RGWListRawObjsCtx ctx;
+  do {
+    list<std::string> oids;
+    int r = rados->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: OIDC pool: "
+                  << pool.name << ": " << prefix << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    for (const auto& iter : oids) {
+      std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = get_oidc_provider();
+      bufferlist bl;
+
+      r = rgw_get_system_obj(obj_ctx, pool, iter, bl, nullptr, nullptr, null_yield, dpp);
+      if (r < 0) {
+        return r;
+      }
+
+      try {
+        using ceph::decode;
+        auto iter = bl.cbegin();
+        decode(*provider, iter);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: "
+	  << pool.name << ": " << iter << dendl;
+        return -EIO;
+      }
+
+      providers.push_back(std::move(provider));
+    }
+  } while (is_truncated);
+
+  return 0;
 }
 
 int RadosStore::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx* ioctx)
@@ -1928,6 +2024,359 @@ const std::string& RadosZone::get_current_period_id()
 {
   return store->svc()->zone->get_current_period_id();
 }
+
+int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  bufferlist bl;
+
+  int r = rgw_get_system_obj(obj_ctx, pool, key, bl, nullptr, nullptr, y, dpp);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    ceph::decode(script, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosLuaScriptManager::put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  bufferlist bl;
+  ceph::encode(script, bl);
+
+  int r = rgw_put_system_obj(obj_ctx, pool, key, bl, false, nullptr, real_time(), y);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RadosLuaScriptManager::del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+{
+  int r = rgw_delete_system_obj(store->svc()->sysobj, pool, key, nullptr, y);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  std::string oid = tenant + get_url_oid_prefix() + url;
+
+  bufferlist bl;
+  using ceph::encode;
+  encode(*this, bl);
+  return rgw_put_system_obj(obj_ctx, store->get_zone()->get_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
+}
+
+int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto& pool = store->get_zone()->get_params().oidc_pool;
+  std::string oid = tenant + get_url_oid_prefix() + url;
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  try {
+    using ceph::decode;
+    auto iter = bl.cbegin();
+    decode(*this, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
+                  ": " << url << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosOIDCProvider::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  auto& pool = store->get_zone()->get_params().oidc_pool;
+
+  std::string url, tenant;
+  auto ret = get_tenant_url_from_arn(tenant, url);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to parse arn" << dendl;
+    return -EINVAL;
+  }
+
+  if (this->tenant != tenant) {
+    ldpp_dout(dpp, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
+                  << tenant << ": " << dendl;
+    return -EINVAL;
+  }
+
+  // Delete url
+  std::string oid = tenant + get_url_oid_prefix() + url;
+  ret = rgw_delete_system_obj(store->svc()->sysobj, pool, oid, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
+                  << provider_url << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
+}
+
+int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  using ceph::encode;
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  std::string oid = get_info_oid_prefix() + id;
+
+  bufferlist bl;
+  encode(*this, bl);
+
+  return rgw_put_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+}
+
+int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  RGWNameToId nameToId;
+  nameToId.obj_id = id;
+
+  std::string oid = tenant + get_names_oid_prefix() + name;
+
+  bufferlist bl;
+  using ceph::encode;
+  encode(nameToId, bl);
+
+  return rgw_put_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+}
+
+int RadosRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  std::string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
+
+  bufferlist bl;
+
+  return rgw_put_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+}
+
+int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  std::string oid = tenant + get_names_oid_prefix() + role_name;
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWNameToId nameToId;
+  try {
+    auto iter = bl.cbegin();
+    using ceph::decode;
+    decode(nameToId, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode role from Role pool: " << role_name << dendl;
+    return -EIO;
+  }
+  role_id = nameToId.obj_id;
+  return 0;
+}
+
+int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  std::string oid = tenant + get_names_oid_prefix() + name;
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed reading role name from Role pool: " << name <<
+      ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  RGWNameToId nameToId;
+  try {
+    using ceph::decode;
+    auto iter = bl.cbegin();
+    decode(nameToId, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode role name from Role pool: " << name << dendl;
+    return -EIO;
+  }
+  id = nameToId.obj_id;
+  return 0;
+}
+
+int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  std::string oid = get_info_oid_prefix() + id;
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  try {
+    using ceph::decode;
+    auto iter = bl.cbegin();
+    decode(*this, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode role info from Role pool: " << id << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  int ret;
+
+  if (! validate_input(dpp)) {
+    return -EINVAL;
+  }
+
+  /* check to see the name is not used */
+  ret = read_id(dpp, name, tenant, id, y);
+  if (exclusive && ret == 0) {
+    ldpp_dout(dpp, 0) << "ERROR: name " << name << " already in use for role id "
+                    << id << dendl;
+    return -EEXIST;
+  } else if ( ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "failed reading role id  " << id << ": "
+                  << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  /* create unique id */
+  uuid_d new_uuid;
+  char uuid_str[37];
+  new_uuid.generate_random();
+  new_uuid.print(uuid_str);
+  id = uuid_str;
+
+  //arn
+  arn = role_arn_prefix + tenant + ":role" + path + name;
+
+  // Creation time
+  real_clock::time_point t = real_clock::now();
+
+  struct timeval tv;
+  real_clock::to_timeval(t, tv);
+
+  char buf[30];
+  struct tm result;
+  gmtime_r(&tv.tv_sec, &result);
+  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
+  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
+  creation_date.assign(buf, strlen(buf));
+
+  auto& pool = store->get_zone()->get_params().roles_pool;
+  ret = store_info(dpp, exclusive, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR:  storing role info in Role pool: "
+                  << id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = store_name(dpp, exclusive, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: storing role name in Role pool: "
+                  << name << ": " << cpp_strerror(-ret) << dendl;
+
+    //Delete the role info that was stored in the previous call
+    std::string oid = get_info_oid_prefix() + id;
+    int info_ret = rgw_delete_system_obj(store->svc()->sysobj, pool, oid, nullptr, y);
+    if (info_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from Role pool: "
+                  << id << ": " << cpp_strerror(-info_ret) << dendl;
+    }
+    return ret;
+  }
+
+  ret = store_path(dpp, exclusive, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: storing role path in Role pool: "
+                  << path << ": " << cpp_strerror(-ret) << dendl;
+    //Delete the role info that was stored in the previous call
+    std::string oid = get_info_oid_prefix() + id;
+    int info_ret = rgw_delete_system_obj(store->svc()->sysobj, pool, oid, nullptr, y);
+    if (info_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from Role pool: "
+                  << id << ": " << cpp_strerror(-info_ret) << dendl;
+    }
+    //Delete role name that was stored in previous call
+    oid = tenant + get_names_oid_prefix() + name;
+    int name_ret = rgw_delete_system_obj(store->svc()->sysobj, pool, oid, nullptr, y);
+    if (name_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role name from Role pool: "
+                  << name << ": " << cpp_strerror(-name_ret) << dendl;
+    }
+    return ret;
+  }
+  return 0;
+}
+
+int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  auto& pool = store->get_zone()->get_params().roles_pool;
+
+  int ret = read_name(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = read_info(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (! perm_policy_map.empty()) {
+    return -ERR_DELETE_CONFLICT;
+  }
+
+  // Delete id
+  std::string oid = get_info_oid_prefix() + id;
+  ret = rgw_delete_system_obj(store->svc()->sysobj, pool, oid, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting role id from Role pool: "
+                  << id << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  // Delete name
+  oid = tenant + get_names_oid_prefix() + name;
+  ret = rgw_delete_system_obj(store->svc()->sysobj, pool, oid, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting role name from Role pool: "
+                  << name << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  // Delete path
+  oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
+  ret = rgw_delete_system_obj(store->svc()->sysobj, pool, oid, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting role path from Role pool: "
+                  << path << ": " << cpp_strerror(-ret) << dendl;
+  }
+  return ret;
+}
+
 
 } // namespace rgw::sal
 

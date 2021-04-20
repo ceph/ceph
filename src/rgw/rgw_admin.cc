@@ -1084,20 +1084,20 @@ static void show_policy_names(std::vector<string> policy_names, Formatter* forma
   formatter->flush(cout);
 }
 
-static void show_role_info(RGWRole& role, Formatter* formatter)
+static void show_role_info(rgw::sal::RGWRole* role, Formatter* formatter)
 {
   formatter->open_object_section("role");
-  role.dump(formatter);
+  role->dump(formatter);
   formatter->close_section();
   formatter->flush(cout);
 }
 
-static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
+static void show_roles_info(vector<std::unique_ptr<rgw::sal::RGWRole>>& roles, Formatter* formatter)
 {
   formatter->open_array_section("Roles");
   for (const auto& it : roles) {
     formatter->open_object_section("role");
-    it.dump(formatter);
+    it->dump(formatter);
     formatter->close_section();
   }
   formatter->close_section();
@@ -5798,12 +5798,12 @@ int main(int argc, const char **argv)
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, path, assume_role_doc, tenant);
-      ret = role.create(dpp(), true, null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant, path, assume_role_doc);
+      ret = role->create(dpp(), true, null_yield);
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role, formatter.get());
+      show_role_info(role.get(), formatter.get());
       return 0;
     }
   case OPT::ROLE_DELETE:
@@ -5812,8 +5812,8 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
-      ret = role.delete_obj(dpp(), null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      ret = role->delete_obj(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5826,12 +5826,12 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
-      ret = role.get(dpp(), null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role, formatter.get());
+      show_role_info(role.get(), formatter.get());
       return 0;
     }
   case OPT::ROLE_MODIFY:
@@ -5854,13 +5854,13 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      RGWRole role(g_ceph_context, store, role_name, tenant);
-      ret = role.get(dpp(), null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
-      role.update_trust_policy(assume_role_doc);
-      ret = role.update(null_yield);
+      role->update_trust_policy(assume_role_doc);
+      ret = role->update(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5869,8 +5869,8 @@ int main(int argc, const char **argv)
     }
   case OPT::ROLE_LIST:
     {
-      vector<RGWRole> result;
-      ret = RGWRole::get_roles_by_path_prefix(dpp(), store, g_ceph_context, path_prefix, tenant, result, null_yield);
+      vector<std::unique_ptr<rgw::sal::RGWRole>> result;
+      ret = store->get_roles(dpp(), null_yield, path_prefix, tenant, result);
       if (ret < 0) {
         return -ret;
       }
@@ -5902,13 +5902,13 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      RGWRole role(g_ceph_context, store, role_name, tenant);
-      ret = role.get(dpp(), null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
-      role.set_perm_policy(policy_name, perm_policy_doc);
-      ret = role.update(null_yield);
+      role->set_perm_policy(policy_name, perm_policy_doc);
+      ret = role->update(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5921,12 +5921,12 @@ int main(int argc, const char **argv)
         cerr << "ERROR: Role name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
-      ret = role.get(dpp(), null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
-      std::vector<string> policy_names = role.get_role_policy_names();
+      std::vector<string> policy_names = role->get_role_policy_names();
       show_policy_names(policy_names, formatter.get());
       return 0;
     }
@@ -5941,13 +5941,13 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
-      int ret = role.get(dpp(), null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      int ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
       string perm_policy;
-      ret = role.get_role_policy(policy_name, perm_policy);
+      ret = role->get_role_policy(dpp(), policy_name, perm_policy);
       if (ret < 0) {
         return -ret;
       }
@@ -5965,16 +5965,16 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
-      ret = role.get(dpp(), null_yield);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
-      ret = role.delete_policy(policy_name);
+      ret = role->delete_policy(dpp(), policy_name);
       if (ret < 0) {
         return -ret;
       }
-      ret = role.update(null_yield);
+      ret = role->update(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -9312,7 +9312,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
       return EINVAL;
     }
-    rc = rgw::lua::write_script(store, tenant, null_yield, script_ctx, script);
+    rc = rgw::lua::write_script(dpp(), store, tenant, null_yield, script_ctx, script);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
@@ -9352,7 +9352,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
       return EINVAL;
     }
-    const auto rc = rgw::lua::delete_script(store, tenant, null_yield, script_ctx);
+    const auto rc = rgw::lua::delete_script(dpp(), store, tenant, null_yield, script_ctx);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;
