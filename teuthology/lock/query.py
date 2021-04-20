@@ -5,6 +5,7 @@ import requests
 
 from teuthology import misc
 from teuthology.config import config
+from teuthology.contextutil import safe_while
 from teuthology.util.compat import urlencode
 
 
@@ -14,13 +15,15 @@ log = logging.getLogger(__name__)
 def get_status(name):
     name = misc.canonicalize_hostname(name, user=None)
     uri = os.path.join(config.lock_server, 'nodes', name, '')
-    response = requests.get(uri)
-    success = response.ok
-    if success:
-        return response.json()
+    with safe_while(
+            sleep=1, increment=0.5, action=f'get_status {name}') as proceed:
+        while proceed():
+            response = requests.get(uri)
+            if response.ok:
+                return response.json()
     log.warning(
         "Failed to query lock server for status of {name}".format(name=name))
-    return None
+    return dict()
 
 
 def get_statuses(machines):
@@ -59,14 +62,16 @@ def list_locks(keyed_by_name=False, **kwargs):
         if 'machine_type' in kwargs:
             kwargs['machine_type'] = kwargs['machine_type'].replace(',','|')
         uri += '?' + urlencode(kwargs)
-    try:
-        response = requests.get(uri)
-    except requests.ConnectionError:
-        success = False
-        log.exception("Could not contact lock server: %s", config.lock_server)
-    else:
-        success = response.ok
-    if success:
+    with safe_while(
+            sleep=1, increment=0.5, action='list_locks') as proceed:
+        while proceed():
+            try:
+                response = requests.get(uri)
+                if response.ok:
+                    break
+            except requests.ConnectionError:
+                log.exception("Could not contact lock server: %s, retrying...", config.lock_server)
+    if response.ok:
         if not keyed_by_name:
             return response.json()
         else:
@@ -122,7 +127,12 @@ def find_stale_locks(owner=None):
         (name, job_id) = description.split('/')[-2:]
         url = os.path.join(config.results_server, 'runs', name, 'jobs', job_id,
                            '')
-        resp = requests.get(url)
+        with safe_while(
+                sleep=1, increment=0.5, action='node_is_active') as proceed:
+            while proceed():
+                resp = requests.get(url)
+                if resp.ok:
+                    break
         if not resp.ok:
             return False
         job_info = resp.json()
