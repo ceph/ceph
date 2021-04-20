@@ -95,7 +95,7 @@ A sample python script to demonstrate the above is given below:
    sig = hmac.new(key, hmac_body, sha1).hexdigest()
    rest_uri = "{host}{path}?temp_url_sig={sig}&temp_url_expires={expires}".format(
 		host=host, path=path, sig=sig, expires=expires)
-   print rest_uri
+   print(rest_uri)
 
    # Example Output
    # https://objectstore.example.com/swift/v1/your-bucket/your-object?temp_url_sig=ff4657876227fc6025f04fcf1e82818266d022c6&temp_url_expires=1423200992
