@@ -34,7 +34,6 @@ Security fixes
   For more information, see :ref:`CVE-2021-20288`.
 
 
-
 v16.2.0 Pacific
 ===============
 
