@@ -77,8 +77,12 @@ TEST(LibCephFS, OpenEmptyComponent) {
 
   fd = ceph_open(cmount, c_path, O_RDONLY, 0666);
   ASSERT_LT(0, fd);
-
   ASSERT_EQ(0, ceph_close(cmount, fd));
+
+  // cleanup
+  ASSERT_EQ(0, ceph_unlink(cmount, c_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, c_dir));
+
   ceph_shutdown(cmount);
 }
 
@@ -479,6 +483,13 @@ TEST(LibCephFS, DirLs) {
   ASSERT_EQ(found, entries);
 
   ASSERT_EQ(ceph_closedir(cmount, ls_dir), 0);
+
+  // cleanup
+  for(i = 0; i < r; ++i) {
+    sprintf(bazstr, "%s/dirf%d", foostr, i);
+    ASSERT_EQ(0, ceph_unlink(cmount, bazstr));
+  }
+  ASSERT_EQ(0, ceph_rmdir(cmount, foostr));
 
   ceph_shutdown(cmount);
 }
