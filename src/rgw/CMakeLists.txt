@@ -1,7 +1,3 @@
-if(Boost_VERSION VERSION_GREATER_EQUAL 1.74)
-  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
-endif()
-
 add_custom_target(civetweb_h
   COMMAND ${CMAKE_COMMAND} -E make_directory
   "${CMAKE_BINARY_DIR}/src/include/civetweb"
@@ -141,6 +137,7 @@ set(librgw_common_srcs
   rgw_tag.cc
   rgw_tag_s3.cc
   rgw_tools.cc
+  rgw_log_backing.cc
   rgw_user.cc
   rgw_website.cc
   rgw_xml.cc

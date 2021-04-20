@@ -3668,7 +3668,10 @@ def prepare_ssh(
     host = get_hostname()
     logger.info('Adding host %s...' % host)
     try:
-        cli(['orch', 'host', 'add', host])
+        args = ['orch', 'host', 'add', host]
+        if ctx.mon_ip:
+            args.append(ctx.mon_ip)
+        cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
 
@@ -3831,8 +3834,6 @@ def finish_bootstrap_config(
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
 
-    host: Optional[str] = None
-
     if not ctx.output_config:
         ctx.output_config = os.path.join(ctx.output_dir, 'ceph.conf')
     if not ctx.output_keyring:
@@ -3987,7 +3988,6 @@ def command_bootstrap(ctx):
         is_available(ctx, 'mgr epoch %d' % epoch, mgr_has_latest_epoch)
 
     # ssh
-    host = None
     if not ctx.skip_ssh:
         prepare_ssh(ctx, cli, wait_for_mgr_restart)
 
@@ -4030,13 +4030,13 @@ def command_bootstrap(ctx):
                 if 'hostname:' in line:
                     line = line.replace('\n', '')
                     split = line.split(': ')
-                    if split[1] != host:
+                    if split[1] != hostname:
                         logger.info('Adding ssh key to %s' % split[1])
 
                         ssh_key = '/etc/ceph/ceph.pub'
                         if ctx.ssh_public_key:
                             ssh_key = ctx.ssh_public_key.name
-                        out, err, code = call_throws(ctx, ['ssh-copy-id', '-f', '-i', ssh_key, '%s@%s' % (ctx.ssh_user, split[1])])
+                        out, err, code = call_throws(ctx, ['sudo', '-u', ctx.ssh_user, 'ssh-copy-id', '-f', '-i', ssh_key, '-o StrictHostKeyChecking=no', '%s@%s' % (ctx.ssh_user, split[1])])
 
         mounts = {}
         mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:z'

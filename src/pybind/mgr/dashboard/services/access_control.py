@@ -208,67 +208,77 @@ class Role(object):
 # this roles cannot be deleted nor updated
 
 # admin role provides all permissions for all scopes
-ADMIN_ROLE = Role('administrator', 'Administrator', {
-    scope_name: Permission.all_permissions()
-    for scope_name in Scope.all_scopes()
-})
+ADMIN_ROLE = Role(
+    'administrator', 'allows full permissions for all security scopes', {
+        scope_name: Permission.all_permissions()
+        for scope_name in Scope.all_scopes()
+    })
 
 
 # read-only role provides read-only permission for all scopes
-READ_ONLY_ROLE = Role('read-only', 'Read-Only', {
-    scope_name: [_P.READ] for scope_name in Scope.all_scopes()
-    if scope_name != Scope.DASHBOARD_SETTINGS
-})
+READ_ONLY_ROLE = Role(
+    'read-only',
+    'allows read permission for all security scope except dashboard settings and config-opt', {
+        scope_name: [_P.READ] for scope_name in Scope.all_scopes()
+        if scope_name not in (Scope.DASHBOARD_SETTINGS, Scope.CONFIG_OPT)
+    })
 
 
 # block manager role provides all permission for block related scopes
-BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
-    Scope.RBD_IMAGE: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.POOL: [_P.READ],
-    Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+BLOCK_MGR_ROLE = Role(
+    'block-manager', 'allows full permissions for rbd-image, rbd-mirroring, and iscsi scopes', {
+        Scope.RBD_IMAGE: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.POOL: [_P.READ],
+        Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 # RadosGW manager role provides all permissions for block related scopes
-RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
-    Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+RGW_MGR_ROLE = Role(
+    'rgw-manager', 'allows full permissions for the rgw scope', {
+        Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 # Cluster manager role provides all permission for OSDs, Monitors, and
 # Config options
-CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
-    Scope.HOSTS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.OSD: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.MONITOR: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+CLUSTER_MGR_ROLE = Role(
+    'cluster-manager', """allows full permissions for the hosts, osd, mon, mgr,
+    and config-opt scopes""", {
+        Scope.HOSTS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.OSD: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.MONITOR: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 # Pool manager role provides all permissions for pool related scopes
-POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
-    Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+POOL_MGR_ROLE = Role(
+    'pool-manager', 'allows full permissions for the pool scope', {
+        Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 # CephFS manager role provides all permissions for CephFS related scopes
-CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
-    Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+CEPHFS_MGR_ROLE = Role(
+    'cephfs-manager', 'allows full permissions for the cephfs scope', {
+        Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
-GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
-    Scope.NFS_GANESHA: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.GRAFANA: [_P.READ],
-})
+GANESHA_MGR_ROLE = Role(
+    'ganesha-manager', 'allows full permissions for the nfs-ganesha scope', {
+        Scope.NFS_GANESHA: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.GRAFANA: [_P.READ],
+    })
 
 
 SYSTEM_ROLES = {
@@ -515,45 +525,6 @@ class AccessControlDB(object):
             version = cls.VERSION
         return "{}{}".format(cls.ACDB_CONFIG_KEY, version)
 
-    def check_and_update_db(self):
-        logger.debug("Checking for previews DB versions")
-
-        def check_migrate_v0_to_current():
-            # check if there is username/password from previous version
-            username = mgr.get_module_option('username', None)
-            password = mgr.get_module_option('password', None)
-            if username and password:
-                logger.debug("Found single user credentials: user=%s", username)
-                # found user credentials
-                user = self.create_user(username, "", None, None)
-                # password is already hashed, so setting manually
-                user.password = password
-                user.add_roles([ADMIN_ROLE])
-                self.save()
-
-        def check_migrate_v1_to_current():
-            # Check if version 1 exists in the DB and migrate it to current version
-            v1_db = mgr.get_store(self.accessdb_config_key(1))
-            if v1_db:
-                logger.debug("Found database v1 credentials")
-                v1_db = json.loads(v1_db)
-
-                for user, _ in v1_db['users'].items():
-                    v1_db['users'][user]['enabled'] = True
-                    v1_db['users'][user]['pwdExpirationDate'] = None
-                    v1_db['users'][user]['pwdUpdateRequired'] = False
-
-                self.roles = {rn: Role.from_dict(r) for rn, r in v1_db.get('roles', {}).items()}
-                self.users = {un: User.from_dict(u, dict(self.roles, **SYSTEM_ROLES))
-                              for un, u in v1_db.get('users', {}).items()}
-
-                self.save()
-            else:
-                # If version 1 does not exist, check if migration of VERSION "0" needs to be done
-                check_migrate_v0_to_current()
-
-        check_migrate_v1_to_current()
-
     @classmethod
     def load(cls):
         logger.info("Loading user roles DB version=%s", cls.VERSION)
@@ -562,8 +533,6 @@ class AccessControlDB(object):
         if json_db is None:
             logger.debug("No DB v%s found, creating new...", cls.VERSION)
             db = cls(cls.VERSION, {}, {})
-            # check if we can update from a previous version database
-            db.check_and_update_db()
             return db
 
         dict_db = json.loads(json_db)

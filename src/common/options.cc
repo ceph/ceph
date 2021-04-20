@@ -7439,17 +7439,15 @@ std::vector<Option> get_rgw_options() {
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
 
-   Option("rgw_data_log_backing", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("auto")
-    .set_enum_allowed( { "auto", "fifo", "omap" } )
-    .set_description("Backing store for the RGW data sync log")
+   Option("rgw_default_data_log_backing", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("fifo")
+    .set_enum_allowed( { "fifo", "omap" } )
+    .set_description("Default backing store for the RGW data sync log")
     .set_long_description(
         "Whether to use the older OMAP backing store or the high performance "
-	"FIFO based backing store. Auto uses whatever already exists "
-	"but will default to FIFO if there isn't an existing log. Either of "
-	"the explicit options will cause startup to fail if the other log is "
-	"still around."),
-   
+	"FIFO based backing store by default. This only covers the creation of "
+	"the log on startup if none exists."),
+
    Option("rgw_luarocks_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
      .set_flag(Option::FLAG_STARTUP)
 #ifdef WITH_RADOSGW_LUA_PACKAGES

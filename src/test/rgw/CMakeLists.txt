@@ -1,4 +1,3 @@
-
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # amqp mock library
   set(amqp_mock_src
@@ -211,6 +210,11 @@ add_ceph_test(test-ceph-diff-sorted.sh
 # unittest_cls_fifo_legacy
 add_executable(unittest_cls_fifo_legacy test_cls_fifo_legacy.cc)
 target_link_libraries(unittest_cls_fifo_legacy radostest-cxx ${UNITTEST_LIBS}
+  ${rgw_libs})
+
+# unittest_log_backing
+add_executable(unittest_log_backing test_log_backing.cc)
+target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
   ${rgw_libs})
 
 add_executable(unittest_rgw_lua test_rgw_lua.cc)

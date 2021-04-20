@@ -202,7 +202,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
                     int num_shards, utime_t interval)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       num_shards(num_shards), interval(interval),
-      lock_oid(store->svc()->datalog_rados->get_oid(0)),
+      lock_oid(store->svc()->datalog_rados->get_oid(0, 0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       last_trim(num_shards)
   {}
