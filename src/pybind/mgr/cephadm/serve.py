@@ -1144,6 +1144,24 @@ class CephadmServe:
             self.log.warning(msg)
             raise OrchestratorError(msg)
 
+    def _write_remote_file(self,
+                           host: str,
+                           path: str,
+                           content: bytes,
+                           mode: int,
+                           uid: int,
+                           gid: int) -> None:
+        with self._remote_connection(host) as tpl:
+            conn, connr = tpl
+            try:
+                errmsg = connr.write_file(path, content, mode, uid, gid)
+                if errmsg is not None:
+                    raise OrchestratorError(errmsg)
+            except Exception as e:
+                msg = f"Unable to write {host}:{path}: {e}"
+                self.log.warning(msg)
+                raise OrchestratorError(msg)
+
     @contextmanager
     def _remote_connection(self,
                            host: str,
