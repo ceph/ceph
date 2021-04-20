@@ -386,22 +386,10 @@ class CephadmServe:
         config = self.mgr.get_minimal_ceph_conf()
 
         try:
-            with self._remote_connection(host) as tpl:
-                conn, connr = tpl
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['mkdir', '-p', '/etc/ceph'])
-                if code:
-                    return f'failed to create /etc/ceph on {host}: {err}'
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['dd', 'of=/etc/ceph/ceph.conf'],
-                    stdin=config.encode('utf-8')
-                )
-                if code:
-                    return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
-                self.mgr.cache.update_last_etc_ceph_ceph_conf(host)
-                self.mgr.cache.save_host(host)
+            self._write_remote_file(host, '/etc/ceph/ceph.conf',
+                                    config.encode('utf-8'), 0o644, 0, 0)
+            self.mgr.cache.update_last_etc_ceph_ceph_conf(host)
+            self.mgr.cache.save_host(host)
         except OrchestratorError as e:
             return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
