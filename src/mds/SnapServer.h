@@ -119,7 +119,7 @@ public:
   void check_osd_map(bool force);
 
   void mark_base_recursively_scrubbed(inodeno_t ino) {
-    if (ino ==  MDS_INO_ROOT)
+    if (ino ==  CEPH_INO_ROOT)
       root_scrubbed = true;
     else if (ino == MDS_INO_MDSDIR(rank))
       mdsdir_scrubbed = true;

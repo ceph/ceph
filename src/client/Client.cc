@@ -132,7 +132,7 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 }
 
 bool Client::is_reserved_vino(vinodeno_t &vino) {
-  if (vino.ino < MDS_INO_SYSTEM_BASE && vino.ino != MDS_INO_ROOT) {
+  if (vino.ino < MDS_INO_SYSTEM_BASE && vino.ino != CEPH_INO_ROOT) {
     ldout(cct, -1) << __func__ << "attempt to access reserved inode number " << vino << dendl;
     return true;
   }
@@ -4338,7 +4338,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
         ++q;
 	if (dn->lru_is_expireable()) {
 	  if (can_invalidate_dentries &&
-	      dn->dir->parent_inode->ino == MDS_INO_ROOT) {
+	      dn->dir->parent_inode->ino == CEPH_INO_ROOT) {
 	    // Only issue one of these per DN for inodes in root: handle
 	    // others more efficiently by calling for root-child DNs at
 	    // the end of this function.
@@ -4351,10 +4351,10 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
 	  all = false;
         }
       }
-      if (in->ll_ref == 1 && in->ino != MDS_INO_ROOT) {
+      if (in->ll_ref == 1 && in->ino != CEPH_INO_ROOT) {
          _schedule_ino_release_callback(in.get());
       }
-      if (all && in->ino != MDS_INO_ROOT) {
+      if (all && in->ino != CEPH_INO_ROOT) {
         ldout(cct, 20) << __func__ << " counting as trimmed: " << *in << dendl;
 	trimmed++;
       }

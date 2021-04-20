@@ -23,6 +23,7 @@
 #include "include/compact_map.h"
 #include "include/compact_set.h"
 #include "include/fs_types.h"
+#include "include/ceph_fs.h"
 
 #include "inode_backtrace.h"
 
@@ -40,13 +41,7 @@
 #define MAX_MDS                   0x100
 #define NUM_STRAY                 10
 
-#define MDS_INO_ROOT              1
-
-// No longer created but recognised in existing filesystems
-// so that we don't try to fragment it.
-#define MDS_INO_CEPH              2
-
-#define MDS_INO_GLOBAL_SNAPREALM  3
+// Inode numbers 1,2 and 4 please see CEPH_INO_* in include/ceph_fs.h
 
 #define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
 #define MDS_INO_STRAY_OFFSET      (6*MAX_MDS)
@@ -65,7 +60,7 @@
 #define MDS_INO_IS_STRAY(i)  ((i) >= MDS_INO_STRAY_OFFSET  && (i) < (MDS_INO_STRAY_OFFSET+(MAX_MDS*NUM_STRAY)))
 #define MDS_INO_IS_MDSDIR(i) ((i) >= MDS_INO_MDSDIR_OFFSET && (i) < (MDS_INO_MDSDIR_OFFSET+MAX_MDS))
 #define MDS_INO_MDSDIR_OWNER(i) (signed ((unsigned (i)) - MDS_INO_MDSDIR_OFFSET))
-#define MDS_INO_IS_BASE(i)   ((i) == MDS_INO_ROOT || (i) == MDS_INO_GLOBAL_SNAPREALM || MDS_INO_IS_MDSDIR(i))
+#define MDS_INO_IS_BASE(i)   ((i) == CEPH_INO_ROOT || (i) == CEPH_INO_GLOBAL_SNAPREALM || MDS_INO_IS_MDSDIR(i))
 #define MDS_INO_STRAY_OWNER(i) (signed (((unsigned (i)) - MDS_INO_STRAY_OFFSET) / NUM_STRAY))
 #define MDS_INO_STRAY_INDEX(i) (((unsigned (i)) - MDS_INO_STRAY_OFFSET) % NUM_STRAY)
 
