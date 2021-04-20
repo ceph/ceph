@@ -83,9 +83,9 @@ Options
 
    will set all of capabilities associated with a given key, for all subsystems
 
- .. option:: --mode *mode*
+.. option:: --mode *mode*
 
-    will set the desired file mode to the keyring e.g: 0644, defaults to 0600
+   will set the desired file mode to the keyring e.g: 0644, defaults to 0600
 
 
 Capabilities
