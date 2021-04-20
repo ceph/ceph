@@ -14,7 +14,7 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, IngressSpec, CustomContainerSpec
+from ceph.deployment.service_spec import ServiceSpec, IngressSpec, CustomContainerSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
@@ -131,6 +131,21 @@ class CephadmServe:
         bad_hosts = []
         failures = []
 
+        etc_ceph_ceph_conf_hosts = []
+        if self.mgr.manage_etc_ceph_ceph_conf:
+            try:
+                pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
+                ha = HostAssignment(
+                    spec=ServiceSpec('mon', placement=pspec),
+                    hosts=self.mgr._schedulable_hosts(),
+                    daemons=[],
+                    networks=self.mgr.cache.networks,
+                )
+                all_slots, _, _ = ha.place()
+                etc_ceph_ceph_conf_hosts = [s.hostname for s in all_slots]
+            except Exception as e:
+                self.mgr.log.warning(f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
+
         @forall_hosts
         def refresh(host: str) -> None:
 
@@ -173,7 +188,10 @@ class CephadmServe:
                 if r:
                     failures.append(r)
 
-            if self.mgr.cache.host_needs_new_etc_ceph_ceph_conf(host):
+            if (
+                host in etc_ceph_ceph_conf_hosts
+                and self.mgr.cache.host_needs_new_etc_ceph_ceph_conf(host)
+            ):
                 self.log.debug(f"deploying new /etc/ceph/ceph.conf on `{host}`")
                 r = self._deploy_etc_ceph_ceph_conf(host)
                 if r:

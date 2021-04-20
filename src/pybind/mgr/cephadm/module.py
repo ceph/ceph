@@ -284,6 +284,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Manage and own /etc/ceph/ceph.conf on the hosts.',
         ),
         Option(
+            'manage_etc_ceph_ceph_conf_hosts',
+            type='str',
+            default='*',
+            desc='PlacementSpec describing on which hosts to manage /etc/ceph/ceph.conf',
+        ),
+        Option(
             'registry_url',
             type='str',
             default=None,
@@ -366,6 +372,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.migration_current: Optional[int] = None
             self.config_dashboard = True
             self.manage_etc_ceph_ceph_conf = True
+            self.manage_etc_ceph_ceph_conf_hosts = '*'
             self.registry_url: Optional[str] = None
             self.registry_username: Optional[str] = None
             self.registry_password: Optional[str] = None
