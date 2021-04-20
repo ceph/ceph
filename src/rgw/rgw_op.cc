@@ -3162,7 +3162,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
   /* We're replacing bucket with the newly created one */
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << tmp_bucket << dendl;
-  op_ret = store->create_bucket(this, *s->user, tmp_bucket, zonegroup_id,
+  op_ret = store->create_bucket(this, s->user.get(), tmp_bucket, zonegroup_id,
 				placement_rule,
 				info.swift_ver_location,
 				pquota_info, policy, attrs, info, ep_objv,
@@ -3177,31 +3177,6 @@ void RGWCreateBucket::execute(optional_yield y)
     return;
 
   const bool existed = s->bucket_exists;
-  if (existed) {
-    /* bucket already existed, might have raced with another bucket creation, or
-     * might be partial bucket creation that never completed. Read existing bucket
-     * info, verify that the reported bucket owner is the current user.
-     * If all is ok then update the user's list of buckets.
-     * Otherwise inform client about a name conflict.
-     */
-    if (s->bucket->get_info().owner.compare(s->user->get_id()) != 0) {
-      op_ret = -EEXIST;
-      return;
-    }
-  }
-
-  op_ret = s->bucket->link(this, s->user.get(), y, false);
-  if (op_ret && !existed && op_ret != -EEXIST) {
-    /* if it exists (or previously existed), don't remove it! */
-    op_ret = s->bucket->unlink(this, s->user.get(), y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
-		       << dendl;
-    }
-  } else if (op_ret == -EEXIST || (op_ret == 0 && existed)) {
-    op_ret = -ERR_BUCKET_EXISTS;
-  }
-
   if (need_metadata_upload() && existed) {
     /* OK, it looks we lost race with another request. As it's required to
      * handle metadata fusion and upload, the whole operation becomes very
@@ -6911,7 +6886,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
   placement_rule.storage_class = s->info.storage_class;
   forward_req_info(s->cct, info, bucket_name);
 
-  op_ret = store->create_bucket(this, *s->user, new_bucket,
+  op_ret = store->create_bucket(this, s->user.get(), new_bucket,
                                 store->get_zone()->get_zonegroup().get_id(),
                                 placement_rule, swift_ver_location,
                                 pquota_info, policy, attrs,
@@ -6922,37 +6897,6 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret
       << ", bucket=" << bucket << dendl;
-
-  if (op_ret && op_ret != -EEXIST) {
-    return op_ret;
-  }
-
-  const bool existed = (op_ret == -EEXIST);
-  if (existed) {
-    /* bucket already existed, might have raced with another bucket creation, or
-     * might be partial bucket creation that never completed. Read existing bucket
-     * info, verify that the reported bucket owner is the current user.
-     * If all is ok then update the user's list of buckets.
-     * Otherwise inform client about a name conflict.
-     */
-    if (out_info.owner.compare(s->user->get_id()) != 0) {
-      op_ret = -EEXIST;
-      ldpp_dout(this, 20) << "conflicting bucket name" << dendl;
-      return op_ret;
-    }
-  }
-
-  op_ret = bucket->link(this, s->user.get(), y, false);
-  if (op_ret && !existed && op_ret != -EEXIST) {
-    /* if it exists (or previously existed), don't remove it! */
-    op_ret = bucket->unlink(this, s->user.get(), y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret << dendl;
-    }
-  } else if (op_ret == -EEXIST || (op_ret == 0 && existed)) {
-    ldpp_dout(this, 20) << "containers already exists" << dendl;
-    op_ret = -ERR_BUCKET_EXISTS;
-  }
 
   return op_ret;
 }

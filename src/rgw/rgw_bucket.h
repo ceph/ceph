@@ -349,11 +349,8 @@ public:
           map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
-  int link(RGWBucketAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp,
-           std::string *err_msg = NULL);
   int chown(RGWBucketAdminOpState& op_state, const string& marker,
             optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
-  int unlink(RGWBucketAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
   int set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   int remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
