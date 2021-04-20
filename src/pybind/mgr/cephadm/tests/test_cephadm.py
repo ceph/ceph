@@ -1,6 +1,5 @@
 import json
 from contextlib import contextmanager
-from unittest.mock import ANY
 
 import pytest
 
@@ -1059,9 +1058,11 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
-    def test_etc_ceph(self, _check, _get_connection, cephadm_module):
+    @mock.patch("cephadm.module.CephadmServe._write_remote_file")
+    def test_etc_ceph(self, _write_file, _check, _get_connection, cephadm_module):
         _get_connection.return_value = mock.Mock(), mock.Mock()
         _check.return_value = '{}', '', 0
+        _write_file.return_value = None
 
         assert cephadm_module.manage_etc_ceph_ceph_conf is False
 
@@ -1074,15 +1075,16 @@ class TestCephadm(object):
             assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')
+            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf', b'',
+                                           0o644, 0, 0)
 
             assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
 
             # set extra config and expect that we deploy another ceph.conf
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _check.assert_called_with(
-                ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'\n\n[mon]\nk=v\n')
+            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf',
+                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0)
 
             # reload
             cephadm_module.cache.last_etc_ceph_ceph_conf = {}
