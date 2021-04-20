@@ -194,7 +194,7 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
   return read_errorator::make_ready_future<ceph::bufferlist>();
 }
 
-SeaStore::get_attr_errorator::future<ceph::bufferptr> SeaStore::get_attr(
+SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
   CollectionRef ch,
   const ghobject_t& oid,
   std::string_view name) const
@@ -566,10 +566,9 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
     case Transaction::OP_SETATTR:
     {
       std::string name = i.decode_string();
-      ceph::bufferlist bl;
+      std::map<std::string, bufferlist> to_set;
+      ceph::bufferlist& bl = to_set[name];
       i.decode_bl(bl);
-      std::map<std::string, bufferptr> to_set;
-      to_set[name] = bufferptr(bl.c_str(), bl.length());
       return _setattrs(ctx, get_onode(op->oid), std::move(to_set));
     }
     break;
@@ -809,7 +808,7 @@ SeaStore::tm_ret SeaStore::_truncate(
 SeaStore::tm_ret SeaStore::_setattrs(
   internal_context_t &ctx,
   OnodeRef &onode,
-  std::map<std::string,bufferptr> &&aset)
+  std::map<std::string, bufferlist>&& aset)
 {
   logger().debug("{} onode={}",
                 __func__, *onode);

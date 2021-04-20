@@ -89,14 +89,14 @@ public:
   using get_attr_errorator = crimson::errorator<
     crimson::ct_error::enoent,
     crimson::ct_error::enodata>;
-  virtual get_attr_errorator::future<ceph::bufferptr> get_attr(
+  virtual get_attr_errorator::future<ceph::bufferlist> get_attr(
     CollectionRef c,
     const ghobject_t& oid,
     std::string_view name) const = 0;
 
   using get_attrs_ertr = crimson::errorator<
     crimson::ct_error::enoent>;
-  using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
+  using attrs_t = std::map<std::string, ceph::bufferlist, std::less<>>;
   virtual get_attrs_ertr::future<attrs_t> get_attrs(
     CollectionRef c,
     const ghobject_t& oid) = 0;
