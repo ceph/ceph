@@ -164,11 +164,8 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag,
 {
   // Special cases: damage to these dirfrags is considered fatal to
   // the MDS rank that owns them.
-  if (
-      (MDS_INO_IS_STRAY(ino) && MDS_INO_STRAY_OWNER(ino) == rank)
-      ||
-      (ino == MDS_INO_ROOT)
-     ) {
+  if ((MDS_INO_IS_STRAY(ino) && MDS_INO_STRAY_OWNER(ino) == rank)
+      || (ino == CEPH_INO_ROOT)) {
     derr << "Damage to fragment " << frag << " of ino " << ino
          << " is fatal because it is a system directory for this rank" << dendl;
     return true;
