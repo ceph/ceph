@@ -71,6 +71,13 @@ public:
     const std::string &key,
     const ceph::bufferlist &value) = 0;
 
+  using omap_set_keys_ertr = base_ertr;
+  using omap_set_keys_ret = omap_set_keys_ertr::future<>;
+  virtual omap_set_keys_ret omap_set_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    std::map<std::string, ceph::bufferlist>&& keys) = 0;
+
   /**
    * remove key value mapping in omap tree
    *
