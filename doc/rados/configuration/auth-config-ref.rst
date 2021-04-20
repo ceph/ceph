@@ -181,55 +181,6 @@ setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 .. confval:: keyfile
 .. confval:: key
 
-Daemon Keyrings
----------------
-
-Administrative users or deployment tools  (e.g., ``cephadm``) may generate
-daemon keyrings in the same way as generating user keyrings.  By default, Ceph
-stores daemons keyrings inside their data directory. The default keyring
-locations, and the capabilities necessary for the daemon to function, are shown
-below.
-
-.. describe:: ceph-mon
-
-:Location: ``$mon_data/keyring``
-:Capabilities: ``mon 'allow *'``
-
-.. describe:: ceph-osd
-
-:Location: ``$osd_data/keyring``
-:Capabilities: ``mgr 'allow profile osd' mon 'allow profile osd' osd 'allow *'``
-
-.. describe:: ceph-mds
-
-:Location: ``$mds_data/keyring``
-:Capabilities: ``mds 'allow' mgr 'allow profile mds' mon 'allow profile mds' osd 'allow rwx'``
-
-.. describe:: ceph-mgr
-
-:Location: ``$mgr_data/keyring``
-:Capabilities: ``mon 'allow profile mgr' mds 'allow *' osd 'allow *'``
-
-.. describe:: radosgw
-
-:Location: ``$rgw_data/keyring``
-:Capabilities: ``mon 'allow rwx' osd 'allow rwx'``
-
-
-.. note:: The monitor keyring (i.e., ``mon.``) contains a key but no
-   capabilities, and is not part of the cluster ``auth`` database.
-
-The daemon data directory locations default to directories of the form::
-
-  /var/lib/ceph/$type/$cluster-$id
-
-For example, ``osd.12`` would be::
-
-  /var/lib/ceph/osd/ceph-12
-
-You can override these locations, but it is not recommended.
-
-
 .. index:: signatures
 
 Signatures
