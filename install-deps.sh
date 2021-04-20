@@ -62,11 +62,12 @@ function munge_debian_control {
 	    ;;
     esac
     if $with_seastar; then
-	sed -i -e 's/^# Crimson[[:space:]]//g' $control
+        sed -i -e 's/^# Crimson[[:space:]]//g' $control
     fi
     if $with_jaeger; then
-	sed -i -e 's/^# Jaeger[[:space:]]//g' $control
-	sed -i -e 's/^# Crimson      libyaml-cpp-dev,/d' $control
+        sed -i -e 's/^# Jaeger[[:space:]]\+/               /g' $control
+        sed -i -e '/^# Crimson[[:space:]]\+libyaml-cpp-dev,/d' $control
+        sed -i -e 's/^[[:space:]]\+Built-Using:/Built-Using:/' $control
     fi
     if $for_make_check; then
         sed -i 's/^# Make-Check[[:space:]]/             /g' $control
