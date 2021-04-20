@@ -102,6 +102,26 @@ BtreeLBAManager::get_mappings(
     });
 }
 
+BtreeLBAManager::find_hole_ret
+BtreeLBAManager::find_hole(
+  Transaction &t,
+  laddr_t hint,
+  extent_len_t len)
+{
+  return get_root(t
+  ).safe_then([this, hint, len, &t](auto extent) {
+    return extent->find_hole(
+      get_context(t),
+      hint,
+      L_ADDR_MAX,
+      len);
+  }).safe_then([len](auto addr) {
+    return seastar::make_ready_future<std::pair<laddr_t, extent_len_t>>(
+      addr, len);
+  });
+
+}
+
 BtreeLBAManager::alloc_extent_ret
 BtreeLBAManager::alloc_extent(
   Transaction &t,

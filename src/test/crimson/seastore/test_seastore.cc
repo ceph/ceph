@@ -59,6 +59,7 @@ struct seastore_test_t :
     const ghobject_t oid;
 
     std::map<string, bufferlist> omap;
+    bufferlist contents;
 
     void set_omap(
       CTransaction &t,
@@ -83,6 +84,88 @@ struct seastore_test_t :
 	coll,
 	std::move(t)).get0();
     }
+
+    void write(
+      SeaStore &seastore,
+      CTransaction &t,
+      uint64_t offset,
+      bufferlist bl)  {
+      bufferlist new_contents;
+      if (offset > 0 && contents.length()) {
+	new_contents.substr_of(
+	  contents,
+	  0,
+	  std::min<size_t>(offset, contents.length())
+	);
+      }
+      new_contents.append_zero(offset - new_contents.length());
+      new_contents.append(bl);
+
+      auto tail_offset = offset + bl.length();
+      if (contents.length() > tail_offset) {
+	bufferlist tail;
+	tail.substr_of(
+	  contents,
+	  tail_offset,
+	  contents.length() - tail_offset);
+	new_contents.append(tail);
+      }
+      contents.swap(new_contents);
+
+      t.write(
+	cid,
+	oid,
+	offset,
+	bl.length(),
+	bl);
+    }
+    void write(
+      SeaStore &seastore,
+      uint64_t offset,
+      bufferlist bl)  {
+      CTransaction t;
+      write(seastore, t, offset, bl);
+      seastore.do_transaction(
+	coll,
+	std::move(t)).get0();
+    }
+    void write(
+      SeaStore &seastore,
+      uint64_t offset,
+      size_t len,
+      char fill)  {
+      auto buffer = bufferptr(buffer::create(len));
+      ::memset(buffer.c_str(), fill, len);
+      bufferlist bl;
+      bl.append(buffer);
+      write(seastore, offset, bl);
+    }
+
+    void read(
+      SeaStore &seastore,
+      uint64_t offset,
+      uint64_t len) {
+      bufferlist to_check;
+      to_check.substr_of(
+	contents,
+	offset,
+	len);
+      auto ret = seastore.read(
+	coll,
+	oid,
+	offset,
+	len).unsafe_get0();
+      EXPECT_EQ(ret.length(), to_check.length());
+      EXPECT_EQ(ret, to_check);
+    }
+
+    void check_size(SeaStore &seastore) {
+      auto st = seastore.stat(
+	coll,
+	oid).get0();
+      EXPECT_EQ(contents.length(), st.st_size);
+    }
+
 
     void check_omap_key(
       SeaStore &seastore,
@@ -239,5 +322,23 @@ TEST_F(seastore_test_t, omap_test_iterator)
 	make_bufferlist(128));
     }
     test_obj.check_omap(*seastore);
+  });
+}
+
+
+TEST_F(seastore_test_t, simple_extent_test)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.write(
+      *seastore,
+      1024,
+      1024,
+      'a');
+    test_obj.read(
+      *seastore,
+      1024,
+      1024);
+    test_obj.check_size(*seastore);
   });
 }
