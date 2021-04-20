@@ -177,6 +177,7 @@ void MDSDaemon::asok_command(
 	heapcmd_vec.push_back(value);
       }
       ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+      r = 0;
     }
   } else if (command == "cpu_profiler") {
     string arg;
