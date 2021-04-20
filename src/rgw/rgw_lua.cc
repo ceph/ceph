@@ -65,79 +65,23 @@ std::string script_oid(context ctx, const std::string& tenant) {
 
 int read_script(const DoutPrefixProvider *dpp, rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx, std::string& script)
 {
-  RGWObjVersionTracker objv_tracker;
+  auto lua_script = store->get_lua_script_manager();
 
-  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
-
-  bufferlist bl;
-  
-  const auto rc = store->get_system_obj(
-      dpp,
-      obj.pool, 
-      obj.oid,
-      bl,
-      &objv_tracker,
-      nullptr, 
-      y, 
-      nullptr, 
-      nullptr);
-
-  if (rc < 0) {
-    return rc;
-  }
-
-  auto iter = bl.cbegin();
-  try {
-    ceph::decode(script, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  return 0;
+  return lua_script->get(dpp, y, script_oid(ctx, tenant), script);
 }
 
-int write_script(rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
+int write_script(const DoutPrefixProvider *dpp, rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
 {
-  RGWObjVersionTracker objv_tracker;
+  auto lua_script = store->get_lua_script_manager();
 
-  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
-
-  bufferlist bl;
-  ceph::encode(script, bl);
-
-  const auto rc = store->put_system_obj(
-      obj.pool,
-      obj.oid,
-      bl,
-      false,
-      &objv_tracker,
-      real_time(),
-      y);
-
-  if (rc < 0) {
-    return rc;
-  }
-
-  return 0;
+  return lua_script->put(dpp, y, script_oid(ctx, tenant), script);
 }
 
-int delete_script(rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx)
+int delete_script(const DoutPrefixProvider *dpp, rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx)
 {
-  RGWObjVersionTracker objv_tracker;
+  auto lua_script = store->get_lua_script_manager();
 
-  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
-
-  const auto rc = store->delete_system_obj(
-      obj.pool,
-      obj.oid,
-      &objv_tracker,
-      y);
-
-  if (rc < 0 && rc != -ENOENT) {
-    return rc;
-  }
-
-  return 0;
+  return lua_script->del(dpp, y, script_oid(ctx, tenant));
 }
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
