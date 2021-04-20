@@ -38,13 +38,13 @@ target_link_libraries(
   crimson::gtest
   crimson-seastore)
 
-add_executable(unittest-extmap-manager
-  test_extmap_manager.cc
+add_executable(unittest-object-data-handler
+  test_object_data_handler.cc
   ../gtest_seastar.cc)
-add_ceph_test(unittest-extmap-manager
-  unittest-extmap-manager --memory 256M --smp 1)
+add_ceph_unittest(unittest-object-data-handler
+  --memory 256M --smp 1)
 target_link_libraries(
-  unittest-extmap-manager
+  unittest-object-data-handler
   crimson::gtest
   crimson-seastore
   crimson-os

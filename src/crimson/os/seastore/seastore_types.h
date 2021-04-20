@@ -43,10 +43,15 @@ constexpr segment_id_t RECORD_REL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 2;
 constexpr segment_id_t BLOCK_REL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 3;
-
 // for tests which generate fake paddrs
 constexpr segment_id_t FAKE_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 4;
+
+/* Used to denote references to notional zero filled segment, mainly
+ * in denoting reserved laddr ranges for unallocated object data.
+ */
+constexpr segment_id_t ZERO_SEG_ID =
+  std::numeric_limits<segment_id_t>::max() - 5;
 
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
@@ -101,6 +106,27 @@ struct paddr_t {
 
   bool is_block_relative() const {
     return segment == BLOCK_REL_SEG_ID;
+  }
+
+  /// Denotes special zero segment addr
+  bool is_zero() const {
+    return segment == ZERO_SEG_ID;
+  }
+
+  /// Denotes special null segment addr
+  bool is_null() const {
+    return segment == NULL_SEG_ID;
+  }
+
+  /**
+   * is_real
+   *
+   * indicates whether addr reflects a physical location, absolute
+   * or relative.  FAKE segments also count as real so as to reflect
+   * the way in which unit tests use them.
+   */
+  bool is_real() const {
+    return !is_zero() && !is_null();
   }
 
   paddr_t add_offset(segment_off_t o) const {
@@ -175,6 +201,9 @@ constexpr paddr_t make_block_relative_paddr(segment_off_t off) {
 constexpr paddr_t make_fake_paddr(segment_off_t off) {
   return paddr_t{FAKE_SEG_ID, off};
 }
+constexpr paddr_t zero_paddr() {
+  return paddr_t{ZERO_SEG_ID, 0};
+}
 
 struct __attribute((packed)) paddr_le_t {
   ceph_le32 segment = ceph_le32(NULL_SEG_ID);
@@ -195,7 +224,8 @@ struct __attribute((packed)) paddr_le_t {
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 
 using objaddr_t = uint32_t;
-constexpr objaddr_t OBJ_ADDR_MIN = std::numeric_limits<objaddr_t>::min();
+constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
+constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX - 1;
 
 /* Monotonically increasing identifier for the location of a
  * journal_record.
@@ -282,12 +312,11 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  EXTMAP_INNER = 4,
-  EXTMAP_LEAF = 5,
-  OMAP_INNER = 6,
-  OMAP_LEAF = 7,
-  ONODE_BLOCK_STAGED = 8,
-  COLL_BLOCK = 9,
+  OMAP_INNER = 4,
+  OMAP_LEAF = 5,
+  ONODE_BLOCK_STAGED = 6,
+  COLL_BLOCK = 7,
+  OBJECT_DATA_BLOCK = 8,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
@@ -365,6 +394,71 @@ std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 struct record_t {
   std::vector<extent_t> extents;
   std::vector<delta_info_t> deltas;
+};
+
+class object_data_t {
+  laddr_t reserved_data_base = L_ADDR_NULL;
+  extent_len_t reserved_data_len = 0;
+
+  bool dirty = false;
+public:
+  object_data_t(
+    laddr_t reserved_data_base,
+    extent_len_t reserved_data_len)
+    : reserved_data_base(reserved_data_base),
+      reserved_data_len(reserved_data_len) {}
+
+  laddr_t get_reserved_data_base() const {
+    return reserved_data_base;
+  }
+
+  extent_len_t get_reserved_data_len() const {
+    return reserved_data_len;
+  }
+
+  bool is_null() const {
+    return reserved_data_base == L_ADDR_NULL;
+  }
+
+  bool must_update() const {
+    return dirty;
+  }
+
+  void update_reserved(
+    laddr_t base,
+    extent_len_t len) {
+    dirty = true;
+    reserved_data_base = base;
+    reserved_data_len = len;
+  }
+
+  void update_len(
+    extent_len_t len) {
+    dirty = true;
+    reserved_data_len = len;
+  }
+
+  void clear() {
+    dirty = true;
+    reserved_data_base = L_ADDR_NULL;
+    reserved_data_len = 0;
+  }
+};
+
+struct __attribute__((packed)) object_data_le_t {
+  laddr_le_t reserved_data_base = laddr_le_t(L_ADDR_NULL);
+  extent_len_le_t reserved_data_len = init_extent_len_le(0);
+
+  void update(const object_data_t &nroot) {
+    reserved_data_base = nroot.get_reserved_data_base();
+    reserved_data_len = init_extent_len_le(nroot.get_reserved_data_len());
+  }
+
+  object_data_t get() const {
+    return object_data_t(
+      reserved_data_base,
+      reserved_data_len);
+  }
 };
 
 struct omap_root_t {

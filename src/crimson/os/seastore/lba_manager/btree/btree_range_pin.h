@@ -263,6 +263,7 @@ public:
     auto ret = std::unique_ptr<BtreeLBAPin>(new BtreeLBAPin);
     ret->pin.set_range(pin.range);
     ret->paddr = paddr;
+    ret->parent = parent;
     return ret;
   }
 

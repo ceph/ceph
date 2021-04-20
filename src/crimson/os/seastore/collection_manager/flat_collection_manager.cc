@@ -47,13 +47,11 @@ FlatCollectionManager::get_coll_root(const coll_root_t &coll_root, Transaction &
   logger().debug("FlatCollectionManager: {}", __func__);
   assert(coll_root.get_location() != L_ADDR_NULL);
   auto cc = get_coll_context(t);
-  return cc.tm.read_extents<CollectionNode>(
+  return cc.tm.read_extent<CollectionNode>(
     cc.t,
     coll_root.get_location(),
     coll_root.get_size()
-  ).safe_then([](auto&& extents) {
-    assert(extents.size() == 1);
-    [[maybe_unused]] auto [laddr, e] = extents.front();
+  ).safe_then([](auto&& e) {
     return get_root_ertr::make_ready_future<CollectionNodeRef>(std::move(e));
   });
 }

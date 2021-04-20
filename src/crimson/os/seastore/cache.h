@@ -173,7 +173,10 @@ public:
 	      std::move(ref));
 	  },
 	  get_extent_ertr::pass_further{},
-	  crimson::ct_error::discard_all{});
+	  crimson::ct_error::assert_all{
+	    "Cache::get_extent: invalid error"
+	  }
+	);
     }
   }
 
