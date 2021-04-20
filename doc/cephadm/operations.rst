@@ -318,6 +318,14 @@ hosts, please enable this by running::
 
   ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf true
 
+If enabled, by default cephadm will update ``ceph.conf`` on all cluster hosts. To
+change the set of hosts that get a managed config file, you can update the
+``mgr/cephadm/manage_etc_ceph_ceph_conf_hosts`` setting to a different placement
+spec (see :ref:`orchestrator-cli-placement-spec`).  For example, to limit config
+file updates to hosts with the ``foo`` label::
+
+  ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_host label:foo
+
 To set up an initial configuration before bootstrapping
 the cluster, create an initial ``ceph.conf`` file. For example::
 
