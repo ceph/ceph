@@ -270,24 +270,24 @@ AlienStore::readv(CollectionRef ch,
   });
 }
 
-AlienStore::get_attr_errorator::future<ceph::bufferptr>
+AlienStore::get_attr_errorator::future<ceph::bufferlist>
 AlienStore::get_attr(CollectionRef ch,
                      const ghobject_t& oid,
                      std::string_view name) const
 {
   logger().debug("{}", __func__);
-  return seastar::do_with(ceph::bufferptr{}, [=] (auto &value) {
+  return seastar::do_with(ceph::bufferlist{}, [=] (auto &value) {
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, &value] {
       auto c =static_cast<AlienCollection*>(ch.get());
       return store->getattr(c->collection, oid,
 		            static_cast<std::string>(name).c_str(), value);
-    }).then([oid, &value] (int r) -> get_attr_errorator::future<ceph::bufferptr> {
+    }).then([oid, &value] (int r) -> get_attr_errorator::future<ceph::bufferlist> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
       } else if (r == -ENODATA) {
         return crimson::ct_error::enodata::make();
       } else {
-        return get_attr_errorator::make_ready_future<ceph::bufferptr>(
+        return get_attr_errorator::make_ready_future<ceph::bufferlist>(
           std::move(value));
       }
     });

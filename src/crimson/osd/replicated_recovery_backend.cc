@@ -453,8 +453,8 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
       return eversion_t{};
     }
     push_op->omap_header.claim_append(std::move(bl));
-    for (auto&& [key, val] : std::move(attrs)) {
-      push_op->attrset[key].push_back(val);
+    for (auto&& [key, val] : attrs) {
+      push_op->attrset.emplace(std::move(key), std::move(val));
     }
     logger().debug("read_metadata_for_push_op: {}", push_op->attrset[OI_ATTR]);
     object_info_t oi;

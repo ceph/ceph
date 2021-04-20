@@ -62,7 +62,7 @@ public:
     const ghobject_t& oid,
     interval_set<uint64_t>& m,
     uint32_t op_flags = 0) final;
-  get_attr_errorator::future<ceph::bufferptr> get_attr(
+  get_attr_errorator::future<ceph::bufferlist> get_attr(
     CollectionRef c,
     const ghobject_t& oid,
     std::string_view name) const final;
@@ -254,7 +254,7 @@ private:
   tm_ret _setattrs(
     internal_context_t &ctx,
     OnodeRef &onode,
-    std::map<std::string,bufferptr> &&aset);
+    std::map<std::string,bufferlist>&& aset);
   tm_ret _create_collection(
     internal_context_t &ctx,
     const coll_t& cid, int bits);
