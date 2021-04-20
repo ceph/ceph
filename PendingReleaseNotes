@@ -9,6 +9,13 @@
   that were storing state in RADOS omap, especially without striping which
   limits scalability.
 
+* fs: A file system can be renamed using the `fs rename` command. The cephx
+  IDs authorized to the old file system name need to be reauthorized to the
+  new file system name. Since the operations of the clients using these
+  re-authorized IDs will  be disrupted, the command requires the
+  "--yes-i-really-mean-it" flag. Also, mirroring is expected to be disabled
+  on the file system.
+
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.
 

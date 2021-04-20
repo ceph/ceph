@@ -508,7 +508,7 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
     return;
   }
 
-  std::string_view fs_name = mds->get_fs_name();
+  std::string_view fs_name = mds->mdsmap->get_fs_name();
   if (!fs_name.empty() && !session->fs_name_capable(fs_name, MAY_READ)) {
     dout(0) << " dropping message not allowed for this fs_name: " << *m << dendl;
     return;
@@ -542,7 +542,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
     return;
   }
 
-  std::string_view fs_name = mds->get_fs_name();
+  std::string_view fs_name = mds->mdsmap->get_fs_name();
   if (!fs_name.empty() && !session->fs_name_capable(fs_name, MAY_READ)) {
     dout(0) << " dropping message not allowed for this fs_name: " << *m << dendl;
     auto reply = make_message<MClientSession>(CEPH_SESSION_REJECT);

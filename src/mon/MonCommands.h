@@ -449,6 +449,11 @@ COMMAND("fs mirror peer_remove "
 	"name=fs_name,type=CephString "
 	"name=uuid,type=CephString ",
 	"remove a mirror peer for a ceph filesystem", "mds", "rw")
+COMMAND("fs rename "
+	"name=fs_name,type=CephString "
+	"name=new_fs_name,type=CephString,goodchars=[A-Za-z0-9-_.] "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"rename a ceph file system", "mds", "rw")
 
 /*
  * Monmap commands

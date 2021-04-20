@@ -1,3 +1,4 @@
+import errno
 import json
 import uuid
 from io import StringIO
@@ -193,6 +194,58 @@ class TestAdminCommands(CephFSTestCase):
         for i in range(2):
             self._check_pool_application_metadata_key_value(
                 pool_names[i], 'cephfs', keys[i], fs_name)
+
+    def test_fs_rename(self):
+        """
+        That the file system can be renamed, and the application metadata set on its pools are as expected.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+        client_id = 'test_new_cephfs'
+
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+
+        # authorize a cephx ID access to the renamed file system.
+        # use the ID to write to the file system.
+        self.fs.name = new_fs_name
+        keyring = self.fs.authorize(client_id, ('/', 'rw'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/',
+                             cephfs_name=self.fs.name)
+        filedata, filename = 'some data on fs', 'file_on_fs'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+        self._check_pool_application_metadata_key_value(
+            self.fs.get_data_pool_name(), 'cephfs', 'data', new_fs_name)
+        self._check_pool_application_metadata_key_value(
+            self.fs.get_metadata_pool_name(), 'cephfs', 'metadata', new_fs_name)
+
+        # cleanup
+        self.mount_a.umount_wait()
+        self.run_cluster_cmd(f'auth rm client.{client_id}')
+        self.run_cluster_cmd(f'fs rename {new_fs_name} {orig_fs_name} --yes-i-really-mean-it')
+        self.fs.name = orig_fs_name
+
+    def test_fs_rename_fails_with_mirroring_enabled(self):
+        """
+        That renaming of a file system fails if mirroring is enabled on it.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+
+        self.run_cluster_cmd(f'fs mirror enable {orig_fs_name}')
+        try:
+            self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM, "invalid error code on renaming a mirrored file system")
+        else:
+            self.fail("expected renaming of a mirrored file system to fail")
+        self.run_cluster_cmd(f'fs mirror disable {orig_fs_name}')
+
 
 class TestRequiredClientFeatures(CephFSTestCase):
     CLIENTS_REQUIRED = 0
