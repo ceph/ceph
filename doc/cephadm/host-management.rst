@@ -117,7 +117,21 @@ To remove a label, run::
 
   ceph orch host label rm my_hostname my_label
 
-  
+
+.. _cephadm-special-host-labels:
+
+Special host labels
+-------------------
+
+The following host labels have a special meaning to cephadm.  All start with ``_``.
+
+* ``_no_schedule``: *Do not schedule or deploy daemons on this host*.
+
+  This label prevents cephadm from deploying daemons on this host.  If it is added to
+  an existing host that already contains Ceph daemons, it will cause cephadm to move
+  those daemons elsewhere (except OSDs, which are not removed automatically).
+
+
 Maintenance Mode
 ================
 
