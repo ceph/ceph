@@ -1270,7 +1270,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return image
 
-    def _hosts_with_daemon_inventory(self) -> List[HostSpec]:
+    def _schedulable_hosts(self) -> List[HostSpec]:
         """
         Returns all usable hosts that went through _refresh_host_daemons().
 
@@ -1281,8 +1281,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         return [
             h for h in self.inventory.all_specs()
-            if self.cache.host_had_daemon_refresh(h.hostname)
-            and h.status.lower() not in ['maintenance', 'offline']
+            if (
+                self.cache.host_had_daemon_refresh(h.hostname)
+                and h.status.lower() not in ['maintenance', 'offline']
+                and '_no_schedule' not in h.labels
+            )
         ]
 
     def _add_host(self, spec):
@@ -2101,7 +2104,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         ha = HostAssignment(
             spec=spec,
-            hosts=self._hosts_with_daemon_inventory(),
+            hosts=self._schedulable_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
