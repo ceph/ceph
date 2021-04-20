@@ -106,6 +106,22 @@ BtreeOMapManager::omap_get_value(
   });
 }
 
+BtreeOMapManager::omap_set_keys_ret
+BtreeOMapManager::omap_set_keys(
+  omap_root_t &omap_root,
+  Transaction &t,
+  std::map<std::string, ceph::bufferlist>&& keys)
+{
+  return seastar::do_with(std::move(keys), [&, this](auto& keys) {
+    return crimson::do_for_each(
+      keys.begin(),
+      keys.end(),
+      [&, this](auto &p) {
+      return omap_set_key(omap_root, t, p.first, p.second);
+    });
+  });
+}
+
 BtreeOMapManager::omap_set_key_ret
 BtreeOMapManager::omap_set_key(
   omap_root_t &omap_root,

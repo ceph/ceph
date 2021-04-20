@@ -200,11 +200,45 @@ private:
   }
 
 
+  template <typename Ret, typename F>
+  auto repeat_with_onode(
+    CollectionRef ch,
+    const ghobject_t &oid,
+    F &&f) const {
+    return seastar::do_with(
+      oid,
+      Ret{},
+      TransactionRef(),
+      OnodeRef(),
+      std::forward<F>(f),
+      [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
+	return repeat_eagain([&, this] {
+	  t = transaction_manager->create_transaction();
+	  return onode_manager->get_onode(
+	    *t, oid
+	  ).safe_then([&, this](auto onode_ret) {
+	    onode = std::move(onode_ret);
+	    return f(*t, *onode);
+	  }).safe_then([&ret](auto _ret) {
+	    ret = _ret;
+	  });
+	}).safe_then([&ret] {
+	  return seastar::make_ready_future<Ret>(ret);
+	});
+      });
+  }
+
+
   friend class SeaStoreOmapIterator;
   omap_get_values_ret_t omap_list(
     CollectionRef ch,
     const ghobject_t &oid,
     const std::optional<string> &_start,
+    OMapManager::omap_list_config_t config);
+  OMapManager::omap_list_ret _omap_list(
+    const omap_root_le_t& omap_root,
+    Transaction& t,
+    const std::optional<std::string>& start,
     OMapManager::omap_list_config_t config);
 
   TransactionManagerRef transaction_manager;
@@ -261,6 +295,12 @@ private:
   tm_ret _remove_collection(
     internal_context_t &ctx,
     const coll_t& cid);
+  using omap_set_kvs_ret = tm_ertr::future<>;
+  omap_set_kvs_ret __omap_set_kvs(
+    const omap_root_le_t& omap_root,
+    Transaction& t,
+    omap_root_le_t& mutable_omap_root,
+    std::map<std::string, ceph::bufferlist>&& kvs);
 
   boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 };
