@@ -879,6 +879,7 @@ class IngressSpec(ServiceSpec):
                  backend_service: Optional[str] = None,
                  frontend_port: Optional[int] = None,
                  ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  ssl_dh_param: Optional[str] = None,
                  ssl_ciphers: Optional[List[str]] = None,
                  ssl_options: Optional[List[str]] = None,
@@ -891,6 +892,8 @@ class IngressSpec(ServiceSpec):
                  virtual_interface_networks: Optional[List[str]] = [],
                  haproxy_container_image: Optional[str] = None,
                  keepalived_container_image: Optional[str] = None,
+                 unmanaged: bool = False,
+                 ssl: bool = False
                  ):
         assert service_type == 'ingress'
         super(IngressSpec, self).__init__(
@@ -901,6 +904,7 @@ class IngressSpec(ServiceSpec):
         self.backend_service = backend_service
         self.frontend_port = frontend_port
         self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
         self.ssl_dh_param = ssl_dh_param
         self.ssl_ciphers = ssl_ciphers
         self.ssl_options = ssl_options
@@ -912,6 +916,8 @@ class IngressSpec(ServiceSpec):
         self.virtual_interface_networks = virtual_interface_networks or []
         self.haproxy_container_image = haproxy_container_image
         self.keepalived_container_image = keepalived_container_image
+        self.unmanaged = unmanaged
+        self.ssl = ssl
 
     def get_port_start(self) -> List[int]:
         return [cast(int, self.frontend_port),
