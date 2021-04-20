@@ -1,0 +1,119 @@
+#!/usr/bin/awk -f
+
+#
+# Version 1
+#
+# This awk script takes two, similarly sorted lists and outputs
+# only the lines which exist in both lists.  The script takes
+# three inputs:
+#
+# ./rgw-gap-list-comparator \
+#     -v filetwo=gap-list-B.txt \
+#     -v matchout=matched_lines.txt \
+#     gap-list-A.txt
+#
+
+function usage() {
+  print "">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print "The idea behind the script is to eliminate false positive hits">>"/dev/stderr"
+  print "from the rgw-gap-list tool which are due to upload timing of new">>"/dev/stderr"
+  print "objects during the tool's execution.  To use the tool properly,">>"/dev/stderr"
+  print "the following process should be followed:">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print " 1: Run the 'rgw-gap-list' tool twice">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print " 2: Sort the resulting map files:">>"/dev/stderr"
+  print "   $ export LC_ALL=C">>"/dev/stderr"
+  print "   $ sort gap-list-A.gap > gap-list-A.sorted.gap">>"/dev/stderr"
+  print "   $ sort gap-list-B.gap > gap-list.B.sorted.gap">>"/dev/stderr"
+  print "   -- Where the A / B in the gap-list file names are the date/time associated with each of the respective 'rgw-gap-list' outputs">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print " 3: Run the 'same_lines_only.awk' script over the two files:">>"/dev/stderr"
+  print "   $ rm matched_lines.txt">>"/dev/stderr"
+  print "   $ ./rgw-gap-list-comparator -v filetwo=gap-list-B.sorted.gap -v matchout=matched_lines.txt gap-list-A.sorted.gap">>"/dev/stderr"
+  print "   -- Where the A / B in the gap-list file names are the date/time associated with each of the respective 'rgw-gap-list' outputs">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print " The resulting 'matched_lines.txt' will be a high confidence list of impacted objects with little to no false positives.">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  exit 1
+}
+
+function advance_f2() {
+  if ((getline f2line<filetwo) <= 0) {
+    f2_eof=1
+  } else {
+    f2_count++
+  }
+}
+
+function test_lines() {
+ if($0==f2line) {
+    print $0>>matchout
+    lineoutcount++
+    advance_f2()
+    return 0
+  } else if ($0>f2line) {
+    return 2
+  } else {
+    return 1
+  }
+}
+
+function status_out() {
+  printf("%s % 17d\t% 17d\t% 12d\n",get_date_time(),f1_count,f2_count,lineoutcount)>>"/dev/stderr"
+}
+
+function get_date_time() {
+  dtstr="date +%F\\ %T"
+  dtstr | getline mydt
+  close(dtstr)
+  return mydt
+}
+
+BEGIN {
+  if(filetwo==""||matchout=="") {
+     print "">>"/dev/stderr"
+     print "">>"/dev/stderr"
+     print "Missing parameter."
+     print "">>"/dev/stderr"
+     print "">>"/dev/stderr"
+     usage()
+  }
+
+  f1_count=0
+  f2_count=0
+  lineoutcount=0
+  f2_eof=0
+  statusevery=100000
+  advance_f2()
+  printf("%s File 1 Line Count\tFile 2 Line Count\tPotentially Impacted Objects\n",get_date_time())>>"/dev/stderr"
+  status_out()
+}
+
+
+{
+  f1_count++
+  if(f2_eof==0) {
+    if(test_lines()==2) {
+      while($0>f2line && f2_eof==0) {
+        advance_f2()
+      }
+      test_lines()
+    }
+  } else {
+    exit 0
+  }
+  if ((f1_count % statusevery)==0) {
+    status_out()
+  }
+}
+
+END {
+  if(f1_count>0) {
+    status_out()
+  }
+}
+

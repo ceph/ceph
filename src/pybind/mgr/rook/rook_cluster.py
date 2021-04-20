@@ -22,6 +22,7 @@ from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec
+from ceph.utils import datetime_now
 from mgr_util import merge_dicts
 
 try:
@@ -315,7 +316,7 @@ class RookCluster(object):
                     return False
             return True
 
-        refreshed = datetime.datetime.utcnow()
+        refreshed = datetime_now()
         pods = [i for i in self.rook_pods.items if predicate(i)]
 
         pods_summary = []
@@ -341,13 +342,13 @@ class RookCluster(object):
                 'created': None,
             }
 
-            # note: we want UTC but no tzinfo
+            # note: we want UTC
             if d['metadata'].get('creation_timestamp', None):
                 s['created'] = d['metadata']['creation_timestamp'].astimezone(
-                    tz=datetime.timezone.utc).replace(tzinfo=None)
+                    tz=datetime.timezone.utc)
             if d['status'].get('start_time', None):
                 s['started'] = d['status']['start_time'].astimezone(
-                    tz=datetime.timezone.utc).replace(tzinfo=None)
+                    tz=datetime.timezone.utc)
 
             pods_summary.append(s)
 

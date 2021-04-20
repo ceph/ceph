@@ -66,7 +66,7 @@ void DemoteRequest<I>::handle_enable_non_primary_feature(int r) {
 template <typename I>
 void DemoteRequest<I>::create_snapshot() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_create_snapshot>(this);
@@ -81,7 +81,7 @@ void DemoteRequest<I>::create_snapshot() {
 template <typename I>
 void DemoteRequest<I>::handle_create_snapshot(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to create mirror snapshot: " << cpp_strerror(r)
@@ -96,7 +96,7 @@ void DemoteRequest<I>::handle_create_snapshot(int r) {
 template <typename I>
 void DemoteRequest<I>::finish(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

@@ -12,6 +12,16 @@ with patch('builtins.open', create=True):
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
 class TestCephAdm(object):
+
+    def test_docker_unit_file(self):
+        cd.args = mock.Mock()
+        cd.container_path = '/usr/bin/docker'
+        r = cd.get_unit_file('9b9d7609-f4d5-4aba-94c8-effa764d96c9')
+        assert 'Requires=docker.service' in r
+        cd.container_path = '/usr/sbin/podman'
+        r = cd.get_unit_file('9b9d7609-f4d5-4aba-94c8-effa764d96c9')
+        assert 'Requires=docker.service' not in r
+
     def test_is_not_fsid(self):
         assert not cd.is_fsid('no-uuid')
 

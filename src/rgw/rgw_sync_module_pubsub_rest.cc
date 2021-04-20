@@ -245,7 +245,7 @@ public:
     sub_name = s->object.name;
     marker = s->info.args.get("marker");
     const int ret = s->info.args.get_int("max-entries", &max_entries, 
-        RGWUserPubSub::Sub::DEFAULT_MAX_EVENTS);
+        RGWPubSub::Sub::DEFAULT_MAX_EVENTS);
     if (ret < 0) {
       ldout(s->cct, 1) << "failed to parse 'max-entries' param" << dendl;
       return -EINVAL;
@@ -373,9 +373,9 @@ public:
 
 void RGWPSCreateNotif_ObjStore::execute()
 {
-  ups.emplace(store, s->owner.get_id());
+  ps.emplace(store, s->owner.get_id().tenant);
 
-  auto b = ups->get_bucket(bucket_info.bucket);
+  auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->create_notification(topic_name, events);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create notification for topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -410,8 +410,8 @@ void RGWPSDeleteNotif_ObjStore::execute() {
     return;
   }
 
-  ups.emplace(store, s->owner.get_id());
-  auto b = ups->get_bucket(bucket_info.bucket);
+  ps.emplace(store, s->owner.get_id().tenant);
+  auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->remove_notification(topic_name);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove notification from topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -449,8 +449,8 @@ public:
 
 void RGWPSListNotifs_ObjStore::execute()
 {
-  ups.emplace(store, s->owner.get_id());
-  auto b = ups->get_bucket(bucket_info.bucket);
+  ps.emplace(store, s->owner.get_id().tenant);
+  auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->get_topics(&result);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get topics, ret=" << op_ret << dendl;

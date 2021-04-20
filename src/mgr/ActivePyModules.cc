@@ -932,7 +932,6 @@ PyObject *ActivePyModules::get_osdmap()
 
   PyThreadState *tstate = PyEval_SaveThread();
   {
-    std::lock_guard l(lock);
     cluster_state.with_osdmap([&](const OSDMap& o) {
         newmap->deepish_copy_from(o);
       });

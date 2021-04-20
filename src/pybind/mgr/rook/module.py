@@ -1,4 +1,3 @@
-import datetime
 import threading
 import functools
 import os
@@ -6,6 +5,7 @@ import json
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
+from ceph.utils import datetime_now
 
 try:
     from typing import List, Dict, Optional, Callable, Any
@@ -255,7 +255,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_read
     def describe_service(self, service_type=None, service_name=None,
                          refresh=False):
-        now = datetime.datetime.utcnow()
+        now = datetime_now()
 
         # CephCluster
         cl = self.rook_cluster.rook_api_get(

@@ -9,7 +9,7 @@ except ImportError:
 
 from ..services.rgw_client import RgwClient, _parse_frontend_config
 from ..settings import Settings
-from . import KVStoreMockMixin
+from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
 def _dummy_daemon_info():

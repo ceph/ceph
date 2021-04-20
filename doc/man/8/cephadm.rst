@@ -12,7 +12,7 @@ Synopsis
 | **cephadm**** [-h] [--image IMAGE] [--docker] [--data-dir DATA_DIR]
 |               [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |               [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
-|               [--retry RETRY]
+|               [--retry RETRY] [--no-container-init]
 |               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install}
 |               ...
 
@@ -28,7 +28,6 @@ Synopsis
 | **cephadm** **adopt** [-h] --name NAME --style STYLE [--cluster CLUSTER]
 |                       [--legacy-dir LEGACY_DIR] [--config-json CONFIG_JSON]
 |                       [--skip-firewalld] [--skip-pull]
-|                       [--container-init]
 
 | **cephadm** **rm-daemon** [-h] --name NAME --fsid FSID [--force]
 |                           [--force-delete-data]
@@ -78,7 +77,6 @@ Synopsis
 |                           [--registry-username REGISTRY_USERNAME]
 |                           [--registry-password REGISTRY_PASSWORD]
 |                           [--registry-json REGISTRY_JSON]
-|                           [--container-init]
 
 
 
@@ -86,7 +84,6 @@ Synopsis
 |                        [--config-json CONFIG_JSON] [--keyring KEYRING]
 |                        [--key KEY] [--osd-fsid OSD_FSID] [--skip-firewalld]
 |                        [--tcp-ports TCP_PORTS] [--reconfig] [--allow-ptrace]
-|                        [--container-init]
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
@@ -156,6 +153,10 @@ Options
 .. option:: --retry RETRY
 
    max number of retries (default: 10)
+
+.. option:: --no-container-init
+
+   do not run podman/docker with `--init` (default: False)
 
 
 Commands
@@ -238,7 +239,6 @@ Arguments:
 * [--registry-username REGISTRY_USERNAME] username of account to login to on custom registry
 * [--registry-password REGISTRY_PASSWORD] password of account to login to on custom registry
 * [--registry-json REGISTRY_JSON] JSON file containing registry login info (see registry-login command documentation)
-* [--container-init]              Run podman/docker with `--init`
 
 
 ceph-volume
@@ -289,7 +289,6 @@ Arguments:
 * [--tcp-ports                List of tcp ports to open in the host firewall
 * [--reconfig]                Reconfigure a previously deployed daemon
 * [--allow-ptrace]            Allow SYS_PTRACE on daemon container
-* [--container-init]          Run podman/docker with `--init`
 
 
 enter

@@ -467,7 +467,7 @@ struct rgw_pubsub_topic {
   }
 
   string to_str() const {
-    return user.to_str() + "/" + name;
+    return user.tenant + "/" + name;
   }
 
   void dump(Formatter *f) const;
@@ -560,7 +560,7 @@ struct rgw_pubsub_bucket_topics {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_bucket_topics)
 
-struct rgw_pubsub_user_topics {
+struct rgw_pubsub_topics {
   std::map<std::string, rgw_pubsub_topic_subs> topics;
 
   void encode(bufferlist& bl) const {
@@ -578,62 +578,65 @@ struct rgw_pubsub_user_topics {
   void dump(Formatter *f) const;
   void dump_xml(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(rgw_pubsub_user_topics)
+WRITE_CLASS_ENCODER(rgw_pubsub_topics)
 
-static std::string pubsub_user_oid_prefix = "pubsub.user.";
+static std::string pubsub_oid_prefix = "pubsub.";
 
-class RGWUserPubSub
+class RGWPubSub
 {
   friend class Bucket;
 
   rgw::sal::RGWRadosStore *store;
-  rgw_user user;
+  const std::string tenant;
   RGWSysObjectCtx obj_ctx;
 
-  rgw_raw_obj user_meta_obj;
+  rgw_raw_obj meta_obj;
 
-  std::string user_meta_oid() const {
-    return pubsub_user_oid_prefix + user.to_str();
+  std::string meta_oid() const {
+    return pubsub_oid_prefix + tenant;
   }
 
   std::string bucket_meta_oid(const rgw_bucket& bucket) const {
-    return pubsub_user_oid_prefix + user.to_str() + ".bucket." + bucket.name + "/" + bucket.bucket_id;
+    return pubsub_oid_prefix + tenant + ".bucket." + bucket.name + "/" + bucket.bucket_id;
   }
 
   std::string sub_meta_oid(const string& name) const {
-    return pubsub_user_oid_prefix + user.to_str() + ".sub." + name;
+    return pubsub_oid_prefix + tenant + ".sub." + name;
   }
 
   template <class T>
-  int read(const rgw_raw_obj& obj, T *data, RGWObjVersionTracker *objv_tracker);
+  int read(const rgw_raw_obj& obj, T* data, RGWObjVersionTracker* objv_tracker);
 
   template <class T>
-  int write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTracker *obj_tracker);
+  int write(const rgw_raw_obj& obj, const T& info,
+	    RGWObjVersionTracker* obj_tracker);
 
-  int remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker);
+  int remove(const rgw_raw_obj& obj, RGWObjVersionTracker* objv_tracker);
 
-  int read_user_topics(rgw_pubsub_user_topics *result, RGWObjVersionTracker *objv_tracker);
-  int write_user_topics(const rgw_pubsub_user_topics& topics, RGWObjVersionTracker *objv_tracker);
+  int read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker* objv_tracker);
+  int write_topics(const rgw_pubsub_topics& topics,
+			RGWObjVersionTracker* objv_tracker);
 
 public:
-  RGWUserPubSub(rgw::sal::RGWRadosStore *_store, const rgw_user& _user);
+  RGWPubSub(rgw::sal::RGWRadosStore *_store, const std::string& tenant);
 
   class Bucket {
-    friend class RGWUserPubSub;
-    RGWUserPubSub *ps;
+    friend class RGWPubSub;
+    RGWPubSub *ps;
     rgw_bucket bucket;
     rgw_raw_obj bucket_meta_obj;
 
     // read the list of topics associated with a bucket and populate into result
     // use version tacker to enforce atomicity between read/write
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
-    int read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker *objv_tracker);
+    int read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker* objv_tracker);
     // set the list of topics associated with a bucket
     // use version tacker to enforce atomicity between read/write
     // return 0 on success, error code otherwise
-    int write_topics(const rgw_pubsub_bucket_topics& topics, RGWObjVersionTracker *objv_tracker);
+    int write_topics(const rgw_pubsub_bucket_topics& topics,
+		     RGWObjVersionTracker* objv_tracker);
   public:
-    Bucket(RGWUserPubSub *_ps, const rgw_bucket& _bucket) : ps(_ps), bucket(_bucket) {
+    Bucket(RGWPubSub *_ps, const rgw_bucket& _bucket) : ps(_ps), bucket(_bucket) {
       ps->get_bucket_meta_obj(bucket, &bucket_meta_obj);
     }
 
@@ -657,17 +660,18 @@ public:
 
   // base class for subscription
   class Sub {
-    friend class RGWUserPubSub;
+    friend class RGWPubSub;
   protected:
-    RGWUserPubSub* const ps;
+    RGWPubSub* const ps;
     const std::string sub;
     rgw_raw_obj sub_meta_obj;
 
-    int read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker *objv_tracker);
-    int write_sub(const rgw_pubsub_sub_config& sub_conf, RGWObjVersionTracker *objv_tracker);
-    int remove_sub(RGWObjVersionTracker *objv_tracker);
+    int read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker* objv_tracker);
+    int write_sub(const rgw_pubsub_sub_config& sub_conf,
+		  RGWObjVersionTracker* objv_tracker);
+    int remove_sub(RGWObjVersionTracker* objv_tracker);
   public:
-    Sub(RGWUserPubSub *_ps, const std::string& _sub) : ps(_ps), sub(_sub) {
+    Sub(RGWPubSub *_ps, const std::string& _sub) : ps(_ps), sub(_sub) {
       ps->get_sub_meta_obj(sub, &sub_meta_obj);
     }
 
@@ -696,7 +700,7 @@ public:
     } list;
 
   public:
-    SubWithEvents(RGWUserPubSub *_ps, const string& _sub) : Sub(_ps, _sub) {}
+    SubWithEvents(RGWPubSub *_ps, const string& _sub) : Sub(_ps, _sub) {}
 
     virtual ~SubWithEvents() = default;
     
@@ -728,14 +732,14 @@ public:
     return std::make_shared<SubWithEvents<rgw_pubsub_s3_record>>(this, sub);
   }
 
-  void get_user_meta_obj(rgw_raw_obj *obj) const;
+  void get_meta_obj(rgw_raw_obj *obj) const;
   void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const;
 
   void get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const;
 
-  // get all topics defined for the user and populate them into "result"
+  // get all topics (per tenant, if used)) and populate them into "result"
   // return 0 on success or if no topics exist, error code otherwise
-  int get_user_topics(rgw_pubsub_user_topics *result);
+  int get_topics(rgw_pubsub_topics *result);
   // get a topic with its subscriptions by its name and populate it into "result"
   // return -ENOENT if the topic does not exists 
   // return 0 on success, error code otherwise
@@ -760,7 +764,7 @@ public:
 
 
 template <class T>
-int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker *objv_tracker)
+int RGWPubSub::read(const rgw_raw_obj& obj, T* result, RGWObjVersionTracker* objv_tracker)
 {
   bufferlist bl;
   int ret = rgw_get_system_obj(obj_ctx,
@@ -783,7 +787,8 @@ int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker 
 }
 
 template <class T>
-int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTracker *objv_tracker)
+int RGWPubSub::write(const rgw_raw_obj& obj, const T& info,
+			 RGWObjVersionTracker* objv_tracker)
 {
   bufferlist bl;
   encode(info, bl);

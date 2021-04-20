@@ -15,9 +15,8 @@ A push notification mechanism exists too, currently supporting HTTP,
 AMQP0.9.1 and Kafka endpoints. In this case, the events are pushed to an endpoint on top of storing them in Ceph. If events should only be pushed to an endpoint
 and do not need to be stored in Ceph, the `Bucket Notification`_ mechanism should be used instead of pubsub sync module. 
 
-A user can create different topics. A topic entity is defined by its user and its name. A
-user can only manage its own topics, and can only subscribe to events published by buckets
-it owns.
+A user can create different topics. A topic entity is defined by its name and is per tenant. A
+user can only associate its topics (via notification configuration) with buckets it owns.
 
 In order to publish events for specific bucket a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
@@ -31,7 +30,7 @@ mechanisms. This API has two flavors, one is S3-compatible and one is not. The t
 together, although it is recommended to use the S3-compatible one. 
 The S3-compatible API is similar to the one used in the bucket notification mechanism.
 
-Events are stored as RGW objects in a special bucket, under a special user. Events cannot
+Events are stored as RGW objects in a special bucket, under a special user (pubsub control user). Events cannot
 be accessed directly, but need to be pulled and acked using the new REST API.
 
 .. toctree::
@@ -42,7 +41,7 @@ be accessed directly, but need to be pulled and acked using the new REST API.
 PubSub Zone Configuration
 -------------------------
 
-The pubsub sync module requires the creation of a new zone in a `Multisite`_ environment.
+The pubsub sync module requires the creation of a new zone in a :ref:`multisite` environment...
 First, a master zone must exist (see: :ref:`master-zone-label`), 
 then a secondary zone should be created (see :ref:`secondary-zone-label`).
 In the creation of the secondary zone, its tier type must be set to ``pubsub``:
@@ -172,12 +171,14 @@ The endpoint URI may include parameters depending with the type of endpoint:
  - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
  - port defaults to: 5672
  - vhost defaults to: "/"
- - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
  - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
   - "routable": message is considered "delivered" if broker can route to a consumer
+
+.. tip:: The topic-name is used for the AMQP topic ("routing key" for a topic exchange)
 
 - Kafka endpoint 
 
@@ -251,7 +252,7 @@ Delete the specified topic.
 List Topics
 ```````````
 
-List all topics that user defined.
+List all topics associated with a tenant.
 
 ::
 
@@ -581,6 +582,5 @@ Request parameters:
 
 - event-id: id of event to be acked
 
-.. _Multisite : ../multisite
 .. _Bucket Notification : ../notifications
 .. _Bucket Operations: ../s3/bucketops

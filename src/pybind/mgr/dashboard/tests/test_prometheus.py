@@ -5,7 +5,7 @@ try:
 except ImportError:
     from unittest.mock import patch
 
-from . import ControllerTestCase
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 from .. import mgr
 from ..controllers.prometheus import Prometheus, PrometheusReceiver, PrometheusNotifications
 

@@ -192,7 +192,6 @@ class AuthManagerTool(cherrypy.Tool):
 
     def _check_authorization(self, username):
         self.logger.debug("checking authorization...")
-        username = username
         handler = cherrypy.request.handler.callable
         controller = handler.__self__
         sec_scope = getattr(controller, '_security_scope', None)

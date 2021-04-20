@@ -341,10 +341,10 @@ int PyModule::load(PyThreadState *pMainThreadState)
       PySys_SetArgv(1, (char**)argv);
 #endif
       // Configure sys.path to include mgr_module_path
-      string paths = (":" + g_conf().get_val<std::string>("mgr_module_path") +
-		      ":" + get_site_packages());
+      string paths = (g_conf().get_val<std::string>("mgr_module_path") + ':' +
+                      get_site_packages() + ':');
 #if PY_MAJOR_VERSION >= 3
-      wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
+      wstring sys_path(wstring(begin(paths), end(paths)) + Py_GetPath());
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
       dout(10) << "Computed sys.path '"
 	       << string(begin(sys_path), end(sys_path)) << "'" << dendl;
