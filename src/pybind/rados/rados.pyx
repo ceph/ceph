@@ -660,6 +660,8 @@ Rados object in state %s." % self.state)
     def connect(self, timeout: int = 0):
         """
         Connect to the cluster.  Use shutdown() to release resources.
+
+        :param timeout: Any supplied timeout value is currently ignored.
         """
         self.require_state("configuring")
         # NOTE(sileht): timeout was supported by old python API,
