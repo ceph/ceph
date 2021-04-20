@@ -13,7 +13,8 @@ from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
 from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
-from ..services.access_control import load_access_control_db, \
+from ..services.access_control import ensure_text, \
+                                      load_access_control_db, \
                                       password_hash, AccessControlDB, \
                                       SYSTEM_ROLES
 
@@ -571,14 +572,11 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_unicode_password(self):
         self.test_create_user()
-        password = '章鱼不是密码'
-        with tempfile.TemporaryFile(mode='w+') as pwd_file:
-            pwd_file.write(password)
-            pwd_file.seek(0)
-            user = self.exec_cmd('ac-user-set-password', username='admin',
-                                 inbuf=pwd_file.read(), force_password=True)
-            pass_hash = password_hash(password, user['password'])
-            self.assertEqual(user['password'], pass_hash)
+        password = ensure_text('章鱼不是密码')
+        user = self.exec_cmd('ac-user-set-password', username='admin',
+                             inbuf=password.encode('utf-8'), force_password=True)
+        pass_hash = password_hash(password, user['password'])
+        self.assertEqual(user['password'], pass_hash)
 
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:

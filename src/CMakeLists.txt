@@ -401,7 +401,7 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
-  INSTALL_RPATH "")
+  SKIP_RPATH TRUE)
 if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
@@ -691,6 +691,12 @@ if(WITH_RBD)
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
 endif(WITH_RBD)
+
+if(WITH_BOOST_CONTEXT)
+  set(SPAWN_BUILD_TESTS OFF CACHE INTERNAL "disable building of spawn unit tests")
+  set(SPAWN_INSTALL OFF CACHE INTERNAL "disable installation of spawn headers")
+  add_subdirectory(spawn)
+endif()
 
 # RadosGW
 if(WITH_KVS)

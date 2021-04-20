@@ -635,8 +635,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
         s->bucket_acl->get_owner().get_display_name(),
       };
     } else {
-      s->bucket_acl->create_default(s->user->user_id, s->user->display_name);
-      ret = -ERR_NO_SUCH_BUCKET;
+      return -ERR_NO_SUCH_BUCKET;
     }
 
     s->bucket_owner = s->bucket_acl->get_owner();
@@ -3604,7 +3603,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     filter = decrypt.get();
   }
   if (op_ret < 0) {
-    return ret;
+    return op_ret;
   }
 
   ret = read_op.range_to_ofs(obj_size, new_ofs, new_end);

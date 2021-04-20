@@ -8,7 +8,7 @@ from functools import partial
 
 import cherrypy
 
-import rbd
+import rbd  # pylint: disable=import-error
 
 from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
     RESTController

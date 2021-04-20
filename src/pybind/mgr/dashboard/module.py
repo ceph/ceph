@@ -14,11 +14,13 @@ import sys
 import tempfile
 import threading
 import time
+
 from uuid import uuid4
 from OpenSSL import crypto
-import _strptime  # pylint: disable=unused-import
 from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
 from mgr_util import get_default_addr, ServerConfigException, verify_tls_files
+
+import _strptime  # pylint: disable=unused-import
 
 try:
     import cherrypy
@@ -152,7 +154,7 @@ class CherryPyConfig(object):
 
         if use_ssl:
             # SSL initialization
-            cert = self.get_store("crt")
+            cert = self.get_localized_store("crt")
             if cert is not None:
                 self.cert_tmp = tempfile.NamedTemporaryFile()
                 self.cert_tmp.write(cert.encode('utf-8'))
@@ -161,7 +163,7 @@ class CherryPyConfig(object):
             else:
                 cert_fname = self.get_localized_module_option('crt_file')
 
-            pkey = self.get_store("key")
+            pkey = self.get_localized_store("key")
             if pkey is not None:
                 self.pkey_tmp = tempfile.NamedTemporaryFile()
                 self.pkey_tmp.write(pkey.encode('utf-8'))

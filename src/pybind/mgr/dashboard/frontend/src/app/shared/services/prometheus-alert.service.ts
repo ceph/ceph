@@ -17,6 +17,7 @@ export class PrometheusAlertService {
   private canAlertsBeNotified = false;
   alerts: AlertmanagerAlert[] = [];
   rules: PrometheusRule[] = [];
+  activeAlerts: number;
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
@@ -60,6 +61,11 @@ export class PrometheusAlertService {
     if (this.canAlertsBeNotified) {
       this.notifyOnAlertChanges(alerts, this.alerts);
     }
+    this.activeAlerts = _.reduce<AlertmanagerAlert, number>(
+      this.alerts,
+      (result, alert) => (alert.status.state === 'active' ? ++result : result),
+      0
+    );
     this.alerts = alerts;
     this.canAlertsBeNotified = true;
   }

@@ -21,12 +21,21 @@ from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
                          RoleNotInUser
 
 
+def ensure_text(s, encoding='utf-8', errors='strict'):
+    """Ported from six."""
+    if isinstance(s, six.binary_type):
+        return s.decode(encoding, errors)
+    elif isinstance(s, six.text_type):
+        return s
+    else:
+        raise TypeError("not expecting type '%s'" % type(s))
+
+
 # password hashing algorithm
 def password_hash(password, salt_password=None):
     if not password:
         return None
-    if six.PY2:
-        password = unicode(password, 'utf-8') if isinstance(password, str) else password
+    password = ensure_text(password)
     if not salt_password:
         salt_password = bcrypt.gensalt()
     else:
