@@ -3206,6 +3206,30 @@ will start to track new ops received afterwards.";
     }
     f->close_section(); // entries
     f->close_section(); // network_ping_times
+  } else if (prefix == "dump_pool_statfs") {
+    lock_guard l(osd_lock);
+
+    int64_t p = 0;
+    if (!(cmd_getval(cmdmap, "poolid", p))) {
+      ss << "Error dumping pool statfs: no poolid provided";
+      ret = -EINVAL;
+      goto out;
+    }
+
+    store_statfs_t st;
+    bool per_pool_omap_stats = false;
+
+    ret = store->pool_statfs(p, &st, &per_pool_omap_stats);
+    if (ret < 0) {
+      ss << "Error dumping pool statfs: " << cpp_strerror(ret);
+      goto out;
+    } else {
+      ss << "dumping pool statfs...";
+      f->open_object_section("pool_statfs");
+      f->dump_int("poolid", p);
+      st.dump(f);
+      f->close_section();
+    }
   } else {
     ceph_abort_msg("broken asok registration");
   }
@@ -3906,6 +3930,11 @@ void OSD::final_init()
   r = admin_socket->register_command(
     "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
     "Dump osd heartbeat network ping times");
+  ceph_assert(r == 0);
+
+  r = admin_socket->register_command(
+    "dump_pool_statfs name=poolid,type=CephInt,req=true", asok_hook,
+    "Dump store's statistics for the given pool");
   ceph_assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
