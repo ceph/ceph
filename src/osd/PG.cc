@@ -1452,7 +1452,7 @@ bool PG::verify_periodic_scrub_mode(bool allow_deep_scrub,
       is_time_for_deep(allow_deep_scrub, allow_regular_scrub, has_deep_errors, planned);
 
     if (try_to_auto_repair) {
-      if (planned.time_for_deep) {
+      if (planned.time_for_deep && (has_deep_errors || planned.need_auto)) {
 	dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
 	planned.auto_repair = true;
       } else if (allow_regular_scrub) {
