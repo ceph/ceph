@@ -736,6 +736,7 @@ $COSDSHORT
         $(format_conf "${extra_conf}")
 [mon]
         mgr initial modules = $mgr_modules
+        mgr disabled modules = rook
 $DAEMONOPTS
 $CMONDEBUG
         $(format_conf "${extra_conf}")
