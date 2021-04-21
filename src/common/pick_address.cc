@@ -15,6 +15,7 @@
 #include "common/pick_address.h"
 
 #include <netdb.h>
+#include <netinet/in.h>
 #include <string>
 #include <string.h>
 #include <vector>
@@ -45,15 +46,42 @@ bool matches_with_name(const ifaddrs& ifa, const std::string& if_name)
   return if_name.compare(ifa.ifa_name) == 0;
 }
 
-bool is_addr_allowed(const ifaddrs& ifa, bool exclude_lo_iface)
+static int is_loopback_addr(sockaddr* addr)
 {
-  if (exclude_lo_iface && strcmp(ifa.ifa_name, "lo") == 0) {
-    return false;
+  if (addr->sa_family == AF_INET) {
+    const sockaddr_in* sin = (struct sockaddr_in *)(addr);
+    const in_addr_t net = ntohl(sin->sin_addr.s_addr) >> IN_CLASSA_NSHIFT;
+    return net == IN_LOOPBACKNET ? 1 : 0;
+  } else if (addr->sa_family == AF_INET6) {
+    sockaddr_in6* sin6 = (struct sockaddr_in6 *)(addr);
+    return IN6_IS_ADDR_LOOPBACK(&sin6->sin6_addr) ? 1 : 0;
+  } else {
+    return -1;
   }
-  if (boost::starts_with(ifa.ifa_name, "lo:")) {
-    return false;
+}
+
+static int grade_addr(const ifaddrs& ifa)
+{
+  if (ifa.ifa_addr == nullptr) {
+    return -1;
   }
-  return true;
+  int score = 0;
+  if (ifa.ifa_flags & IFF_UP) {
+    score += 4;
+  }
+  switch (is_loopback_addr(ifa.ifa_addr)) {
+  case 0:
+    // prefer non-loopback addresses
+    score += 2;
+    break;
+  case 1:
+    score += 0;
+    break;
+  default:
+    score = -1;
+    break;
+  }
+  return score;
 }
 
 bool matches_with_net(const ifaddrs& ifa,
@@ -107,13 +135,13 @@ bool matches_with_numa_node(const ifaddrs& ifa, int numa_node)
 #endif
 }
 }
+
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,
   const struct ifaddrs *ifa,
   unsigned ipv,
   const std::string &networks,
   const std::string &interfaces,
-  bool exclude_lo_iface,
   int numa_node)
 {
   const auto ifs = get_str_list(interfaces);
@@ -123,25 +151,32 @@ const struct sockaddr *find_ip_in_subnet_list(
       exit(1);
   }
 
+  int best_score = -1;
+  const sockaddr* best_addr = nullptr;
   for (const auto* addr = ifa; addr != nullptr; addr = addr->ifa_next) {
-    if (!is_addr_allowed(*addr, exclude_lo_iface)) {
-      continue;
-    }
-    if ((ifs.empty() ||
-         std::any_of(std::begin(ifs), std::end(ifs),
+    if (!ifs.empty() &&
+	std::none_of(std::begin(ifs), std::end(ifs),
                      [&](const auto& if_name) {
                        return matches_with_name(*addr, if_name);
-                     })) &&
-        (nets.empty() ||
-         std::any_of(std::begin(nets), std::end(nets),
+                     })) {
+      continue;
+    }
+    if (!nets.empty() &&
+	std::none_of(std::begin(nets), std::end(nets),
                      [&](const auto& net) {
                        return matches_with_net(cct, *addr, net, ipv);
-                     })) &&
-        matches_with_numa_node(*addr, numa_node)) {
-      return addr->ifa_addr;
+                     })) {
+      continue;
+    }
+    if (!matches_with_numa_node(*addr, numa_node)) {
+      continue;
+    }
+    if (int score = grade_addr(*addr); score > best_score) {
+      best_score = score;
+      best_addr = addr->ifa_addr;
     }
   }
-  return nullptr;
+  return best_addr;
 }
 
 #ifndef WITH_SEASTAR
@@ -166,7 +201,6 @@ static void fill_in_one_address(CephContext *cct,
 				const struct ifaddrs *ifa,
 				const string &networks,
 				const string &interfaces,
-				bool exclude_lo_iface,
 				const char *conf_var,
 				int numa_node = -1)
 {
@@ -176,7 +210,6 @@ static void fill_in_one_address(CephContext *cct,
     CEPH_PICK_ADDRESS_IPV4|CEPH_PICK_ADDRESS_IPV6,
     networks,
     interfaces,
-    exclude_lo_iface,
     numa_node);
   if (!found) {
     lderr(cct) << "unable to find any IP address in networks '" << networks
@@ -229,27 +262,21 @@ void pick_addresses(CephContext *cct, int needs)
     exit(1);
   }
   auto free_ifa = make_scope_guard([ifa] { freeifaddrs(ifa); });
-
-  const bool exclude_lo_iface =
-    cct->_conf.get_val<bool>("ms_bind_exclude_lo_iface");
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC) &&
     public_addr.is_blank_ip() && !public_network.empty()) {
     fill_in_one_address(cct, ifa, public_network, public_network_interface,
-			exclude_lo_iface,
 			"public_addr");
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER) && cluster_addr.is_blank_ip()) {
     if (!cluster_network.empty()) {
       fill_in_one_address(cct, ifa, cluster_network, cluster_network_interface,
-			  exclude_lo_iface,
 			  "cluster_addr");
     } else {
       if (!public_network.empty()) {
         lderr(cct) << "Public network was set, but cluster network was not set " << dendl;
         lderr(cct) << "    Using public network also for cluster network" << dendl;
         fill_in_one_address(cct, ifa, public_network, public_network_interface,
-			    exclude_lo_iface,
 			    "cluster_addr");
       }
     }
@@ -263,14 +290,12 @@ static int fill_in_one_address(
   unsigned ipv,
   const string &networks,
   const string &interfaces,
-  bool exclude_lo_iface,
   entity_addrvec_t *addrs,
   int numa_node = -1)
 {
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, ipv,
 							networks,
 							interfaces,
-							exclude_lo_iface,
 							numa_node);
   if (!found) {
     std::string ip_type = "";
@@ -384,8 +409,6 @@ int pick_addresses(
       !networks.empty()) {
     int ipv4_r = !(ipv & CEPH_PICK_ADDRESS_IPV4) ? 0 : -1;
     int ipv6_r = !(ipv & CEPH_PICK_ADDRESS_IPV6) ? 0 : -1;
-    const bool exclude_lo_iface =
-      cct->_conf.get_val<bool>("ms_bind_exclude_lo_iface");
     // first try on preferred numa node (if >= 0), then anywhere.
     while (true) {
       // note: pass in ipv to filter the matching addresses
@@ -393,14 +416,12 @@ int pick_addresses(
 	  (flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
 	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
                                      networks, interfaces,
-				     exclude_lo_iface,
 				     addrs,
                                      preferred_numa_node);
       }
       if (ipv & CEPH_PICK_ADDRESS_IPV6) {
 	ipv6_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6,
                                      networks, interfaces,
-				     exclude_lo_iface,
 				     addrs,
                                      preferred_numa_node);
       }
@@ -408,7 +429,6 @@ int pick_addresses(
 	  !(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
 	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
                                      networks, interfaces,
-				     exclude_lo_iface,
 				     addrs,
                                      preferred_numa_node);
       }

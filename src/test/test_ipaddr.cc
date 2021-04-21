@@ -13,6 +13,7 @@
 #endif
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#include <net/if.h>
 
 static void ipv4(struct sockaddr_in *addr, const char *s) {
   int err;
@@ -190,10 +191,12 @@ TEST(CommonIPAddr, TestV4_SkipLoopback)
   one.ifa_name = lo;
 
   two.ifa_next = &three;
+  two.ifa_flags = IFF_UP;
   two.ifa_addr = (struct sockaddr*)&a_two;
   two.ifa_name = lo0;
 
   three.ifa_next = NULL;
+  three.ifa_flags = IFF_UP;
   three.ifa_addr = (struct sockaddr*)&a_three;
   three.ifa_name = eth0;
 
@@ -202,21 +205,18 @@ TEST(CommonIPAddr, TestV4_SkipLoopback)
   ipv4(&a_three, "10.1.2.3");
 
   const struct sockaddr *result = nullptr;
+  // we prefer the non-loopback address despite the loopback addresses
   result =
     find_ip_in_subnet_list(nullptr, (struct ifaddrs*)&one,
                            CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
-                           "10.0.0.0/8", "", true);
+                           "", "");
   ASSERT_EQ((struct sockaddr*)&a_three, result);
+  // the subnet criteria leaves us no choice but the UP loopback address
   result =
     find_ip_in_subnet_list(nullptr, (struct ifaddrs*)&one,
                            CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
-                           "127.0.0.0/8", "", true);
-  ASSERT_EQ(nullptr, result);
-  result =
-    find_ip_in_subnet_list(nullptr, (struct ifaddrs*)&one,
-                           CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
-                           "127.0.0.0/8", "", false);
-  ASSERT_EQ((struct sockaddr*)&a_one, result);
+                           "127.0.0.0/8", "");
+  ASSERT_EQ((struct sockaddr*)&a_two, result);
 }
 
 TEST(CommonIPAddr, TestV6_Simple)
@@ -316,43 +316,37 @@ TEST(CommonIPAddr, TestV6_SkipLoopback)
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 a_three;
-  struct sockaddr_in6 net;
-
-  memset(&net, 0, sizeof(net));
 
   one.ifa_next = &two;
+  ipv6(&a_one, "::1");
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = lo;
 
   two.ifa_next = &three;
+  two.ifa_flags = IFF_UP;
+  ipv6(&a_two, "::1");
   two.ifa_addr = (struct sockaddr*)&a_two;
   two.ifa_name = lo0;
 
   three.ifa_next = NULL;
+  three.ifa_flags = IFF_UP;
+  ipv6(&a_three, "2001:1234:5678:90ab::beef");
   three.ifa_addr = (struct sockaddr*)&a_three;
   three.ifa_name = eth0;
 
-  ipv6(&a_one, "::1");
-  ipv6(&a_two, "::1");
-  ipv6(&a_three, "2001:1234:5678:90ab::beef");
-  ipv6(&net, "ff00::1");
-
   const struct sockaddr *result = nullptr;
+  // we prefer the non-loopback address despite the loopback addresses
   result =
     find_ip_in_subnet_list(nullptr, (struct ifaddrs*)&one,
                            CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
-                           "2001:1234:5678:90ab::0/64", "", true);
+                           "", "");
   ASSERT_EQ((struct sockaddr*)&a_three, result);
+  // the subnet criteria leaves us no choice but the UP loopback address
   result =
     find_ip_in_subnet_list(nullptr, (struct ifaddrs*)&one,
                            CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
-                           "::1/128", "", true);
-  ASSERT_EQ(nullptr, result);
-  result =
-    find_ip_in_subnet_list(nullptr, (struct ifaddrs*)&one,
-                           CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
-                           "::1/128", "", false);
-  ASSERT_EQ((struct sockaddr*)&a_one, result);
+                           "::1/128", "");
+  ASSERT_EQ((struct sockaddr*)&a_two, result);
 }
 
 TEST(CommonIPAddr, ParseNetwork_Empty)
@@ -709,8 +703,7 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.1.0.0/16",
-    "eth0",
-    true);
+    "eth0");
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
@@ -718,8 +711,7 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.2.0.0/16",
-    "eth1",
-    true);
+    "eth1");
   ASSERT_EQ((struct sockaddr*)&a_two, result);
 
   // match by eth name
@@ -728,8 +720,7 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
-    "eth0",
-    true);
+    "eth0");
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
@@ -737,8 +728,7 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
-    "eth1",
-    true);
+    "eth1");
   ASSERT_EQ((struct sockaddr*)&a_two, result);
 
   result = find_ip_in_subnet_list(
@@ -746,8 +736,7 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV6,
     "2001::/16",
-    "eth1",
-    true);
+    "eth1");
   ASSERT_EQ((struct sockaddr*)&a_three, result);
 }
 
