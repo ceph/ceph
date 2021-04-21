@@ -260,6 +260,8 @@ options:
   type: str
   level: advanced
   desc: path for the runtime control socket file, used by the 'ceph daemon' command
+  fmt_desc: The socket for executing administrative commands on a daemon,
+    irrespective of whether Ceph Monitors have established a quorum.
   daemon_default: $run_dir/$cluster-$name.asok
   services:
   - common
@@ -360,6 +362,13 @@ options:
   type: str
   level: advanced
   desc: path to write a pid file (if any)
+  fmt_desc: The file in which the mon, osd or mds will write its
+    PID.  For instance, ``/var/run/$cluster/$type.$id.pid``
+    will create /var/run/ceph/mon.a.pid for the ``mon`` with
+    id ``a`` running in the ``ceph`` cluster. The ``pid
+    file`` is removed when the daemon stops gracefully. If
+    the process is not daemonized (i.e. runs with the ``-f``
+    or ``-d`` option), the ``pid file`` is not created.
   tags:
   - service
   services:
@@ -374,6 +383,8 @@ options:
   type: str
   level: advanced
   desc: path to chdir(2) to after daemonizing
+  fmt_desc: The directory Ceph daemons change to once they are
+    up and running. Default ``/`` directory recommended.
   tags:
   - service
   services:
@@ -392,6 +403,8 @@ options:
   level: advanced
   desc: whether to register signal handlers for SIGABRT etc that dump a stack trace
   long_desc: This is normally true for daemons and values for libraries.
+  fmt_desc: If set, we will install signal handlers for SEGV, ABRT, BUS, ILL,
+    FPE, XCPU, XFSZ, SYS signals to generate a useful log message
   default: true
   tags:
   - service
