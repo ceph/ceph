@@ -1,4 +1,5 @@
 import fileinput
+import glob
 import logging
 import os
 import shutil
@@ -227,18 +228,9 @@ openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30'
 openapi_logger.setLevel(logging.WARNING)
 
 # ceph_confval
-ceph_confval_imports = [os.path.join(top_level,
-                                     'src/common/options',
-                                     yaml + '.yaml.in')
-                        for yaml in ['global',
-                                     'crimson',
-                                     'immutable-object-cache',
-                                     'mds',
-                                     'mds-client',
-                                     'rbd',
-                                     'rbd-mirror',
-                                     'rgw']]
-
+ceph_confval_imports = glob.glob(os.path.join(top_level,
+                                              'src/common/options',
+                                              '*.yaml.in'))
 
 # handles edit-on-github and old version warning display
 def setup(app):
