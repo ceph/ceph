@@ -15,6 +15,7 @@ set(crimson_common_srcs
   common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
+  common/fatal_signal.cc
   common/formatter.cc
   common/perf_counters_collection.cc
   common/log.cc
