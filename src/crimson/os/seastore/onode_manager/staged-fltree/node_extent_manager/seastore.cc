@@ -84,7 +84,6 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
     assert(recorder->field_type() == field_type);
 #endif
   }
-  assert(is_clean());
   auto node = do_get_mutable();
   auto p = bl.cbegin();
   while (p != bl.end()) {
