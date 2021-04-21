@@ -7079,31 +7079,7 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
 
 int Client::unlink(const char *relpath, const UserPerm& perm)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-
-  if (std::string(relpath) == "/")
-    return -CEPHFS_EISDIR;
-
-  filepath path(relpath);
-  string name = path.last_dentry();
-  path.pop_dentry();
-  InodeRef dir;
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &dir, perm);
-  if (r < 0)
-    return r;
-  if (cct->_conf->client_permissions) {
-    r = may_delete(dir.get(), name.c_str(), perm);
-    if (r < 0)
-      return r;
-  }
-  return _unlink(dir.get(), name.c_str(), perm);
+  return unlinkat(CEPHFS_AT_FDCWD, relpath, 0, perm);
 }
 
 int Client::unlinkat(int dirfd, const char *relpath, int flags, const UserPerm& perm)
@@ -7200,33 +7176,7 @@ out:
 
 int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm, std::string alternate_name)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-  tout(cct) << mode << std::endl;
-  ldout(cct, 10) << __func__ << ": " << relpath << dendl;
-
-  if (std::string(relpath) == "/")
-    return -CEPHFS_EEXIST;
-
-  filepath path(relpath);
-  string name = path.last_dentry();
-  path.pop_dentry();
-  InodeRef dir;
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &dir, perm);
-  if (r < 0)
-    return r;
-  if (cct->_conf->client_permissions) {
-    r = may_create(dir.get(), perm);
-    if (r < 0)
-      return r;
-  }
-  return _mkdir(dir.get(), name.c_str(), mode, perm, 0, {}, std::move(alternate_name));
+  return mkdirat(CEPHFS_AT_FDCWD, relpath, mode, perm, alternate_name);
 }
 
 int Client::mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm,
@@ -7331,31 +7281,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 
 int Client::rmdir(const char *relpath, const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-
-  if (std::string(relpath) == "/")
-    return -CEPHFS_EBUSY;
-
-  filepath path(relpath);
-  string name = path.last_dentry();
-  path.pop_dentry();
-  InodeRef dir;
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &dir, perms);
-  if (r < 0)
-    return r;
-  if (cct->_conf->client_permissions) {
-    int r = may_delete(dir.get(), name.c_str(), perms);
-    if (r < 0)
-      return r;
-  }
-  return _rmdir(dir.get(), name.c_str(), perms);
+  return unlinkat(CEPHFS_AT_FDCWD, relpath, AT_REMOVEDIR, perms);
 }
 
 int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t rdev) 
@@ -7393,32 +7319,7 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
   
 int Client::symlink(const char *target, const char *relpath, const UserPerm& perms, std::string alternate_name)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << target << std::endl;
-  tout(cct) << relpath << std::endl;
-
-  if (std::string(relpath) == "/")
-    return -CEPHFS_EEXIST;
-
-  filepath path(relpath);
-  string name = path.last_dentry();
-  path.pop_dentry();
-  InodeRef dir;
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &dir, perms);
-  if (r < 0)
-    return r;
-  if (cct->_conf->client_permissions) {
-    int r = may_create(dir.get(), perms);
-    if (r < 0)
-      return r;
-  }
-  return _symlink(dir.get(), name.c_str(), target, perms, std::move(alternate_name));
+  return symlinkat(target, CEPHFS_AT_FDCWD, relpath, perms, alternate_name);
 }
 
 int Client::symlinkat(const char *target, int dirfd, const char *relpath, const UserPerm& perms,
@@ -7465,22 +7366,7 @@ int Client::symlinkat(const char *target, int dirfd, const char *relpath, const 
 
 int Client::readlink(const char *relpath, char *buf, loff_t size, const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-
-  filepath path(relpath);
-  InodeRef in;
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &in, perms, false);
-  if (r < 0)
-    return r;
-
-  return _readlink(in.get(), buf, size);
+  return readlinkat(CEPHFS_AT_FDCWD, relpath, buf, size, perms);
 }
 
 int Client::readlinkat(int dirfd, const char *relpath, char *buf, loff_t size, const UserPerm& perms) {
@@ -7938,33 +7824,7 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
 		  const UserPerm& perms,
 		  unsigned int want, unsigned int flags)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " want " << want << ")" << dendl;
-  tout(cct) << "statx" << std::endl;
-  tout(cct) << relpath << std::endl;
-
-  filepath path(relpath);
-  InodeRef in;
-
-  unsigned mask = statx_to_mask(flags, want);
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask);
-  if (r < 0)
-    return r;
-
-  r = _getattr(in, mask, perms);
-  if (r < 0) {
-    ldout(cct, 3) << __func__ << " exit on error!" << dendl;
-    return r;
-  }
-
-  fill_statx(in, mask, stx);
-  ldout(cct, 3) << __func__ << " exit (relpath " << relpath << " mask " << stx->stx_mask << ")" << dendl;
-  return r;
+  return statxat(CEPHFS_AT_FDCWD, relpath, stx, perms, want, flags);
 }
 
 int Client::lstat(const char *relpath, struct stat *stbuf,
@@ -8156,24 +8016,7 @@ void Client::touch_dn(Dentry *dn)
 
 int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-  tout(cct) << mode << std::endl;
-
-  filepath path(relpath);
-  InodeRef in;
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &in, perms);
-  if (r < 0)
-    return r;
-  struct stat attr;
-  attr.st_mode = mode;
-  return _setattr(in, &attr, CEPH_SETATTR_MODE, perms);
+  return chmodat(CEPHFS_AT_FDCWD, relpath, mode, 0, perms);
 }
 
 int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
@@ -8233,50 +8076,13 @@ int Client::chmodat(int dirfd, const char *relpath, mode_t mode, int flags,
 
 int Client::lchmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-  tout(cct) << mode << std::endl;
-
-  filepath path(relpath);
-  InodeRef in;
-
-  std::scoped_lock lock(client_lock);
-  // don't follow symlinks
-  int r = path_walk(path, &in, perms, false);
-  if (r < 0)
-    return r;
-  struct stat attr;
-  attr.st_mode = mode;
-  return _setattr(in, &attr, CEPH_SETATTR_MODE, perms);
+  return chmodat(CEPHFS_AT_FDCWD, relpath, mode, AT_SYMLINK_NOFOLLOW, perms);
 }
 
 int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		  const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-  tout(cct) << new_uid << std::endl;
-  tout(cct) << new_gid << std::endl;
-
-  filepath path(relpath);
-  InodeRef in;
-
-  std::scoped_lock lock(client_lock);
-  int r = path_walk(path, &in, perms);
-  if (r < 0)
-    return r;
-  struct stat attr;
-  attr.st_uid = new_uid;
-  attr.st_gid = new_gid;
-  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID, perms);
+  return chownat(CEPHFS_AT_FDCWD, relpath, new_uid, new_gid, 0, perms);
 }
 
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
@@ -8310,30 +8116,7 @@ int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
 int Client::lchown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		   const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
-
-  tout(cct) << __func__ << std::endl;
-  tout(cct) << relpath << std::endl;
-  tout(cct) << new_uid << std::endl;
-  tout(cct) << new_gid << std::endl;
-
-  filepath path(relpath);
-  InodeRef in;
-
-  std::scoped_lock lock(client_lock);
-  // don't follow symlinks
-  int r = path_walk(path, &in, perms, false);
-  if (r < 0)
-    return r;
-  struct stat attr;
-  attr.st_uid = new_uid;
-  attr.st_gid = new_gid;
-  int mask = 0;
-  if (new_uid != static_cast<uid_t>(-1)) mask |= CEPH_SETATTR_UID;
-  if (new_gid != static_cast<gid_t>(-1)) mask |= CEPH_SETATTR_GID;
-  return _setattr(in, &attr, mask, perms);
+  return chownat(CEPHFS_AT_FDCWD, relpath, new_uid, new_gid, AT_SYMLINK_NOFOLLOW, perms);
 }
 
 int Client::chownat(int dirfd, const char *relpath, uid_t new_uid, gid_t new_gid,
