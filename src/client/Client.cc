@@ -3350,6 +3350,9 @@ void Client::get_cap_ref(Inode *in, int cap)
 
 void Client::put_cap_ref(Inode *in, int cap)
 {
+  // HACK: early exit
+  return;
+  
   int last = in->put_cap_ref(cap);
   if (last) {
     int put_nref = 0;
@@ -3388,6 +3391,9 @@ void Client::put_cap_ref(Inode *in, int cap)
 // (track) for capability hit when required (when cap requirement succeedes).
 int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 {
+  // HACK: just assume we have the caps
+  return 0;
+
   Inode *in = fh->inode.get();
 
   int r = check_pool_perm(in, need);
@@ -4222,6 +4228,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
       if (&cap != in->auth_cap)
          ldout(cct, 0) << "WARNING: " <<  "inode " << *in << " caps on mds." << mds << " != auth_cap." << dendl;
 
+      ldout(cct, 0) << "HACK: cap.cap_id:" << cap.cap_id << " cap_id:" << cap_id << dendl;
       ceph_assert(cap.cap_id == cap_id);
       seq = cap.seq;
       mseq = cap.mseq;
@@ -4278,6 +4285,10 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   if (issued & ~old_caps)
     signal_cond_list(in->waitfor_caps);
+
+  // HACK: Just remove all caps in the client.
+  //       We force return true anyways
+  remove_all_caps(in);
 }
 
 void Client::remove_cap(Cap *cap, bool queue_release)

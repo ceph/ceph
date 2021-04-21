@@ -3985,6 +3985,7 @@ public:
 void Locker::_do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id,
 			     ceph_seq_t mseq, ceph_seq_t seq)
 {
+  dout(7) << "HACK: executing _do_cap_release " << ino << dendl;
   CInode *in = mdcache->get_inode(ino);
   if (!in) {
     dout(7) << "_do_cap_release missing ino " << ino << dendl;

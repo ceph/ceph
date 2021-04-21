@@ -2637,15 +2637,15 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     respond_to_request(mdr, -CEPHFS_EOPNOTSUPP);
   }
 
-  // HACK: Always release the capability here so that the MDS is no longer tracking it.
-  client_t client = mdr->get_client();
-  CInode* ino = mdr->in[0];
-  if (ino) {
-    Capability *cap = ino->get_client_cap(client);
-    if (cap) {
-      mds->locker->_do_cap_release(client, inodeno_t((uint64_t)cap->get_inode()) , cap->get_cap_id(), cap->get_mseq(), cap->get_last_seq());
+    // HACK: continously release caps on every tick for all sessions.
+    client_t client = mdr->session->get_client();
+    for (auto p = mdr->session->caps.begin(); !p.end(); ) {
+      const Capability *cap = *p;
+      ++p;
+      mds->locker->_do_cap_release(client, cap->get_inode()->ino(), cap->get_cap_id(), cap->get_mseq(), cap->get_last_seq());
     }
-  }
+
+     mdr->session->notify_cap_release(mdr->session->caps.size());
 }
 
 

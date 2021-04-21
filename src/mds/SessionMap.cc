@@ -577,7 +577,11 @@ void Session::dump(Formatter *f, bool cap_dump) const
   f->dump_string("state", get_state_name());
   f->dump_int("num_leases", leases.size());
   f->dump_int("num_caps", caps.size());
-  if (cap_dump) {
+
+  // HACK: Always dump the caps for testing.
+  //   Unclear why but adding `--dump-caps` gives
+  //   `invalid json` from admin socket.
+  if (true) {
     f->open_array_section("caps");
     for (const auto& cap : caps) {
       f->dump_object("cap", *cap);
