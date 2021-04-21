@@ -6667,7 +6667,7 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   unexpirables.clear();
 
   // trim dentries from the LRU until count is reached
-  // if mds is in standbyreplay and will trim all inodes which aren't in segments
+  // if mds is in standby_replay and skip trimming the inodes
   while (!throttled && (cache_toofull() || count > 0 || is_standby_replay)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) break;
@@ -6675,8 +6675,7 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
     if (!dn) {
       break;
     }
-    if ((is_standby_replay && dn->get_linkage()->inode &&
-        dn->get_linkage()->inode->item_open_file.is_on_list())) {
+    if (is_standby_replay && dn->get_linkage()->inode) {
       // we move the inodes that need to be trimmed to the end of the lru queue.
       // refer to MDCache::standby_trim_segment
       lru.lru_insert_bot(dn);
