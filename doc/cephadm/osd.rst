@@ -446,8 +446,8 @@ information about the attributes with this command:
 
   ceph-volume inventory </path/to/disk>
 
-Vendor or Model:
-^^^^^^^^^^^^^^^^
+Vendor or Model
+^^^^^^^^^^^^^^^
 
 Specific disks can be targeted by vendor or model:
 
@@ -462,8 +462,8 @@ or
     vendor: disk_vendor_name
 
 
-Size:
-^^^^^
+Size
+^^^^
 
 Specific disks can be targeted by `Size`:
 
@@ -471,8 +471,8 @@ Specific disks can be targeted by `Size`:
 
     size: size_spec
 
-Size specs:
-___________
+Size specs
+__________
 
 Size specifications can be of the following forms:
 
@@ -513,8 +513,8 @@ Other units of size are supported: Megabyte(M), Gigabyte(G) and Terrabyte(T).
 Appending the (B) for byte is also supported: ``MB``, ``GB``, ``TB``.
 
 
-Rotational:
-^^^^^^^^^^^
+Rotational
+^^^^^^^^^^
 
 This operates on the 'rotational' attribute of the disk.
 
@@ -527,8 +527,8 @@ This operates on the 'rotational' attribute of the disk.
 `0` to match all disks that are non-rotational (SSD, NVME etc)
 
 
-All:
-^^^^
+All
+^^^
 
 This will take all disks that are 'available'
 
@@ -539,8 +539,8 @@ Note: This is exclusive for the data_devices section.
     all: true
 
 
-Limiter:
-^^^^^^^^
+Limiter
+^^^^^^^
 
 If you have specified some valid filters but want to limit the number of disks that they match, use the ``limit`` directive:
 
