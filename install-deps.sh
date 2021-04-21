@@ -54,11 +54,15 @@ function munge_debian_control {
     shift
     local for_make_check=$1
     shift
+    local control_in=$1.in
     local control=$1
     case "$version" in
         *squeeze*|*wheezy*)
 	    control="/tmp/control.$$"
-	    grep -v babeltrace debian/control > $control
+	    grep -v babeltrace $control_in > $control
+	    ;;
+        *)
+	    cp $control_in $control
 	    ;;
     esac
     if $with_seastar; then
@@ -337,7 +341,7 @@ else
                 $SUDO apt-get install -y gcc
                 ;;
         esac
-        if ! test -r debian/control ; then
+        if ! test -r debian/control.in ; then
             echo debian/control is not a readable file
             exit 1
         fi
