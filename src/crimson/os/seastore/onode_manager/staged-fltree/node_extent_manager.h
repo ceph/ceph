@@ -41,8 +41,6 @@ class NodeExtent : public LogicalCachedExtent {
   NodeExtent(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
   NodeExtentMutable do_get_mutable() {
-    assert(is_pending() || // during mutation
-           is_clean());    // during replay
     return NodeExtentMutable(get_bptr().c_str(), get_length());
   }
 
