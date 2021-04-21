@@ -92,7 +92,7 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
 
 
 class FakeDispatcher : public Dispatcher {
- public:
+public:
   struct Session : public RefCountedObject {
     atomic<uint64_t> count;
     ConnectionRef con;
@@ -219,6 +219,17 @@ class FakeDispatcher : public Dispatcher {
     return 1;
   }
 
+  bool ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) override {
+    switch(ttype) {
+    case ms_throttle_t::MESSAGE:
+    case ms_throttle_t::BYTES:
+    case ms_throttle_t::DISPATCH_QUEUE:
+    case ms_throttle_t::NONE:
+      return true;
+    default:
+      return false;
+    }
+  }
   void reply_message(Message *m) {
     MPing *rm = new MPing();
     m->get_connection()->send_message(rm);
@@ -1610,7 +1621,7 @@ ostream& operator<<(ostream& out, const Payload &pl)
 }
 
 class SyntheticDispatcher : public Dispatcher {
- public:
+public:
   ceph::mutex lock = ceph::make_mutex("SyntheticDispatcher::lock");
   ceph::condition_variable cond;
   bool is_server;
@@ -1701,6 +1712,18 @@ class SyntheticDispatcher : public Dispatcher {
       m->put();
       got_new = true;
       cond.notify_all();
+    }
+  }
+
+  bool ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) override {
+    switch(ttype) {
+    case ms_throttle_t::MESSAGE:
+    case ms_throttle_t::BYTES:
+    case ms_throttle_t::DISPATCH_QUEUE:
+    case ms_throttle_t::NONE:
+      return true;
+    default:
+      return false;
     }
   }
 
@@ -2196,7 +2219,7 @@ class MarkdownDispatcher : public Dispatcher {
   ceph::mutex lock = ceph::make_mutex("MarkdownDispatcher::lock");
   set<ConnectionRef> conns;
   bool last_mark;
- public:
+public:
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context),
                               last_mark(false) {
@@ -2264,6 +2287,17 @@ class MarkdownDispatcher : public Dispatcher {
   }
   int ms_handle_authentication(Connection *con) override {
     return 1;
+  }
+  bool ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) override {
+    switch(ttype) {
+    case ms_throttle_t::MESSAGE:
+    case ms_throttle_t::BYTES:
+    case ms_throttle_t::DISPATCH_QUEUE:
+    case ms_throttle_t::NONE:
+      return true;
+    default:
+      return false;
+    }
   }
 };
 
