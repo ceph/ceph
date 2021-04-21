@@ -179,169 +179,22 @@ scrubbing operations.
 Operations
 ==========
 
- ``osd_op_queue``
-
-:Description: This sets the type of queue to be used for prioritizing ops
-              within each OSD. Both queues feature a strict sub-queue which is
-              dequeued before the normal queue. The normal queue is different
-              between implementations. The WeightedPriorityQueue (``wpq``)
-              dequeues operations in relation to their priorities to prevent
-              starvation of any queue. WPQ should help in cases where a few OSDs
-              are more overloaded than others. The new mClockQueue
-              (``mclock_scheduler``) prioritizes operations based on which class
-              they belong to (recovery, scrub, snaptrim, client op, osd subop).
-              See `QoS Based on mClock`_. Requires a restart.
-
-:Type: String
-:Valid Choices: wpq, mclock_scheduler
-:Default: ``wpq``
-
-
-``osd_op_queue_cut_off``
-
-:Description: This selects which priority ops will be sent to the strict
-              queue verses the normal queue. The ``low`` setting sends all
-              replication ops and higher to the strict queue, while the ``high``
-              option sends only replication acknowledgment ops and higher to
-              the strict queue. Setting this to ``high`` should help when a few
-              OSDs in the cluster are very busy especially when combined with
-              ``wpq`` in the ``osd_op_queue`` setting. OSDs that are very busy
-              handling replication traffic could starve primary client traffic
-              on these OSDs without these settings. Requires a restart.
-
-:Type: String
-:Valid Choices: low, high
-:Default: ``high``
-
-
-``osd_client_op_priority``
-
-:Description: The priority set for client operations.  This value is relative
-              to that of ``osd_recovery_op_priority`` below.  The default
-              strongly favors client ops over recovery.
-
-:Type: 32-bit Integer
-:Default: ``63``
-:Valid Range: 1-63
-
-
-``osd_recovery_op_priority``
-
-:Description: The priority of recovery operations vs client operations, if not specified by the
-              pool's ``recovery_op_priority``.  The default value prioritizes client
-              ops (see above) over recovery ops.  You may adjust the tradeoff of client
-              impact against the time to restore cluster health by lowering this value
-              for increased prioritization of client ops, or by increasing it to favor
-              recovery.
-
-:Type: 32-bit Integer
-:Default: ``3``
-:Valid Range: 1-63
-
-
-``osd_scrub_priority``
-
-:Description: The default work queue priority for scheduled scrubs when the
-              pool doesn't specify a value of ``scrub_priority``.  This can be
-              boosted to the value of ``osd_client_op_priority`` when scrubs are
-              blocking client operations.
-
-:Type: 32-bit Integer
-:Default: ``5``
-:Valid Range: 1-63
-
-
-``osd_requested_scrub_priority``
-
-:Description: The priority set for user requested scrub on the work queue.  If
-              this value were to be smaller than ``osd_client_op_priority`` it
-              can be boosted to the value of ``osd_client_op_priority`` when
-              scrub is blocking client operations.
-
-:Type: 32-bit Integer
-:Default: ``120``
-
-
-``osd_snap_trim_priority``
-
-:Description: The priority set for the snap trim work queue.
-
-:Type: 32-bit Integer
-:Default: ``5``
-:Valid Range: 1-63
-
-``osd_snap_trim_sleep``
-
-:Description: Time in seconds to sleep before next snap trim op.
-              Increasing this value will slow down snap trimming.
-              This option overrides backend specific variants.
-
-:Type: Float
-:Default: ``0``
-
-
-``osd_snap_trim_sleep_hdd``
-
-:Description: Time in seconds to sleep before next snap trim op
-              for HDDs.
-
-:Type: Float
-:Default: ``5``
-
-
-``osd_snap_trim_sleep_ssd``
-
-:Description: Time in seconds to sleep before next snap trim op
-              for SSD OSDs (including NVMe).
-
-:Type: Float
-:Default: ``0``
-
-
-``osd_snap_trim_sleep_hybrid``
-
-:Description: Time in seconds to sleep before next snap trim op
-              when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
-
-:Type: Float
-:Default: ``2``
-
-``osd_op_thread_timeout``
-
-:Description: The Ceph OSD Daemon operation thread timeout in seconds.
-:Type: 32-bit Integer
-:Default: ``15``
-
-
-``osd_op_complaint_time``
-
-:Description: An operation becomes complaint worthy after the specified number
-              of seconds have elapsed.
-
-:Type: Float
-:Default: ``30``
-
-
-``osd_op_history_size``
-
-:Description: The maximum number of completed operations to track.
-:Type: 32-bit Unsigned Integer
-:Default: ``20``
-
-
-``osd_op_history_duration``
-
-:Description: The oldest completed operation to track.
-:Type: 32-bit Unsigned Integer
-:Default: ``600``
-
-
-``osd_op_log_threshold``
-
-:Description: How many operations logs to display at once.
-:Type: 32-bit Integer
-:Default: ``5``
-
+.. confval:: osd_op_queue
+.. confval:: osd_op_queue_cut_off
+.. confval:: osd_client_op_priority
+.. confval:: osd_recovery_op_priority
+.. confval:: osd_scrub_priority
+.. confval:: osd_requested_scrub_priority
+.. confval:: osd_snap_trim_priority
+.. confval:: osd_snap_trim_sleep
+.. confval:: osd_snap_trim_sleep_hdd
+.. confval:: osd_snap_trim_sleep_ssd
+.. confval:: osd_snap_trim_sleep_hybrid
+.. confval:: osd_op_thread_timeout
+.. confval:: osd_op_complaint_time
+.. confval:: osd_op_history_size
+.. confval:: osd_op_history_duration
+.. confval:: osd_op_log_threshold
 
 .. _dmclock-qos:
 
@@ -468,95 +321,18 @@ to the code base. We hope you'll share you're experiences with your
 mClock and dmClock experiments on the ``ceph-devel`` mailing list.
 
 
-``osd_push_per_object_cost``
-
-:Description: the overhead for serving a push op
-
-:Type: Unsigned Integer
-:Default: 1000
-
-
-``osd_recovery_max_chunk``
-
-:Description: the maximum total size of data chunks a recovery op can carry.
-
-:Type: Unsigned Integer
-:Default: 8 MiB
-
-
-``osd_mclock_scheduler_client_res``
-
-:Description: IO proportion reserved for each client (default).
-
-:Type: Unsigned Integer
-:Default: 1
-
-
-``osd_mclock_scheduler_client_wgt``
-
-:Description: IO share for each client (default) over reservation.
-
-:Type: Unsigned Integer
-:Default: 1
-
-
-``osd_mclock_scheduler_client_lim``
-
-:Description: IO limit for each client (default) over reservation.
-
-:Type: Unsigned Integer
-:Default: 999999
-
-
-``osd_mclock_scheduler_background_recovery_res``
-
-:Description: IO proportion reserved for background recovery (default).
-
-:Type: Unsigned Integer
-:Default: 1
-
-
-``osd_mclock_scheduler_background_recovery_wgt``
-
-:Description: IO share for each background recovery over reservation.
-
-:Type: Unsigned Integer
-:Default: 1
-
-
-``osd_mclock_scheduler_background_recovery_lim``
-
-:Description: IO limit for background recovery over reservation.
-
-:Type: Unsigned Integer
-:Default: 999999
-
-
-``osd_mclock_scheduler_background_best_effort_res``
-
-:Description: IO proportion reserved for background best_effort (default).
-
-:Type: Unsigned Integer
-:Default: 1
-
-
-``osd_mclock_scheduler_background_best_effort_wgt``
-
-:Description: IO share for each background best_effort over reservation.
-
-:Type: Unsigned Integer
-:Default: 1
-
-
-``osd_mclock_scheduler_background_best_effort_lim``
-
-:Description: IO limit for background best_effort over reservation.
-
-:Type: Unsigned Integer
-:Default: 999999
+.. confval:: osd_push_per_object_cost
+.. confval:: osd_mclock_scheduler_client_res
+.. confval:: osd_mclock_scheduler_client_wgt
+.. confval:: osd_mclock_scheduler_client_lim
+.. confval:: osd_mclock_scheduler_background_recovery_res
+.. confval:: osd_mclock_scheduler_background_recovery_wgt
+.. confval:: osd_mclock_scheduler_background_recovery_lim
+.. confval:: osd_mclock_scheduler_background_best_effort_res
+.. confval:: osd_mclock_scheduler_background_best_effort_wgt
+.. confval:: osd_mclock_scheduler_background_best_effort_lim
 
 .. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf
-
 
 .. index:: OSD; backfilling
 
@@ -572,35 +348,10 @@ with 'backfilling', which allows Ceph to set backfill operations to a lower
 priority than requests to read or write data.
 
 
-``osd_max_backfills``
-
-:Description: The maximum number of backfills allowed to or from a single OSD.
-              Note that this is applied separately for read and write operations.
-:Type: 64-bit Unsigned Integer
-:Default: ``1``
-
-
-``osd_backfill_scan_min``
-
-:Description: The minimum number of objects per backfill scan.
-
-:Type: 32-bit Integer
-:Default: ``64``
-
-
-``osd_backfill_scan_max``
-
-:Description: The maximum number of objects per backfill scan.
-
-:Type: 32-bit Integer
-:Default: ``512``
-
-
-``osd_backfill_retry_interval``
-
-:Description: The number of seconds to wait before retrying backfill requests.
-:Type: Double
-:Default: ``10.0``
+.. confval:: osd_max_backfills
+.. confval:: osd_backfill_scan_min
+.. confval:: osd_backfill_scan_max
+.. confval:: osd_backfill_retry_interval
 
 .. index:: OSD; osdmap
 
@@ -611,28 +362,9 @@ OSD maps reflect the OSD daemons operating in the cluster. Over time, the
 number of map epochs increases. Ceph provides some settings to ensure that
 Ceph performs well as the OSD map grows larger.
 
-
-``osd_map_dedup``
-
-:Description: Enable removing duplicates in the OSD map.
-:Type: Boolean
-:Default: ``true``
-
-
-``osd_map_cache_size``
-
-:Description: The number of OSD maps to keep cached.
-:Type: 32-bit Integer
-:Default: ``50``
-
-
-``osd_map_message_max``
-
-:Description: The maximum map entries allowed per MOSDMap message.
-:Type: 32-bit Integer
-:Default: ``40``
-
-
+.. confval:: osd_map_dedup
+.. confval:: osd_map_cache_size
+.. confval:: osd_map_message_max
 
 .. index:: OSD; recovery
 
@@ -657,123 +389,18 @@ To maintain operational performance, Ceph performs recovery with limitations on
 the number recovery requests, threads and object chunk sizes which allows Ceph
 perform well in a degraded state.
 
-
-``osd_recovery_delay_start``
-
-:Description: After peering completes, Ceph will delay for the specified number
-              of seconds before starting to recover RADOS objects.
-
-:Type: Float
-:Default: ``0``
-
-
-``osd_recovery_max_active``
-
-:Description: The number of active recovery requests per OSD at one time. More
-              requests will accelerate recovery, but the requests places an
-              increased load on the cluster.
-
-	      This value is only used if it is non-zero. Normally it
-	      is ``0``, which means that the ``hdd`` or ``ssd`` values
-	      (below) are used, depending on the type of the primary
-	      device backing the OSD.
-
-:Type: 32-bit Integer
-:Default: ``0``
-
-``osd_recovery_max_active_hdd``
-
-:Description: The number of active recovery requests per OSD at one time, if the
-	      primary device is rotational.
-
-:Type: 32-bit Integer
-:Default: ``3``
-
-``osd_recovery_max_active_ssd``
-
-:Description: The number of active recovery requests per OSD at one time, if the
-	      primary device is non-rotational (i.e., an SSD).
-
-:Type: 32-bit Integer
-:Default: ``10``
-
-
-``osd_recovery_max_chunk``
-
-:Description: The maximum size of a recovered chunk of data to push.
-:Type: 64-bit Unsigned Integer
-:Default: ``8 << 20``
-
-
-``osd_recovery_max_single_start``
-
-:Description: The maximum number of recovery operations per OSD that will be
-              newly started when an OSD is recovering.
-:Type: 64-bit Unsigned Integer
-:Default: ``1``
-
-
-``osd_recovery_thread_timeout``
-
-:Description: The maximum time in seconds before timing out a recovery thread.
-:Type: 32-bit Integer
-:Default: ``30``
-
-
-``osd_recover_clone_overlap``
-
-:Description: Preserves clone overlap during recovery. Should always be set
-              to ``true``.
-
-:Type: Boolean
-:Default: ``true``
-
-
-``osd_recovery_sleep``
-
-:Description: Time in seconds to sleep before the next recovery or backfill op.
-              Increasing this value will slow down recovery operation while
-              client operations will be less impacted.
-
-:Type: Float
-:Default: ``0``
-
-
-``osd_recovery_sleep_hdd``
-
-:Description: Time in seconds to sleep before next recovery or backfill op
-              for HDDs.
-
-:Type: Float
-:Default: ``0.1``
-
-
-``osd_recovery_sleep_ssd``
-
-:Description: Time in seconds to sleep before the next recovery or backfill op
-              for SSDs.
-
-:Type: Float
-:Default: ``0``
-
-
-``osd_recovery_sleep_hybrid``
-
-:Description: Time in seconds to sleep before the next recovery or backfill op
-              when OSD data is on HDD and OSD journal / WAL+DB is on SSD.
-
-:Type: Float
-:Default: ``0.025``
-
-
-``osd_recovery_priority``
-
-:Description: The default priority set for recovery work queue.  Not
-              related to a pool's ``recovery_priority``.
-
-:Type: 32-bit Integer
-:Default: ``5``
-
+.. confval:: osd_recovery_delay_start
+.. confval:: osd_recovery_max_active
+.. confval:: osd_recovery_max_active_hdd
+.. confval:: osd_recovery_max_active_ssd
+.. confval:: osd_recovery_max_chunk
+.. confval:: osd_recovery_max_single_start
+.. confval:: osd_recover_clone_overlap
+.. confval:: osd_recovery_sleep
+.. confval:: osd_recovery_sleep_hdd
+.. confval:: osd_recovery_sleep_ssd
+.. confval:: osd_recovery_sleep_hybrid
+.. confval:: osd_recovery_priority
 
 Tiering
 =======
