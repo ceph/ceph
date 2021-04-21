@@ -184,7 +184,13 @@ available options.
 
 * You can pass any initial Ceph configuration options to the new
   cluster by putting them in a standard ini-style configuration file
-  and using the ``--config *<config-file>*`` option.
+  and using the ``--config *<config-file>*`` option.  For example::
+
+      $ cat <<EOF > initial-ceph.conf
+      [global]
+      osd crush chooseleaf type = 0
+      EOF
+      $ ./cephadm bootstrap --config initial-ceph.conf ...
 
 * The ``--ssh-user *<user>*`` option makes it possible to choose which ssh
   user cephadm will use to connect to hosts. The associated ssh key will be

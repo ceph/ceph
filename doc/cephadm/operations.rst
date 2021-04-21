@@ -299,43 +299,74 @@ CEPHADM_CHECK_KERNEL_VERSION
 The OS kernel version (maj.min) is checked for consistency across the hosts. Once again, the
 majority of the hosts is used as the basis of identifying anomalies.
 
+Client keyrings and configs
+===========================
+
+Cephadm can distribute copies of the ``ceph.conf`` and client keyring
+files to hosts.  For example, it is usually a good idea to store a
+copy of the config and ``client.admin`` keyring on any hosts that will
+be used to administer the cluster via the CLI.  By default, cephadm will do
+this for any nodes with the ``admin`` label (which normally includes the bootstrap
+host).
+
+When a client keyring is placed under management, cephadm will:
+
+  - build a list of target hosts based on the specified placement spec (see :ref:`orchestrator-cli-placement-spec`)
+  - store a copy of the ``/etc/ceph/ceph.conf`` file on the specified host(s)
+  - store a copy of the keyring file on the specified host(s)
+  - update the ``ceph.conf`` file as needed (e.g., due to a change in the cluster monitors)
+  - update the keyring file if the entity's key is changed (e.g., via ``ceph auth ...`` commands)
+  - ensure the keyring file has the specified ownership and mode
+  - remove the keyring file when client keyring management is disabled
+  - remove the keyring file from old hosts if the keyring placement spec is updated (as needed)
+
+To view which client keyrings are currently under management::
+
+  ceph orch client-keyring ls
+
+To place a keyring under management::
+
+  ceph orch client-keyring set <entity> <placement> [--mode=<mode>] [--owner=<uid>.<gid>] [--path=<path>]
+
+- By default, the *path* will be ``/etc/ceph/client.{entity}.keyring``, which is where
+  Ceph looks by default.  Be careful specifying alternate locations as existing files
+  maybe overwritten.
+- A placement of ``*`` (all hosts) is common.
+- The mode defaults to ``0600`` and ownership to ``0:0`` (user root, group root).
+
+For example, to create and deploy a ``client.rbd`` key to hosts with the ``rbd-client`` label and group readable by uid/gid 107 (qemu),::
+
+  ceph auth get-or-create-key client.rbd mon 'profile rbd' mgr 'profile rbd' osd 'profile rbd pool=my_rbd_pool'
+  ceph orch client-keyring set client.rbd label:rbd-client --owner 107:107 --mode 640
+
+The resulting keyring file is::
+
+  -rw-r-----. 1 qemu qemu 156 Apr 21 08:47 /etc/ceph/client.client.rbd.keyring
+
+To disable management of a keyring file::
+
+  ceph orch client-keyring rm <entity>
+
+Note that this will delete any keyring files for this entity that were previously written
+to cluster nodes.
+
+
 /etc/ceph/ceph.conf
 ===================
 
-Cephadm distributes a minimized ``ceph.conf`` that only contains
-a minimal set of information to connect to the Ceph cluster.
+It may also be useful to distribute ``ceph.conf`` files to hosts without an associated
+client keyring file.  By default, cephadm only deploys a ``ceph.conf`` file to hosts where a client keyring
+is also distributed (see above).  To write config files to hosts without client keyrings::
 
-To update the configuration settings, instead of manually editing
-the ``ceph.conf`` file, use the config database instead::
+    ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf true
 
-  ceph config set ...
+By default, the configs are written to all hosts (i.e., those listed
+by ``ceph orch host ls``).  To specify which hosts get a ``ceph.conf``::
 
-See :ref:`ceph-conf-database` for details.
+    ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_host <placement spec>
 
-By default, cephadm does not deploy that minimized ``ceph.conf`` across the
-cluster. To enable the management of ``/etc/ceph/ceph.conf`` files on all
-hosts, please enable this by running::
+For example, to distribute configs to hosts with the ``bare_config`` label,::
 
-  ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf true
+    ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_host label:bare_config
 
-If enabled, by default cephadm will update ``ceph.conf`` on all cluster hosts. To
-change the set of hosts that get a managed config file, you can update the
-``mgr/cephadm/manage_etc_ceph_ceph_conf_hosts`` setting to a different placement
-spec (see :ref:`orchestrator-cli-placement-spec`).  For example, to limit config
-file updates to hosts with the ``foo`` label::
-
-  ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_host label:foo
-
-To set up an initial configuration before bootstrapping
-the cluster, create an initial ``ceph.conf`` file. For example::
-
-  cat <<EOF > /etc/ceph/ceph.conf
-  [global]
-  osd crush chooseleaf type = 0
-  EOF
-
-Then, run bootstrap referencing this file::
-
-  cephadm bootstrap -c /root/ceph.conf ...
-
-
+(See :ref:`orchestrator-cli-placement-spec` for more information about placement specs.)

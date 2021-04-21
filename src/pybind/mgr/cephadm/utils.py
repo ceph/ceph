@@ -119,3 +119,14 @@ def resolve_ip(hostname: str) -> str:
 
 def ceph_release_to_major(release: str) -> int:
     return ord(release[0]) - ord('a') + 1
+
+
+def file_mode_to_str(mode: int) -> str:
+    r = ''
+    for shift in range(0, 9, 3):
+        r = (
+            f'{"r" if (mode >> shift) & 4 else "-"}'
+            f'{"w" if (mode >> shift) & 2 else "-"}'
+            f'{"x" if (mode >> shift) & 1 else "-"}'
+        ) + r
+    return r

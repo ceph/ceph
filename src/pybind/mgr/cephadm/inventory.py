@@ -3,11 +3,11 @@ from copy import copy
 import json
 import logging
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
-    NamedTuple
+    NamedTuple, Type
 
 import orchestrator
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 
@@ -226,6 +226,83 @@ class SpecStore():
 
     def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
         return self.spec_created.get(spec.service_name())
+
+
+class ClientKeyringSpec(object):
+    """
+    A client keyring file that we should maintain
+    """
+    def __init__(
+            self,
+            entity: str,
+            placement: PlacementSpec,
+            mode: Optional[int] = None,
+            uid: Optional[int] = None,
+            gid: Optional[int] = None,
+    ) -> None:
+        self.entity = entity
+        self.placement = placement
+        self.mode = mode or 0o600
+        self.uid = uid or 0
+        self.gid = gid or 0
+
+    def validate(self) -> None:
+        pass
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            'entity': self.entity,
+            'placement': self.placement.to_json(),
+            'mode': self.mode,
+            'uid': self.uid,
+            'gid': self.gid,
+        }
+
+    @property
+    def path(self) -> str:
+        return f'/etc/ceph/ceph.{self.entity}.keyring'
+
+    @classmethod
+    def from_json(cls: Type, data: dict) -> 'ClientKeyringSpec':
+        c = data.copy()
+        if 'placement' in c:
+            c['placement'] = PlacementSpec.from_json(c['placement'])
+        _cls = cls(**c)
+        _cls.validate()
+        return _cls
+
+
+class ClientKeyringStore():
+    """
+    Track client keyring files that we are supposed to maintain
+    """
+
+    def __init__(self, mgr):
+        # type: (CephadmOrchestrator) -> None
+        self.mgr: CephadmOrchestrator = mgr
+        self.mgr = mgr
+        self.keys: Dict[str, ClientKeyringSpec] = {}
+
+    def load(self) -> None:
+        c = self.mgr.get_store('client_keyrings') or b'{}'
+        j = json.loads(c)
+        for e, d in j.items():
+            self.keys[e] = ClientKeyringSpec.from_json(d)
+
+    def save(self) -> None:
+        data = {
+            k: v.to_json() for k, v in self.keys.items()
+        }
+        self.mgr.set_store('client_keyrings', json.dumps(data))
+
+    def update(self, ks: ClientKeyringSpec) -> None:
+        self.keys[ks.entity] = ks
+        self.save()
+
+    def rm(self, entity: str) -> None:
+        if entity in self.keys:
+            del self.keys[entity]
+            self.save()
 
 
 class HostCache():
