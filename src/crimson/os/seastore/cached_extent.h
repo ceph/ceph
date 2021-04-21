@@ -415,15 +415,11 @@ protected:
    * reference.
    */
   paddr_t maybe_generate_relative(paddr_t addr) {
-    if (!addr.is_relative()) {
-      return addr;
-    } else if (is_mutation_pending()) {
-      assert(addr.is_record_relative());
-      return addr;
-    } else {
-      ceph_assert(is_initial_pending());
-      ceph_assert(get_paddr().is_record_relative());
+    if (is_initial_pending() && addr.is_record_relative()) {
       return addr - get_paddr();
+    } else {
+      ceph_assert(!addr.is_record_relative() || is_mutation_pending());
+      return addr;
     }
   }
 
