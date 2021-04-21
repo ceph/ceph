@@ -405,20 +405,8 @@ perform well in a degraded state.
 Tiering
 =======
 
-``osd_agent_max_ops``
-
-:Description: The maximum number of simultaneous flushing ops per tiering agent
-              in the high speed mode.
-:Type: 32-bit Integer
-:Default: ``4``
-
-
-``osd_agent_max_low_ops``
-
-:Description: The maximum number of simultaneous flushing ops per tiering agent
-              in the low speed mode.
-:Type: 32-bit Integer
-:Default: ``2``
+.. confval:: osd_agent_max_ops
+.. confval:: osd_agent_max_low_ops
 
 See `cache target dirty high ratio`_ for when the tiering agent flushes dirty
 objects within the high speed mode.
@@ -426,103 +414,15 @@ objects within the high speed mode.
 Miscellaneous
 =============
 
-
-``osd_snap_trim_thread_timeout``
-
-:Description: The maximum time in seconds before timing out a snap trim thread.
-:Type: 32-bit Integer
-:Default: ``1*60*60``
-
-
-``osd_backlog_thread_timeout``
-
-:Description: The maximum time in seconds before timing out a backlog thread.
-:Type: 32-bit Integer
-:Default: ``1*60*60``
-
-
-``osd_default_notify_timeout``
-
-:Description: The OSD default notification timeout (in seconds).
-:Type: 32-bit Unsigned Integer
-:Default: ``30``
-
-
-``osd_check_for_log_corruption``
-
-:Description: Check log files for corruption. Can be computationally expensive.
-:Type: Boolean
-:Default: ``false``
-
-
-``osd_remove_thread_timeout``
-
-:Description: The maximum time in seconds before timing out a remove OSD thread.
-:Type: 32-bit Integer
-:Default: ``60*60``
-
-
-``osd_command_thread_timeout``
-
-:Description: The maximum time in seconds before timing out a command thread.
-:Type: 32-bit Integer
-:Default: ``10*60``
-
-
-``osd_delete_sleep``
-
-:Description: Time in seconds to sleep before the next removal transaction. This
-              throttles the PG deletion process.
-
-:Type: Float
-:Default: ``0``
-
-
-``osd_delete_sleep_hdd``
-
-:Description: Time in seconds to sleep before the next removal transaction
-              for HDDs.
-
-:Type: Float
-:Default: ``5``
-
-
-``osd_delete_sleep_ssd``
-
-:Description: Time in seconds to sleep before the next removal transaction
-              for SSDs.
-
-:Type: Float
-:Default: ``0``
-
-
-``osd_delete_sleep_hybrid``
-
-:Description: Time in seconds to sleep before the next removal transaction
-              when OSD data is on HDD and OSD journal or WAL+DB is on SSD.
-
-:Type: Float
-:Default: ``1``
-
-
-``osd_command_max_records``
-
-:Description: Limits the number of lost objects to return.
-:Type: 32-bit Integer
-:Default: ``256``
-
-
-``osd_fast_fail_on_connection_refused``
-
-:Description: If this option is enabled, crashed OSDs are marked down
-              immediately by connected peers and MONs (assuming that the
-              crashed OSD host survives). Disable it to restore old
-              behavior, at the expense of possible long I/O stalls when
-              OSDs crash in the middle of I/O operations.
-:Type: Boolean
-:Default: ``true``
-
-
+.. confval:: osd_default_notify_timeout
+.. confval:: osd_check_for_log_corruption
+.. confval:: osd_command_thread_timeout
+.. confval:: osd_delete_sleep
+.. confval:: osd_delete_sleep_hdd
+.. confval:: osd_delete_sleep_ssd
+.. confval:: osd_delete_sleep_hybrid
+.. confval:: osd_command_max_records
+.. confval:: osd_fast_fail_on_connection_refused
 
 .. _pool: ../../operations/pools
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction

@@ -260,6 +260,8 @@ options:
   type: str
   level: advanced
   desc: path for the runtime control socket file, used by the 'ceph daemon' command
+  fmt_desc: The socket for executing administrative commands on a daemon,
+    irrespective of whether Ceph Monitors have established a quorum.
   daemon_default: $run_dir/$cluster-$name.asok
   services:
   - common
@@ -360,6 +362,13 @@ options:
   type: str
   level: advanced
   desc: path to write a pid file (if any)
+  fmt_desc: The file in which the mon, osd or mds will write its
+    PID.  For instance, ``/var/run/$cluster/$type.$id.pid``
+    will create /var/run/ceph/mon.a.pid for the ``mon`` with
+    id ``a`` running in the ``ceph`` cluster. The ``pid
+    file`` is removed when the daemon stops gracefully. If
+    the process is not daemonized (i.e. runs with the ``-f``
+    or ``-d`` option), the ``pid file`` is not created.
   tags:
   - service
   services:
@@ -374,6 +383,8 @@ options:
   type: str
   level: advanced
   desc: path to chdir(2) to after daemonizing
+  fmt_desc: The directory Ceph daemons change to once they are
+    up and running. Default ``/`` directory recommended.
   tags:
   - service
   services:
@@ -392,6 +403,8 @@ options:
   level: advanced
   desc: whether to register signal handlers for SIGABRT etc that dump a stack trace
   long_desc: This is normally true for daemons and values for libraries.
+  fmt_desc: If set, we will install signal handlers for SEGV, ABRT, BUS, ILL,
+    FPE, XCPU, XFSZ, SYS signals to generate a useful log message
   default: true
   tags:
   - service
@@ -1740,6 +1753,7 @@ options:
   type: int
   level: advanced
   desc: interval for internal mon background checks
+  fmt_desc: A monitor's tick interval in seconds.
   default: 5
   services:
   - mon
@@ -2168,6 +2182,8 @@ options:
   type: float
   level: advanced
   desc: frequency of clock synchronization checks between monitors (seconds)
+  fmt_desc: The time check interval (clock drift check) in seconds
+    for the Leader.
   default: 5_min
   services:
   - mon
@@ -2178,6 +2194,8 @@ options:
   level: advanced
   desc: frequency of clock synchronization (re)checks between monitors while clocks
     are believed to be skewed (seconds)
+  fmt_desc: The time check interval (clock drift check) in seconds when in
+    presence of a skew in seconds for the Leader.
   default: 30
   services:
   - mon
@@ -3680,12 +3698,16 @@ options:
   type: int
   level: advanced
   desc: maximum concurrent tiering operations for tiering agent
+  fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
+    in the high speed mode.
   default: 4
   with_legacy: true
 - name: osd_agent_max_low_ops
   type: int
   level: advanced
   desc: maximum concurrent low-priority tiering operations for tiering agent
+  fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
+    in the low speed mode.
   default: 2
   with_legacy: true
 - name: osd_agent_min_evict_effort
@@ -4771,6 +4793,7 @@ options:
   type: int
   level: advanced
   default: 10_min
+  fmt_desc: The maximum time in seconds before timing out a command thread.
   with_legacy: true
 - name: osd_command_thread_suicide_timeout
   type: int
@@ -5315,6 +5338,7 @@ options:
   type: bool
   level: advanced
   default: false
+  fmt_desc: Check log files for corruption. Can be computationally expensive.
   with_legacy: true
 - name: osd_use_stale_snap
   type: bool
@@ -5330,6 +5354,7 @@ options:
   level: advanced
   desc: default number of seconds after which notify propagation times out. used if
     a client has not specified other value
+  fmt_desc: The OSD default notification timeout (in seconds).
   default: 30
   with_legacy: true
 - name: osd_kill_backfill_at
@@ -5473,6 +5498,7 @@ options:
   type: int
   level: advanced
   default: 256
+  fmt_desc: Limits the number of lost objects to return.
   with_legacy: true
 # max peer osds to report that are blocking our progress
 - name: osd_max_pg_blocked_by
@@ -5662,6 +5688,8 @@ options:
   level: advanced
   desc: Time in seconds to sleep before next removal transaction (overrides values
     below)
+  fmt_desc: Time in seconds to sleep before the next removal transaction. This
+    throttles the PG deletion process.
   default: 0
 - name: osd_delete_sleep_hdd
   type: float
@@ -5676,8 +5704,8 @@ options:
 - name: osd_delete_sleep_hybrid
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next removal transaction when data is on HDD
-    and journal is on SSD
+  desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
+    and OSD journal or WAL+DB is on SSD
   default: 1
 # what % full makes an OSD "full" (failsafe)
 - name: osd_failsafe_full_ratio
@@ -5710,6 +5738,11 @@ options:
   type: bool
   level: advanced
   default: true
+  fmt_desc: If this option is enabled, crashed OSDs are marked down
+    immediately by connected peers and MONs (assuming that the
+    crashed OSD host survives). Disable it to restore old
+    behavior, at the expense of possible long I/O stalls when
+    OSDs crash in the middle of I/O operations.
   with_legacy: true
 - name: osd_pg_object_context_cache_count
   type: int
@@ -8648,27 +8681,6 @@ options:
   default: true
   tags:
   - client
-- name: crimson_osd_obc_lru_size
-  type: uint
-  level: advanced
-  desc: Number of obcs to cache
-  default: 10
-- name: crimson_osd_scheduler_concurrency
-  type: uint
-  level: advanced
-  desc: The maximum number concurrent IO operations, 0 for unlimited
-  default: 0
-- name: crimson_alien_op_num_threads
-  type: uint
-  level: advanced
-  desc: The number of threads for serving alienized ObjectStore
-  default: 6
-  flags:
-  - startup
-- name: crimson_alien_thread_cpu_cores
-  type: str
-  level: advanced
-  desc: Cpu cores on which alienstore threads will run
 - name: bdev_type
   type: str
   level: advanced

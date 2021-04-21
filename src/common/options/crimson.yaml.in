@@ -1,0 +1,25 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: crimson_osd_obc_lru_size
+  type: uint
+  level: advanced
+  desc: Number of obcs to cache
+  default: 10
+- name: crimson_osd_scheduler_concurrency
+  type: uint
+  level: advanced
+  desc: The maximum number concurrent IO operations, 0 for unlimited
+  default: 0
+- name: crimson_alien_op_num_threads
+  type: uint
+  level: advanced
+  desc: The number of threads for serving alienized ObjectStore
+  default: 6
+  flags:
+  - startup
+- name: crimson_alien_thread_cpu_cores
+  type: str
+  level: advanced
+  desc: CPU cores on which alienstore threads will run

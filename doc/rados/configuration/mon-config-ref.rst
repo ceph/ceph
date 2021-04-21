@@ -568,45 +568,11 @@ the level of acceptable clock drift without compromising Paxos guarantees.
 Ceph provides the following tunable options to allow you to find 
 acceptable values.
 
-
-``mon_tick_interval`` 
-
-:Description: A monitor's tick interval in seconds. 
-:Type: 32-bit Integer
-:Default: ``5`` 
-
-
-``mon_clock_drift_allowed`` 
-
-:Description: The clock drift in seconds allowed between monitors.
-:Type: Float
-:Default: ``0.05``
-
-
-``mon_clock_drift_warn_backoff`` 
-
-:Description: Exponential backoff for clock drift warnings
-:Type: Float
-:Default: ``5.00``
-
-
-``mon_timecheck_interval``
-
-:Description: The time check interval (clock drift check) in seconds 
-              for the Leader.
-
-:Type: Float
-:Default: ``300.00``
-
-
-``mon_timecheck_skew_interval``
-
-:Description: The time check interval (clock drift check) in seconds when in
-              presence of a skew in seconds for the Leader.
-
-:Type: Float
-:Default: ``30.00``
-
+.. confval:: mon_tick_interval
+.. confval:: mon_clock_drift_allowed
+.. confval:: mon_clock_drift_warn_backoff
+.. confval:: mon_timecheck_interval
+.. confval:: mon_timecheck_skew_interval
 
 Client
 ------
