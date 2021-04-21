@@ -612,7 +612,7 @@ class VolumeGroup(object):
         if b_to_ext < int(self.vg_free_count):
             # return bytes in extents if there is more space
             return b_to_ext
-        elif b_to_ext / int(self.vg_free_count) - 1 < 0.01:
+        elif float(b_to_ext) / int(self.vg_free_count) - 1 < 0.01:
             # return vg_fre_count if its less then 1% off
             logger.info(
                 'bytes_to_extents results in {} but only {} '
