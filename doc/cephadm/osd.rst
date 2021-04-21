@@ -432,18 +432,15 @@ Filters
 -------
 
 .. note::
-   Filters are applied using a `AND` gate by default. This essentially means that a drive needs to fulfill all filter
-   criteria in order to get selected.
-   If you wish to change this behavior you can adjust this behavior by setting
+   Filters are applied using an `AND` gate by default. This means that a drive
+   must fulfill all filter criteria in order to get selected. This behavior can
+   be adjusted by setting ``filter_logic: OR`` in the OSD specification. 
 
-    `filter_logic: OR`  # valid arguments are `AND`, `OR`
+Filters are used to assign disks to groups, using their attributes to group
+them. 
 
-   in the OSD Specification.
-
-You can assign disks to certain groups by their attributes using filters.
-
-The attributes are based off of ceph-volume's disk query. You can retrieve the information
-with
+The attributes are based off of ceph-volume's disk query. You can retrieve
+information about the attributes with this command:
 
 .. code-block:: bash
 
@@ -452,7 +449,7 @@ with
 Vendor or Model:
 ^^^^^^^^^^^^^^^^
 
-You can target specific disks by their Vendor or by their Model
+Specific disks can be targeted by vendor or model:
 
 .. code-block:: yaml
 
@@ -468,7 +465,7 @@ or
 Size:
 ^^^^^
 
-You can also match by disk `Size`.
+Specific disks can be targeted by `Size`:
 
 .. code-block:: yaml
 
@@ -477,7 +474,7 @@ You can also match by disk `Size`.
 Size specs:
 ___________
 
-Size specification of format can be of form:
+Size specifications can be of the following forms:
 
 * LOW:HIGH
 * :HIGH
@@ -486,34 +483,34 @@ Size specification of format can be of form:
 
 Concrete examples:
 
-Includes disks of an exact size
+To include disks of an exact size
 
 .. code-block:: yaml
 
     size: '10G'
 
-Includes disks which size is within the range
+To include disks within a given range of size: 
 
 .. code-block:: yaml
 
     size: '10G:40G'
 
-Includes disks less than or equal to 10G in size
+To include disks that are less than or equal to 10G in size:
 
 .. code-block:: yaml
 
     size: ':10G'
 
-
-Includes disks equal to or greater than 40G in size
+To include disks equal to or greater than 40G in size:
 
 .. code-block:: yaml
 
     size: '40G:'
 
-Sizes don't have to be exclusively in Gigabyte(G).
+Sizes don't have to be specified exclusively in Gigabytes(G).
 
-Supported units are Megabyte(M), Gigabyte(G) and Terrabyte(T). Also appending the (B) for byte is supported. MB, GB, TB
+Other units of size are supported: Megabyte(M), Gigabyte(G) and Terrabyte(T).
+Appending the (B) for byte is also supported: ``MB``, ``GB``, ``TB``.
 
 
 Rotational:
@@ -545,14 +542,14 @@ Note: This is exclusive for the data_devices section.
 Limiter:
 ^^^^^^^^
 
-When you specified valid filters but want to limit the amount of matching disks you can use the 'limit' directive.
+If you have specified some valid filters but want to limit the number of disks that they match, use the ``limit`` directive:
 
 .. code-block:: yaml
 
     limit: 2
 
-For example, if you used `vendor` to match all disks that are from `VendorA` but only want to use the first two
-you could use `limit`.
+For example, if you used `vendor` to match all disks that are from `VendorA`
+but want to use only the first two, you could use `limit`:
 
 .. code-block:: yaml
 
@@ -560,7 +557,7 @@ you could use `limit`.
     vendor: VendorA
     limit: 2
 
-Note: Be aware that `limit` is really just a last resort and shouldn't be used if it can be avoided.
+Note: `limit` is a last resort and shouldn't be used if it can be avoided.
 
 
 Additional Options
