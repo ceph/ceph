@@ -81,6 +81,7 @@ endif()
 
 add_options(global)
 add_options(cephfs-mirror)
+add_options(crimson)
 add_options(mds)
 add_options(mds-client)
 add_options(rbd)
