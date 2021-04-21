@@ -183,7 +183,7 @@ int Header::add_keyslot(const char* passphrase, size_t passphrase_size) {
 
   auto r = crypt_keyslot_add_by_volume_key(
           m_cd, CRYPT_ANY_SLOT, NULL, 0, passphrase, passphrase_size);
-  if (r != 0) {
+  if (r < 0) {
     lderr(m_cct) << "crypt_keyslot_add_by_volume_key failed: "
                  << cpp_strerror(r) << dendl;
     return r;
@@ -222,7 +222,7 @@ int Header::read_volume_key(const char* passphrase, size_t passphrase_size,
   auto r = crypt_volume_key_get(
           m_cd, CRYPT_ANY_SLOT, volume_key, volume_key_size, passphrase,
           passphrase_size);
-  if (r != 0) {
+  if (r < 0) {
     lderr(m_cct) << "crypt_volume_key_get failed: " << cpp_strerror(r)
                  << dendl;
     return r;
