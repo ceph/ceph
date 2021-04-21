@@ -3680,12 +3680,16 @@ options:
   type: int
   level: advanced
   desc: maximum concurrent tiering operations for tiering agent
+  fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
+    in the high speed mode.
   default: 4
   with_legacy: true
 - name: osd_agent_max_low_ops
   type: int
   level: advanced
   desc: maximum concurrent low-priority tiering operations for tiering agent
+  fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
+    in the low speed mode.
   default: 2
   with_legacy: true
 - name: osd_agent_min_evict_effort
@@ -4771,6 +4775,7 @@ options:
   type: int
   level: advanced
   default: 10_min
+  fmt_desc: The maximum time in seconds before timing out a command thread.
   with_legacy: true
 - name: osd_command_thread_suicide_timeout
   type: int
@@ -5315,6 +5320,7 @@ options:
   type: bool
   level: advanced
   default: false
+  fmt_desc: Check log files for corruption. Can be computationally expensive.
   with_legacy: true
 - name: osd_use_stale_snap
   type: bool
@@ -5330,6 +5336,7 @@ options:
   level: advanced
   desc: default number of seconds after which notify propagation times out. used if
     a client has not specified other value
+  fmt_desc: The OSD default notification timeout (in seconds).
   default: 30
   with_legacy: true
 - name: osd_kill_backfill_at
@@ -5473,6 +5480,7 @@ options:
   type: int
   level: advanced
   default: 256
+  fmt_desc: Limits the number of lost objects to return.
   with_legacy: true
 # max peer osds to report that are blocking our progress
 - name: osd_max_pg_blocked_by
@@ -5662,6 +5670,8 @@ options:
   level: advanced
   desc: Time in seconds to sleep before next removal transaction (overrides values
     below)
+  fmt_desc: Time in seconds to sleep before the next removal transaction. This
+    throttles the PG deletion process.
   default: 0
 - name: osd_delete_sleep_hdd
   type: float
@@ -5676,8 +5686,8 @@ options:
 - name: osd_delete_sleep_hybrid
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next removal transaction when data is on HDD
-    and journal is on SSD
+  desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
+    and OSD journal or WAL+DB is on SSD
   default: 1
 # what % full makes an OSD "full" (failsafe)
 - name: osd_failsafe_full_ratio
@@ -5710,6 +5720,11 @@ options:
   type: bool
   level: advanced
   default: true
+  fmt_desc: If this option is enabled, crashed OSDs are marked down
+    immediately by connected peers and MONs (assuming that the
+    crashed OSD host survives). Disable it to restore old
+    behavior, at the expense of possible long I/O stalls when
+    OSDs crash in the middle of I/O operations.
   with_legacy: true
 - name: osd_pg_object_context_cache_count
   type: int
