@@ -231,6 +231,7 @@ ceph_confval_imports = [os.path.join(top_level,
                                      'src/common/options',
                                      yaml + '.yaml.in')
                         for yaml in ['global',
+                                     'crimson',
                                      'immutable-object-cache',
                                      'mds',
                                      'mds-client',
