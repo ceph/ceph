@@ -1028,11 +1028,6 @@ std::vector<Option> get_global_options() {
     .set_default(100_M)
     .set_description("Limit messages that are read off the network but still being processed"),
 
-    Option("ms_bind_exclude_lo_iface", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_flag(Option::FLAG_STARTUP)
-    .set_description("Allow servers to bind loopback network interfaces (lo)"),
-
     Option("ms_bind_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Bind servers to IPv4 address(es)")
