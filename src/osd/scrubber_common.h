@@ -21,6 +21,14 @@ enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 /// see ScrubPGgIF::m_current_token
 using act_token_t = uint32_t;
 
+/// "environment" preconditions affecting which PGs are eligible for scrubbing
+struct ScrubPreconds {
+  bool allow_requested_repair_only{false};
+  bool load_is_low{true};
+  bool time_permit{true};
+  bool only_deadlined{false};
+};
+
 }  // namespace Scrub
 
 
@@ -266,6 +274,23 @@ struct ScrubPgIF {
    */
   virtual bool reserve_local() = 0;
 
+  /**
+   * Register/de-register with the OSD scrub queue
+   *
+   * Following our status as Primary or replica.
+   */
+  virtual void on_primary_change(const requested_scrub_t& request_flags) = 0;
+
+  /**
+   * Recalculate the required scrub time.
+   *
+   * This function assumes that the queue registration status is up-to-date,
+   * i.e. the OSD "knows our name" if-f we are the Primary.
+   */
+  virtual void update_scrub_job(const requested_scrub_t& request_flags) = 0;
+
+  virtual void on_maybe_registration_change(const requested_scrub_t& request_flags) = 0;
+
   // on the replica:
   virtual void handle_scrub_reserve_request(OpRequestRef op) = 0;
   virtual void handle_scrub_reserve_release(OpRequestRef op) = 0;
@@ -274,8 +299,8 @@ struct ScrubPgIF {
   virtual void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from) = 0;
   virtual void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from) = 0;
 
-  virtual void reg_next_scrub(const requested_scrub_t& request_flags) = 0;
-  virtual void unreg_next_scrub() = 0;
+  virtual void rm_from_osd_scrubbing() = 0;
+
   virtual void scrub_requested(scrub_level_t scrub_level,
 			       scrub_type_t scrub_type,
 			       requested_scrub_t& req_flags) = 0;

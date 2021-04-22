@@ -90,7 +90,17 @@ ReservingReplicas::ReservingReplicas(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> ReservingReplicas" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+
+  // prevent the OSD from starting another scrub while we are trying to secure
+  // replicas resources
+  scrbr->set_reserving_now();
   scrbr->reserve_replicas();
+}
+
+ReservingReplicas::~ReservingReplicas()
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  scrbr->clear_reserving_now();
 }
 
 sc::result ReservingReplicas::react(const ReservationFailure&)
