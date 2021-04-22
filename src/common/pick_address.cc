@@ -118,20 +118,20 @@ bool matches_with_net(CephContext *cct,
   return matches_with_net(ifa, (sockaddr*)&net, prefix_len, ipv);
 }
 
-bool matches_with_numa_node(const ifaddrs& ifa, int numa_node)
+int grade_with_numa_node(const ifaddrs& ifa, int numa_node)
 {
 #if defined(WITH_SEASTAR) || defined(_WIN32)
-  return true;
+  return 0;
 #else
   if (numa_node < 0) {
-    return true;
+    return 0;
   }
   int if_node = -1;
   int r = get_iface_numa_node(ifa.ifa_name, &if_node);
   if (r < 0) {
-    return false;
+    return 0;
   }
-  return if_node == numa_node;
+  return if_node == numa_node ? 1 : 0;
 #endif
 }
 }
@@ -151,7 +151,7 @@ const struct sockaddr *find_ip_in_subnet_list(
       exit(1);
   }
 
-  int best_score = -1;
+  int best_score = 0;
   const sockaddr* best_addr = nullptr;
   for (const auto* addr = ifa; addr != nullptr; addr = addr->ifa_next) {
     if (!ifs.empty() &&
@@ -168,10 +168,12 @@ const struct sockaddr *find_ip_in_subnet_list(
                      })) {
       continue;
     }
-    if (!matches_with_numa_node(*addr, numa_node)) {
+    int score = grade_addr(*addr);
+    if (score < 0) {
       continue;
     }
-    if (int score = grade_addr(*addr); score > best_score) {
+    score += grade_with_numa_node(*addr, numa_node);
+    if (score > best_score) {
       best_score = score;
       best_addr = addr->ifa_addr;
     }
@@ -409,36 +411,29 @@ int pick_addresses(
       !networks.empty()) {
     int ipv4_r = !(ipv & CEPH_PICK_ADDRESS_IPV4) ? 0 : -1;
     int ipv6_r = !(ipv & CEPH_PICK_ADDRESS_IPV6) ? 0 : -1;
-    // first try on preferred numa node (if >= 0), then anywhere.
-    while (true) {
-      // note: pass in ipv to filter the matching addresses
-      if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
-	  (flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-                                     networks, interfaces,
-				     addrs,
-                                     preferred_numa_node);
-      }
-      if (ipv & CEPH_PICK_ADDRESS_IPV6) {
-	ipv6_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6,
-                                     networks, interfaces,
-				     addrs,
-                                     preferred_numa_node);
-      }
-      if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
-	  !(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-                                     networks, interfaces,
-				     addrs,
-                                     preferred_numa_node);
-      }
-      if (ipv4_r >= 0 && ipv6_r >= 0) {
-	break;
-      }
-      if (preferred_numa_node < 0) {
-	return ipv4_r >= 0 && ipv6_r >= 0 ? 0 : -1;
-      }
-      preferred_numa_node = -1;      // try any numa node
+    // note: pass in ipv to filter the matching addresses
+    if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
+	(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
+      ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
+				   networks, interfaces,
+				   addrs,
+				   preferred_numa_node);
+    }
+    if (ipv & CEPH_PICK_ADDRESS_IPV6) {
+      ipv6_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6,
+				   networks, interfaces,
+				   addrs,
+				   preferred_numa_node);
+    }
+    if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
+	!(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
+      ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
+				   networks, interfaces,
+				   addrs,
+				   preferred_numa_node);
+    }
+    if (ipv4_r < 0 || ipv6_r < 0) {
+      return -1;
     }
   }
 
