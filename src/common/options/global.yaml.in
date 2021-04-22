@@ -3814,7 +3814,7 @@ options:
   type: str
   level: advanced
   desc: erasure code plugins to load
-  default: jerasure lrc isa
+  default: @osd_erasure_code_plugins@
   services:
   - mon
   - osd
