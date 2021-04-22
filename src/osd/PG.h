@@ -599,8 +599,6 @@ public:
     void complete(int r) override;
   };
 
-  void _delete_some(ObjectStore::Transaction *t);
-
   virtual void set_dynamic_perf_stats_queries(
     const std::list<OSDPerfMetricQuery> &queries) {
   }
