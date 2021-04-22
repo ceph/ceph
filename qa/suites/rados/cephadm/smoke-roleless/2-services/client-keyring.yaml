@@ -1,0 +1,40 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph orch host label add `hostname` foo
+      - ceph auth get-or-create client.foo mon 'allow r'
+      - ceph orch client-keyring set client.foo label:foo --mode 770 --owner 11111:22222
+- exec:
+    host.a:
+      - while ! test -e /etc/ceph/ceph.client.foo.keyring ; do sleep 1 ; done
+      - ls -al /etc/ceph/ceph.client.foo.keyring | grep rwxrwx---
+      - ls -al /etc/ceph/ceph.client.foo.keyring | grep 11111
+      - ls -al /etc/ceph/ceph.client.foo.keyring | grep 22222
+      - test -e /etc/ceph/ceph.conf
+- exec:
+    host.b:
+      - test ! -e /etc/ceph/ceph.client.foo.keyring
+- cephadm.shell:
+    host.b:
+      - ceph orch host label add `hostname` foo
+- exec:
+    host.b:
+      - while ! test -e /etc/ceph/ceph.client.foo.keyring ; do sleep 1 ; done
+      - ls -al /etc/ceph/ceph.client.foo.keyring | grep rwxrwx---
+      - ls -al /etc/ceph/ceph.client.foo.keyring | grep 11111
+      - ls -al /etc/ceph/ceph.client.foo.keyring | grep 22222
+- cephadm.shell:
+    host.b:
+      - ceph orch host label rm `hostname` foo
+- exec:
+    host.b:
+      - while test -e /etc/ceph/ceph.client.foo.keyring ; do sleep 1 ; done
+- exec:
+    host.a:
+      - test -e /etc/ceph/ceph.client.foo.keyring
+- cephadm.shell:
+    host.a:
+      - ceph orch client-keyring rm client.foo
+- exec:
+    host.a:
+      - while test -e /etc/ceph/ceph.client.foo.keyring ; do sleep 1 ; done
