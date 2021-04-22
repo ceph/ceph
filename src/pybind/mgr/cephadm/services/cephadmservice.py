@@ -116,13 +116,24 @@ class CephadmService(metaclass=ABCMeta):
         self.mgr: "CephadmOrchestrator" = mgr
 
     def allow_colo(self) -> bool:
+        """
+        Return True if multiple daemons of the same type can colocate on
+        the same host.
+        """
         return False
 
-    def per_host_daemon_type(self) -> Optional[str]:
-        return None
-
     def primary_daemon_type(self) -> str:
+        """
+        This is the type of the primary (usually only) daemon to be deployed.
+        """
         return self.TYPE
+
+    def per_host_daemon_type(self) -> Optional[str]:
+        """
+        If defined, this type of daemon will be deployed once for each host
+        containing one or more daemons of the primary type.
+        """
+        return None
 
     def make_daemon_spec(
             self, host: str,
