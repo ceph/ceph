@@ -1270,7 +1270,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return image
 
-    def _hosts_with_daemon_inventory(self) -> List[HostSpec]:
+    def _schedulable_hosts(self) -> List[HostSpec]:
         """
         Returns all usable hosts that went through _refresh_host_daemons().
 
@@ -1281,8 +1281,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         return [
             h for h in self.inventory.all_specs()
-            if self.cache.host_had_daemon_refresh(h.hostname)
-            and h.status.lower() not in ['maintenance', 'offline']
+            if (
+                self.cache.host_had_daemon_refresh(h.hostname)
+                and h.status.lower() not in ['maintenance', 'offline']
+                and '_no_schedule' not in h.labels
+            )
         ]
 
     def _add_host(self, spec):
@@ -1353,12 +1356,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def add_host_label(self, host: str, label: str) -> str:
         self.inventory.add_label(host, label)
         self.log.info('Added label %s to host %s' % (label, host))
+        self._kick_serve_loop()
         return 'Added label %s to host %s' % (label, host)
 
     @handle_orch_error
     def remove_host_label(self, host: str, label: str) -> str:
         self.inventory.rm_label(host, label)
         self.log.info('Removed label %s to host %s' % (label, host))
+        self._kick_serve_loop()
         return 'Removed label %s from host %s' % (label, host)
 
     def _host_ok_to_stop(self, hostname: str, force: bool = False) -> Tuple[int, str]:
@@ -1579,7 +1584,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 continue
             sm[nm] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=spec.placement.get_target_count(self.inventory.all_specs()),
+                size=spec.placement.get_target_count(self._schedulable_hosts()),
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
@@ -2101,7 +2106,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         ha = HostAssignment(
             spec=spec,
-            hosts=self._hosts_with_daemon_inventory(),
+            hosts=self._schedulable_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
