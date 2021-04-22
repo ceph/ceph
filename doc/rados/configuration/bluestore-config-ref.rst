@@ -324,6 +324,15 @@ To enable sharding and apply the Pacific defaults, stop an OSD and run
 .. confval:: bluestore_rocksdb_cf
 .. confval:: bluestore_rocksdb_cfs
 
+Throttling
+==========
+
+.. confval:: bluestore_throttle_bytes
+.. confval:: bluestore_throttle_deferred_bytes
+.. confval:: bluestore_throttle_cost_per_io
+.. confval:: bluestore_throttle_cost_per_io_hdd
+.. confval:: bluestore_throttle_cost_per_io_ssd
+
 SPDK Usage
 ==================
 

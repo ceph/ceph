@@ -210,7 +210,15 @@ class CephOption(Directive):
         desc = opt.get('fmt_desc') or opt.get('long_desc') or opt.get('desc')
         opt_default = opt.get('default')
         default = self.options.get('default', opt_default)
-        rendered = self.template.render(opt=opt, desc=desc, default=default)
+        try:
+            rendered = self.template.render(opt=opt,
+                                            desc=desc,
+                                            default=default)
+        except Exception as e:
+            message = (f'Unable to render option "{name}": {e}. ',
+                       f'opt={opt}, desc={desc}, default={default}')
+            raise self.error(message)
+
         lineno = self.lineno - self.state_machine.input_offset - 1
         source = self.state_machine.input_lines.source(lineno)
         self.state_machine.insert_input(rendered.split('\n'), source)
