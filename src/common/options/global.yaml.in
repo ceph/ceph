@@ -4348,6 +4348,9 @@ options:
 - name: osd_op_num_shards
   type: int
   level: advanced
+  fmt_desc: The number of shards allocated for a given OSD. Each shard has its own processing queue.
+    PGs on the OSD are distributed evenly in the shard. This setting overrides _ssd and _hdd if
+    non-zero.
   default: 0
   flags:
   - startup
@@ -4355,6 +4358,7 @@ options:
 - name: osd_op_num_shards_hdd
   type: int
   level: advanced
+  fmt_desc: the number of shards allocated for a given OSD (for rotational media).
   default: 5
   see_also:
   - osd_op_num_shards
@@ -4364,6 +4368,7 @@ options:
 - name: osd_op_num_shards_ssd
   type: int
   level: advanced
+  fmt_desc: the number of shards allocated for a given OSD (for solid state media).
   default: 8
   see_also:
   - osd_op_num_shards
