@@ -103,6 +103,13 @@ def calc_size(c):
     return round(c[1] / (1024 * 1024), 2)
 
 
+# in MB
+def calc_avg_size(c):
+    if c[0] == 0:
+        return 0.0
+    return round(c[1] / (c[0] * 1024 * 1024), 2)
+
+
 # in MB/s
 def calc_speed(size, duration):
     if duration == 0:
@@ -236,6 +243,15 @@ class FSTop(object):
             # return empty string for none type
             return ''
 
+    def avg_items(self, item):
+        if item == "READ_IO_SIZES":
+            return "raio"
+        if item == "WRITE_IO_SIZES":
+            return "waio"
+        else:
+            # return empty string for none type
+            return ''
+
     def speed_items(self, item):
         if item == "READ_IO_SIZES":
             return "rsp"
@@ -274,6 +290,17 @@ class FSTop(object):
             xp += nlen
 
             if item == "READ_IO_SIZES" or item == "WRITE_IO_SIZES":
+                # average io sizes
+                it = f'{self.avg_items(item)}{self.mtype(typ)}'
+                heading.append(it)
+                nlen = len(it) + len(ITEMS_PAD)
+                if item == "READ_IO_SIZES":
+                    x_coord_map["READ_IO_AVG"] = (xp, nlen)
+                if item == "WRITE_IO_SIZES":
+                    x_coord_map["WRITE_IO_AVG"] = (xp, nlen)
+                xp += nlen
+
+                # io speeds
                 it = f'{self.speed_items(item)}{self.speed_mtype(typ)}'
                 heading.append(it)
                 nlen = len(it) + len(ITEMS_PAD)
@@ -354,6 +381,23 @@ class FSTop(object):
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_lat(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_SIZE:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_size(m)}', hlen)
+
+                    # average io sizes
+                    if remaining_hlen == 0:
+                        return
+                    if key == "READ_IO_SIZES":
+                        coord = x_coord_map["READ_IO_AVG"]
+                    elif key == "WRITE_IO_SIZES":
+                        coord = x_coord_map["WRITE_IO_AVG"]
+                    hlen = coord[1] - len(ITEMS_PAD)
+                    hlen = min(hlen, remaining_hlen)
+                    if remaining_hlen < coord[1]:
+                        remaining_hlen = 0
+                    else:
+                        remaining_hlen -= coord[1]
+                    self.mainw.addnstr(y_coord, coord[0], f'{calc_avg_size(m)}', hlen)
+
+                    # io speeds
                     if remaining_hlen == 0:
                         return
                     if key == "READ_IO_SIZES":
