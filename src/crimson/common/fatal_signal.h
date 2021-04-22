@@ -9,7 +9,6 @@ public:
 
 private:
   static void signaled(int signum);
-  static void print_backtrace(int signum);
 
   template <int... SigNums>
   void install_oneshot_signals_handler();
