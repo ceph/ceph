@@ -18,9 +18,6 @@ overrides:
         rgw sync obj etag verify: true
   rgw:
     compression type: random
-  install:
-    ceph:
-      branch: pacific
   rgw-multisite-tests:
     branch: pacific # run pacific branch of tests
     repo: https://github.com/ceph/ceph.git
