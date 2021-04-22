@@ -13,7 +13,8 @@ from ..services.cephfs import CephFS
 from ..services.cephx import CephX
 from ..services.exception import DashboardException, serialize_dashboard_exception
 from ..services.ganesha import Ganesha, GaneshaConf, NFSException
-from ..services.rgw_client import RgwClient
+from ..services.rgw_client import NoCredentialsException, \
+    NoRgwDaemonsException, RequestException, RgwClient
 from . import ApiController, BaseController, ControllerDoc, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, Task, UiApiController
 
@@ -307,7 +308,11 @@ class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/rgw/buckets')
     @ReadPermission
     def buckets(self, user_id=None):
-        return RgwClient.instance(user_id).get_buckets()
+        try:
+            return RgwClient.instance(user_id).get_buckets()
+        except (DashboardException, NoCredentialsException, RequestException,
+                NoRgwDaemonsException):
+            return []
 
     @Endpoint('GET', '/clusters')
     @ReadPermission
