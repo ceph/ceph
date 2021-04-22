@@ -169,11 +169,6 @@ private:
 
   void remove_image();
 
-  void remove_v1_image();
-  void handle_remove_v1_image(int r);
-
-  void remove_v2_image();
-
   void dir_get_image_id();
   void handle_dir_get_image_id(int r);
 

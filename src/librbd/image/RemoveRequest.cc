@@ -416,50 +416,6 @@ template<typename I>
 void RemoveRequest<I>::remove_image() {
   ldout(m_cct, 20) << dendl;
 
-  if (m_old_format || m_unknown_format) {
-    remove_v1_image();
-  } else {
-    remove_v2_image();
-  }
-}
-
-template<typename I>
-void RemoveRequest<I>::remove_v1_image() {
-  ldout(m_cct, 20) << dendl;
-
-  Context *ctx = new LambdaContext([this] (int r) {
-      r = tmap_rm(m_ioctx, m_image_name);
-      handle_remove_v1_image(r);
-    });
-
-  m_op_work_queue->queue(ctx, 0);
-}
-
-template<typename I>
-void RemoveRequest<I>::handle_remove_v1_image(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  m_old_format = (r == 0);
-  if (r == 0 || (r < 0 && !m_unknown_format)) {
-    if (r < 0 && r != -ENOENT) {
-      lderr(m_cct) << "error removing image from v1 directory: "
-                   << cpp_strerror(r) << dendl;
-    }
-
-    m_on_finish->complete(r);
-    delete this;
-    return;
-  }
-
-  if (!m_old_format) {
-    remove_v2_image();
-  }
-}
-
-template<typename I>
-void RemoveRequest<I>::remove_v2_image() {
-  ldout(m_cct, 20) << dendl;
-
   if (m_image_id.empty()) {
     dir_get_image_id();
     return;
