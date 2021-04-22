@@ -148,11 +148,14 @@ This command will:
   host.
 * Generate a new SSH key for the Ceph cluster and add it to the root
   user's ``/root/.ssh/authorized_keys`` file.
+* Write a copy of the public key to ``/etc/ceph/ceph.pub``.
 * Write a minimal configuration file to ``/etc/ceph/ceph.conf``. This
   file is needed to communicate with the new cluster.
 * Write a copy of the ``client.admin`` administrative (privileged!)
   secret key to ``/etc/ceph/ceph.client.admin.keyring``.
-* Write a copy of the public key to ``/etc/ceph/ceph.pub``.
+* Add the ``_admin`` label to the bootstrap host.  By default, any host
+  with this label will (also) get a copy of ``/etc/ceph/ceph.conf`` and
+  ``/etc/ceph/ceph.client.admin.keyring``.
 
 Further information about cephadm bootstrap 
 -------------------------------------------
@@ -271,6 +274,16 @@ Adding Hosts
 ============
 
 Next, add all hosts to the cluster by following :ref:`cephadm-adding-hosts`.
+
+By default, a ``ceph.conf`` file and a copy of the ``client.admin`` keyring
+are maintained in ``/etc/ceph`` on all hosts with the ``_admin`` label, which is initially
+applied only to the bootstrap host. We usually recommend that one or more other hosts be
+given the ``_admin`` label so that the Ceph CLI (e.g., via ``cephadm shell``) is easily
+accessible on multiple hosts.  To add the ``_admin`` label to additional host(s),
+
+  .. prompt:: bash #
+
+    ceph orch host label add *<host>* _admin
 
 Adding additional MONs
 ======================
