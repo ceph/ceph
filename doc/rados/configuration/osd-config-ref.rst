@@ -179,6 +179,9 @@ scrubbing operations.
 Operations
 ==========
 
+.. confval:: osd_op_num_shards
+.. confval:: osd_op_num_shards_hdd
+.. confval:: osd_op_num_shards_ssd
 .. confval:: osd_op_queue
 .. confval:: osd_op_queue_cut_off
 .. confval:: osd_client_op_priority
@@ -285,8 +288,8 @@ queues within Ceph. First, requests to an OSD are sharded by their
 placement group identifier. Each shard has its own mClock queue and
 these queues neither interact nor share information among them. The
 number of shards can be controlled with the configuration options
-``osd_op_num_shards``, ``osd_op_num_shards_hdd``, and
-``osd_op_num_shards_ssd``. A lower number of shards will increase the
+:confval:`osd_op_num_shards`, :confval:`osd_op_num_shards_hdd`, and
+:confval:`osd_op_num_shards_ssd`. A lower number of shards will increase the
 impact of the mClock queues, but may have other deleterious effects.
 
 Second, requests are transferred from the operation queue to the
@@ -303,11 +306,11 @@ the impact of mClock, we want to keep as few operations in the
 operation sequencer as possible. So we have an inherent tension.
 
 The configuration options that influence the number of operations in
-the operation sequencer are ``bluestore_throttle_bytes``,
-``bluestore_throttle_deferred_bytes``,
-``bluestore_throttle_cost_per_io``,
-``bluestore_throttle_cost_per_io_hdd``, and
-``bluestore_throttle_cost_per_io_ssd``.
+the operation sequencer are :confval:`bluestore_throttle_bytes`,
+:confval:`bluestore_throttle_deferred_bytes`,
+:confval:`bluestore_throttle_cost_per_io`,
+:confval:`bluestore_throttle_cost_per_io_hdd`, and
+:confval:`bluestore_throttle_cost_per_io_ssd`.
 
 A third factor that affects the impact of the mClock algorithm is that
 we're using a distributed system, where requests are made to multiple

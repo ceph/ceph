@@ -167,7 +167,7 @@ maximize the impact of the mclock scheduler.
 
 :Bluestore Throttle Parameters:
   We recommend using the default values as defined by
-  ``bluestore_throttle_bytes`` and ``bluestore_throttle_deferred_bytes``. But
+  :confval:`bluestore_throttle_bytes` and :confval:`bluestore_throttle_deferred_bytes`. But
   these parameters may also be determined during the benchmarking phase as
   described below.
 
@@ -183,7 +183,7 @@ correct bluestore throttle values.
 2. Install cbt and all the dependencies mentioned on the cbt github page.
 3. Construct the Ceph configuration file and the cbt yaml file.
 4. Ensure that the bluestore throttle options ( i.e.
-   ``bluestore_throttle_bytes`` and ``bluestore_throttle_deferred_bytes``) are
+   :confval:`bluestore_throttle_bytes` and :confval:`bluestore_throttle_deferred_bytes`) are
    set to the default values.
 5. Ensure that the test is performed on similar device types to get reliable
    OSD capacity data.
@@ -195,8 +195,8 @@ correct bluestore throttle values.
    value is the baseline throughput(IOPS) when the default bluestore
    throttle options are in effect.
 9. If the intent is to determine the bluestore throttle values for your
-   environment, then set the two options, ``bluestore_throttle_bytes`` and
-   ``bluestore_throttle_deferred_bytes`` to 32 KiB(32768 Bytes) each to begin
+   environment, then set the two options, :confval:`bluestore_throttle_bytes` and
+   :confval:`bluestore_throttle_deferred_bytes` to 32 KiB(32768 Bytes) each to begin
    with. Otherwise, you may skip to the next section.
 10. Run the 4KiB random write workload as before on the OSD(s) for 300 secs.
 11. Note the overall throughput from the cbt log files and compare the value
@@ -253,7 +253,7 @@ The other values for the built-in profiles include *balanced* and
 *high_recovery_ops*.
 
 If there is a requirement to change the default profile, then the option
-``osd_mclock_profile`` may be set in the **[global]** or **[osd]** section of
+:confval:`osd_mclock_profile` may be set in the **[global]** or **[osd]** section of
 your Ceph configuration file before bringing up your cluster.
 
 Alternatively, to change the profile during runtime, use the following command:
