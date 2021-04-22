@@ -266,7 +266,7 @@ SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
   return repeat_eagain(
     [this] {
       return seastar::do_with(
-	make_transaction(),
+	ecb->create_transaction(),
 	[this](auto &t) {
 	  return rewrite_dirty(*t, get_dirty_tail()
 	  ).safe_then([this, &t] {
@@ -310,7 +310,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 	    "SegmentCleaner::gc_reclaim_space: processing {} extents",
 	    extents.size());
 	  return seastar::do_with(
-	    make_transaction(),
+	    ecb->create_transaction(),
 	    [this, &extents](auto &t) mutable {
 	      return crimson::do_for_each(
 		extents,

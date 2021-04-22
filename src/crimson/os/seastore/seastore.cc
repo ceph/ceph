@@ -70,7 +70,7 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
   return transaction_manager->mkfs(
   ).safe_then([this] {
     return seastar::do_with(
-      make_transaction(),
+      transaction_manager->create_transaction(),
       [this](auto &t) {
 	return onode_manager->mkfs(*t
 	).safe_then([this, &t] {
@@ -139,7 +139,7 @@ seastar::future<std::vector<coll_t>> SeaStore::list_collections()
       return repeat_eagain([this, &ret] {
 
 	return seastar::do_with(
-	  make_transaction(),
+	  transaction_manager->create_transaction(),
 	  [this, &ret](auto &t) {
 	    return transaction_manager->read_collection_root(*t
 	    ).safe_then([this, &ret, &t](auto coll_root) {
