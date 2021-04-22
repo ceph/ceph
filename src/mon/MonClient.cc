@@ -678,18 +678,6 @@ void MonClient::_finish_auth(int auth_err)
     _check_auth_tickets();
   }
   auth_cond.notify_all();
-
-  if (!auth_err) {
-    Context *cb = nullptr;
-    if (session_established_context) {
-      cb = session_established_context.release();
-    }
-    if (cb) {
-      monc_lock.unlock();
-      cb->complete(0);
-      monc_lock.lock();
-    }
-  }
 }
 
 // ---------
