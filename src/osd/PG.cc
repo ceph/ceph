@@ -2669,9 +2669,15 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
       &olist,
       &next);
     if (!olist.empty()) {
-      dout(0) << __func__ << " additional unexpected onode list"
-              <<" (new onodes has appeared since PG removal started"
-              << olist << dendl;
+      for (auto& oid : olist) {
+        if (oid == pgmeta_oid) {
+          dout(20) << __func__ << " removing pgmeta object " << oid << dendl;
+        } else {
+          dout(0) << __func__ << " additional unexpected onode"
+                  <<" new onode has appeared since PG removal started"
+                  << oid << dendl;
+        }
+      }
     }
   }
 
