@@ -8,7 +8,7 @@ import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
-from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -199,6 +199,13 @@ class CephadmUpgrade:
                 self._save_upgrade_state()
                 return 'Resumed upgrade to %s' % self.target_image
             return 'Upgrade to %s in progress' % self.target_image
+
+        running_mgr_count = len([daemon for daemon in self.mgr.cache.get_daemons_by_type(
+            'mgr') if daemon.status == DaemonDescriptionStatus.running])
+
+        if running_mgr_count < 2:
+            raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
+
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
             target_name=target_name,
