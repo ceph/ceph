@@ -222,7 +222,7 @@ See the `Network Configuration Reference`_ for details.
 
 Once you deploy a Ceph cluster, you **SHOULD NOT** change the IP addresses of
 monitors. However, if you decide to change the monitor's IP address, you
-must follow a specific procedure. See `Changing a Monitor's IP Address`_ for
+must follow a specific procedure. See :ref:`Changing a Monitor's IP address` for
 details.
 
 Monitors can also be found by clients by using DNS SRV records. See `Monitor lookup through DNS`_ for details.
@@ -598,7 +598,7 @@ is far outweighed by the number of accidental pool (and thus data) deletions it 
 .. confval:: osd_pool_default_flag_nopgchange
 .. confval:: osd_pool_default_flag_nosizechange
 
-For more information about the pool flags see `Pool values`_.
+For more information about the pool flags see :ref:`Pool values <setpoolvalues>`.
 
 Miscellaneous
 =============
@@ -638,7 +638,5 @@ Miscellaneous
 .. _Monitoring a Cluster: ../../operations/monitoring
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg
 .. _Bootstrapping a Monitor: ../../../dev/mon-bootstrap
-.. _Changing a Monitor's IP Address: ../../operations/add-or-rm-mons#changing-a-monitor-s-ip-address
 .. _Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
-.. _Pool values: ../../operations/pools/#set-pool-values
