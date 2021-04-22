@@ -50,7 +50,7 @@ void FatalSignal::install_oneshot_signal_handler()
 }
 
 
-static void print_with_backtrace(std::string_view cause) {
+static void print_backtrace(std::string_view cause) {
   std::cerr << cause;
   if (seastar::engine_is_ready()) {
     std::cerr << " on shard " << seastar::this_shard_id();
@@ -66,13 +66,13 @@ void FatalSignal::signaled(const int signum)
 {
   switch (signum) {
   case SIGSEGV:
-    print_with_backtrace("Aborting");
+    print_backtrace("Aborting");
     break;
   case SIGABRT:
-    print_with_backtrace("Segmentation fault");
+    print_backtrace("Segmentation fault");
     break;
   default:
-    print_with_backtrace(fmt::format("Signal {}", signum));
+    print_backtrace(fmt::format("Signal {}", signum));
     break;
   }
 }
