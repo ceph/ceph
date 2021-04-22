@@ -66,10 +66,10 @@ void FatalSignal::signaled(const int signum)
 {
   switch (signum) {
   case SIGSEGV:
-    print_backtrace("Aborting");
+    print_backtrace("Segmentation fault");
     break;
   case SIGABRT:
-    print_backtrace("Segmentation fault");
+    print_backtrace("Aborting");
     break;
   default:
     print_backtrace(fmt::format("Signal {}", signum));
