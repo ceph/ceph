@@ -17,6 +17,7 @@
 #include "os/Transaction.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
@@ -306,4 +307,7 @@ private:
   boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 };
 
+std::unique_ptr<SeaStore> make_seastore(
+  const std::string &device,
+  const ConfigValues &config);
 }
