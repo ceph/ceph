@@ -48,6 +48,7 @@ class CachedExtent : public boost::intrusive_ref_counter<
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
                            //  version > 0
+    RETIRED,               // In ExtentIndex while in retired_extent_gate
     INVALID                // Part of no ExtentIndex set
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
@@ -59,14 +60,6 @@ class CachedExtent : public boost::intrusive_ref_counter<
 
   // Points at current version while in state MUTATION_PENDING
   CachedExtentRef prior_instance;
-
-  /**
-   * dirty_from
-   *
-   * When dirty, indiciates the oldest journal entry which mutates
-   * this extent.
-   */
-  journal_seq_t dirty_from;
 
 public:
   /**
@@ -137,7 +130,7 @@ public:
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
 	<< ", version=" << version
-	<< ", dirty_from=" << dirty_from
+	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", paddr=" << get_paddr()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
@@ -232,7 +225,12 @@ public:
 
   /// Returns true if extent has not been superceded or retired
   bool is_valid() const {
-    return state != extent_state_t::INVALID;
+    return state != extent_state_t::INVALID && state != extent_state_t::RETIRED;
+  }
+
+  /// True iff extent is in state RETIRED
+  bool is_retired() const {
+    return state == extent_state_t::RETIRED;
   }
 
   /// Returns true if extent or prior_instance has been invalidated
@@ -240,13 +238,17 @@ public:
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
   }
 
-  /**
-   * get_dirty_from
-   *
-   * Return journal location of oldest relevant delta.
-   */
-  auto get_dirty_from() const { return dirty_from; }
+  /// Return journal location of oldest relevant delta, only valid while DIRTY
+  auto get_dirty_from() const {
+    ceph_assert(is_dirty());
+    return dirty_from_or_retired_at;
+  }
 
+  /// Return journal location of oldest relevant delta, only valid while RETIRED
+  auto get_retired_at() const {
+    ceph_assert(is_retired());
+    return dirty_from_or_retired_at;
+  }
 
   /**
    * get_paddr
@@ -316,6 +318,15 @@ private:
   using list = boost::intrusive::list<
     CachedExtent,
     primary_ref_list_member_options>;
+  friend class retired_extent_gate_t;
+
+  /**
+   * dirty_from_or_retired_at
+   *
+   * Encodes ordering token for primary_ref_list -- dirty_from when
+   * dirty or retired_at if retired.
+   */
+  journal_seq_t dirty_from_or_retired_at;
 
   /// Actual data contents
   ceph::bufferptr ptr;
@@ -351,7 +362,7 @@ protected:
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
-      dirty_from(other.dirty_from),
+      dirty_from_or_retired_at(other.dirty_from_or_retired_at),
       ptr(other.ptr.c_str(), other.ptr.length()),
       version(other.version),
       poffset(other.poffset) {}
@@ -359,7 +370,7 @@ protected:
   struct share_buffer_t {};
   CachedExtent(const CachedExtent &other, share_buffer_t) :
     state(other.state),
-    dirty_from(other.dirty_from),
+    dirty_from_or_retired_at(other.dirty_from_or_retired_at),
     ptr(other.ptr),
     version(other.version),
     poffset(other.poffset) {}
@@ -571,6 +582,70 @@ using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
 
+/**
+ * retired_extent_gate_t
+ *
+ * We need to keep each retired extent in memory until all transactions
+ * that could still reference it has completed.  live_tokens tracks the
+ * set of tokens (which will be embedded in Transaction's) still live
+ * in order of the commit after which it was created.  retired_extents
+ * lists retired extents ordered by the commit at which they were
+ * retired.
+ */
+class retired_extent_gate_t {
+public:
+  class token_t {
+    friend class retired_extent_gate_t;
+    retired_extent_gate_t *parent = nullptr;
+    journal_seq_t created_after;
+
+    boost::intrusive::list_member_hook<> list_hook;
+    using list_hook_options = boost::intrusive::member_hook<
+      token_t,
+      boost::intrusive::list_member_hook<>,
+      &token_t::list_hook>;
+    using registry =  boost::intrusive::list<
+      token_t,
+      list_hook_options>;
+  public:
+    token_t(journal_seq_t created_after) : created_after(created_after) {}
+    ~token_t();
+  };
+
+  void prune() {
+    journal_seq_t prune_to = live_tokens.empty() ?
+      JOURNAL_SEQ_MAX : live_tokens.front().created_after;
+    while (!retired_extents.empty() &&
+	   prune_to > retired_extents.front().get_retired_at()) {
+      auto ext = &retired_extents.front();
+      retired_extents.pop_front();
+      intrusive_ptr_release(ext);
+    }
+  }
+
+  void add_token(token_t &t) {
+    t.parent = this;
+    live_tokens.push_back(t);
+  }
+
+  void add_extent(CachedExtent &extent) {
+    intrusive_ptr_add_ref(&extent);
+    retired_extents.push_back(extent);
+  }
+
+private:
+  token_t::registry live_tokens;
+  CachedExtent::list retired_extents;
+};
+
+inline retired_extent_gate_t::token_t::~token_t() {
+  if (parent) {
+    parent->live_tokens.erase(
+      parent->live_tokens.s_iterator_to(*this));
+    parent->prune();
+    parent = nullptr;
+  }
+}
 
 /**
  * LogicalCachedExtent
