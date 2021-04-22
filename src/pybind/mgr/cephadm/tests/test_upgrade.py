@@ -128,3 +128,17 @@ def test_not_enough_mgrs(cephadm_module: CephadmOrchestrator):
         with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=1)), CephadmOrchestrator.apply_mgr, ''):
             with pytest.raises(OrchestratorError):
                 wait(cephadm_module, cephadm_module.upgrade_start('image_id', None))
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_enough_mons_for_ok_to_stop(check_mon_command, cephadm_module: CephadmOrchestrator):
+    # only 2 monitors, not enough for ok-to-stop to ever pass
+    check_mon_command.return_value = (
+        0, '{"monmap": {"mons": [{"name": "mon.1"}, {"name": "mon.2"}]}}', '')
+    assert not cephadm_module.upgrade._enough_mons_for_ok_to_stop()
+
+    # 3 monitors, ok-to-stop should work fine
+    check_mon_command.return_value = (
+        0, '{"monmap": {"mons": [{"name": "mon.1"}, {"name": "mon.2"}, {"name": "mon.3"}]}}', '')
+    assert cephadm_module.upgrade._enough_mons_for_ok_to_stop()

@@ -420,6 +420,19 @@ class CephadmUpgrade:
 
         return continue_upgrade
 
+    def _enough_mons_for_ok_to_stop(self) -> bool:
+        # type () -> bool
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'quorum_status',
+        })
+        try:
+            j = json.loads(out)
+        except Exception:
+            raise OrchestratorError('failed to parse quorum status')
+
+        mons = [m['name'] for m in j['monmap']['mons']]
+        return len(mons) > 2
+
     def _do_upgrade(self):
         # type: () -> None
         if not self.upgrade_state:
@@ -567,9 +580,13 @@ class CephadmUpgrade:
                         to_upgrade.append(d_entry)
                     continue
 
-                if d.daemon_type in ['mon', 'osd', 'mds']:
+                if d.daemon_type in ['osd', 'mds']:
                     # NOTE: known_ok_to_stop is an output argument for
                     # _wait_for_ok_to_stop
+                    if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                        return
+
+                if d.daemon_type == 'mon' and self._enough_mons_for_ok_to_stop():
                     if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                         return
 
