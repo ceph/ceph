@@ -154,7 +154,7 @@ class Ganesha(object):
             if RgwClient.admin_instance().is_service_online() and \
                     RgwClient.admin_instance().is_system_user():
                 result.append("RGW")
-        except (NoCredentialsException, RequestException, LookupError):
+        except (DashboardException, NoCredentialsException, RequestException, LookupError):
             pass
         return result
 
@@ -212,9 +212,9 @@ class GaneshaConfParser(object):
         return block_name
 
     def parse_block_or_section(self):
-        if self.stream().startswith("%url "):
+        if self.stream().startswith("%url"):
             # section line
-            self.pos += 5
+            self.pos += self.stream().find('rados://')
             idx = self.stream().find('\n')
             if idx == -1:
                 value = self.stream()
