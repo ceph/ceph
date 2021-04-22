@@ -195,7 +195,7 @@ auto call_with_interruption(
 
 template <typename InterruptCond, typename Func, typename... T,
 	  typename Result = std::invoke_result_t<Func, T...>>
-decltype(auto) non_futurized_call_with_interruption(
+Result non_futurized_call_with_interruption(
   InterruptCondRef<InterruptCond> interrupt_condition,
   Func&& func, T&&... args)
 {
