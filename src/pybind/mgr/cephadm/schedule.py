@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import random
 from typing import List, Optional, Callable, TypeVar, Tuple, NamedTuple, Dict
@@ -308,7 +309,10 @@ class HostAssignment(object):
 
         # shuffle for pseudo random selection
         # gen seed off of self.spec to make shuffling deterministic
-        seed = hash(self.spec.service_name())
-        random.Random(seed).shuffle(ls)
-
+        seed = int(
+            hashlib.sha1(self.spec.service_name().encode('utf-8')).hexdigest(),
+            16
+        ) % (2 ** 32)
+        final = sorted(ls)
+        random.Random(seed).shuffle(final)
         return ls
