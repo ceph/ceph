@@ -524,7 +524,7 @@ class InternalNode final : public Node {
 
   template <bool FORCE_MERGE = false>
   node_future<> apply_children_merge(
-      context_t, Ref<Node>&& left, Ref<Node>&& right, bool update_index);
+      context_t, Ref<Node>&& left, laddr_t, Ref<Node>&& right, bool update_index);
 
   void validate_child_tracked(const Node& child) const {
     validate_child(child);

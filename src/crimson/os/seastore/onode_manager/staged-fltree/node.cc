@@ -555,14 +555,16 @@ Node::try_merge_adjacent(context_t c, bool update_parent_index)
           update_index_after_merge = update_parent_index;
         }
         logger().info("OTree::Node::MergeAdjacent: merge {} and {} "
-                      "at merge_stage={}, merge_size={}B, update_index={} ...",
+                      "at merge_stage={}, merge_size={}B, update_index={}, is_left={} ...",
                       left_for_merge->get_name(), right_for_merge->get_name(),
-                      merge_stage, merge_size, update_index_after_merge);
+                      merge_stage, merge_size, update_index_after_merge, is_left);
         // we currently cannot generate delta depends on another extent content,
         // so use rebuild_extent() as a workaround to rebuild the node from a
         // fresh extent, thus no need to generate delta.
+        auto left_addr = left_for_merge->impl->laddr();
         return left_for_merge->rebuild_extent(c
         ).safe_then([c, merge_stage, merge_size, update_index_after_merge,
+                     left_addr,
                      left_for_merge = std::move(left_for_merge),
                      right_for_merge = std::move(right_for_merge)] (auto left_mut) mutable {
           if (left_for_merge->impl->node_type() == node_type_t::LEAF) {
@@ -573,7 +575,7 @@ Node::try_merge_adjacent(context_t c, bool update_parent_index)
               left_mut, *right_for_merge->impl, merge_stage, merge_size);
           left_for_merge->track_merge(right_for_merge, merge_stage, left_last_pos);
           return left_for_merge->parent_info().ptr->apply_children_merge(
-              c, std::move(left_for_merge),
+              c, std::move(left_for_merge), left_addr,
               std::move(right_for_merge), update_index_after_merge);
         });
       } else {
@@ -946,16 +948,16 @@ node_future<> InternalNode::fix_index(context_t c, Ref<Node> child)
 
 template <bool FORCE_MERGE>
 node_future<> InternalNode::apply_children_merge(
-    context_t c, Ref<Node>&& left_child,
+    context_t c, Ref<Node>&& left_child, laddr_t origin_left_addr,
     Ref<Node>&& right_child, bool update_index)
 {
   auto left_pos = left_child->parent_info().position;
   auto left_addr = left_child->impl->laddr();
   auto& right_pos = right_child->parent_info().position;
   auto right_addr = right_child->impl->laddr();
-  logger().debug("OTree::Internal::ApplyChildMerge: apply {}'s child "
-                 "{} at pos({}), to merge with {} at pos({}), update_index={} ...",
-                 get_name(), left_child->get_name(), left_pos,
+  logger().debug("OTree::Internal::ApplyChildMerge: apply {}'s child {} (was {:#x}) "
+                 "at pos({}), to merge with {} at pos({}), update_index={} ...",
+                 get_name(), left_child->get_name(), origin_left_addr, left_pos,
                  right_child->get_name(), right_pos, update_index);
 
 #ifndef NDEBUG
@@ -963,7 +965,7 @@ node_future<> InternalNode::apply_children_merge(
   assert(!left_pos.is_end());
   const laddr_packed_t* p_value_left;
   impl->get_slot(left_pos, nullptr, &p_value_left);
-  assert(p_value_left->value == left_addr);
+  assert(p_value_left->value == origin_left_addr);
 
   assert(right_child->use_count() == 1);
   assert(right_child->parent_info().ptr == this);
@@ -1031,9 +1033,9 @@ node_future<> InternalNode::apply_children_merge(
   });
 }
 template node_future<> InternalNode::apply_children_merge<true>(
-    context_t, Ref<Node>&&, Ref<Node>&&, bool);
+    context_t, Ref<Node>&&, laddr_t, Ref<Node>&&, bool);
 template node_future<> InternalNode::apply_children_merge<false>(
-    context_t, Ref<Node>&&, Ref<Node>&&, bool);
+    context_t, Ref<Node>&&, laddr_t, Ref<Node>&&, bool);
 
 node_future<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
     context_t c, const search_position_t& pos)
