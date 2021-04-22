@@ -55,6 +55,8 @@ cdef nogil:
 
     int ceph_getaddrs(ceph_mount_info* cmount, char** addrs):
         pass
+    int64_t ceph_get_fs_cid(ceph_mount_info *cmount):
+        pass
     int ceph_conf_read_file(ceph_mount_info *cmount, const char *path_list):
         pass
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv):
