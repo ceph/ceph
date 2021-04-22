@@ -398,10 +398,10 @@ Create a file called (for example) ``osd_spec.yml``:
 
 This means :
 
-#. Turn any available (ceph-volume decides what 'available' is) into an OSD on
-   all hosts that match the glob pattern '*'. (The glob pattern matches against
-   the registered hosts from `host ls`) A more detailed section on host_pattern
-   is available below.
+#. Turn any available device (ceph-volume decides what 'available' is) into an
+   OSD on all hosts that match the glob pattern '*'. (The glob pattern matches
+   against the registered hosts from `host ls`) A more detailed section on
+   host_pattern is available below.
 
 #. Then pass it to `osd create` like this:
 
