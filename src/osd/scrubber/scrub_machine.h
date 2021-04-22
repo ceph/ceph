@@ -164,6 +164,7 @@ struct NotActive : sc::state<NotActive, ScrubMachine> {
 struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {
 
   explicit ReservingReplicas(my_context ctx);
+  ~ReservingReplicas();
   using reactions = mpl::list<sc::custom_reaction<FullReset>,
 			      // all replicas granted our resources request
 			      sc::transition<RemotesReserved, ActiveScrubbing>,
