@@ -6570,7 +6570,7 @@ void PeeringState::ToDelete::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS;
   // note: on a successful removal, this path doesn't execute. see
-  // _delete_some().
+  // do_delete_work().
   pl->get_perf_logger().dec(l_osd_pg_removing);
 
   pl->cancel_local_background_io_reservation();
