@@ -577,36 +577,10 @@ acceptable values.
 Client
 ------
 
-``mon_client_hunt_interval``
-
-:Description: The client will try a new monitor every ``N`` seconds until it
-              establishes a connection.
-              
-:Type: Double
-:Default: ``3.00``
-
-
-``mon_client_ping_interval``
-
-:Description: The client will ping the monitor every ``N`` seconds.
-:Type: Double
-:Default: ``10.00``
-
-
-``mon_client_max_log_entries_per_message``
-
-:Description: The maximum number of log entries a monitor will generate 
-              per client message.
-
-:Type: Integer
-:Default: ``1000``
-
-
-``mon_client_bytes``
-
-:Description: The amount of client message data allowed in memory (in bytes).
-:Type: 64-bit Integer Unsigned
-:Default: ``100ul << 20``
+.. confval:: mon_client_hunt_interval
+.. confval:: mon_client_ping_interval
+.. confval:: mon_client_max_log_entries_per_message
+.. confval:: mon_client_bytes
 
 .. _pool-settings:
 
@@ -617,258 +591,42 @@ Since version v0.94 there is support for pool flags which allow or disallow chan
 Monitors can also disallow removal of pools if appropriately configured. The inconvenience of this guardrail
 is far outweighed by the number of accidental pool (and thus data) deletions it prevents.
 
-``mon_allow_pool_delete``
-
-:Description: Should monitors allow pools to be removed, regardless of what the pool flags say?
-
-:Type: Boolean
-:Default: ``false``
-
-
-``osd_pool_default_ec_fast_read``
-
-:Description: Whether to turn on fast read on the pool or not. It will be used as
-              the default setting of newly created erasure coded pools if ``fast_read``
-              is not specified at create time.
-
-:Type: Boolean
-:Default: ``false``
-
-
-``osd_pool_default_flag_hashpspool``
-
-:Description: Set the hashpspool flag on new pools
-:Type: Boolean
-:Default: ``true``
-
-
-``osd_pool_default_flag_nodelete``
-
-:Description: Set the ``nodelete`` flag on new pools, which prevents pool removal.
-:Type: Boolean
-:Default: ``false``
-
-
-``osd_pool_default_flag_nopgchange``
-
-:Description: Set the ``nopgchange`` flag on new pools. Does not allow the number of PGs to be changed.
-:Type: Boolean
-:Default: ``false``
-
-
-``osd_pool_default_flag_nosizechange``
-
-:Description: Set the ``nosizechange`` flag on new pools. Does not allow the ``size`` to be changed.
-:Type: Boolean
-:Default: ``false``
+.. confval:: mon_allow_pool_delete
+.. confval:: osd_pool_default_ec_fast_read
+.. confval:: osd_pool_default_flag_hashpspool
+.. confval:: osd_pool_default_flag_nodelete
+.. confval:: osd_pool_default_flag_nopgchange
+.. confval:: osd_pool_default_flag_nosizechange
 
 For more information about the pool flags see `Pool values`_.
 
 Miscellaneous
 =============
 
-``mon_max_osd``
-
-:Description: The maximum number of OSDs allowed in the cluster.
-:Type: 32-bit Integer
-:Default: ``10000``
-
-
-``mon_globalid_prealloc`` 
-
-:Description: The number of global IDs to pre-allocate for clients and daemons in the cluster.
-:Type: 32-bit Integer
-:Default: ``10000``
-
-
-``mon_subscribe_interval`` 
-
-:Description: The refresh interval (in seconds) for subscriptions. The 
-              subscription mechanism enables obtaining cluster maps 
-              and log information.
-
-:Type: Double
-:Default: ``86400.00`` 
-
-
-``mon_stat_smooth_intervals``
-
-:Description: Ceph will smooth statistics over the last ``N`` PG maps.
-:Type: Integer
-:Default: ``6``
-
-
-``mon_probe_timeout`` 
-
-:Description: Number of seconds the monitor will wait to find peers before bootstrapping.
-:Type: Double
-:Default: ``2.00``
-
-
-``mon_daemon_bytes``
-
-:Description: The message memory cap for metadata server and OSD messages (in bytes).
-:Type: 64-bit Integer Unsigned
-:Default: ``400ul << 20``
-
-
-``mon_max_log_entries_per_event``
-
-:Description: The maximum number of log entries per event. 
-:Type: Integer
-:Default: ``4096``
-
-
-``mon_osd_prime_pg_temp``
-
-:Description: Enables or disables priming the PGMap with the previous OSDs when an ``out``
-              OSD comes back into the cluster. With the ``true`` setting, clients
-              will continue to use the previous OSDs until the newly ``in`` OSDs for
-              a PG have peered.
-
-:Type: Boolean
-:Default: ``true``
-
-
-``mon_osd_prime pg temp max time``
-
-:Description: How much time in seconds the monitor should spend trying to prime the
-              PGMap when an out OSD comes back into the cluster.
-
-:Type: Float
-:Default: ``0.50``
-
-
-``mon_osd_prime_pg_temp_max_time_estimate``
-
-:Description: Maximum estimate of time spent on each PG before we prime all PGs
-              in parallel.
-
-:Type: Float
-:Default: ``0.25``
-
-
-``mon_mds_skip_sanity``
-
-:Description: Skip safety assertions on FSMap (in case of bugs where we want to
-              continue anyway). Monitor terminates if the FSMap sanity check
-              fails, but we can disable it by enabling this option.
-
-:Type: Boolean
-:Default: ``False``
-
-
-``mon_max_mdsmap_epochs``
-
-:Description: The maximum number of mdsmap epochs to trim during a single proposal.
-:Type: Integer
-:Default: ``500``
-
-
-``mon_config_key_max_entry_size``
-
-:Description: The maximum size of config-key entry (in bytes)
-:Type: Integer
-:Default: ``65536``
-
-
-``mon_scrub_interval``
-
-:Description: How often the monitor scrubs its store by comparing
-              the stored checksums with the computed ones for all stored
-              keys. (0 disables it. dangerous, use with care)
-
-:Type: Seconds
-:Default: ``1 day``
-
-
-``mon_scrub_max_keys``
-
-:Description: The maximum number of keys to scrub each time.
-:Type: Integer
-:Default: ``100``
-
-
-``mon_compact_on_start``
-
-:Description: Compact the database used as Ceph Monitor store on
-              ``ceph-mon`` start. A manual compaction helps to shrink the
-              monitor database and improve the performance of it if the regular
-              compaction fails to work.
-
-:Type: Boolean
-:Default: ``False``
-
-
-``mon_compact_on_bootstrap``
-
-:Description: Compact the database used as Ceph Monitor store
-              on bootstrap. Monitors probe each other to establish
-              a quorum after bootstrap. If a monitor times out before joining the
-              quorum, it will start over and bootstrap again.
-
-:Type: Boolean
-:Default: ``False``
-
-
-``mon_compact_on_trim``
-
-:Description: Compact a certain prefix (including paxos) when we trim its old states.
-:Type: Boolean
-:Default: ``True``
-
-
-``mon_cpu_threads``
-
-:Description: Number of threads for performing CPU intensive work on monitor.
-:Type: Integer
-:Default: ``4``
-
-
-``mon_osd_mapping_pgs_per_chunk``
-
-:Description: We calculate the mapping from placement group to OSDs in chunks.
-              This option specifies the number of placement groups per chunk.
-
-:Type: Integer
-:Default: ``4096``
-
-
-``mon_session_timeout``
-
-:Description: Monitor will terminate inactive sessions stay idle over this
-              time limit.
-
-:Type: Integer
-:Default: ``300``
-
-
-``mon_osd_cache_size_min``
-
-:Description: The minimum amount of bytes to be kept mapped in memory for osd
-               monitor caches.
-
-:Type: 64-bit Integer
-:Default: ``134217728``
-
-
-``mon_memory_target``
-
-:Description: The amount of bytes pertaining to OSD monitor caches and KV cache
-              to be kept mapped in memory with cache auto-tuning enabled.
-
-:Type: 64-bit Integer
-:Default: ``2147483648``
-
-
-``mon_memory_autotune``
-
-:Description: Autotune the cache memory used for OSD monitors and KV
-              database.
-
-:Type: Boolean
-:Default: ``True``
-
+.. confval:: mon_max_osd
+.. confval:: mon_globalid_prealloc
+.. confval:: mon_subscribe_interval
+.. confval:: mon_stat_smooth_intervals
+.. confval:: mon_probe_timeout
+.. confval:: mon_daemon_bytes
+.. confval:: mon_max_log_entries_per_event
+.. confval:: mon_osd_prime_pg_temp
+.. confval:: mon_osd_prime_pg_temp_max_time
+.. confval:: mon_osd_prime_pg_temp_max_estimate
+.. confval:: mon_mds_skip_sanity
+.. confval:: mon_max_mdsmap_epochs
+.. confval:: mon_config_key_max_entry_size
+.. confval:: mon_scrub_interval
+.. confval:: mon_scrub_max_keys
+.. confval:: mon_compact_on_start
+.. confval:: mon_compact_on_bootstrap
+.. confval:: mon_compact_on_trim
+.. confval:: mon_cpu_threads
+.. confval:: mon_osd_mapping_pgs_per_chunk
+.. confval:: mon_session_timeout
+.. confval:: mon_osd_cache_size_min
+.. confval:: mon_memory_target
+.. confval:: mon_memory_autotune
 
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
