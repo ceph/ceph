@@ -58,7 +58,7 @@ private:
   /**
    * Discover python modules from local disk
    */
-  std::set<std::string> probe_modules(const std::string &path) const;
+  std::vector<std::string> probe_modules(const std::string &path) const;
 
   PyModuleConfig module_config;
 
