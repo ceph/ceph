@@ -90,20 +90,28 @@ public:
   Cache(SegmentManager &segment_manager);
   ~Cache();
 
+  retired_extent_gate_t retired_extent_gate;
+
   /// Creates empty transaction
   TransactionRef create_transaction() {
-    return std::make_unique<Transaction>(
+    auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
-      false
+      false,
+      last_commit
     );
+    retired_extent_gate.add_token(ret->retired_gate_token);
+    return ret;
   }
 
   /// Creates empty weak transaction
   TransactionRef create_weak_transaction() {
-    return std::make_unique<Transaction>(
+    auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
-      true
+      true,
+      last_commit
     );
+    retired_extent_gate.add_token(ret->retired_gate_token);
+    return ret;
   }
 
   /**
@@ -522,6 +530,8 @@ private:
   SegmentManager &segment_manager; ///< ref to segment_manager
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
+
+  journal_seq_t last_commit = JOURNAL_SEQ_MIN;
 
   /**
    * dirty

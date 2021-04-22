@@ -105,6 +105,17 @@ void Cache::remove_extent(CachedExtentRef ref)
   extents.erase(*ref);
 }
 
+void Cache::retire_extent(CachedExtentRef ref)
+{
+  logger().debug("retire_extent: {}", *ref);
+  assert(ref->is_valid());
+
+  remove_from_dirty(ref);
+  ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
+  retired_extent_gate.add_extent(*ref);
+  ref->state = CachedExtent::extent_state_t::RETIRED;
+}
+
 void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
 {
   assert(next->get_paddr() == prev->get_paddr());
@@ -323,7 +334,7 @@ void Cache::complete_commit(
     }
     i->state = CachedExtent::extent_state_t::DIRTY;
     if (i->version == 1 || i->get_type() == extent_types_t::ROOT) {
-      i->dirty_from = seq;
+      i->dirty_from_or_retired_at = seq;
     }
   }
 
@@ -343,6 +354,13 @@ void Cache::complete_commit(
   for (auto &i: t.mutated_block_list) {
     i->complete_io();
   }
+
+  last_commit = seq;
+  for (auto &i: t.retired_set) {
+    logger().debug("try_construct_record: retiring {}", *i);
+    i->dirty_from_or_retired_at = last_commit;
+  }
+  retired_extent_gate.prune();
 }
 
 void Cache::init() {
@@ -390,7 +408,7 @@ Cache::replay_delta(
     logger().debug("replay_delta: found root delta");
     remove_extent(root);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
-    root->dirty_from = journal_seq;
+    root->dirty_from_or_retired_at = journal_seq;
     add_extent(root);
     return replay_delta_ertr::now();
   } else {
@@ -438,7 +456,7 @@ Cache::replay_delta(
       assert(extent->last_committed_crc == delta.final_crc);
 
       if (extent->version == 0) {
-	extent->dirty_from = journal_seq;
+	extent->dirty_from_or_retired_at = journal_seq;
       }
       extent->version++;
       mark_dirty(extent);
