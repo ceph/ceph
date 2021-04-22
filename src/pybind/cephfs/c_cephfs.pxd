@@ -46,6 +46,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     void ceph_shutdown(ceph_mount_info *cmount)
 
     int ceph_getaddrs(ceph_mount_info* cmount, char** addrs)
+    int64_t ceph_get_fs_cid(ceph_mount_info *cmount)
     int ceph_conf_read_file(ceph_mount_info *cmount, const char *path_list)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_conf_get(ceph_mount_info *cmount, const char *option, char *buf, size_t len)

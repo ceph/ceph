@@ -481,6 +481,17 @@ cdef class LibCephFS(object):
             for key, value in conf.items():
                 self.conf_set(key, value)
 
+    def get_fscid(self):
+        """
+        Return the file system id for this fs client.
+        """
+        self.require_state("mounted")
+        with nogil:
+            ret = ceph_get_fs_cid(self.cluster)
+        if ret < 0:
+            raise make_ex(ret, "error fetching fscid")
+        return ret
+
     def get_addrs(self):
         """
         Get associated client addresses with this RADOS session.
