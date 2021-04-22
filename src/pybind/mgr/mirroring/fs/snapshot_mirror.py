@@ -376,34 +376,38 @@ class FSSnapshotMirror:
                 return True
         return False
 
-    def get_mirror_info(self, remote_fs):
+    @staticmethod
+    def get_mirror_info(fs):
         try:
-            val = remote_fs.getxattr('/', 'ceph.mirror.info')
+            val = fs.getxattr('/', 'ceph.mirror.info')
             match = re.search(r'^cluster_id=([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}) fs_id=(\d+)$',
                               val.decode('utf-8'))
             if match and len(match.groups()) == 2:
                 return {'cluster_id': match.group(1),
                         'fs_id': int(match.group(2))
                         }
-            return None
+            raise MirrorException(-errno.EINVAL, 'invalid ceph.mirror.info value format')
         except cephfs.Error as e:
-            return None
+            raise MirrorException(-e.errno, 'error fetching ceph.mirror.info xattr')
 
-    def set_mirror_info(self, local_cluster_id, local_fsid, remote_fs):
+    @staticmethod
+    def set_mirror_info(local_cluster_id, local_fsid, remote_fs):
         log.info(f'setting {local_cluster_id}::{local_fsid} on remote')
         try:
             remote_fs.setxattr('/', 'ceph.mirror.info',
                                f'cluster_id={local_cluster_id} fs_id={local_fsid}'.encode('utf-8'), os.XATTR_CREATE)
         except cephfs.Error as e:
             if e.errno == errno.EEXIST:
-                mi = self.get_mirror_info(remote_fs)
-                if not mi:
-                    log.error(f'error fetching mirror info when setting mirror info')
-                    raise Exception(-errno.EINVAL)
-                cluster_id = mi['cluster_id']
-                fs_id = mi['fs_id']
-                if not (cluster_id == local_cluster_id and fs_id == local_fsid):
-                    raise MirrorException(-errno.EEXIST, f'peer mirrorred by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
+                try:
+                    mi = FSSnapshotMirror.get_mirror_info(remote_fs)
+                    cluster_id = mi['cluster_id']
+                    fs_id = mi['fs_id']
+                    if not (cluster_id == local_cluster_id and fs_id == local_fsid):
+                        raise MirrorException(-errno.EEXIST, f'peer mirrorred by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
+                except MirrorException:
+                    # if mirror info cannot be fetched for some reason, let's just
+                    # fail.
+                    raise MirrorException(-errno.EEXIST, f'already an active peer')
             else:
                 log.error(f'error setting mirrored fsid: {e}')
                 raise Exception(-e.errno)
@@ -444,25 +448,32 @@ class FSSnapshotMirror:
         client_name, cluster_name = FSSnapshotMirror.split_spec(remote_cluster_spec)
         remote_cluster, remote_fs = connect_to_filesystem(client_name, cluster_name, remote_fs_name,
                                                           'remote', conf_dct=remote_conf)
-        if 'fsid' in remote_conf:
-            if not remote_cluster.get_fsid() == remote_conf['fsid']:
-                raise MirrorException(-errno.EINVAL, 'FSID mismatch between bootstrap token and remote cluster')
-
-        local_fsid = FSSnapshotMirror.get_filesystem_id(local_fs_name, self.fs_map)
-        if local_fsid is None:
-            log.error(f'error looking up filesystem id for {local_fs_name}')
-            raise Exception(-errno.EINVAL)
-
-        # post cluster id comparison, filesystem name comparison would suffice
-        local_cluster_id = self.rados.get_fsid()
-        remote_cluster_id = remote_cluster.get_fsid()
-        log.debug(f'local_cluster_id={local_cluster_id} remote_cluster_id={remote_cluster_id}')
-        if local_cluster_id == remote_cluster_id and local_fs_name == remote_fs_name:
-            raise MirrorException(-errno.EINVAL, "'Source and destination cluster fsid and "\
-                                  "file-system name can't be the same")
-
         try:
-            self.set_mirror_info(local_cluster_id, local_fsid, remote_fs)
+            local_cluster_id = self.rados.get_fsid()
+            remote_cluster_id = remote_cluster.get_fsid()
+            log.debug(f'local_cluster_id={local_cluster_id} remote_cluster_id={remote_cluster_id}')
+            if 'fsid' in remote_conf:
+                if not remote_cluster_id == remote_conf['fsid']:
+                    raise MirrorException(-errno.EINVAL, 'FSID mismatch between bootstrap token and remote cluster')
+
+            local_fscid = remote_fscid = None
+            with open_filesystem(self.local_fs, local_fs_name) as local_fsh:
+                local_fscid = local_fsh.get_fscid()
+                remote_fscid = remote_fs.get_fscid()
+                log.debug(f'local_fscid={local_fscid} remote_fscid={remote_fscid}')
+                mi = None
+                try:
+                    mi = FSSnapshotMirror.get_mirror_info(local_fsh)
+                except MirrorException as me:
+                    if me.args[0] != -errno.ENODATA:
+                        raise Exception(-errno.EINVAL)
+                if mi and mi['cluster_id'] == remote_cluster_id and mi['fs_id'] == remote_fscid:
+                    raise MirrorException(-errno.EINVAL, f'file system is an active peer for file system: {remote_fs_name}')
+
+            if local_cluster_id == remote_cluster_id and local_fscid == remote_fscid:
+                raise MirrorException(-errno.EINVAL, "'Source and destination cluster fsid and "\
+                                      "file-system name can't be the same")
+            FSSnapshotMirror.set_mirror_info(local_cluster_id, local_fscid, remote_fs)
         finally:
             disconnect_from_filesystem(cluster_name, remote_fs_name, remote_cluster, remote_fs)
 
