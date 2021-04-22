@@ -1071,7 +1071,7 @@ class DummyChildPool {
       }
       left->impl->reset(*p_keys, left_is_tail);
       return left->parent_info().ptr->apply_children_merge<true>(
-          c, std::move(left), std::move(right), !stole_key);
+          c, std::move(left), left->impl->laddr(), std::move(right), !stole_key);
     }
 
     DummyChildImpl* impl;
