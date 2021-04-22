@@ -1608,6 +1608,10 @@ options:
   default: false
   services:
   - mon
+  fmt_desc: Compact the database used as Ceph Monitor store on
+    ``ceph-mon`` start. A manual compaction helps to shrink the
+    monitor database and improve the performance of it if the regular
+    compaction fails to work.
   with_legacy: true
 # trigger leveldb compaction on bootstrap
 - name: mon_compact_on_bootstrap
@@ -1616,6 +1620,10 @@ options:
   default: false
   services:
   - mon
+  fmt_desc: Compact the database used as Ceph Monitor store
+    on bootstrap. Monitors probe each other to establish
+    a quorum after bootstrap. If a monitor times out before joining the
+    quorum, it will start over and bootstrap again.
   with_legacy: true
 # compact (a prefix) when we trim old states
 - name: mon_compact_on_trim
@@ -1624,6 +1632,7 @@ options:
   default: true
   services:
   - mon
+  fmt_desc: Compact a certain prefix (including paxos) when we trim its old states.
   with_legacy: true
 - name: mon_osdmap_full_prune_enabled
   type: bool
@@ -1683,6 +1692,8 @@ options:
   type: size
   level: advanced
   desc: The minimum amount of bytes to be kept mapped in memory for osd monitor caches.
+  fmt_desc: The minimum amount of bytes to be kept mapped in memory for osd
+     monitor caches.
   default: 128_M
   services:
   - mon
@@ -1692,6 +1703,8 @@ options:
   level: basic
   desc: The amount of bytes pertaining to osd monitor caches and kv cache to be kept
     mapped in memory with cache auto-tuning enabled
+  fmt_desc: The amount of bytes pertaining to OSD monitor caches and KV cache
+    to be kept mapped in memory with cache auto-tuning enabled.
   default: 2_G
   services:
   - mon
@@ -1702,6 +1715,8 @@ options:
   type: bool
   level: basic
   desc: Autotune the cache memory being used for osd monitors and kv database
+  fmt_desc: Autotune the cache memory used for OSD monitors and KV
+    database.
   default: true
   services:
   - mon
@@ -1712,6 +1727,7 @@ options:
   type: int
   level: advanced
   desc: worker threads for CPU intensive background work
+  fmt_desc: Number of threads for performing CPU intensive work on monitor.
   default: 4
   services:
   - mon
@@ -1720,6 +1736,8 @@ options:
   type: int
   level: dev
   desc: granularity of PG placement calculation background work
+  fmt_desc: We calculate the mapping from placement group to OSDs in chunks.
+    This option specifies the number of placement groups per chunk.
   default: 4096
   services:
   - mon
@@ -1762,6 +1780,8 @@ options:
   type: int
   level: advanced
   desc: close inactive mon client connections after this many seconds
+  fmt_desc: Monitor will terminate inactive sessions stay idle over this
+    time limit.
   default: 5_min
   services:
   - mon
@@ -1770,6 +1790,9 @@ options:
   type: float
   level: dev
   desc: subscribe interval for pre-jewel clients
+  fmt_desc: The refresh interval (in seconds) for subscriptions. The
+    subscription mechanism enables obtaining cluster maps
+    and log information.
   default: 1_day
   services:
   - mon
@@ -1972,6 +1995,10 @@ options:
   type: bool
   level: dev
   desc: minimize peering work by priming pg_temp values after a map change
+  fmt_desc: Enables or disables priming the PGMap with the previous OSDs when an ``out``
+    OSD comes back into the cluster. With the ``true`` setting, clients
+    will continue to use the previous OSDs until the newly ``in`` OSDs for
+    a PG have peered.
   default: true
   services:
   - mon
@@ -1980,6 +2007,8 @@ options:
   type: float
   level: dev
   desc: maximum time to spend precalculating PG mappings on map change (seconds)
+  fmt_desc: How much time in seconds the monitor should spend trying to prime the
+    PGMap when an out OSD comes back into the cluster.
   default: 0.5
   services:
   - mon
@@ -1989,6 +2018,8 @@ options:
   level: advanced
   desc: calculate all PG mappings if estimated fraction of PGs that change is above
     this amount
+  fmt_desc: Maximum estimate of time spent on each PG before we prime all PGs
+    in parallel.
   default: 0.25
   services:
   - mon
@@ -1998,6 +2029,7 @@ options:
   level: advanced
   desc: number of PGMaps stats over which we calc the average read/write throughput
     of the whole cluster
+  fmt_desc: Ceph will smooth statistics over the last ``N`` PG maps.
   default: 6
   services:
   - mgr
@@ -2335,6 +2367,7 @@ options:
   type: bool
   level: advanced
   desc: allow pool deletions
+  fmt_desc: Should monitors allow pools to be removed, regardless of what the pool flags say?
   default: false
   services:
   - mon
@@ -2354,6 +2387,7 @@ options:
   long_desc: This setting caps how many new clients can authenticate with the cluster
     before the monitors have to perform a write to preallocate more.  Large values
     burn through the 64-bit ID space more quickly.
+  fmt_desc: The number of global IDs to pre-allocate for clients and daemons in the cluster.
   default: 10000
   services:
   - mon
@@ -2566,6 +2600,7 @@ options:
   type: int
   level: advanced
   desc: max number of FSMaps/MDSMaps to store
+  fmt_desc: The maximum number of mdsmap epochs to trim during a single proposal.
   default: 500
   services:
   - mon
@@ -2581,6 +2616,7 @@ options:
   type: int
   level: advanced
   desc: max number of OSDs in a cluster
+  fmt_desc: The maximum number of OSDs allowed in the cluster.
   default: 10000
   services:
   - mon
@@ -2589,6 +2625,7 @@ options:
   type: float
   level: advanced
   desc: timeout for querying other mons during bootstrap pre-election phase (seconds)
+  fmt_desc: Number of seconds the monitor will wait to find peers before bootstrapping.
   default: 2
   services:
   - mon
@@ -2597,6 +2634,7 @@ options:
   type: size
   level: advanced
   desc: max bytes of outstanding client messages mon will read off the network
+  fmt_desc: The amount of client message data allowed in memory (in bytes).
   default: 100_M
   services:
   - mon
@@ -2605,6 +2643,7 @@ options:
   type: size
   level: advanced
   desc: max bytes of outstanding mon messages mon will read off the network
+  fmt_desc: The message memory cap for metadata server and OSD messages (in bytes).
   default: 400_M
   services:
   - mon
@@ -2629,6 +2668,7 @@ options:
   type: int
   level: advanced
   desc: max cluster log entries per paxos event
+  fmt_desc: The maximum number of log entries per event.
   default: 4096
   services:
   - mon
@@ -2773,6 +2813,9 @@ options:
   type: secs
   level: advanced
   desc: frequency for scrubbing mon database
+  fmt_desc: How often the monitor scrubs its store by comparing
+    the stored checksums with the computed ones for all stored
+    keys. (0 disables it. dangerous, use with care)
   default: 1_day
   services:
   - mon
@@ -2789,6 +2832,7 @@ options:
   type: int
   level: advanced
   desc: max keys per on scrub chunk/step
+  fmt_desc: The maximum number of keys to scrub each time.
   default: 100
   services:
   - mon
@@ -2815,6 +2859,7 @@ options:
   type: size
   level: advanced
   desc: Defines the number of bytes allowed to be held in a single config-key entry
+  fmt_desc: The maximum size of config-key entry (in bytes)
   default: 64_K
   services:
   - mon
@@ -2925,6 +2970,9 @@ options:
   type: bool
   level: advanced
   desc: skip sanity checks on fsmap/mdsmap
+  fmt_desc: Skip safety assertions on FSMap (in case of bugs where we want to
+    continue anyway). Monitor terminates if the FSMap sanity check
+    fails, but we can disable it by enabling this option.
   default: false
   services:
   - mon
@@ -3441,6 +3489,8 @@ options:
   type: float
   level: advanced
   default: 3
+  fmt_desc: The client will try a new monitor every ``N`` seconds until it
+    establishes a connection.
   with_legacy: true
 # send logs every N seconds
 - name: mon_client_log_interval
@@ -3454,6 +3504,7 @@ options:
   type: float
   level: advanced
   default: 10
+  fmt_desc: The client will ping the monitor every ``N`` seconds.
   with_legacy: true
 # fail if we don't hear back
 - name: mon_client_ping_timeout
@@ -3480,6 +3531,8 @@ options:
   type: int
   level: advanced
   default: 1000
+  fmt_desc: The maximum number of log entries a monitor will generate
+    per client message.
   with_legacy: true
 - name: mon_client_directed_command_retry
   type: int
@@ -3910,6 +3963,9 @@ options:
   type: bool
   level: advanced
   desc: set ec_fast_read for new erasure-coded pools
+  fmt_desc: Whether to turn on fast read on the pool or not. It will be used as
+    the default setting of newly created erasure coded pools if ``fast_read``
+    is not specified at create time.
   default: false
   services:
   - mon
@@ -4063,6 +4119,7 @@ options:
   type: bool
   level: advanced
   desc: set nodelete flag on new pools
+  fmt_desc: Set the ``nodelete`` flag on new pools, which prevents pool removal.
   default: false
   services:
   - mon
@@ -4072,6 +4129,7 @@ options:
   type: bool
   level: advanced
   desc: set nopgchange flag on new pools
+  fmt_desc: Set the ``nopgchange`` flag on new pools. Does not allow the number of PGs to be changed.
   default: false
   services:
   - mon
@@ -4081,6 +4139,7 @@ options:
   type: bool
   level: advanced
   desc: set nosizechange flag on new pools
+  fmt_desc: Set the ``nosizechange`` flag on new pools. Does not allow the ``size`` to be changed.
   default: false
   services:
   - mon
