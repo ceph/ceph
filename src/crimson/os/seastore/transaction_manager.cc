@@ -55,7 +55,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 	});
       });
   }).safe_then([this] {
-    return journal->close();
+    return close();
   });
 }
 

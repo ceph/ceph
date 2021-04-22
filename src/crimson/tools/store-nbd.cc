@@ -38,6 +38,9 @@
 #include <seastar/core/byteorder.hh>
 #include <seastar/core/rwlock.hh>
 
+#include "crimson/common/config_proxy.h"
+#include "crimson/common/perf_counters_collection.h"
+
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -73,8 +76,6 @@ public:
     std::string type;
     bool mkfs = false;
     std::optional<std::string> path;
-    size_t segment_size;
-    size_t total_device_size;
 
     void populate_options(
       po::options_description &desc)
@@ -85,18 +86,6 @@ public:
 	 ->default_value("transaction_manager")
 	 ->notifier([this](auto s) { type = s; }),
 	 "Backend to use, options are transaction_manager"
-	)
-	("segment-size",
-	 po::value<size_t>()
-	 ->default_value(16ul << 20 /* 16MB */)
-	 ->notifier([this](auto s) { segment_size = s; }),
-	 "Total working set size"
-	)
-	("total-device-size",
-	 po::value<size_t>()
-	 ->default_value(10ul << 30 /* 10G */)
-	 ->notifier([this](auto s) { total_device_size = s; }),
-	 "Size of writes"
 	)
 	("device-path",
 	 po::value<std::string>()
@@ -374,20 +363,29 @@ int main(int argc, char** argv)
   }
 
   sc.run([=] {
-    auto backend = get_backend(backend_config);
-    return seastar::do_with(
-      NBDHandler(*backend, nbd_config),
-      std::move(backend),
-      [](auto &nbd, auto &backend) {
-	return backend->mount(
-	).then([&] {
-	  logger().debug("Running nbd server...");
-	  return nbd.run();
-	}).then([&] {
-	  return backend->close();
+    return crimson::common::sharded_conf(
+    ).start(EntityName{}, string_view{"ceph"}
+    ).then([=] {
+      auto backend = get_backend(backend_config);
+      return seastar::do_with(
+	NBDHandler(*backend, nbd_config),
+	std::move(backend),
+	[](auto &nbd, auto &backend) {
+	  return backend->mount(
+	  ).then([&] {
+	    logger().debug("Running nbd server...");
+	    return nbd.run();
+	  }).then([&] {
+	    return backend->close();
+	  });
 	});
+    }).then([=] {
+      return crimson::common::sharded_perf_coll().stop().then([] {
+	return crimson::common::sharded_conf().stop();
       });
+    });
   });
+
   sc.stop();
 }
 
@@ -663,16 +661,15 @@ public:
     assert(config.path);
     segment_manager = std::make_unique<
       segment_manager::block::BlockSegmentManager
-      >();
+      >(*config.path);
     logger().debug("mkfs");
-    BlockSegmentManager::mkfs_config_t block_config{
-      *config.path, config.segment_size, config.total_device_size
-    };
-    block_config.meta.seastore_id.generate_random();
-    return segment_manager->mkfs(std::move(block_config)
+    seastore_meta_t meta;
+    meta.seastore_id.generate_random();
+    return segment_manager->mkfs(
+      std::move(meta)
     ).safe_then([this] {
       logger().debug("");
-      return segment_manager->mount({ *config.path });
+      return segment_manager->mount();
     }).safe_then([this] {
       init();
       logger().debug("tm mkfs");
@@ -699,8 +696,8 @@ public:
     ).then([this] {
       segment_manager = std::make_unique<
 	segment_manager::block::BlockSegmentManager
-	>();
-      return segment_manager->mount({ *config.path });
+	>(*config.path);
+      return segment_manager->mount();
     }).safe_then([this] {
       init();
       return tm->mount();

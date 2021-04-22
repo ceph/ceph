@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <string.h>
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
 
 #include "include/buffer.h"
@@ -92,31 +93,40 @@ SegmentStateTracker::read_in(
 
 static
 block_sm_superblock_t make_superblock(
-  const BlockSegmentManager::mkfs_config_t &config,
+  seastore_meta_t meta,
   const seastar::stat_data &data)
 {
+  using crimson::common::get_conf;
+
+  auto config_size = get_conf<Option::size_t>(
+    "seastore_device_size");
+
   logger().debug(
     "{}: size {}, block_size {}, allocated_size {}, configured_size {}",
     __func__,
     data.size,
     data.block_size,
     data.allocated_size,
-    config.total_size);
-  size_t size = (data.size == 0) ? config.total_size : data.size;
-  size_t raw_segments = size / config.segment_size;
+    config_size);
+
+  size_t size = (data.size == 0) ? config_size : data.size;
+
+  auto config_segment_size = get_conf<Option::size_t>(
+    "seastore_segment_size");
+  size_t raw_segments = size / config_segment_size;
   size_t tracker_size = SegmentStateTracker::get_raw_size(
     raw_segments,
     data.block_size);
   size_t segments = (size - tracker_size - data.block_size)
-    / config.segment_size;
+    / config_segment_size;
   return block_sm_superblock_t{
     size,
-    config.segment_size,
+    config_segment_size,
     data.block_size,
     segments,
     data.block_size,
     tracker_size + data.block_size,
-    config.meta
+    meta
   };
 }
 
@@ -268,10 +278,10 @@ BlockSegmentManager::~BlockSegmentManager()
 {
 }
 
-BlockSegmentManager::mount_ret BlockSegmentManager::mount(const mount_config_t& config)
+BlockSegmentManager::mount_ret BlockSegmentManager::mount()
 {
   return open_device(
-    config.path, seastar::open_flags::rw | seastar::open_flags::dsync
+    device_path, seastar::open_flags::rw | seastar::open_flags::dsync
   ).safe_then([=](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
@@ -295,7 +305,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount(const mount_config_t& 
   });
 }
 
-BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(mkfs_config_t config)
+BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(seastore_meta_t meta)
 {
   return seastar::do_with(
     seastar::file{},
@@ -304,11 +314,11 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(mkfs_config_t config)
     std::unique_ptr<SegmentStateTracker>(),
     [=](auto &device, auto &stat, auto &sb, auto &tracker) {
       return open_device(
-	config.path, seastar::open_flags::rw
-      ).safe_then([&, config](auto p) {
+	device_path, seastar::open_flags::rw
+      ).safe_then([&, meta](auto p) {
 	device = p.first;
 	stat = p.second;
-	sb = make_superblock(config, stat);
+	sb = make_superblock(meta, stat);
 	return write_superblock(device, sb);
       }).safe_then([&] {
 	logger().debug("BlockSegmentManager::mkfs: superblock written");
