@@ -158,9 +158,9 @@ private:
     return seastar::do_with(
       internal_context_t{ ch, std::move(t) },
       std::forward<F>(f),
-      [](auto &ctx, auto &f) {
+      [this](auto &ctx, auto &f) {
 	return repeat_eagain([&]() {
-	  ctx.reset(make_transaction());
+	  ctx.reset(transaction_manager->create_transaction());
 	  return std::invoke(f, ctx);
 	}).handle_error(
 	  crimson::ct_error::eagain::pass_further{},
@@ -184,7 +184,7 @@ private:
       std::forward<F>(f),
       [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
 	return repeat_eagain([&, this] {
-	  t = make_transaction();
+	  t = transaction_manager->create_transaction();
 	  return onode_manager->get_onode(
 	    *t, oid
 	  ).safe_then([&, this](auto onode_ret) {

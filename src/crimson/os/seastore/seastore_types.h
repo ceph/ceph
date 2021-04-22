@@ -36,6 +36,8 @@ struct seastore_meta_t {
 
 // Identifies segment location on disk, see SegmentManager,
 using segment_id_t = uint32_t;
+constexpr segment_id_t MAX_SEG_ID =
+  std::numeric_limits<segment_id_t>::max();
 constexpr segment_id_t NULL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 1;
 /* Used to denote relative paddr_t */
@@ -59,7 +61,9 @@ std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 // may be negative for relative offsets
 using segment_off_t = int32_t;
 constexpr segment_off_t NULL_SEG_OFF =
-  std::numeric_limits<segment_id_t>::max();
+  std::numeric_limits<segment_off_t>::max();
+constexpr segment_off_t MAX_SEG_OFF =
+  std::numeric_limits<segment_off_t>::max();
 
 std::ostream &offset_to_stream(std::ostream &, const segment_off_t &t);
 
@@ -67,6 +71,8 @@ std::ostream &offset_to_stream(std::ostream &, const segment_off_t &t);
  * the incarnation of a segment */
 using segment_seq_t = uint32_t;
 static constexpr segment_seq_t NULL_SEG_SEQ =
+  std::numeric_limits<segment_seq_t>::max();
+static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
 
 // Offset of delta within a record
@@ -192,6 +198,10 @@ WRITE_CMP_OPERATORS_2(paddr_t, segment, offset)
 WRITE_EQ_OPERATORS_2(paddr_t, segment, offset)
 constexpr paddr_t P_ADDR_NULL = paddr_t{};
 constexpr paddr_t P_ADDR_MIN = paddr_t{0, 0};
+constexpr paddr_t P_ADDR_MAX = paddr_t{
+  MAX_SEG_ID,
+  MAX_SEG_OFF
+};
 constexpr paddr_t make_record_relative_paddr(segment_off_t off) {
   return paddr_t{RECORD_REL_SEG_ID, off};
 }
@@ -243,6 +253,14 @@ struct journal_seq_t {
 };
 WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
 WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
+constexpr journal_seq_t JOURNAL_SEQ_MIN{
+  0,
+  paddr_t{0, 0}
+};
+constexpr journal_seq_t JOURNAL_SEQ_MAX{
+  MAX_SEG_SEQ,
+  P_ADDR_MAX
+};
 
 std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq);
 
@@ -317,6 +335,7 @@ enum class extent_types_t : uint8_t {
   ONODE_BLOCK_STAGED = 6,
   COLL_BLOCK = 7,
   OBJECT_DATA_BLOCK = 8,
+  RETIRED_PLACEHOLDER = 9,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,

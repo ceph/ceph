@@ -48,6 +48,7 @@ class CachedExtent : public boost::intrusive_ref_counter<
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
                            //  version > 0
+    RETIRED,               // In ExtentIndex while in retired_extent_gate
     INVALID                // Part of no ExtentIndex set
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
@@ -59,14 +60,6 @@ class CachedExtent : public boost::intrusive_ref_counter<
 
   // Points at current version while in state MUTATION_PENDING
   CachedExtentRef prior_instance;
-
-  /**
-   * dirty_from
-   *
-   * When dirty, indiciates the oldest journal entry which mutates
-   * this extent.
-   */
-  journal_seq_t dirty_from;
 
 public:
   /**
@@ -137,7 +130,7 @@ public:
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
 	<< ", version=" << version
-	<< ", dirty_from=" << dirty_from
+	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", paddr=" << get_paddr()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
@@ -232,7 +225,12 @@ public:
 
   /// Returns true if extent has not been superceded or retired
   bool is_valid() const {
-    return state != extent_state_t::INVALID;
+    return state != extent_state_t::INVALID && state != extent_state_t::RETIRED;
+  }
+
+  /// True iff extent is in state RETIRED
+  bool is_retired() const {
+    return state == extent_state_t::RETIRED;
   }
 
   /// Returns true if extent or prior_instance has been invalidated
@@ -240,13 +238,17 @@ public:
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
   }
 
-  /**
-   * get_dirty_from
-   *
-   * Return journal location of oldest relevant delta.
-   */
-  auto get_dirty_from() const { return dirty_from; }
+  /// Return journal location of oldest relevant delta, only valid while DIRTY
+  auto get_dirty_from() const {
+    ceph_assert(is_dirty());
+    return dirty_from_or_retired_at;
+  }
 
+  /// Return journal location of oldest relevant delta, only valid while RETIRED
+  auto get_retired_at() const {
+    ceph_assert(is_retired());
+    return dirty_from_or_retired_at;
+  }
 
   /**
    * get_paddr
@@ -257,7 +259,7 @@ public:
   paddr_t get_paddr() const { return poffset; }
 
   /// Returns length of extent
-  extent_len_t get_length() const { return ptr.length(); }
+  virtual extent_len_t get_length() const { return ptr.length(); }
 
   /// Returns version, get_version() == 0 iff is_clean()
   extent_version_t get_version() const {
@@ -316,6 +318,15 @@ private:
   using list = boost::intrusive::list<
     CachedExtent,
     primary_ref_list_member_options>;
+  friend class retired_extent_gate_t;
+
+  /**
+   * dirty_from_or_retired_at
+   *
+   * Encodes ordering token for primary_ref_list -- dirty_from when
+   * dirty or retired_at if retired.
+   */
+  journal_seq_t dirty_from_or_retired_at;
 
   /// Actual data contents
   ceph::bufferptr ptr;
@@ -351,7 +362,7 @@ protected:
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
-      dirty_from(other.dirty_from),
+      dirty_from_or_retired_at(other.dirty_from_or_retired_at),
       ptr(other.ptr.c_str(), other.ptr.length()),
       version(other.version),
       poffset(other.poffset) {}
@@ -359,16 +370,19 @@ protected:
   struct share_buffer_t {};
   CachedExtent(const CachedExtent &other, share_buffer_t) :
     state(other.state),
-    dirty_from(other.dirty_from),
+    dirty_from_or_retired_at(other.dirty_from_or_retired_at),
     ptr(other.ptr),
     version(other.version),
     poffset(other.poffset) {}
 
+  struct retired_placeholder_t{};
+  CachedExtent(retired_placeholder_t) : state(extent_state_t::RETIRED) {}
 
   friend class Cache;
-  template <typename T>
-  static TCachedExtentRef<T> make_cached_extent_ref(bufferptr &&ptr) {
-    return new T(std::move(ptr));
+  template <typename T, typename... Args>
+  static TCachedExtentRef<T> make_cached_extent_ref(
+    Args&&... args) {
+    return new T(std::forward<Args>(args)...);
   }
 
   CachedExtentRef get_prior_instance() {
@@ -401,15 +415,11 @@ protected:
    * reference.
    */
   paddr_t maybe_generate_relative(paddr_t addr) {
-    if (!addr.is_relative()) {
-      return addr;
-    } else if (is_mutation_pending()) {
-      assert(addr.is_record_relative());
-      return addr;
-    } else {
-      ceph_assert(is_initial_pending());
-      ceph_assert(get_paddr().is_record_relative());
+    if (is_initial_pending() && addr.is_record_relative()) {
       return addr - get_paddr();
+    } else {
+      ceph_assert(!addr.is_record_relative() || is_mutation_pending());
+      return addr;
     }
   }
 
@@ -571,6 +581,127 @@ using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
 
+/**
+ * retired_extent_gate_t
+ *
+ * We need to keep each retired extent in memory until all transactions
+ * that could still reference it has completed.  live_tokens tracks the
+ * set of tokens (which will be embedded in Transaction's) still live
+ * in order of the commit after which it was created.  retired_extents
+ * lists retired extents ordered by the commit at which they were
+ * retired.
+ */
+class retired_extent_gate_t {
+public:
+  class token_t {
+    friend class retired_extent_gate_t;
+    retired_extent_gate_t *parent = nullptr;
+    journal_seq_t created_after;
+
+    boost::intrusive::list_member_hook<> list_hook;
+    using list_hook_options = boost::intrusive::member_hook<
+      token_t,
+      boost::intrusive::list_member_hook<>,
+      &token_t::list_hook>;
+    using registry =  boost::intrusive::list<
+      token_t,
+      list_hook_options>;
+  public:
+    token_t(journal_seq_t created_after) : created_after(created_after) {}
+    ~token_t();
+  };
+
+  void prune() {
+    journal_seq_t prune_to = live_tokens.empty() ?
+      JOURNAL_SEQ_MAX : live_tokens.front().created_after;
+    while (!retired_extents.empty() &&
+	   prune_to > retired_extents.front().get_retired_at()) {
+      auto ext = &retired_extents.front();
+      retired_extents.pop_front();
+      intrusive_ptr_release(ext);
+    }
+  }
+
+  void add_token(token_t &t) {
+    t.parent = this;
+    live_tokens.push_back(t);
+  }
+
+  void add_extent(CachedExtent &extent) {
+    intrusive_ptr_add_ref(&extent);
+    retired_extents.push_back(extent);
+  }
+
+private:
+  token_t::registry live_tokens;
+  CachedExtent::list retired_extents;
+};
+
+inline retired_extent_gate_t::token_t::~token_t() {
+  if (parent) {
+    parent->live_tokens.erase(
+      parent->live_tokens.s_iterator_to(*this));
+    parent->prune();
+    parent = nullptr;
+  }
+}
+
+/**
+ * RetiredExtentPlaceholder
+ *
+ * Cache::retire_extent(Transaction&, paddr_t, extent_len_t) can retire
+ * an extent not currently in cache.  In that case, we need to add a
+ * placeholder to the cache until transactions that might reference
+ * the extent complete as in the case where the extent is already cached.
+ * Cache::complete_commit thus creates a RetiredExtentPlaceholder to
+ * serve that purpose.  ptr is not populated, and state is set to
+ * RETIRED.  Cache interfaces check for RETIRED and return EAGAIN if
+ * encountered, so references to these placeholder extents should not
+ * escape the Cache interface boundary.
+ */
+class RetiredExtentPlaceholder : public CachedExtent {
+  extent_len_t length;
+
+public:
+  template <typename... T>
+  RetiredExtentPlaceholder(extent_len_t length)
+    : CachedExtent(CachedExtent::retired_placeholder_t{}),
+      length(length) {}
+
+  extent_len_t get_length() const final { return length; }
+
+  CachedExtentRef duplicate_for_write() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return CachedExtentRef();
+  }
+
+  ceph::bufferlist get_delta() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return ceph::bufferlist();
+  }
+
+  static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+
+  void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &bl) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+
+  bool is_logical() const final {
+    return false;
+  }
+
+  std::ostream &print_detail(std::ostream &out) const final {
+    return out << "RetiredExtentPlaceholder";
+  }
+
+  void on_delta_write(paddr_t record_block_offset) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+};
 
 /**
  * LogicalCachedExtent

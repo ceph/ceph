@@ -73,7 +73,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this](auto addr) {
     segment_cleaner->set_journal_head(addr);
     return seastar::do_with(
-      make_weak_transaction(),
+      create_weak_transaction(),
       [this](auto &t) {
 	return cache->init_cached_extents(*t, [this](auto &t, auto &e) {
 	  return lba_manager->init_cached_extent(t, e);
@@ -83,9 +83,9 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           return lba_manager->scan_mapped_space(
             *t,
             [this](paddr_t addr, extent_len_t len) {
-              logger().debug("TransactionManager::mount: marking {}~{} used",
-                           addr,
-                           len);
+              logger().trace("TransactionManager::mount: marking {}~{} used",
+			     addr,
+			     len);
               segment_cleaner->mark_space_used(
                 addr,
                 len ,
@@ -160,7 +160,7 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
       logger().debug(
 	"TransactionManager::dec_ref: offset {} refcount 0",
 	offset);
-      return cache->retire_extent_if_cached(
+      return cache->retire_extent(
 	t, result.addr, result.length
       ).safe_then([] {
 	return ref_ret(

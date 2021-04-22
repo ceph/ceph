@@ -137,7 +137,7 @@ TEST_F(a_basic_test_t, 2_node_sizes)
 {
   run_async([this] {
     auto nm = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
-    auto t = make_transaction();
+    auto t = make_test_transaction();
     ValueBuilderImpl<TestValue> vb;
     context_t c{*nm, vb, *t};
     std::array<std::pair<NodeImplURef, NodeExtentMutable>, 16> nodes = {
@@ -181,7 +181,7 @@ struct b_dummy_tree_test_t : public seastar_test_suite_t {
 
   b_dummy_tree_test_t()
     : moved_nm{NodeExtentManager::create_dummy(IS_DUMMY_SYNC)},
-      ref_t{make_transaction()},
+      ref_t{make_test_transaction()},
       t{*ref_t},
       c{*moved_nm, vb, t},
       tree{std::move(moved_nm)} {}
@@ -403,7 +403,7 @@ class TestTree {
  public:
   TestTree()
     : moved_nm{NodeExtentManager::create_dummy(IS_DUMMY_SYNC)},
-      ref_t{make_transaction()},
+      ref_t{make_test_transaction()},
       t{*ref_t},
       c{*moved_nm, vb, t},
       tree{std::move(moved_nm)},
@@ -457,7 +457,7 @@ class TestTree {
                           const split_expectation_t& expected) {
     return seastar::async([this, key, value, expected] {
       TestBtree tree_clone(NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
-      auto ref_t_clone = make_transaction();
+      auto ref_t_clone = make_test_transaction();
       Transaction& t_clone = *ref_t_clone;
       tree_clone.test_clone_from(t_clone, t, tree).unsafe_get0();
 
@@ -966,7 +966,7 @@ class DummyChildPool {
   std::optional<TestBtree> p_btree;
   NodeExtentManager* p_nm = nullptr;
   ValueBuilderImpl<TestValue> vb;
-  TransactionRef ref_t = make_transaction();
+  TransactionRef ref_t = make_test_transaction();
 
   std::random_device rd;
   std::set<Ref<DummyChild>> splitable_nodes;
