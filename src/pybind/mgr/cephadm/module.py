@@ -1691,8 +1691,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._daemon_action_set_image(action, image, daemon_spec.daemon_type,
                                       daemon_spec.daemon_id)
 
-        if action == 'redeploy' and self.daemon_is_self(daemon_spec.daemon_type,
-                                                        daemon_spec.daemon_id):
+        if (action == 'redeploy' or action == 'restart') and self.daemon_is_self(daemon_spec.daemon_type,
+                                                                                 daemon_spec.daemon_id):
             self.mgr_service.fail_over()
             return ''  # unreachable
 
@@ -1743,7 +1743,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         assert d.daemon_type is not None
         assert d.daemon_id is not None
 
-        if action == 'redeploy' and self.daemon_is_self(d.daemon_type, d.daemon_id) \
+        if (action == 'redeploy' or action == 'restart') and self.daemon_is_self(d.daemon_type, d.daemon_id) \
                 and not self.mgr_service.mgr_map_has_standby():
             raise OrchestratorError(
                 f'Unable to schedule redeploy for {daemon_name}: No standby MGRs')
@@ -1766,7 +1766,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         assert dd.daemon_type is not None
         assert dd.daemon_id is not None
         assert dd.hostname is not None
-        if action == 'redeploy' and self.daemon_is_self(dd.daemon_type, dd.daemon_id) \
+        if (action == 'redeploy' or action == 'restart') and self.daemon_is_self(dd.daemon_type, dd.daemon_id) \
                 and not self.mgr_service.mgr_map_has_standby():
             raise OrchestratorError(
                 f'Unable to schedule redeploy for {daemon_name}: No standby MGRs')
