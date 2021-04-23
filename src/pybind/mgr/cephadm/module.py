@@ -2241,12 +2241,14 @@ Then run the following:
                     'service_type': spec.service_type,
                     'data': self._preview_osdspecs(osdspecs=[cast(DriveGroupSpec, spec)])}
 
+        svc = self.cephadm_services[spec.service_type]
         ha = HostAssignment(
             spec=spec,
             hosts=self._schedulable_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
-            allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
+            allow_colo=svc.allow_colo(),
+            rank_map=self.spec_store[spec.service_name()].rank_map if svc.ranked() else None
         )
         ha.validate()
         hosts, to_add, to_remove = ha.place()
