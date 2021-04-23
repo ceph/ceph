@@ -802,7 +802,6 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       node_offset_t insert_size;
       if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
-        assert(is_level_tail());
         insert_stage = STAGE;
         insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, value);
       } else {
