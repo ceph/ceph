@@ -47,7 +47,8 @@ namespace ceph {
 #define CEPHFS_FEATURE_OP_GETVXATTR         17
 #define CEPHFS_FEATURE_32BITS_RETRY_FWD     18
 #define CEPHFS_FEATURE_NEW_SNAPREALM_INFO   19
-#define CEPHFS_FEATURE_MAX                  19
+#define CEPHFS_FEATURE_QOS                  20
+#define CEPHFS_FEATURE_MAX                  20
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -66,8 +67,12 @@ namespace ceph {
   CEPHFS_FEATURE_ALTERNATE_NAME,        \
   CEPHFS_FEATURE_NOTIFY_SESSION_STATE,  \
   CEPHFS_FEATURE_OP_GETVXATTR,          \
+<<<<<<< HEAD
   CEPHFS_FEATURE_32BITS_RETRY_FWD,      \
   CEPHFS_FEATURE_NEW_SNAPREALM_INFO     \
+=======
+  CEPHFS_FEATURE_QOS,                   \
+>>>>>>> 3fd8a20194c (mds: Add CEPHFS_FEATURE_QOS to cephfs_features & Update CInode encode)
 }
 
 #define CEPHFS_METRIC_FEATURES_ALL {		\

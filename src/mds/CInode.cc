@@ -4071,7 +4071,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(inline_data, bl);
     const mempool_inode *policy_i = ppolicy ? pi : oi;
     encode(policy_i->quota, bl);
-    encode(any_i->dmclock_info, bl);
+    if (session->info.has_feature(CEPHFS_FEATURE_QOS)) {
+      encode(any_i->dmclock_info, bl);
+    }
     encode(layout.pool_ns, bl);
     encode(any_i->btime, bl);
     encode(any_i->change_attr, bl);
