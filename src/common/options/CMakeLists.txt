@@ -21,7 +21,8 @@ function(file_configure input_file output_file)
     VERBATIM)
 endfunction()
 
-function(add_options name yaml_in_file)
+function(add_options name)
+  set(yaml_in_file ${CMAKE_CURRENT_SOURCE_DIR}/${name}.yaml.in)
   set(yaml_file ${CMAKE_CURRENT_BINARY_DIR}/${name}.yaml)
   file_configure("${yaml_in_file}"
     "${yaml_file}" @ONLY)
@@ -78,17 +79,21 @@ if(WITH_MGR)
   endif()
 endif()
 
+add_options(global)
+add_options(cephfs-mirror)
+add_options(crimson)
+add_options(mds)
+add_options(mds-client)
+add_options(rbd)
+add_options(rbd-mirror)
+add_options(immutable-object-cache)
+
 # if set to empty string, system default luarocks package location (if exist) will be used
 set(rgw_luarocks_location "")
 if(WITH_RADOSGW_LUA_PACKAGES)
   set(rgw_luarocks_location "/tmp/luarocks")
 endif()
-
-file(GLOB yaml_in_srcs "*.yaml.in")
-foreach(fn ${yaml_in_srcs})
-  get_filename_component(name ${fn} NAME_WE)
-  add_options(${name} ${fn})
-endforeach()
+add_options(rgw)
 
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
