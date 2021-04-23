@@ -989,7 +989,7 @@ class DummyChildPool {
       std::set<ghobject_t> new_keys;
       new_keys.insert(new_key);
       impl->reset(new_keys, impl->is_level_tail());
-      return fix_parent_index<true>(c);
+      return fix_parent_index<true>(c, false);
     }
 
     bool match_pos(const search_position_t& pos) const {
