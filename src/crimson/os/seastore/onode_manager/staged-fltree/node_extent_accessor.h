@@ -84,6 +84,16 @@ class DeltaRecorderT final: public DeltaRecorder {
     ceph::encode(static_cast<node_offset_t>(node_offset), encoded);
   }
 
+  void encode_erase(
+      const position_t& erase_pos) {
+    ceph::encode(node_delta_op_t::ERASE, encoded);
+    erase_pos.encode(encoded);
+  }
+
+  void encode_make_tail() {
+    ceph::encode(node_delta_op_t::MAKE_TAIL, encoded);
+  }
+
   static DeltaRecorderURef create_for_encode(const ValueBuilder& v_builder) {
     return std::unique_ptr<DeltaRecorder>(new DeltaRecorderT(v_builder));
   }
@@ -157,6 +167,19 @@ class DeltaRecorderT final: public DeltaRecorder {
         logger().debug("OTree::Extent::Replay: apply {:#x} to offset {:#x} ...",
                        new_addr, update_offset);
         layout_t::update_child_addr(node, new_addr, p_addr);
+        break;
+      }
+      case node_delta_op_t::ERASE: {
+        logger().debug("OTree::Extent::Replay: decoding ERASE ...");
+        auto erase_pos = position_t::decode(delta);
+        logger().debug("OTree::Extent::Replay: apply erase_pos({}) ...",
+                       erase_pos);
+        layout_t::erase(node, stage, erase_pos);
+        break;
+      }
+      case node_delta_op_t::MAKE_TAIL: {
+        logger().debug("OTree::Extent::Replay: decoded MAKE_TAIL, apply ...");
+        layout_t::make_tail(node, stage);
         break;
       }
       case node_delta_op_t::SUBOP_UPDATE_VALUE: {
@@ -413,6 +436,40 @@ class NodeExtentAccessorT {
 #ifndef NDEBUG
     test_extent->replay_and_verify(extent);
 #endif
+  }
+
+  std::tuple<match_stage_t, position_t> erase_replayable(const position_t& pos) {
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
+      recorder->encode_erase(pos);
+    }
+#ifndef NDEBUG
+    test_extent->prepare_replay(extent);
+    test_recorder->encode_erase(pos);
+#endif
+    auto ret = layout_t::erase(*mut, read(), pos);
+#ifndef NDEBUG
+    test_extent->replay_and_verify(extent);
+#endif
+    return ret;
+  }
+
+  position_t make_tail_replayable() {
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
+      recorder->encode_make_tail();
+    }
+#ifndef NDEBUG
+    test_extent->prepare_replay(extent);
+    test_recorder->encode_make_tail();
+#endif
+    auto ret = layout_t::make_tail(*mut, read());
+#ifndef NDEBUG
+    test_extent->replay_and_verify(extent);
+#endif
+    return ret;
   }
 
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>

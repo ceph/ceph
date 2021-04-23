@@ -71,6 +71,22 @@ struct NodeLayoutReplayableT {
     assert(NODE_TYPE == node_type_t::INTERNAL);
     mut.copy_in_absolute(p_addr, new_addr);
   }
+
+  static std::tuple<match_stage_t, position_t> erase(
+      NodeExtentMutable& mut,
+      const node_stage_t& node_stage,
+      const position_t& _erase_pos) {
+    // TODO
+    ceph_abort("not implemented");
+  }
+
+  static position_t make_tail(
+      NodeExtentMutable& mut,
+      const node_stage_t& node_stage) {
+    assert(!node_stage.is_level_tail());
+    // TODO
+    ceph_abort("not implemented");
+  }
 };
 
 }

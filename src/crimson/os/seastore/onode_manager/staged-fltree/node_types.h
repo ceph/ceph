@@ -66,6 +66,8 @@ enum class node_delta_op_t : uint8_t {
   SPLIT,
   SPLIT_INSERT,
   UPDATE_CHILD_ADDR,
+  ERASE,
+  MAKE_TAIL,
   SUBOP_UPDATE_VALUE = 0xff,
 };
 
