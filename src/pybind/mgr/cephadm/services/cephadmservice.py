@@ -94,6 +94,7 @@ class CephadmDaemonDeploySpec:
         return DaemonDescription(
             daemon_type=self.daemon_type,
             daemon_id=self.daemon_id,
+            service_name=self.service_name,
             hostname=self.host,
             status=status,
             status_desc=status_desc,
