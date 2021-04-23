@@ -937,7 +937,9 @@ class DummyChildPool {
       if (right_child->can_split()) {
         splitable_nodes.insert(right_child);
       }
-      return apply_split_to_parent(c, right_child, false);
+      Ref<Node> this_ref = this;
+      return apply_split_to_parent(
+          c, std::move(this_ref), std::move(right_child), false);
     }
 
     node_future<> insert_and_split(
@@ -989,7 +991,8 @@ class DummyChildPool {
       std::set<ghobject_t> new_keys;
       new_keys.insert(new_key);
       impl->reset(new_keys, impl->is_level_tail());
-      return fix_parent_index<true>(c, false);
+      Ref<Node> this_ref = this;
+      return fix_parent_index<true>(c, std::move(this_ref), false);
     }
 
     bool match_pos(const search_position_t& pos) const {
