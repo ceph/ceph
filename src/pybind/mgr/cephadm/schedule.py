@@ -19,10 +19,14 @@ class DaemonPlacement(NamedTuple):
     name: str = ''
     ip: Optional[str] = None
     ports: List[int] = []
+    rank: Optional[int] = None
+    rank_generation: Optional[int] = None
 
     def __str__(self) -> str:
         res = self.daemon_type + ':' + self.hostname
         other = []
+        if self.rank is not None:
+            other.append(f'rank={self.rank}.{self.rank_generation}')
         if self.network:
             other.append(f'network={self.network}')
         if self.name:
@@ -41,6 +45,8 @@ class DaemonPlacement(NamedTuple):
             self.name,
             self.ip,
             [p + n for p in self.ports],
+            self.rank,
+            self.rank_generation,
         )
 
     def matches_daemon(self, dd: DaemonDescription) -> bool:

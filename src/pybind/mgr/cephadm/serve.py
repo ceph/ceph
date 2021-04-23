@@ -420,6 +420,8 @@ class CephadmServe:
             sd.version = d.get('version')
             sd.ports = d.get('ports')
             sd.ip = d.get('ip')
+            sd.rank = int(d['rank']) if d.get('rank') is not None else None
+            sd.rank_generation = int(d['rank_generation']) if d.get('rank_generation') is not None else None
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
@@ -737,6 +739,8 @@ class CephadmServe:
                 daemon_type=slot.daemon_type,
                 ports=slot.ports,
                 ip=slot.ip,
+                rank=slot.rank,
+                rank_generation=slot.rank_generation,
             )
             self.log.debug('Placing %s.%s on host %s' % (
                 slot.daemon_type, daemon_id, slot.hostname))
@@ -966,6 +970,8 @@ class CephadmServe:
                             'ports': daemon_spec.ports,
                             'ip': daemon_spec.ip,
                             'deployed_by': self.mgr.get_active_mgr_digests(),
+                            'rank': daemon_spec.rank,
+                            'rank_generation': daemon_spec.rank_generation,
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
