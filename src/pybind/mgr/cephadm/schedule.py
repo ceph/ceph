@@ -28,8 +28,7 @@ class DaemonPlacement(NamedTuple):
         if self.name:
             other.append(f'name={self.name}')
         if self.ports:
-            other.append(
-                f'{self.ip or "*"}:{self.ports[0] if len(self.ports) == 1 else ",".join(map(str, self.ports))}')
+            other.append(f'{self.ip or "*"}:{",".join(map(str, self.ports))}')
         if other:
             res += '(' + ' '.join(other) + ')'
         return res
