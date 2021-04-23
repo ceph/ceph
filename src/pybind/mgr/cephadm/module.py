@@ -570,9 +570,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         # cephadm
         self._kick_serve_loop()
 
-    def get_unique_name(self, daemon_type, host, existing, prefix=None,
-                        forcename=None):
-        # type: (str, str, List[orchestrator.DaemonDescription], Optional[str], Optional[str]) -> str
+    def get_unique_name(
+            self,
+            daemon_type: str,
+            host: str,
+            existing: List[orchestrator.DaemonDescription],
+            prefix: Optional[str] = None,
+            forcename: Optional[str] = None,
+            rank: Optional[int] = None,
+            rank_generation: Optional[int] = None,
+    ) -> str:
         """
         Generate a unique random service name
         """
@@ -594,6 +601,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 name = prefix + '.'
             else:
                 name = ''
+            if rank is not None and rank_generation is not None:
+                name += f'{rank}.{rank_generation}.'
             name += host
             if suffix:
                 name += '.' + ''.join(random.choice(string.ascii_lowercase)
