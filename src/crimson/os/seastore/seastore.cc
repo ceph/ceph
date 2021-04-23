@@ -212,7 +212,17 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
   auto c = static_cast<SeastoreCollection*>(ch.get());
   logger().debug("{} {} {}",
 		 __func__, c->get_cid(), oid);
-  return crimson::ct_error::enoent::make();
+  return repeat_with_onode<attrs_t>(
+    c, oid, [=](auto &t, auto& onode) {
+    auto& layout = onode.get_layout();
+    SeaStore::attrs_t attrs;
+    attrs[OI_ATTR] = ceph::bufferptr(&layout.oi[0], layout.oi_size);
+    attrs[SS_ATTR] = ceph::bufferptr(&layout.ss[0], layout.ss_size);
+    return attrs;
+  }).handle_error(crimson::ct_error::input_output_error::handle([this] {
+    logger().error("EIO when getting attrs");
+    abort();
+  }), crimson::ct_error::pass_further_all{});
 }
 
 seastar::future<struct stat> SeaStore::stat(
@@ -803,6 +813,31 @@ SeaStore::tm_ret SeaStore::_setattrs(
 {
   logger().debug("{} onode={}",
                 __func__, *onode);
+  auto& layout = onode->get_mutable_layout(*ctx.transaction);
+  for (auto& [key, val] : aset) {
+    if (key == OI_ATTR) {
+      if (__builtin_expect(
+          val.length() > onode_layout_t::MAX_OI_LENGTH,
+          false)) {
+        logger().error("{} onode={} oi attr too long!");
+        return crimson::ct_error::input_output_error::make();
+      }
+      layout.oi_size = val.length();
+      val.copy_out(0, val.length(), &layout.oi[0]);
+    } else if (key == SS_ATTR) {
+      if (__builtin_expect(
+          val.length() > onode_layout_t::MAX_SS_LENGTH,
+          false)) {
+        logger().error("{} onode={} oi attr too long!");
+        return crimson::ct_error::input_output_error::make();
+      }
+      layout.ss_size = val.length();
+      val.copy_out(0, val.length(), &layout.ss[0]);
+    } else {
+      //FIXME: right now, only OI_ATTR and SS_ATTR are supported
+      assert(0 == "only OI_ATTR and SS_ATTR are supported for now");
+    }
+  }
   return tm_ertr::now();
 }
 
@@ -876,13 +911,41 @@ boost::intrusive_ptr<SeastoreCollection> SeaStore::_get_collection(const coll_t&
 seastar::future<> SeaStore::write_meta(const std::string& key,
 					const std::string& value)
 {
-  return seastar::make_ready_future<>();
+  logger().debug("{}, key: {}; value: {}", __func__, key, value);
+  return seastar::do_with(key, value,
+    [this](auto& key, auto& value) {
+    return repeat_eagain([this, &key, &value] {
+      auto t = transaction_manager->create_transaction();
+      return transaction_manager->get_root(*t).safe_then(
+        [this, t=std::move(t), &key, &value](auto root) mutable {
+        transaction_manager->update_root_meta(*t, key, value);
+        return transaction_manager->submit_transaction(std::move(t));
+      });
+    });
+  }).handle_error(
+    crimson::ct_error::assert_all{"Invalid error in Seastar::write_meta"}
+  );
 }
 
 seastar::future<std::tuple<int, std::string>> SeaStore::read_meta(const std::string& key)
 {
-  return seastar::make_ready_future<std::tuple<int, std::string>>(
-    std::make_tuple(0, ""s));
+  logger().debug("{}, key: {}", __func__, key);
+  return seastar::do_with(transaction_manager->create_transaction(), key,
+    [this](auto& t, auto& key) {
+    return transaction_manager->get_root(*t).safe_then(
+      [this, &key](auto root) {
+      auto& meta = root->meta;
+      auto it = meta.find(key);
+      if (it != meta.end()) {
+        return seastar::make_ready_future<std::tuple<int, std::string>>(
+          std::make_tuple(0, it->second));
+      }
+      return seastar::make_ready_future<std::tuple<int, std::string>>(
+        std::make_tuple(-1, std::string("")));
+    });
+  }).handle_error(
+    crimson::ct_error::assert_all{"Invalid error in Seastar::write_meta"}
+  );
 }
 
 uuid_d SeaStore::get_fsid() const
