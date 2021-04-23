@@ -516,7 +516,14 @@ class NFSGanesha(object):
             args += ['--ns', self.namespace]
         if self.userid:
             args += ['--userid', self.userid]
-        args += [action, self.get_daemon_name()]
+
+        meta = json.loads(self.ctx.meta_json)
+        if 'service_name' in meta and 'rank' in meta:
+            nodeid = f"{meta['service_name']}.{meta['rank']}"
+        else:
+            nodeid = self.daemon_id
+
+        args += [action, nodeid]
 
         data_dir = get_data_dir(self.fsid, self.ctx.data_dir,
                                 self.daemon_type, self.daemon_id)

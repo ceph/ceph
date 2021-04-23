@@ -4,7 +4,7 @@ from typing import Dict, Tuple, Any, List, cast, Optional
 
 from mgr_module import HandleCommandResult
 
-from ceph.deployment.service_spec import NFSServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 import rados
 
 from orchestrator import DaemonDescription
@@ -16,6 +16,38 @@ logger = logging.getLogger(__name__)
 
 class NFSService(CephService):
     TYPE = 'nfs'
+
+    def ranked(self) -> bool:
+        return True
+
+    def fence(self, daemon_id: str) -> None:
+        logger.info(f'Fencing old nfs.{daemon_id}')
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'auth rm',
+            'entity': f'client.nfs.{daemon_id}',
+        })
+
+        # TODO: block/fence this entity (in case it is still running somewhere)
+
+    def fence_old_ranks(self,
+                        spec: ServiceSpec,
+                        rank_map: Dict[int, Dict[int, Optional[str]]],
+                        num_ranks: int) -> None:
+        for rank, m in list(rank_map.items()):
+            if rank >= num_ranks:
+                for daemon_id in m.values():
+                    if daemon_id is not None:
+                        self.fence(daemon_id)
+                del rank_map[rank]
+                self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+            else:
+                max_gen = max(m.keys())
+                for gen, daemon_id in list(m.items()):
+                    if gen < max_gen:
+                        if daemon_id is not None:
+                            self.fence(daemon_id)
+                        del rank_map[rank][gen]
+                        self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
     def config(self, spec: NFSServiceSpec, daemon_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
@@ -51,7 +83,7 @@ class NFSService(CephService):
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context = dict(user=rados_user,
-                           nodeid=daemon_spec.name(),
+                           nodeid=f'{daemon_spec.service_name}.{daemon_spec.rank}',
                            pool=spec.pool,
                            namespace=spec.namespace if spec.namespace else '',
                            rgw_user=rgw_user,
@@ -141,7 +173,7 @@ class NFSService(CephService):
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
         logger.info(f'Removing key for {entity}')
-        ret, out, err = self.mgr.check_mon_command({
+        self.mgr.check_mon_command({
             'prefix': 'auth rm',
             'entity': entity,
         })
