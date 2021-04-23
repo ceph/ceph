@@ -4,7 +4,9 @@
 #include "build_options.h"
 
 std::vector<Option> get_global_options();
+std::vector<Option> get_mgr_options();
 std::vector<Option> get_crimson_options();
+std::vector<Option> get_osd_options();
 std::vector<Option> get_rgw_options();
 std::vector<Option> get_rbd_options();
 std::vector<Option> get_rbd_mirror_options();
@@ -25,6 +27,8 @@ std::vector<Option> build_options()
   };
 
   ingest(get_crimson_options(), "osd");
+  ingest(get_mgr_options(), "mgr");
+  ingest(get_osd_options(), "osd");
   ingest(get_rgw_options(), "rgw");
   ingest(get_rbd_options(), "rbd");
   ingest(get_rbd_mirror_options(), "rbd-mirror");
