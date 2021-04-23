@@ -430,13 +430,13 @@ class Node
   };
   const parent_info_t& parent_info() const { return *_parent_info; }
 
-  node_future<> apply_split_to_parent(context_t, Ref<Node>, bool);
+  node_future<> apply_split_to_parent(context_t, Ref<Node>&&, Ref<Node>&&, bool);
   node_future<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);
   template <bool FORCE_MERGE = false>
-  node_future<> try_merge_adjacent(context_t, bool);
+  node_future<> try_merge_adjacent(context_t, bool, Ref<Node>&&);
   node_future<> erase_node(context_t, Ref<Node>&&);
   template <bool FORCE_MERGE = false>
-  node_future<> fix_parent_index(context_t, bool);
+  node_future<> fix_parent_index(context_t, Ref<Node>&&, bool);
   node_future<NodeExtentMutable> rebuild_extent(context_t);
   node_future<> retire(context_t, Ref<Node>&&);
   void make_tail(context_t);
@@ -485,7 +485,7 @@ class InternalNode final : public Node {
 
   node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
 
-  node_future<> apply_child_split(context_t, Ref<Node> left, Ref<Node> right, bool);
+  node_future<> apply_child_split(context_t, Ref<Node>&& left, Ref<Node>&& right, bool);
 
   template <bool VALIDATE>
   void do_track_child(Node& child) {
@@ -520,7 +520,7 @@ class InternalNode final : public Node {
   node_future<> erase_child(context_t, Ref<Node>&&);
 
   template <bool FORCE_MERGE = false>
-  node_future<> fix_index(context_t, Ref<Node>, bool);
+  node_future<> fix_index(context_t, Ref<Node>&&, bool);
 
   template <bool FORCE_MERGE = false>
   node_future<> apply_children_merge(
