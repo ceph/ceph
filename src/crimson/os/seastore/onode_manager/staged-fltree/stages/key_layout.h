@@ -9,6 +9,7 @@
 #include <ostream>
 
 #include "common/hobject.h"
+#include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
 
 namespace crimson::os::seastore::onode {
@@ -555,6 +556,13 @@ inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
  */
 class key_view_t {
  public:
+  //FIXME: the length of ns and oid should be defined by osd_max_object_name_len
+  //       and object_max_object_namespace_len in the future
+  static constexpr int MAX_NS_OID_LENGTH =
+    (4096 - sizeof(onode_layout_t) * 2) / 4
+    - sizeof(shard_pool_t) - sizeof(crush_t) - sizeof(snap_gen_t)
+    - 8; // size of length field of oid and ns
+
   /**
    * common interfaces as a full_key_t
    */

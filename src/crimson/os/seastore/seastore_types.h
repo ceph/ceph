@@ -655,9 +655,14 @@ public:
  * TODO: generalize this to permit more than one lba_manager implementation
  */
 struct __attribute__((packed)) root_t {
+
+  static constexpr int MAX_META_LENGTH = 1024;
+
   lba_root_t lba_root;
   laddr_le_t onode_root;
   coll_root_le_t collection_root;
+  char meta[MAX_META_LENGTH];
+  bool have_meta = false;
 
   void adjust_addrs_from_base(paddr_t base) {
     lba_root.adjust_addrs_from_base(base);

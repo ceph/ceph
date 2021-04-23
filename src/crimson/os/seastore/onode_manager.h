@@ -37,7 +37,8 @@ public:
     return seastar::make_ready_future<OnodeRef>();
   }
 
-  using get_or_create_onode_ertr = base_ertr;
+  using get_or_create_onode_ertr = base_ertr::extend<
+    crimson::ct_error::value_too_large>;
   using get_or_create_onode_ret = get_or_create_onode_ertr::future<
     OnodeRef>;
   virtual get_or_create_onode_ret get_or_create_onode(
@@ -46,7 +47,8 @@ public:
     return seastar::make_ready_future<OnodeRef>();
   }
 
-  using get_or_create_onodes_ertr = base_ertr;
+  using get_or_create_onodes_ertr = base_ertr::extend<
+    crimson::ct_error::value_too_large>;
   using get_or_create_onodes_ret = get_or_create_onodes_ertr::future<
     std::vector<OnodeRef>>;
   virtual get_or_create_onodes_ret get_or_create_onodes(
