@@ -1,3 +1,5 @@
+.. _placement groups:
+
 ==================
  Placement Groups
 ==================
