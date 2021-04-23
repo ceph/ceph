@@ -2255,7 +2255,7 @@ Then run the following:
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
             'add': [hs.hostname for hs in to_add],
-            'remove': [d.hostname for d in to_remove]
+            'remove': [d.name() for d in to_remove]
         }
 
     @handle_orch_error
