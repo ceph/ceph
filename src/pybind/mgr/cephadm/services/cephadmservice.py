@@ -34,7 +34,9 @@ class CephadmDaemonDeploySpec:
                  extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
                  ip: Optional[str] = None,
-                 ports: Optional[List[int]] = None):
+                 ports: Optional[List[int]] = None,
+                 rank: Optional[int] = None,
+                 rank_generation: Optional[int] = None):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -66,6 +68,9 @@ class CephadmDaemonDeploySpec:
         self.final_config: Dict[str, Any] = {}
         self.deps: List[str] = []
 
+        self.rank: Optional[int] = rank
+        self.rank_generation: Optional[int] = rank_generation
+
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
@@ -88,6 +93,8 @@ class CephadmDaemonDeploySpec:
             service_name=dd.service_name(),
             ip=dd.ip,
             ports=dd.ports,
+            rank=dd.rank,
+            rank_generation=dd.rank_generation,
         )
 
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
@@ -100,6 +107,8 @@ class CephadmDaemonDeploySpec:
             status_desc=status_desc,
             ip=self.ip,
             ports=self.ports,
+            rank=self.rank,
+            rank_generation=self.rank_generation,
         )
 
 
@@ -137,13 +146,16 @@ class CephadmService(metaclass=ABCMeta):
         return None
 
     def make_daemon_spec(
-            self, host: str,
+            self,
+            host: str,
             daemon_id: str,
             network: str,
             spec: ServiceSpecs,
             daemon_type: Optional[str] = None,
             ports: Optional[List[int]] = None,
             ip: Optional[str] = None,
+            rank: Optional[int] = None,
+            rank_generation: Optional[int] = None,
     ) -> CephadmDaemonDeploySpec:
         return CephadmDaemonDeploySpec(
             host=host,
@@ -153,6 +165,8 @@ class CephadmService(metaclass=ABCMeta):
             daemon_type=daemon_type,
             ports=ports,
             ip=ip,
+            rank=rank,
+            rank_generation=rank_generation,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:

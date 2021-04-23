@@ -794,6 +794,8 @@ class DaemonDescription(object):
                  ports: Optional[List[int]] = None,
                  ip: Optional[str] = None,
                  deployed_by: Optional[List[str]] = None,
+                 rank: Optional[int] = None,
+                 rank_generation: Optional[int] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -815,6 +817,10 @@ class DaemonDescription(object):
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
         self.daemon_id: Optional[str] = daemon_id
+
+        # Some daemon types have a numeric rank assigned
+        self.rank: Optional[int] = rank
+        self.rank_generation: Optional[int] = rank_generation
 
         self._service_name: Optional[str] = service_name
 
@@ -960,6 +966,8 @@ class DaemonDescription(object):
         out['is_active'] = self.is_active
         out['ports'] = self.ports
         out['ip'] = self.ip
+        out['rank'] = self.rank
+        out['rank_generation'] = self.rank_generation
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
