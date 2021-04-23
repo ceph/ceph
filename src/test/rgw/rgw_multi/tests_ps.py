@@ -865,6 +865,10 @@ def test_ps_s3_topic_on_master():
     assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
     assert_equal(endpoint_address, result['GetTopicResponse']['GetTopicResult']['Topic']['EndPoint']['EndpointAddress'])
     # Note that endpoint args may be ordered differently in the result
+    result = topic_conf3.get_attributes()
+    assert_equal(topic_arn, result['Attributes']['TopicArn'])
+    json_endpoint = json.loads(result['Attributes']['EndPoint'])
+    assert_equal(endpoint_address, json_endpoint['EndpointAddress'])
 
     # delete topic 1
     result = topic_conf1.del_config()
@@ -873,6 +877,12 @@ def test_ps_s3_topic_on_master():
     # try to get a deleted topic
     _, status = topic_conf1.get_config()
     assert_equal(status, 404)
+    try:
+        topic_conf1.get_attributes()
+    except:
+        print('topic already deleted - this is expected')
+    else:
+        assert False, 'topic 1 should be deleted at this point'
 
     # get the remaining 2 topics
     result, status = topic_conf1.get_list()

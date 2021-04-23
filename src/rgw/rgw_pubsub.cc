@@ -312,6 +312,26 @@ void rgw_pubsub_topic::dump_xml(Formatter *f) const
   encode_xml("OpaqueData", opaque_data, f);
 }
 
+void encode_xml_key_value_entry(const std::string& key, const std::string& value, Formatter *f) {
+  f->open_object_section("entry");
+  encode_xml("key", key, f);
+  encode_xml("value", value, f);
+  f->close_section(); // entry
+}
+
+void rgw_pubsub_topic::dump_xml_as_attributes(Formatter *f) const
+{
+  f->open_array_section("Attributes");
+  std::string str_user;
+  user.to_str(str_user);
+  encode_xml_key_value_entry("User", str_user, f);
+  encode_xml_key_value_entry("Name", name, f);
+  encode_xml_key_value_entry("EndPoint", dest.to_json_str(), f);
+  encode_xml_key_value_entry("TopicArn", arn, f);
+  encode_xml_key_value_entry("OpaqueData", opaque_data, f);
+  f->close_section(); // Attributes
+}
+
 void encode_json(const char *name, const rgw::notify::EventTypeList& l, Formatter *f)
 {
   f->open_array_section(name);
@@ -370,6 +390,22 @@ void rgw_pubsub_sub_dest::dump_xml(Formatter *f) const
   encode_xml("EndpointAddress", push_endpoint, f);
   encode_xml("EndpointArgs", push_endpoint_args, f);
   encode_xml("EndpointTopic", arn_topic, f);
+}
+
+std::string rgw_pubsub_sub_dest::to_json_str() const
+{
+  // first 2 members are omitted here since they
+  // dont apply to AWS compliant topics
+  JSONFormatter f;
+  f.open_object_section("");
+  encode_json("EndpointAddress", push_endpoint, &f);
+  encode_json("EndpointArgs", push_endpoint_args, &f);
+  encode_json("EndpointTopic", arn_topic, &f);
+  encode_json("HasStoredSecret", stored_secret, &f);
+  f.close_section();
+  std::stringstream ss;
+  f.flush(ss);
+  return ss.str();
 }
 
 void rgw_pubsub_sub_config::dump(Formatter *f) const
