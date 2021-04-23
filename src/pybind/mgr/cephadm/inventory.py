@@ -167,7 +167,7 @@ class SpecStore():
                 self._specs[service_name] = spec
                 self.spec_created[service_name] = created
 
-                if 'deleted' in v:
+                if 'deleted' in j:
                     deleted = str_to_datetime(cast(str, j['deleted']))
                     self.spec_deleted[service_name] = deleted
 
