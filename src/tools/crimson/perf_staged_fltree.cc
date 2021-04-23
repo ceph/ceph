@@ -25,9 +25,9 @@ class PerfTree : public TMTestState {
  public:
   PerfTree(bool is_dummy) : is_dummy{is_dummy} {}
 
-  seastar::future<> run(KVPool<test_item_t>& kvs) {
-    return tm_setup().then([this, &kvs] {
-      return seastar::async([this, &kvs] {
+  seastar::future<> run(KVPool<test_item_t>& kvs, double erase_ratio) {
+    return tm_setup().then([this, &kvs, erase_ratio] {
+      return seastar::async([this, &kvs, erase_ratio] {
         auto tree = std::make_unique<TreeBuilder<TRACK, test_item_t>>(kvs,
             (is_dummy ? NodeExtentManager::create_dummy(true)
                       : NodeExtentManager::create_seastore(*tm)));
@@ -47,14 +47,20 @@ class PerfTree : public TMTestState {
           logger().warn("submit_transaction() done! {}s", duration.count());
         }
         {
+          // Note: tm->create_weak_transaction() can also work, but too slow.
           auto t = tm->create_transaction();
           tree->get_stats(*t).unsafe_get();
+          tree->validate(*t).unsafe_get();
+        }
+        {
+          auto t = tm->create_transaction();
+          tree->erase(*t, kvs.size() * erase_ratio).unsafe_get();
           tm->submit_transaction(std::move(t)).unsafe_get();
           segment_cleaner->run_until_halt().get0();
         }
         {
-          // Note: tm->create_weak_transaction() can also work, but too slow.
           auto t = tm->create_transaction();
+          tree->get_stats(*t).unsafe_get();
           tree->validate(*t).unsafe_get();
         }
         tree.reset();
@@ -88,6 +94,9 @@ seastar::future<> run(const bpo::variables_map& config) {
     ceph_assert(range1.size() == 2);
     auto range0 = config["range0"].as<std::vector<unsigned>>();
     ceph_assert(range0.size() == 2);
+    auto erase_ratio = config["erase-ratio"].as<double>();
+    ceph_assert(erase_ratio >= 0);
+    ceph_assert(erase_ratio <= 1);
 
     auto kvs = KVPool<test_item_t>::create_raw_range(
         str_sizes, onode_sizes,
@@ -95,7 +104,7 @@ seastar::future<> run(const bpo::variables_map& config) {
         {range1[0], range1[1]},
         {range0[0], range0[1]});
     PerfTree<TRACK> perf{is_dummy};
-    perf.run(kvs).get0();
+    perf.run(kvs, erase_ratio).get0();
   });
 }
 
@@ -122,7 +131,10 @@ int main(int argc, char** argv)
      "range of ns-oid strings [a, b)")
     ("range0", bpo::value<std::vector<unsigned>>()->default_value(
         {0, 4}),
-     "range of snap-gen [a, b)");
+     "range of snap-gen [a, b)")
+    ("erase-ratio", bpo::value<double>()->default_value(
+        0.8),
+     "erase-ratio of all the inserted onodes");
   return app.run(argc, argv, [&app] {
     auto&& config = app.configuration();
     auto tracked = config["tracked"].as<bool>();
