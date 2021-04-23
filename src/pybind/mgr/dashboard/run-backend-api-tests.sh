@@ -122,7 +122,9 @@ run_teuthology_tests() {
         pybind_dir+=":$LOCAL_BUILD_DIR/src/pybind"
     fi
     export PYTHONPATH=$source_dir/qa:$LOCAL_BUILD_DIR/lib/cython_modules/lib.3/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
-    export RGW=${RGW:-1}
+    export DASHBOARD_SSL=1
+    export NFS=0
+    export RGW=1
 
     export COVERAGE_ENABLED=true
     export COVERAGE_FILE=.coverage.mgr.dashboard
