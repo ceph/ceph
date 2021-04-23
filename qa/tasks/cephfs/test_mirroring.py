@@ -740,13 +740,18 @@ class TestMirroring(CephFSTestCase):
     def test_mirroring_init_failure_with_recovery(self):
         """Test if the mirror daemon can recover from a init failure"""
 
+        # disable mgr mirroring plugin as it would try to load dir map on
+        # on mirroring enabled for a filesystem (an throw up erorrs in
+        # the logs)
+        self.disable_mirroring_module()
+
         # enable mirroring through mon interface -- this should result in the mirror daemon
-        # failing to enable mirroring due to absence of `cephfs_mirorr` index object.
+        # failing to enable mirroring due to absence of `cephfs_mirror` index object.
 
         self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", self.primary_fs_name)
         # need safe_while since non-failed status pops up as mirroring is restarted
         # internally in mirror daemon.
-        with safe_while(sleep=5, tries=10, action='wait for failed state') as proceed:
+        with safe_while(sleep=5, tries=20, action='wait for failed state') as proceed:
             while proceed():
                 try:
                     # verify via asok
