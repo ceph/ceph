@@ -856,6 +856,12 @@ struct staged {
    * Lookup internals (hide?)
    */
 
+  static bool is_keys_one(
+      const container_t& container) {      // IN
+    // TODO
+    ceph_abort("not implemented");
+  }
+
   template <bool GET_KEY>
   static result_t smallest_result(
       const iterator_t& iter, full_key_t<KeyT::VIEW>* p_index_key) {
@@ -2110,6 +2116,13 @@ struct staged {
       auto& iter = trim_at.get();
       iter.trim_until(mut);
     }
+  }
+
+  static std::tuple<match_stage_t, node_offset_t> evaluate_merge(
+      const full_key_t<KeyT::VIEW>& left_pivot_index,
+      const container_t& right_container) {
+    // TODO
+    ceph_abort("not implemented");
   }
 };
 

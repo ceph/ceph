@@ -706,7 +706,13 @@ class DummyChildPool {
     laddr_t laddr() const override { return _laddr; }
     bool is_level_tail() const override { return _is_level_tail; }
     std::optional<key_view_t> get_pivot_index() const override { return {key_view}; }
+    bool is_extent_valid() const override { return true; }
     const std::string& get_name() const override { return name; }
+    search_position_t make_tail() override {
+      _is_level_tail = true;
+      build_name();
+      return search_position_t::end();
+    }
 
    protected:
     node_type_t node_type() const override { return node_type_t::LEAF; }
@@ -722,7 +728,23 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     bool is_keys_empty() const override {
       ceph_abort("impossible path"); }
+    bool is_keys_one() const override {
+      ceph_abort("impossible path"); }
     node_offset_t free_size() const override {
+      ceph_abort("impossible path"); }
+    node_offset_t total_size() const override {
+      ceph_abort("impossible path"); }
+    bool is_size_underflow() const override {
+      ceph_abort("impossible path"); }
+    std::tuple<match_stage_t, search_position_t> erase(const search_position_t&) override {
+      ceph_abort("impossible path"); }
+    std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) override {
+      ceph_abort("impossible path"); }
+    search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, node_offset_t) override {
+      ceph_abort("impossible path"); }
+    ertr::future<NodeExtentMutable> rebuild_extent(context_t) override {
+      ceph_abort("impossible path"); }
+    ertr::future<> retire_extent(context_t) override {
       ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
       ceph_abort("impossible path"); }
@@ -787,7 +809,7 @@ class DummyChildPool {
       if (right_child->can_split()) {
         splitable_nodes.insert(right_child);
       }
-      return apply_split_to_parent(c, right_child);
+      return apply_split_to_parent(c, right_child, false);
     }
 
     node_future<> insert_and_split(
@@ -862,6 +884,10 @@ class DummyChildPool {
         context_t, const key_hobj_t&, MatchHistory&) override {
       ceph_abort("impossible path"); }
     node_future<> do_get_tree_stats(context_t, tree_stats_t&) override {
+      ceph_abort("impossible path"); }
+    bool is_tracking() const override {
+      ceph_abort("impossible path"); }
+    void track_merge(Ref<Node>, match_stage_t, search_position_t&) override {
       ceph_abort("impossible path"); }
 
    private:

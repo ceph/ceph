@@ -65,8 +65,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return ret;
   }
 
-  using alloc_ertr = NodeExtentManager::tm_ertr;
-  static alloc_ertr::future<typename parent_t::fresh_impl_t> allocate(
+  static ertr::future<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
     // NOTE: Currently, all the node types have the same size for simplicity.
     // But depending on the requirement, we may need to make node size
@@ -103,9 +102,15 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(!is_keys_empty());
   }
   bool is_keys_empty() const override { return extent.read().keys() == 0; }
+  bool is_keys_one() const override {
+    assert(!is_keys_empty());
+    return STAGE_T::is_keys_one(extent.read());
+  }
 
   level_t level() const override { return extent.read().level(); }
   node_offset_t free_size() const override { return extent.read().free_size(); }
+  node_offset_t total_size() const override { return extent.read().total_size(); }
+  bool is_extent_valid() const override { return extent.is_valid(); }
 
   std::optional<key_view_t> get_pivot_index() const override {
     if (is_level_tail()) {
@@ -116,6 +121,112 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     STAGE_T::template get_largest_slot<false, true, false>(
         extent.read(), nullptr, &pivot_index, nullptr);
     return {pivot_index};
+  }
+
+  bool is_size_underflow() const override {
+    /**
+     * There might be 2 node-merge strategies:
+     *
+     * The first is to rebalance and merge nodes and perfer tree fillness as
+     * much as possible in order to save space and improve key density for
+     * lookup, in exchange to the efforts of frequent merge, split and
+     * rebalance. These operations cannot benefit from seastore deltas because
+     * they are allocating fresh extents which need to be write into the
+     * journal as a whole, making write amplification much larger.
+     *
+     * The second is to delay rebalance and merge. When submit the transaction,
+     * simple insert and erase only need to append delta including just enough
+     * information about the inserted/erase item. The downside is tree fillness
+     * is not as good as the first strategy.
+     *
+     * Currently the decision is the second way by delaying merge until the
+     * node is 1/4 full, so that:
+     * - After a split operation (making the node at least 1/2 full):
+     *   - The next merge need to erase items taking at least 1/4 space;
+     *   - The next split need to insert items taking at most 1/2 space;
+     * - After a merge operation (making the node at least 1/2 full):
+     *   - The next merge need to erase items taking at least 1/4 space;
+     *   - The next split need to insert items taking at most 1/2 space;
+     * - TODO: before node rebalance is implemented, the node size can be below
+     *   the underflow limit if it cannot be merged with peers;
+     */
+    auto& node_stage = extent.read();
+    size_t empty_size = node_stage.size_before(0);
+    size_t filled_kv_size = filled_size() - empty_size;
+    size_t full_kv_size = node_stage.total_size() - empty_size;
+    return filled_kv_size <= full_kv_size / 4;
+  }
+
+  std::tuple<match_stage_t, search_position_t>
+  erase(const search_position_t& pos) override {
+    logger().debug("OTree::Layout::Erase: begin at erase_pos({}) ...", pos);
+    if (unlikely(logger().is_enabled(seastar::log_level::trace))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().trace("OTree::Layout::Erase: -- dump\n{}", sos.str());
+    }
+    auto [stage, next_or_last_pos] = extent.erase_replayable(cast_down<STAGE>(pos));
+    logger().debug("OTree::Layout::Erase: done  at erase_stage={}, n/l_pos({})",
+                   stage, next_or_last_pos);
+    if (unlikely(logger().is_enabled(seastar::log_level::trace))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().trace("OTree::Layout::Erase: -- dump\n{}", sos.str());
+    }
+#ifndef NDEBUG
+    if (!is_keys_empty()) {
+      validate_layout();
+    }
+#endif
+    return {stage, normalize(std::move(next_or_last_pos))};
+  }
+
+  std::tuple<match_stage_t, std::size_t> evaluate_merge(
+      NodeImpl& _right_node) override {
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
+    auto& left_node_stage = extent.read();
+    auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
+    auto& right_node_stage = right_node.extent.read();
+    assert(!is_level_tail());
+    assert(!is_keys_empty());
+    assert(!right_node.is_keys_empty());
+    key_view_t left_pivot_index;
+    STAGE_T::template get_largest_slot<false, true, false>(
+        left_node_stage, nullptr, &left_pivot_index, nullptr);
+    auto [merge_stage, size_comp] = STAGE_T::evaluate_merge(
+        left_pivot_index, right_node_stage);
+    auto size_left = filled_size();
+    auto size_right = right_node.filled_size();
+    assert(size_right > size_comp);
+    std::size_t merge_size = size_left + size_right - size_comp;
+    return {merge_stage, merge_size};
+  }
+
+  search_position_t merge(NodeExtentMutable& mut, NodeImpl& _right_node,
+                          match_stage_t merge_stage, node_offset_t merge_size) override {
+    // TODO
+    ceph_abort("not implemented");
+  }
+
+  ertr::future<NodeExtentMutable>
+  rebuild_extent(context_t c) override {
+    return extent.rebuild(c).safe_then([this] (auto mut) {
+      // addr may change
+      build_name();
+      return mut;
+    });
+  }
+
+  ertr::future<> retire_extent(context_t c) override {
+    return extent.retire(c);
+  }
+
+  search_position_t make_tail() override {
+    auto&& ret = extent.make_tail_replayable();
+    // is_level_tail is changed
+    build_name();
+    return normalize(std::move(ret));
   }
 
   node_stats_t get_stats() const override {
@@ -217,6 +328,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
   }
 
+  void get_prev_slot(search_position_t& pos,
+                     key_view_t* p_index_key = nullptr,
+                     const value_t** pp_value = nullptr) const override {
+    ceph_abort("not implemented");
+  }
+
   void get_next_slot(search_position_t& pos,
                      key_view_t* p_index_key = nullptr,
                      const value_t** pp_value = nullptr) const override {
@@ -247,6 +364,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else if (!p_pos && p_index_key && !pp_value) {
       STAGE_T::template get_largest_slot<false, true, false>(
           extent.read(), nullptr, p_index_key, nullptr);
+    } else if (p_pos && !p_index_key && pp_value) {
+      STAGE_T::template get_largest_slot<true, false, true>(
+          extent.read(), &cast_down_fill_0<STAGE>(*p_pos), nullptr, pp_value);
+    } else if (p_pos && !p_index_key && !pp_value) {
+      STAGE_T::template get_largest_slot<true, false, false>(
+          extent.read(), &cast_down_fill_0<STAGE>(*p_pos), nullptr, nullptr);
     } else {
       ceph_abort("not implemented");
     }
