@@ -194,6 +194,14 @@ struct staged_position_t {
     return *this;
   }
 
+  me_t& operator+=(const me_t& o) {
+    assert(is_valid_index(index));
+    assert(is_valid_index(o.index));
+    index += o.index;
+    nxt += o.nxt;
+    return *this;
+  }
+
   void encode(ceph::bufferlist& encoded) const {
     ceph::encode(index, encoded);
     nxt.encode(encoded);
@@ -266,6 +274,13 @@ struct staged_position_t<STAGE_BOTTOM> {
       assert(is_valid_index(index));
       index -= o.index;
     }
+    return *this;
+  }
+
+  me_t& operator+=(const me_t& o) {
+    assert(is_valid_index(index));
+    assert(is_valid_index(o.index));
+    index += o.index;
     return *this;
   }
 

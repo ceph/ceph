@@ -394,6 +394,10 @@ class Node
       context_t, const key_hobj_t&, MatchHistory&) = 0;
   virtual node_future<> do_get_tree_stats(context_t, tree_stats_t&) = 0;
 
+  virtual bool is_tracking() const = 0;
+
+  virtual void track_merge(Ref<Node>, match_stage_t, search_position_t&) = 0;
+
  protected:
   Node(NodeImplURef&&);
   bool is_root() const {
@@ -425,8 +429,14 @@ class Node
   };
   const parent_info_t& parent_info() const { return *_parent_info; }
 
-  node_future<> apply_split_to_parent(context_t, Ref<Node>);
+  node_future<> apply_split_to_parent(context_t, Ref<Node>, bool);
   node_future<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);
+  node_future<> try_merge_adjacent(context_t, bool);
+  node_future<> erase_node(context_t, Ref<Node>&&);
+  node_future<> fix_parent_index(context_t);
+  node_future<NodeExtentMutable> rebuild_extent(context_t);
+  node_future<> retire(context_t, Ref<Node>&&);
+  void make_tail(context_t);
 
  private:
   /**
@@ -472,7 +482,7 @@ class InternalNode final : public Node {
 
   node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
 
-  node_future<> apply_child_split(context_t, Ref<Node> left, Ref<Node> right);
+  node_future<> apply_child_split(context_t, Ref<Node> left, Ref<Node> right, bool);
 
   template <bool VALIDATE>
   void do_track_child(Node& child) {
@@ -501,12 +511,35 @@ class InternalNode final : public Node {
     }
   }
 
+  node_future<std::pair<Ref<Node>, Ref<Node>>> get_child_peers(
+      context_t, const search_position_t&);
+
+  node_future<> erase_child(context_t, Ref<Node>&&);
+
+  node_future<> fix_index(context_t, Ref<Node>);
+
+  node_future<> apply_children_merge(
+      context_t, Ref<Node>&& left, Ref<Node>&& right, bool update_index);
+
   void validate_child_tracked(const Node& child) const {
     validate_child(child);
     assert(tracked_child_nodes.find(child.parent_info().position) !=
            tracked_child_nodes.end());
     assert(tracked_child_nodes.find(child.parent_info().position)->second == &child);
   }
+
+  void validate_child_inconsistent(const Node& child) const;
+
+  void validate_tracked_children() const {
+#ifndef NDEBUG
+    for (auto& kv : tracked_child_nodes) {
+      assert(kv.first == kv.second->parent_info().position);
+      validate_child(*kv.second);
+    }
+#endif
+  }
+
+  void track_make_tail(const search_position_t&);
 
   static node_future<Ref<InternalNode>> allocate_root(
       context_t, level_t, laddr_t, Super::URef&&);
@@ -517,25 +550,29 @@ class InternalNode final : public Node {
   node_future<search_result_t> lower_bound_tracked(
       context_t, const key_hobj_t&, MatchHistory&) override;
   node_future<> do_get_tree_stats(context_t, tree_stats_t&) override;
+  bool is_tracking() const override {
+     return !tracked_child_nodes.empty();
+  }
+  void track_merge(Ref<Node>, match_stage_t, search_position_t&) override;
 
   node_future<> test_clone_root(context_t, RootNodeTracker&) const override;
 
  private:
+  node_future<> try_downgrade_root(context_t, Ref<Node>&&);
+
+  node_future<Ref<InternalNode>> insert_or_split(
+      context_t, const search_position_t&, const key_view_t&, Ref<Node>,
+      Ref<Node> outdated_child=nullptr);
+
   // XXX: extract a common tracker for InternalNode to track Node,
   // and LeafNode to track tree_cursor_t.
   node_future<Ref<Node>> get_or_track_child(context_t, const search_position_t&, laddr_t);
   void track_insert(
       const search_position_t&, match_stage_t, Ref<Node>, Ref<Node> nxt_child = nullptr);
-  void replace_track(Ref<Node> new_child, Ref<Node> old_child);
+  void replace_track(Ref<Node> new_child, Ref<Node> old_child, bool);
   void track_split(const search_position_t&, Ref<InternalNode>);
-  void validate_tracked_children() const {
-#ifndef NDEBUG
-    for (auto& kv : tracked_child_nodes) {
-      assert(kv.first == kv.second->parent_info().position);
-      validate_child(*kv.second);
-    }
-#endif
-  }
+  template <bool VALIDATE = true>
+  void track_erase(const search_position_t&, match_stage_t);
   void validate_child(const Node& child) const;
 
   struct fresh_node_t {
@@ -630,6 +667,10 @@ class LeafNode final : public Node {
   node_future<search_result_t> lower_bound_tracked(
       context_t, const key_hobj_t&, MatchHistory&) override;
   node_future<> do_get_tree_stats(context_t, tree_stats_t&) override;
+  bool is_tracking() const override {
+    return !tracked_cursors.empty();
+  }
+  void track_merge(Ref<Node>, match_stage_t, search_position_t&) override;
 
   node_future<> test_clone_root(context_t, RootNodeTracker&) const override;
 
@@ -650,6 +691,7 @@ class LeafNode final : public Node {
   Ref<tree_cursor_t> track_insert(
       const search_position_t&, match_stage_t, const value_header_t*);
   void track_split(const search_position_t&, Ref<LeafNode>);
+  void track_erase(const search_position_t&, match_stage_t);
   void validate_tracked_cursors() const {
 #ifndef NDEBUG
     for (auto& kv : tracked_cursors) {

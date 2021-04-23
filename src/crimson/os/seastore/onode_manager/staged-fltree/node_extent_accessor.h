@@ -329,6 +329,15 @@ class NodeExtentAccessorT {
     return state;
   }
 
+  bool is_valid() const {
+    if (extent) {
+      assert(extent->is_valid());
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
@@ -487,7 +496,49 @@ class NodeExtentAccessorT {
     std::memcpy(to.get_write(), extent->get_read(), extent->get_length());
   }
 
+  using ertr = NodeExtentManager::tm_ertr;
+  ertr::future<NodeExtentMutable> rebuild(context_t c) {
+    assert(extent->is_valid());
+    if (state == nextent_state_t::FRESH) {
+      assert(extent->is_initial_pending());
+      // already fresh and no need to record
+      return ertr::make_ready_future<NodeExtentMutable>(*mut);
+    }
+    assert(!extent->is_initial_pending());
+    return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
+    ).safe_then([this, c] (auto fresh_extent) {
+      logger().debug("OTree::Extent::Rebuild: update addr from {:#x} to {:#x} ...",
+                     extent->get_laddr(), fresh_extent->get_laddr());
+      assert(fresh_extent->is_initial_pending());
+      assert(fresh_extent->get_recorder() == nullptr);
+      assert(extent->get_length() == fresh_extent->get_length());
+      auto fresh_mut = fresh_extent->get_mutable();
+      std::memcpy(fresh_mut.get_write(), extent->get_read(), extent->get_length());
+      NodeExtentRef to_discard = extent;
+
+      extent = fresh_extent;
+      node_stage = node_stage_t(
+          reinterpret_cast<const FieldType*>(extent->get_read()));
+      state = nextent_state_t::FRESH;
+      mut.emplace(fresh_mut);
+      recorder = nullptr;
+
+      return c.nm.retire_extent(c.t, to_discard);
+    }).safe_then([this] {
+      return *mut;
+    });
+  }
+
+  ertr::future<> retire(context_t c) {
+    assert(extent->is_valid());
+    return c.nm.retire_extent(c.t, std::move(extent));
+  }
+
  private:
+  static seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_filestore);
+  }
+
   NodeExtentRef extent;
   node_stage_t node_stage;
   nextent_state_t state;
