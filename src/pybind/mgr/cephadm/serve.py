@@ -664,6 +664,9 @@ class CephadmServe:
             )
             return False
 
+        rank_map = None
+        if svc.ranked():
+            rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr._schedulable_hosts(),
@@ -676,6 +679,7 @@ class CephadmServe:
             allow_colo=svc.allow_colo(),
             primary_daemon_type=svc.primary_daemon_type(),
             per_host_daemon_type=svc.per_host_daemon_type(),
+            rank_map=rank_map,
         )
 
         try:
@@ -703,6 +707,40 @@ class CephadmServe:
         self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
         self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
 
+        # assign names
+        for i in range(len(slots_to_add)):
+            slot = slots_to_add[i]
+            slot = slot.assign_name(self.mgr.get_unique_name(
+                slot.daemon_type,
+                slot.hostname,
+                daemons,
+                prefix=spec.service_id,
+                forcename=slot.name,
+                rank=slot.rank,
+                rank_generation=slot.rank_generation,
+            ))
+            slots_to_add[i] = slot
+            if rank_map is not None:
+                assert slot.rank is not None
+                assert slot.rank_generation is not None
+                assert rank_map[slot.rank][slot.rank_generation] is None
+                rank_map[slot.rank][slot.rank_generation] = slot.name
+
+        if rank_map:
+            # record the rank_map before we make changes so that if we fail the
+            # next mgr will clean up.
+            self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+
+            # remove daemons now, since we are going to fence them anyway
+            for d in daemons_to_remove:
+                assert d.hostname is not None
+                self._remove_daemon(d.name(), d.hostname)
+            daemons_to_remove = []
+
+            # fence them
+            svc.fence_old_ranks(spec, rank_map, len(all_slots))
+
+        # create daemons
         for slot in slots_to_add:
             # first remove daemon on conflicting port?
             if slot.ports:
@@ -723,13 +761,7 @@ class CephadmServe:
                     break
 
             # deploy new daemon
-            daemon_id = self.mgr.get_unique_name(
-                slot.daemon_type,
-                slot.hostname,
-                daemons,
-                prefix=spec.service_id,
-                forcename=slot.name)
-
+            daemon_id = slot.name
             if not did_config:
                 svc.config(spec, daemon_id)
                 did_config = True

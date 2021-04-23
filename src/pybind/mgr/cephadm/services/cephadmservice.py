@@ -145,6 +145,19 @@ class CephadmService(metaclass=ABCMeta):
         """
         return None
 
+    def ranked(self) -> bool:
+        """
+        If True, we will assign a stable rank (0, 1, ...) and monotonically increasing
+        generation (0, 1, ...) to each daemon we create/deploy.
+        """
+        return False
+
+    def fence_old_ranks(self,
+                        spec: ServiceSpec,
+                        rank_map: Dict[int, Dict[int, Optional[str]]],
+                        num_ranks: int) -> None:
+        assert False
+
     def make_daemon_spec(
             self,
             host: str,
