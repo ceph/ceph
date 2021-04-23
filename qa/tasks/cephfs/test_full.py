@@ -25,9 +25,8 @@ class FullnessTestCase(CephFSTestCase):
     pool_capacity = None  # type: Optional[int]
     fill_mb = None
 
-    # Subclasses define what fullness means to them
     def is_full(self):
-        raise NotImplementedError()
+        return self.fs.is_full()
 
     def setUp(self):
         CephFSTestCase.setUp(self)
@@ -373,9 +372,6 @@ class TestQuotaFull(FullnessTestCase):
         self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", pool_name,
                                             "max_bytes", "{0}".format(self.pool_capacity))
 
-    def is_full(self):
-        return self.fs.is_full()
-
 
 class TestClusterFull(FullnessTestCase):
     """
@@ -392,9 +388,6 @@ class TestClusterFull(FullnessTestCase):
             full_ratio = float(self.fs.get_config("mon_osd_full_ratio", service_type="mon"))
             TestClusterFull.pool_capacity = int(max_avail * full_ratio)
             TestClusterFull.fill_mb = (self.pool_capacity // (1024 * 1024))
-
-    def is_full(self):
-        return self.fs.is_full()
 
 # Hide the parent class so that unittest.loader doesn't try to run it.
 del globals()['FullnessTestCase']
