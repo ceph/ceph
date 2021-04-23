@@ -503,7 +503,7 @@ Node::try_merge_adjacent(context_t c, bool update_parent_index)
   if constexpr (!FORCE_MERGE) {
     if (!impl->is_size_underflow()) {
       if (update_parent_index) {
-        return fix_parent_index(c);
+        return fix_parent_index(c, false);
       } else {
         parent_info().ptr->validate_child_tracked(*this);
         return node_ertr::now();
@@ -585,7 +585,7 @@ Node::try_merge_adjacent(context_t c, bool update_parent_index)
 
     // cannot merge
     if (update_parent_index) {
-      return fix_parent_index(c);
+      return fix_parent_index(c, false);
     } else {
       parent_info().ptr->validate_child_tracked(*this);
       return node_ertr::now();
@@ -606,7 +606,8 @@ node_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
 }
 
 template <bool FORCE_MERGE = false>
-node_future<> Node::fix_parent_index(context_t c)
+node_future<> Node::fix_parent_index(
+    context_t c, bool check_downgrade)
 {
   assert(!is_root());
   auto& parent = parent_info().ptr;
@@ -614,10 +615,10 @@ node_future<> Node::fix_parent_index(context_t c)
   parent->do_untrack_child(*this);
   // the rest of parent tracks should be correct
   parent->validate_tracked_children();
-  return parent->fix_index<FORCE_MERGE>(c, this);
+  return parent->fix_index<FORCE_MERGE>(c, this, check_downgrade);
 }
-template node_future<> Node::fix_parent_index<true>(context_t);
-template node_future<> Node::fix_parent_index<false>(context_t);
+template node_future<> Node::fix_parent_index<true>(context_t, bool);
+template node_future<> Node::fix_parent_index<false>(context_t, bool);
 
 node_future<Ref<Node>> Node::load(
     context_t c, laddr_t addr, bool expect_is_level_tail)
@@ -760,7 +761,8 @@ node_future<> InternalNode::apply_child_split(
   }).safe_then([c, update_right_index, right_child] {
     if (update_right_index) {
       // right_child must be already untracked by insert_or_split()
-      return right_child->parent_info().ptr->fix_index(c, right_child);
+      return right_child->parent_info().ptr->fix_index(
+          c, right_child, false);
     } else {
       // there is no need to call try_merge_adjacent() because
       // the filled size of the inserted node or the split right node
@@ -893,7 +895,8 @@ node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
 }
 
 template <bool FORCE_MERGE>
-node_future<> InternalNode::fix_index(context_t c, Ref<Node> child)
+node_future<> InternalNode::fix_index(
+    context_t c, Ref<Node> child, bool check_downgrade)
 {
   impl->validate_non_empty();
 
@@ -925,7 +928,7 @@ node_future<> InternalNode::fix_index(context_t c, Ref<Node> child)
 
   Ref<InternalNode> this_ref = this;
   return insert_or_split(c, next_pos, new_key, child
-  ).safe_then([this, c, update_parent_index,
+  ).safe_then([this, c, update_parent_index, check_downgrade,
                this_ref = std::move(this_ref)] (auto split_right) {
     if (split_right) {
       // after split, the parent index to the split_right will be incorrect
@@ -934,9 +937,14 @@ node_future<> InternalNode::fix_index(context_t c, Ref<Node> child)
     } else {
       // no split path
       if (is_root()) {
-        // no need to call try_downgrade_root() because the number of keys
-        // has not changed.
-        return node_ertr::now();
+        if (check_downgrade) {
+          return try_downgrade_root(c, std::move(this_ref));
+        } else {
+          // no need to call try_downgrade_root() because the number of keys
+          // has not changed, and I must have at least 2 keys.
+          assert(!impl->is_keys_empty());
+          return node_ertr::now();
+        }
       } else {
         // for non-root, maybe need merge adjacent or fix parent,
         // because the filled node size may be reduced.
@@ -1006,18 +1014,10 @@ node_future<> InternalNode::apply_children_merge(
                left_child = std::move(left_child)] () mutable {
     Ref<InternalNode> this_ref = this;
     if (update_index) {
-      return left_child->fix_parent_index<FORCE_MERGE>(c
-      ).safe_then([c, this, this_ref = std::move(this_ref)] {
-        // I'm all good but:
-        // - my number of keys is reduced by 1
-        // - my size may underflow,
-        //   but try_merge_adjacent() is already part of fix_index()
-        if (is_root()) {
-          return try_downgrade_root(c, std::move(this_ref));
-        } else {
-          return node_ertr::now();
-        }
-      });
+      // I'm all good but:
+      // - my number of keys is reduced by 1
+      // - my size may underflow, but try_merge_adjacent() is already part of fix_index()
+      return left_child->fix_parent_index<FORCE_MERGE>(c, true);
     } else {
       left_child.reset();
       validate_tracked_children();
