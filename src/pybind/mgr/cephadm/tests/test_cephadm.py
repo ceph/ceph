@@ -117,6 +117,7 @@ class TestCephadm(object):
 
                 assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
                     {
+                        'service_name': 'mds.name',
                         'daemon_type': 'mds',
                         'hostname': 'test',
                         'status': 1,
