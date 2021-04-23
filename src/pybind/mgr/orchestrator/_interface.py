@@ -943,6 +943,7 @@ class DaemonDescription(object):
         out: Dict[str, Any] = OrderedDict()
         out['daemon_type'] = self.daemon_type
         out['daemon_id'] = self.daemon_id
+        out['service_name'] = self._service_name
         out['hostname'] = self.hostname
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
