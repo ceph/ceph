@@ -1355,14 +1355,16 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
     assert(impl->free_size() == free_size - insert_size);
     assert(insert_pos <= pos);
     assert(p_value->value == insert_value);
-    track_insert(insert_pos, insert_stage, insert_child);
 
     if (outdated_child) {
+      track_insert<false>(insert_pos, insert_stage, insert_child);
       // untrack the inaccurate child after updated its position
       // before validate, and before fix_index()
       validate_child_inconsistent(*outdated_child);
       // we will need its parent_info valid for the following fix_index()
       do_untrack_child(*outdated_child);
+    } else {
+      track_insert(insert_pos, insert_stage, insert_child);
     }
 
     validate_tracked_children();
@@ -1391,19 +1393,25 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
         insert_pos, insert_stage, insert_size);
     assert(p_value->value == insert_value);
     track_split(split_pos, right_node);
-    if (is_insert_left) {
-      track_insert(insert_pos, insert_stage, insert_child);
-    } else {
-      right_node->track_insert(insert_pos, insert_stage, insert_child);
-    }
 
     if (outdated_child) {
+      if (is_insert_left) {
+        track_insert<false>(insert_pos, insert_stage, insert_child);
+      } else {
+        right_node->template track_insert<false>(insert_pos, insert_stage, insert_child);
+      }
       // untrack the inaccurate child after updated its position
       // before validate, and before fix_index()
       auto& _parent = outdated_child->parent_info().ptr;
       _parent->validate_child_inconsistent(*outdated_child);
       // we will need its parent_info valid for the following fix_index()
       _parent->do_untrack_child(*outdated_child);
+    } else {
+      if (is_insert_left) {
+        track_insert(insert_pos, insert_stage, insert_child);
+      } else {
+        right_node->track_insert(insert_pos, insert_stage, insert_child);
+      }
     }
 
     validate_tracked_children();
@@ -1440,6 +1448,7 @@ node_future<Ref<Node>> InternalNode::get_or_track_child(
   });
 }
 
+template <bool VALIDATE>
 void InternalNode::track_insert(
       const search_position_t& insert_pos, match_stage_t insert_stage,
       Ref<Node> insert_child, Ref<Node> nxt_child)
@@ -1458,7 +1467,7 @@ void InternalNode::track_insert(
     auto _pos = node->parent_info().position;
     assert(!_pos.is_end());
     ++_pos.index_by_stage(insert_stage);
-    node->as_child(_pos, this);
+    node->as_child<VALIDATE>(_pos, this);
   }
   // track insert
   insert_child->as_child(insert_pos, this);
@@ -1472,6 +1481,8 @@ void InternalNode::track_insert(
   }
 #endif
 }
+template void InternalNode::track_insert<true>(const search_position_t&, match_stage_t, Ref<Node>, Ref<Node>);
+template void InternalNode::track_insert<false>(const search_position_t&, match_stage_t, Ref<Node>, Ref<Node>);
 
 void InternalNode::replace_track(
     Ref<Node> new_child, Ref<Node> old_child, bool is_new_child_outdated)

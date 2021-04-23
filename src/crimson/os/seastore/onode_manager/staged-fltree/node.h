@@ -572,6 +572,7 @@ class InternalNode final : public Node {
   // XXX: extract a common tracker for InternalNode to track Node,
   // and LeafNode to track tree_cursor_t.
   node_future<Ref<Node>> get_or_track_child(context_t, const search_position_t&, laddr_t);
+  template <bool VALIDATE = true>
   void track_insert(
       const search_position_t&, match_stage_t, Ref<Node>, Ref<Node> nxt_child = nullptr);
   void replace_track(Ref<Node> new_child, Ref<Node> old_child, bool);
