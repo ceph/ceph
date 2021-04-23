@@ -43,6 +43,7 @@ from io import StringIO
 from threading import Thread, RLock
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from pathlib import Path
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'docker.io/ceph/ceph:v16'
@@ -52,6 +53,7 @@ DEFAULT_PROMETHEUS_IMAGE = 'docker.io/prom/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'docker.io/prom/node-exporter:v0.18.1'
 DEFAULT_GRAFANA_IMAGE = 'docker.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_ALERT_MANAGER_IMAGE = 'docker.io/prom/alertmanager:v0.20.0'
+DEFAULT_REGISTRY = 'docker.io'   # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
 LATEST_STABLE_RELEASE = 'pacific'
@@ -899,6 +901,15 @@ class CustomContainer(object):
                     bind[index] = 'source={}'.format(os.path.join(
                         data_dir, match.group(1)))
         return binds
+
+##################################
+
+
+def touch(file_path: str, uid: Optional[int] = None, gid: Optional[int] = None) -> None:
+    Path(file_path).touch()
+    if uid and gid:
+        os.chown(file_path, uid, gid)
+
 
 ##################################
 
@@ -2140,6 +2151,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+            touch(os.path.join(data_dir_root, 'data', 'grafana.db'), uid, gid)
         elif daemon_type == 'alertmanager':
             data_dir_root = get_data_dir(fsid, ctx.data_dir,
                                          daemon_type, daemon_id)
@@ -2326,6 +2338,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
+            mounts[os.path.join(data_dir, 'data/grafana.db')] = '/var/lib/grafana/grafana.db:Z'
         elif daemon_type == 'alertmanager':
             mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/etc/alertmanager:Z'
 
@@ -3246,6 +3259,20 @@ def command_inspect_image(ctx):
     return 0
 
 
+def normalize_image_digest(digest):
+    # normal case:
+    #   ceph/ceph -> docker.io/ceph/ceph
+    # edge cases that shouldn't ever come up:
+    #   ubuntu -> docker.io/ubuntu    (ubuntu alias for library/ubuntu)
+    # no change:
+    #   quay.ceph.io/ceph/ceph -> ceph
+    #   docker.io/ubuntu -> no change
+    bits = digest.split('/')
+    if '.' not in bits[0] or len(bits) < 3:
+        digest = DEFAULT_REGISTRY + '/' + digest
+    return digest
+
+
 def get_image_info_from_inspect(out, image):
     # type: (str, str) -> Dict[str, Union[str,List[str]]]
     image_id, digests = out.split(',', 1)
@@ -3255,7 +3282,7 @@ def get_image_info_from_inspect(out, image):
         'image_id': normalize_container_id(image_id)
     }  # type: Dict[str, Union[str,List[str]]]
     if digests:
-        r['repo_digests'] = digests[1:-1].split(' ')
+        r['repo_digests'] = list(map(normalize_image_digest, digests[1:-1].split(' ')))
     return r
 
 ##################################
@@ -4314,7 +4341,7 @@ def command_shell(ctx):
     if not ctx.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
         ctx.keyring = SHELL_DEFAULT_KEYRING
 
-    container_args = []  # type: List[str]
+    container_args: List[str] = ['-i']
     mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
                                   no_config=True if ctx.config else False)
     binds = get_container_binds(ctx, ctx.fsid, daemon_type, daemon_id)
@@ -4337,7 +4364,7 @@ def command_shell(ctx):
     else:
         command = ['bash']
         container_args += [
-            '-it',
+            '-t',
             '-e', 'LANG=C',
             '-e', 'PS1=%s' % CUSTOM_PS1,
         ]
@@ -4376,13 +4403,13 @@ def command_enter(ctx):
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
     (daemon_type, daemon_id) = ctx.name.split('.', 1)
-    container_args = []  # type: List[str]
+    container_args = ['-i']  # type: List[str]
     if ctx.command:
         command = ctx.command
     else:
         command = ['sh']
         container_args += [
-            '-it',
+            '-t',
             '-e', 'LANG=C',
             '-e', 'PS1=%s' % CUSTOM_PS1,
         ]
