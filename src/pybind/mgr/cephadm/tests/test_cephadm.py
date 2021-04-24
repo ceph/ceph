@@ -1004,7 +1004,7 @@ class TestCephadm(object):
                         # being in offline/maint mode should disqualify hosts from being
                         # candidates for scheduling
                         candidates = [
-                            h.hostname for h in cephadm_module._hosts_with_daemon_inventory()]
+                            h.hostname for h in cephadm_module._schedulable_hosts()]
                         assert 'test2' not in candidates
                         assert 'test3' not in candidates
 
