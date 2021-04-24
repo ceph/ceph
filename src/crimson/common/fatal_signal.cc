@@ -46,7 +46,7 @@ void FatalSignal::install_oneshot_signal_handler()
     sa.sa_flags |= SA_ONSTACK;
   }
   [[maybe_unused]] auto r = ::sigaction(SigNum, &sa, nullptr);
-  assert(r);
+  assert(r == 0);
 }
 
 
