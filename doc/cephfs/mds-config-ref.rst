@@ -2,122 +2,19 @@
  MDS Config Reference
 ======================
 
-``mds_cache_memory_limit``
-
-:Description: The memory limit the MDS should enforce for its cache.
-:Type:  64-bit Integer Unsigned
-:Default: ``4G``
-
-``mds_cache_reservation``
-
-:Description: The cache reservation (memory or inodes) for the MDS cache to maintain.
-              Once the MDS begins dipping into its reservation, it will recall
-              client state until its cache size shrinks to restore the
-              reservation.
-:Type:  Float
-:Default: ``0.05``
-
-
-``mds_cache_mid``
-
-:Description: The insertion point for new items in the cache LRU 
-              (from the top).
-
-:Type:  Float
-:Default: ``0.7``
-
-
-``mds_dir_commit_ratio``
-
-:Description: The fraction of directory that is dirty before Ceph commits using 
-              a full update (instead of partial update).
-
-:Type:  Float
-:Default: ``0.5``
-
-
-``mds_dir_max_commit_size``
-
-:Description: The maximum size of a directory update before Ceph breaks it into 
-              smaller transactions (MB).
-              
-:Type:  32-bit Integer
-:Default: ``10``
-
-
-``mds_decay_halflife``
-
-:Description: The half-life of MDS cache temperature.
-:Type:  Float
-:Default: ``5``
-
-``mds_beacon_interval``
-
-:Description: The frequency (in seconds) of beacon messages sent 
-              to the monitor.
-
-:Type:  Float
-:Default: ``4``
-
-
-``mds_beacon_grace``
-
-:Description: The interval without beacons before Ceph declares an MDS laggy 
-              (and possibly replace it).
-              
-:Type:  Float
-:Default: ``15``
-
-
-``mds_blocklist_interval``
-
-:Description: The blocklist duration for failed MDSs in the OSD map. Note,
-              this controls how long failed MDS daemons will stay in the
-              OSDMap blocklist. It has no effect on how long something is
-              blocklisted when the administrator blocklists it manually. For
-              example, ``ceph osd blocklist add`` will still use the default
-              blocklist time.
-:Type:  Float
-:Default: ``24.0*60.0``
-
-
-``mds_reconnect_timeout``
-
-:Description: The interval (in seconds) to wait for clients to reconnect 
-              during MDS restart.
-
-:Type:  Float
-:Default: ``45``
-
-
-``mds_tick_interval``
-
-:Description: How frequently the MDS performs internal periodic tasks.
-:Type:  Float
-:Default: ``5``
-
-
-``mds_dirstat_min_interval``
-
-:Description: The minimum interval (in seconds) to try to avoid propagating 
-              recursive stats up the tree.
-              
-:Type:  Float
-:Default: ``1``
-
-``mds_scatter_nudge_interval``
-
-:Description: How quickly dirstat changes propagate up.
-:Type:  Float
-:Default: ``5``
-
-
-``mds_client_prealloc_inos``
-
-:Description: The number of inode numbers to preallocate per client session.
-:Type:  32-bit Integer
-:Default: ``1000``
-
+.. confval:: mds_cache_memory_limit
+.. confval:: mds_cache_reservation
+.. confval:: mds_cache_mid
+.. confval:: mds_dir_max_commit_size
+.. confval:: mds_decay_halflife
+.. confval:: mds_beacon_interval
+.. confval:: mds_beacon_grace
+.. confval:: mon_mds_blocklist_interval
+.. confval:: mds_reconnect_timeout
+.. confval:: mds_tick_interval
+.. confval:: mds_dirstat_min_interval
+.. confval:: mds_scatter_nudge_interval
+.. confval:: mds_client_prealloc_inos
 
 ``mds_early_reply``
 
