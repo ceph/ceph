@@ -319,6 +319,57 @@ namespace rgw {
       }
     }
 
+    void encode(buffer::list& bl) const {
+      ENCODE_START(3, 1, bl);
+      encode(uint32_t(fh.fh_type), bl);
+      encode(state.dev, bl);
+      encode(state.size, bl);
+      encode(state.nlink, bl);
+      encode(state.owner_uid, bl);
+      encode(state.owner_gid, bl);
+      encode(state.unix_mode, bl);
+      for (const auto& t : { state.ctime, state.mtime, state.atime }) {
+	encode(real_clock::from_timespec(t), bl);
+      }
+      encode((uint32_t)2, bl);
+      encode(file_ondisk_version.load(), bl);
+      ENCODE_FINISH(bl);
+    }
+
+    //XXX: RGWFileHandle::decode method can only be called from
+    //	   RGWFileHandle::decode_attrs, otherwise the file_ondisk_version
+    //	   fied would be contaminated
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(3, bl);
+      uint32_t fh_type;
+      decode(fh_type, bl);
+      if ((fh.fh_type != fh_type) &&
+	 (fh_type == RGW_FS_TYPE_SYMBOLIC_LINK))
+        fh.fh_type = RGW_FS_TYPE_SYMBOLIC_LINK;
+      decode(state.dev, bl);
+      decode(state.size, bl);
+      decode(state.nlink, bl);
+      decode(state.owner_uid, bl);
+      decode(state.owner_gid, bl);
+      decode(state.unix_mode, bl);
+      ceph::real_time enc_time;
+      for (auto t : { &(state.ctime), &(state.mtime), &(state.atime) }) {
+	decode(enc_time, bl);
+	*t = real_clock::to_timespec(enc_time);
+      }
+      if (struct_v >= 2) {
+        decode(state.version, bl);
+      }
+      if (struct_v >= 3) {
+	int64_t fov;
+	decode(fov, bl);
+	file_ondisk_version = fov;
+      }
+      DECODE_FINISH(bl);
+    }
+
+    friend void encode(const RGWFileHandle& c, ::ceph::buffer::list &bl, uint64_t features);
+    friend void decode(RGWFileHandle &c, ::ceph::bufferlist::const_iterator &p);
   public:
     RGWFileHandle(RGWLibFS* _fs, RGWFileHandle* _parent,
 		  const fh_key& _fhk, std::string& _name, uint32_t _flags)
@@ -684,56 +735,6 @@ namespace rgw {
 
     void set_acls(const ceph::buffer::list& _acls ) {
       acls = _acls;
-    }
-
-    void encode(buffer::list& bl) const {
-      ENCODE_START(3, 1, bl);
-      encode(uint32_t(fh.fh_type), bl);
-      encode(state.dev, bl);
-      encode(state.size, bl);
-      encode(state.nlink, bl);
-      encode(state.owner_uid, bl);
-      encode(state.owner_gid, bl);
-      encode(state.unix_mode, bl);
-      for (const auto& t : { state.ctime, state.mtime, state.atime }) {
-	encode(real_clock::from_timespec(t), bl);
-      }
-      encode((uint32_t)2, bl);
-      encode(file_ondisk_version.load(), bl);
-      ENCODE_FINISH(bl);
-    }
-
-    //XXX: RGWFileHandle::decode method can only be called from
-    //	   RGWFileHandle::decode_attrs, otherwise the file_ondisk_version
-    //	   fied would be contaminated
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(3, bl);
-      uint32_t fh_type;
-      decode(fh_type, bl);
-      if ((fh.fh_type != fh_type) &&
-	 (fh_type == RGW_FS_TYPE_SYMBOLIC_LINK))
-        fh.fh_type = RGW_FS_TYPE_SYMBOLIC_LINK;  
-      ceph_assert(fh.fh_type == fh_type);
-      decode(state.dev, bl);
-      decode(state.size, bl);
-      decode(state.nlink, bl);
-      decode(state.owner_uid, bl);
-      decode(state.owner_gid, bl);
-      decode(state.unix_mode, bl);
-      ceph::real_time enc_time;
-      for (auto t : { &(state.ctime), &(state.mtime), &(state.atime) }) {
-	decode(enc_time, bl);
-	*t = real_clock::to_timespec(enc_time);
-      }
-      if (struct_v >= 2) {
-        decode(state.version, bl);
-      }
-      if (struct_v >= 3) {
-	int64_t fov;
-	decode(fov, bl);
-	file_ondisk_version = fov;
-      }
-      DECODE_FINISH(bl);
     }
 
     void encode_attrs(ceph::buffer::list& ux_key1,
