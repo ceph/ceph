@@ -1,12 +1,12 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
-import { of as observableOf } from 'rxjs';
+import { of as observableOf, throwError } from 'rxjs';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -55,93 +55,75 @@ describe('RgwBucketFormComponent', () => {
 
   describe('bucketNameValidator', () => {
     const testValidator = (name: string, valid: boolean) => {
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl(name);
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          if (valid) {
-            expect(resp).toBe(null);
-          } else {
-            expect(resp instanceof Object).toBeTruthy();
-            expect(resp.bucketNameInvalid).toBeTruthy();
-          }
-        });
+      rgwBucketServiceGetSpy.and.returnValue(throwError('foo'));
+      formHelper.setValue('bid', name, true);
+      tick(500);
+      if (valid) {
+        formHelper.expectValid('bid');
+      } else {
+        formHelper.expectError('bid', 'bucketNameInvalid');
       }
     };
 
-    it('should validate empty name', () => {
-      testValidator('', true);
-    });
+    it('should validate empty name', fakeAsync(() => {
+      formHelper.expectErrorChange('bid', '', 'required', true);
+    }));
 
-    it('bucket names cannot be formatted as IP address', () => {
+    it('bucket names cannot be formatted as IP address', fakeAsync(() => {
       testValidator('172.10.4.51', false);
-    });
+    }));
 
-    it('bucket name must be >= 3 characters long (1/2)', () => {
+    it('bucket name must be >= 3 characters long (1/2)', fakeAsync(() => {
       testValidator('ab', false);
-    });
+    }));
 
-    it('bucket name must be >= 3 characters long (2/2)', () => {
+    it('bucket name must be >= 3 characters long (2/2)', fakeAsync(() => {
       testValidator('abc', true);
-    });
+    }));
 
-    it('bucket name must be <= than 63 characters long (1/2)', () => {
+    it('bucket name must be <= than 63 characters long (1/2)', fakeAsync(() => {
       testValidator(_.repeat('a', 64), false);
-    });
+    }));
 
-    it('bucket name must be <= than 63 characters long (2/2)', () => {
+    it('bucket name must be <= than 63 characters long (2/2)', fakeAsync(() => {
       testValidator(_.repeat('a', 63), true);
-    });
+    }));
 
-    it('bucket names must not contain uppercase characters or underscores (1/2)', () => {
+    it('bucket names must not contain uppercase characters or underscores (1/2)', fakeAsync(() => {
       testValidator('iAmInvalid', false);
-    });
+    }));
 
-    it('bucket names must not contain uppercase characters or underscores (2/2)', () => {
+    it('bucket names must not contain uppercase characters or underscores (2/2)', fakeAsync(() => {
       testValidator('i_am_invalid', false);
-    });
+    }));
 
-    it('bucket names with invalid labels (1/3)', () => {
+    it('bucket names with invalid labels (1/3)', fakeAsync(() => {
       testValidator('abc.1def.Ghi2', false);
-    });
+    }));
 
-    it('bucket names with invalid labels (2/3)', () => {
-      testValidator('abc.1-xy', false);
-    });
+    it('bucket names with invalid labels (2/3)', fakeAsync(() => {
+      testValidator('abc.1_xy', false);
+    }));
 
-    it('bucket names with invalid labels (3/3)', () => {
+    it('bucket names with invalid labels (3/3)', fakeAsync(() => {
       testValidator('abc.*def', false);
-    });
+    }));
 
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', () => {
+    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', fakeAsync(() => {
       testValidator('xyz.abc', true);
-    });
+    }));
 
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (2/3)', () => {
+    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (2/3)', fakeAsync(() => {
       testValidator('abc.1-def', true);
-    });
+    }));
 
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (3/3)', () => {
+    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (3/3)', fakeAsync(() => {
       testValidator('abc.ghi2', true);
-    });
+    }));
 
-    it('bucket names must be unique', () => {
-      spyOn(rgwBucketService, 'enumerate').and.returnValue(observableOf(['abcd']));
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl('abcd');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp instanceof Object).toBeTruthy();
-          expect(resp.bucketNameExists).toBeTruthy();
-        });
-      }
-    });
+    it('bucket names must be unique', fakeAsync(() => {
+      testValidator('bucket-name-is-unique', true);
+    }));
 
     it('should get zonegroup and placement targets', () => {
       const payload: Record<string, any> = {
