@@ -1391,7 +1391,7 @@ private:
     vector<uint32_t> hb_front_min;
     vector<uint32_t> hb_front_max;
 
-    bool is_stale(utime_t stale) {
+    bool is_stale(utime_t stale) const {
       if (ping_history.empty()) {
         return false;
       }
@@ -1399,7 +1399,7 @@ private:
       return oldest_deadline <= stale;
     }
 
-    bool is_unhealthy(utime_t now) {
+    bool is_unhealthy(utime_t now) const {
       if (ping_history.empty()) {
         /// we haven't sent a ping yet or we have got all replies,
         /// in either way we are safe and healthy for now
@@ -1410,7 +1410,7 @@ private:
       return now > oldest_deadline;
     }
 
-    bool is_healthy(utime_t now) {
+    bool is_healthy(utime_t now) const {
       if (last_rx_front == utime_t() || last_rx_back == utime_t()) {
         // only declare to be healthy until we have received the first
         // replies from both front/back connections
