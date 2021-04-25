@@ -50,6 +50,21 @@
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameExists')"
                   i18n>The chosen name is already in use.</span>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'containsUpperCase')"
+                  i18n>Bucket names must not contain uppercase characters or underscores.</span>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'lowerCaseOrNumber')"
+                  i18n>Each label must start and end with a lowercase letter or a number.</span>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'ipAddress')"
+                  i18n>Bucket names cannot be formatted as IP address.</span>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'onlyLowerCaseAndNumbers')"
+                  i18n>Bucket names can only contain lowercase letters, numbers, and hyphens.</span>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'shouldBeInRange')"
+                  i18n>Bucket names must be 3 to 63 characters long.</span>
           </div>
         </div>
 

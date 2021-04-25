@@ -54,14 +54,14 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('bucketNameValidator', () => {
-    const testValidator = (name: string, valid: boolean) => {
+    const testValidator = (name: string, valid: boolean, expectedError?: string) => {
       rgwBucketServiceGetSpy.and.returnValue(throwError('foo'));
       formHelper.setValue('bid', name, true);
-      tick(500);
+      tick();
       if (valid) {
         formHelper.expectValid('bid');
       } else {
-        formHelper.expectError('bid', 'bucketNameInvalid');
+        formHelper.expectError('bid', expectedError);
       }
     };
 
@@ -70,11 +70,14 @@ describe('RgwBucketFormComponent', () => {
     }));
 
     it('bucket names cannot be formatted as IP address', fakeAsync(() => {
-      testValidator('172.10.4.51', false);
+      const testIPs = ['1.1.1.01', '001.1.1.01', '127.0.0.1'];
+      for (const ip of testIPs) {
+        testValidator(ip, false, 'ipAddress');
+      }
     }));
 
     it('bucket name must be >= 3 characters long (1/2)', fakeAsync(() => {
-      testValidator('ab', false);
+      testValidator('ab', false, 'shouldBeInRange');
     }));
 
     it('bucket name must be >= 3 characters long (2/2)', fakeAsync(() => {
@@ -82,7 +85,7 @@ describe('RgwBucketFormComponent', () => {
     }));
 
     it('bucket name must be <= than 63 characters long (1/2)', fakeAsync(() => {
-      testValidator(_.repeat('a', 64), false);
+      testValidator(_.repeat('a', 64), false, 'shouldBeInRange');
     }));
 
     it('bucket name must be <= than 63 characters long (2/2)', fakeAsync(() => {
@@ -90,23 +93,31 @@ describe('RgwBucketFormComponent', () => {
     }));
 
     it('bucket names must not contain uppercase characters or underscores (1/2)', fakeAsync(() => {
-      testValidator('iAmInvalid', false);
+      testValidator('iAmInvalid', false, 'containsUpperCase');
+    }));
+
+    it('bucket names can only contain lowercase letters, numbers, and hyphens', fakeAsync(() => {
+      testValidator('$$$', false, 'onlyLowerCaseAndNumbers');
     }));
 
     it('bucket names must not contain uppercase characters or underscores (2/2)', fakeAsync(() => {
-      testValidator('i_am_invalid', false);
+      testValidator('i_am_invalid', false, 'containsUpperCase');
+    }));
+
+    it('bucket names must start and end with letters or numbers', fakeAsync(() => {
+      testValidator('abcd-', false, 'lowerCaseOrNumber');
     }));
 
     it('bucket names with invalid labels (1/3)', fakeAsync(() => {
-      testValidator('abc.1def.Ghi2', false);
+      testValidator('abc.1def.Ghi2', false, 'containsUpperCase');
     }));
 
     it('bucket names with invalid labels (2/3)', fakeAsync(() => {
-      testValidator('abc.1_xy', false);
+      testValidator('abc.1_xy', false, 'containsUpperCase');
     }));
 
     it('bucket names with invalid labels (3/3)', fakeAsync(() => {
-      testValidator('abc.*def', false);
+      testValidator('abc.*def', false, 'lowerCaseOrNumber');
     }));
 
     it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', fakeAsync(() => {
