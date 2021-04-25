@@ -572,6 +572,9 @@ class RadosWriter : public Writer {
 
   ~RadosWriter();
 
+  // add alloc hint to osd
+  void add_write_hint(librados::ObjectWriteOperation& op, const uint64_t cost);
+
   // change the current stripe object
   virtual int set_stripe_obj(const rgw_raw_obj& obj) override;
 

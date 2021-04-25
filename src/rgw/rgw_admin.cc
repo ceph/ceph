@@ -358,6 +358,9 @@ void usage()
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
   cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
+  cout << "   --enable-alloc-hint=<type>\n";
+  cout << "                             placement target enable allocation hint type (true or false)\n";
+  cout << "   --compression-hint=<type> placement target compression hint type (compressible, incompressible or none)\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
   cout << "                             set zone tier config keys, values\n";
@@ -3168,6 +3171,8 @@ int main(int argc, const char **argv)
   bool index_type_specified = false;
 
   boost::optional<std::string> compression_type;
+  boost::optional<bool> enable_alloc_hint;
+  boost::optional<std::string> compression_hint;
 
   string totp_serial;
   string totp_seed;
@@ -3560,6 +3565,17 @@ int main(int argc, const char **argv)
         }
       }
       index_type_specified = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--enable-alloc-hint", (char*)NULL)) {
+      if (val == "true") {
+        enable_alloc_hint = true;
+      } else if (val == "false") {
+        enable_alloc_hint = false;
+      } else {
+        cerr << "ERROR: failed to parse enable alloc hint type(only true or false)" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--compression-hint", (char*)NULL)) {
+      compression_hint = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
       compression_type = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*)NULL)) {
@@ -5308,6 +5324,13 @@ int main(int argc, const char **argv)
           std::cerr << "Unrecognized compression type" << std::endl;
           return EINVAL;
         }
+        // validate compression hint
+        if (compression_hint && *compression_hint != "none"
+            && *compression_hint != "compressible"
+            && *compression_hint != "incompressible") {
+          std::cerr << "Unrecognized compression_hint type" << std::endl;
+          return EINVAL;
+        }
 
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
@@ -5365,7 +5388,10 @@ int main(int argc, const char **argv)
 	  }
 
           rgw_pool dp = opt_data_pool;
-          info.storage_classes.set_storage_class(storage_class, &dp, compression_type.get_ptr());
+          info.storage_classes.set_storage_class(storage_class, &dp,
+                                                 compression_type.get_ptr(),
+                                                 enable_alloc_hint.get_ptr(),
+                                                 compression_hint.get_ptr());
 
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;

@@ -160,18 +160,26 @@ WRITE_CLASS_ENCODER(RGWSystemMetaObj)
 struct RGWZoneStorageClass {
   boost::optional<rgw_pool> data_pool;
   boost::optional<std::string> compression_type;
+  boost::optional<bool> enable_alloc_hint;
+  boost::optional<std::string> compression_hint;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(data_pool, bl);
     encode(compression_type, bl);
+    encode(enable_alloc_hint, bl);
+    encode(compression_hint, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(data_pool, bl);
     decode(compression_type, bl);
+    if (struct_v >= 2) {
+      decode(enable_alloc_hint, bl);
+      decode(compression_hint, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -230,7 +238,7 @@ public:
     return m;
   }
 
-  void set_storage_class(const string& sc, const rgw_pool *data_pool, const string *compression_type) {
+  void set_storage_class(const string& sc, const rgw_pool *data_pool, const string *compression_type, const bool *enable_alloc_hint, const string *compression_hint) {
     const string *psc = &sc;
     if (sc.empty()) {
       psc = &RGW_STORAGE_CLASS_STANDARD;
@@ -241,6 +249,12 @@ public:
     }
     if (compression_type) {
       storage_class.compression_type = *compression_type;
+    }
+    if (enable_alloc_hint) {
+      storage_class.enable_alloc_hint = *enable_alloc_hint;
+    }
+    if (compression_hint) {
+      storage_class.compression_hint = *compression_hint;
     }
   }
 
@@ -277,7 +291,7 @@ struct RGWZonePlacementInfo {
   RGWZonePlacementInfo() : index_type(rgw::BucketIndexType::Normal) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(index_pool.to_str(), bl);
     rgw_pool standard_data_pool = get_data_pool(RGW_STORAGE_CLASS_STANDARD);
     encode(standard_data_pool.to_str(), bl);
@@ -286,11 +300,15 @@ struct RGWZonePlacementInfo {
     string standard_compression_type = get_compression_type(RGW_STORAGE_CLASS_STANDARD);
     encode(standard_compression_type, bl);
     encode(storage_classes, bl);
+    bool standard_enable_alloc_hint = get_enable_alloc_hint(RGW_STORAGE_CLASS_STANDARD);
+    encode(standard_enable_alloc_hint, bl);
+    string standard_compression_hint = get_compression_hint(RGW_STORAGE_CLASS_STANDARD);
+    encode(standard_compression_hint, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     string index_pool_str;
     string data_pool_str;
     decode(index_pool_str, bl);
@@ -311,11 +329,22 @@ struct RGWZonePlacementInfo {
     if (struct_v >= 6) {
       decode(standard_compression_type, bl);
     }
+    bool decode_storage_classes = false;
     if (struct_v >= 7) {
       decode(storage_classes, bl);
-    } else {
+      decode_storage_classes = true;
+    }
+    bool standard_enable_alloc_hint;
+    string standard_compression_hint;
+    if (struct_v >= 8) {
+      decode(standard_enable_alloc_hint, bl);
+      decode(standard_compression_hint, bl);
+    }
+    if (!decode_storage_classes) {
       storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &standard_data_pool,
-                                        (!standard_compression_type.empty() ? &standard_compression_type : nullptr));
+                                        (!standard_compression_type.empty() ? &standard_compression_type : nullptr),
+                                        &standard_enable_alloc_hint,
+                                        (!standard_compression_hint.empty() ? &standard_compression_hint : nullptr));
     }
     DECODE_FINISH(bl);
   }
@@ -348,6 +377,26 @@ struct RGWZonePlacementInfo {
       return no_compression;
     }
     return storage_class->compression_type.get_value_or(no_compression);
+  }
+
+  const bool get_enable_alloc_hint(const string& sc) const {
+    const RGWZoneStorageClass *storage_class;
+    bool enable_alloc_hint{false};
+
+    if (!storage_classes.find(sc, &storage_class)) {
+      return enable_alloc_hint;
+    }
+    return storage_class->enable_alloc_hint.get_value_or(enable_alloc_hint);
+  }
+
+  const string& get_compression_hint(const string& sc) const {
+    const RGWZoneStorageClass *storage_class;
+    static string no_compression_hint;
+
+    if (!storage_classes.find(sc, &storage_class)) {
+      return no_compression_hint;
+    }
+    return storage_class->compression_hint.get_value_or(no_compression_hint);
   }
 
   bool storage_class_exists(const string& sc) const {
@@ -410,6 +459,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int fix_pool_names(optional_yield y);
 
   const string& get_compression_type(const rgw_placement_rule& placement_rule) const;
+  const bool get_enable_alloc_hint(const rgw_placement_rule& placement_rule) const;
+  const string& get_compression_hint(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
     ENCODE_START(14, 1, bl);

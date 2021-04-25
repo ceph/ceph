@@ -3873,8 +3873,24 @@ void RGWPutObj::execute(optional_yield y)
   DataProcessor *filter = processor.get();
 
   const auto& compression_type = store->get_zone()->get_params().get_compression_type(*pdest_placement);
+  const bool enable_alloc_hint = store->get_zone()->get_params().get_enable_alloc_hint(*pdest_placement);
+  const auto& compression_hint = store->get_zone()->get_params().get_compression_hint(*pdest_placement);
+
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
+
+  RGWObjState *obj_state;
+  op_ret = s->object->get_obj_state(this, &obj_ctx, &obj_state, s->yield);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: get current obj state returned with error" << op_ret << dendl;
+    return;
+  }
+  obj_state->enable_alloc_hint = enable_alloc_hint;
+  if (compression_hint == "compressible") {
+    obj_state->alloc_hint_flags |= librados::ALLOC_HINT_FLAG_COMPRESSIBLE;
+  } else if (compression_hint == "incompressible") {
+    obj_state->alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+  }
 
   std::unique_ptr<DataProcessor> encrypt;
 
@@ -3893,6 +3909,8 @@ void RGWPutObj::execute(optional_yield y)
       } else {
         compressor.emplace(s->cct, plugin, filter);
         filter = &*compressor;
+        // always send incompressible hint when rgw is itself doing compression
+        obj_state->alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
       }
     }
   }
