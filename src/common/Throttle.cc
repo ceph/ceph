@@ -276,7 +276,7 @@ enum {
 
 BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n,
 				 unsigned expected_concurrency, bool _use_perf)
-  : cct(cct), name(n),
+  : name(n),
     conds(expected_concurrency),///< [in] determines size of conds
     use_perf(_use_perf)
 {
