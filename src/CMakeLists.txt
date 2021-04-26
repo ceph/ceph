@@ -380,6 +380,11 @@ if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
 
+include(CheckTypeSize)
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/time.h")
+CHECK_TYPE_SIZE(suseconds_t SUSECONDS_T)
+unset(CMAKE_EXTRA_INCLUDE_FILES)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
