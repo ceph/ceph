@@ -71,7 +71,6 @@ if(WITH_RBD)
 	rbd-replay-many.rst
 	rbd-replay-prep.rst
 	rbd-replay.rst
-	rbdmap.rst
 	rbdmap-generator.rst
 	rbd.rst)
   if(LINUX)

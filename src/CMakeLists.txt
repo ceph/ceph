@@ -908,7 +908,6 @@ if(WITH_RBD)
   install(PROGRAMS
     ceph-rbdnamer
     rbd-replay-many
-    rbdmap
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   install(PROGRAMS rbdmap-generator
     DESTINATION ${SYSTEMD_SYSTEM_GENERATOR_DIR})
