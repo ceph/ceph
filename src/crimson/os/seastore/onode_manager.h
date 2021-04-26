@@ -33,9 +33,7 @@ public:
     OnodeRef>;
   virtual get_onode_ret get_onode(
     Transaction &trans,
-    const ghobject_t &hoid) {
-    return seastar::make_ready_future<OnodeRef>();
-  }
+    const ghobject_t &hoid) = 0;
 
   using get_or_create_onode_ertr = base_ertr::extend<
     crimson::ct_error::value_too_large>;
@@ -43,9 +41,7 @@ public:
     OnodeRef>;
   virtual get_or_create_onode_ret get_or_create_onode(
     Transaction &trans,
-    const ghobject_t &hoid) {
-    return seastar::make_ready_future<OnodeRef>();
-  }
+    const ghobject_t &hoid) = 0;
 
   using get_or_create_onodes_ertr = base_ertr::extend<
     crimson::ct_error::value_too_large>;
@@ -53,17 +49,14 @@ public:
     std::vector<OnodeRef>>;
   virtual get_or_create_onodes_ret get_or_create_onodes(
     Transaction &trans,
-    const std::vector<ghobject_t> &hoids) {
-    return seastar::make_ready_future<std::vector<OnodeRef>>();
-  }
+    const std::vector<ghobject_t> &hoids) = 0;
 
   using write_dirty_ertr = base_ertr;
   using write_dirty_ret = write_dirty_ertr::future<>;
   virtual write_dirty_ret write_dirty(
     Transaction &trans,
-    const std::vector<OnodeRef> &onodes) {
-    return seastar::now();
-  }
+    const std::vector<OnodeRef> &onodes) = 0;
+
   virtual ~OnodeManager() {}
 };
 using OnodeManagerRef = std::unique_ptr<OnodeManager>;
