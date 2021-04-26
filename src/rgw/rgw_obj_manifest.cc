@@ -226,6 +226,12 @@ void RGWObjManifest::obj_iterator::operator++()
   if (manifest->explicit_objs) {
     ++explicit_iter;
 
+    if (explicit_iter == manifest->objs.end()) {
+      ofs = manifest->obj_size;
+      stripe_size = 0;
+      return;
+    }
+
     update_explicit_pos();
 
     update_location();
