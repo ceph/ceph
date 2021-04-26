@@ -51,6 +51,10 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 
 #endif /* __FreeBSD__ */
 
+#if defined(__APPLE__)
+struct cpu_set_t;
+#endif
+
 #if defined(__APPLE__) || defined(__FreeBSD__)
 /* Make sure that ENODATA is defined in the correct way */
 #ifdef ENODATA
