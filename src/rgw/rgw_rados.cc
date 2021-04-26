@@ -1184,12 +1184,16 @@ int RGWRados::init_complete()
 
   pools_initialized = true;
 
-  gc = new RGWGC();
-  gc->initialize(cct, this);
+  if (use_gc) {
+    gc = new RGWGC();
+    gc->initialize(cct, this);
+  } else {
+    ldout(cct, 5) << "note: GC not initialized" << dendl;
+  }
 
   obj_expirer = new RGWObjectExpirer(this->store);
 
-  if (use_gc_thread) {
+  if (use_gc_thread && use_gc) {
     gc->start_processor();
     obj_expirer->start_processor();
   }
