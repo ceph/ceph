@@ -29,12 +29,12 @@
 %else
 %bcond_without tcmalloc
 %endif
+%bcond_with system_pmdk
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
 %ifarch x86_64 ppc64le
 %bcond_without rbd_rwl_cache
 %bcond_without rbd_ssd_cache
-%global _system_pmdk 1
 %else
 %bcond_with rbd_rwl_cache
 %bcond_with rbd_ssd_cache
@@ -60,12 +60,10 @@
 %bcond_with libradosstriper
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
-%global _system_pmdk 1
 %bcond_without rbd_rwl_cache
 %bcond_without rbd_ssd_cache
 %else
 %bcond_with lttng
-%global _system_pmdk 0
 %bcond_with rbd_rwl_cache
 %bcond_with rbd_ssd_cache
 %endif
@@ -254,7 +252,7 @@ BuildRequires:  nlohmann_json-devel
 BuildRequires:  libevent-devel
 BuildRequires:  yaml-cpp-devel
 %endif
-%if 0%{?_system_pmdk}
+%if 0%{with system_pmdk}
 BuildRequires:  libpmem-devel
 BuildRequires:  libpmemobj-devel
 %endif
@@ -1333,7 +1331,7 @@ ${CMAKE} .. \
 %if 0%{with rbd_ssd_cache}
     -DWITH_RBD_SSD_CACHE=ON \
 %endif
-%if 0%{?_system_pmdk}
+%if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
 %endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
