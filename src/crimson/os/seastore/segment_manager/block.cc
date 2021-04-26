@@ -281,7 +281,7 @@ BlockSegmentManager::~BlockSegmentManager()
 BlockSegmentManager::mount_ret BlockSegmentManager::mount()
 {
   return open_device(
-    device_path, seastar::open_flags::rw | seastar::open_flags::dsync
+    device_path, seastar::open_flags::rw
   ).safe_then([=](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
