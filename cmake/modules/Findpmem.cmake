@@ -14,6 +14,16 @@ foreach(component pmem ${pmem_FIND_COMPONENTS})
   else()
     message(FATAL_ERROR "unknown libpmem component: ${component}")
   endif()
+  pkg_check_modules(PKG_${component} QUIET "lib${component}")
+  if(NOT pmem_VERSION_STRING OR PKG_${component}_VERSION VERSION_LESS pmem_VERSION_STRING)
+    set(pmem_VERSION_STRING ${PKG_${component}_VERSION})
+  endif()
+  find_path(pmem_${component}_INCLUDE_DIR
+    NAMES lib${component}.h
+    HINTS ${PKG_${component}_INCLUDE_DIRS})
+  find_library(pmem_${component}_LIBRARY
+    NAMES ${component}
+    HINTS ${PKG_${component}_LIBRARY_DIRS})
   mark_as_advanced(
     pmem_${component}_INCLUDE_DIR
     pmem_${component}_LIBRARY)
