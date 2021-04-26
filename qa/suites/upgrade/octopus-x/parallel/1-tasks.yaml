@@ -14,6 +14,7 @@ tasks:
         osd_class_default_list: "*"
     # deploy additional mons the "old" (octopus) way
     add_mons_via_daemon_add: true
+    avoid_pacific_features: true
 - print: "**** done end installing octopus cephadm ..."
 
 - cephadm.shell:
