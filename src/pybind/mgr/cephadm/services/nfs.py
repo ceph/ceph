@@ -82,12 +82,17 @@ class NFSService(CephService):
 
         # generate the ganesha config
         def get_ganesha_conf() -> str:
-            context = dict(user=rados_user,
-                           nodeid=f'{daemon_spec.service_name}.{daemon_spec.rank}',
-                           pool=spec.pool,
-                           namespace=spec.namespace if spec.namespace else '',
-                           rgw_user=rgw_user,
-                           url=spec.rados_config_location())
+            context = {
+                "user": rados_user,
+                "nodeid": f'{daemon_spec.service_name}.{daemon_spec.rank}',
+                "pool": spec.pool,
+                "namespace": spec.namespace if spec.namespace else '',
+                "rgw_user": rgw_user,
+                "url": spec.rados_config_location(),
+                # fall back to default NFS port if not present in daemon_spec
+                "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
+                "bind_addr": daemon_spec.ip if daemon_spec.ip else '',
+            }
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
         # generate the cephadm config json
