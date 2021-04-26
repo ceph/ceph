@@ -14,7 +14,8 @@ namespace crimson::os::seastore::onode {
 
 FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   Transaction &trans,
-  const ghobject_t &hoid) {
+  const ghobject_t &hoid)
+{
   return tree.find(
     trans, hoid
   ).safe_then([this, &hoid](auto cursor)
@@ -41,7 +42,8 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
 FLTreeOnodeManager::get_or_create_onode_ret
 FLTreeOnodeManager::get_or_create_onode(
   Transaction &trans,
-  const ghobject_t &hoid) {
+  const ghobject_t &hoid)
+{
   if (hoid.hobj.oid.name.length() + hoid.hobj.nspace.length()
       > key_view_t::MAX_NS_OID_LENGTH) {
     return crimson::ct_error::value_too_large::make();
@@ -74,7 +76,8 @@ FLTreeOnodeManager::get_or_create_onode(
 FLTreeOnodeManager::get_or_create_onodes_ret
 FLTreeOnodeManager::get_or_create_onodes(
   Transaction &trans,
-  const std::vector<ghobject_t> &hoids) {
+  const std::vector<ghobject_t> &hoids)
+{
   return seastar::do_with(
     std::vector<OnodeRef>(),
     [this, &hoids, &trans](auto &ret) {
@@ -94,7 +97,8 @@ FLTreeOnodeManager::get_or_create_onodes(
 
 FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
   Transaction &trans,
-  const std::vector<OnodeRef> &onodes) {
+  const std::vector<OnodeRef> &onodes)
+{
   return crimson::do_for_each(
     onodes,
     [this, &trans](auto &onode) -> OnodeTree::btree_future<> {
