@@ -3,6 +3,10 @@ NFS_CORE_PARAM {
         Enable_NLM = false;
         Enable_RQUOTA = false;
         Protocols = 4;
+        NFS_Port = {{ port }};
+{% if bind_addr %}
+        Bind_addr = {{ bind_addr }};
+{% endif %}
 }
 
 MDCACHE {

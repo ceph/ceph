@@ -4365,8 +4365,8 @@ def command_deploy(ctx):
                       ports=daemon_ports)
 
     elif daemon_type == NFSGanesha.daemon_type:
-        if not ctx.reconfig and not redeploy:
-            daemon_ports.extend(NFSGanesha.port_map.values())
+        if not ctx.reconfig and not redeploy and not daemon_ports:
+            daemon_ports = list(NFSGanesha.port_map.values())
 
         config, keyring = get_config_and_keyring(ctx)
         # TODO: extract ganesha uid/gid (997, 994) ?
