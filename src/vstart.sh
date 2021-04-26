@@ -216,6 +216,7 @@ usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
+usage=$usage"\t--seastore use seastore as crimson osd backend\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default)\n"
 usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend\n"
 usage=$usage"\t-K, --kstore use kstore as the osd objectstore backend\n"
@@ -392,6 +393,9 @@ case $1 in
         ;;
     --memstore)
         objectstore="memstore"
+        ;;
+    --seastore)
+        objectstore="seastore"
         ;;
     -b | --bluestore)
         objectstore="bluestore"
