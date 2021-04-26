@@ -30,7 +30,7 @@ After=remote-fs-pre.target rbdmap-pre.target systemd-udevd-kernel.socket network
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/rbd device map %I{rdb_map_args}
+ExecStart=/usr/bin/rbd device map %I{rbd_map_args}
 ExecStartPost=-/etc/ceph/rbd.d/%I map /dev/rbd/%I
 ExecStop=-/etc/ceph/rbd.d/%I unmap /dev/rbd/%I
 ExecStop=/usr/bin/rbd device unmap %I{rbd_unmap_args}
@@ -189,7 +189,7 @@ def generate_one(line: str, dir_fd: int):
 
     template_args = {
         'rbdmap_path': RBDMAP_PATH,
-        'rdb_map_args': ''.join(' --' + a for a in rbd_map_args),
+        'rbd_map_args': ''.join(' --' + a for a in rbd_map_args),
         'unit_extra': '\n'.join(unit_extra),
         'rbd_unmap_args': rbd_unmap_args,
     }

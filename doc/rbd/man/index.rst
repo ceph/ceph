@@ -9,7 +9,6 @@
    rbd-fuse <../../man/8/rbd-fuse>
    rbd-nbd <../../man/8/rbd-nbd>
    rbd-ggate <../../man/8/rbd-ggate>
-   rbd-map <../../man/8/rbdmap>
    rbdmap-generator <../../man/8/rbdmap-generator>
    ceph-rbdnamer <../../man/8/ceph-rbdnamer>
    rbd-replay-prep <../../man/8/rbd-replay-prep>
