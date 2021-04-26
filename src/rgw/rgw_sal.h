@@ -918,16 +918,16 @@ class StoreManager {
 public:
   StoreManager() {}
   static rgw::sal::Store* get_storage(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads,
-                               bool run_sync_thread, bool run_reshard_thread, bool use_cache = true) {
+                               bool run_sync_thread, bool run_reshard_thread, bool use_cache = true, bool use_gc = true) {
     rgw::sal::Store* store = init_storage_provider(dpp, cct, svc, use_gc_thread, use_lc_thread,
-        quota_threads, run_sync_thread, run_reshard_thread, use_cache);
+        quota_threads, run_sync_thread, run_reshard_thread, use_cache, use_gc);
     return store;
   }
   static rgw::sal::Store* get_raw_storage(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc) {
     rgw::sal::Store* store = init_raw_storage_provider(dpp, cct, svc);
     return store;
   }
-  static rgw::sal::Store* init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache);
+  static rgw::sal::Store* init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache, bool use_gc);
   static rgw::sal::Store* init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc);
   static void close_storage(rgw::sal::Store* store);
 
