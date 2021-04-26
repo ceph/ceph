@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-**rbdmap-generator** is a generator that translates /etc/ceph/rbdmap into native
+**rbdmap-generator** is a generator that translates /etc/ceph/rbdtab into native
 systemd units early at boot and when configuration of the system manager is
 reloaded with ``systemctl daemon-reload``. This will create rbdmap@.service
 units as necessary. When these units are activated or deactivated, ``rbd device
@@ -23,7 +23,7 @@ map`` or ``rbd device unmap`` command is called as appropriate.
 
 **rbdmap-generator** implements **systemd.generator**\(7)
 
-The /etc/ceph/rbdmap file describes RBD devices that are set up during system
+The /etc/ceph/rbdtab file describes RBD devices that are set up during system
 boot.
 
 Empty lines and lines starting with the "#" character are ignored. Each of the
@@ -32,14 +32,24 @@ space.
 
 Each line is in the form::
 
-    image-or-snap-spec options
+    device-type image-or-snap-spec generic-options map-options unmap-options
+
+#. device-type is the device type used, as recognized by ``--device-type``
+   argument of ``rbd device map`` command. Currently, only ``krbd`` is
+   supported.
 
 #. image-or-snap-spec is the image or snapshot specification, in the form of
    [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>]. If only <image-name>
    is specified, <pool-name> defaults to "rbd".
 
-#. options is a comma-delimited list of options. This field is optional. The
-   supported options are listed below.
+#. generic-options is a comma-delimited list of options. This field is optional.
+   The supported options are listed below.
+
+#. map-options is passed unchanged to ``--options`` argument of ``rbd device
+   map`` command. This field is optional.
+
+#. unmap-options is passed unchanged to ``--options`` argument of ``rbd device
+   unmap`` command. This field is optional.
 
 If successful, the generated unit maps the image to a ``/dev/rbdX`` device, at
 which point a udev rule is triggered to create a friendly device name symlink,
@@ -50,14 +60,11 @@ should be used. Otherwise, a dependency loop might be created where the mount
 point will be pulled in by local-fs.target, while the service to configure the
 network is usually only started after the local file system has been mounted.
 
-Supported Options in Config File
---------------------------------
+For capability reason, if /etc/ceph/rbdtab file is not present, /etc/ceph/rbdmap
+file will be read and parsed in a way compatible with the old ``rbdmap`` script.
 
-.. option:: conf=, cluster=, id=, name=, mon_host=, keyfile=, keyring=, \
-   device-type=, read-only, exclusive, quiesce=, quiesce-hook=
-
-   These options are passed to :program:`rbd`\(8) command directly as
-   command-line arguments.
+Supported Generic Options in Config File
+----------------------------------------
 
 .. option:: noauto, auto
 
@@ -82,27 +89,30 @@ Supported Options in Config File
 
    See systemd.unit(5) for details.
 
-All other options that not start with "x-" are passed unchanged to ``rbd device
-map`` command as the value of ``--options`` argument. See "Kernel rbd (krbd)
-options" in :program:`rbd`\(8) for details
+All other options that not start with "x-" are passed to ``rbd device map``
+command directly as command-line arguments.. See :program:`rbd`\(8) for details
 
 
 Examples
 ========
 
-Example ``/etc/ceph/rbdmap`` for three RBD images: "bar1" in pool "rbd"; "bar2"
+Example ``/etc/ceph/rbdtab`` for three RBD images: "bar1" in pool "rbd"; "bar2"
 and "bar3" in pool "foopool"::
 
-    bar1
-    foopool/bar2    id=admin,noauto
-    foopool/bar3    id=admin,lock_on_read,queue_depth=1024
+    krbd bar1
+    krbd foopool/bar2    id=admin,noauto
+    krbd foopool/bar3    id=admin        lock_on_read,queue_depth=1024  force
 
 When the devices are mapped, the following ``rbd device map`` commands are
 called::
 
-    rbd device map rbd/bar1
-    rbd device map foopool/bar2 --id=admin
-    rbd device map foopool/bar3 --id=admin --options=lock_on_read,queue_depth=1024
+    rbd device map rbd/bar1 --device-type=krbd
+    rbd device map foopool/bar2 --id=admin --device-type=krbd
+    rbd device map foopool/bar3 --id=admin --device-type=krbd --options=lock_on_read,queue_depth=1024
+
+When the last one is unmapped, the following command is called::
+
+    rbd device unmap foopool/bar3 --device-type=krbd --options=force
 
 If the images had XFS file systems on them, the corresponding ``/etc/fstab``
 entries might look like this::
@@ -115,7 +125,7 @@ For image "bar2", we create an automount in this example. The first access to
 the directory /mnt/bar2 will trigger the mount, which in turn will trigger the
 RBD device mapping.
 
-After creating the images and populating the ``/etc/ceph/rbdmap`` file, making
+After creating the images and populating the ``/etc/ceph/rbdtab`` file, making
 the images get automatically mapped and mounted at boot is just a matter of
 enabling that unit (which may already be done on package installation)::
 
