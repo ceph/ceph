@@ -9,6 +9,7 @@ include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
 
+check_function_exists(memset_s HAVE_MEMSET_S)
 check_function_exists(fallocate CEPH_HAVE_FALLOCATE)
 check_function_exists(posix_fadvise HAVE_POSIX_FADVISE)
 check_function_exists(posix_fallocate HAVE_POSIX_FALLOCATE)

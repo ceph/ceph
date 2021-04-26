@@ -3,6 +3,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+/* Define to 1 if you have the `memset_s()` function. */
+#cmakedefine HAVE_MEMSET_S
+
 /* fallocate(2) is supported */
 #cmakedefine CEPH_HAVE_FALLOCATE
 
