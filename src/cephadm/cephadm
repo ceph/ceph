@@ -492,43 +492,6 @@ class NFSGanesha(object):
                 os.fchown(f.fileno(), uid, gid)
                 f.write(self.rgw.get('keyring', ''))
 
-    def get_rados_grace_container(self, action):
-        # type: (str) -> CephContainer
-        """Container for a ganesha action on the grace db"""
-        entrypoint = '/usr/bin/ganesha-rados-grace'
-
-        assert self.pool
-        args = ['--pool', self.pool]
-        if self.namespace:
-            args += ['--ns', self.namespace]
-        if self.userid:
-            args += ['--userid', self.userid]
-
-        meta = json.loads(self.ctx.meta_json)
-        if 'service_name' in meta and 'rank' in meta:
-            nodeid = f"{meta['service_name']}.{meta['rank']}"
-        else:
-            nodeid = self.daemon_id
-
-        args += [action, nodeid]
-
-        data_dir = get_data_dir(self.fsid, self.ctx.data_dir,
-                                self.daemon_type, self.daemon_id)
-        volume_mounts = self.get_container_mounts(data_dir)
-        envs = self.get_container_envs()
-
-        logger.info('Creating RADOS grace for action: %s' % action)
-        c = CephContainer(
-            self.ctx,
-            image=self.image,
-            entrypoint=entrypoint,
-            args=args,
-            volume_mounts=volume_mounts,
-            cname=self.get_container_name(desc='grace-%s' % action),
-            envs=envs
-        )
-        return c
-
 ##################################
 
 
@@ -2754,11 +2717,6 @@ def deploy_daemon_units(
                     memory_limit=ctx.memory_limit,
                 )
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
-        elif daemon_type == NFSGanesha.daemon_type:
-            # add nfs to the rados grace db
-            nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
-            prestart = nfs_ganesha.get_rados_grace_container('add')
-            _write_container_cmd_to_bash(ctx, f, prestart, 'add daemon to rados grace')
         elif daemon_type == CephIscsi.daemon_type:
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
@@ -2807,11 +2765,6 @@ def deploy_daemon_units(
                                                     daemon_id),
             )
             _write_container_cmd_to_bash(ctx, f, poststop, 'deactivate osd')
-        elif daemon_type == NFSGanesha.daemon_type:
-            # remove nfs from the rados grace db
-            nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
-            poststop = nfs_ganesha.get_rados_grace_container('remove')
-            _write_container_cmd_to_bash(ctx, f, poststop, 'remove daemon from rados grace')
         elif daemon_type == CephIscsi.daemon_type:
             # make sure we also stop the tcmu container
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
