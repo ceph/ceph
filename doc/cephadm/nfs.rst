@@ -26,7 +26,7 @@ pool *nfs-ganesha* and the namespace *nfs-ns*, run this command:
    ceph orch apply nfs foo nfs-ganesha nfs-ns
 
 .. note::
-   If the *nfs-ganesha* doesn't exist, create it.
+   If the *nfs-ganesha* pool doesn't exist, create it.
 
 See :ref:`orchestrator-cli-placement-spec` for the details of the placement
 specification.
