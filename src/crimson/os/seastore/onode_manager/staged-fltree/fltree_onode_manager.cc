@@ -18,12 +18,12 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   return tree.find(
     trans, hoid
   ).safe_then([this, &hoid](auto cursor)
-	      -> get_onode_ret {
+              -> get_onode_ret {
     if (cursor == tree.end()) {
       logger().debug(
-	"FLTreeOnodeManager::{}: no entry for {}",
-	__func__,
-	hoid);
+        "FLTreeOnodeManager::{}: no entry for {}",
+        __func__,
+        hoid);
       return crimson::ct_error::enoent::make();
     }
     auto val = OnodeRef(new FLTreeOnode(cursor.value()));
@@ -50,14 +50,14 @@ FLTreeOnodeManager::get_or_create_onode(
     trans, hoid,
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
   ).safe_then([&trans, &hoid](auto p)
-	      -> get_or_create_onode_ret {
+              -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
     auto val = OnodeRef(new FLTreeOnode(cursor.value()));
     if (created) {
       logger().debug(
-	"FLTreeOnodeManager::{}: created onode for entry for {}",
-	__func__,
-	hoid);
+        "FLTreeOnodeManager::{}: created onode for entry for {}",
+        __func__,
+        hoid);
       val->get_mutable_layout(trans) = onode_layout_t{};
     }
     return seastar::make_ready_future<OnodeRef>(
@@ -80,15 +80,15 @@ FLTreeOnodeManager::get_or_create_onodes(
     [this, &hoids, &trans](auto &ret) {
       ret.reserve(hoids.size());
       return crimson::do_for_each(
-	hoids,
-	[this, &trans, &ret](auto &hoid) {
-	  return get_or_create_onode(trans, hoid
-	  ).safe_then([&ret](auto &&onoderef) {
-	    ret.push_back(std::move(onoderef));
-	  });
-	}).safe_then([&ret] {
-	  return std::move(ret);
-	});
+        hoids,
+        [this, &trans, &ret](auto &hoid) {
+          return get_or_create_onode(trans, hoid
+          ).safe_then([&ret](auto &&onoderef) {
+            ret.push_back(std::move(onoderef));
+          });
+        }).safe_then([&ret] {
+          return std::move(ret);
+        });
     });
 }
 
@@ -101,22 +101,22 @@ FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
       auto &flonode = static_cast<FLTreeOnode&>(*onode);
       switch (flonode.status) {
       case FLTreeOnode::status_t::MUTATED: {
-	flonode.populate_recorder(trans);
-	return seastar::now();
+        flonode.populate_recorder(trans);
+        return seastar::now();
       }
       case FLTreeOnode::status_t::DELETED: {
-	return tree.erase(trans, flonode);
+        return tree.erase(trans, flonode);
       }
       case FLTreeOnode::status_t::STABLE: {
-	return seastar::now();
+        return seastar::now();
       }
       default:
-	__builtin_unreachable();
+        __builtin_unreachable();
       }
     }).handle_error(
       write_dirty_ertr::pass_further{},
       crimson::ct_error::assert_all{
-	"Invalid error in FLTreeOnodeManager::write_dirty"
+        "Invalid error in FLTreeOnodeManager::write_dirty"
       }
     );
 }

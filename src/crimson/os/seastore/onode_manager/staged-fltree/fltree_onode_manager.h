@@ -88,14 +88,14 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
     tree(std::make_unique<SeastoreNodeExtentManager>(
-	   tm, laddr_t{})) {}
+           tm, laddr_t{})) {}
 
   mkfs_ret mkfs(Transaction &t) {
     return tree.mkfs(t
     ).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-	"Invalid error in FLTreeOnodeManager::mkfs"
+        "Invalid error in FLTreeOnodeManager::mkfs"
       }
     );
   }
