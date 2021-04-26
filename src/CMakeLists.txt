@@ -584,7 +584,7 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-if(NOT WIN32)
+if(WITH_CEPHFS)
   find_package(Lua 5.3 REQUIRED)
 endif()
 
