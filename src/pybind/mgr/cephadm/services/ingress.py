@@ -64,6 +64,9 @@ class IngressService(CephService):
     ) -> Tuple[Dict[str, Any], List[str]]:
         spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         assert spec.backend_service
+        if spec.backend_service not in self.mgr.spec_store:
+            raise RuntimeError(f'{spec.service_name()} backend service {spec.backend_service} does not exist')
+        backend_spec = self.mgr.spec_store[spec.backend_service].spec
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
         deps = [d.name() for d in daemons]
 
@@ -80,17 +83,48 @@ class IngressService(CephService):
         if spec.monitor_password:
             password = spec.monitor_password
 
+        if backend_spec.service_type == 'nfs':
+            mode = 'tcp'
+            by_rank = {d.rank: d for d in daemons if d.rank is not None}
+            servers = []
+
+            # try to establish how many ranks we *should* have
+            num_ranks = backend_spec.placement.count
+            if not num_ranks:
+                num_ranks = 1 + max(by_rank.keys())
+
+            for rank in range(num_ranks):
+                if rank in by_rank:
+                    d = by_rank[rank]
+                    assert(d.ports)
+                    servers.append({
+                        'name': f"{spec.backend_service}.{rank}",
+                        'ip': d.ip or resolve_ip(str(d.hostname)),
+                        'port': d.ports[0],
+                    })
+                else:
+                    # offline/missing server; leave rank in place
+                    servers.append({
+                        'name': f"{spec.backend_service}.{rank}",
+                        'ip': '0.0.0.0',
+                        'port': 0,
+                    })
+        else:
+            mode = 'http'
+            servers = [
+                {
+                    'name': d.name(),
+                    'ip': d.ip or resolve_ip(str(d.hostname)),
+                    'port': d.ports[0],
+                } for d in daemons if d.ports
+            ]
+
         haproxy_conf = self.mgr.template.render(
             'services/ingress/haproxy.cfg.j2',
             {
                 'spec': spec,
-                'servers': [
-                    {
-                        'name': d.name(),
-                        'ip': d.ip or resolve_ip(str(d.hostname)),
-                        'port': d.ports[0],
-                    } for d in daemons if d.ports
-                ],
+                'mode': mode,
+                'servers': servers,
                 'user': spec.monitor_user or 'admin',
                 'password': password,
                 'ip': daemon_spec.ip or '*',
@@ -194,7 +228,8 @@ class IngressService(CephService):
 
         # remove host, daemon is being deployed on from hosts list for
         # other_ips in conf file and converter to ips
-        hosts.remove(host)
+        if host in hosts:
+            hosts.remove(host)
         other_ips = [resolve_ip(h) for h in hosts]
 
         keepalived_conf = self.mgr.template.render(
