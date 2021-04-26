@@ -83,7 +83,7 @@ class List(object):
                 'osd_id': int(whoami),
                 'osd_uuid': oj[dev]['osd_uuid'],
                 'ceph_fsid': oj[dev]['ceph_fsid'],
-                'dev': dev
+                'device': dev
             }
         return result
 
