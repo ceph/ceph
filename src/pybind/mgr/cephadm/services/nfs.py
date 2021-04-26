@@ -1,5 +1,8 @@
 import errno
 import logging
+import os
+import subprocess
+import tempfile
 from typing import Dict, Tuple, Any, List, cast, Optional
 
 from mgr_module import HandleCommandResult
@@ -39,6 +42,9 @@ class NFSService(CephService):
                     if daemon_id is not None:
                         self.fence(daemon_id)
                 del rank_map[rank]
+                nodeid = f'{spec.service_name()}.{rank}'
+                self.mgr.log.info(f'Removing {nodeid} from the ganesha grace table')
+                self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
                 self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
             else:
                 max_gen = max(m.keys())
@@ -69,9 +75,15 @@ class NFSService(CephService):
 
         deps: List[str] = []
 
+        nodeid = f'{daemon_spec.service_name}.{daemon_spec.rank}'
+
         # create the RADOS recovery pool keyring
         rados_user = f'{daemon_type}.{daemon_id}'
         rados_keyring = self.create_keyring(daemon_spec)
+
+        # ensure rank is known to ganesha
+        self.mgr.log.info(f'Ensuring {nodeid} is in the ganesha grace table')
+        self.run_grace_tool(spec, 'add', nodeid)
 
         # create the rados config object
         self.create_rados_config_obj(spec)
@@ -84,7 +96,7 @@ class NFSService(CephService):
         def get_ganesha_conf() -> str:
             context = {
                 "user": rados_user,
-                "nodeid": f'{daemon_spec.service_name}.{daemon_spec.rank}',
+                "nodeid": nodeid,
                 "pool": spec.pool,
                 "namespace": spec.namespace if spec.namespace else '',
                 "rgw_user": rgw_user,
@@ -171,6 +183,53 @@ class NFSService(CephService):
                                               'osd', 'allow rwx tag rgw *=*'])
 
         return keyring
+
+    def run_grace_tool(self,
+                       spec: NFSServiceSpec,
+                       action: str,
+                       nodeid: str) -> None:
+        # write a temp keyring and referencing config file.  this is a kludge
+        # because the ganesha-grace-tool can only authenticate as a client (and
+        # not a mgr).  Also, it doesn't allow you to pass a keyring location via
+        # the command line, nor does it parse the CEPH_ARGS env var.
+        tmp_id = f'mgr.nfs.grace.{spec.service_name()}'
+        entity = AuthEntity(f'client.{tmp_id}')
+        keyring = self.get_keyring_with_caps(
+            entity,
+            ['mon', 'allow r', 'osd', f'allow rwx pool {spec.pool}']
+        )
+        tmp_keyring = tempfile.NamedTemporaryFile(mode='w', prefix='mgr-grace-keyring')
+        os.fchmod(tmp_keyring.fileno(), 0o600)
+        tmp_keyring.write(keyring)
+        tmp_keyring.flush()
+        tmp_conf = tempfile.NamedTemporaryFile(mode='w', prefix='mgr-grace-conf')
+        tmp_conf.write(self.mgr.get_minimal_ceph_conf())
+        tmp_conf.write(f'\tkeyring = {tmp_keyring.name}\n')
+        tmp_conf.flush()
+        try:
+            cmd: List[str] = [
+                'ganesha-rados-grace',
+                '--cephconf', tmp_conf.name,
+                '--userid', tmp_id,
+                '--pool', cast(str, spec.pool),
+            ]
+            if spec.namespace:
+                cmd += ['--ns', spec.namespace]
+            cmd += [action, nodeid]
+            self.mgr.log.debug(cmd)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    timeout=10)
+            if result.returncode:
+                self.mgr.log.warning(
+                    f'ganesha-rados-grace tool failed: {result.stderr.decode("utf-8")}'
+                )
+                raise RuntimeError(f'grace tool failed: {result.stderr.decode("utf-8")}')
+
+        finally:
+            self.mgr.check_mon_command({
+                'prefix': 'auth rm',
+                'entity': entity,
+            })
 
     def remove_rgw_keyring(self, daemon: DaemonDescription) -> None:
         assert daemon.daemon_id is not None
