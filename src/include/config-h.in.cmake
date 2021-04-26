@@ -66,6 +66,9 @@
 /* Define if the system has the type `in_addr_t' */
 #cmakedefine HAVE_IN_ADDR_T
 
+/* Define if you have suseconds_t */
+#cmakedefine HAVE_SUSECONDS_T
+
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
 
