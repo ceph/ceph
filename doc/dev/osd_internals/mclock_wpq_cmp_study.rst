@@ -432,7 +432,7 @@ objects to be recovered in all the cases using HDDs with WAL and dB was around
 
 .. image:: ../../images/mclock_wpq_study/Recovery_Rate_Comparison_HDD_WALdB_WPQ_vs_mClock.png
 
-As expected, the *high_client_ops* impacts recovery opeations the most as it
+As expected, the *high_client_ops* impacts recovery operations the most as it
 took an average of  ~1409 secs for the recovery to complete at ~3 Objects/sec.
 The recovery bandwidth as expected was the lowest at ~11 MiB/s.
 
