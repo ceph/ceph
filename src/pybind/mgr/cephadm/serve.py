@@ -840,6 +840,10 @@ class CephadmServe:
             if spec and spec.unmanaged:
                 continue
 
+            # ignore daemons for deleted services
+            if dd.service_name() in self.mgr.spec_store.spec_deleted:
+                continue
+
             # These daemon types require additional configs after creation
             if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
                 daemons_post[dd.daemon_type].append(dd)
