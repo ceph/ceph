@@ -632,9 +632,9 @@ public:
 
   void init() {
     auto segment_cleaner = std::make_unique<SegmentCleaner>(
-      SegmentCleaner::config_t::default_from_segment_manager(
-	*segment_manager),
+      SegmentCleaner::config_t::get_default(),
       false /* detailed */);
+    segment_cleaner->mount(*segment_manager);
     auto journal = std::make_unique<Journal>(*segment_manager);
     auto cache = std::make_unique<Cache>(*segment_manager);
     auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
