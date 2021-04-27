@@ -440,6 +440,7 @@ struct entity_addr_t {
     return ss.str();
   }
 
+  bool parse(const std::string_view s);
   bool parse(const char *s, const char **end = 0, int type=0);
 
   void decode_legacy_addr_after_marker(ceph::buffer::list::const_iterator& bl)
