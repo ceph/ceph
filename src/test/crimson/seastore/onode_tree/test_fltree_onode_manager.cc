@@ -128,6 +128,15 @@ struct fltree_onode_manager_test_t
     });
   }
 
+  void validate_erased(iterator_t& it) {
+    with_transaction([this, &it] (auto& t) {
+      auto p_kv = *it;
+      auto exist = manager->contains_onode(
+          t, p_kv->key).unsafe_get0();
+      ceph_assert(exist == false);
+    });
+  }
+
   template <typename F>
   void with_onodes_process(
       iterator_t& start, iterator_t& end, F&& f) {
@@ -176,6 +185,18 @@ struct fltree_onode_manager_test_t
     });
   }
 
+  void validate_erased(
+      iterator_t& start, iterator_t& end) {
+    with_onodes_process(start, end,
+        [this] (auto& t, auto& oids, auto& items) {
+      for (auto& oid : oids) {
+        auto exist = manager->contains_onode(
+            t, oid).unsafe_get0();
+        ceph_assert(exist == false);
+      }
+    });
+  }
+
   fltree_onode_manager_test_t() {}
 };
 
@@ -193,6 +214,12 @@ TEST_F(fltree_onode_manager_test_t, 1_single)
       item.modify(t, onode);
     });
     validate_onode(iter);
+
+    with_onode_write(iter, [this](auto& t, auto& onode, auto& item) {
+      OnodeRef onode_ref = &onode;
+      manager->erase_onode(t, onode_ref).unsafe_get0();
+    });
+    validate_erased(iter);
   });
 }
 
@@ -224,6 +251,20 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
         [](auto& t, auto& onode, auto& item) {
       item.modify(t, onode);
     });
+    validate_onodes(start, end);
+
+    pool.shuffle();
+    rd_start = pool.random_begin();
+    rd_end = rd_start + 50;
+    with_onodes_write(rd_start, rd_end,
+        [this](auto& t, auto& onode, auto& item) {
+      OnodeRef onode_ref = &onode;
+      manager->erase_onode(t, onode_ref).unsafe_get0();
+    });
+    validate_erased(rd_start, rd_end);
+    pool.erase_from_random(rd_start, rd_end);
+    start = pool.begin();
+    end = pool.end();
     validate_onodes(start, end);
   });
 }

@@ -12,6 +12,20 @@ namespace {
 
 namespace crimson::os::seastore::onode {
 
+FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(
+  Transaction &trans,
+  const ghobject_t &hoid)
+{
+  return tree.contains(
+    trans, hoid
+  ).handle_error(
+    contains_onode_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in FLTreeOnodeManager::contains_onode"
+    }
+  );
+}
+
 FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   Transaction &trans,
   const ghobject_t &hoid)
@@ -123,6 +137,15 @@ FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
         "Invalid error in FLTreeOnodeManager::write_dirty"
       }
     );
+}
+
+FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
+  Transaction &trans,
+  OnodeRef &onode)
+{
+  auto &flonode = static_cast<FLTreeOnode&>(*onode);
+  flonode.mark_delete();
+  return erase_onode_ertr::now();
 }
 
 FLTreeOnodeManager::~FLTreeOnodeManager() {}

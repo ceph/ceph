@@ -27,6 +27,12 @@ public:
   using mkfs_ret = mkfs_ertr::future<>;
   virtual mkfs_ret mkfs(Transaction &t) = 0;
 
+  using contains_onode_ertr = base_ertr;
+  using contains_onode_ret = contains_onode_ertr::future<bool>;
+  virtual contains_onode_ret contains_onode(
+    Transaction &trans,
+    const ghobject_t &hoid) = 0;
+
   using get_onode_ertr = base_ertr::extend<
     crimson::ct_error::enoent>;
   using get_onode_ret = get_onode_ertr::future<
@@ -56,6 +62,12 @@ public:
   virtual write_dirty_ret write_dirty(
     Transaction &trans,
     const std::vector<OnodeRef> &onodes) = 0;
+
+  using erase_onode_ertr = base_ertr;
+  using erase_onode_ret = erase_onode_ertr::future<>;
+  virtual erase_onode_ret erase_onode(
+    Transaction &trans,
+    OnodeRef &onode) = 0;
 
   virtual ~OnodeManager() {}
 };
