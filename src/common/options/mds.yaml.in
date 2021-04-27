@@ -95,6 +95,10 @@ options:
   type: float
   level: advanced
   desc: amount of memory to reserve for future cached objects
+  fmt_desc: The cache reservation (memory or inodes) for the MDS cache to maintain.
+    Once the MDS begins dipping into its reservation, it will recall
+    client state until its cache size shrinks to restore the
+    reservation.
   default: 0.05
   services:
   - mds
@@ -111,6 +115,8 @@ options:
   type: float
   level: advanced
   desc: midpoint for MDS cache LRU
+  fmt_desc: The insertion point for new items in the cache LRU
+    (from the top).
   default: 0.7
   services:
   - mds
@@ -144,6 +150,8 @@ options:
   type: int
   level: advanced
   desc: maximum size in megabytes for a RADOS write to a directory
+  fmt_desc: The maximum size of a directory update before Ceph breaks it into
+    smaller transactions (MB).
   default: 10
   services:
   - mds
@@ -167,7 +175,7 @@ options:
 - name: mds_beacon_interval
   type: float
   level: advanced
-  desc: interval in seconds between MDS beacons to monitors
+  desc: interval in seconds between MDS beacon messages sent to monitors
   default: 4
   services:
   - mds
@@ -176,6 +184,8 @@ options:
   type: float
   level: advanced
   desc: tolerance in seconds for missed MDS beacons to monitors
+  fmt_desc: The interval without beacons before Ceph declares an MDS laggy
+    (and possibly replace it).
   default: 15
   services:
   - mds
@@ -383,6 +393,7 @@ options:
   type: float
   level: advanced
   desc: time in seconds between upkeep tasks
+  fmt_desc: How frequently the MDS performs internal periodic tasks.
   default: 5
   services:
   - mds
@@ -394,12 +405,15 @@ options:
   default: 1
   services:
   - mds
+  fmt_desc: The minimum interval (in seconds) to try to avoid propagating
+    recursive stats up the tree.
   with_legacy: true
 # how quickly dirstat changes propagate up the hierarchy
 - name: mds_scatter_nudge_interval
   type: float
   level: advanced
   desc: minimum interval between scatter lock updates
+  fmt_desc: How quickly dirstat changes propagate up.
   default: 5
   services:
   - mds
@@ -408,6 +422,7 @@ options:
   type: int
   level: advanced
   desc: number of unused inodes to pre-allocate to clients for file creation
+  fmt_desc: The number of inode numbers to preallocate per client session.
   default: 1000
   services:
   - mds
