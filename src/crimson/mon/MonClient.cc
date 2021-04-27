@@ -46,7 +46,7 @@ namespace crimson::mon {
 
 using crimson::common::local_conf;
 
-class Connection {
+class Connection : public seastar::enable_shared_from_this<Connection> {
 public:
   Connection(const AuthRegistry& auth_registry,
              crimson::net::ConnectionRef conn,
@@ -95,7 +95,7 @@ private:
 
 private:
   bool closed = false;
-  seastar::shared_promise<Ref<MAuthReply>> reply;
+  seastar::shared_promise<Ref<MAuthReply>> auth_reply;
   // v2
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point auth_start;
@@ -123,8 +123,9 @@ Connection::Connection(const AuthRegistry& auth_registry,
 seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 {
   logger().info("{}", __func__);
-  reply.set_value(m);
-  reply = {};
+  ceph_assert(m);
+  auth_reply.set_value(m);
+  auth_reply = {};
   return seastar::now();
 }
 
@@ -222,8 +223,8 @@ Connection::do_auth_single(Connection::request_t what)
   logger().info("sending {}", *m);
   return conn->send(m).then([this] {
     logger().info("waiting");
-    return reply.get_shared_future();
-  }).then([this] (Ref<MAuthReply> m) {
+    return auth_reply.get_shared_future();
+  }).then([this, life_extender=shared_from_this()] (Ref<MAuthReply> m) {
     if (!m) {
       ceph_assert(closed);
       logger().info("do_auth_single: connection closed");
@@ -257,7 +258,8 @@ Connection::do_auth_single(Connection::request_t what)
 
 seastar::future<Connection::auth_result_t>
 Connection::do_auth(Connection::request_t what) {
-  return seastar::repeat_until_value([this, what]() {
+  return seastar::repeat_until_value(
+    [this, life_extender=shared_from_this(), what]() {
     return do_auth_single(what);
   });
 }
@@ -376,8 +378,8 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
 void Connection::close()
 {
   logger().info("{}", __func__);
-  reply.set_value(Ref<MAuthReply>(nullptr));
-  reply = {};
+  auth_reply.set_value(Ref<MAuthReply>(nullptr));
+  auth_reply = {};
   if (auth_done) {
     auth_done->set_value(auth_result_t::canceled);
     auth_done.reset();
@@ -929,7 +931,7 @@ seastar::future<bool> Client::reopen_session(int rank)
   logger().info("{} to mon.{}", __func__, rank);
   if (active_con) {
     active_con->close();
-    active_con.reset();
+    active_con = nullptr;
     ceph_assert(pending_conns.empty());
   } else {
     for (auto& pending_con : pending_conns) {
@@ -957,7 +959,7 @@ seastar::future<bool> Client::reopen_session(int rank)
     logger().info("connecting to mon.{}", rank);
     auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
     auto& mc = pending_conns.emplace_back(
-      std::make_unique<Connection>(auth_registry, conn, &keyring));
+      seastar::make_shared<Connection>(auth_registry, conn, &keyring));
     assert(conn->get_peer_addr().is_msgr2());
     return mc->authenticate_v2().then([peer, this](auto result) {
       if (result == Connection::auth_result_t::success) {
@@ -1000,7 +1002,7 @@ void Client::_finish_auth(const entity_addr_t& peer)
 
   ceph_assert(!active_con && !pending_conns.empty());
   active_con = std::move(*found);
-  found->reset();
+  *found = nullptr;
   for (auto& conn : pending_conns) {
     if (conn) {
       conn->close();
