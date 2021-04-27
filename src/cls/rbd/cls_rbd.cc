@@ -7996,7 +7996,7 @@ int namespace_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int sparsify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  size_t sparse_size;
+  uint64_t sparse_size;
   bool remove_empty;
   try {
     auto iter = in->cbegin();
