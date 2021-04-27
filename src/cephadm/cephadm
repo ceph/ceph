@@ -4572,8 +4572,8 @@ def command_ceph_volume(ctx):
         privileged=True,
         volume_mounts=mounts,
     )
-    verbosity = CallVerbosity.VERBOSE if ctx.log_output else CallVerbosity.VERBOSE_ON_FAILURE
-    out, err, code = call_throws(ctx, c.run_cmd(), verbosity=verbosity)
+
+    out, err, code = call_throws(ctx, c.run_cmd())
     if not code:
         print(out)
 
@@ -7079,7 +7079,6 @@ class CephadmDaemon():
         # expects to use
         self.ctx.command = 'inventory --format=json'.split()
         self.ctx.fsid = self.fsid
-        self.ctx.log_output = False
 
         ctr = 0
         exception_encountered = False
@@ -7697,11 +7696,6 @@ def _get_parser():
     parser_ceph_volume.add_argument(
         '--keyring', '-k',
         help='ceph.keyring to pass through to the container')
-    parser_ceph_volume.add_argument(
-        '--log-output',
-        action='store_true',
-        default=True,
-        help='suppress ceph volume output from the log')
     parser_ceph_volume.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
