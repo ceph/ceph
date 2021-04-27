@@ -91,7 +91,7 @@ public:
   get_version_t get_version(const std::string& map);
   command_result_t run_command(std::string&& cmd,
                                bufferlist&& bl);
-  seastar::future<> send_message(MessageRef);
+  seastar::future<> send_message(MessageURef);
   bool sub_want(const std::string& what, version_t start, unsigned flags);
   void sub_got(const std::string& what, version_t have);
   void sub_unwant(const std::string& what);
@@ -180,8 +180,8 @@ private:
 
   // messages that are waiting for the active_con to be available
   struct pending_msg_t {
-    pending_msg_t(MessageRef& m) : msg(m) {}
-    MessageRef msg;
+    pending_msg_t(MessageURef m) : msg(std::move(m)) {}
+    MessageURef msg;
     seastar::promise<> pr;
   };
   std::deque<pending_msg_t> pending_messages;
