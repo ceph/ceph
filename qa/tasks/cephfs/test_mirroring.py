@@ -234,25 +234,11 @@ class TestMirroring(CephFSTestCase):
         log.debug(f'command returned={res}')
         return json.loads(res)
 
-    def get_mirror_daemon_id(self):
-        ceph_status = json.loads(self.fs.mon_manager.raw_cluster_cmd("status", "--format=json"))
-        log.debug(f'ceph_status: {ceph_status}')
-        daemon_id = None
-        for k in ceph_status['servicemap']['services']['cephfs-mirror']['daemons']:
-            try:
-                daemon_id = int(k)
-                break #nit, only a single mirror daemon is expected -- bail out.
-            except ValueError:
-                pass
-
-        log.debug(f'daemon_id: {daemon_id}')
-        self.assertTrue(daemon_id is not None)
-        return daemon_id
-
-    def get_mirror_daemon_status(self, daemon_id, fs_name, fs_id):
+    def get_mirror_daemon_status(self, fs_name, fs_id):
         daemon_status = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "daemon", "status", fs_name))
         log.debug(f'daemon_status: {daemon_status}')
-        status = daemon_status[str(daemon_id)][str(fs_id)]
+        # running a single mirror daemon is supported
+        status = daemon_status[0]
         log.debug(f'status: {status}')
         return status
 
@@ -666,43 +652,42 @@ class TestMirroring(CephFSTestCase):
     def test_cephfs_mirror_service_daemon_status(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
-        peer_uuid = self.get_peer_uuid("client.mirror_remote@ceph")
-
-        daemon_id = self.get_mirror_daemon_id()
 
         time.sleep(30)
-        status = self.get_mirror_daemon_status(daemon_id, self.primary_fs_name, self.primary_fs_id)
+        status = self.get_mirror_daemon_status(self.primary_fs_name, self.primary_fs_id)
+
+        # assumption for this test: mirroring enabled for a single filesystem w/ single
+        # peer
 
         # we have not added any directories
-        self.assertEquals(status['directory_count'], 0)
-
-        peer_stats = status['peers'][peer_uuid]['stats']
-        self.assertEquals(peer_stats['failure_count'], 0)
-        self.assertEquals(peer_stats['recovery_count'], 0)
+        peer = status['filesystems'][0]['peers'][0]
+        self.assertEquals(status['filesystems'][0]['directory_count'], 0)
+        self.assertEquals(peer['stats']['failure_count'], 0)
+        self.assertEquals(peer['stats']['recovery_count'], 0)
 
         # add a non-existent directory for synchronization -- check if its reported
         # in daemon stats
         self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
 
         time.sleep(120)
-        status = self.get_mirror_daemon_status(daemon_id, self.primary_fs_name, self.primary_fs_id)
+        status = self.get_mirror_daemon_status(self.primary_fs_name, self.primary_fs_id)
         # we added one
-        self.assertEquals(status['directory_count'], 1)
-        peer_stats = status['peers'][peer_uuid]['stats']
+        peer = status['filesystems'][0]['peers'][0]
+        self.assertEquals(status['filesystems'][0]['directory_count'], 1)
         # failure count should be reflected
-        self.assertEquals(peer_stats['failure_count'], 1)
-        self.assertEquals(peer_stats['recovery_count'], 0)
+        self.assertEquals(peer['stats']['failure_count'], 1)
+        self.assertEquals(peer['stats']['recovery_count'], 0)
 
         # create the directory, mirror daemon would recover
         self.mount_a.run_shell(["mkdir", "d0"])
 
         time.sleep(120)
-        status = self.get_mirror_daemon_status(daemon_id, self.primary_fs_name, self.primary_fs_id)
-        self.assertEquals(status['directory_count'], 1)
-        peer_stats = status['peers'][peer_uuid]['stats']
+        status = self.get_mirror_daemon_status(self.primary_fs_name, self.primary_fs_id)
+        peer = status['filesystems'][0]['peers'][0]
+        self.assertEquals(status['filesystems'][0]['directory_count'], 1)
         # failure and recovery count should be reflected
-        self.assertEquals(peer_stats['failure_count'], 1)
-        self.assertEquals(peer_stats['recovery_count'], 1)
+        self.assertEquals(peer['stats']['failure_count'], 1)
+        self.assertEquals(peer['stats']['recovery_count'], 1)
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 

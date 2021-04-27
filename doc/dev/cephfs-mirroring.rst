@@ -220,27 +220,32 @@ status::
 E.g::
 
   $ ceph fs snapshot mirror daemon status a | jq
-  {
-  "14135": {
-    "1": {
-      "name": "a",
-      "directory_count": 0,
-      "peers": {
-        "ae3f22e6-1c72-4a81-8d5d-eebca3bfd29d": {
-          "remote": {
-            "client_name": "client.mirror_remote",
-            "cluster_name": "site-remote",
-            "fs_name": "backup_fs"
-          },
-          "stats": {
-            "failure_count": 0,
-            "recovery_count": 0
+  [
+    {
+      "daemon_id": 284167,
+      "filesystems": [
+        {
+          "filesystem_id": 1,
+          "name": "a",
+          "directory_count": 1,
+          "peers": [
+            {
+              "uuid": "02117353-8cd1-44db-976b-eb20609aa160",
+              "remote": {
+                "client_name": "client.mirror_remote",
+                "cluster_name": "ceph",
+                "fs_name": "backup_fs"
+              },
+              "stats": {
+                "failure_count": 1,
+                "recovery_count": 0
+              }
             }
-          }
+          ]
         }
-      }
+      ]
     }
-  }
+  ]
 
 An entry per mirror daemon instance is displayed along with information such as configured
 peers and basic stats. For more detailed stats, use the admin socket interface as detailed
