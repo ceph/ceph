@@ -30,6 +30,7 @@ TransactionManager::TransactionManager(
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
+  segment_cleaner->mount(segment_manager);
   return journal->open_for_write().safe_then([this, FNAME](auto addr) {
     DEBUG("TransactionManager::mkfs: about to do_with");
     segment_cleaner->init_mkfs(addr);
@@ -63,6 +64,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 {
   LOG_PREFIX(TransactionManager::mount);
   cache->init();
+  segment_cleaner->mount(segment_manager);
   return journal->replay([this](auto seq, auto paddr, const auto &e) {
     return cache->replay_delta(seq, paddr, e);
   }).safe_then([this] {

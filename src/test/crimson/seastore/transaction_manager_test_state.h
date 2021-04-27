@@ -72,8 +72,7 @@ auto get_transaction_manager(
   SegmentManager &segment_manager
 ) {
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
-    SegmentCleaner::config_t::default_from_segment_manager(
-      segment_manager),
+    SegmentCleaner::config_t::get_default(),
     true);
   auto journal = std::make_unique<Journal>(segment_manager);
   auto cache = std::make_unique<Cache>(segment_manager);
