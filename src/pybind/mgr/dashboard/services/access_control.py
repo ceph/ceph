@@ -114,7 +114,7 @@ ADMIN_ROLE = Role('administrator', 'Administrator', {
 # read-only role provides read-only permission for all scopes
 READ_ONLY_ROLE = Role('read-only', 'Read-Only', {
     scope_name: [_P.READ] for scope_name in Scope.all_scopes()
-    if scope_name != Scope.DASHBOARD_SETTINGS
+    if scope_name not in (Scope.DASHBOARD_SETTINGS, Scope.CONFIG_OPT)
 })
 
 
