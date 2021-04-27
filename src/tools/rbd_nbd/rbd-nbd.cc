@@ -20,6 +20,8 @@
 #include "include/int_types.h"
 #include "include/scope_guard.h"
 
+#include <boost/endian/conversion.hpp>
+
 #include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,6 +85,9 @@ namespace fs = std::experimental::filesystem;
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
+
+using boost::endian::big_to_native;
+using boost::endian::native_to_big;
 
 enum Command {
   None,
@@ -176,15 +181,6 @@ static EventSocket terminate_event_sock;
 
 #define HELP_INFO 1
 #define VERSION_INFO 2
-
-#ifdef CEPH_BIG_ENDIAN
-#define ntohll(a) (a)
-#elif defined(CEPH_LITTLE_ENDIAN)
-#define ntohll(a) swab(a)
-#else
-#error "Could not determine endianess"
-#endif
-#define htonll(a) ntohll(a)
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg);
@@ -331,16 +327,16 @@ private:
     }
 
     if (ret < 0) {
-      ctx->reply.error = htonl(-ret);
+      ctx->reply.error = native_to_big<uint32_t>(-ret);
     } else if ((ctx->command == NBD_CMD_READ) &&
                 ret < static_cast<int>(ctx->request.len)) {
       int pad_byte_count = static_cast<int> (ctx->request.len) - ret;
       ctx->data.append_zero(pad_byte_count);
       dout(20) << __func__ << ": " << *ctx << ": Pad byte count: "
                << pad_byte_count << dendl;
-      ctx->reply.error = htonl(0);
+      ctx->reply.error = native_to_big<uint32_t>(0);
     } else {
-      ctx->reply.error = htonl(0);
+      ctx->reply.error = native_to_big<uint32_t>(0);
     }
     ctx->server->io_finish(ctx);
 
@@ -394,11 +390,11 @@ private:
 	goto signal;
       }
 
-      ctx->request.from = ntohll(ctx->request.from);
-      ctx->request.type = ntohl(ctx->request.type);
-      ctx->request.len = ntohl(ctx->request.len);
+      ctx->request.from = big_to_native(ctx->request.from);
+      ctx->request.type = big_to_native(ctx->request.type);
+      ctx->request.len = big_to_native(ctx->request.len);
 
-      ctx->reply.magic = htonl(NBD_REPLY_MAGIC);
+      ctx->reply.magic = native_to_big<uint32_t>(NBD_REPLY_MAGIC);
       memcpy(ctx->reply.handle, ctx->request.handle, sizeof(ctx->reply.handle));
 
       ctx->command = ctx->request.type & 0x0000ffff;
@@ -675,7 +671,7 @@ public:
 
 std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
 
-  os << "[" << std::hex << ntohll(*((uint64_t *)ctx.request.handle));
+  os << "[" << std::hex << big_to_native(*((uint64_t *)ctx.request.handle));
 
   switch (ctx.command)
   {
@@ -700,7 +696,7 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
   }
 
   os << ctx.request.from << "~" << ctx.request.len << " "
-     << std::dec << ntohl(ctx.reply.error) << "]";
+     << std::dec << big_to_native(ctx.reply.error) << "]";
 
   return os;
 }

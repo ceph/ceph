@@ -18,6 +18,7 @@
 #include "librbd/migration/Utils.h"
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/endian/conversion.hpp>
 #include <deque>
 #include <tuple>
 #include <unordered_map>
@@ -31,6 +32,8 @@ namespace migration {
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::migration::QCOWFormat: " \
                            << __func__ << ": "
+
+using boost::endian::big_to_native;
 
 namespace qcow_format {
 
@@ -69,7 +72,7 @@ void LookupTable::decode() {
 
   // translate the lookup table (big-endian -> CPU endianess)
   for (auto idx = 0UL; idx < size; ++idx) {
-    cluster_offsets[idx] = be64toh(cluster_offsets[idx]);
+    cluster_offsets[idx] = big_to_native(cluster_offsets[idx]);
   }
 
   decoded = true;
@@ -385,7 +388,7 @@ private:
       auto cluster_offset = l2_table->cluster_offsets[request.l2_table_index];
       if (!l2_table->decoded) {
         // table hasn't been byte-swapped
-        cluster_offset = be64toh(cluster_offset);
+        cluster_offset = big_to_native(cluster_offset);
       }
 
       *request.cluster_offset = cluster_offset & qcow_format->m_cluster_mask;
@@ -890,8 +893,8 @@ void QCOWFormat<I>::handle_probe(int r, Context* on_finish) {
 
   auto header_probe = *reinterpret_cast<QCowHeaderProbe*>(
     m_bl.c_str());
-  header_probe.magic = be32toh(header_probe.magic);
-  header_probe.version = be32toh(header_probe.version);
+  header_probe.magic = big_to_native(header_probe.magic);
+  header_probe.version = big_to_native(header_probe.version);
 
   if (header_probe.magic != QCOW_MAGIC) {
     lderr(cct) << "invalid QCOW header magic" << dendl;
@@ -946,13 +949,13 @@ void QCOWFormat<I>::handle_read_v1_header(int r, Context* on_finish) {
   auto header = *reinterpret_cast<QCowHeaderV1*>(m_bl.c_str());
 
   // byte-swap important fields
-  header.magic = be32toh(header.magic);
-  header.version = be32toh(header.version);
-  header.backing_file_offset = be64toh(header.backing_file_offset);
-  header.backing_file_size = be32toh(header.backing_file_size);
-  header.size = be64toh(header.size);
-  header.crypt_method = be32toh(header.crypt_method);
-  header.l1_table_offset = be64toh(header.l1_table_offset);
+  header.magic = big_to_native(header.magic);
+  header.version = big_to_native(header.version);
+  header.backing_file_offset = big_to_native(header.backing_file_offset);
+  header.backing_file_size = big_to_native(header.backing_file_size);
+  header.size = big_to_native(header.size);
+  header.crypt_method = big_to_native(header.crypt_method);
+  header.l1_table_offset = big_to_native(header.l1_table_offset);
 
   if (header.magic != QCOW_MAGIC || header.version != 1) {
     // honestly shouldn't happen since we've already validated it
@@ -1048,17 +1051,17 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
   auto header = *reinterpret_cast<QCowHeader*>(m_bl.c_str());
 
   // byte-swap important fields
-  header.magic = be32toh(header.magic);
-  header.version = be32toh(header.version);
-  header.backing_file_offset = be64toh(header.backing_file_offset);
-  header.backing_file_size = be32toh(header.backing_file_size);
-  header.cluster_bits = be32toh(header.cluster_bits);
-  header.size = be64toh(header.size);
-  header.crypt_method = be32toh(header.crypt_method);
-  header.l1_size = be32toh(header.l1_size);
-  header.l1_table_offset = be64toh(header.l1_table_offset);
-  header.nb_snapshots = be32toh(header.nb_snapshots);
-  header.snapshots_offset = be64toh(header.snapshots_offset);
+  header.magic = big_to_native(header.magic);
+  header.version = big_to_native(header.version);
+  header.backing_file_offset = big_to_native(header.backing_file_offset);
+  header.backing_file_size = big_to_native(header.backing_file_size);
+  header.cluster_bits = big_to_native(header.cluster_bits);
+  header.size = big_to_native(header.size);
+  header.crypt_method = big_to_native(header.crypt_method);
+  header.l1_size = big_to_native(header.l1_size);
+  header.l1_table_offset = big_to_native(header.l1_table_offset);
+  header.nb_snapshots = big_to_native(header.nb_snapshots);
+  header.snapshots_offset = big_to_native(header.snapshots_offset);
 
   if (header.version == 2) {
     // valid only for version >= 3
@@ -1068,10 +1071,10 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
     header.header_length = 72;
     header.compression_type = 0;
   } else {
-    header.incompatible_features = be64toh(header.incompatible_features);
-    header.compatible_features = be64toh(header.compatible_features);
-    header.autoclear_features = be64toh(header.autoclear_features);
-    header.header_length = be32toh(header.header_length);
+    header.incompatible_features = big_to_native(header.incompatible_features);
+    header.compatible_features = big_to_native(header.compatible_features);
+    header.autoclear_features = big_to_native(header.autoclear_features);
+    header.header_length = big_to_native(header.header_length);
   }
 
   if (header.magic != QCOW_MAGIC || header.version < 2 || header.version > 3) {
@@ -1212,13 +1215,13 @@ void QCOWFormat<I>::handle_read_snapshot(int r, Context* on_finish) {
   auto header = *reinterpret_cast<QCowSnapshotHeader*>(m_bl.c_str());
 
   auto& snapshot = m_snapshots[m_snapshots.size() + 1];
-  snapshot.id.resize(be16toh(header.id_str_size));
-  snapshot.name.resize(be16toh(header.name_size));
-  snapshot.l1_table_offset = be64toh(header.l1_table_offset);
-  snapshot.l1_table.size = be32toh(header.l1_size);
-  snapshot.timestamp.sec_ref() = be32toh(header.date_sec);
-  snapshot.timestamp.nsec_ref() = be32toh(header.date_nsec);
-  snapshot.extra_data_size = be32toh(header.extra_data_size);
+  snapshot.id.resize(big_to_native(header.id_str_size));
+  snapshot.name.resize(big_to_native(header.name_size));
+  snapshot.l1_table_offset = big_to_native(header.l1_table_offset);
+  snapshot.l1_table.size = big_to_native(header.l1_size);
+  snapshot.timestamp.sec_ref() = big_to_native(header.date_sec);
+  snapshot.timestamp.nsec_ref() = big_to_native(header.date_nsec);
+  snapshot.extra_data_size = big_to_native(header.extra_data_size);
 
   ldout(cct, 10) << "snap_id=" << m_snapshots.size() << ", "
                  << "id_str_len=" << snapshot.id.size() << ", "
@@ -1280,7 +1283,7 @@ void QCOWFormat<I>::handle_read_snapshot_extra(int r, Context* on_finish) {
   if (snapshot.extra_data_size >=
         offsetof(QCowSnapshotExtraData, disk_size) + sizeof(uint64_t))  {
     auto extra = reinterpret_cast<const QCowSnapshotExtraData*>(m_bl.c_str());
-    snapshot.size = be64toh(extra->disk_size);
+    snapshot.size = big_to_native(extra->disk_size);
   } else {
     snapshot.size = m_size;
   }
