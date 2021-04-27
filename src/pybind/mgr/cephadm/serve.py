@@ -529,20 +529,23 @@ class CephadmServe:
         svc = self.mgr.cephadm_services[service_type]
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
 
-        public_network = None
+        public_networks: List[str] = []
         if service_type == 'mon':
             out = str(self.mgr.get_foreign_ceph_option('mon', 'public_network'))
             if '/' in out:
-                public_network = out.strip()
-                self.log.debug('mon public_network is %s' % public_network)
+                public_networks = [x.strip() for x in out.split(',')]
+                self.log.debug('mon public_network(s) is %s' % public_networks)
 
         def matches_network(host):
             # type: (str) -> bool
-            if not public_network:
+            if len(public_networks) == 0:
                 return False
-            # make sure we have 1 or more IPs for that network on that
+            # make sure we have 1 or more IPs for any of those networks on that
             # host
-            return len(self.mgr.cache.networks[host].get(public_network, [])) > 0
+            for network in public_networks:
+                if len(self.mgr.cache.networks[host].get(network, [])) > 0:
+                    return True
+            return False
 
         ha = HostAssignment(
             spec=spec,
