@@ -1763,7 +1763,9 @@ namespace crimson {
 
 	while (!this->finishing) {
 	  // predicate for cond.wait()
-	  const auto pred = [this] () -> bool { return this->finishing; };
+	  const auto pred = [this] () -> bool {
+	    return this->finishing || sched_ahead_when > TimeZero;
+	  };
 
 	  if (TimeZero == sched_ahead_when) {
 	    sched_ahead_cv.wait(l, pred);
