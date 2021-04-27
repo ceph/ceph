@@ -1026,7 +1026,7 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 				         uint64_t adjust_used)
 {
   *pratio =
-   ((float)new_stat.statfs.get_used()) / ((float)new_stat.statfs.total);
+   ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
 
   if (adjust_used) {
     dout(20) << __func__ << " Before kb_used() " << new_stat.statfs.kb_used()  << dendl;
@@ -1047,7 +1047,7 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
   if (backfill_adjusted) {
     dout(20) << __func__ << " backfill adjusted " << new_stat << dendl;
   }
-  return ((float)new_stat.statfs.get_used()) / ((float)new_stat.statfs.total);
+  return ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
 }
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
