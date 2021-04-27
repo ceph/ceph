@@ -55,10 +55,12 @@ struct FLTreeOnode final : Onode, Value {
   };
 
   const onode_layout_t &get_layout() const final {
+    assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
   }
 
   onode_layout_t &get_mutable_layout(Transaction &t) final {
+    assert(status != status_t::DELETED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
@@ -67,6 +69,7 @@ struct FLTreeOnode final : Onode, Value {
   };
 
   void populate_recorder(Transaction &t) {
+    assert(status == status_t::MUTATED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
@@ -75,6 +78,11 @@ struct FLTreeOnode final : Onode, Value {
         p.first);
     }
     status = status_t::STABLE;
+  }
+
+  void mark_delete() {
+    assert(status != status_t::DELETED);
+    status = status_t::DELETED;
   }
 
   ~FLTreeOnode() final {}
@@ -100,6 +108,10 @@ public:
     );
   }
 
+  contains_onode_ret contains_onode(
+    Transaction &trans,
+    const ghobject_t &hoid) final;
+
   get_onode_ret get_onode(
     Transaction &trans,
     const ghobject_t &hoid) final;
@@ -115,6 +127,10 @@ public:
   write_dirty_ret write_dirty(
     Transaction &trans,
     const std::vector<OnodeRef> &onodes) final;
+
+  erase_onode_ret erase_onode(
+    Transaction &trans,
+    OnodeRef &onode) final;
 
   ~FLTreeOnodeManager();
 };
