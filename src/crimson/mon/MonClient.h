@@ -9,6 +9,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer.hh>
 
 #include "auth/AuthRegistry.h"
@@ -54,8 +55,8 @@ class Client : public crimson::net::Dispatcher,
   const uint32_t want_keys;
 
   MonMap monmap;
-  std::unique_ptr<Connection> active_con;
-  std::vector<std::unique_ptr<Connection>> pending_conns;
+  seastar::shared_ptr<Connection> active_con;
+  std::vector<seastar::shared_ptr<Connection>> pending_conns;
   seastar::timer<seastar::lowres_clock> timer;
 
   crimson::net::Messenger& msgr;
