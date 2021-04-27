@@ -46,6 +46,10 @@ class JSONObj;
 #define CEPHFS_ETIME           62
 #define CEPHFS_EOLDSNAPC       85
 
+// taken from linux kernel: include/uapi/linux/fcntl.h
+#define CEPHFS_AT_FDCWD        -100    /* Special value used to indicate
+                                          openat should use the current
+                                          working directory. */
 
 // --------------------------------------
 // ino
