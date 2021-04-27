@@ -798,12 +798,12 @@ seastar::future<> Client::handle_subscribe_ack(Ref<MMonSubscribeAck> m)
 
 Client::get_version_t Client::get_version(const std::string& map)
 {
-  auto m = make_message<MMonGetVersion>();
+  auto m = crimson::net::make_message<MMonGetVersion>();
   auto tid = ++last_version_req_id;
   m->handle = tid;
   m->what = map;
   auto& req = version_reqs[tid];
-  return send_message(m).then([&req] {
+  return send_message(std::move(m)).then([&req] {
     return req.get_future();
   });
 }
@@ -1013,7 +1013,7 @@ Client::command_result_t
 Client::run_command(std::string&& cmd,
                     bufferlist&& bl)
 {
-  auto m = make_message<MMonCommand>(monmap.fsid);
+  auto m = crimson::net::make_message<MMonCommand>(monmap.fsid);
   auto tid = ++last_mon_command_id;
   m->set_tid(tid);
   m->cmd = {std::move(cmd)};
@@ -1024,13 +1024,13 @@ Client::run_command(std::string&& cmd,
   });
 }
 
-seastar::future<> Client::send_message(MessageRef m)
+seastar::future<> Client::send_message(MessageURef m)
 {
   if (active_con) {
     assert(pending_messages.empty());
-    return active_con->get_conn()->send(m);
+    return active_con->get_conn()->send(std::move(m));
   } else {
-    auto& delayed = pending_messages.emplace_back(m);
+    auto& delayed = pending_messages.emplace_back(std::move(m));
     return delayed.pr.get_future();
   }
 }
@@ -1041,7 +1041,7 @@ seastar::future<> Client::on_session_opened()
     return sub.reload() ? renew_subs() : seastar::now();
   }).then([this] {
     for (auto& m : pending_messages) {
-      (void) active_con->get_conn()->send(m.msg);
+      (void) active_con->get_conn()->send(std::move(m.msg));
       m.pr.set_value();
     }
     pending_messages.clear();
@@ -1049,7 +1049,7 @@ seastar::future<> Client::on_session_opened()
   }).then([this] {
     return seastar::parallel_for_each(mon_commands,
       [this](auto &command) {
-      return send_message(make_message<MMonCommand>(*command.req));
+      return send_message(crimson::net::make_message<MMonCommand>(*command.req));
     });
   });
 }
@@ -1084,10 +1084,10 @@ seastar::future<> Client::renew_subs()
   }
   logger().trace("{}", __func__);
 
-  auto m = make_message<MMonSubscribe>();
+  auto m = crimson::net::make_message<MMonSubscribe>();
   m->what = sub.get_subs();
   m->hostname = ceph_get_short_hostname();
-  return send_message(m).then([this] {
+  return send_message(std::move(m)).then([this] {
     sub.renewed();
   });
 }
