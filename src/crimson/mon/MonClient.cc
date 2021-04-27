@@ -123,6 +123,7 @@ Connection::Connection(const AuthRegistry& auth_registry,
 seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 {
   logger().info("{}", __func__);
+  ceph_assert(m);
   auth_reply.set_value(m);
   auth_reply = {};
   return seastar::now();
