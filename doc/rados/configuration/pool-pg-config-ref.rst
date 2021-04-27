@@ -32,6 +32,7 @@ Ceph configuration file.
 .. confval:: osd_pool_default_min_size
 .. confval:: osd_pool_default_pg_num
 .. confval:: osd_pool_default_pgp_num
+.. confval:: osd_pool_default_pg_autoscale_mode
 .. confval:: osd_pool_default_flags
 .. confval:: osd_max_pgls
 .. confval:: osd_min_pg_log_entries

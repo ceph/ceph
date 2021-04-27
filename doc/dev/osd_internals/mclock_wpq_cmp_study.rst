@@ -20,7 +20,7 @@ exploratory mindset. This is still true with other organizations and individuals
 who continue to either use the codebase or modify it according to their needs.
 
 DmClock exists in its own repository_. Before the Ceph *Pacific* release,
-mClock could be enabled by setting the ``osd_op_queue`` Ceph option to
+mClock could be enabled by setting the :confval:`osd_op_queue` Ceph option to
 "mclock_scheduler". Additional mClock parameters like *reservation*, *weight*
 and *limit* for each service type could be set using Ceph options.
 For example, ``osd_mclock_scheduler_client_[res,wgt,lim]`` is one such option.
@@ -109,8 +109,8 @@ baseline throughput for each device type was determined:
 | **HDD (without bluestore WAL & dB)** | 315 IOPS (1.23 MiB/s)                     |
 +--------------------------------------+-------------------------------------------+
 
-.. note:: The ``bluestore_throttle_bytes`` and
-          ``bluestore_throttle_deferred_bytes`` for SSDs were determined to be
+.. note:: The :confval:`bluestore_throttle_bytes` and
+          :confval:`bluestore_throttle_deferred_bytes` for SSDs were determined to be
           256 KiB. For HDDs, it was 40MiB. The above throughput was obtained
           by running 4 KiB random writes at a queue depth of 64 for 300 secs.
 
@@ -261,9 +261,9 @@ Apart from the non-default bluestore throttle already mentioned above, the
 following set of Ceph recovery related options were modified for tests with both
 the WPQ and mClock schedulers.
 
-- ``osd_max_backfills`` = 1000
-- ``osd_recovery_max_active`` = 1000
-- ``osd_async_recovery_min_cost`` = 1
+- :confval:`osd_max_backfills` = 1000
+- :confval:`osd_recovery_max_active` = 1000
+- :confval:`osd_async_recovery_min_cost` = 1
 
 The above options set a high limit on the number of concurrent local and
 remote backfill operations per OSD. Under these conditions the capability of the
@@ -286,7 +286,7 @@ schedulers and their respective configurations.
 
 WPQ(def) in the chart shows the average client throughput obtained
 using the WPQ scheduler with all other Ceph configuration settings set to
-default values. The default setting for ``osd_max_backfills`` limits the number
+default values. The default setting for :confval:`osd_max_backfills` limits the number
 of concurrent local and remote backfills or recoveries per OSD to 1. As a
 result, the average client throughput obtained is impressive at just over 18000
 IOPS when compared to the baseline value which is 21500 IOPS.
@@ -300,7 +300,7 @@ overwhelm the client operations. Sections further below discuss the recovery
 rates under these conditions.
 
 With the non-default options, the same test was executed with mClock and with
-the default profile(*high_client_ops*) enabled. As per the profile allocation,
+the default profile (*high_client_ops*) enabled. As per the profile allocation,
 the reservation goal of 50% (10750 IOPS) is being met with an average throughput
 of 11209 IOPS during the course of recovery operations. This is more than 4x
 times the throughput obtained with WPQ(BST).
@@ -364,7 +364,7 @@ around 75000 objects as observed in the chart below.
 
 .. image:: ../../images/mclock_wpq_study/Recovery_Rate_Comparison_NVMe_SSD_WPQ_vs_mClock.png
 
-Intuitively, the *high_client_ops* should  impact recovery operations the most
+Intuitively, the *high_client_ops* should impact recovery operations the most
 and this is indeed the case as it took an average of 966 secs for the
 recovery to complete at 80 Objects/sec. The recovery bandwidth as expected was
 the lowest at an average of ~320 MiB/s.
@@ -432,7 +432,7 @@ objects to be recovered in all the cases using HDDs with WAL and dB was around
 
 .. image:: ../../images/mclock_wpq_study/Recovery_Rate_Comparison_HDD_WALdB_WPQ_vs_mClock.png
 
-As expected, the *high_client_ops* impacts recovery opeations the most as it
+As expected, the *high_client_ops* impacts recovery operations the most as it
 took an average of  ~1409 secs for the recovery to complete at ~3 Objects/sec.
 The recovery bandwidth as expected was the lowest at ~11 MiB/s.
 
