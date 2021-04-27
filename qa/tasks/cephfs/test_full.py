@@ -213,9 +213,13 @@ class FullnessTestCase(CephFSTestCase):
             log.warning("This test may run rather slowly unless you decrease"
                      "osd_mon_report_interval (5 is a good setting)!")
 
+        # set the object_size to 1MB to make the objects destributed more evenly
+        # among the OSDs to fix Tracker#45434
+        file_layout = "stripe_unit=1048576 stripe_count=1 object_size=1048576"
         self.mount_a.run_python(template.format(
             fill_mb=self.fill_mb,
             file_path=file_path,
+            file_layout=file_layout,
             full_wait=full_wait,
             is_fuse=isinstance(self.mount_a, FuseMount)
         ))
@@ -233,6 +237,7 @@ class FullnessTestCase(CephFSTestCase):
             print("writing some data through which we expect to succeed")
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
+            os.setxattr("{file_path}", 'ceph.file.layout', b'{file_layout}')
             bytes += os.write(f, b'a' * 512 * 1024)
             os.fsync(f)
             print("fsync'ed data successfully, will now attempt to fill fs")
@@ -304,6 +309,7 @@ class FullnessTestCase(CephFSTestCase):
             print("writing some data through which we expect to succeed")
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
+            os.setxattr("{file_path}", 'ceph.file.layout', b'{file_layout}')
             bytes += os.write(f, b'a' * 4096)
             os.fsync(f)
             print("fsync'ed data successfully, will now attempt to fill fs")
