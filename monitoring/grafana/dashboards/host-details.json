@@ -36,11 +36,11 @@
   "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": null,
-  "iteration": 1557386759572,
+  "iteration": 1619480057794,
   "links": [],
   "panels": [
     {
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -61,6 +61,12 @@
         "rgba(50, 172, 45, 0.97)"
       ],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -91,7 +97,7 @@
         }
       ],
       "maxDataPoints": "",
-      "minSpan": 4,
+      "maxPerRow": 6,
       "nullPointMode": "connected",
       "nullText": null,
       "postfix": "",
@@ -148,13 +154,21 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "Shows the CPU breakdown. When multiple servers are selected, only the first host's cpu data is shown",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 10,
         "w": 6,
         "x": 3,
         "y": 1
       },
+      "hiddenSeries": false,
       "id": 9,
       "legend": {
         "alignAsTable": false,
@@ -169,8 +183,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -193,6 +210,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "CPU Utilization",
       "tooltip": {
@@ -244,13 +262,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 10,
         "w": 6,
         "x": 9,
         "y": 1
       },
+      "hiddenSeries": false,
       "id": 14,
       "legend": {
         "avg": false,
@@ -265,6 +291,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -316,6 +345,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "RAM Usage",
       "tooltip": {
@@ -361,13 +391,21 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "Show the network load (rx,tx) across all interfaces (excluding loopback 'lo')",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 10,
         "w": 6,
         "x": 15,
         "y": 1
       },
+      "hiddenSeries": false,
       "id": 10,
       "legend": {
         "alignAsTable": false,
@@ -384,8 +422,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -420,6 +461,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Network Load",
       "tooltip": {
@@ -464,13 +506,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 3,
         "x": 21,
         "y": 1
       },
+      "hiddenSeries": false,
       "hideTimeOverride": true,
       "id": 18,
       "legend": {
@@ -486,6 +536,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -518,6 +571,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Network drop rate",
       "tooltip": {
@@ -568,6 +622,12 @@
       "datasource": "$datasource",
       "decimals": 0,
       "description": "Each OSD consists of a Journal/WAL partition and a data partition. The RAW Capacity shown is the sum of the data partitions across all OSDs on the selected OSD hosts.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "bytes",
       "gauge": {
         "maxValue": 100,
@@ -598,7 +658,7 @@
         }
       ],
       "maxDataPoints": "",
-      "minSpan": 4,
+      "maxPerRow": 6,
       "nullPointMode": "connected",
       "nullText": null,
       "postfix": "",
@@ -621,9 +681,11 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(ceph_osd_stat_bytes and on (ceph_daemon) ceph_disk_occupation{instance=~\"($ceph_hosts).*\"})",
+          "expr": "sum(ceph_osd_stat_bytes and on (ceph_daemon) ceph_disk_occupation{exported_instance=~\"($ceph_hosts).*\"})",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 2,
+          "legendFormat": "",
           "refId": "A",
           "step": 40,
           "textEditor": true
@@ -648,13 +710,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 3,
         "x": 21,
         "y": 6
       },
+      "hiddenSeries": false,
       "hideTimeOverride": true,
       "id": 19,
       "legend": {
@@ -670,6 +740,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -702,6 +775,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Network error rate",
       "tooltip": {
@@ -742,6 +816,7 @@
     },
     {
       "collapsed": false,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -761,13 +836,21 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "For any OSD devices on the host, this chart shows the iops per physical device. Each device is shown by it's name and corresponding OSD id value",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 11,
         "x": 0,
         "y": 12
       },
+      "hiddenSeries": false,
       "id": 6,
       "legend": {
         "avg": false,
@@ -781,8 +864,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "connected",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -798,8 +884,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "label_replace(\n  (\n    irate(node_disk_writes_completed{instance=~\"($ceph_hosts).*\"}[5m]) or\n    irate(node_disk_writes_completed_total{instance=~\"($ceph_hosts).*\"}[5m])\n  ),\n  \"instance\",\n  \"$1\",\n  \"instance\",\n  \"([^:.]*).*\"\n)\n* on(instance, device) group_left(ceph_daemon)\n  label_replace(\n    label_replace(\n      ceph_disk_occupation,\n      \"device\",\n      \"$1\",\n      \"device\",\n      \"/dev/(.*)\"\n    ),\n    \"instance\",\n    \"$1\",\n    \"instance\",\n    \"([^:.]*).*\"\n  )",
+          "expr": "label_replace(\n  (\n    irate(node_disk_writes_completed{instance=~\"($ceph_hosts).*\"}[5m]) or\n    irate(node_disk_writes_completed_total{instance=~\"($ceph_hosts).*\"}[5m])\n  ),\n  \"instance\",\n  \"$1\",\n  \"instance\",\n  \"([^:.]*).*\"\n)\n* on(instance, device) group_left(ceph_daemon)\n  label_replace(\n    label_replace(\n      ceph_disk_occupation,\n      \"device\",\n      \"$1\",\n      \"device\",\n      \"/dev/(.*)\"\n    ),\n    \"instance\",\n    \"$1\",\n    \"exported_instance\",\n    \"([^:.]*).*\"\n  )",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}}) writes",
           "refId": "A",
@@ -807,9 +894,10 @@
           "textEditor": true
         },
         {
-          "expr": "label_replace(\n    (irate(node_disk_reads_completed{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_reads_completed_total{instance=~\"($ceph_hosts).*\"}[5m])),\n    \"instance\",\n    \"$1\",\n    \"instance\",\n    \"([^:.]*).*\"\n)\n* on(instance, device) group_left(ceph_daemon)\n  label_replace(\n    label_replace(\n      ceph_disk_occupation,\n      \"device\",\n      \"$1\",\n      \"device\",\n      \"/dev/(.*)\"\n    ),\n    \"instance\",\n    \"$1\",\n    \"instance\",\n    \"([^:.]*).*\"\n  )",
+          "expr": "label_replace(\n    (irate(node_disk_reads_completed{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_reads_completed_total{instance=~\"($ceph_hosts).*\"}[5m])),\n    \"instance\",\n    \"$1\",\n    \"instance\",\n    \"([^:.]*).*\"\n)\n* on(instance, device) group_left(ceph_daemon)\n  label_replace(\n    label_replace(\n      ceph_disk_occupation,\n      \"device\",\n      \"$1\",\n      \"device\",\n      \"/dev/(.*)\"\n    ),\n    \"instance\",\n    \"$1\",\n    \"exported_instance\",\n    \"([^:.]*).*\"\n  )",
           "format": "time_series",
           "hide": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}}) reads",
           "refId": "B"
@@ -817,6 +905,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$ceph_hosts Disk IOPS",
       "tooltip": {
@@ -862,13 +951,21 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "For OSD hosts, this chart shows the disk bandwidth (read bytes/sec + write bytes/sec) of the physical OSD device. Each device is shown by device name, and corresponding OSD id",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 11,
         "x": 12,
         "y": 12
       },
+      "hiddenSeries": false,
       "id": 8,
       "legend": {
         "avg": false,
@@ -882,8 +979,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "connected",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -899,15 +999,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "label_replace((irate(node_disk_bytes_written{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_written_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace((irate(node_disk_bytes_written{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_written_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"exported_instance\", \"([^:.]*).*\")",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}}) write",
           "refId": "B"
         },
         {
-          "expr": "label_replace((irate(node_disk_bytes_read{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_read_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace((irate(node_disk_bytes_read{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_read_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"exported_instance\", \"([^:.]*).*\")",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}}) read",
           "refId": "C"
@@ -915,6 +1017,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$ceph_hosts Throughput by Disk",
       "tooltip": {
@@ -960,13 +1063,21 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "For OSD hosts, this chart shows the latency at the physical drive. Each drive is shown by device name, with it's corresponding OSD id",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 11,
         "x": 0,
         "y": 21
       },
+      "hiddenSeries": false,
       "id": 7,
       "legend": {
         "avg": false,
@@ -980,8 +1091,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -992,9 +1106,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "max by(instance,device) (label_replace((irate(node_disk_write_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )  / clamp_min(irate(node_disk_writes_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001) or   (irate(node_disk_read_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )  / clamp_min(irate(node_disk_reads_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")) *  on(instance,device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation{instance=~\"($ceph_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "max by(instance,device) (label_replace((irate(node_disk_write_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )  / clamp_min(irate(node_disk_writes_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001) or   (irate(node_disk_read_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )  / clamp_min(irate(node_disk_reads_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")) *  on(instance,device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation{exported_instance=~\"($ceph_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"exported_instance\", \"([^:.]*).*\")",
           "format": "time_series",
           "hide": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}})",
           "refId": "D"
@@ -1002,6 +1117,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$ceph_hosts Disk Latency",
       "tooltip": {
@@ -1047,6 +1163,12 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "Show disk utilization % (util) of any OSD devices on the host by the physical device name and associated OSD id.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1055,6 +1177,7 @@
         "x": 12,
         "y": 21
       },
+      "hiddenSeries": false,
       "id": 5,
       "legend": {
         "avg": false,
@@ -1083,9 +1206,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "label_replace(((irate(node_disk_io_time_ms{instance=~\"($ceph_hosts).*\"}[5m]) / 10 ) or  irate(node_disk_io_time_seconds_total{instance=~\"($ceph_hosts).*\"}[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation{instance=~\"($ceph_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace(((irate(node_disk_io_time_ms{instance=~\"($ceph_hosts).*\"}[5m]) / 10 ) or  irate(node_disk_io_time_seconds_total{instance=~\"($ceph_hosts).*\"}[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation{exported_instance=~\"($ceph_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"exported_instance\", \"([^:.]*).*\")",
           "format": "time_series",
           "hide": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}})",
           "refId": "A"
@@ -1134,7 +1258,7 @@
     }
   ],
   "refresh": "10s",
-  "schemaVersion": 16,
+  "schemaVersion": 25,
   "style": "dark",
   "tags": [
     "overview"
@@ -1143,11 +1267,14 @@
     "list": [
       {
         "current": {
+          "selected": false,
           "text": "default",
           "value": "default"
         },
         "hide": 0,
+        "includeAll": false,
         "label": "Data Source",
+        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
@@ -1158,8 +1285,9 @@
       },
       {
         "allValue": null,
-        "current": {},
+        "current": {}
         "datasource": "$datasource",
+        "definition": "label_values(node_scrape_collector_success, instance) ",
         "hide": 0,
         "includeAll": false,
         "label": "Hostname",
@@ -1168,7 +1296,7 @@
         "options": [],
         "query": "label_values(node_scrape_collector_success, instance) ",
         "refresh": 1,
-        "regex": "([^.:]*).*",
+        "regex": "([^:]*).*",
         "skipUrlSync": false,
         "sort": 3,
         "tagValuesQuery": "",
@@ -1185,7 +1313,6 @@
   },
   "timepicker": {
     "refresh_intervals": [
-      "5s",
       "10s",
       "30s",
       "1m",
@@ -1210,6 +1337,5 @@
   },
   "timezone": "browser",
   "title": "Host Details",
-  "uid": "rtOg0AiWz",
-  "version": 4
+  "version": 7
 }

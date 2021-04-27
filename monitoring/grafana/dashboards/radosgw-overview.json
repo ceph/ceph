@@ -623,8 +623,7 @@
       "30d"
     ]
   },
-  "timezone": "",
+  "timezone": "browser",
   "title": "RGW Overview",
-  "uid": "WAkugZpiz",
   "version": 2
 }

@@ -36,8 +36,7 @@
   "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": null,
-  "iteration": 1557393917915,
+  "iteration": 1619480467138,
   "links": [],
   "panels": [
     {
@@ -50,6 +49,12 @@
         "#d44a3a"
       ],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -101,10 +106,12 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(sum by (hostname) (ceph_osd_metadata))",
+          "expr": "count(sum by (hostname) (ceph_osd_metadata{instance=~\"$instance.*\"}))",
           "format": "time_series",
           "instant": true,
+          "interval": "",
           "intervalFactor": 1,
+          "legendFormat": "",
           "refId": "A"
         }
       ],
@@ -131,8 +138,14 @@
         "#d44a3a"
       ],
       "datasource": "$datasource",
-      "description": "Average CPU busy across all hosts (OSD, RGW, MON etc) within the cluster",
       "decimals": 2,
+      "description": "Average CPU busy across all hosts (OSD, RGW, MON etc) within the cluster",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "percentunit",
       "gauge": {
         "maxValue": 100,
@@ -187,7 +200,9 @@
           "expr": "avg(\n  1 - (\n    avg by(instance) \n      (irate(node_cpu_seconds_total{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or\n       irate(node_cpu{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]))\n    )\n  )",
           "format": "time_series",
           "instant": true,
+          "interval": "",
           "intervalFactor": 1,
+          "legendFormat": "",
           "refId": "A"
         }
       ],
@@ -214,8 +229,14 @@
         "#d44a3a"
       ],
       "datasource": "$datasource",
-      "description": "Average Memory Usage across all hosts in the cluster (excludes buffer/cache usage)",
       "decimals": 2,
+      "description": "Average Memory Usage across all hosts in the cluster (excludes buffer/cache usage)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "percentunit",
       "gauge": {
         "maxValue": 100,
@@ -298,6 +319,12 @@
       ],
       "datasource": "$datasource",
       "description": "IOPS Load at the device as reported by the OS on all OSD hosts",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -380,6 +407,12 @@
       ],
       "datasource": "$datasource",
       "description": "Average Disk utilization for all OSD data devices (i.e. excludes journal/WAL)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "percent",
       "gauge": {
         "maxValue": 100,
@@ -431,10 +464,12 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr" : "avg (\n  label_replace((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) *\n  on(instance, device) label_replace(label_replace(ceph_disk_occupation{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\")\n)",
+          "expr": "avg (\n  label_replace((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) *\n  on(instance, device) label_replace(label_replace(ceph_disk_occupation{exported_instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"exported_instance\", \"([^.:]*).*\")\n)",
           "format": "time_series",
           "instant": true,
+          "interval": "",
           "intervalFactor": 1,
+          "legendFormat": "",
           "refId": "A"
         }
       ],
@@ -463,6 +498,12 @@
       "datasource": "$datasource",
       "decimals": 0,
       "description": "Total send/receive network load across all hosts in the ceph cluster",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "bytes",
       "gauge": {
         "maxValue": 100,
@@ -541,13 +582,21 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "Show the top 10 busiest hosts by cpu",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 0,
         "y": 5
       },
+      "hiddenSeries": false,
       "id": 13,
       "legend": {
         "avg": false,
@@ -562,6 +611,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -574,6 +626,7 @@
         {
           "expr": "topk(10,100 * ( 1 - (\n    avg by(instance) \n      (irate(node_cpu_seconds_total{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or\n       irate(node_cpu{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]))\n    )\n  )\n)",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -628,13 +681,21 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "Top 10 hosts by network load",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
         "y": 5
       },
+      "hiddenSeries": false,
       "id": 19,
       "legend": {
         "avg": false,
@@ -649,6 +710,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -710,7 +774,7 @@
     }
   ],
   "refresh": "10s",
-  "schemaVersion": 16,
+  "schemaVersion": 25,
   "style": "dark",
   "tags": [],
   "templating": {
@@ -721,7 +785,9 @@
           "value": "default"
         },
         "hide": 0,
+        "includeAll": false,
         "label": "Data Source",
+        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
@@ -732,15 +798,20 @@
       },
       {
         "allValue": "",
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "$datasource",
+        "definition": "label_values(ceph_disk_occupation{instance=~\"$instance.*\"}, exported_instance)",
         "hide": 2,
         "includeAll": true,
         "label": null,
         "multi": false,
         "name": "osd_hosts",
         "options": [],
-        "query": "label_values(ceph_disk_occupation, exported_instance)",
+        "query": "label_values(ceph_disk_occupation{instance=~\"$instance.*\"}, exported_instance)",
         "refresh": 1,
         "regex": "([^.]*).*",
         "skipUrlSync": false,
@@ -753,15 +824,20 @@
       },
       {
         "allValue": null,
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "$datasource",
+        "definition": "label_values(ceph_mon_metadata{instance=~\"$instance.*\"}, ceph_daemon)",
         "hide": 2,
         "includeAll": true,
         "label": null,
         "multi": false,
         "name": "mon_hosts",
         "options": [],
-        "query": "label_values(ceph_mon_metadata, ceph_daemon)",
+        "query": "label_values(ceph_mon_metadata{instance=~\"$instance.*\"}, ceph_daemon)",
         "refresh": 1,
         "regex": "mon.(.*)",
         "skipUrlSync": false,
@@ -774,15 +850,20 @@
       },
       {
         "allValue": null,
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "$datasource",
+        "definition": "label_values(ceph_mds_inodes{instance=~\"$instance.*\"}, ceph_daemon)",
         "hide": 2,
         "includeAll": true,
         "label": null,
         "multi": false,
         "name": "mds_hosts",
         "options": [],
-        "query": "label_values(ceph_mds_inodes, ceph_daemon)",
+        "query": "label_values(ceph_mds_inodes{instance=~\"$instance.*\"}, ceph_daemon)",
         "refresh": 1,
         "regex": "mds.(.*)",
         "skipUrlSync": false,
@@ -795,17 +876,47 @@
       },
       {
         "allValue": null,
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "$datasource",
+        "definition": "label_values(ceph_rgw_qlen{instance=~\"$instance.*\"}, ceph_daemon)",
         "hide": 2,
         "includeAll": true,
         "label": null,
         "multi": false,
         "name": "rgw_hosts",
         "options": [],
-        "query": "label_values(ceph_rgw_qlen, ceph_daemon)",
+        "query": "label_values(ceph_rgw_qlen{instance=~\"$instance.*\"}, ceph_daemon)",
         "refresh": 1,
         "regex": "rgw.(.*)",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "text": "default",
+          "value": "default"
+        },
+        "datasource": "$datasource",
+        "definition": "label_values(ceph_health_status, instance)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Instance",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(ceph_health_status, instance)",
+        "refresh": 1,
+        "regex": "([^:]*).*",
         "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
@@ -845,8 +956,7 @@
       "30d"
     ]
   },
-  "timezone": "",
+  "timezone": "browser",
   "title": "Host Overview",
-  "uid": "y0KGL0iZz",
   "version": 3
 }

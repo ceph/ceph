@@ -302,8 +302,7 @@
       "30d"
     ]
   },
-  "timezone": "",
+  "timezone": "browser",
   "title": "MDS Performance",
-  "uid": "tbO9LAiZz",
   "version": 2
 }

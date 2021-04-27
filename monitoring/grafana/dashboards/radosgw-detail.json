@@ -484,8 +484,7 @@
       "30d"
     ]
   },
-  "timezone": "",
+  "timezone": "browser",
   "title": "RGW Instance Detail",
-  "uid": "x5ARzZtmk",
   "version": 2
 }
