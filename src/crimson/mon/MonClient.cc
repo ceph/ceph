@@ -95,7 +95,7 @@ private:
 
 private:
   bool closed = false;
-  seastar::shared_promise<Ref<MAuthReply>> reply;
+  seastar::shared_promise<Ref<MAuthReply>> auth_reply;
   // v2
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point auth_start;
@@ -123,8 +123,8 @@ Connection::Connection(const AuthRegistry& auth_registry,
 seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 {
   logger().info("{}", __func__);
-  reply.set_value(m);
-  reply = {};
+  auth_reply.set_value(m);
+  auth_reply = {};
   return seastar::now();
 }
 
@@ -222,7 +222,7 @@ Connection::do_auth_single(Connection::request_t what)
   logger().info("sending {}", *m);
   return conn->send(m).then([this] {
     logger().info("waiting");
-    return reply.get_shared_future();
+    return auth_reply.get_shared_future();
   }).then([this] (Ref<MAuthReply> m) {
     if (!m) {
       ceph_assert(closed);
@@ -376,8 +376,8 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
 void Connection::close()
 {
   logger().info("{}", __func__);
-  reply.set_value(Ref<MAuthReply>(nullptr));
-  reply = {};
+  auth_reply.set_value(Ref<MAuthReply>(nullptr));
+  auth_reply = {};
   if (auth_done) {
     auth_done->set_value(auth_result_t::canceled);
     auth_done.reset();
