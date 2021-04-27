@@ -1,0 +1,523 @@
+[
+    {
+        "container_id": "9fa324d32bc8",
+        "container_image_digests": [
+            "docker.io/prom/alertmanager@sha256:7e4e9f7a0954b45736d149c40e9620a6664036bb05f0dce447bef5042b139f5d",
+            "docker.io/prom/alertmanager@sha256:b9323917a2eda265bec69e59a457f001c529facbbc8166df277f4850cdac61a0"
+        ],
+        "container_image_id": "0881eb8f169f5556a292b4e2c01d683172b12830a62a9225a98a8e206bb734f0",
+        "container_image_name": "docker.io/prom/alertmanager:v0.20.0",
+        "created": "2021-04-04T14:20:55.872521Z",
+        "daemon_id": "ceph-node-00",
+        "daemon_type": "alertmanager",
+        "events": [
+            "2021-04-04T14:20:55.970128Z daemon:alertmanager.ceph-node-00 [INFO] \"Deployed alertmanager.ceph-node-00 on host 'ceph-node-00.cephlab.com'\"",
+            "2021-04-04T14:25:37.637716Z daemon:alertmanager.ceph-node-00 [INFO] \"Reconfigured alertmanager.ceph-node-00 on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": true,
+        "last_refresh": "2021-04-04T14:27:38.610198Z",
+        "memory_usage": 10471079,
+        "ports": [
+            9093,
+            9094
+        ],
+        "started": "2021-04-04T14:25:36.837872Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "0.20.0"
+    },
+    {
+        "container_id": "44add59a53bc",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:21:00.330646Z",
+        "daemon_id": "ceph-node-00",
+        "daemon_type": "crash",
+        "events": [
+            "2021-04-04T14:21:00.456022Z daemon:crash.ceph-node-00 [INFO] \"Deployed crash.ceph-node-00 on host 'ceph-node-00.cephlab.com'\"",
+            "2021-04-04T14:25:41.234986Z daemon:crash.ceph-node-00 [INFO] \"Reconfigured crash.ceph-node-00 on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:38.610356Z",
+        "memory_usage": 7190085,
+        "ports": [],
+        "started": "2021-04-04T14:20:59.550334Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "4a2180e2e4ae",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:24:23.552501Z",
+        "daemon_id": "ceph-node-01",
+        "daemon_type": "crash",
+        "events": [
+            "2021-04-04T14:24:23.591035Z daemon:crash.ceph-node-01 [INFO] \"Deployed crash.ceph-node-01 on host 'ceph-node-01.cephlab.com'\"",
+            "2021-04-04T14:25:42.677262Z daemon:crash.ceph-node-01 [INFO] \"Reconfigured crash.ceph-node-01 on host 'ceph-node-01.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-01.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:26:25.839645Z",
+        "memory_usage": 7147094,
+        "ports": [],
+        "started": "2021-04-04T14:24:23.188059Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "2eb2f0a13f46",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:24:21.012014Z",
+        "daemon_id": "ceph-node-02",
+        "daemon_type": "crash",
+        "events": [
+            "2021-04-04T14:24:21.047797Z daemon:crash.ceph-node-02 [INFO] \"Deployed crash.ceph-node-02 on host 'ceph-node-02.cephlab.com'\"",
+            "2021-04-04T14:25:43.974052Z daemon:crash.ceph-node-02 [INFO] \"Reconfigured crash.ceph-node-02 on host 'ceph-node-02.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-02.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:37.470841Z",
+        "memory_usage": 8018460,
+        "ports": [],
+        "started": "2021-04-04T14:24:20.664558Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "10359b995638",
+        "container_image_digests": [
+            "docker.io/ceph/ceph-grafana@sha256:44f6f2bfa52724d4db9a2ce343b299ff70a18dc21f1420548d5643df4ee18a6b"
+        ],
+        "container_image_id": "80728b29ad3f603cb306daeb6b0fb6c4c388e29e7eaac82cd3d3582ffd96b931",
+        "container_image_name": "docker.io/ceph/ceph-grafana:6.7.4",
+        "created": "2021-04-04T14:21:41.602878Z",
+        "daemon_id": "ceph-node-00",
+        "daemon_type": "grafana",
+        "events": [
+            "2021-04-04T14:21:41.651390Z daemon:grafana.ceph-node-00 [INFO] \"Deployed grafana.ceph-node-00 on host 'ceph-node-00.cephlab.com'\"",
+            "2021-04-04T14:25:26.705257Z daemon:grafana.ceph-node-00 [INFO] \"Reconfigured grafana.ceph-node-00 on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": true,
+        "last_refresh": "2021-04-04T14:27:38.609816Z",
+        "memory_usage": 27797749,
+        "ports": [
+            3000
+        ],
+        "started": "2021-04-04T14:25:26.020123Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "6.7.4"
+    },
+    {
+        "container_id": "04e86dfde3ae",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph:master",
+        "created": "2021-04-04T14:17:17.458301Z",
+        "daemon_id": "ceph-node-00.cephlab.com.qqwcpr",
+        "daemon_type": "mgr",
+        "events": [
+            "2021-04-04T14:25:24.076974Z daemon:mgr.ceph-node-00.cephlab.com.qqwcpr [ERROR] \"\"",
+            "2021-04-04T14:25:39.425312Z daemon:mgr.ceph-node-00.cephlab.com.qqwcpr [INFO] \"Reconfigured mgr.ceph-node-00.cephlab.com.qqwcpr on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "",
+        "is_active": true,
+        "last_refresh": "2021-04-04T14:20:21.353502Z",
+        "memory_usage": 411670937,
+        "ports": [
+            9283
+        ],
+        "started": "2021-04-04T14:17:16.779682Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "04e86dfde3ae",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph:master",
+        "created": "2021-04-04T14:17:17.458301Z",
+        "daemon_id": "ceph-node-00.cephlab.com.qqwcpr",
+        "daemon_type": "mgr",
+        "events": [
+            "2021-04-04T14:25:24.076974Z daemon:mgr.ceph-node-00.cephlab.com.qqwcpr [ERROR] \"\"",
+            "2021-04-04T14:25:39.425312Z daemon:mgr.ceph-node-00.cephlab.com.qqwcpr [INFO] \"Reconfigured mgr.ceph-node-00.cephlab.com.qqwcpr on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": true,
+        "last_refresh": "2021-04-04T14:27:38.610265Z",
+        "memory_usage": 468608614,
+        "ports": [
+            9283
+        ],
+        "started": "2021-04-04T14:17:16.779682Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "7bfba45507ab",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:24:25.445135Z",
+        "daemon_id": "ceph-node-02.mywsmi",
+        "daemon_type": "mgr",
+        "events": [
+            "2021-04-04T14:24:25.484361Z daemon:mgr.ceph-node-02.mywsmi [INFO] \"Deployed mgr.ceph-node-02.mywsmi on host 'ceph-node-02.cephlab.com'\"",
+            "2021-04-04T14:25:46.457476Z daemon:mgr.ceph-node-02.mywsmi [INFO] \"Reconfigured mgr.ceph-node-02.mywsmi on host 'ceph-node-02.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-02.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:37.471837Z",
+        "memory_usage": 384617676,
+        "ports": [
+            8443,
+            9283
+        ],
+        "started": "2021-04-04T14:24:25.142998Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "6045be766e88",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph:master",
+        "created": "2021-04-04T14:17:07.904023Z",
+        "daemon_id": "ceph-node-00.cephlab.com",
+        "daemon_type": "mon",
+        "events": [
+            "2021-04-04T14:25:24.076865Z daemon:mon.ceph-node-00.cephlab.com [ERROR] \"\"",
+            "2021-04-04T14:25:28.250425Z daemon:mon.ceph-node-00.cephlab.com [INFO] \"Reconfigured mon.ceph-node-00.cephlab.com on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:20:21.353077Z",
+        "memory_usage": 35871784,
+        "ports": [],
+        "started": "2021-04-04T14:17:13.608122Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "6045be766e88",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph:master",
+        "created": "2021-04-04T14:17:07.904023Z",
+        "daemon_id": "ceph-node-00.cephlab.com",
+        "daemon_type": "mon",
+        "events": [
+            "2021-04-04T14:25:24.076865Z daemon:mon.ceph-node-00.cephlab.com [ERROR] \"\"",
+            "2021-04-04T14:25:28.250425Z daemon:mon.ceph-node-00.cephlab.com [INFO] \"Reconfigured mon.ceph-node-00.cephlab.com on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:38.609967Z",
+        "memory_usage": 74826383,
+        "ports": [],
+        "started": "2021-04-04T14:17:13.608122Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "d2d261f4eb17",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:24:28.269212Z",
+        "daemon_id": "ceph-node-02",
+        "daemon_type": "mon",
+        "events": [
+            "2021-04-04T14:24:28.314782Z daemon:mon.ceph-node-02 [INFO] \"Deployed mon.ceph-node-02 on host 'ceph-node-02.cephlab.com'\"",
+            "2021-04-04T14:25:45.448194Z daemon:mon.ceph-node-02 [INFO] \"Reconfigured mon.ceph-node-02 on host 'ceph-node-02.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-02.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:37.471665Z",
+        "memory_usage": 65515028,
+        "ports": [],
+        "started": "2021-04-04T14:24:28.147109Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "51c04231de4c",
+        "container_image_digests": [
+            "docker.io/prom/node-exporter@sha256:a2f29256e53cc3e0b64d7a472512600b2e9410347d53cdc85b49f659c17e02ee",
+            "docker.io/prom/node-exporter@sha256:b630fb29d99b3483c73a2a7db5fc01a967392a3d7ad754c8eccf9f4a67e7ee31"
+        ],
+        "container_image_id": "e5a616e4b9cf68dfcad7782b78e118be4310022e874d52da85c55923fb615f87",
+        "container_image_name": "docker.io/prom/node-exporter:v0.18.1",
+        "created": "2021-04-04T14:21:52.336199Z",
+        "daemon_id": "ceph-node-00",
+        "daemon_type": "node-exporter",
+        "events": [
+            "2021-04-04T14:21:52.372374Z daemon:node-exporter.ceph-node-00 [INFO] \"Deployed node-exporter.ceph-node-00 on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:38.610044Z",
+        "memory_usage": 8001683,
+        "ports": [
+            9100
+        ],
+        "started": "2021-04-04T14:21:52.044759Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "0.18.1"
+    },
+    {
+        "container_id": "ac9e1d055972",
+        "container_image_digests": [
+            "docker.io/prom/node-exporter@sha256:a2f29256e53cc3e0b64d7a472512600b2e9410347d53cdc85b49f659c17e02ee",
+            "docker.io/prom/node-exporter@sha256:b630fb29d99b3483c73a2a7db5fc01a967392a3d7ad754c8eccf9f4a67e7ee31"
+        ],
+        "container_image_id": "e5a616e4b9cf68dfcad7782b78e118be4310022e874d52da85c55923fb615f87",
+        "container_image_name": "docker.io/prom/node-exporter:v0.18.1",
+        "created": "2021-04-04T14:24:39.469923Z",
+        "daemon_id": "ceph-node-01",
+        "daemon_type": "node-exporter",
+        "events": [
+            "2021-04-04T14:24:39.508244Z daemon:node-exporter.ceph-node-01 [INFO] \"Deployed node-exporter.ceph-node-01 on host 'ceph-node-01.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-01.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:26:25.839072Z",
+        "memory_usage": 7052722,
+        "ports": [
+            9100
+        ],
+        "started": "2021-04-04T14:24:39.156587Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "0.18.1"
+    },
+    {
+        "container_id": "b133dbf9cff8",
+        "container_image_digests": [
+            "docker.io/prom/node-exporter@sha256:a2f29256e53cc3e0b64d7a472512600b2e9410347d53cdc85b49f659c17e02ee",
+            "docker.io/prom/node-exporter@sha256:b630fb29d99b3483c73a2a7db5fc01a967392a3d7ad754c8eccf9f4a67e7ee31"
+        ],
+        "container_image_id": "e5a616e4b9cf68dfcad7782b78e118be4310022e874d52da85c55923fb615f87",
+        "container_image_name": "docker.io/prom/node-exporter:v0.18.1",
+        "created": "2021-04-04T14:24:49.840797Z",
+        "daemon_id": "ceph-node-02",
+        "daemon_type": "node-exporter",
+        "events": [
+            "2021-04-04T14:24:49.901437Z daemon:node-exporter.ceph-node-02 [INFO] \"Deployed node-exporter.ceph-node-02 on host 'ceph-node-02.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-02.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:37.471349Z",
+        "memory_usage": 7696547,
+        "ports": [
+            9100
+        ],
+        "started": "2021-04-04T14:24:49.524299Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "0.18.1"
+    },
+    {
+        "container_id": "51d864a583df",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:25:03.086634Z",
+        "daemon_id": "0",
+        "daemon_type": "osd",
+        "events": [
+            "2021-04-04T14:25:03.152770Z daemon:osd.0 [INFO] \"Deployed osd.0 on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:38.610426Z",
+        "memory_usage": 63826821,
+        "osdspec_affinity": "all-available-devices",
+        "ports": [],
+        "started": "2021-04-04T14:25:02.948826Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "7a141557611e",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:25:02.803534Z",
+        "daemon_id": "1",
+        "daemon_type": "osd",
+        "events": [
+            "2021-04-04T14:25:02.905863Z daemon:osd.1 [INFO] \"Deployed osd.1 on host 'ceph-node-01.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-01.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:26:25.839343Z",
+        "memory_usage": 44155535,
+        "osdspec_affinity": "all-available-devices",
+        "ports": [],
+        "started": "2021-04-04T14:25:02.650699Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "bbf4cc5b870a",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:25:03.771174Z",
+        "daemon_id": "2",
+        "daemon_type": "osd",
+        "events": [
+            "2021-04-04T14:25:03.827365Z daemon:osd.2 [INFO] \"Deployed osd.2 on host 'ceph-node-02.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-02.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:37.471996Z",
+        "memory_usage": 62495129,
+        "osdspec_affinity": "all-available-devices",
+        "ports": [],
+        "started": "2021-04-04T14:25:08.134780Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "e36d84e5608b",
+        "container_image_digests": [
+            "docker.io/prom/prometheus@sha256:5880ec936055fad18ccee798d2a63f64ed85bd28e8e0af17c6923a090b686c3d",
+            "docker.io/prom/prometheus@sha256:b4e6cd0275a26750505e539f8528e891053434ebd3972be02645bed5f02f0795"
+        ],
+        "container_image_id": "de242295e2257c37c8cadfd962369228f8f10b2d48a44259b65fef44ad4f6490",
+        "container_image_name": "docker.io/prom/prometheus:v2.18.1",
+        "created": "2021-04-04T14:22:11.310763Z",
+        "daemon_id": "ceph-node-00",
+        "daemon_type": "prometheus",
+        "events": [
+            "2021-04-04T14:22:11.356043Z daemon:prometheus.ceph-node-00 [INFO] \"Deployed prometheus.ceph-node-00 on host 'ceph-node-00.cephlab.com'\"",
+            "2021-04-04T14:25:33.086106Z daemon:prometheus.ceph-node-00 [INFO] \"Reconfigured prometheus.ceph-node-00 on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": true,
+        "last_refresh": "2021-04-04T14:27:38.610128Z",
+        "memory_usage": 27724349,
+        "ports": [
+            9095
+        ],
+        "started": "2021-04-04T14:25:32.344156Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "2.18.1"
+    },
+    {
+        "container_id": "5cdeb705c7f6",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:27:26.775628Z",
+        "daemon_id": "foo.ceph-node-00.qknfoh",
+        "daemon_type": "rgw",
+        "events": [
+            "2021-04-04T14:27:26.824821Z daemon:rgw.foo.ceph-node-00.qknfoh [INFO] \"Deployed rgw.foo.ceph-node-00.qknfoh on host 'ceph-node-00.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-00.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:38.610617Z",
+        "memory_usage": 53309603,
+        "ports": [
+            80
+        ],
+        "started": "2021-04-04T14:27:26.350981Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_id": "18a2179a35c0",
+        "container_image_digests": [
+            "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4"
+        ],
+        "container_image_id": "f72dfde44435bedf5e4c8be05c8194cc57f5f654b9bb146b73e81f1c5358b4c5",
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:27:24.200977Z",
+        "daemon_id": "foo.ceph-node-02.fgzmmm",
+        "daemon_type": "rgw",
+        "events": [
+            "2021-04-04T14:27:24.300473Z daemon:rgw.foo.ceph-node-02.fgzmmm [INFO] \"Deployed rgw.foo.ceph-node-02.fgzmmm on host 'ceph-node-02.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-02.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:37.471149Z",
+        "memory_usage": 53487861,
+        "ports": [
+            80
+        ],
+        "started": "2021-04-04T14:27:23.793957Z",
+        "status": 1,
+        "status_desc": "running",
+        "version": "17.0.0-2786-g7fb0569e"
+    },
+    {
+        "container_image_name": "quay.ceph.io/ceph-ci/ceph@sha256:cfd9dc4a437e11894a9a0d930ed1221ccc4e939b943981f6dfbdc611816904d4",
+        "created": "2021-04-04T14:27:30.048136Z",
+        "daemon_id": "foo.ceph-node-02.hqjyla",
+        "daemon_type": "rgw",
+        "events": [
+            "2021-04-04T14:27:30.115692Z daemon:rgw.foo.ceph-node-02.hqjyla [INFO] \"Deployed rgw.foo.ceph-node-02.hqjyla on host 'ceph-node-02.cephlab.com'\""
+        ],
+        "hostname": "ceph-node-02.cephlab.com",
+        "is_active": false,
+        "last_refresh": "2021-04-04T14:27:37.471564Z",
+        "ports": [
+            80
+        ],
+        "status": -1,
+        "status_desc": "unknown"
+    }
+]
