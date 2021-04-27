@@ -434,6 +434,7 @@ class LocalRemote(object):
                                        stderr=subprocess.PIPE,
                                        stdin=subprocess.PIPE,
                                        cwd=cwd,
+                                       env=env,
                                        shell=True)
         else:
             # Sanity check that we've got a list of strings
