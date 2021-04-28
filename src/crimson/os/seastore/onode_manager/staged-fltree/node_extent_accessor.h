@@ -349,7 +349,7 @@ class NodeExtentAccessorT {
     }
 #ifndef NDEBUG
     test_extent->prepare_replay(extent);
-    test_recorder->template encode_split(split_at, read().p_start());
+    test_recorder->encode_split(split_at, read().p_start());
 #endif
     layout_t::split(*mut, read(), split_at);
 #ifndef NDEBUG
