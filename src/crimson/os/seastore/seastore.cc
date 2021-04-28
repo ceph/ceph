@@ -107,21 +107,7 @@ seastar::future<CollectionRef> SeaStore::create_new_collection(const coll_t& cid
 {
   LOG_PREFIX(SeaStore::create_new_collection);
   DEBUG("{}", cid);
-  auto c = _get_collection(cid);
-  return repeat_with_internal_context(
-    c,
-    ceph::os::Transaction{},
-    [this, cid](auto &ctx) {
-      return _create_collection(
-	ctx,
-	cid,
-	4 /* TODO */
-      ).safe_then([this, &ctx] {
-	return transaction_manager->submit_transaction(std::move(ctx.transaction));
-      });
-    }).then([c] {
-      return CollectionRef(c);
-    });
+  return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
 }
 
 seastar::future<CollectionRef> SeaStore::open_collection(const coll_t& cid)

@@ -40,6 +40,11 @@ struct seastore_test_t :
       return seastore->create_new_collection(coll_name);
     }).then([this](auto coll_ref) {
       coll = coll_ref;
+      CTransaction t;
+      t.create_collection(coll_name, 4);
+      return seastore->do_transaction(
+	coll,
+	std::move(t));
     });
   }
 
@@ -288,6 +293,11 @@ TEST_F(seastore_test_t, collection_create_list_remove)
     coll_t test_coll{spg_t{pg_t{1, 0}}};
     {
       seastore->create_new_collection(test_coll).get0();
+      {
+	CTransaction t;
+	t.create_collection(test_coll, 4);
+	do_transaction(std::move(t));
+      }
       auto collections = seastore->list_collections().get0();
       EXPECT_EQ(collections.size(), 2);
       EXPECT_TRUE(contains(collections, coll_name));
@@ -295,9 +305,11 @@ TEST_F(seastore_test_t, collection_create_list_remove)
     }
 
     {
-      CTransaction t;
-      t.remove_collection(test_coll);
-      do_transaction(std::move(t));
+      {
+	CTransaction t;
+	t.remove_collection(test_coll);
+	do_transaction(std::move(t));
+      }
       auto collections = seastore->list_collections().get0();
       EXPECT_EQ(collections.size(), 1);
       EXPECT_TRUE(contains(collections, coll_name));
