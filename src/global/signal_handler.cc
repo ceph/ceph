@@ -46,14 +46,22 @@ using std::string;
 using ceph::BackTrace;
 using ceph::JSONFormatter;
 
+#ifndef _WIN32
+void install_sighandler(int signum, signal_action_handler_t handler, int flags)
+#else
 void install_sighandler(int signum, signal_handler_t handler, int flags)
+#endif
 {
   int ret;
   struct sigaction oldact;
   struct sigaction act;
   memset(&act, 0, sizeof(act));
 
+#ifndef _WIN32
+  act.sa_sigaction = handler;
+#else
   act.sa_handler = handler;
+#endif
   sigemptyset(&act.sa_mask);
   act.sa_flags = flags;
 
@@ -281,7 +289,38 @@ void generate_crash_dump(char *base,
   }
 }
 
+#ifndef _WIN32
+static void dump_siginfo(std::ostream& os, const siginfo_t& siginfo)
+{
+  os << std::endl << "Dump of siginfo:" << std::endl
+     << "  si_signo: " << siginfo.si_signo << std::endl
+     << "  si_errno: " << siginfo.si_errno << std::endl
+     << "  si_code: " << siginfo.si_code << std::endl
+     << "  si_pid: " << siginfo.si_pid << std::endl
+     << "  si_uid: " << siginfo.si_uid << std::endl
+     << "  si_status: " << siginfo.si_status << std::endl
+     << "  si_utime: " << siginfo.si_utime << std::endl
+     << "  si_stime: " << siginfo.si_stime << std::endl
+     << "  si_int: " << siginfo.si_int << std::endl
+     << "  si_ptr: " << siginfo.si_ptr << std::endl
+     << "  si_overrun: " << siginfo.si_overrun << std::endl
+     << "  si_timerid: " << siginfo.si_timerid << std::endl
+     << "  si_addr: " << siginfo.si_addr << std::endl
+     << "  si_band: " << siginfo.si_band << std::endl
+     << "  si_fd: " << siginfo.si_fd << std::endl
+     << "  si_addr_lsb: " << siginfo.si_addr_lsb << std::endl
+     << "  si_lower: " << siginfo.si_lower << std::endl
+     << "  si_upper: " << siginfo.si_upper << std::endl
+     << "  si_pkey: " << siginfo.si_pkey << std::endl
+     << "  si_call_addr: " << siginfo.si_call_addr << std::endl
+     << "  si_syscall: " << siginfo.si_syscall << std::endl
+     << "  si_arch: " << siginfo.si_arch << std::endl;
+}
+
+static void handle_oneshot_fatal_signal(int signum, siginfo_t *siginfo, void*)
+#else
 static void handle_oneshot_fatal_signal(int signum)
+#endif
 {
   constexpr static pid_t NULL_TID{0};
   static std::atomic<pid_t> handler_tid{NULL_TID};
@@ -325,6 +364,11 @@ static void handle_oneshot_fatal_signal(int signum)
   ClibBackTrace bt(1);
   ostringstream oss;
   bt.print(oss);
+#ifndef _WIN32
+  if (siginfo) {
+    dump_siginfo(oss, *siginfo);
+  }
+#endif
   dout_emergency(oss.str());
 
   char crash_base[PATH_MAX] = { 0 };
@@ -366,7 +410,11 @@ static void handle_oneshot_fatal_signal(int signum)
 
 void install_standard_sighandlers(void)
 {
+#ifndef _WIN32
+  install_sighandler(SIGSEGV, handle_oneshot_fatal_signal, SA_NODEFER | SA_SIGINFO);
+#else
   install_sighandler(SIGSEGV, handle_oneshot_fatal_signal, SA_NODEFER);
+#endif
   install_sighandler(SIGABRT, handle_oneshot_fatal_signal, SA_NODEFER);
   install_sighandler(SIGBUS, handle_oneshot_fatal_signal, SA_NODEFER);
   install_sighandler(SIGILL, handle_oneshot_fatal_signal, SA_NODEFER);

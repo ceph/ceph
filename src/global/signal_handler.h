@@ -21,6 +21,10 @@
 #include <string>
 
 typedef void (*signal_handler_t)(int);
+#ifndef _WIN32
+typedef void (*signal_action_handler_t)(int, siginfo_t*, void*);
+#endif
+
 namespace ceph {
   struct BackTrace;
 }
@@ -33,7 +37,11 @@ namespace ceph {
 # define sig_str(signum) sys_siglist[signum]
 #endif
 
+#ifndef _WIN32
+void install_sighandler(int signum, signal_action_handler_t handler, int flags);
+#else
 void install_sighandler(int signum, signal_handler_t handler, int flags);
+#endif
 
 // handles SIGHUP
 void sighup_handler(int signum);
