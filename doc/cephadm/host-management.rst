@@ -278,7 +278,6 @@ names etc. When cephadm initiates an ssh connection to a remote host,
 the host name  can be resolved in four different ways:
 
 -  a custom ssh config resolving the name to an IP
--  via an externally maintained ``/etc/hosts``
 -  via explicitly providing an IP address to cephadm: ``ceph orch host add <hostname> <IP>``
 -  automatic name resolution via DNS.
 

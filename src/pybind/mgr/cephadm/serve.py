@@ -1240,7 +1240,10 @@ To add the cephadm SSH key to the host:
 > ceph cephadm get-pub-key > ~/ceph.pub
 > ssh-copy-id -f -i ~/ceph.pub {user}@{addr}
 
-To check that the host is reachable:
+To check that the host is reachable open a new shell with the --no-hosts flag:
+> cephadm shell --no-hosts
+
+Then run the following:
 > ceph cephadm get-ssh-config > ssh_config
 > ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
 > chmod 0600 ~/cephadm_private_key
