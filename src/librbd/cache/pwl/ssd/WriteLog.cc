@@ -700,29 +700,31 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
               //space for userdata
               allocated_bytes += entry->get_aligned_data_size();
             }
-          }
-          {
-            std::lock_guard locker(m_lock);
-            m_first_valid_entry = first_valid_entry;
-            ceph_assert(m_first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0);
-            this->m_free_log_entries += retiring_entries.size();
-            ceph_assert(this->m_bytes_cached >= cached_bytes);
-            this->m_bytes_cached -= cached_bytes;
+        }
+        {
+          std::lock_guard locker(m_lock);
+          m_first_valid_entry = first_valid_entry;
+          ceph_assert(m_first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+          this->m_free_log_entries += retiring_entries.size();
+          ceph_assert(this->m_bytes_allocated >= allocated_bytes);
+          this->m_bytes_allocated -= allocated_bytes;
+          ceph_assert(this->m_bytes_cached >= cached_bytes);
+          this->m_bytes_cached -= cached_bytes;
 
-            ldout(m_image_ctx.cct, 20)
-              << "Finished root update: " << "initial_first_valid_entry="
-              << initial_first_valid_entry << ", " << "m_first_valid_entry="
-              << m_first_valid_entry << "," << "release space = "
-              << allocated_bytes << "," << "m_bytes_allocated="
-              << m_bytes_allocated << "," << "release cached space="
-              << allocated_bytes << "," << "m_bytes_cached="
-              << this->m_bytes_cached << dendl;
+          ldout(m_image_ctx.cct, 20)
+            << "Finished root update: " << "initial_first_valid_entry="
+            << initial_first_valid_entry << ", " << "m_first_valid_entry="
+            << m_first_valid_entry << "," << "release space = "
+            << allocated_bytes << "," << "m_bytes_allocated="
+            << m_bytes_allocated << "," << "release cached space="
+            << cached_bytes << "," << "m_bytes_cached="
+            << this->m_bytes_cached << dendl;
 
-            this->m_alloc_failed_since_retire = false;
-            this->wake_up();
-            m_async_update_superblock--;
-            this->m_async_op_tracker.finish_op();
-          }
+          this->m_alloc_failed_since_retire = false;
+          this->wake_up();
+          m_async_update_superblock--;
+          this->m_async_op_tracker.finish_op();
+        }
 
           this->dispatch_deferred_writes();
           this->process_writeback_dirty_entries();
