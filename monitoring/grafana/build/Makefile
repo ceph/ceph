@@ -21,7 +21,7 @@ build :
 	echo "Creating base container"
 	$(eval CONTAINER := $(shell sudo buildah from ${IMAGE}))
 	# Using upstream grafana build
-	wget https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
+	curl -fLO https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
 	sudo buildah copy $(CONTAINER) grafana-${GRAFANA_VERSION}.${ARCH}.rpm /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
 	sudo buildah run $(CONTAINER) ${PKGMGR} install -y --setopt install_weak_deps=false --setopt=tsflags=nodocs /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
 	sudo buildah run $(CONTAINER) ${PKGMGR} clean all
