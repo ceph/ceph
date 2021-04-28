@@ -1,7 +1,8 @@
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpecValidationError, ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.hostspec import SpecValidationError
 
 try:
     from typing import Optional, List, Dict, Any, Union
@@ -121,7 +122,7 @@ class DeviceSelection(object):
         return repr(self) == repr(other)
 
 
-class DriveGroupValidationError(ServiceSpecValidationError):
+class DriveGroupValidationError(SpecValidationError):
     """
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
     if it was raised in a different mgr module.
@@ -255,6 +256,8 @@ class DriveGroupSpec(ServiceSpec):
         else:
             args.update(cls._drive_group_spec_from_json(json_drive_group))
 
+        args['unmanaged'] = json_drive_group.pop('unmanaged', False)
+
         return cls(**args)
 
     @classmethod
@@ -283,6 +286,9 @@ class DriveGroupSpec(ServiceSpec):
         if not isinstance(self.placement.host_pattern, str) and \
                 self.placement.host_pattern is not None:
             raise DriveGroupValidationError('host_pattern must be of type string')
+
+        if self.data_devices is None:
+            raise DriveGroupValidationError("`data_devices` element is required.")
 
         specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
         for s in filter(None, specs):

@@ -4,4 +4,5 @@ tasks:
       - ceph osd pool create foo
       - rbd pool init foo
       - ceph orch apply iscsi foo u p
-      - sleep 120
+- cephadm.wait_for_service:
+    service: iscsi.foo

@@ -31,9 +31,9 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec
+    IscsiServiceSpec, IngressSpec
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult
@@ -94,7 +94,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
-        except (OrchestratorError, ServiceSpecValidationError) as e:
+        except (OrchestratorError, SpecValidationError) as e:
             # Do not print Traceback for expected errors.
             return HandleCommandResult(e.errno, stderr=str(e))
         except ImportError as e:
@@ -450,7 +450,7 @@ class Orchestrator(object):
             'prometheus': self.apply_prometheus,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
-            'ha-rgw': self.apply_ha_rgw,
+            'ingress': self.apply_ingress,
             'host': self.add_host,
             'cephadm-exporter': self.apply_cephadm_exporter,
         }
@@ -596,8 +596,8 @@ class Orchestrator(object):
         """Update RGW cluster"""
         raise NotImplementedError()
 
-    def apply_ha_rgw(self, spec: HA_RGWSpec) -> OrchResult[str]:
-        """Update ha-rgw daemons"""
+    def apply_ingress(self, spec: IngressSpec) -> OrchResult[str]:
+        """Update ingress daemons"""
         raise NotImplementedError()
 
     def apply_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[str]:
@@ -687,8 +687,8 @@ def daemon_type_to_service(dtype: str) -> str:
         'mds': 'mds',
         'rgw': 'rgw',
         'osd': 'osd',
-        'haproxy': 'ha-rgw',
-        'keepalived': 'ha-rgw',
+        'haproxy': 'ingress',
+        'keepalived': 'ingress',
         'iscsi': 'iscsi',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
@@ -712,7 +712,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'mds': ['mds'],
         'rgw': ['rgw'],
         'osd': ['osd'],
-        'ha-rgw': ['haproxy', 'keepalived'],
+        'ingress': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
@@ -810,8 +810,6 @@ class DaemonDescription(object):
         # The type of service (osd, mon, mgr, etc.)
         self.daemon_type = daemon_type
 
-        assert daemon_type not in ['HA_RGW', 'ha-rgw']
-
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
@@ -856,9 +854,7 @@ class DaemonDescription(object):
     def get_port_summary(self) -> str:
         if not self.ports:
             return ''
-        return ' '.join([
-            f"{self.ip or '*'}:{p}" for p in self.ports
-        ])
+        return f"{self.ip or '*'}:{','.join(map(str, self.ports or []))}"
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -1027,7 +1023,9 @@ class ServiceDescription(object):
                  deleted: Optional[datetime.datetime] = None,
                  size: int = 0,
                  running: int = 0,
-                 events: Optional[List['OrchestratorEvent']] = None) -> None:
+                 events: Optional[List['OrchestratorEvent']] = None,
+                 virtual_ip: Optional[str] = None,
+                 ports: List[int] = []) -> None:
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
         # (image name)
@@ -1057,11 +1055,19 @@ class ServiceDescription(object):
 
         self.events: List[OrchestratorEvent] = events or []
 
+        self.virtual_ip = virtual_ip
+        self.ports = ports
+
     def service_type(self) -> str:
         return self.spec.service_type
 
     def __repr__(self) -> str:
         return f"<ServiceDescription of {self.spec.one_line_str()}>"
+
+    def get_port_summary(self) -> str:
+        if not self.ports:
+            return ''
+        return f"{(self.virtual_ip or '?').split('/')[0]}:{','.join(map(str, self.ports or []))}"
 
     def to_json(self) -> OrderedDict:
         out = self.spec.to_json()
@@ -1074,6 +1080,8 @@ class ServiceDescription(object):
             'running': self.running,
             'last_refresh': self.last_refresh,
             'created': self.created,
+            'virtual_ip': self.virtual_ip,
+            'ports': self.ports if self.ports else None,
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):

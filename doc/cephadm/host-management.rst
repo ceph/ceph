@@ -15,6 +15,9 @@ To list hosts associated with the cluster:
 Adding Hosts
 ============
 
+Hosts must have these :ref:`cephadm-host-requirements` installed.
+Hosts without all the necessary requirements will fail to be added to the cluster.
+
 To add each new host to the cluster, perform two steps:
 
 #. Install the cluster's public SSH key in the new host's root user's ``authorized_keys`` file:
@@ -101,7 +104,12 @@ are free form and have no particular meaning by itself and each host
 can have multiple labels. They can be used to specify placement
 of daemons. See :ref:`orch-placement-by-labels`
 
-To add a label, run::
+Labels can be added when adding a host with the ``--labels`` flag::
+
+  ceph orch host add my_hostname --labels=my_label1
+  ceph orch host add my_hostname --labels=my_label1,my_label2
+
+To add a label a existing host, run::
 
   ceph orch host label add my_hostname my_label
 

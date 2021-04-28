@@ -5,8 +5,9 @@ import yaml
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, ServiceSpecValidationError, RGWSpec, NFSServiceSpec, IscsiServiceSpec
+    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.hostspec import SpecValidationError
 
 
 @pytest.mark.parametrize("test_input,expected, require_network",
@@ -84,7 +85,7 @@ def test_parse_placement_specs(test_input, expected):
     ]
 )
 def test_parse_placement_specs_raises(test_input):
-    with pytest.raises(ServiceSpecValidationError):
+    with pytest.raises(SpecValidationError):
         PlacementSpec.from_string(test_input)
 
 @pytest.mark.parametrize("test_input",
@@ -181,6 +182,16 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     assert spec.validate() is None
     ServiceSpec.from_json(spec.to_json())
 
+def test_osd_unmanaged():
+    osd_spec = {"placement": {"host_pattern": "*"},
+                "service_id": "all-available-devices",
+                "service_name": "osd.all-available-devices",
+                "service_type": "osd",
+                "spec": {"data_devices": {"all": True}, "filter_logic": "AND", "objectstore": "bluestore"},
+                "unmanaged": True}
+
+    dg_spec = ServiceSpec.from_json(osd_spec)
+    assert dg_spec.unmanaged == True
 
 def test_yaml():
     y = """service_type: crash
@@ -321,6 +332,6 @@ def test_service_name(s_type, s_id, s_name):
     ])
 
 def test_service_id_raises_invalid_char(s_type, s_id):
-    with pytest.raises(ServiceSpecValidationError):
+    with pytest.raises(SpecValidationError):
         spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
         spec.validate()

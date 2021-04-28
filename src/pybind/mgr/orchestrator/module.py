@@ -10,8 +10,8 @@ from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, \
-    ServiceSpecValidationError
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
 from mgr_util import to_pretty_timedelta, format_dimless
@@ -326,6 +326,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None, maintenance: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
+
+        # split multiple labels passed in with --labels=label1,label2
+        if labels and len(labels) == 1:
+            labels = labels[0].split(',')
+
         s = HostSpec(hostname=hostname, addr=addr, labels=labels, status=_status)
 
         return self._apply_misc([s], False, Format.plain)
@@ -556,11 +561,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         else:
             now = datetime_now()
             table = PrettyTable(
-                ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
-                 'PLACEMENT',
-                 ],
+                [
+                    'NAME', 'PORTS',
+                    'RUNNING', 'REFRESHED', 'AGE',
+                    'PLACEMENT',
+                ],
                 border=False)
             table.align['NAME'] = 'l'
+            table.align['PORTS'] = 'l'
             table.align['RUNNING'] = 'r'
             table.align['REFRESHED'] = 'l'
             table.align['AGE'] = 'l'
@@ -581,6 +589,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
                 table.add_row((
                     s.spec.service_name(),
+                    s.get_port_summary(),
                     '%d/%d' % (s.running, s.size),
                     refreshed,
                     nice_delta(now, s.created),
@@ -644,7 +653,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 table.add_row((
                     s.name(),
                     ukn(s.hostname),
-                    s.get_port_summary() or '-',
+                    s.get_port_summary(),
                     status,
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
@@ -1011,7 +1020,7 @@ Usage:
                         try:
                             self.get_foreign_ceph_option('mon', k)
                         except KeyError:
-                            raise ServiceSpecValidationError(f'Invalid config option {k} in spec')
+                            raise SpecValidationError(f'Invalid config option {k} in spec')
 
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
@@ -1075,6 +1084,13 @@ Usage:
         """Update the number of RGW instances for the given zone"""
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        if realm and not zone:
+            raise OrchestratorValidationError(
+                'Cannot add RGW: Realm specified but no zone specified')
+        if zone and not realm:
+            raise OrchestratorValidationError(
+                'Cannot add RGW: Zone specified but no realm specified')
 
         spec = RGWSpec(
             service_id=svc_id,
