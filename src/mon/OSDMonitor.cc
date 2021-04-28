@@ -615,7 +615,7 @@ CrushWrapper &OSDMonitor::_get_stable_crush()
   return *osdmap.crush;
 }
 
-void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
+CrushWrapper OSDMonitor::_get_pending_crush()
 {
   bufferlist bl;
   if (pending_inc.crush.length())
@@ -624,7 +624,9 @@ void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
     osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   auto p = bl.cbegin();
-  newcrush.decode(p);
+  CrushWrapper crush;
+  crush.decode(p);
+  return crush;
 }
 
 void OSDMonitor::create_initial()
@@ -1178,8 +1180,7 @@ void OSDMonitor::create_pending()
   // Rewrite CRUSH rule IDs if they are using legacy "ruleset"
   // structure.
   if (osdmap.crush->has_legacy_rule_ids()) {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     // First, for all pools, work out which rule they really used
     // by resolving ruleset to rule.
@@ -7303,8 +7304,7 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
       return ret;
   }
 
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
 
   ret = newcrush.rename_bucket(srcname,
 			       dstname,
@@ -7399,8 +7399,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
     return -EEXIST;
   }
 
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
 
   ruleid = newcrush.get_rule_id(name);
   if (ruleid != -ENOENT) {
@@ -7751,8 +7750,7 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
     // found it, use it
     *crush_rule = ret;
   } else {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     ret = newcrush.get_rule_id(rule_name);
     if (ret != -ENOENT) {
@@ -7860,8 +7858,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     return r;
   }
   if (g_conf()->mon_osd_crush_smoke_test) {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     ostringstream err;
     CrushTester tester(newcrush, err);
     tester.set_min_x(0);
@@ -9082,8 +9079,7 @@ void OSDMonitor::do_osd_create(
 
 out:
   if (device_class.size()) {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (newcrush.get_max_devices() < *new_id + 1) {
       newcrush.set_max_devices(*new_id + 1);
     }
@@ -9633,8 +9629,7 @@ int OSDMonitor::prepare_command_osd_purge(
    *     the crush update we delayed from before.
    */
 
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
 
   bool may_be_idempotent = false;
 
@@ -9826,8 +9821,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
 
   } else if (prefix == "osd crush set-all-straw-buckets-to-straw2") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     for (int b = 0; b < newcrush.get_max_buckets(); ++b) {
       int bid = -1 - b;
       if (newcrush.bucket_exists(bid) &&
@@ -9855,8 +9849,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool stop = false;
     vector<string> idvec;
     cmd_getval(cmdmap, "ids", idvec);
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     set<int> updated;
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
       set<int> osds;
@@ -9929,8 +9922,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool stop = false;
     vector<string> idvec;
     cmd_getval(cmdmap, "ids", idvec);
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     set<int> updated;
 
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
@@ -10002,8 +9994,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "class '" << device_class << "' already exists";
       goto reply;
     }
-     CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+     CrushWrapper newcrush = _get_pending_crush();
      if (newcrush.class_exists(device_class)) {
       ss << "class '" << device_class << "' already exists";
       goto update;
@@ -10032,8 +10023,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
        goto reply;
      }
 
-     CrushWrapper newcrush;
-     _get_pending_crush(newcrush);
+     CrushWrapper newcrush = _get_pending_crush();
      if (!newcrush.class_exists(device_class)) {
        err = 0; // make command idempotent
        goto wait;
@@ -10107,8 +10097,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (!newcrush.class_exists(srcname) && newcrush.class_exists(dstname)) {
       // suppose this is a replay and return success
       // so command is idempotent
@@ -10148,8 +10137,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (newcrush.name_exists(name)) {
       ss << "bucket '" << name << "' already exists";
@@ -10218,8 +10206,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto update;
   } else if (prefix == "osd crush weight-set create" ||
 	     prefix == "osd crush weight-set create-compat") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     int positions;
     if (newcrush.has_non_straw2_buckets()) {
@@ -10272,8 +10259,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd crush weight-set rm" ||
 	     prefix == "osd crush weight-set rm-compat") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     if (prefix == "osd crush weight-set rm") {
       string poolname;
@@ -10299,8 +10285,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "pool", poolname);
     cmd_getval(cmdmap, "item", item);
     cmd_getval(cmdmap, "weight", weight);
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     if (prefix == "osd crush weight-set reweight") {
       pool = osdmap.lookup_pg_pool_name(poolname.c_str());
@@ -10386,8 +10371,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     dout(5) << "adding/updating crush item id " << osdid << " name '"
       << osd_name << "' weight " << weight << " at location "
       << loc << dendl;
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     string action;
     if (prefix == "osd crush set" ||
@@ -10447,8 +10431,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	      << "' initial_weight " << weight << " at location " << loc
 	      << dendl;
 
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+      CrushWrapper newcrush = _get_pending_crush();
 
       err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc,
 					 g_conf()->osd_crush_update_weight_set);
@@ -10482,8 +10465,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       CrushWrapper::parse_loc_map(argvec, &loc);
 
       dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+      CrushWrapper newcrush = _get_pending_crush();
 
       if (!newcrush.name_exists(name)) {
 	err = -ENOENT;
@@ -10522,8 +10504,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool force = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", force);
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (!newcrush.name_exists(source)) {
       ss << "source item " << source << " does not exist";
       err = -ENOENT;
@@ -10590,8 +10571,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     dout(5) << "linking crush item name '" << name << "' at location " << loc << dendl;
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (!newcrush.name_exists(name)) {
       err = -ENOENT;
@@ -10625,8 +10605,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd crush unlink") {
     do {
       // osd crush rm <id> [ancestor]
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+      CrushWrapper newcrush = _get_pending_crush();
 
       string name;
       cmd_getval(cmdmap, "name", name);
@@ -10681,8 +10660,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } while (false);
 
   } else if (prefix == "osd crush reweight-all") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     newcrush.reweight(cct);
     pending_inc.crush.clear();
@@ -10694,8 +10672,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd crush reweight") {
     // osd crush reweight <name> <weight>
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     string name;
     cmd_getval(cmdmap, "name", name);
@@ -10733,8 +10710,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd crush reweight-subtree") {
     // osd crush reweight <name> <weight>
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     string name;
     cmd_getval(cmdmap, "name", name);
@@ -10771,8 +10747,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush tunables") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     err = 0;
     string profile;
@@ -10810,8 +10785,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush set-tunable") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     err = 0;
     string tunable;
@@ -10868,8 +10842,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (newcrush.rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
@@ -10907,8 +10880,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (newcrush.rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
@@ -11107,8 +11079,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (!newcrush.rule_exists(name)) {
       ss << "rule " << name << " does not exist";
@@ -11156,8 +11127,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (!newcrush.rule_exists(srcname) && newcrush.rule_exists(dstname)) {
       // srcname does not exist and dstname already exists
       // suppose this is a replay and return success
@@ -14171,8 +14141,7 @@ int OSDMonitor::_prepare_remove_pool(
   }
 
   // remove any choose_args for this pool
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
   if (newcrush.have_choose_args(pool)) {
     dout(10) << __func__ << " removing choose_args for pool " << pool << dendl;
     newcrush.rm_choose_args(pool);
@@ -14331,8 +14300,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 {
   dout(20) << __func__ << dendl;
   *okay = false;
-  CrushWrapper crush;
-  _get_pending_crush(crush);
+  CrushWrapper crush = _get_pending_crush();
   int dividing_id;
   int retval = crush.get_validated_type_id(dividing_bucket, &dividing_id);
   if (retval == -1) {

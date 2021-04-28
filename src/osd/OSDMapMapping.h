@@ -286,6 +286,9 @@ private:
       mapping->_finish(*osdmap);
     }
   };
+  friend class OSDMapTest;
+  // for testing only
+  void update(const OSDMap& map);
 
 public:
   void get(pg_t pgid,
@@ -326,7 +329,6 @@ public:
     return acting_rmap[osd];
   }
 
-  void update(const OSDMap& map);
   void update(const OSDMap& map, pg_t pgid);
 
   std::unique_ptr<MappingJob> start_update(
