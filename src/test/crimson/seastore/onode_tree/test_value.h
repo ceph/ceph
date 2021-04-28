@@ -149,7 +149,7 @@ struct test_item_t {
 
   value_size_t get_payload_size() const {
     assert(size > sizeof(value_header_t));
-    return {static_cast<value_size_t>(size - sizeof(value_header_t))};
+    return static_cast<value_size_t>(size - sizeof(value_header_t));
   }
 
   void initialize(Transaction& t, TestValue& value) const {
