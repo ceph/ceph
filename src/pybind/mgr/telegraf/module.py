@@ -1,6 +1,7 @@
 import errno
 import json
 import itertools
+import six
 import socket
 import time
 from threading import Event
@@ -98,7 +99,9 @@ class Module(MgrModule):
                 }
 
     def get_daemon_stats(self):
-        for daemon, counters in self.get_all_perf_counters().items():
+        osd_map_tree = self.get('osd_map_tree')
+        osd_classes = dict([(c['name'],c['device_class']) for c in osd_map_tree['nodes'] if c['type']=='osd' ])
+        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
             svc_type, svc_id = daemon.split('.', 1)
             metadata = self.get_metadata(svc_type, svc_id)
             if not metadata:
@@ -107,15 +110,17 @@ class Module(MgrModule):
             for path, counter_info in counters.items():
                 if counter_info['type'] & self.PERFCOUNTER_HISTOGRAM:
                     continue
-
-                yield {
-                    'measurement': 'ceph_daemon_stats',
-                    'tags': {
+                tags = {
                         'ceph_daemon': daemon,
                         'type_instance': path,
                         'host': metadata['hostname'],
                         'fsid': self.get_fsid()
-                    },
+                    }
+                if svc_type == 'osd':
+                    tags['device_class'] = osd_classes[daemon]
+                yield {
+                    'measurement': 'ceph_daemon_stats',
+                    'tags': tags,
                     'value': counter_info['value']
                 }
 
