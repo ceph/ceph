@@ -242,7 +242,7 @@ public:
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
-  void _get_pending_crush(CrushWrapper& newcrush);
+  CrushWrapper _get_pending_crush();
 
   enum FastReadType {
     FAST_READ_OFF,
