@@ -23,7 +23,7 @@ TEMPLATE = '''
    {{ desc | wordwrap(70) | indent(3) }}
 {% endif %}
    :type: ``{{opt.type}}``
-{%- if default %}
+{%- if default is defined %}
   {%- if opt.type == 'size' %}
    :default: ``{{ default | eval_size | iec_size }}``
   {%- elif opt.type == 'secs' %}
