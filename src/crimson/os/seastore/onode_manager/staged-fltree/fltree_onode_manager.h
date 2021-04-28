@@ -10,7 +10,7 @@
 
 namespace crimson::os::seastore::onode {
 
-struct FLTreeOnode : Onode, Value {
+struct FLTreeOnode final : Onode, Value {
   static constexpr value_magic_t HEADER_MAGIC = value_magic_t::ONODE;
 
   enum class status_t {
