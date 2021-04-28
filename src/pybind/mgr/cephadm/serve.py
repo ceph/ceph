@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 from collections import defaultdict
@@ -14,7 +15,7 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, IngressSpec, CustomContainerSpec
+from ceph.deployment.service_spec import ServiceSpec, IngressSpec, CustomContainerSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
@@ -131,6 +132,65 @@ class CephadmServe:
         bad_hosts = []
         failures = []
 
+        # host -> path -> (mode, uid, gid, content, digest)
+        client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]] = {}
+
+        # ceph.conf
+        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
+            config = self.mgr.get_minimal_ceph_conf().encode('utf-8')
+            config_digest = ''.join('%02x' % c for c in hashlib.sha256(config).digest())
+
+        if self.mgr.manage_etc_ceph_ceph_conf:
+            try:
+                pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
+                ha = HostAssignment(
+                    spec=ServiceSpec('mon', placement=pspec),
+                    hosts=self.mgr._schedulable_hosts(),
+                    daemons=[],
+                    networks=self.mgr.cache.networks,
+                )
+                all_slots, _, _ = ha.place()
+                for host in {s.hostname for s in all_slots}:
+                    if host not in client_files:
+                        client_files[host] = {}
+                    client_files[host]['/etc/ceph/ceph.conf'] = (
+                        0o644, 0, 0, bytes(config), str(config_digest)
+                    )
+            except Exception as e:
+                self.mgr.log.warning(f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
+
+        # client keyrings
+        for ks in self.mgr.keys.keys.values():
+            assert config
+            assert config_digest
+            try:
+                ret, keyring, err = self.mgr.mon_command({
+                    'prefix': 'auth get',
+                    'entity': ks.entity,
+                })
+                if ret:
+                    self.log.warning(f'unable to fetch keyring for {ks.entity}')
+                    continue
+                digest = ''.join('%02x' % c for c in hashlib.sha256(keyring.encode('utf-8')).digest())
+                ha = HostAssignment(
+                    spec=ServiceSpec('mon', placement=ks.placement),
+                    hosts=self.mgr._schedulable_hosts(),
+                    daemons=[],
+                    networks=self.mgr.cache.networks,
+                )
+                all_slots, _, _ = ha.place()
+                for host in {s.hostname for s in all_slots}:
+                    if host not in client_files:
+                        client_files[host] = {}
+                    client_files[host]['/etc/ceph/ceph.conf'] = (
+                        0o644, 0, 0, bytes(config), str(config_digest)
+                    )
+                    client_files[host][ks.path] = (
+                        ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest
+                    )
+            except Exception as e:
+                self.log.warning(f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
+
         @forall_hosts
         def refresh(host: str) -> None:
 
@@ -173,11 +233,31 @@ class CephadmServe:
                 if r:
                     failures.append(r)
 
-            if self.mgr.cache.host_needs_new_etc_ceph_ceph_conf(host):
-                self.log.debug(f"deploying new /etc/ceph/ceph.conf on `{host}`")
-                r = self._deploy_etc_ceph_ceph_conf(host)
-                if r:
-                    bad_hosts.append(r)
+            # client files
+            updated_files = False
+            old_files = self.mgr.cache.get_host_client_files(host).copy()
+            for path, m in client_files.get(host, {}).items():
+                mode, uid, gid, content, digest = m
+                if path in old_files:
+                    match = old_files[path] == (digest, mode, uid, gid)
+                    del old_files[path]
+                    if match:
+                        continue
+                self.log.info(f'Updating {host}:{path}')
+                self._write_remote_file(host, path, content, mode, uid, gid)
+                self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
+                updated_files = True
+            for path in old_files.keys():
+                self.log.info(f'Removing {host}:{path}')
+                with self._remote_connection(host) as tpl:
+                    conn, connr = tpl
+                    out, err, code = remoto.process.check(
+                        conn,
+                        ['rm', '-f', path])
+                updated_files = True
+                self.mgr.cache.removed_client_file(host, path)
+            if updated_files:
+                self.mgr.cache.save_host(host)
 
         refresh(self.mgr.cache.get_hosts())
 
@@ -363,30 +443,6 @@ class CephadmServe:
         self.mgr.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
         self.mgr.cache.loading_osdspec_preview.remove(search_host)
-
-    def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
-        config = self.mgr.get_minimal_ceph_conf()
-
-        try:
-            with self._remote_connection(host) as tpl:
-                conn, connr = tpl
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['mkdir', '-p', '/etc/ceph'])
-                if code:
-                    return f'failed to create /etc/ceph on {host}: {err}'
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['dd', 'of=/etc/ceph/ceph.conf'],
-                    stdin=config.encode('utf-8')
-                )
-                if code:
-                    return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
-                self.mgr.cache.update_last_etc_ceph_ceph_conf(host)
-                self.mgr.cache.save_host(host)
-        except OrchestratorError as e:
-            return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
-        return None
 
     def _check_for_strays(self) -> None:
         self.log.debug('_check_for_strays')
@@ -1125,6 +1181,24 @@ class CephadmServe:
             msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
             self.log.warning(msg)
             raise OrchestratorError(msg)
+
+    def _write_remote_file(self,
+                           host: str,
+                           path: str,
+                           content: bytes,
+                           mode: int,
+                           uid: int,
+                           gid: int) -> None:
+        with self._remote_connection(host) as tpl:
+            conn, connr = tpl
+            try:
+                errmsg = connr.write_file(path, content, mode, uid, gid)
+                if errmsg is not None:
+                    raise OrchestratorError(errmsg)
+            except Exception as e:
+                msg = f"Unable to write {host}:{path}: {e}"
+                self.log.warning(msg)
+                raise OrchestratorError(msg)
 
     @contextmanager
     def _remote_connection(self,

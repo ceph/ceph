@@ -56,7 +56,7 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
     NodeExporterService
 from .services.exporter import CephadmExporter, CephadmExporterConfig
 from .schedule import HostAssignment
-from .inventory import Inventory, SpecStore, HostCache, EventStore
+from .inventory import Inventory, SpecStore, HostCache, EventStore, ClientKeyringStore, ClientKeyringSpec
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_TYPES, GATEWAY_TYPES, forall_hosts, cephadmNoImage
@@ -284,6 +284,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Manage and own /etc/ceph/ceph.conf on the hosts.',
         ),
         Option(
+            'manage_etc_ceph_ceph_conf_hosts',
+            type='str',
+            default='*',
+            desc='PlacementSpec describing on which hosts to manage /etc/ceph/ceph.conf',
+        ),
+        Option(
             'registry_url',
             type='str',
             default=None,
@@ -366,6 +372,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.migration_current: Optional[int] = None
             self.config_dashboard = True
             self.manage_etc_ceph_ceph_conf = True
+            self.manage_etc_ceph_ceph_conf_hosts = '*'
             self.registry_url: Optional[str] = None
             self.registry_username: Optional[str] = None
             self.registry_password: Optional[str] = None
@@ -409,6 +416,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.spec_store = SpecStore(self)
         self.spec_store.load()
+
+        self.keys = ClientKeyringStore(self)
+        self.keys.load()
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -1190,6 +1200,67 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd')
 
         return HandleCommandResult(stdout='\n'.join(run(host)))
+
+    @orchestrator._cli_read_command('orch client-keyring ls')
+    def _client_keyring_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        if format != Format.plain:
+            output = to_format(self.keys.keys.values(), format, many=True, cls=ClientKeyringSpec)
+        else:
+            table = PrettyTable(
+                ['ENTITY', 'PLACEMENT', 'MODE', 'OWNER', 'PATH'],
+                border=False)
+            table.align = 'l'
+            table.left_padding_width = 0
+            table.right_padding_width = 2
+            for ks in sorted(self.keys.keys.values(), key=lambda ks: ks.entity):
+                table.add_row((
+                    ks.entity, ks.placement.pretty_str(),
+                    utils.file_mode_to_str(ks.mode),
+                    f'{ks.uid}:{ks.gid}',
+                    ks.path,
+                ))
+            output = table.get_string()
+        return HandleCommandResult(stdout=output)
+
+    @orchestrator._cli_write_command('orch client-keyring set')
+    def _client_keyring_set(
+            self,
+            entity: str,
+            placement: str,
+            owner: Optional[str] = None,
+            mode: Optional[str] = None,
+    ) -> HandleCommandResult:
+        if not entity.startswith('client.'):
+            raise OrchestratorError('entity must start with client.')
+        if owner:
+            try:
+                uid, gid = map(int, owner.split(':'))
+            except Exception:
+                raise OrchestratorError('owner must look like "<uid>:<gid>", e.g., "0:0"')
+        else:
+            uid = 0
+            gid = 0
+        if mode:
+            try:
+                imode = int(mode, 8)
+            except Exception:
+                raise OrchestratorError('mode must be an octal mode, e.g. "600"')
+        else:
+            imode = 0o600
+        pspec = PlacementSpec.from_string(placement)
+        ks = ClientKeyringSpec(entity, pspec, mode=imode, uid=uid, gid=gid)
+        self.keys.update(ks)
+        self._kick_serve_loop()
+        return HandleCommandResult()
+
+    @orchestrator._cli_write_command('orch client-keyring rm')
+    def _client_keyring_rm(
+            self,
+            entity: str,
+    ) -> HandleCommandResult:
+        self.keys.rm(entity)
+        self._kick_serve_loop()
+        return HandleCommandResult()
 
     def _get_connection(self, host: str) -> Tuple['remoto.backends.BaseConnection',
                                                   'remoto.backends.LegacyModuleExecute']:
