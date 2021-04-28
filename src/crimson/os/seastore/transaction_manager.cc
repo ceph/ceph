@@ -85,10 +85,12 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		t,
 		addr,
 		len);
-	      segment_cleaner->mark_space_used(
-		addr,
-		len ,
-		/* init_scan = */ true);
+	      if (addr.is_real()) {
+		segment_cleaner->mark_space_used(
+		  addr,
+		  len ,
+		  /* init_scan = */ true);
+	      }
             });
         });
       });
