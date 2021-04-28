@@ -2,7 +2,7 @@
 GRAFANA_VERSION := 6.7.4-1
 PIECHART_VERSION := "1.4.0"
 STATUS_PANEL_VERSION := "1.0.9"
-DASHBOARD_DIR := "monitoring/grafana/dashboards"
+DASHBOARD_DIR := "../dashboards"
 DASHBOARD_PROVISIONING := "ceph-dashboard.yml"
 IMAGE := "docker.io/centos:8"
 VERSION := "${IMAGE: -1}"
@@ -18,7 +18,7 @@ endif
 
 # Build a grafana instance - preconfigured for use within Ceph's dashboard UI
 
-build : fetch_dashboards
+build :
 	echo "Creating base container"
 	$(eval CONTAINER := $(shell buildah from ${IMAGE}))
 	# Using upstream grafana build
@@ -30,7 +30,7 @@ build : fetch_dashboards
 	buildah run $(CONTAINER) grafana-cli plugins install grafana-piechart-panel ${PIECHART_VERSION}
 	buildah run $(CONTAINER) grafana-cli plugins install vonage-status-panel ${STATUS_PANEL_VERSION}
 	buildah run $(CONTAINER) mkdir -p /etc/grafana/dashboards/ceph-dashboard
-	buildah copy $(CONTAINER) jsonfiles/*.json /etc/grafana/dashboards/ceph-dashboard
+	buildah copy $(CONTAINER) ${DASHBOARD_DIR}/*.json /etc/grafana/dashboards/ceph-dashboard
 
 	@/bin/echo -e "\
 apiVersion: 1 \\n\
@@ -70,21 +70,7 @@ providers: \\n\
 	buildah commit --format docker --squash $(CONTAINER) ceph-grafana:${ceph_version}
 	buildah tag ceph-grafana:${ceph_version} ceph/ceph-grafana:${ceph_version}
 
-
-fetch_dashboards: clean
-	wget -O - https://api.github.com/repos/ceph/ceph/contents/${DASHBOARD_DIR}?ref=${ceph_version} | jq '.[].download_url' > dashboards
-
-	# drop quotes from the list and pick out only json files
-	sed -i 's/\"//g' dashboards
-	sed -i '/\.json/!d' dashboards
-	mkdir jsonfiles 
-	while read -r line; do \
-		wget "$$line" -P jsonfiles; \
-	done < dashboards
-
 clean :
-	rm -f dashboards
-	rm -fr jsonfiles
 	rm -f grafana-*.rpm*
 	rm -f ${DASHBOARD_PROVISIONING}
 
