@@ -139,7 +139,9 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
       num_small_writes = MAX_LOG_ENTRIES;
     }
     assert(num_small_writes > 2);
-    m_log_pool_ring_buffer_size = this->m_log_pool_config_size - DATA_RING_BUFFER_OFFSET;
+    /* Size of ring buffer */
+    this->m_bytes_allocated_cap =
+        this->m_log_pool_config_size - DATA_RING_BUFFER_OFFSET;
     /* Log ring empty */
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
@@ -302,8 +304,7 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
                                           bytes_allocated, num_lanes,
                                           num_log_entries,
-                                          num_unpublished_reserves,
-                                          m_log_pool_ring_buffer_size);
+                                          num_unpublished_reserves);
   req->set_allocated(alloc_succeeds);
   return alloc_succeeds;
 }
@@ -533,9 +534,10 @@ void WriteLog<I>::process_work() {
   CephContext *cct = m_image_ctx.cct;
   int max_iterations = 4;
   bool wake_up_requested = false;
-  uint64_t aggressive_high_water_bytes = m_log_pool_ring_buffer_size * AGGRESSIVE_RETIRE_HIGH_WATER;
+  uint64_t aggressive_high_water_bytes =
+      this->m_bytes_allocated_cap * AGGRESSIVE_RETIRE_HIGH_WATER;
   uint64_t aggressive_high_water_entries = this->m_total_log_entries * AGGRESSIVE_RETIRE_HIGH_WATER;
-  uint64_t high_water_bytes = m_log_pool_ring_buffer_size * RETIRE_HIGH_WATER;
+  uint64_t high_water_bytes = this->m_bytes_allocated_cap * RETIRE_HIGH_WATER;
   uint64_t high_water_entries = this->m_total_log_entries * RETIRE_HIGH_WATER;
 
   ldout(cct, 20) << dendl;

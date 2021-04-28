@@ -931,9 +931,9 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
                               &num_lanes, &num_log_entries, &num_unpublished_reserves);
 
-  alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied, bytes_allocated,
-                              num_lanes, num_log_entries, num_unpublished_reserves,
-                              this->m_bytes_allocated_cap);
+  alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
+                                          bytes_allocated, num_lanes, num_log_entries,
+                                          num_unpublished_reserves);
 
   std::vector<WriteBufferAllocation>& buffers = req->get_resources_buffers();
   if (!alloc_succeeds) {
