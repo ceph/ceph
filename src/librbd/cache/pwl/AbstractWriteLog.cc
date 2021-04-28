@@ -1487,7 +1487,7 @@ bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
     if (m_bytes_allocated + bytes_allocated > m_bytes_allocated_cap) {
       if (!req->has_io_waited_for_buffers()) {
         req->set_io_waited_for_buffers(true);
-        ldout(m_image_ctx.cct, 1) << "Waiting for allocation cap (cap="
+        ldout(m_image_ctx.cct, 5) << "Waiting for allocation cap (cap="
                                   << m_bytes_allocated_cap
                                   << ", allocated=" << m_bytes_allocated
                                   << ") in write [" << *req << "]" << dendl;

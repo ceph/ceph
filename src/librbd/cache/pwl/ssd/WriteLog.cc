@@ -654,8 +654,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     }
   }
   if (retiring_entries.size()) {
-    ldout(cct, 1) << "Retiring " << retiring_entries.size()
-                  << " entries" << dendl;
+    ldout(cct, 20) << "Retiring " << retiring_entries.size() << " entries"
+                   << dendl;
 
     // Advance first valid entry and release buffers
     uint64_t flushed_sync_gen;
