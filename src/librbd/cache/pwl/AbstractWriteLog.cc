@@ -310,16 +310,17 @@ void AbstractWriteLog<I>::log_perf() {
 template <typename I>
 void AbstractWriteLog<I>::periodic_stats() {
   std::lock_guard locker(m_lock);
-  ldout(m_image_ctx.cct, 1) << "STATS: "
-                            << "m_free_log_entries=" << m_free_log_entries << ", "
-                            << "m_log_entries=" << m_log_entries.size() << ", "
-                            << "m_dirty_log_entries=" << m_dirty_log_entries.size() << ", "
-                            << "m_bytes_allocated=" << m_bytes_allocated << ", "
-                            << "m_bytes_cached=" << m_bytes_cached << ", "
-                            << "m_bytes_dirty=" << m_bytes_dirty << ", "
-                            << "bytes available=" << m_bytes_allocated_cap - m_bytes_allocated << ", "
-                            << "m_current_sync_gen=" << m_current_sync_gen << ", "
-                            << "m_flushed_sync_gen=" << m_flushed_sync_gen << ", "
+  ldout(m_image_ctx.cct, 1) << "STATS: m_log_entries=" << m_log_entries.size()
+                            << ", m_dirty_log_entries=" << m_dirty_log_entries.size()
+                            << ", m_free_log_entries=" << m_free_log_entries
+                            << ", m_bytes_allocated=" << m_bytes_allocated
+                            << ", m_bytes_cached=" << m_bytes_cached
+                            << ", m_bytes_dirty=" << m_bytes_dirty
+                            << ", bytes available=" << m_bytes_allocated_cap - m_bytes_allocated
+                            << ", m_first_valid_entry=" << m_first_valid_entry
+                            << ", m_first_free_entry=" << m_first_free_entry
+                            << ", m_current_sync_gen=" << m_current_sync_gen
+                            << ", m_flushed_sync_gen=" << m_flushed_sync_gen
                             << dendl;
 }
 
