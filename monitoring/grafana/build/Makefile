@@ -11,17 +11,20 @@ PKGMGR := "dnf"
 GF_CONFIG := "/etc/grafana/grafana.ini"
 ceph_version := "master"
 
+ARCH ?= x86_64
+ifeq "$(ARCH)" "arm64"
+	override ARCH := aarch64
+endif
+
 # Build a grafana instance - preconfigured for use within Ceph's dashboard UI
 
 build : fetch_dashboards
 	echo "Creating base container"
 	$(eval CONTAINER := $(shell buildah from ${IMAGE}))
 	# Using upstream grafana build
-	wget https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.x86_64.rpm
-	#wget localhost:8000/grafana-${GRAFANA_VERSION}.x86_64.rpm
-	#cp grafana-${GRAFANA_VERSION}.x86_64.rpm ${mountpoint}/tmp/.
-	buildah copy $(CONTAINER) grafana-${GRAFANA_VERSION}.x86_64.rpm /tmp/grafana-${GRAFANA_VERSION}.x86_64.rpm 
-	buildah run $(CONTAINER) ${PKGMGR} install -y --setopt install_weak_deps=false --setopt=tsflags=nodocs /tmp/grafana-${GRAFANA_VERSION}.x86_64.rpm
+	wget https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
+	buildah copy $(CONTAINER) grafana-${GRAFANA_VERSION}.${ARCH}.rpm /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
+	buildah run $(CONTAINER) ${PKGMGR} install -y --setopt install_weak_deps=false --setopt=tsflags=nodocs /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
 	buildah run $(CONTAINER) ${PKGMGR} clean all
 	buildah run $(CONTAINER) rm -f /tmp/grafana*.rpm
 	buildah run $(CONTAINER) grafana-cli plugins install grafana-piechart-panel ${PIECHART_VERSION}
