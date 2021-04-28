@@ -4147,6 +4147,14 @@ def command_bootstrap(ctx):
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
+    if ctx.output_config == '/etc/ceph/ceph.conf' and not ctx.skip_admin_label:
+        logger.info('Enabling client.admin keyring and conf on hosts with "admin" label')
+        try:
+            cli(['orch', 'client-keyring', 'set', 'client.admin', 'label:_admin'])
+            cli(['orch', 'host', 'label', 'add', get_hostname(), '_admin'])
+        except Exception:
+            logger.info('Unable to set up "admin" label; assuming older version of Ceph')
+
     if ctx.apply_spec:
         logger.info('Applying %s to cluster' % ctx.apply_spec)
 
@@ -7684,6 +7692,10 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--output-pub-ssh-key',
         help="location to write the cluster's public SSH key")
+    parser_bootstrap.add_argument(
+        '--skip-admin-label',
+        action='store_true',
+        help='do not create admin label for ceph.conf and client.admin keyring distribution')
     parser_bootstrap.add_argument(
         '--skip-ssh',
         action='store_true',
