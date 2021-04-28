@@ -1460,7 +1460,7 @@ template <typename I>
 bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
       uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
       uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap){
+      uint64_t &num_unpublished_reserves) {
   bool alloc_succeeds = true;
   bool no_space = false;
   {
@@ -1484,11 +1484,11 @@ bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
       no_space = true; /* Entries must be retired */
     }
     /* Don't attempt buffer allocate if we've exceeded the "full" threshold */
-    if (m_bytes_allocated + bytes_allocated > bytes_allocated_cap) {
+    if (m_bytes_allocated + bytes_allocated > m_bytes_allocated_cap) {
       if (!req->has_io_waited_for_buffers()) {
         req->set_io_waited_for_buffers(true);
         ldout(m_image_ctx.cct, 1) << "Waiting for allocation cap (cap="
-                                  << bytes_allocated_cap
+                                  << m_bytes_allocated_cap
                                   << ", allocated=" << m_bytes_allocated
                                   << ") in write [" << *req << "]" << dendl;
       }
