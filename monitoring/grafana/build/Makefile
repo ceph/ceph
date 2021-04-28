@@ -7,7 +7,6 @@ DASHBOARD_PROVISIONING := "ceph-dashboard.yml"
 IMAGE := "docker.io/centos:8"
 VERSION := "${IMAGE: -1}"
 PKGMGR := "dnf"
-# CONTAINER := $(shell buildah from ${IMAGE})
 GF_CONFIG := "/etc/grafana/grafana.ini"
 ceph_version := "master"
 
@@ -20,17 +19,17 @@ endif
 
 build :
 	echo "Creating base container"
-	$(eval CONTAINER := $(shell buildah from ${IMAGE}))
+	$(eval CONTAINER := $(shell sudo buildah from ${IMAGE}))
 	# Using upstream grafana build
 	wget https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
-	buildah copy $(CONTAINER) grafana-${GRAFANA_VERSION}.${ARCH}.rpm /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
-	buildah run $(CONTAINER) ${PKGMGR} install -y --setopt install_weak_deps=false --setopt=tsflags=nodocs /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
-	buildah run $(CONTAINER) ${PKGMGR} clean all
-	buildah run $(CONTAINER) rm -f /tmp/grafana*.rpm
-	buildah run $(CONTAINER) grafana-cli plugins install grafana-piechart-panel ${PIECHART_VERSION}
-	buildah run $(CONTAINER) grafana-cli plugins install vonage-status-panel ${STATUS_PANEL_VERSION}
-	buildah run $(CONTAINER) mkdir -p /etc/grafana/dashboards/ceph-dashboard
-	buildah copy $(CONTAINER) ${DASHBOARD_DIR}/*.json /etc/grafana/dashboards/ceph-dashboard
+	sudo buildah copy $(CONTAINER) grafana-${GRAFANA_VERSION}.${ARCH}.rpm /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
+	sudo buildah run $(CONTAINER) ${PKGMGR} install -y --setopt install_weak_deps=false --setopt=tsflags=nodocs /tmp/grafana-${GRAFANA_VERSION}.${ARCH}.rpm
+	sudo buildah run $(CONTAINER) ${PKGMGR} clean all
+	sudo buildah run $(CONTAINER) rm -f /tmp/grafana*.rpm
+	sudo buildah run $(CONTAINER) grafana-cli plugins install grafana-piechart-panel ${PIECHART_VERSION}
+	sudo buildah run $(CONTAINER) grafana-cli plugins install vonage-status-panel ${STATUS_PANEL_VERSION}
+	sudo buildah run $(CONTAINER) mkdir -p /etc/grafana/dashboards/ceph-dashboard
+	sudo buildah copy $(CONTAINER) ${DASHBOARD_DIR}/*.json /etc/grafana/dashboards/ceph-dashboard
 
 	@/bin/echo -e "\
 apiVersion: 1 \\n\
@@ -46,29 +45,29 @@ providers: \\n\
     path: '/etc/grafana/dashboards/ceph-dashboard'" >> ${DASHBOARD_PROVISIONING}
 
 
-	buildah copy $(CONTAINER) ${DASHBOARD_PROVISIONING} /etc/grafana/provisioning/dashboards/${DASHBOARD_PROVISIONING}
+	sudo buildah copy $(CONTAINER) ${DASHBOARD_PROVISIONING} /etc/grafana/provisioning/dashboards/${DASHBOARD_PROVISIONING}
 
 	# expose tcp/3000 for grafana
-	buildah config --port 3000 $(CONTAINER)
+	sudo buildah config --port 3000 $(CONTAINER)
 
 	# set working dir
-	buildah config --workingdir /usr/share/grafana $(CONTAINER)
+	sudo buildah config --workingdir /usr/share/grafana $(CONTAINER)
 
 	# set environment overrides from the default locations in /usr/share
-	buildah config --env GF_PATHS_LOGS="/var/log/grafana" $(CONTAINER)
-	buildah config --env GF_PATHS_PLUGINS="/var/lib/grafana/plugins" $(CONTAINER)
-	buildah config --env GF_PATHS_PROVISIONING="/etc/grafana/provisioning" $(CONTAINER)
-	buildah config --env GF_PATHS_DATA="/var/lib/grafana" $(CONTAINER)
+	sudo buildah config --env GF_PATHS_LOGS="/var/log/grafana" $(CONTAINER)
+	sudo buildah config --env GF_PATHS_PLUGINS="/var/lib/grafana/plugins" $(CONTAINER)
+	sudo buildah config --env GF_PATHS_PROVISIONING="/etc/grafana/provisioning" $(CONTAINER)
+	sudo buildah config --env GF_PATHS_DATA="/var/lib/grafana" $(CONTAINER)
 
 	# entrypoint
-	buildah config --entrypoint "grafana-server --config=${GF_CONFIG}" $(CONTAINER)
+	sudo buildah config --entrypoint "grafana-server --config=${GF_CONFIG}" $(CONTAINER)
 
 	# finalize
-	buildah config --label maintainer="Paul Cuzner <pcuzner@redhat.com>" $(CONTAINER)
-	buildah config --label description="Ceph Grafana Container" $(CONTAINER)
-	buildah config --label summary="Grafana Container configured for Ceph mgr/dashboard integration" $(CONTAINER)
-	buildah commit --format docker --squash $(CONTAINER) ceph-grafana:${ceph_version}
-	buildah tag ceph-grafana:${ceph_version} ceph/ceph-grafana:${ceph_version}
+	sudo buildah config --label maintainer="Paul Cuzner <pcuzner@redhat.com>" $(CONTAINER)
+	sudo buildah config --label description="Ceph Grafana Container" $(CONTAINER)
+	sudo buildah config --label summary="Grafana Container configured for Ceph mgr/dashboard integration" $(CONTAINER)
+	sudo buildah commit --format docker --squash $(CONTAINER) ceph-grafana:${ceph_version}
+	sudo buildah tag ceph-grafana:${ceph_version} ceph/ceph-grafana:${ceph_version}
 
 clean :
 	rm -f grafana-*.rpm*
