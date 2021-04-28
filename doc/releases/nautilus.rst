@@ -27,8 +27,8 @@ Security fixes
 
   It is possible to disable the health alerts around insecure clients::
 
+    ceph config set mon mon_warn_on_insecure_global_id_reclaim false
     ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
-    ceph config set mon auth_expose_insecure_global_id_reclaim false
 
   However, if you disable these alerts, we strongly recommend that you
   follow up by removing these settings after clients have been
