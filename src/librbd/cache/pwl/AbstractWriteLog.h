@@ -356,7 +356,7 @@ protected:
       uint64_t &bytes_cached, uint64_t &bytes_dirtied,
       uint64_t &bytes_allocated,
       uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap);
+      uint64_t &num_unpublished_reserves);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
       bool isRWL=false);
