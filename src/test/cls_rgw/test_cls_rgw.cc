@@ -483,7 +483,7 @@ TEST(cls_rgw, bi_list)
   uint64_t num_objs = 35;
 
   for (uint64_t i = 0; i < num_objs; i++) {
-    string obj = str_int("obj", i);
+    string obj = str_int(i % 4 ? "obj" : "об'єкт", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
     index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc, RGW_BILOG_FLAG_VERSIONED_OP);
