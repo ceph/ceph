@@ -3174,6 +3174,8 @@ class CephContainer:
 
         if self.host_network:
             cmd_args.append('--net=host')
+        if self.ctx.no_hosts:
+            cmd_args.append('--no-hosts')
         if self.privileged:
             cmd_args.extend([
                 '--privileged',
@@ -7589,6 +7591,10 @@ def _get_parser():
     parser_shell.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command (optional)')
+    parser_shell.add_argument(
+        '--no-hosts',
+        action='store_true',
+        help='dont pass /etc/hosts through to the container')
 
     parser_enter = subparsers.add_parser(
         'enter', help='run an interactive shell inside a running daemon container')

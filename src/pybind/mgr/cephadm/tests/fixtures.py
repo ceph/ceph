@@ -70,11 +70,12 @@ def wait(m, c):
 @contextmanager
 def with_host(m: CephadmOrchestrator, name, refresh_hosts=True):
     # type: (CephadmOrchestrator, str) -> None
-    wait(m, m.add_host(HostSpec(hostname=name)))
-    if refresh_hosts:
-        CephadmServe(m)._refresh_hosts_and_daemons()
-    yield
-    wait(m, m.remove_host(name))
+    with mock.patch("cephadm.utils.resolve_ip"):
+        wait(m, m.add_host(HostSpec(hostname=name)))
+        if refresh_hosts:
+            CephadmServe(m)._refresh_hosts_and_daemons()
+        yield
+        wait(m, m.remove_host(name))
 
 
 def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):
