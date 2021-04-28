@@ -373,50 +373,52 @@ public:
   }
 
   /**
-   * get_root
+   * read_root_meta
    *
-   * Get root block's ondisk layout
+   * Read root block meta entry for key.
    */
-  using get_root_ertr = base_ertr;
-  using get_root_ret = get_root_ertr::future<RootBlockRef>;
-  get_root_ret get_root(Transaction &t) {
-    return cache->get_root(t);
+  using read_root_meta_ertr = base_ertr;
+  using read_root_meta_bare = std::optional<std::string>;
+  using read_root_meta_ret = read_root_meta_ertr::future<
+    read_root_meta_bare>;
+  read_root_meta_ret read_root_meta(
+    Transaction &t,
+    const std::string &key) {
+    return cache->get_root(
+      t
+    ).safe_then([&key](auto root) {
+      auto meta = root->root.get_meta();
+      auto iter = meta.find(key);
+      if (iter == meta.end()) {
+	return seastar::make_ready_future<read_root_meta_bare>(std::nullopt);
+      } else {
+	return seastar::make_ready_future<read_root_meta_bare>(iter->second);
+      }
+    });
   }
 
   /**
    * update_root_meta
    *
-   * modify root block's meta field
+   * Update root block meta entry for key to value.
    */
-  using update_root_meta_ertr = base_ertr::extend<
-    crimson::ct_error::value_too_large>;
+  using update_root_meta_ertr = base_ertr;
   using update_root_meta_ret = update_root_meta_ertr::future<>;
-  update_root_meta_ret update_root_meta(Transaction& t,
-                                        const std::string& key,
-                                        const std::string& value) {
-    auto root = cache->get_root_fast(t);
-    root = cache->duplicate_for_write(t, root)->cast<RootBlock>();
-    root->meta[key] = value;
+  update_root_meta_ret update_root_meta(
+    Transaction& t,
+    const std::string& key,
+    const std::string& value) {
+    return cache->get_root(
+      t
+    ).safe_then([this, &t, &key, &value](RootBlockRef root) {
+      root = cache->duplicate_for_write(t, root)->cast<RootBlock>();
 
-    // calculate meta size
-    // TODO: we probably need a uniformal interface for calcuting
-    // the encoded size of data structures
-    uint32_t meta_size = 4; // initial 4 bytes for std::map size
-    for (auto& [key, val] : root->meta) {
-      // sizes of length fields for key and val + sizes of key and val
-      meta_size += 8 + key.length() + val.length();
-    }
+      auto meta = root->root.get_meta();
+      meta[key] = value;
 
-    if (meta_size > root_t::MAX_META_LENGTH) {
-      return crimson::ct_error::value_too_large::make();
-    }
-
-    ceph::bufferlist bl(1);
-    bl.rebuild(ceph::buffer::ptr_node::create(
-      &root->get_root().meta[0], root_t::MAX_META_LENGTH));
-    encode(root->meta, bl);
-    root->get_root().have_meta = true;
-    return update_root_meta_ertr::now();
+      root->root.set_meta(meta);
+      return seastar::now();
+    });
   }
 
   /**
