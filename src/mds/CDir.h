@@ -612,9 +612,8 @@ protected:
   mempool::mds_co::compact_set<mempool::mds_co::string> wanted_items;
 
   void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
-  void _omap_fetch_more(
-    bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
-    MDSContext *fin);
+  void _omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
+                        map<string, bufferlist>& omap, MDSContext *fin);
   CDentry *_load_dentry(
       std::string_view key,
       std::string_view dname,
