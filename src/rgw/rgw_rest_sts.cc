@@ -89,7 +89,7 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   if (ret < 0) {
     return nullptr;
   }
-  return std::move(provider);
+  return provider;
 }
 
 bool
