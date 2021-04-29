@@ -34,7 +34,7 @@ export class PlacementPipe implements PipeTransform {
       kv.push($localize`label:${label}`);
     }
     if (_.isString(hostPattern)) {
-      kv.push(...hostPattern);
+      kv.push(hostPattern);
     }
     return kv.join(';');
   }
