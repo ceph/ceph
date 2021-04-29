@@ -4966,7 +4966,17 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   }
 
   struct dirent *de = nullptr;
-  while ((de = ::readdir(dir))) {
+  while (true) {
+    errno = 0;
+    de = ::readdir(dir);
+    if (de == nullptr) {
+      if (errno != 0) {
+        r = -errno;
+        derr << "readdir failed " << fn << ": " << cpp_strerror(-r) << dendl;
+        if (r == -EIO && m_filestore_fail_eio) handle_eio();
+      }
+      break;
+    }
     if (de->d_type == DT_UNKNOWN) {
       // d_type not supported (non-ext[234], btrfs), must stat
       struct stat sb;
