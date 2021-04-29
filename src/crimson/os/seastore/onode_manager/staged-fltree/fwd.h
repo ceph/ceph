@@ -73,8 +73,13 @@ inline MatchKindCMP toMatchKindCMP(int value) {
 }
 template <typename Type>
 MatchKindCMP toMatchKindCMP(const Type& l, const Type& r) {
-  int match = l - r;
-  return toMatchKindCMP(match);
+  if (l > r) {
+    return MatchKindCMP::GT;
+  } else if (l < r) {
+    return MatchKindCMP::LT;
+  } else {
+    return MatchKindCMP::EQ;
+  }
 }
 
 inline MatchKindCMP toMatchKindCMP(
