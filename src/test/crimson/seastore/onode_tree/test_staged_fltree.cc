@@ -202,9 +202,8 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
   run_async([this] {
     logger().info("\n---------------------------------------------"
                   "\nrandomized leaf node insert:\n");
-    auto key_s = make_ghobj(0, 0, 0, "ns", "oid", 0, 0);
-    auto key_e = make_ghobj(
-        std::numeric_limits<shard_t>::max(), 0, 0, "ns", "oid", 0, 0);
+    auto key_s = ghobject_t();
+    auto key_e = ghobject_t::get_max();
     ASSERT_TRUE(tree.find(t, key_s).unsafe_get0().is_end());
     ASSERT_TRUE(tree.begin(t).unsafe_get0().is_end());
     ASSERT_TRUE(tree.last(t).unsafe_get0().is_end());

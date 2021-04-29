@@ -464,6 +464,22 @@ inline MatchKindCMP compare_to(const ns_oid_view_t& l, const ns_oid_view_t& r) {
                     string_view_masked_t{r.oid});
 }
 
+inline const ghobject_t _MIN_OID() {
+  assert(ghobject_t().is_min());
+  // don't extern _MIN_OID
+  return ghobject_t();
+}
+
+/*
+ * Unfortunally the ghobject_t representitive as tree key doesn't have max
+ * field, so we define our own _MAX_OID and translate it from/to
+ * ghobject_t::get_max() if necessary.
+ */
+inline const ghobject_t _MAX_OID() {
+  return ghobject_t(shard_id_t(MAX_SHARD), MAX_POOL, MAX_CRUSH,
+                    "MAX", "MAX", MAX_SNAP, MAX_GEN);
+}
+
 /**
  * key_hobj_t
  *
@@ -472,7 +488,17 @@ inline MatchKindCMP compare_to(const ns_oid_view_t& l, const ns_oid_view_t& r) {
  */
 class key_hobj_t {
  public:
-  explicit key_hobj_t(const ghobject_t& ghobj) : ghobj{ghobj} {}
+  explicit key_hobj_t(const ghobject_t& _ghobj) {
+    if (_ghobj.is_max()) {
+      ghobj = _MAX_OID();
+    } else {
+      // including when _ghobj.is_min()
+      ghobj = _ghobj;
+    }
+    // I can be in the range of [_MIN_OID, _MAX_OID]
+    assert(ghobj >= _MIN_OID());
+    assert(ghobj <= _MAX_OID());
+  }
   /*
    * common interfaces as a full_key_t
    */
