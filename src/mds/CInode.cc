@@ -4055,7 +4055,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(snap_btime, bl);
     encode(file_i->rstat.rsnaps, bl);
     encode(snap_metadata, bl);
-    encode(file_i->fscrypt, bl);
+    encode(!file_i->fscrypt_auth.empty(), bl);
     ENCODE_FINISH(bl);
   }
   else {

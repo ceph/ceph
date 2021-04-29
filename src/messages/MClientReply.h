@@ -146,7 +146,8 @@ struct InodeStat {
   mds_rank_t dir_pin;
   std::map<std::string,std::string> snap_metadata;
 
-  bool fscrypt = false; // fscrypt enabled ?
+  std::vector<uint8_t> fscrypt_auth;
+  std::vector<uint8_t> fscrypt_file;
 
  public:
   InodeStat() {}
@@ -212,7 +213,9 @@ struct InodeStat {
         decode(snap_metadata, p);
       }
       if (struct_v >= 6) {
-        decode(fscrypt, p);
+        bool fscrypt_flag;
+
+        decode(fscrypt_flag, p);
       }
       DECODE_FINISH(p);
     }
