@@ -197,6 +197,26 @@ struct fltree_onode_manager_test_t
     });
   }
 
+  static constexpr uint64_t LIST_LIMIT = 10;
+  void validate_list_onodes(KVPool<onode_item_t>& pool) {
+    with_onodes_process(pool.begin(), pool.end(),
+        [this] (auto& t, auto& oids, auto& items) {
+      std::vector<ghobject_t> listed_oids;
+      auto start = ghobject_t();
+      auto end = ghobject_t::get_max();
+      assert(start < end);
+      assert(start < oids[0]);
+      assert(oids[0] < end);
+      while (start != end) {
+        auto [list_ret, list_end] = manager->list_onodes(
+            t, start, end, LIST_LIMIT).unsafe_get0();
+        listed_oids.insert(listed_oids.end(), list_ret.begin(), list_ret.end());
+        start = list_end;
+      }
+      ceph_assert(oids.size() == listed_oids.size());
+    });
+  }
+
   fltree_onode_manager_test_t() {}
 };
 
@@ -214,6 +234,8 @@ TEST_F(fltree_onode_manager_test_t, 1_single)
       item.modify(t, onode);
     });
     validate_onode(iter);
+
+    validate_list_onodes(pool);
 
     with_onode_write(iter, [this](auto& t, auto& onode, auto& item) {
       OnodeRef onode_ref = &onode;
@@ -235,6 +257,8 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
       item.initialize(t, onode);
     });
     validate_onodes(start, end);
+
+    validate_list_onodes(pool);
 
     auto rd_start = pool.random_begin();
     auto rd_end = rd_start + 50;
@@ -266,5 +290,7 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
     start = pool.begin();
     end = pool.end();
     validate_onodes(start, end);
+
+    validate_list_onodes(pool);
   });
 }
