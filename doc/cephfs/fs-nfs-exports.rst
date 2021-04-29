@@ -323,4 +323,23 @@ grace period. The exports can be mounted by
 
 .. note:: Only NFS v4.0+ is supported.
 
+Troubleshooting
+===============
+
+Checking NFS-Ganesha logs with
+
+1) ``cephadm``
+
+   .. code:: bash
+
+      $ cephadm logs --fsid <fsid> --name nfs.<cluster_id>.hostname
+
+2) ``rook``
+
+   .. code:: bash
+
+      $ kubectl logs -n rook-ceph rook-ceph-nfs-<cluster_id>-<node_id> nfs-ganesha
+
+Log level can be changed using `nfs cluster config set` command.
+
 .. _NFS-Ganesha NFS Server: https://github.com/nfs-ganesha/nfs-ganesha/wiki
