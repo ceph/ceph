@@ -210,7 +210,10 @@
             class="tc_submenuitem tc_submenuitem_block_iscsi"
             *ngIf="permissions.iscsi.read && enabledFeature.iscsi">
           <a i18n
-             routerLink="/block/iscsi">iSCSI</a>
+             routerLink="/block/iscsi">iSCSI
+            <small *ngIf="healthData.iscsi_daemons.down > 0"
+                   class="badge badge-danger">{{healthData.iscsi_daemons.down}}</small>
+          </a>
         </li>
       </ul>
     </li>
