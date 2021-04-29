@@ -1324,7 +1324,7 @@ public:
           obligation_counter = state->counter;
           progress = ceph::real_time{};
 
-          ldout(cct, 4) << "starting sync on " << bucket_shard_str{state->key}
+          ldout(cct, 4) << "[PR41121] RGWDataSyncSingleEntryCR starting sync on " << bucket_shard_str{state->key}
               << ' ' << *state->obligation << dendl;
           yield call(new RGWRunBucketSourcesSyncCR(sc, lease_cr,
                                                    std::nullopt, /* target_bs */
@@ -1595,6 +1595,7 @@ public:
             tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
+            ldout(cct, 4) << "[PR41121] RGWDataSyncShardCR::full_sync() call sync_single_entry() on: " << iter->first << dendl;
             spawn(sync_single_entry(source_bs, std::nullopt, iter->first,
                                     entry_timestamp, false), false);
           }
@@ -1677,6 +1678,7 @@ public:
             continue;
           }
           tn->log(20, SSTR("received async update notification: " << *modified_iter));
+          ldout(cct, 4) << "[PR41121] RGWDataSyncShardCR::incremental_sync() call sync_single_entry() on: " << *modified_iter << dendl;
           spawn(sync_single_entry(source_bs, std::nullopt, string(),
                                   ceph::real_time{}, false), false);
         }
@@ -1705,6 +1707,7 @@ public:
               continue;
             }
             tn->log(20, SSTR("handle error entry key=" << to_string(source_bs, gen) << " timestamp=" << entry_timestamp));
+            ldout(cct, 4) << "[PR41121] RGWDataSyncShardCR::incremental_sync() call sync_single_entry() handle error key: " << to_string(source_bs, gen) << dendl;
             spawn(sync_single_entry(source_bs, gen, "", entry_timestamp, true), false);
           }
           if (!omapvals->more) {
@@ -1739,6 +1742,7 @@ public:
           if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
           } else {
+            ldout(cct, 4) << "[PR41121] RGWDataSyncShardCR::incremental_sync() call sync_single_entry() data log: " << log_iter->log_id << dendl;
             spawn(sync_single_entry(source_bs, log_iter->entry.gen, log_iter->log_id,
                                     log_iter->log_timestamp, false), false);
           }
@@ -2756,14 +2760,14 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
 
   rgw_bucket_shard_sync_info& status;
   RGWObjVersionTracker& objv_tracker;
-  rgw_bucket_index_marker_info& info;
+  const rgw_bucket_index_marker_info& info;
   const BucketIndexShardsManager& marker_mgr;
   bool exclusive;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncCtx *_sc,
                                         const rgw_bucket_sync_pair_info& _sync_pair,
                                         rgw_bucket_shard_sync_info& _status,
-                                        rgw_bucket_index_marker_info& _info,
+                                        const rgw_bucket_index_marker_info& _info,
                                         const BucketIndexShardsManager& _marker_mgr,
                                         RGWObjVersionTracker& objv_tracker,
                                         bool exclusive)
@@ -2937,7 +2941,7 @@ int RGWReadBucketPipeSyncStatusCoroutine::operate()
                                              rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, oid),
                                              &attrs, true, objv_tracker));
     if (retcode == -ENOENT) {
-      *status = rgw_bucket_shard_sync_info();
+      *status = rgw_bucket_shard_sync_info{};
       return set_cr_done();
     }
     if (retcode < 0) {
@@ -2945,6 +2949,8 @@ int RGWReadBucketPipeSyncStatusCoroutine::operate()
       return set_cr_error(retcode);
     }
     status->decode_from_attrs(sync_env->cct, attrs);
+    ldout(sync_env->cct, 20) << "status from attributes for status object: '" << oid <<
+      "' is: " << state_to_string(status->state) << dendl;
     return set_cr_done();
   }
   return 0;
@@ -3150,50 +3156,54 @@ public:
         return set_cr_error(retcode);
       }
 
-      status.state = BucketSyncState::Init;
+      if (info.syncstopped) {
+          ldout(cct, 20) << "[PR41121] InitBucketFullSyncStatusCR remote bucket indicates that sync was stopped. from: " << sync_pair << dendl;
+          status.state = BucketSyncState::Stopped;
+      } else {
+        status.state = BucketSyncState::Init;
 
-      if (info.oldest_gen == 0) {
-        if (check_compat) {
-          // try to convert existing per-shard incremental status for backward compatibility
-          yield call(new CheckAllBucketShardStatusIsIncremental(sc, sync_pair, num_shards, &all_incremental));
+        if (info.oldest_gen == 0) {
+          if (check_compat) {
+            // try to convert existing per-shard incremental status for backward compatibility
+            yield call(new CheckAllBucketShardStatusIsIncremental(sc, sync_pair, num_shards, &all_incremental));
+            if (retcode < 0) {
+              return set_cr_error(retcode);
+            }
+            if (all_incremental) {
+              // we can use existing status and resume incremental sync
+              status.state = BucketSyncState::Incremental;
+            }
+          }
+        }
+
+        if (status.state != BucketSyncState::Incremental) {
+          // initialize all shard sync status. this will populate the log marker
+          // positions where incremental sync will resume after full sync
+          yield call(new InitBucketShardStatusCollectCR(sc, sync_pair, info, marker_mgr, num_shards));
           if (retcode < 0) {
+            ldout(cct, 20) << "ERROR: failed to collect init status. from: " << sync_pair << ". error:"
+              << cpp_strerror(retcode) << dendl;
             return set_cr_error(retcode);
           }
-          if (all_incremental) {
-            // we can use existing status and resume incremental sync
+
+          if (sync_env->sync_module->should_full_sync()) {
+            status.state = BucketSyncState::Full;
+          } else {
             status.state = BucketSyncState::Incremental;
           }
         }
+
+        status.incremental_gen = info.latest_gen;
       }
-
-      if (status.state != BucketSyncState::Incremental) {
-        // initialize all shard sync status. this will populate the log marker
-        // positions where incremental sync will resume after full sync
-        yield call(new InitBucketShardStatusCollectCR(sc, sync_pair, info, marker_mgr, num_shards));
-        if (retcode < 0) {
-          ldout(cct, 20) << "failed to init bucket shard status: "
-              << cpp_strerror(retcode) << dendl;
-          return set_cr_error(retcode);
-        }
-
-        if (sync_env->sync_module->should_full_sync()) {
-          status.state = BucketSyncState::Full;
-        } else {
-          status.state = BucketSyncState::Incremental;
-        }
-      }
-
-      status.incremental_gen = info.latest_gen;
-
-      ldout(cct, 20) << "writing bucket sync state=" << status.state << dendl;
+      ldout(cct, 20) << "[PR41121] InitBucketFullSyncStatusCR writing bucket sync state=" << status.state <<  " to sync object: " << status_obj.oid  << dendl;
 
       // write bucket sync status
       using CR = RGWSimpleRadosWriteCR<rgw_bucket_sync_status>;
       yield call(new CR(sync_env->async_rados, sync_env->svc->sysobj,
                         status_obj, status, &objv, false));
       if (retcode < 0) {
-        ldout(cct, 20) << "failed to write bucket shard status: "
-            << cpp_strerror(retcode) << dendl;
+        ldout(cct, 20) << "failed to write bucket shard status to sync object: " << status_obj.oid << ". error" 
+          << cpp_strerror(retcode)  << dendl;
         return set_cr_error(retcode);
       }
       return set_cr_done();
@@ -4238,7 +4248,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       for (; entries_iter != entries_end; ++entries_iter) {
         auto e = *entries_iter;
         if (e.op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP) {
-          ldout(sync_env->cct, 20) << "syncstop on " << e.timestamp << dendl;
+          tn->log(20, SSTR("syncstop at: " << e.timestamp));
           syncstopped = true;
           entries_end = std::next(entries_iter); // stop after this entry
           break;
@@ -4660,7 +4670,7 @@ int RGWRunBucketSourcesSyncCR::operate()
           sync_pair.dest_bs.shard_id = -1;
         }
 
-        ldpp_dout(sync_env->dpp, 20) << __func__ << "(): sync_pair=" << sync_pair << dendl;
+        ldpp_dout(sync_env->dpp, 20) << "[PR41121] RGWRunBucketSourcesSyncCR calling sync_bucket_shard_cr() on =" << sync_pair << dendl;
 
         cur_progress = (progress ? &shard_progress[prealloc_stack_id()] : nullptr);
 
@@ -5006,11 +5016,11 @@ int RGWSyncBucketShardCR::operate()
   reenter(this) {
     yield call(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &sync_status, &objv_tracker));
     if (retcode < 0 && retcode != -ENOENT) {
-      tn->log(0, "ERROR: failed to read sync status for bucket");
+      tn->log(0, SSTR("ERROR: failed to read sync status for bucket. error: " << retcode));
       return set_cr_error(retcode);
     }
 
-    tn->log(20, SSTR("sync status for source bucket shard: " << sync_status.state));
+    tn->log(20, SSTR("sync status for source bucket shard: " << to_string(sync_status.state)));
     sync_status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
     if (progress) {
       *progress = sync_status.inc_marker.timestamp;
@@ -5024,7 +5034,11 @@ int RGWSyncBucketShardCR::operate()
       tn->log(5, SSTR("incremental sync on bucket failed, retcode=" << retcode));
       return set_cr_error(retcode);
     }
-    // TODO: handle transition to StateStopped
+    tn->log(20, SSTR("sync status for source bucket changed after init to: " << to_string(sync_status.state)));
+    if (sync_status.state == rgw_bucket_shard_sync_info::StateStopped) {
+      bucket_state = BucketSyncState::StoppedIndication;
+    }
+
     return set_cr_done();
   }
 
@@ -5085,19 +5099,22 @@ static RGWCoroutine* sync_bucket_shard_cr(RGWDataSyncCtx* sc,
 
 int RGWSyncBucketCR::operate()
 {
+  ldpp_dout(env->dpp, 20) << "[PR41121] start RGWSyncBucketCR on: " << sync_pair << dendl;
   reenter(this) {
     // read source/destination bucket info
     yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.source_bs.bucket, &sync_pipe.source_bucket_info,
                                           &sync_pipe.source_bucket_attrs, tn));
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
+      ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR failed to retrieve source bucket info: " << bucket_str{sync_pair.source_bs.bucket} << ". error: " << retcode << dendl;
       return set_cr_error(retcode);
     }
-
+      
     yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.dest_bs.bucket, &sync_pipe.dest_bucket_info,
                                           &sync_pipe.dest_bucket_attrs, tn));
     if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
+      ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR failed to retrieve destination bucket info. error: " << retcode << dendl;
+      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.dest_bs.bucket}));
       return set_cr_error(retcode);
     }
 
@@ -5108,27 +5125,32 @@ int RGWSyncBucketCR::operate()
     yield call(new ReadCR(env->async_rados, env->svc->sysobj,
                           status_obj, &bucket_status, false, &objv));
     if (retcode == -ENOENT) {
+      ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR create bucket sync status for: " << sync_pair << dendl;
       // use exclusive create to set state=Init
       objv.generate_new_write_ver(cct);
       using WriteCR = RGWSimpleRadosWriteCR<rgw_bucket_sync_status>;
       yield call(new WriteCR(env->async_rados, env->svc->sysobj,
                              status_obj, bucket_status, &objv, true));
       if (retcode == -EEXIST) {
+        ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR bucket sync status creation race. for: " << sync_pair << dendl;
         // raced with another create, read its status
         yield call(new ReadCR(env->async_rados, env->svc->sysobj,
                               status_obj, &bucket_status, false, &objv));
       }
     }
     if (retcode < 0) {
+      ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR failed to read bucket sync status. error: " << retcode << dendl;
       return set_cr_error(retcode);
     }
 
     do {
+      ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR sync status at begining of loop for: " << sync_pair << ". is: " << bucket_status.state << dendl;
       tn->log(20, SSTR("sync status for source bucket: " << bucket_status.state));
 
       // if the state wasn't Incremental, take a bucket-wide lease to prevent
       // different shards from duplicating the init and full sync
-      if (bucket_status.state != BucketSyncState::Incremental) {
+      if (bucket_status.state == BucketSyncState::Init ||
+          bucket_status.state == BucketSyncState::Full) {
         assert(!bucket_lease_cr);
         bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->store, status_obj,
                                                        lock_name, lock_duration, this));
@@ -5138,6 +5160,7 @@ int RGWSyncBucketCR::operate()
             tn->log(5, "failed to take bucket lease");
             set_status("lease lock failed, early abort");
             drain_all();
+            ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR failed to lease lock. error: " << bucket_lease_cr->get_ret_status() << dendl;
             return set_cr_error(bucket_lease_cr->get_ret_status());
           }
           tn->log(5, "waiting on bucket lease");
@@ -5150,14 +5173,18 @@ int RGWSyncBucketCR::operate()
           bucket_lease_cr->go_down();
           drain_all();
           bucket_lease_cr.reset();
+          ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR failed to read sync status after lock is taken. error: " << retcode << dendl;
           return set_cr_error(retcode);
         }
       }
+      
+      ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR sync status after lock is taken for: " << sync_pair <<". is: " << bucket_status.state << dendl;
 
       if (bucket_status.state == BucketSyncState::Init ||
-          bucket_status.state == BucketSyncState::Stopped) {
-        assert(bucket_lease_cr);
-        // init sync status
+          bucket_status.state == BucketSyncState::StoppedIndication) {
+        assert(bucket_status.state == BucketSyncState::StoppedIndication || bucket_lease_cr);
+        // init sync status or validate that we are in "stop" state
+        // "stop" state does not need a lease
         yield {
           init_check_compat = objv.read_version.ver <= 1; // newly-created
           int num_shards = sync_pipe.dest_bucket_info.layout.current_index.layout.normal.num_shards;
@@ -5166,11 +5193,28 @@ int RGWSyncBucketCR::operate()
                                               init_check_compat));
         }
         if (retcode < 0) {
+          ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR failed to got sync status from InitBucketFullSyncStatusCR. error: " << retcode << dendl;
+          tn->log(20, SSTR("failed to get status. error: " << retcode));
+          if (bucket_status.state == BucketSyncState::Init) {
+            bucket_lease_cr->go_down();
+            drain_all();
+            bucket_lease_cr.reset();
+          }
+          return set_cr_error(retcode);
+        }
+        ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR got sync status from InitBucketFullSyncStatusCR for: " << sync_pair << ". is: " << bucket_status.state << dendl;
+      }
+
+      if (bucket_status.state == BucketSyncState::Stopped) {
+        // at this point we know that the full bucket state is "stop"
+        ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR bucket syncing stops (stop CR). for: " << sync_pair << dendl;
+        tn->log(20, "bucket syncing stops. releasing lease and stopping cr");
+        if (bucket_lease_cr) {
           bucket_lease_cr->go_down();
           drain_all();
           bucket_lease_cr.reset();
-          return set_cr_error(retcode);
         }
+        break;
       }
 
       if (bucket_status.state == BucketSyncState::Full) {
@@ -5182,8 +5226,10 @@ int RGWSyncBucketCR::operate()
           bucket_lease_cr->go_down();
           drain_all();
           bucket_lease_cr.reset();
+          ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR calling RGWBucketFullSyncCR error: " << retcode << dendl;
           return set_cr_error(retcode);
         }
+        ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR calling RGWBucketFullSyncCR ok. for: " << sync_pair << dendl;
       }
 
       if (bucket_status.state == BucketSyncState::Incremental) {
@@ -5202,11 +5248,13 @@ int RGWSyncBucketCR::operate()
             tn->log(10, SSTR("requested sync of future generation "
                              << *gen << " > " << current_gen
                              << ", returning " << retcode << " for later retry"));
+            ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR requested sync of future generation" << dendl;
             return set_cr_error(retcode);
           } else if (*gen < current_gen) {
             tn->log(10, SSTR("requested sync of past generation "
                              << *gen << " < " << current_gen
                              << ", returning success"));
+            ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR requested sync of past generation" << dendl;
             return set_cr_done();
           }
         }
@@ -5215,12 +5263,15 @@ int RGWSyncBucketCR::operate()
                                             sync_pipe, bucket_status.state,
                                             tn, progress));
         if (retcode < 0) {
+          ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR calling RGWSyncBucketShardCR error: " << retcode << dendl;
           return set_cr_error(retcode);
         }
+        ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR calling RGWSyncBucketShardCR ok. for: " << sync_pair << dendl;
       }
       // loop back to previous states unless incremental sync returns normally
     } while (bucket_status.state != BucketSyncState::Incremental);
 
+    ldpp_dout(env->dpp, 20) << "[PR41121] RGWSyncBucketCR cr done. status is: " << bucket_status.state << dendl;
     return set_cr_done();
   }
 
@@ -5234,6 +5285,7 @@ RGWCoroutine *RGWRemoteBucketManager::run_sync_cr(int num)
   }
 
   constexpr std::optional<uint64_t> gen; // sync current gen
+  ldpp_dout(sync_env->dpp, 20) << "[PR41121] RGWRemoteBucketManager calling sync_bucket_shard_cr() on =" << sync_pairs[num] << dendl;
   return sync_bucket_shard_cr(&sc, nullptr, sync_pairs[num], gen,
                               sync_env->sync_tracer->root_node, nullptr);
 }

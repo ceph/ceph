@@ -566,6 +566,16 @@ struct rgw_bucket_shard_sync_info {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
 
+inline std::string state_to_string(uint16_t s) {
+  switch (s) {
+    case rgw_bucket_shard_sync_info::StateInit: return "init";
+    case rgw_bucket_shard_sync_info::StateFullSync: return "full";
+    case rgw_bucket_shard_sync_info::StateIncrementalSync: return "incremental";
+    case rgw_bucket_shard_sync_info::StateStopped: return "stopped";
+  }
+  return "ERROR";
+}
+
 struct rgw_bucket_full_sync_status {
   rgw_obj_key position;
   uint64_t count = 0;
@@ -594,6 +604,7 @@ enum class BucketSyncState : uint8_t {
   Full,
   Incremental,
   Stopped,
+  StoppedIndication
 };
 inline std::ostream& operator<<(std::ostream& out, const BucketSyncState& s) {
   switch (s) {
@@ -601,6 +612,7 @@ inline std::ostream& operator<<(std::ostream& out, const BucketSyncState& s) {
   case BucketSyncState::Full: out << "full"; break;
   case BucketSyncState::Incremental: out << "incremental"; break;
   case BucketSyncState::Stopped: out << "stopped"; break;
+  case BucketSyncState::StoppedIndication: out << "stopped indication"; break;
   }
   return out;
 }

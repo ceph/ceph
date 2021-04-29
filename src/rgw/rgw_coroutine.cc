@@ -9,6 +9,7 @@
 #include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
+#include <boost/type_index.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -950,12 +951,13 @@ void RGWCoroutine::wait_for_child()
 
 string RGWCoroutine::to_str() const
 {
-  return typeid(*this).name();
+  return boost::typeindex::type_id_runtime(*this).pretty_name();
 }
 
 ostream& operator<<(ostream& out, const RGWCoroutine& cr)
 {
-  out << "cr:s=" << (void *)cr.get_stack() << ":op=" << (void *)&cr << ":" << typeid(cr).name();
+  out << "cr:s=" << (void *)cr.get_stack() << ":op=" << (void *)&cr << ":" 
+    << boost::typeindex::type_id_runtime(cr).pretty_name();
   return out;
 }
 
