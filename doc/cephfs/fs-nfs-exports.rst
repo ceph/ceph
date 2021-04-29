@@ -158,8 +158,8 @@ This removes the user defined configuration.
 Create CephFS Export
 ====================
 
-.. warning:: Currently, the volume/nfs interface is not integrated with dashboard. Both
-   dashboard and volume/nfs interface have different export requirements and
+.. warning:: Currently, the nfs interface is not integrated with dashboard. Both
+   dashboard and nfs interface have different export requirements and
    create exports differently. Management of dashboard created exports is not
    supported.
 
@@ -184,7 +184,7 @@ path is '/'. It need not be unique. Subvolume path can be fetched using:
 
    $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-.. note:: Export creation is supported only for NFS Ganesha clusters deployed using volume/nfs interface.
+.. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
 Delete CephFS Export
 ====================
