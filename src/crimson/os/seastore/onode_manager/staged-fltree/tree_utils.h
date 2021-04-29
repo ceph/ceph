@@ -246,6 +246,7 @@ class KVPool {
     auto ret = ghobject_t(
       hobject_t(
         sobject_t(ss.str(), CEPH_NOSNAP)));
+    ret.set_shard(shard_id_t(0));
     ret.hobj.nspace = "asdf";
     return ret;
   }

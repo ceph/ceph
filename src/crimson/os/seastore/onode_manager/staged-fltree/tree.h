@@ -243,6 +243,7 @@ class Btree {
     return seastar::do_with(
       full_key_t<KeyT::HOBJ>(obj),
       [this, &t, vconf](auto& key) -> btree_future<std::pair<Cursor, bool>> {
+        ceph_assert(key.is_valid());
         return get_root(t).safe_then([this, &t, &key, vconf](auto root) {
           return root->insert(get_context(t), key, vconf);
         }).safe_then([this](auto ret) {
