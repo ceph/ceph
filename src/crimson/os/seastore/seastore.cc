@@ -114,8 +114,27 @@ SeaStore::list_objects(CollectionRef ch,
                         const ghobject_t& end,
                         uint64_t limit) const
 {
-  return seastar::make_ready_future<std::tuple<std::vector<ghobject_t>, ghobject_t>>(
-    std::make_tuple(std::vector<ghobject_t>(), end));
+  using RetType = typename OnodeManager::list_onodes_bare_ret;
+  return seastar::do_with(
+      RetType(),
+      [this, start, end, limit] (auto& ret) {
+    return repeat_eagain([this, start, end, limit, &ret] {
+      return seastar::do_with(
+          transaction_manager->create_transaction(),
+          [this, start, end, limit, &ret] (auto& t) {
+        return onode_manager->list_onodes(*t, start, end, limit
+        ).safe_then([&ret] (auto&& _ret) {
+          ret = std::move(_ret);
+        });
+      });
+    }).safe_then([&ret] {
+      return std::move(ret);
+    });
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::list_objects"
+    }
+  );
 }
 
 seastar::future<CollectionRef> SeaStore::create_new_collection(const coll_t& cid)
@@ -722,7 +741,7 @@ SeaStore::tm_ret SeaStore::_remove(
 {
   LOG_PREFIX(SeaStore::_remove);
   DEBUGT("onode={}", *ctx.transaction, *onode);
-  return tm_ertr::now();
+  return onode_manager->erase_onode(*ctx.transaction, onode);
 }
 
 SeaStore::tm_ret SeaStore::_touch(
