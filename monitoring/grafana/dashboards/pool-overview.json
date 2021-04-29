@@ -15,7 +15,7 @@
   "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "iteration": 1551789900270,
+  "iteration": 1619482563168,
   "links": [],
   "panels": [
     {
@@ -24,13 +24,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 0
       },
+      "hiddenSeries": false,
       "id": 1,
       "legend": {
         "avg": false,
@@ -44,8 +52,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -61,16 +72,18 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "topk($topk,rate(ceph_pool_rd[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata) ",
+          "expr": "topk($topk,rate(ceph_pool_rd{instance=~\"$instance.*\"}[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{instance=~\"$instance.*\"}) ",
           "format": "time_series",
           "hide": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{name}} - read",
           "refId": "F"
         },
         {
-          "expr": "topk($topk,rate(ceph_pool_wr[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata) ",
+          "expr": "topk($topk,rate(ceph_pool_wr{instance=~\"$instance.*\"}[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{instance=~\"$instance.*\"}) ",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{name}} - write",
           "refId": "A"
@@ -78,6 +91,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Top $topk Client IOPS by Pool",
       "tooltip": {
@@ -122,13 +136,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 0
       },
+      "hiddenSeries": false,
       "id": 2,
       "legend": {
         "avg": false,
@@ -142,8 +164,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -159,16 +184,18 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "topk($topk,rate(ceph_pool_rd_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata)",
+          "expr": "topk($topk,rate(ceph_pool_rd_bytes{instance=~\"$instance.*\"}[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{instance=~\"$instance.*\"})",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{name}} - read",
           "refId": "A",
           "textEditor": true
         },
         {
-          "expr": "topk($topk,rate(ceph_pool_wr_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata)",
+          "expr": "topk($topk,rate(ceph_pool_wr_bytes{instance=~\"$instance.*\"}[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{instance=~\"$instance.*\"})",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{name}} - write",
           "refId": "B"
@@ -176,6 +203,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Top $topk Client Throughput by Pool",
       "tooltip": {
@@ -222,16 +250,22 @@
         }
       ],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 9
+        "y": 7
       },
       "id": 3,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "pageSize": null,
       "scroll": true,
       "showHeader": true,
@@ -242,6 +276,7 @@
       "styles": [
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -257,6 +292,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -272,6 +308,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -287,6 +324,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -302,6 +340,7 @@
         },
         {
           "alias": "Pool Name",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -317,6 +356,7 @@
         },
         {
           "alias": "Pool ID",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -332,6 +372,7 @@
         },
         {
           "alias": "IOPS (R+W)",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -348,17 +389,19 @@
       ],
       "targets": [
         {
-          "expr": "topk($topk,((irate(ceph_pool_rd[1m]) + irate(ceph_pool_wr[1m])) + on(pool_id) group_left(instance,name) ceph_pool_metadata))",
+          "expr": "topk($topk,((irate(ceph_pool_rd{instance=~\"$instance.*\"}[1m]) + irate(ceph_pool_wr{instance=~\"$instance.*\"}[1m])) + on(pool_id) group_left(instance,name) ceph_pool_metadata{instance=~\"$instance.*\"}))",
           "format": "table",
           "instant": true,
+          "interval": "",
           "intervalFactor": 2,
+          "legendFormat": "",
           "refId": "A",
           "textEditor": true
         }
       ],
       "title": "Top $topk Pools by Client IOPS",
       "transform": "table",
-      "type": "table"
+      "type": "table-old"
     },
     {
       "columns": [
@@ -368,16 +411,22 @@
         }
       ],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 9
+        "y": 7
       },
       "id": 4,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "pageSize": null,
       "scroll": true,
       "showHeader": true,
@@ -388,12 +437,14 @@
       "styles": [
         {
           "alias": "Time",
+          "align": "auto",
           "dateFormat": "YYYY-MM-DD HH:mm:ss",
           "pattern": "Time",
           "type": "hidden"
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -409,6 +460,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -424,6 +476,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -439,6 +492,7 @@
         },
         {
           "alias": "Pool Name",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -454,6 +508,7 @@
         },
         {
           "alias": "Pool ID",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -469,6 +524,7 @@
         },
         {
           "alias": "Throughput",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -485,31 +541,39 @@
       ],
       "targets": [
         {
-          "expr": "topk($topk,(irate(ceph_pool_rd_bytes[1m]) + irate(ceph_pool_wr_bytes[1m])) + on(pool_id) group_left(instance,name) ceph_pool_metadata) ",
+          "expr": "topk($topk,(irate(ceph_pool_rd_bytes{instance=~\"$instance.*\"}[1m]) + irate(ceph_pool_wr_bytes{instance=~\"$instance.*\"}[1m])) + on(pool_id) group_left(instance,name) ceph_pool_metadata{instance=~\"$instance.*\"}) ",
           "format": "table",
           "instant": true,
+          "interval": "",
           "intervalFactor": 2,
+          "legendFormat": "",
           "refId": "A",
           "textEditor": true
         }
       ],
       "title": "Top $topk Pools by Throughput",
       "transform": "table",
-      "type": "table"
+      "type": "table-old"
     },
     {
       "columns": [],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 9
+        "y": 7
       },
       "id": 5,
       "links": [],
-      "minSpan": 8,
+      "maxPerRow": 3,
       "pageSize": null,
       "scroll": true,
       "showHeader": true,
@@ -520,6 +584,7 @@
       "styles": [
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -535,6 +600,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -550,6 +616,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -565,6 +632,7 @@
         },
         {
           "alias": "Pool Name",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -580,6 +648,7 @@
         },
         {
           "alias": "Pool ID",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -595,6 +664,7 @@
         },
         {
           "alias": "Capacity Used",
+          "align": "auto",
           "colorMode": "value",
           "colors": [
             "rgba(50, 172, 45, 0.97)",
@@ -614,10 +684,11 @@
       ],
       "targets": [
         {
-          "expr": "topk($topk,((ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) * on(pool_id) group_left(name) ceph_pool_metadata))",
+          "expr": "topk($topk,((ceph_pool_stored{instance=~\"$instance.*\"} / (ceph_pool_stored{instance=~\"$instance.*\"} + ceph_pool_max_avail{instance=~\"$instance.*\"})) * on(pool_id) group_left(name) ceph_pool_metadata{instance=~\"$instance.*\"}))",
           "format": "table",
           "hide": false,
           "instant": true,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "D"
@@ -625,22 +696,24 @@
       ],
       "title": "Top $topk Pools By Capacity Used",
       "transform": "table",
-      "type": "table"
+      "type": "table-old"
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 16,
+  "schemaVersion": 25,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {
-          "text": "Prometheus admin.virt1.home.fajerski.name:9090",
-          "value": "Prometheus admin.virt1.home.fajerski.name:9090"
+          "text": "default",
+          "value": "default"
         },
         "hide": 0,
+        "includeAll": false,
         "label": "Data Source",
+        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
@@ -666,6 +739,28 @@
         "query": "15",
         "skipUrlSync": false,
         "type": "textbox"
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values(ceph_health_status, instance)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Instance",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(ceph_health_status, instance)",
+        "refresh": 1,
+        "regex": "([^:]*).*",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
       }
     ]
   },
@@ -701,6 +796,5 @@
   },
   "timezone": "browser",
   "title": "Ceph Pools Overview",
-  "uid": "z99hzWtmk",
-  "version": 1
+  "version": 4
 }

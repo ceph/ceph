@@ -36,8 +36,7 @@
   "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": null,
-  "iteration": 1551858875941,
+  "iteration": 1619481771816,
   "links": [],
   "panels": [
     {
@@ -51,6 +50,12 @@
       ],
       "datasource": "$datasource",
       "decimals": 2,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "percentunit",
       "gauge": {
         "maxValue": 1,
@@ -99,12 +104,13 @@
         "lineColor": "rgb(31, 120, 193)",
         "show": true
       },
-      "tableColumn": "",
       "targets": [
         {
-          "expr": "(ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "(ceph_pool_stored{instance=~\"$instance.*\"} / (ceph_pool_stored{instance=~\"$instance.*\"} + ceph_pool_max_avail{instance=~\"$instance.*\"} )) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
+          "legendFormat": "",
           "refId": "A"
         }
       ],
@@ -132,6 +138,12 @@
       ],
       "datasource": "$datasource",
       "description": "Time till pool is full assuming the average fill rate of the last 6 hours",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "s",
       "gauge": {
         "maxValue": 100,
@@ -180,12 +192,13 @@
         "lineColor": "rgb(31, 120, 193)",
         "show": false
       },
-      "tableColumn": "",
       "targets": [
         {
-          "expr": "(ceph_pool_max_avail / deriv(ceph_pool_stored[6h])) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"} > 0",
+          "expr": "(ceph_pool_max_avail{instance=~\"$instance.*\"} / deriv(ceph_pool_stored{instance=~\"$instance.*\"}[6h])) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"} > 0",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
+          "legendFormat": "",
           "refId": "A"
         }
       ],
@@ -216,13 +229,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
         "y": 0
       },
+      "hiddenSeries": false,
       "id": 10,
       "legend": {
         "avg": false,
@@ -236,8 +257,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -248,8 +272,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "deriv(ceph_pool_objects[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "deriv(ceph_pool_objects{instance=~\"$instance.*\"}[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "Objects per second",
           "refId": "B"
@@ -257,6 +282,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$pool_name Object Ingress/Egress",
       "tooltip": {
@@ -304,13 +330,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
         "y": 7
       },
+      "hiddenSeries": false,
       "id": 6,
       "legend": {
         "avg": false,
@@ -324,8 +358,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -341,15 +378,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_pool_rd[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "irate(ceph_pool_rd{instance=~\"$instance.*\"}[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "reads",
           "refId": "B"
         },
         {
-          "expr": "irate(ceph_pool_wr[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "irate(ceph_pool_wr{instance=~\"$instance.*\"}[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "writes",
           "refId": "C"
@@ -357,6 +396,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$pool_name Client IOPS",
       "tooltip": {
@@ -404,13 +444,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
         "y": 7
       },
+      "hiddenSeries": false,
       "id": 7,
       "legend": {
         "avg": false,
@@ -424,8 +472,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -441,15 +492,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_pool_rd_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "irate(ceph_pool_rd_bytes{instance=~\"$instance.*\"}[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "reads",
           "refId": "A"
         },
         {
-          "expr": "irate(ceph_pool_wr_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "irate(ceph_pool_wr_bytes{instance=~\"$instance.*\"}[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "writes",
           "refId": "C"
@@ -457,6 +510,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$pool_name Client Throughput",
       "tooltip": {
@@ -504,13 +558,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
         "y": 14
       },
+      "hiddenSeries": false,
       "id": 8,
       "legend": {
         "avg": false,
@@ -524,8 +586,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -536,8 +601,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "ceph_pool_objects * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "ceph_pool_objects{instance=~\"$instance.*\"} * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\", instance=~\"$instance.*\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "Number of Objects",
           "refId": "B"
@@ -545,6 +611,7 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$pool_name Objects",
       "tooltip": {
@@ -585,18 +652,20 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 16,
+  "schemaVersion": 25,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {
-          "text": "Prometheus admin.virt1.home.fajerski.name:9090",
-          "value": "Prometheus admin.virt1.home.fajerski.name:9090"
+          "text": "default",
+          "value": "default"
         },
         "hide": 0,
+        "includeAll": false,
         "label": "Data Source",
+        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
@@ -609,17 +678,40 @@
         "allValue": null,
         "current": {},
         "datasource": "$datasource",
+        "definition": "label_values(ceph_pool_metadata{instance=~\"$instance.*\"},name)",
         "hide": 0,
         "includeAll": false,
         "label": "Pool Name",
         "multi": false,
         "name": "pool_name",
         "options": [],
-        "query": "label_values(ceph_pool_metadata,name)",
+        "query": "label_values(ceph_pool_metadata{instance=~\"$instance.*\"},name)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values(ceph_health_status, instance)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Instance",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(ceph_health_status, instance)",
+        "refresh": 1,
+        "regex": "([^:]*).*",
+        "skipUrlSync": false,
+        "sort": 0,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",
@@ -660,6 +752,5 @@
   },
   "timezone": "browser",
   "title": "Ceph Pool Details",
-  "uid": "-xyV8KCiz",
-  "version": 1
+  "version": 11
 }

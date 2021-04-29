@@ -31,8 +31,7 @@
   "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": null,
-  "iteration": 1584428820779,
+  "iteration": 1619482841690,
   "links": [],
   "panels": [
     {
@@ -40,30 +39,45 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "$Datasource",
+      "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
-        "h": 9,
-        "w": 8,
+        "h": 12,
+        "w": 24,
         "x": 0,
         "y": 0
       },
+      "hiddenSeries": false,
       "id": 6,
       "legend": {
+        "alignAsTable": true,
         "avg": false,
-        "current": false,
+        "current": true,
         "hideEmpty": false,
         "hideZero": false,
         "max": false,
         "min": false,
+        "rightSide": true,
         "show": true,
+        "sort": "current",
+        "sortDesc": false,
         "total": false,
-        "values": false
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -74,22 +88,25 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_rbd_write_ops{pool=\"$Pool\", image=\"$Image\"}[30s])",
+          "expr": "irate(ceph_rbd_write_ops{pool=~\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s]) * -1",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Write",
+          "legendFormat": "Write {{image}}",
           "refId": "A"
         },
         {
-          "expr": "irate(ceph_rbd_read_ops{pool=\"$Pool\", image=\"$Image\"}[30s])",
+          "expr": "irate(ceph_rbd_read_ops{pool=~\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s])",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Read",
+          "legendFormat": "Read {{image}}",
           "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "IOPS",
       "tooltip": {
@@ -111,7 +128,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -133,28 +150,41 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "$Datasource",
-      "fill": 1,
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 8,
-        "y": 0
+      "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
       },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "hiddenSeries": false,
       "id": 4,
       "legend": {
+        "alignAsTable": true,
         "avg": false,
-        "current": false,
+        "current": true,
         "max": false,
         "min": false,
+        "rightSide": true,
         "show": true,
         "total": false,
-        "values": false
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -165,22 +195,25 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_rbd_write_bytes{pool=\"$Pool\", image=\"$Image\"}[30s])",
+          "expr": "irate(ceph_rbd_write_bytes{pool=~\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s]) * -1",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Write",
+          "legendFormat": "Write {{image}}",
           "refId": "A"
         },
         {
-          "expr": "irate(ceph_rbd_read_bytes{pool=\"$Pool\", image=\"$Image\"}[30s])",
+          "expr": "irate(ceph_rbd_read_bytes{pool=~\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s])",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Read",
+          "legendFormat": "Read {{image}}",
           "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Throughput",
       "tooltip": {
@@ -202,7 +235,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -224,28 +257,41 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "$Datasource",
-      "fill": 1,
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 16,
-        "y": 0
+      "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
       },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "hiddenSeries": false,
       "id": 2,
       "legend": {
+        "alignAsTable": true,
         "avg": false,
-        "current": false,
+        "current": true,
         "max": false,
         "min": false,
+        "rightSide": true,
         "show": true,
         "total": false,
-        "values": false
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -256,22 +302,25 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_rbd_write_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) / irate(ceph_rbd_write_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])",
+          "expr": "(irate(ceph_rbd_write_latency_sum{pool=~\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s]) / irate(ceph_rbd_write_latency_count{pool=~\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s])) * -1",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Write",
+          "legendFormat": "Write {{image}}",
           "refId": "A"
         },
         {
-          "expr": "irate(ceph_rbd_read_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) / irate(ceph_rbd_read_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])",
+          "expr": "irate(ceph_rbd_read_latency_sum{pool=~\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s]) / irate(ceph_rbd_read_latency_count{pool=\"$pool\", image=~\"$image\", instance=~\"$instance.*\"}[30s])",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Read",
+          "legendFormat": "Read {{image}}",
           "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Average Latency",
       "tooltip": {
@@ -293,7 +342,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -311,8 +360,8 @@
       }
     }
   ],
-  "refresh": false,
-  "schemaVersion": 16,
+  "refresh": "10s",
+  "schemaVersion": 25,
   "style": "dark",
   "tags": [],
   "templating": {
@@ -320,8 +369,10 @@
       {
         "current": {},
         "hide": 0,
+        "includeAll": false,
         "label": null,
-        "name": "Datasource",
+        "multi": false,
+        "name": "datasource",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
@@ -332,14 +383,41 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "$Datasource",
+        "datasource": "$datasource",
+        "definition": "label_values(ceph_rbd_read_bytes{instance=~\"$instance.*\"}, pool)",
         "hide": 0,
-        "includeAll": false,
-        "label": null,
+        "includeAll": true,
+        "label": "Pool",
         "multi": false,
-        "name": "Pool",
+        "name": "pool",
         "options": [],
-        "query": "label_values(pool)",
+        "query": "label_values(ceph_rbd_read_bytes{instance=~\"$instance.*\"}, pool)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "$datasource",
+        "definition": "label_values(ceph_rbd_read_bytes{instance=~\"$instance.*\"}, image)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Image",
+        "multi": false,
+        "name": "image",
+        "options": [],
+        "query": "label_values(ceph_rbd_read_bytes{instance=~\"$instance.*\"}, image)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -354,15 +432,16 @@
         "allValue": null,
         "current": {},
         "datasource": "$Datasource",
+        "definition": "label_values(ceph_health_status, instance)",
         "hide": 0,
         "includeAll": false,
-        "label": null,
+        "label": "Instance",
         "multi": false,
-        "name": "Image",
+        "name": "instance",
         "options": [],
-        "query": "label_values(image)",
+        "query": "label_values(ceph_health_status, instance)",
         "refresh": 1,
-        "regex": "",
+        "regex": "([^:]*).*",
         "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
@@ -402,8 +481,7 @@
       "30d"
     ]
   },
-  "timezone": "",
+  "timezone": "browser",
   "title": "RBD Details",
-  "uid": "YhCYGcuZz",
   "version": 7
 }

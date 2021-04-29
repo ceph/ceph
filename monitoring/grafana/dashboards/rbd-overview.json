@@ -42,8 +42,7 @@
   "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": null,
-  "iteration": 1547242766440,
+  "iteration": 1619534670825,
   "links": [],
   "panels": [
     {
@@ -52,13 +51,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 8,
         "x": 0,
         "y": 0
       },
+      "hiddenSeries": false,
       "id": 2,
       "legend": {
         "avg": false,
@@ -73,6 +80,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -83,14 +93,15 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "round(sum(irate(ceph_rbd_write_ops[30s])))",
+          "expr": "round(sum(irate(ceph_rbd_write_ops{instance=~\"$instance.*\"}[30s]))) * -1",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "Writes",
           "refId": "A"
         },
         {
-          "expr": "round(sum(irate(ceph_rbd_read_ops[30s])))",
+          "expr": "round(sum(irate(ceph_rbd_read_ops{instance=~\"$instance.*\"}[30s])))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -145,13 +156,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 8,
         "x": 8,
         "y": 0
       },
+      "hiddenSeries": false,
       "id": 4,
       "legend": {
         "avg": false,
@@ -166,6 +185,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -176,15 +198,16 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "round(sum(irate(ceph_rbd_write_bytes[30s])))",
+          "expr": "round(sum(irate(ceph_rbd_write_bytes{instance=~\"$instance.*\"}[30s]))) * -1",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "Write",
           "refId": "A"
         },
         {
-          "expr": "round(sum(irate(ceph_rbd_read_bytes[30s])))",
+          "expr": "round(sum(irate(ceph_rbd_read_bytes{instance=~\"$instance.*\"}[30s])))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -240,13 +263,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 8,
         "x": 16,
         "y": 0
       },
+      "hiddenSeries": false,
       "id": 6,
       "legend": {
         "avg": false,
@@ -261,6 +292,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -271,14 +305,15 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "round(sum(irate(ceph_rbd_write_latency_sum[30s])) / sum(irate(ceph_rbd_write_latency_count[30s])))",
+          "expr": "round(sum(irate(ceph_rbd_write_latency_sum{instance=~\"$instance.*\"}[30s])) / sum(irate(ceph_rbd_write_latency_count{instance=~\"$instance.*\"}[30s]))) * -1",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "Write",
           "refId": "A"
         },
         {
-          "expr": "round(sum(irate(ceph_rbd_read_latency_sum[30s])) / sum(irate(ceph_rbd_read_latency_count[30s])))",
+          "expr": "round(sum(irate(ceph_rbd_read_latency_sum{instance=~\"$instance.*\"}[30s])) / sum(irate(ceph_rbd_read_latency_count{instance=~\"$instance.*\"}[30s])))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -330,6 +365,12 @@
     {
       "columns": [],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -350,6 +391,7 @@
       "styles": [
         {
           "alias": "Pool",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -367,6 +409,7 @@
         },
         {
           "alias": "Image",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -383,6 +426,7 @@
         },
         {
           "alias": "IOPS",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -399,6 +443,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -426,11 +471,17 @@
       ],
       "title": "Highest IOPS",
       "transform": "table",
-      "type": "table"
+      "type": "table-old"
     },
     {
       "columns": [],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -450,6 +501,7 @@
       "styles": [
         {
           "alias": "Pool",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -466,6 +518,7 @@
         },
         {
           "alias": "Image",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -482,6 +535,7 @@
         },
         {
           "alias": "Throughput",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -498,6 +552,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -522,11 +577,17 @@
       ],
       "title": "Highest Throughput",
       "transform": "table",
-      "type": "table"
+      "type": "table-old"
     },
     {
       "columns": [],
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -546,6 +607,7 @@
       "styles": [
         {
           "alias": "Pool",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -562,6 +624,7 @@
         },
         {
           "alias": "Image",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -578,6 +641,7 @@
         },
         {
           "alias": "Latency",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -594,6 +658,7 @@
         },
         {
           "alias": "",
+          "align": "auto",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -620,11 +685,11 @@
       ],
       "title": "Highest Latency",
       "transform": "table",
-      "type": "table"
+      "type": "table-old"
     }
   ],
   "refresh": "30s",
-  "schemaVersion": 16,
+  "schemaVersion": 25,
   "style": "dark",
   "tags": [
     "overview"
@@ -637,7 +702,9 @@
           "value": "default"
         },
         "hide": 0,
+        "includeAll": false,
         "label": "Data Source",
+        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
@@ -645,11 +712,33 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values(ceph_health_status, instance)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Instance",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(ceph_health_status, instance)",
+        "refresh": 0,
+        "regex": "([^:]*).*",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
       }
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-24h",
     "to": "now"
   },
   "timepicker": {
@@ -678,8 +767,7 @@
       "30d"
     ]
   },
-  "timezone": "",
+  "timezone": "browser",
   "title": "RBD Overview",
-  "uid": "41FrpeUiz",
-  "version": 8
+  "version": 3
 }
