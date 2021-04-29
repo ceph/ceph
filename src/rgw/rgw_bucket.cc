@@ -3032,25 +3032,6 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y, dpp);
 }
 
-int RGWBucketCtl::set_acl(ACLOwner& owner, rgw_bucket& bucket,
-                          RGWBucketInfo& bucket_info, bufferlist& bl,
-                          optional_yield y,
-                          const DoutPrefixProvider *dpp)
-{
-  // set owner and acl
-  bucket_info.owner = owner.get_id();
-  std::map<std::string, bufferlist> attrs{{RGW_ATTR_ACL, bl}};
-
-  int r = store_bucket_instance_info(bucket, bucket_info, y, dpp,
-                                     BucketInstance::PutParams().set_attrs(&attrs));
-  if (r < 0) {
-    cerr << "ERROR: failed to set bucket owner: " << cpp_strerror(-r) << std::endl;
-    return r;
-  }
-  
-  return 0;
-}
-
 // TODO: remove RGWRados dependency for bucket listing
 int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
                         const rgw_user& user_id, const std::string& display_name,
