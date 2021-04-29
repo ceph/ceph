@@ -155,8 +155,8 @@ class KVPool {
       const std::pair<index_t, index_t>& range1,
       const std::pair<index_t, index_t>& range0) {
     ceph_assert(range2.first < range2.second);
-    ceph_assert(range2.second - 1 <= (index_t)std::numeric_limits<shard_t>::max());
-    ceph_assert(range2.second - 1 <= std::numeric_limits<crush_hash_t>::max());
+    ceph_assert(range2.second - 1 <= MAX_SHARD);
+    ceph_assert(range2.second - 1 <= MAX_CRUSH);
     ceph_assert(range1.first < range1.second);
     ceph_assert(range1.second - 1 <= 9);
     ceph_assert(range0.first < range0.second);

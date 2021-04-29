@@ -25,6 +25,12 @@ static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_hash()));
 static_assert(sizeof(snap_t) == sizeof(ghobject_t().hobj.snap.val));
 static_assert(sizeof(gen_t) == sizeof(ghobject_t().generation));
 
+constexpr auto MAX_SHARD = std::numeric_limits<shard_t>::max();
+constexpr auto MAX_POOL = std::numeric_limits<pool_t>::max();
+constexpr auto MAX_CRUSH = std::numeric_limits<crush_hash_t>::max();
+constexpr auto MAX_SNAP = std::numeric_limits<snap_t>::max();
+constexpr auto MAX_GEN = std::numeric_limits<gen_t>::max();
+
 class NodeExtentMutable;
 class key_view_t;
 class key_hobj_t;
