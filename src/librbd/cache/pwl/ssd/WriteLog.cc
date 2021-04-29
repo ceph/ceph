@@ -494,21 +494,21 @@ Context* WriteLog<I>::construct_flush_entry_ctx(
   if (invalidating) {
     return ctx;
   }
-  if(log_entry->is_write_entry()) {
-      bufferlist *read_bl_ptr = new bufferlist;
-      ctx = new LambdaContext(
-          [this, log_entry, read_bl_ptr, ctx](int r) {
-            bufferlist captured_entry_bl;
-            captured_entry_bl.claim_append(*read_bl_ptr);
-            free(read_bl_ptr);
-            m_image_ctx.op_work_queue->queue(new LambdaContext(
-              [this, log_entry, entry_bl=move(captured_entry_bl), ctx](int r) {
-               auto captured_entry_bl = std::move(entry_bl);
-               ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-                                          << " " << *log_entry << dendl;
-               log_entry->writeback_bl(this->m_image_writeback, ctx,
-                                       std::move(captured_entry_bl));
-              }), 0);
+  if (log_entry->is_write_entry()) {
+    bufferlist *read_bl_ptr = new bufferlist;
+    ctx = new LambdaContext(
+      [this, log_entry, read_bl_ptr, ctx](int r) {
+        bufferlist captured_entry_bl;
+        captured_entry_bl.claim_append(*read_bl_ptr);
+        delete read_bl_ptr;
+        m_image_ctx.op_work_queue->queue(new LambdaContext(
+          [this, log_entry, entry_bl=move(captured_entry_bl), ctx](int r) {
+            auto captured_entry_bl = std::move(entry_bl);
+            ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+                                       << " " << *log_entry << dendl;
+            log_entry->writeback_bl(this->m_image_writeback, ctx,
+                                    std::move(captured_entry_bl));
+          }), 0);
       });
       ctx = new LambdaContext(
         [this, log_entry, read_bl_ptr, ctx](int r) {
