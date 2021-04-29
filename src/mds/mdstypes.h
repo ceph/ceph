@@ -624,7 +624,8 @@ struct inode_t {
 
   std::basic_string<char,std::char_traits<char>,Allocator<char>> stray_prior_path; //stores path before unlink
 
-  bool fscrypt = false; // fscrypt enabled ?
+  std::vector<uint8_t> fscrypt_auth;
+  std::vector<uint8_t> fscrypt_file;
 
 private:
   bool older_is_consistent(const inode_t &other) const;
@@ -689,7 +690,7 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_ephemeral_random_pin, bl);
   encode(export_ephemeral_distributed_pin, bl);
 
-  encode(fscrypt, bl);
+  encode(!fscrypt_auth.empty(), bl);
 
   ENCODE_FINISH(bl);
 }
@@ -796,9 +797,8 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
   }
 
   if (struct_v >= 17) {
-    decode(fscrypt, p);
-  } else {
-    fscrypt = 0;
+    bool fscrypt_flag;
+    decode(fscrypt_flag, p);
   }
 
   DECODE_FINISH(p);
