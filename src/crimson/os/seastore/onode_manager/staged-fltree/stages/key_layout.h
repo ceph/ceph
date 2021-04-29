@@ -480,6 +480,10 @@ inline const ghobject_t _MAX_OID() {
                     "MAX", "MAX", MAX_SNAP, MAX_GEN);
 }
 
+// the valid key stored in tree should be in the range of (_MIN_OID, _MAX_OID)
+template <KeyT KT>
+bool is_valid_key(const full_key_t<KT>& key);
+
 /**
  * key_hobj_t
  *
@@ -547,6 +551,10 @@ class key_hobj_t {
        << string_view_masked_t{oid()} << "; "
        << snap() << "," << gen() << ")";
     return os;
+  }
+
+  bool is_valid() const {
+    return is_valid_key<KeyT::HOBJ>(*this);
   }
 
   static key_hobj_t decode(ceph::bufferlist::const_iterator& delta) {
@@ -675,6 +683,7 @@ class key_view_t {
   }
 
   ghobject_t to_ghobj() const {
+    assert(is_valid_key<KeyT::VIEW>(*this));
     return ghobject_t(
         shard_id_t(shard()), pool(), crush(),
         std::string(nspace()), std::string(oid()), snap(), gen());
@@ -799,6 +808,12 @@ inline MatchKindCMP key_view_t::compare_to(
 inline MatchKindCMP key_view_t::compare_to(
     const full_key_t<KeyT::HOBJ>& o) const {
   return compare_full_key<KeyT::VIEW, KeyT::HOBJ>(*this, o);
+}
+
+template <KeyT KT>
+bool is_valid_key(const full_key_t<KT>& key) {
+  return key.compare_to(key_hobj_t(ghobject_t())) == MatchKindCMP::GT &&
+         key.compare_to(key_hobj_t(ghobject_t::get_max())) == MatchKindCMP::LT;
 }
 
 inline std::ostream& operator<<(std::ostream& os, const key_view_t& key) {
