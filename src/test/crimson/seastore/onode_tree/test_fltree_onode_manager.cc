@@ -139,7 +139,7 @@ struct fltree_onode_manager_test_t
 
   template <typename F>
   void with_onodes_process(
-      iterator_t& start, iterator_t& end, F&& f) {
+      const iterator_t& start, const iterator_t& end, F&& f) {
     std::vector<ghobject_t> oids;
     std::vector<onode_item_t*> items;
     auto it = start;
@@ -156,7 +156,7 @@ struct fltree_onode_manager_test_t
 
   template <typename F>
   void with_onodes_write(
-      iterator_t& start, iterator_t& end, F&& f) {
+      const iterator_t& start, const iterator_t& end, F&& f) {
     with_onodes_process(start, end,
         [this, f=std::move(f)] (auto& t, auto& oids, auto& items) {
       auto onodes = manager->get_or_create_onodes(
@@ -172,7 +172,7 @@ struct fltree_onode_manager_test_t
   }
 
   void validate_onodes(
-      iterator_t& start, iterator_t& end) {
+      const iterator_t& start, const iterator_t& end) {
     with_onodes_process(start, end,
         [this] (auto& t, auto& oids, auto& items) {
       for (auto tup : boost::combine(oids, items)) {
@@ -186,7 +186,7 @@ struct fltree_onode_manager_test_t
   }
 
   void validate_erased(
-      iterator_t& start, iterator_t& end) {
+      const iterator_t& start, const iterator_t& end) {
     with_onodes_process(start, end,
         [this] (auto& t, auto& oids, auto& items) {
       for (auto& oid : oids) {
