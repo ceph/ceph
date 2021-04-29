@@ -502,7 +502,7 @@ Context* WriteLog<I>::construct_flush_entry_ctx(
       [this, log_entry, read_bl_ptr, ctx](int r) {
         bufferlist captured_entry_bl;
         captured_entry_bl.claim_append(*read_bl_ptr);
-        free(read_bl_ptr);
+        delete read_bl_ptr;
         m_image_ctx.op_work_queue->queue(new LambdaContext(
           [this, log_entry, entry_bl=move(captured_entry_bl), ctx](int r) {
             auto captured_entry_bl = std::move(entry_bl);
