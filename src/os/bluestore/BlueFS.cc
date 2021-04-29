@@ -2821,8 +2821,8 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     } else {
       bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered, h->write_hint);
     }
-    lock.lock();
     h->lock.unlock();
+    lock.lock();
     h->dirty_devs[p->bdev] = true;
     if (p->bdev == BDEV_SLOW) {
       bytes_written_slow += t.length();
