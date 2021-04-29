@@ -104,7 +104,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       {
         name: $localize`Container image ID`,
         prop: 'status.container_image_id',
-        flexGrow: 3,
+        flexGrow: 1.5,
         cellTransformation: CellTemplate.truncate,
         customTemplateConfig: {
           length: 12
@@ -114,7 +114,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         name: $localize`Placement`,
         prop: '',
         pipe: new PlacementPipe(),
-        flexGrow: 1
+        flexGrow: 2
       },
       {
         name: $localize`Running`,
