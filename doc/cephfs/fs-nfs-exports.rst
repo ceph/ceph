@@ -184,6 +184,8 @@ path is '/'. It need not be unique. Subvolume path can be fetched using:
 
    $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
+.. note:: Export creation is supported only for NFS Ganesha clusters deployed using volume/nfs interface.
+
 Delete CephFS Export
 ====================
 
