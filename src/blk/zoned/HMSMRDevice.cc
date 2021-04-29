@@ -115,7 +115,7 @@ bool HMSMRDevice::set_smr_params(const std::string& path) {
 
   zone_size = zbd_zone_len(&zones[0]);
   conventional_region_size = nr_zones * zone_size;
-
+  zbd_dev = dev;
   dout(10) << __func__ << " setting zone size to " << zone_size
 	   << " and conventional region size to " << conventional_region_size
            << dendl;
@@ -410,6 +410,19 @@ void HMSMRDevice::_detect_vdo()
     dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
   }
   return;
+}
+
+// Will reset the write pointer of all zones from start to end(both inclusive)
+uint64_t HMSMRDevice::reset_zones(uint64_t zone_num_start, uint64_t zone_num_end) {
+  ceph_assert(is_smr());
+  uint64_t len = (zone_num_end + 1 - zone_num_start)  * zone_size;
+  ceph_assert(len > 0);
+  if (!zbd_reset_zones(zbd_dev, zone_num_start * zone_size, len))
+  {
+    return 1;
+  }
+  derr << __func__ << " zbd reset zones failed for zones " << zone_num_start <<" to "<< zone_num_end<< dendl;
+  return 0; 
 }
 
 bool HMSMRDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
