@@ -134,7 +134,6 @@ private:
   int update_pool_root_sync(std::shared_ptr<pwl::WriteLogPoolRoot> root);
   void update_pool_root(std::shared_ptr<WriteLogPoolRoot> root,
                                           AioTransContext *aio);
-  void pre_io_check(WriteLogCacheEntry *log_entry, uint64_t &length);
   void aio_read_data_block(WriteLogCacheEntry *log_entry, bufferlist *bl,
                            Context *ctx);
   void aio_read_data_block(std::vector<WriteLogCacheEntry*> &log_entries,
