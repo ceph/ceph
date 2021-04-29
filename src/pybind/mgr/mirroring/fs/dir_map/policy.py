@@ -79,16 +79,14 @@ class Policy:
                 self.dir_states[dir_path] = DirectoryState(instance_id, dir_map['last_shuffled'])
                 dir_state = self.dir_states[dir_path]
                 state = State.INITIALIZING if instance_id else State.ASSOCIATING
-                if instance_id:
-                    purging = dir_mapping.get('purging', False)
-                    if purging:
-                        dir_state.purging = True
-                        state = State.DISASSOCIATING
-                    else:
-                        state = State.INITIALIZING
-                else:
-                    state = State.ASSOCIATING
-                log.debug(f'starting state: {dir_path} {state}')
+                purging = dir_map.get('purging', 0)
+                if purging:
+                    dir_state.purging = True
+                    state = State.DISASSOCIATING
+                    if not instance_id:
+                        dir_state.transition = StateTransition.transit(state,
+                                                                       dir_state.transition.action_type)
+                log.debug(f'starting state: {dir_path} {state}: {dir_state}')
                 self.set_state(dir_state, state)
                 log.debug(f'init dir_state: {dir_state}')
 
