@@ -868,3 +868,70 @@ class TestMirroring(CephFSTestCase):
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0/d1/d2/d3')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_remove_on_stall(self):
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+        # fetch rados address for blacklist check
+        rados_inst = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+
+        # simulate non-responding mirror daemon by sending SIGSTOP
+        pid = self.get_mirror_daemon_pid()
+        log.debug(f'SIGSTOP to cephfs-mirror pid {pid}')
+        self.mount_a.run_shell(['kill', '-SIGSTOP', pid])
+
+        # wait for blocklist timeout -- the manager module would blocklist
+        # the mirror daemon
+        time.sleep(40)
+
+        # make sure the rados addr is blocklisted
+        blocklist = self.get_blocklisted_instances()
+        self.assertTrue(rados_inst in blocklist)
+
+        # now we are sure that there are no "active" mirror daemons -- add a directory path.
+        dir_path_p = "/d0/d1"
+        dir_path = "/d0/d1/d2"
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "add", self.primary_fs_name, dir_path)
+
+        time.sleep(10)
+        # this uses an undocumented interface to get dirpath map state
+        res_json = self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "dirmap", self.primary_fs_name, dir_path)
+        res = json.loads(res_json)
+        # there are no mirror daemons
+        self.assertTrue(res['state'], 'stalled')
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "remove", self.primary_fs_name, dir_path)
+
+        time.sleep(10)
+        try:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "dirmap", self.primary_fs_name, dir_path)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                raise RuntimeError('invalid errno when checking dirmap status for non-existent directory')
+        else:
+            raise RuntimeError('incorrect errno when checking dirmap state for non-existent directory')
+
+        # adding a parent directory should be allowed
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "add", self.primary_fs_name, dir_path_p)
+
+        time.sleep(10)
+        # however, this directory path should get stalled too
+        res_json = self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "dirmap", self.primary_fs_name, dir_path_p)
+        res = json.loads(res_json)
+        # there are no mirror daemons
+        self.assertTrue(res['state'], 'stalled')
+
+        # wake up the mirror daemon -- at this point, the daemon should know
+        # that it has been blocklisted
+        log.debug('SIGCONT to cephfs-mirror')
+        self.mount_a.run_shell(['kill', '-SIGCONT', pid])
+
+        # wait for restart mirror on blocklist
+        time.sleep(60)
+        res_json = self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "snapshot", "mirror", "dirmap", self.primary_fs_name, dir_path_p)
+        res = json.loads(res_json)
+        # there are no mirror daemons
+        self.assertTrue(res['state'], 'mapped')
+
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
