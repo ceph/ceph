@@ -953,20 +953,8 @@ int WriteLog<I>::update_pool_root_sync(
 }
 
 template <typename I>
-void WriteLog<I>::pre_io_check(WriteLogCacheEntry *log_entry,
-                               uint64_t &length) {
-  assert(log_entry->is_write() || log_entry->is_writesame());
-  ceph_assert(log_entry->write_data_pos <= pool_size);
-
-  length = log_entry->is_write() ? log_entry->write_bytes :
-                                   log_entry->ws_datalen;
-  length = round_up_to(length, MIN_WRITE_ALLOC_SSD_SIZE);
-  ceph_assert(length != 0 && log_entry->write_data_pos + length <= pool_size);
-}
-
-template <typename I>
-void WriteLog<I>::aio_read_data_block(
-  WriteLogCacheEntry *log_entry, bufferlist *bl, Context *ctx) {
+void WriteLog<I>::aio_read_data_block(WriteLogCacheEntry *log_entry,
+                                      bufferlist *bl, Context *ctx) {
   std::vector<WriteLogCacheEntry*> log_entries {log_entry};
   std::vector<bufferlist *> bls {bl};
   aio_read_data_block(log_entries, bls, ctx);
@@ -997,12 +985,32 @@ void WriteLog<I>::aio_read_data_block(
   for (unsigned int i = 0; i < log_entries.size(); i++) {
     auto log_entry = log_entries[i];
 
-    uint64_t length;
-    pre_io_check(log_entry, length);
-    ldout(cct, 20) << "Read at " << log_entry->write_data_pos
-                   << ", length " << length << dendl;
+    ceph_assert(log_entry->is_write() || log_entry->is_writesame());
+    uint64_t len = log_entry->is_write() ? log_entry->write_bytes :
+                                           log_entry->ws_datalen;
+    uint64_t align_len = round_up_to(len, MIN_WRITE_ALLOC_SSD_SIZE);
 
-    bdev->aio_read(log_entry->write_data_pos, length, bls[i], &aio->ioc);
+    ldout(cct, 20) << "entry i=" << i << " " << log_entry->write_data_pos
+                   << "~" << len << dendl;
+    ceph_assert(log_entry->write_data_pos <= pool_root.pool_size);
+    ceph_assert(align_len != 0);
+    if (log_entry->write_data_pos + align_len > pool_root.pool_size) {
+      // spans boundary, need to split
+      uint64_t len1 = pool_root.pool_size - log_entry->write_data_pos;
+      uint64_t len2 = align_len - len1;
+
+      ldout(cct, 20) << "read " << log_entry->write_data_pos << "~"
+                     << align_len << " spans boundary, split into "
+                     << log_entry->write_data_pos << "~" << len1
+                     << " and " << DATA_RING_BUFFER_OFFSET << "~"
+                     << len2 << dendl;
+      bdev->aio_read(log_entry->write_data_pos, len1, bls[i], &aio->ioc);
+      bdev->aio_read(DATA_RING_BUFFER_OFFSET, len2, bls[i], &aio->ioc);
+    } else {
+      ldout(cct, 20) << "read " << log_entry->write_data_pos << "~"
+                     << align_len << dendl;
+      bdev->aio_read(log_entry->write_data_pos, align_len, bls[i], &aio->ioc);
+    }
   }
   bdev->aio_submit(&aio->ioc);
 }
