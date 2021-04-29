@@ -69,6 +69,15 @@ public:
     Transaction &trans,
     OnodeRef &onode) = 0;
 
+  using list_onodes_ertr = base_ertr;
+  using list_onodes_bare_ret = std::tuple<std::vector<ghobject_t>, ghobject_t>;
+  using list_onodes_ret = list_onodes_ertr::future<list_onodes_bare_ret>;
+  virtual list_onodes_ret list_onodes(
+    Transaction &trans,
+    const ghobject_t& start,
+    const ghobject_t& end,
+    uint64_t limit) = 0;
+
   virtual ~OnodeManager() {}
 };
 using OnodeManagerRef = std::unique_ptr<OnodeManager>;

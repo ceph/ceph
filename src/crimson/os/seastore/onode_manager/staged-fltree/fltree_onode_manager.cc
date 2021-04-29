@@ -148,6 +148,55 @@ FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
   return erase_onode_ertr::now();
 }
 
+FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
+  Transaction &trans,
+  const ghobject_t& start,
+  const ghobject_t& end,
+  uint64_t limit)
+{
+  return tree.lower_bound(trans, start
+  ).safe_then([this, &trans, end, limit] (auto&& cursor) {
+    using crimson::os::seastore::onode::full_key_t;
+    return seastar::do_with(
+        limit,
+        std::move(cursor),
+        list_onodes_bare_ret(),
+        [this, &trans, end] (auto& to_list, auto& current_cursor, auto& ret) {
+      using get_next_ertr = typename OnodeTree::btree_ertr;
+      return crimson::do_until(
+          [this, &trans, end, &to_list, &current_cursor, &ret] () mutable
+          -> get_next_ertr::future<bool> {
+        if (current_cursor.is_end() ||
+            current_cursor.get_ghobj() >= end) {
+          std::get<1>(ret) = end;
+          return seastar::make_ready_future<bool>(true);
+        }
+        if (to_list == 0) {
+          std::get<1>(ret) = current_cursor.get_ghobj();
+          return seastar::make_ready_future<bool>(true);
+        }
+        std::get<0>(ret).emplace_back(current_cursor.get_ghobj());
+        return tree.get_next(trans, current_cursor
+        ).safe_then([&to_list, &current_cursor] (auto&& next_cursor) mutable {
+          // we intentionally hold the current_cursor during get_next() to
+          // accelerate tree lookup.
+          --to_list;
+          current_cursor = next_cursor;
+          return seastar::make_ready_future<bool>(false);
+        });
+      }).safe_then([&ret] () mutable {
+        return seastar::make_ready_future<list_onodes_bare_ret>(
+            std::move(ret));
+      });
+    });
+  }).handle_error(
+    list_onodes_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in FLTreeOnodeManager::list_onodes"
+    }
+  );
+}
+
 FLTreeOnodeManager::~FLTreeOnodeManager() {}
 
 }

@@ -132,6 +132,12 @@ public:
     Transaction &trans,
     OnodeRef &onode) final;
 
+  list_onodes_ret list_onodes(
+    Transaction &trans,
+    const ghobject_t& start,
+    const ghobject_t& end,
+    uint64_t limit) final;
+
   ~FLTreeOnodeManager();
 };
 using FLTreeOnodeManagerRef = std::unique_ptr<FLTreeOnodeManager>;
