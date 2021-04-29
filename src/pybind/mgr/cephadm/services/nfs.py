@@ -270,3 +270,25 @@ class NFSService(CephService):
         # Provide warning
         warn_message = "WARNING: Removing NFS daemons can cause clients to lose connectivity. "
         return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+    def purge(self, service_name: str) -> None:
+        if service_name not in self.mgr.spec_store:
+            return
+        spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
+
+        logger.info(f'Removing grace file for {service_name}')
+        cmd = [
+            'rados',
+            '-n', f"mgr.{self.mgr.get_mgr_id()}",
+            '-k', str(self.mgr.get_ceph_option('keyring')),
+            '-p', cast(str, spec.pool),
+        ]
+        if spec.namespace:
+            cmd += ['--namespace', spec.namespace]
+        cmd += ['rm', 'grace']
+        subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10
+        )
