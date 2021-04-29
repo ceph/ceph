@@ -20,6 +20,7 @@
 
 #include "crimson/osd/exceptions.h"
 
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
@@ -32,16 +33,18 @@ class Journal;
 
 template <typename F>
 auto repeat_eagain(F &&f) {
+  LOG_PREFIX("repeat_eagain");
   return seastar::do_with(
     std::forward<F>(f),
-    [](auto &f) {
+    [FNAME](auto &f) {
       return crimson::do_until(
-	[&f] {
+	[FNAME, &f] {
 	  return std::invoke(f
 	  ).safe_then([] {
 	    return true;
 	  }).handle_error(
-	    [](const crimson::ct_error::eagain &e) {
+	    [FNAME](const crimson::ct_error::eagain &e) {
+	      DEBUG("hit eagain, restarting");
 	      return seastar::make_ready_future<bool>(false);
 	    },
 	    crimson::ct_error::pass_further_all{}
@@ -124,15 +127,14 @@ public:
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
     LBAPinRef pin) {
+    LOG_PREFIX(TransactionManager::pin_to_extent);
     using ret = pin_to_extent_ret<T>;
-    crimson::get_logger(ceph_subsys_filestore).debug(
-      "pin_to_extent: getting extent {}",
-      *pin);
+    DEBUGT("getting extent {}", t, *pin);
     return cache->get_extent<T>(
       t,
       pin->get_paddr(),
       pin->get_length()
-    ).safe_then([this, pin=std::move(pin)](auto ref) mutable -> ret {
+    ).safe_then([this, FNAME, &t, pin=std::move(pin)](auto ref) mutable -> ret {
       if (!ref->has_pin()) {
 	if (pin->has_been_invalidated() || ref->has_been_invalidated()) {
 	  return crimson::ct_error::eagain::make();
@@ -141,9 +143,7 @@ public:
 	  lba_manager->add_pin(ref->get_pin());
 	}
       }
-      crimson::get_logger(ceph_subsys_filestore).debug(
-	"pin_to_extent: got extent {}",
-	*ref);
+      DEBUGT("got extent {}", t, *ref);
       return pin_to_extent_ret<T>(
 	pin_to_extent_ertr::ready_future_marker{},
 	std::move(ref));
@@ -165,18 +165,16 @@ public:
     Transaction &t,
     laddr_t offset,
     extent_len_t length) {
+    LOG_PREFIX(TransactionManager::read_extent);
     return get_pins(
       t, offset, length
-    ).safe_then([this, &t, offset, length](auto pins) {
+    ).safe_then([this, FNAME, &t, offset, length](auto pins) {
       if (pins.size() != 1 || !pins.front()->get_paddr().is_real()) {
-	auto &logger = crimson::get_logger(ceph_subsys_filestore);
-	logger.error(
-	  "TransactionManager::read_extent offset {} len {} got {} extents:",
-	  offset,
-	  length,
-	  pins.size());
+	ERRORT(
+	  "offset {} len {} got {} extents:",
+	  t, offset, length, pins.size());
 	for (auto &i: pins) {
-	  logger.error("\t{}", *i);
+	  ERRORT("\t{}", t, *i);
 	}
 	ceph_assert(0 == "Should be impossible");
       }
@@ -186,21 +184,21 @@ public:
 
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
-    auto &logger = crimson::get_logger(ceph_subsys_filestore);
+    LOG_PREFIX(TransactionManager::get_mutable_extent);
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
     if (!ret->has_pin()) {
-      logger.debug(
-	"{}: duplicating {} for write: {}",
-	__func__,
+      DEBUGT(
+	"duplicating {} for write: {}",
+	t,
 	*ref,
 	*ret);
       ret->set_pin(ref->get_pin().duplicate());
     } else {
-      logger.debug(
-	"{}: {} already pending",
-	__func__,
+      DEBUGT(
+	"{} already pending",
+	t,
 	*ref);
       assert(ref->is_pending());
       assert(&*ref == &*ret);
