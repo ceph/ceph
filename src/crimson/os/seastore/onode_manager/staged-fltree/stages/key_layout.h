@@ -53,7 +53,7 @@ struct shard_pool_t {
   pool_t pool;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const shard_pool_t& sp) {
-  return os << (unsigned)sp.shard << "," << sp.pool;
+  return os << (int)sp.shard << "," << sp.pool;
 }
 inline MatchKindCMP compare_to(const shard_pool_t& l, const shard_pool_t& r) {
   auto ret = toMatchKindCMP(l.shard, r.shard);
@@ -509,7 +509,7 @@ class key_hobj_t {
   MatchKindCMP compare_to(const full_key_t<KeyT::HOBJ>&) const;
 
   std::ostream& dump(std::ostream& os) const {
-    os << "key_hobj(" << (unsigned)shard() << ","
+    os << "key_hobj(" << (int)shard() << ","
        << pool() << "," << crush() << "; "
        << string_view_masked_t{nspace()} << ","
        << string_view_masked_t{oid()} << "; "
@@ -688,7 +688,7 @@ class key_view_t {
   std::ostream& dump(std::ostream& os) const {
     os << "key_view(";
     if (has_shard_pool()) {
-      os << (unsigned)shard() << "," << pool() << ",";
+      os << (int)shard() << "," << pool() << ",";
     } else {
       os << "X,X,";
     }
