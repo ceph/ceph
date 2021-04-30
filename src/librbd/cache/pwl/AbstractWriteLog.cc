@@ -1464,29 +1464,10 @@ template <typename I>
 bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
       uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
       uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves) {
-  bool alloc_succeeds = true;
-  bool no_space = false;
+      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap,
+      bool &alloc_succeeds, bool &no_space){
   {
     std::lock_guard locker(m_lock);
-    if (m_free_lanes < num_lanes) {
-      req->set_io_waited_for_lanes(true);
-      ldout(m_image_ctx.cct, 20) << "not enough free lanes (need "
-                                 <<  num_lanes
-                                 << ", have " << m_free_lanes << ") "
-                                 << *req << dendl;
-      alloc_succeeds = false;
-      /* This isn't considered a "no space" alloc fail. Lanes are a throttling mechanism. */
-    }
-    if (m_free_log_entries < num_log_entries) {
-      req->set_io_waited_for_entries(true);
-      ldout(m_image_ctx.cct, 20) << "not enough free entries (need "
-                                 << num_log_entries
-                                 << ", have " << m_free_log_entries << ") "
-                                 << *req << dendl;
-      alloc_succeeds = false;
-      no_space = true; /* Entries must be retired */
-    }
     /* Don't attempt buffer allocate if we've exceeded the "full" threshold */
     if (m_bytes_allocated + bytes_allocated > m_bytes_allocated_cap) {
       if (!req->has_io_waited_for_buffers()) {
@@ -1503,27 +1484,6 @@ bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
 
   if (alloc_succeeds) {
     reserve_cache(req, alloc_succeeds, no_space);
-  }
-
-  if (alloc_succeeds) {
-    std::lock_guard locker(m_lock);
-    /* We need one free log entry per extent (each is a separate entry), and
-     * one free "lane" for remote replication. */
-    if ((m_free_lanes >= num_lanes) &&
-        (m_free_log_entries >= num_log_entries)) {
-      m_free_lanes -= num_lanes;
-      m_free_log_entries -= num_log_entries;
-      m_unpublished_reserves += num_unpublished_reserves;
-      m_bytes_allocated += bytes_allocated;
-      m_bytes_cached += bytes_cached;
-      m_bytes_dirty += bytes_dirtied;
-      if (req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_buffers(false);
-      }
-
-    } else {
-      alloc_succeeds = false;
-    }
   }
 
   if (!alloc_succeeds && no_space) {
@@ -1614,6 +1574,7 @@ bool AbstractWriteLog<I>::can_flush_entry(std::shared_ptr<GenericLogEntry> log_e
 
   if (m_flush_ops_in_flight &&
       (log_entry->ram_entry.sync_gen_number > m_lowest_flushing_sync_gen)) {
+    ldout(cct, 20) << "cannot flush this entry." << dendl;
     return false;
   }
 
@@ -1653,7 +1614,8 @@ Context* AbstractWriteLog<I>::construct_flush_entry(std::shared_ptr<GenericLogEn
           m_bytes_dirty -= log_entry->bytes_dirty();
           sync_point_writer_flushed(log_entry->get_sync_point_entry());
           ldout(m_image_ctx.cct, 20) << "flushed: " << log_entry
-                                     << " invalidating=" << invalidating
+                                     << "index: " << log_entry->log_entry_index
+                                     << "invalidating=" << invalidating
                                      << dendl;
         }
         m_flush_ops_in_flight -= 1;

@@ -165,7 +165,6 @@ private:
 
  std::atomic<bool> m_initialized = {false};
 
-  uint64_t m_bytes_dirty = 0;     /* Total bytes yet to flush to RBD */
   utime_t m_last_alloc_fail;      /* Entry or buffer allocation fail seen */
 
   pwl::WriteLogGuard m_write_log_guard;
@@ -206,8 +205,6 @@ private:
 
   /* Writes that have left the block guard, but are waiting for resources */
   C_BlockIORequests m_deferred_ios;
-  /* Throttle writes concurrently allocating & replicating */
-  unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
 
   /* Initialized from config, then set false during shutdown */
   std::atomic<bool> m_periodic_stats_enabled = {false};
@@ -263,15 +260,19 @@ protected:
   ImageCtxT &m_image_ctx;
 
   std::string m_log_pool_name;
-  uint64_t m_log_pool_config_size; /* Configured size of RWL */
+  uint64_t m_log_pool_config_size = 0; /* Configured size of RWL */
   uint64_t m_log_pool_actual_size = 0; /* Actual size of RWL pool */
 
   uint32_t m_total_log_entries = 0;
   uint32_t m_free_log_entries = 0;
 
+  /* Throttle writes concurrently allocating & replicating */
+  unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
+
   std::atomic<uint64_t> m_bytes_allocated = {0}; /* Total bytes allocated in write buffers */
   uint64_t m_bytes_cached = 0;    /* Total bytes used in write buffers */
   uint64_t m_bytes_allocated_cap = 0;
+  uint64_t m_bytes_dirty = 0;     /* Total bytes yet to flush to RBD */
 
   std::atomic<bool> m_alloc_failed_since_retire = {false};
 
@@ -320,8 +321,8 @@ protected:
   pwl::WriteLogMap m_blocks_to_log_entries;
 
   /* New entries are at the back. Oldest at the front */
-  pwl::GenericLogEntries m_log_entries;
-  pwl::GenericLogEntries m_dirty_log_entries;
+  pwl::GenericLogEntries m_log_entries; //log entries on disk + RAM == allocated
+  pwl::GenericLogEntries m_dirty_log_entries; //log entries on disk
 
   PerfCounters *m_perfcounter = nullptr;
 
@@ -356,7 +357,8 @@ protected:
       uint64_t &bytes_cached, uint64_t &bytes_dirtied,
       uint64_t &bytes_allocated,
       uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves);
+      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap,
+      bool &alloc_succeeds, bool &no_space);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
       bool isRWL=false);

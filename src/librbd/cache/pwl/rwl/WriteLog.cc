@@ -926,6 +926,7 @@ void WriteLog<I>::copy_bl_to_buffer(
 template <typename I>
 bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   bool alloc_succeeds = true;
+  bool no_space = false;
   uint64_t bytes_allocated = 0;
   uint64_t bytes_cached = 0;
   uint64_t bytes_dirtied = 0;
@@ -938,9 +939,50 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
                               &num_lanes, &num_log_entries, &num_unpublished_reserves);
 
-  alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
-                                          bytes_allocated, num_lanes, num_log_entries,
-                                          num_unpublished_reserves);
+  if (this->get_free_lanes() < num_lanes) {
+    req->set_io_waited_for_lanes(true);
+    ldout(m_image_ctx.cct, 20) << "not enough free lanes (need "
+                               <<  num_lanes
+                               << ", have " << this->get_free_lanes() << ") "
+                               << *req << dendl;
+    alloc_succeeds = false;
+    // This isn't considered a "no space" alloc fail. Lanes are a throttling mechanism.
+  }
+
+  if (this->get_free_log_entries() < num_log_entries) {
+    req->set_io_waited_for_entries(true);
+    ldout(m_image_ctx.cct, 20) << "not enough free entries (need "
+                               << num_log_entries
+                               << ", have " << this->get_free_log_entries() << ") "
+                               << *req << dendl;
+    alloc_succeeds = false; // Entries must be retired
+    no_space = true;
+  }
+
+  this->check_allocation(req, bytes_cached, bytes_dirtied, bytes_allocated,
+      num_lanes, num_log_entries, num_unpublished_reserves,
+      this->m_bytes_allocated_cap, alloc_succeeds, no_space);
+
+  if (alloc_succeeds) {
+    std::lock_guard locker(m_lock);
+    /* We need one free log entry per extent (each is a separate entry), and
+     * one free "lane" for remote replication. */
+    if ((this->m_free_lanes >= num_lanes) &&
+        (this->m_free_log_entries >= num_log_entries)) {
+      this->m_free_lanes -= num_lanes;
+      this->m_free_log_entries -= num_log_entries;
+      this->m_unpublished_reserves += num_unpublished_reserves;
+      this->m_bytes_allocated += bytes_allocated;
+      this->m_bytes_cached += bytes_cached;
+      this->m_bytes_dirty += bytes_dirtied;
+      if (req->has_io_waited_for_buffers()) {
+        req->set_io_waited_for_buffers(false);
+      }
+
+    } else {
+      alloc_succeeds = false;
+    }
+  }
 
   std::vector<WriteBufferAllocation>& buffers = req->get_resources_buffers();
   if (!alloc_succeeds) {
