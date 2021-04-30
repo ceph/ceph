@@ -4833,12 +4833,16 @@ options:
     Increasing this value will slow down snap trimming.
     This option overrides backend specific variants.
   default: 0
+  flags:
+  - runtime
   with_legacy: true
 - name: osd_snap_trim_sleep_hdd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next snap trim for HDDs
   default: 5
+  flags:
+  - runtime
 - name: osd_snap_trim_sleep_ssd
   type: float
   level: advanced
@@ -4846,6 +4850,8 @@ options:
   fmt_desc: Time in seconds to sleep before next snap trim op
     for SSD OSDs (including NVMe).
   default: 0
+  flags:
+  - runtime
 - name: osd_snap_trim_sleep_hybrid
   type: float
   level: advanced
@@ -4854,6 +4860,8 @@ options:
   fmt_desc: Time in seconds to sleep before next snap trim op
     when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
   default: 2
+  flags:
+  - runtime
 - name: osd_scrub_invalid_stats
   type: bool
   level: advanced
@@ -5279,6 +5287,8 @@ options:
   fmt_desc: Time to sleep before scrubbing the next group of chunks. Increasing this value will slow
     down the overall rate of scrubbing so that client operations will be less impacted.
   default: 0
+  flags:
+  - runtime
   with_legacy: true
 # more sleep between [deep]scrub ops
 - name: osd_scrub_extended_sleep
@@ -5761,22 +5771,30 @@ options:
   fmt_desc: Time in seconds to sleep before the next removal transaction. This
     throttles the PG deletion process.
   default: 0
+  flags:
+  - runtime
 - name: osd_delete_sleep_hdd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for HDDs
   default: 5
+  flags:
+  - runtime
 - name: osd_delete_sleep_ssd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for SSDs
   default: 1
+  flags:
+  - runtime
 - name: osd_delete_sleep_hybrid
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
     and OSD journal or WAL+DB is on SSD
   default: 1
+  flags:
+  - runtime
 # what % full makes an OSD "full" (failsafe)
 - name: osd_failsafe_full_ratio
   type: float
