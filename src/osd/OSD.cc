@@ -2322,6 +2322,9 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
       this);
     shards.push_back(one_shard);
   }
+
+  // override some config options if mclock is enabled on all the shards
+  maybe_override_options_for_qos();
 }
 
 OSD::~OSD()
@@ -9918,6 +9921,15 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_recovery_sleep_hdd",
     "osd_recovery_sleep_ssd",
     "osd_recovery_sleep_hybrid",
+    "osd_delete_sleep",
+    "osd_delete_sleep_hdd",
+    "osd_delete_sleep_ssd",
+    "osd_delete_sleep_hybrid",
+    "osd_snap_trim_sleep",
+    "osd_snap_trim_sleep_hdd",
+    "osd_snap_trim_sleep_ssd",
+    "osd_snap_trim_sleep_hybrid"
+    "osd_scrub_sleep",
     "osd_recovery_max_active",
     "osd_recovery_max_active_hdd",
     "osd_recovery_max_active_ssd",
@@ -9967,46 +9979,9 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_max_active") ||
       changed.count("osd_recovery_max_active_hdd") ||
       changed.count("osd_recovery_max_active_ssd")) {
-    if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
-        cct->_conf.get_val<std::string>("osd_mclock_profile") != "custom") {
-      // Set ceph config option to meet QoS goals
-      // Set high value for recovery max active
-      uint32_t recovery_max_active = 1000;
-      if (cct->_conf->osd_recovery_max_active) {
-        cct->_conf.set_val(
-            "osd_recovery_max_active", std::to_string(recovery_max_active));
-      }
-      if (store_is_rotational) {
-        cct->_conf.set_val(
-            "osd_recovery_max_active_hdd", std::to_string(recovery_max_active));
-      } else {
-        cct->_conf.set_val(
-            "osd_recovery_max_active_ssd", std::to_string(recovery_max_active));
-      }
-      // Set high value for osd_max_backfill
-      cct->_conf.set_val("osd_max_backfills", std::to_string(1000));
-
-      // Disable recovery sleep
-      cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
-      cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
-      cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
-      cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
-
-      // Disable delete sleep
-      cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
-      cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
-      cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
-      cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
-
-      // Disable snap trim sleep
-      cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));
-      cct->_conf.set_val("osd_snap_trim_sleep_hdd", std::to_string(0));
-      cct->_conf.set_val("osd_snap_trim_sleep_ssd", std::to_string(0));
-      cct->_conf.set_val("osd_snap_trim_sleep_hybrid", std::to_string(0));
-
-      // Disable scrub sleep
-      cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
-    } else {
+    if (!maybe_override_options_for_qos() &&
+        changed.count("osd_max_backfills")) {
+      // Scheduler is not "mclock". Fallback to earlier behavior
       service.local_reserver.set_max(cct->_conf->osd_max_backfills);
       service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
     }
@@ -10098,6 +10073,54 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
     service.poolctx.stop();
     service.poolctx.start(conf.get_val<std::uint64_t>("osd_asio_thread_count"));
   }
+}
+
+bool OSD::maybe_override_options_for_qos()
+{
+  // If the scheduler enabled is mclock, override the recovery, backfill
+  // and sleep options so that mclock can meet the QoS goals.
+  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") {
+    dout(1) << __func__
+            << ": Changing recovery/backfill/sleep settings for QoS" << dendl;
+
+    // Set high value for recovery max active
+    uint32_t rec_max_active = 1000;
+    cct->_conf.set_val(
+      "osd_recovery_max_active", std::to_string(rec_max_active));
+    cct->_conf.set_val(
+      "osd_recovery_max_active_hdd", std::to_string(rec_max_active));
+    cct->_conf.set_val(
+      "osd_recovery_max_active_ssd", std::to_string(rec_max_active));
+
+    // Set high value for osd_max_backfill
+    uint32_t max_backfills = 1000;
+    cct->_conf.set_val("osd_max_backfills", std::to_string(max_backfills));
+    service.local_reserver.set_max(max_backfills);
+    service.remote_reserver.set_max(max_backfills);
+
+    // Disable recovery sleep
+    cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
+
+    // Disable delete sleep
+    cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
+    cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
+    cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
+    cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
+
+    // Disable snap trim sleep
+    cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));
+    cct->_conf.set_val("osd_snap_trim_sleep_hdd", std::to_string(0));
+    cct->_conf.set_val("osd_snap_trim_sleep_ssd", std::to_string(0));
+    cct->_conf.set_val("osd_snap_trim_sleep_hybrid", std::to_string(0));
+
+    // Disable scrub sleep
+    cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
+    return true;
+  }
+  return false;
 }
 
 void OSD::update_log_config()
