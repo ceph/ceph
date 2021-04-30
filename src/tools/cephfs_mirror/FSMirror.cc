@@ -141,7 +141,7 @@ void FSMirror::init(Context *on_finish) {
 
   std::scoped_lock locker(m_lock);
   int r = connect(g_ceph_context->_conf->name.to_str(),
-                  g_ceph_context->_conf->cluster, &m_cluster);
+                  g_ceph_context->_conf->cluster, &m_cluster, "", "", m_args);
   if (r < 0) {
     m_init_failed = true;
     on_finish->complete(r);
