@@ -478,6 +478,20 @@ install(TARGETS
   ceph_test_stress_watch
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(ceph_test_c2c
+  test_c2c.cc
+  )
+target_link_libraries(ceph_test_c2c
+  global
+  ceph-common
+  pthread
+  ${EXTRALIBS}
+  ${CMAKE_DL_LIBS}
+  )
+install(TARGETS
+  ceph_test_c2c
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 if(WITH_FUSE)
   add_executable(ceph_test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
