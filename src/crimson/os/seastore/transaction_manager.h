@@ -473,6 +473,10 @@ public:
     return segment_manager.get_block_size();
   }
 
+  store_statfs_t store_stat() const {
+    return segment_cleaner->stat();
+  }
+
   ~TransactionManager();
 
 private:
