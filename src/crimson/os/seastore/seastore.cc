@@ -88,8 +88,9 @@ seastar::future<store_statfs_t> SeaStore::stat() const
 {
   LOG_PREFIX(SeaStore::stat);
   DEBUG("");
-  store_statfs_t st;
-  return seastar::make_ready_future<store_statfs_t>(st);
+  return seastar::make_ready_future<store_statfs_t>(
+    transaction_manager->store_stat()
+  );
 }
 
 seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>

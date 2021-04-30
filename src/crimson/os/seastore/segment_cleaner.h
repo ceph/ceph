@@ -7,6 +7,8 @@
 
 #include "common/ceph_time.h"
 
+#include "osd/osd_types.h"
+
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal.h"
@@ -501,6 +503,18 @@ public:
   void complete_init() {
     init_complete = true;
     start();
+  }
+
+  store_statfs_t stat() const {
+    store_statfs_t st;
+    st.total = get_total_bytes();
+    st.available = get_total_bytes() - get_used_bytes();
+    st.allocated = get_used_bytes();
+    st.data_stored = get_used_bytes();
+
+    // TODO add per extent type counters for omap_allocated and
+    // internal metadata
+    return st;
   }
 
   seastar::future<> stop() {
