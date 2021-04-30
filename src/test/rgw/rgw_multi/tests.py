@@ -1339,6 +1339,44 @@ def test_bucket_reshard_incremental():
         k.set_contents_from_string('foo')
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+@attr('bucket_reshard')
+def test_bucket_reshard_full():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # stop gateways in other zones so we can force the bucket to full sync
+    for z in zonegroup_conns.rw_zones[1:]:
+        z.zone.stop()
+
+    # use try-finally to restart gateways even if something fails
+    try:
+        # upload some objects
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string('foo')
+
+        # reshard on first zone
+        zone.zone.cluster.admin(['bucket', 'reshard',
+            '--bucket', bucket.name,
+            '--num-shards', '3',
+            '--yes-i-really-mean-it'])
+
+        # upload more objects
+        for objname in ('e', 'f', 'g', 'h'):
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string('foo')
+    finally:
+        for z in zonegroup_conns.rw_zones[1:]:
+            z.zone.start()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 def test_bucket_creation_time():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
