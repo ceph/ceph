@@ -273,11 +273,22 @@ class Host(RESTController):
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_CREATE])
     @handle_orchestrator_error('host')
     @host_task('create', {'hostname': '{hostname}'})
+    @EndpointDoc('',
+                 parameters={
+                     'hostname': (str, 'Hostname'),
+                     'addr': (str, 'Network Address'),
+                     'labels': ([str], 'Host Labels'),
+                     'status': (str, 'Status of the Host')
+                 },
+                 responses={200: None, 204: None})
+    @RESTController.MethodMap(version='0.1')
     def create(self, hostname: str,
+               addr: Optional[str] = None,
+               labels: Optional[List[str]] = None,
                status: Optional[str] = None):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, True)
-        orch_client.hosts.add(hostname, status)
+        orch_client.hosts.add(hostname, addr, labels, status)
     create._cp_config = {'tools.json_in.force': False}  # pylint: disable=W0212
 
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_DELETE])
@@ -387,6 +398,7 @@ class Host(RESTController):
                      'force': (bool, 'Force Enter Maintenance')
                  },
                  responses={200: None, 204: None})
+    @RESTController.MethodMap(version='0.1')
     def set(self, hostname: str, update_labels: bool = False,
             labels: List[str] = None, maintenance: bool = False,
             force: bool = False):
