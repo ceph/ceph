@@ -802,7 +802,6 @@ protected:
   std::string end_marker;
   int64_t limit;
   uint64_t limit_max;
-  rgw::sal::Attrs attrs;
   bool is_truncated;
 
   RGWUsageStats global_stats;
@@ -1347,8 +1346,6 @@ protected:
   std::map<int, std::string> temp_url_keys;
   RGWQuotaInfo new_quota;
   bool new_quota_extracted;
-
-  RGWObjVersionTracker acct_op_tracker;
 
   RGWAccessControlPolicy policy;
   bool has_policy;

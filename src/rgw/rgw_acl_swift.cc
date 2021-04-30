@@ -123,7 +123,7 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
   std::unique_ptr<rgw::sal::User> user;
 
   user = store->get_user(rgw_user(uid));
-  if (user->load_by_id(dpp, null_yield) < 0) {
+  if (user->load_user(dpp, null_yield) < 0) {
     ldout(cct, 10) << "grant user does not exist: " << uid << dendl;
     /* skipping silently */
     grant.set_canon(user->get_id(), std::string(), perm);
@@ -316,7 +316,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
     } else  {
       std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(uid));
 
-      if (user->load_by_id(dpp, null_yield) < 0) {
+      if (user->load_user(dpp, null_yield) < 0) {
         ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
         /* skipping silently */
         grant.set_canon(user->get_id(), std::string(), perm);
