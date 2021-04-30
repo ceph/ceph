@@ -132,6 +132,37 @@ private:
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPGStateHistory>(const crimson::osd::OSD& osd);
 
+//dump the contents of perfcounters in osd and store
+class DumpPerfCountersHook final: public AdminSocketHook {
+public:
+  explicit DumpPerfCountersHook(const crimson::osd::OSD &osd) :
+    AdminSocketHook{"perfcounters_dump",
+                    "",
+                    "dump perfcounters in osd and store"},
+    osd{osd}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    std::unique_ptr<Formatter> f{Formatter::create(format,
+                                                   "json-pretty",
+                                                   "json-pretty")};
+    std::string logger;
+    std::string counter;
+    cmd_getval(cmdmap, "logger", logger);
+    cmd_getval(cmdmap, "counter", counter);
+
+    crimson::common::local_perf_coll().dump_formatted(f.get(), false, logger, counter);
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+private:
+  const crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>(const crimson::osd::OSD& osd);
+
+
+
 /**
  * A CephContext admin hook: calling assert (if allowed by
  * 'debug_asok_assert_abort')

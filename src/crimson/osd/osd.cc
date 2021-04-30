@@ -442,6 +442,7 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)),
       asok->register_command(make_asok_hook<DumpPGStateHistory>(std::as_const(*this))),
       asok->register_command(make_asok_hook<SeastarMetricsHook>()),
+      asok->register_command(make_asok_hook<DumpPerfCountersHook>(std::as_const(*this))),
       // PG commands
       asok->register_command(make_asok_hook<pg::QueryCommand>(*this)),
       asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)));
