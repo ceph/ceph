@@ -256,11 +256,13 @@ def get_inventories(hosts: Optional[List[str]] = None,
 
 
 @allow_empty_body
-def add_host(hostname: str, status: Optional[str] = None):
+def add_host(hostname: str, addr: Optional[str] = None,
+             labels: Optional[List[str]] = None,
+             status: Optional[str] = None):
     orch_client = OrchClient.instance()
     host = Host()
     host.check_orchestrator_host_op(orch_client, hostname)
-    orch_client.hosts.add(hostname)
+    orch_client.hosts.add(hostname, addr, labels)
     if status == 'maintenance':
         orch_client.hosts.enter_maintenance(hostname)
 
@@ -287,12 +289,17 @@ class Host(RESTController):
     @EndpointDoc('',
                  parameters={
                      'hostname': (str, 'Hostname'),
-                     'status': (str, 'Host Status')
+                     'addr': (str, 'Network Address'),
+                     'labels': ([str], 'Host Labels'),
+                     'status': (str, 'Host Status'),
                  },
                  responses={200: None, 204: None})
+    @RESTController.MethodMap(version='0.1')
     def create(self, hostname: str,
+               addr: Optional[str] = None,
+               labels: Optional[List[str]] = None,
                status: Optional[str] = None):  # pragma: no cover - requires realtime env
-        add_host(hostname, status)
+        add_host(hostname, addr, labels, status)
 
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_DELETE])
     @handle_orchestrator_error('host')
@@ -400,6 +407,7 @@ class Host(RESTController):
                      'force': (bool, 'Force Enter Maintenance')
                  },
                  responses={200: None, 204: None})
+    @RESTController.MethodMap(version='0.1')
     def set(self, hostname: str, update_labels: bool = False,
             labels: List[str] = None, maintenance: bool = False,
             force: bool = False):
