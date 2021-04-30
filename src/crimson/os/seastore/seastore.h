@@ -30,8 +30,6 @@ using OnodeRef = boost::intrusive_ptr<Onode>;
 class TransactionManager;
 
 class SeaStore final : public FuturizedStore {
-  uuid_d osd_fsid;
-
 public:
 
   SeaStore(

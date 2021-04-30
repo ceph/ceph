@@ -1022,7 +1022,7 @@ seastar::future<std::tuple<int, std::string>> SeaStore::read_meta(const std::str
 
 uuid_d SeaStore::get_fsid() const
 {
-  return osd_fsid;
+  return segment_manager->get_meta().seastore_id;
 }
 
 }
