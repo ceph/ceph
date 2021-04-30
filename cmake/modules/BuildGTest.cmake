@@ -20,7 +20,7 @@ macro(_build_gtest gtest_root)
   ExternalProject_Get_Property(googletest source_dir)
   find_path(GTEST_INCLUDE_DIRS
     NAMES gtest/gtest.h
-    PATHS ${source_dir}/googletest/include /usr/include)
+    PATHS ${source_dir}/include /usr/include)
   find_path(GMOCK_INCLUDE_DIRS
     NAMES gmock/gmock.h
     PATHS ${source_dir}/googlemock/include /usr/include)
