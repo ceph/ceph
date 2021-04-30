@@ -1309,6 +1309,36 @@ def test_bucket_index_log_trim():
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
 
+@attr('bucket_reshard')
+def test_bucket_reshard_incremental():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload some objects
+    for objname in ('a', 'b', 'c', 'd'):
+        k = new_key(zone, bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # reshard in each zone
+    for z in zonegroup_conns.rw_zones:
+        z.zone.cluster.admin(['bucket', 'reshard',
+            '--bucket', bucket.name,
+            '--num-shards', '3',
+            '--yes-i-really-mean-it'])
+
+    # upload more objects
+    for objname in ('e', 'f', 'g', 'h'):
+        k = new_key(zone, bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 def test_bucket_creation_time():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
