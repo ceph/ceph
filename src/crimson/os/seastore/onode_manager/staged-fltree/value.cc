@@ -34,8 +34,15 @@ Value::Value(NodeExtentManager& nm,
 
 Value::~Value() {}
 
+bool Value::is_tracked() const
+{
+  assert(!p_cursor->is_end());
+  return p_cursor->is_tracked();
+}
+
 future<> Value::extend(Transaction& t, value_size_t extend_size)
 {
+  assert(is_tracked());
   [[maybe_unused]] auto target_size = get_payload_size() + extend_size;
   return p_cursor->extend_value(get_context(t), extend_size)
 #ifndef NDEBUG
@@ -48,6 +55,7 @@ future<> Value::extend(Transaction& t, value_size_t extend_size)
 
 future<> Value::trim(Transaction& t, value_size_t trim_size)
 {
+  assert(is_tracked());
   assert(get_payload_size() > trim_size);
   [[maybe_unused]] auto target_size = get_payload_size() - trim_size;
   return p_cursor->trim_value(get_context(t), trim_size)

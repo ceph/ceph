@@ -51,7 +51,7 @@ static DeltaRecorderURef create_replay_recorder(
 
 void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr)
 {
-  logger().info("OTree::Seastore: update root {:#x} ...", addr);
+  logger().debug("OTree::Seastore: update root {:#x} ...", addr);
   root_addr = addr;
   auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
   nm->get_tm().write_onode_root(c.t, addr);
@@ -84,7 +84,6 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
     assert(recorder->field_type() == field_type);
 #endif
   }
-  assert(is_clean());
   auto node = do_get_mutable();
   auto p = bl.cbegin();
   while (p != bl.end()) {

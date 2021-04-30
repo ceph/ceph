@@ -105,7 +105,7 @@ FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
 	return seastar::now();
       }
       case FLTreeOnode::status_t::DELETED: {
-	return tree.erase(trans, flonode).safe_then([](auto) {});
+	return tree.erase(trans, flonode);
       }
       case FLTreeOnode::status_t::STABLE: {
 	return seastar::now();

@@ -41,8 +41,6 @@ class NodeExtent : public LogicalCachedExtent {
   NodeExtent(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
   NodeExtentMutable do_get_mutable() {
-    assert(is_pending() || // during mutation
-           is_clean());    // during replay
     return NodeExtentMutable(get_bptr().c_str(), get_length());
   }
 
@@ -72,6 +70,7 @@ class NodeExtentManager {
   virtual tm_future<NodeExtentRef> read_extent(
       Transaction&, laddr_t, extent_len_t) = 0;
   virtual tm_future<NodeExtentRef> alloc_extent(Transaction&, extent_len_t) = 0;
+  virtual tm_future<> retire_extent(Transaction&, NodeExtentRef) = 0;
   virtual tm_future<Super::URef> get_super(Transaction&, RootNodeTracker&) = 0;
   virtual std::ostream& print(std::ostream& os) const = 0;
 
