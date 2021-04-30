@@ -682,7 +682,7 @@ namespace rgw {
     const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
     std::unique_ptr<rgw::sal::User> user = store->get_user(uid);
     /* object exists, but policy is broken */
-    int ret = user->load_by_id(&dp, null_yield);
+    int ret = user->load_user(&dp, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;

@@ -316,15 +316,13 @@ int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yi
 {
   int ret = 0;
   std::unique_ptr<rgw::sal::User> user = store->get_user(user_id);
-  if ((ret = user->load_by_id(dpp, y)) < 0) {
+  if ((ret = user->load_user(dpp, y)) < 0) {
     return -ERR_NO_SUCH_ENTITY;
   }
 
   user->get_info().assumed_role_arn = arn;
 
-  ret = user->store_info(dpp, y, RGWUserCtl::PutParams()
-			    .set_old_info(&user->get_info())
-			    .set_exclusive(false));
+  ret = user->store_user(dpp, y, false, &user->get_info());
   if (ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
