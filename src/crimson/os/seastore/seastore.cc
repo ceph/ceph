@@ -554,12 +554,16 @@ seastar::future<> SeaStore::do_transaction(
       ).safe_then([this, &ctx](auto &&read_onodes) {
 	ctx.onodes = std::move(read_onodes);
 	return crimson::do_until(
-	  [this, &ctx] {
-	    return _do_transaction_step(
-	      ctx, ctx.ch, ctx.onodes, ctx.iter
-	    ).safe_then([&ctx] {
-	      return seastar::make_ready_future<bool>(!ctx.iter.have_op());
-	    });
+	  [this, &ctx]() -> tm_ertr::future<bool> {
+	    if (ctx.iter.have_op()) {
+	      return _do_transaction_step(
+		ctx, ctx.ch, ctx.onodes, ctx.iter
+	      ).safe_then([] {
+		return seastar::make_ready_future<bool>(false);
+	      });
+	    } else {
+	      return seastar::make_ready_future<bool>(true);
+	    };
 	  });
       }).safe_then([this, &ctx] {
 	return onode_manager->write_dirty(*ctx.transaction, ctx.onodes);
