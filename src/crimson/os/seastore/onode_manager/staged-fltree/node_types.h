@@ -66,7 +66,46 @@ enum class node_delta_op_t : uint8_t {
   SPLIT,
   SPLIT_INSERT,
   UPDATE_CHILD_ADDR,
+  ERASE,
+  MAKE_TAIL,
   SUBOP_UPDATE_VALUE = 0xff,
+};
+
+/** nextent_state_t
+ *
+ * The possible states of tree node extent(NodeExtentAccessorT).
+ *
+ * State transition implies the following capabilities is changed:
+ * - mutability is changed;
+ * - whether to record;
+ * - memory has been copied;
+ *
+ * load()----+
+ *           |
+ * alloc()   v
+ *  |        +--> [READ_ONLY] ---------+
+ *  |        |         |               |
+ *  |        |   prepare_mutate()      |
+ *  |        |         |               |
+ *  |        v         v               v
+ *  |        +--> [MUTATION_PENDING]---+
+ *  |        |                         |
+ *  |        |                     rebuild()
+ *  |        |                         |
+ *  |        v                         v
+ *  +------->+--> [FRESH] <------------+
+ *
+ * Note that NodeExtentAccessorT might still be MUTATION_PENDING/FRESH while
+ * the internal extent has become DIRTY after the transaction submission is
+ * started while nodes destruction and validation has not been completed yet.
+ */
+enum class nextent_state_t : uint8_t {
+  READ_ONLY = 0,       // requires mutate for recording
+                       //   CLEAN/DIRTY
+  MUTATION_PENDING,    // can mutate, needs recording
+                       //   MUTATION_PENDING
+  FRESH,               // can mutate, no recording
+                       //   INITIAL_WRITE_PENDING
 };
 
 }

@@ -110,6 +110,9 @@ class internal_sub_items_t {
 
   static node_offset_t trim_until(NodeExtentMutable&, internal_sub_items_t&, index_t);
 
+  static node_offset_t erase_at(
+      NodeExtentMutable&, const internal_sub_items_t&, index_t, const char*);
+
   template <KeyT KT>
   class Appender;
 
@@ -123,6 +126,11 @@ class internal_sub_items_t::Appender {
  public:
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {}
+  Appender(NodeExtentMutable* p_mut, const internal_sub_items_t& sub_items)
+    : p_mut{p_mut},
+      p_append{(char*)(sub_items.p_first_item + 1 - sub_items.keys())} {
+    assert(sub_items.keys());
+  }
   void append(const internal_sub_items_t& src, index_t from, index_t items);
   void append(const full_key_t<KT>&, const laddr_t&, const laddr_packed_t*&);
   char* wrap() { return p_append; }
@@ -270,6 +278,9 @@ class leaf_sub_items_t {
 
   static node_offset_t trim_until(NodeExtentMutable&, leaf_sub_items_t&, index_t index);
 
+  static node_offset_t erase_at(
+      NodeExtentMutable&, const leaf_sub_items_t&, index_t, const char*);
+
   template <KeyT KT>
   class Appender;
 
@@ -298,25 +309,16 @@ class leaf_sub_items_t::Appender {
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {
   }
-
-  void append(const leaf_sub_items_t& src, index_t from, index_t items) {
-    assert(cnt <= APPENDER_LIMIT);
-    assert(from <= src.keys());
-    if (items == 0) {
-      return;
-    }
-    if (op_src) {
-      assert(*op_src == src);
-    } else {
-      op_src = src;
-    }
-    assert(from < src.keys());
-    assert(from + items <= src.keys());
-    appends[cnt] = range_items_t{from, items};
-    ++cnt;
+  Appender(NodeExtentMutable* p_mut, const leaf_sub_items_t& sub_items)
+    : p_mut{p_mut} , op_dst(sub_items) {
+    assert(sub_items.keys());
   }
+
+  void append(const leaf_sub_items_t& src, index_t from, index_t items);
   void append(const full_key_t<KT>& key,
               const value_config_t& value, const value_header_t*& p_value) {
+    // append from empty
+    assert(p_append);
     assert(pp_value == nullptr);
     assert(cnt <= APPENDER_LIMIT);
     appends[cnt] = kv_item_t{&key, value};
@@ -326,12 +328,16 @@ class leaf_sub_items_t::Appender {
   char* wrap();
 
  private:
+  NodeExtentMutable* p_mut;
+  // append from empty
   std::optional<leaf_sub_items_t> op_src;
   const value_header_t** pp_value = nullptr;
-  NodeExtentMutable* p_mut;
-  char* p_append;
+  char* p_append = nullptr;
   var_t appends[APPENDER_LIMIT];
   index_t cnt = 0;
+  // append from existing
+  std::optional<leaf_sub_items_t> op_dst;
+  char* p_appended = nullptr;
 };
 
 template <node_type_t> struct _sub_items_t;

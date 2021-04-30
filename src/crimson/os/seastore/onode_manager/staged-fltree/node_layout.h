@@ -65,8 +65,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return ret;
   }
 
-  using alloc_ertr = NodeExtentManager::tm_ertr;
-  static alloc_ertr::future<typename parent_t::fresh_impl_t> allocate(
+  static ertr::future<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
     // NOTE: Currently, all the node types have the same size for simplicity.
     // But depending on the requirement, we may need to make node size
@@ -90,30 +89,198 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   field_type_t field_type() const override { return FIELD_TYPE; }
   laddr_t laddr() const override { return extent.get_laddr(); }
   const char* read() const override { return extent.read().p_start(); }
-  bool is_duplicate() const override { return extent.is_duplicate(); }
+  nextent_state_t get_extent_state() const override { return extent.get_state(); }
   void prepare_mutate(context_t c) override { return extent.prepare_mutate(c); }
   bool is_level_tail() const override { return extent.read().is_level_tail(); }
-  bool is_empty() const override { return extent.read().keys() == 0; }
-  level_t level() const override { return extent.read().level(); }
-  node_offset_t free_size() const override { return extent.read().free_size(); }
 
-  std::optional<key_view_t> get_pivot_index() const override {
-    assert(!is_empty());
+  void validate_non_empty() const override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       if (is_level_tail()) {
-        return std::nullopt;
+        return;
       }
     }
+    assert(!is_keys_empty());
+  }
+  bool is_keys_empty() const override { return extent.read().keys() == 0; }
+  bool is_keys_one() const override {
+    assert(!is_keys_empty());
+    return STAGE_T::is_keys_one(extent.read());
+  }
+
+  level_t level() const override { return extent.read().level(); }
+  node_offset_t free_size() const override { return extent.read().free_size(); }
+  node_offset_t total_size() const override { return extent.read().total_size(); }
+  bool is_extent_valid() const override { return extent.is_valid(); }
+
+  std::optional<key_view_t> get_pivot_index() const override {
+    if (is_level_tail()) {
+      return std::nullopt;
+    }
+    assert(!is_keys_empty());
     key_view_t pivot_index;
-    get_largest_slot(nullptr, &pivot_index, nullptr);
+    STAGE_T::template get_largest_slot<false, true, false>(
+        extent.read(), nullptr, &pivot_index, nullptr);
     return {pivot_index};
+  }
+
+  bool is_size_underflow() const override {
+    /**
+     * There might be 2 node-merge strategies:
+     *
+     * The first is to rebalance and merge nodes and perfer tree fillness as
+     * much as possible in order to save space and improve key density for
+     * lookup, in exchange to the efforts of frequent merge, split and
+     * rebalance. These operations cannot benefit from seastore deltas because
+     * they are allocating fresh extents which need to be write into the
+     * journal as a whole, making write amplification much larger.
+     *
+     * The second is to delay rebalance and merge. When submit the transaction,
+     * simple insert and erase only need to append delta including just enough
+     * information about the inserted/erase item. The downside is tree fillness
+     * is not as good as the first strategy.
+     *
+     * Currently the decision is the second way by delaying merge until the
+     * node is 1/4 full, so that:
+     * - After a split operation (making the node at least 1/2 full):
+     *   - The next merge need to erase items taking at least 1/4 space;
+     *   - The next split need to insert items taking at most 1/2 space;
+     * - After a merge operation (making the node at least 1/2 full):
+     *   - The next merge need to erase items taking at least 1/4 space;
+     *   - The next split need to insert items taking at most 1/2 space;
+     * - TODO: before node rebalance is implemented, the node size can be below
+     *   the underflow limit if it cannot be merged with peers;
+     */
+    auto& node_stage = extent.read();
+    size_t empty_size = node_stage.size_before(0);
+    size_t filled_kv_size = filled_size() - empty_size;
+    size_t full_kv_size = node_stage.total_size() - empty_size;
+    return filled_kv_size <= full_kv_size / 4;
+  }
+
+  std::tuple<match_stage_t, search_position_t>
+  erase(const search_position_t& pos) override {
+    logger().debug("OTree::Layout::Erase: begin at erase_pos({}) ...", pos);
+    if (unlikely(logger().is_enabled(seastar::log_level::trace))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().trace("OTree::Layout::Erase: -- dump\n{}", sos.str());
+    }
+    auto [stage, next_or_last_pos] = extent.erase_replayable(cast_down<STAGE>(pos));
+    logger().debug("OTree::Layout::Erase: done  at erase_stage={}, n/l_pos({})",
+                   stage, next_or_last_pos);
+    if (unlikely(logger().is_enabled(seastar::log_level::trace))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().trace("OTree::Layout::Erase: -- dump\n{}", sos.str());
+    }
+#ifndef NDEBUG
+    if (!is_keys_empty()) {
+      validate_layout();
+    }
+#endif
+    return {stage, normalize(std::move(next_or_last_pos))};
+  }
+
+  std::tuple<match_stage_t, std::size_t> evaluate_merge(
+      NodeImpl& _right_node) override {
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
+    auto& left_node_stage = extent.read();
+    auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
+    auto& right_node_stage = right_node.extent.read();
+    assert(!is_level_tail());
+    assert(!is_keys_empty());
+    assert(!right_node.is_keys_empty());
+    key_view_t left_pivot_index;
+    STAGE_T::template get_largest_slot<false, true, false>(
+        left_node_stage, nullptr, &left_pivot_index, nullptr);
+    auto [merge_stage, size_comp] = STAGE_T::evaluate_merge(
+        left_pivot_index, right_node_stage);
+    auto size_left = filled_size();
+    auto size_right = right_node.filled_size();
+    assert(size_right > size_comp);
+    std::size_t merge_size = size_left + size_right - size_comp;
+    return {merge_stage, merge_size};
+  }
+
+  search_position_t merge(NodeExtentMutable& mut, NodeImpl& _right_node,
+                          match_stage_t merge_stage, node_offset_t merge_size) override {
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
+    auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
+    if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
+      {
+        std::ostringstream sos;
+        dump(sos);
+        logger().debug("OTree::Layout::Merge: -- left node dump\n{}", sos.str());
+      }
+      {
+        std::ostringstream sos;
+        right_node.dump(sos);
+        logger().debug("OTree::Layout::Merge: -- right node dump\n{}", sos.str());
+      }
+    }
+
+    assert(!is_level_tail());
+    assert(!is_keys_empty());
+    auto& left_node_stage = extent.read();
+    position_t left_last_pos;
+    STAGE_T::template get_largest_slot<true, false, false>(
+        left_node_stage, &left_last_pos, nullptr, nullptr);
+
+    typename STAGE_T::template StagedAppender<KeyT::VIEW> left_appender;
+    left_appender.init_tail(&mut, left_node_stage, merge_stage);
+
+    assert(!right_node.is_keys_empty());
+    auto& right_node_stage = right_node.extent.read();
+    typename STAGE_T::StagedIterator right_append_at;
+    right_append_at.set(right_node_stage);
+
+    auto pos_end = position_t::end();
+    STAGE_T::template append_until<KeyT::VIEW>(
+        right_append_at, left_appender, pos_end, STAGE);
+    assert(right_append_at.is_end());
+    left_appender.wrap();
+
+    if (right_node.is_level_tail()) {
+      node_stage_t::update_is_level_tail(mut, left_node_stage, true);
+      build_name();
+    }
+
+    if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().debug("OTree::Layout::Merge: -- merged node dump\n{}", sos.str());
+    }
+    assert(merge_size == filled_size());
+    return normalize(std::move(left_last_pos));
+  }
+
+  ertr::future<NodeExtentMutable>
+  rebuild_extent(context_t c) override {
+    return extent.rebuild(c).safe_then([this] (auto mut) {
+      // addr may change
+      build_name();
+      return mut;
+    });
+  }
+
+  ertr::future<> retire_extent(context_t c) override {
+    return extent.retire(c);
+  }
+
+  search_position_t make_tail() override {
+    auto&& ret = extent.make_tail_replayable();
+    // is_level_tail is changed
+    build_name();
+    return normalize(std::move(ret));
   }
 
   node_stats_t get_stats() const override {
     node_stats_t stats;
     auto& node_stage = extent.read();
     key_view_t index_key;
-    if (node_stage.keys()) {
+    if (!is_keys_empty()) {
       STAGE_T::get_stats(node_stage, stats, index_key);
     }
     stats.size_persistent = node_stage_t::EXTENT_SIZE;
@@ -139,7 +306,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        << "B, value=" << stats.size_value << "B";
     os << ":\n  header: " << node_stage_t::header_size() << "B";
     size_t size = 0u;
-    if (node_stage.keys()) {
+    if (!is_keys_empty()) {
       STAGE_T::dump(node_stage, os, "  ", size, p_start);
     } else {
       size += node_stage_t::header_size();
@@ -163,17 +330,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   std::ostream& dump_brief(std::ostream& os) const override {
-    auto& node_stage = extent.read();
-    os << "Node" << NODE_TYPE << FIELD_TYPE
-       << "@0x" << std::hex << extent.get_laddr()
-       << "+" << node_stage_t::EXTENT_SIZE << std::dec
-       << (node_stage.is_level_tail() ? "$" : "")
-       << "(level=" << (unsigned)node_stage.level()
-       << ", filled=" << filled_size() << "B"
-       << ", free=" << node_stage.free_size() << "B"
-       << ")";
+    os << name
+       << "(filled=" << filled_size() << "B"
+       << ", free=" << extent.read().free_size() << "B)";
     return os;
   }
+
+  const std::string& get_name() const override { return name; }
 
   void validate_layout() const override {
 #ifndef NDEBUG
@@ -187,6 +350,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   void test_set_tail(NodeExtentMutable& mut) override {
     node_stage_t::update_is_level_tail(mut, extent.read(), true);
+    build_name();
   }
 
   /*
@@ -195,7 +359,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void get_slot(const search_position_t& pos,
                 key_view_t* p_index_key = nullptr,
                 const value_t** pp_value = nullptr) const override {
-    assert(!is_empty());
+    assert(!is_keys_empty());
     assert(!pos.is_end());
     if (p_index_key && pp_value) {
       STAGE_T::template get_slot<true, true>(
@@ -211,10 +375,33 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
   }
 
+  void get_prev_slot(search_position_t& pos,
+                     key_view_t* p_index_key = nullptr,
+                     const value_t** pp_value = nullptr) const override {
+    assert(!is_keys_empty());
+    assert(!pos.is_end());
+    auto& _pos = cast_down<STAGE>(pos);
+#ifndef NDEBUG
+    auto nxt_pos = _pos;
+#endif
+    if (!p_index_key && pp_value) {
+      STAGE_T::template get_prev_slot<false, true>(
+          extent.read(), _pos, nullptr, pp_value);
+    } else {
+      ceph_abort("not implemented");
+    }
+#ifndef NDEBUG
+    auto _nxt_pos = _pos;
+    STAGE_T::template get_next_slot<false, false>(
+        extent.read(), _nxt_pos, nullptr, nullptr);
+    assert(nxt_pos == _nxt_pos);
+#endif
+  }
+
   void get_next_slot(search_position_t& pos,
                      key_view_t* p_index_key = nullptr,
                      const value_t** pp_value = nullptr) const override {
-    assert(!is_empty());
+    assert(!is_keys_empty());
     assert(!pos.is_end());
     bool find_next;
     if (p_index_key && pp_value) {
@@ -234,16 +421,19 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void get_largest_slot(search_position_t* p_pos = nullptr,
                         key_view_t* p_index_key = nullptr,
                         const value_t** pp_value = nullptr) const override {
-    assert(!is_empty());
-    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      assert(!is_level_tail());
-    }
+    assert(!is_keys_empty());
     if (p_pos && p_index_key && pp_value) {
       STAGE_T::template get_largest_slot<true, true, true>(
           extent.read(), &cast_down_fill_0<STAGE>(*p_pos), p_index_key, pp_value);
     } else if (!p_pos && p_index_key && !pp_value) {
       STAGE_T::template get_largest_slot<false, true, false>(
           extent.read(), nullptr, p_index_key, nullptr);
+    } else if (p_pos && !p_index_key && pp_value) {
+      STAGE_T::template get_largest_slot<true, false, true>(
+          extent.read(), &cast_down_fill_0<STAGE>(*p_pos), nullptr, pp_value);
+    } else if (p_pos && !p_index_key && !pp_value) {
+      STAGE_T::template get_largest_slot<true, false, false>(
+          extent.read(), &cast_down_fill_0<STAGE>(*p_pos), nullptr, nullptr);
     } else {
       ceph_abort("not implemented");
     }
@@ -255,11 +445,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       key_view_t* index_key=nullptr, marker_t={}) const override {
     auto& node_stage = extent.read();
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      if (unlikely(node_stage.keys() == 0)) {
+      if (unlikely(is_keys_empty())) {
         history.set<STAGE_LEFT>(MatchKindCMP::LT);
         return lookup_result_t<NODE_TYPE>::end();
       }
     }
+    assert(!is_keys_empty());
 
     typename STAGE_T::result_t result_raw;
     if (index_key) {
@@ -355,10 +546,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(_right_impl.field_type() == FIELD_TYPE);
     auto& right_impl = dynamic_cast<NodeLayoutT&>(_right_impl);
     logger().info("OTree::Layout::Split: begin at "
-                  "insert_pos({}), insert_stage={}, insert_size={}B, "
-                  "{:#x}=>{:#x} ...",
-                  _insert_pos, insert_stage, insert_size,
-                  laddr(), right_impl.laddr());
+                  "insert_pos({}), insert_stage={}, insert_size={}B ...",
+                  _insert_pos, insert_stage, insert_size);
     if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
       std::ostringstream sos;
       dump(sos);
@@ -386,7 +575,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        *    the estimated left_node_size <= target_split_size;
        * B. the fair one takes a further step to calculate the next slot of
        *    P KiB, and if left_node_size + P/2 < target_split_size, compensate
-       *    the split position to include the next slot; (TODO)
+       *    the split position to include the next slot;
        *
        * Say that the node_block_size = N KiB, the largest allowed
        * insert_size = 1/I * N KiB (I > 1). We want to identify the minimal 'I'
@@ -476,7 +665,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     auto append_at = split_at;
     // TODO(cross-node string dedup)
     typename STAGE_T::template StagedAppender<KEY_TYPE> right_appender;
-    right_appender.init(&right_mut, right_mut.get_write());
+    right_appender.init_empty(&right_mut, right_mut.get_write());
     const value_t* p_value = nullptr;
     if (!is_insert_left) {
       // right node: append [start(append_at), insert_pos)
@@ -528,6 +717,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       assert(index.compare_to(key) == MatchKindCMP::EQ);
 #endif
       extent.split_replayable(split_at);
+    }
+    if (right_impl.is_level_tail()) {
+      // is_level_tail of left is changed by split/split_insert
+      build_name();
     }
     if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
       std::ostringstream sos;
@@ -583,6 +776,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void replace_child_addr(
       const search_position_t& pos, laddr_t dst, laddr_t src) override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      logger().debug("OTree::Layout::ReplaceChildAddr: "
+                     "update from {:#x} to {:#x} at pos({}) ...",
+                     src, dst, pos);
       const laddr_packed_t* p_value;
       if (pos.is_end()) {
         assert(is_level_tail());
@@ -604,7 +800,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       auto& node_stage = extent.read();
       match_stage_t insert_stage;
       node_offset_t insert_size;
-      if (unlikely(!node_stage.keys())) {
+      if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
         insert_stage = STAGE;
         insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, value);
@@ -626,8 +822,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const MatchHistory& history, match_stat_t mstat,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      if (unlikely(is_empty())) {
+      if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
+        assert(is_level_tail());
         return {STAGE, STAGE_T::template insert_size<KeyT::HOBJ>(key, value)};
       } else {
         return STAGE_T::evaluate_insert(
@@ -644,7 +841,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
  private:
-  NodeLayoutT(NodeExtentRef extent) : extent{extent} {}
+  NodeLayoutT(NodeExtentRef extent) : extent{extent} {
+    build_name();
+  }
 
   node_offset_t filled_size() const {
     auto& node_stage = extent.read();
@@ -653,11 +852,24 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return ret;
   }
 
+  // rebuild the name whenever addr, type, level, tail is changed
+  void build_name() {
+    // XXX: maybe also include the extent state
+    std::ostringstream sos;
+    sos << "Node" << NODE_TYPE << FIELD_TYPE
+        << "@0x" << std::hex << extent.get_laddr()
+        << "+" << node_stage_t::EXTENT_SIZE << std::dec
+        << "Lv" << (unsigned)level()
+        << (is_level_tail() ? "$" : "");
+    name = sos.str();
+  }
+
   static seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_filestore);
   }
 
   extent_t extent;
+  std::string name = "Node-N/A";
 };
 
 using InternalNode0 = NodeLayoutT<node_fields_0_t, node_type_t::INTERNAL>;

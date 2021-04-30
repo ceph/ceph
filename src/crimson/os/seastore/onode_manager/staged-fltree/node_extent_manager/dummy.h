@@ -27,7 +27,7 @@ class DummySuper final: public Super {
  protected:
   laddr_t get_root_laddr() const override { return *p_root_laddr; }
   void write_root_laddr(context_t, laddr_t addr) override {
-    logger().info("OTree::Dummy: update root {:#x} ...", addr);
+    logger().debug("OTree::Dummy: update root {:#x} ...", addr);
     *p_root_laddr = addr;
   }
  private:
@@ -43,6 +43,14 @@ class DummyNodeExtent final: public NodeExtent {
     state = extent_state_t::INITIAL_WRITE_PENDING;
   }
   ~DummyNodeExtent() override = default;
+
+  void retire() {
+    assert(state == extent_state_t::INITIAL_WRITE_PENDING);
+    state = extent_state_t::INVALID;
+    bufferptr empty_bptr;
+    get_bptr().swap(empty_bptr);
+  }
+
  protected:
   NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override {
     ceph_abort("impossible path"); }
@@ -63,6 +71,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   static constexpr size_t ALIGNMENT = 4096;
  public:
   ~DummyNodeExtentManager() override = default;
+  std::size_t size() const { return allocate_map.size(); }
+
  protected:
   bool is_read_isolated() const override { return false; }
 
@@ -88,6 +98,20 @@ class DummyNodeExtentManager final: public NodeExtentManager {
       using namespace std::chrono_literals;
       return seastar::sleep(1us).then([this, &t, len] {
         return alloc_extent_sync(t, len);
+      });
+    }
+  }
+
+  tm_future<> retire_extent(
+      Transaction& t, NodeExtentRef extent) override {
+    logger().trace("OTree::Dummy: retiring {}B at {:#x} ...",
+                   extent->get_length(), extent->get_laddr());
+    if constexpr (SYNC) {
+      return retire_extent_sync(t, extent);
+    } else {
+      using namespace std::chrono_literals;
+      return seastar::sleep(1us).then([this, &t, extent] {
+        return retire_extent_sync(t, extent);
       });
     }
   }
@@ -138,9 +162,22 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     return tm_ertr::make_ready_future<NodeExtentRef>(extent);
   }
 
+  tm_future<> retire_extent_sync(
+      Transaction& t, NodeExtentRef _extent) {
+    auto& extent = static_cast<DummyNodeExtent&>(*_extent.get());
+    auto addr = extent.get_laddr();
+    auto len = extent.get_length();
+    extent.retire();
+    auto iter = allocate_map.find(addr);
+    assert(iter != allocate_map.end());
+    allocate_map.erase(iter);
+    logger().debug("OTree::Dummy: retired {}B at {:#x}", len, addr);
+    return tm_ertr::now();
+  }
+
   tm_future<Super::URef> get_super_sync(
       Transaction& t, RootNodeTracker& tracker) {
-    logger().debug("OTree::Dummy: got root {:#x}", root_laddr);
+    logger().trace("OTree::Dummy: got root {:#x}", root_laddr);
     return tm_ertr::make_ready_future<Super::URef>(
         Super::URef(new DummySuper(t, tracker, &root_laddr)));
   }
