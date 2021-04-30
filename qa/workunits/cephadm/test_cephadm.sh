@@ -415,8 +415,11 @@ expect_false $CEPHADM rm-daemon --fsid $FSID --name mon.a
 # mgr does not
 $CEPHADM rm-daemon --fsid $FSID --name mgr.x
 
+expect_false $CEPHADM zap-osds --fsid $FSID
+$CEPHADM zap-osds --fsid $FSID --force
+
 ## rm-cluster
-expect_false $CEPHADM rm-cluster --fsid $FSID
-$CEPHADM rm-cluster --fsid $FSID --force
+expect_false $CEPHADM rm-cluster --fsid $FSID --zap-osds
+$CEPHADM rm-cluster --fsid $FSID --force --zap-osds
 
 echo PASS
