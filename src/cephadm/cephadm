@@ -5500,6 +5500,10 @@ def command_rm_cluster(ctx):
     call(ctx, ['systemctl', 'stop', slice_name],
          verbosity=CallVerbosity.DEBUG)
 
+    # osds?
+    if ctx.zap_osds:
+        _zap_osds(ctx)
+
     # rm units
     call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
                       '/ceph-%s@.service' % ctx.fsid])
@@ -7612,6 +7616,10 @@ def _get_parser():
         '--keep-logs',
         action='store_true',
         help='do not remove log files')
+    parser_rm_cluster.add_argument(
+        '--zap-osds',
+        action='store_true',
+        help='zap OSD devices for this cluster')
 
     parser_run = subparsers.add_parser(
         'run', help='run a ceph daemon, in a container, in the foreground')
