@@ -7,6 +7,7 @@ import sys
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
 from ..services.auth import AuthManager, JwtManager
+from ..services.cluster import ClusterModel
 from ..settings import Settings
 from . import ApiController, ControllerAuthMixin, ControllerDoc, EndpointDoc, \
     RESTController, allow_empty_body
@@ -118,4 +119,5 @@ class Auth(RESTController, ControllerAuthMixin):
                 }
         return {
             'login_url': self._get_login_url(),
+            'cluster_status': ClusterModel.from_db().dict()['status']
         }
