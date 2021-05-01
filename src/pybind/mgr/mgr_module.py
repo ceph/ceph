@@ -1127,6 +1127,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         assert self._db_lock.locked()
         if self._db is not None:
             return self._db
+        db_allowed = self.get_ceph_option("mgr_pool")
+        if not db_allowed:
+            raise MgrDBNotReady();
         self._db = self.open_db()
         if self._db is None:
             raise MgrDBNotReady();
