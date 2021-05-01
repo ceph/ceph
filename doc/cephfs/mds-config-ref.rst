@@ -2,8 +2,6 @@
  MDS Config Reference
 ======================
 
-.. confval:: mds_cache_memory_limit
-.. confval:: mds_cache_reservation
 .. confval:: mds_cache_mid
 .. confval:: mds_dir_max_commit_size
 .. confval:: mds_decay_halflife
