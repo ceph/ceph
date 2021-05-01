@@ -335,7 +335,8 @@ class AuthTest(DashboardTestCase):
         self.assertStatus(200)
         data = self.jsonBody()
         self.assertSchema(data, JObj(sub_elems={
-            "login_url": JLeaf(str)
+            "login_url": JLeaf(str),
+            "cluster_status": JLeaf(str)
         }, allow_unknown=False))
         self.logout()
 
@@ -345,6 +346,7 @@ class AuthTest(DashboardTestCase):
         self.assertStatus(200)
         data = self.jsonBody()
         self.assertSchema(data, JObj(sub_elems={
-            "login_url": JLeaf(str)
+            "login_url": JLeaf(str),
+            "cluster_status": JLeaf(str)
         }, allow_unknown=False))
         self.logout(set_cookies=True)
