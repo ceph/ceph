@@ -34,6 +34,14 @@
 #include "common/errno.h"
 #include "common/numa.h"
 
+#ifndef HAVE_IN_ADDR_T
+typedef uint32_t in_addr_t;
+#endif
+
+#ifndef IN_LOOPBACKNET
+#define IN_LOOPBACKNET 127
+#endif
+
 #define dout_subsys ceph_subsys_
 
 using std::string;
