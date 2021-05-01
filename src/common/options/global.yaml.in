@@ -1173,13 +1173,6 @@ options:
   fmt_desc: Throttles total size of messages waiting to be dispatched.
   default: 100_M
   with_legacy: true
-- name: ms_bind_exclude_lo_iface
-  type: bool
-  level: advanced
-  desc: Allow servers to bind loopback network interfaces (lo)
-  default: true
-  flags:
-  - startup
 - name: ms_bind_ipv4
   type: bool
   level: advanced
