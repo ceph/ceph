@@ -63,6 +63,9 @@
 /* Define to 1 if the system has the type `__u8'. */
 #cmakedefine HAVE___U8 1
 
+/* Define if the system has the type `in_addr_t' */
+#cmakedefine HAVE_IN_ADDR_T
+
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
 

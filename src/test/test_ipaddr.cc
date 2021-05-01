@@ -13,7 +13,11 @@
 #endif
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#else
 #include <net/if.h>
+#endif
 
 static void ipv4(struct sockaddr_in *addr, const char *s) {
   int err;
