@@ -7,6 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { of as observableOf } from 'rxjs';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { MgrModuleService } from '../api/mgr-module.service';
 import { ModuleStatusGuardService } from './module-status-guard.service';
 
 describe('ModuleStatusGuardService', () => {
@@ -15,6 +16,7 @@ describe('ModuleStatusGuardService', () => {
   let router: Router;
   let route: ActivatedRouteSnapshot;
   let ngZone: NgZone;
+  let mgrModuleService: MgrModuleService;
 
   @Component({ selector: 'cd-foo', template: '' })
   class FooComponent {}
@@ -25,9 +27,16 @@ describe('ModuleStatusGuardService', () => {
 
   const routes: Routes = [{ path: '**', component: FooComponent }];
 
-  const testCanActivate = (getResult: {}, activateResult: boolean, urlResult: string) => {
+  const testCanActivate = (
+    getResult: {},
+    activateResult: boolean,
+    urlResult: string,
+    backend = 'cephadm'
+  ) => {
     let result: boolean;
     spyOn(httpClient, 'get').and.returnValue(observableOf(getResult));
+    const test = { orchestrator: backend };
+    spyOn(mgrModuleService, 'getConfig').and.returnValue(observableOf(test));
     ngZone.run(() => {
       service.canActivateChild(route).subscribe((resp) => {
         result = resp;
@@ -48,13 +57,15 @@ describe('ModuleStatusGuardService', () => {
   beforeEach(() => {
     service = TestBed.inject(ModuleStatusGuardService);
     httpClient = TestBed.inject(HttpClient);
+    mgrModuleService = TestBed.inject(MgrModuleService);
     router = TestBed.inject(Router);
     route = new ActivatedRouteSnapshot();
     route.url = [];
     route.data = {
       moduleStatusGuardConfig: {
         apiPath: 'bar',
-        redirectTo: '/foo'
+        redirectTo: '/foo',
+        backend: 'rook'
       }
     };
     ngZone = TestBed.inject(NgZone);
@@ -75,5 +86,9 @@ describe('ModuleStatusGuardService', () => {
 
   it('should test canActivateChild with status unavailable', fakeAsync(() => {
     testCanActivate(null, false, '/foo');
+  }));
+
+  it('should redirect normally if the backend provided matches the current backend', fakeAsync(() => {
+    testCanActivate({ available: true, message: 'foo' }, true, '/', 'rook');
   }));
 });
