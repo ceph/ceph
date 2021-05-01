@@ -2708,7 +2708,8 @@ def deploy_daemon_units(
                     args=[
                         'lvm', 'activate',
                         str(daemon_id), osd_fsid,
-                        '--no-systemd'
+                        '--no-systemd',
+                        '--no-tmpfs'
                     ],
                     privileged=True,
                     volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
