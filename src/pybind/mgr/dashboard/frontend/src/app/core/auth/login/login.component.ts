@@ -17,6 +17,7 @@ export class LoginComponent implements OnInit {
   model = new Credentials();
   isLoginActive = false;
   returnUrl: string;
+  postInstalled = false;
 
   constructor(
     private authService: AuthService,
@@ -43,6 +44,7 @@ export class LoginComponent implements OnInit {
       }
       this.authService.check(token).subscribe((login: any) => {
         if (login.login_url) {
+          this.postInstalled = login.cluster_status === 'POST_INSTALLED';
           if (login.login_url === '#/login') {
             this.isLoginActive = true;
           } else {
@@ -63,7 +65,11 @@ export class LoginComponent implements OnInit {
 
   login() {
     this.authService.login(this.model).subscribe(() => {
-      const url = _.get(this.route.snapshot.queryParams, 'returnUrl', '/');
+      const urlPath = this.postInstalled ? '/' : '/create-cluster';
+      let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
+      if (!this.postInstalled && this.route.snapshot.queryParams['returnUrl'] === '/dashboard') {
+        url = '/create-cluster';
+      }
       this.router.navigate([url]);
     });
   }
