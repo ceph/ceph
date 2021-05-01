@@ -1,0 +1,29 @@
+<div class="container h-75">
+  <div class="row h-100 justify-content-center align-items-center">
+    <div class="blank-page">
+      <!-- htmllint img-req-src="false" -->
+      <img [src]="projectConstants.cephLogo"
+           alt="Ceph"
+           class="img-fluid mx-auto d-block">
+      <h3 class="text-center m-2"
+          i18n>Welcome to {{ projectConstants.projectName }}</h3>
+
+      <div class="m-4">
+        <h4 class="text-center"
+            i18n>Please proceed to complete the cluster creation</h4>
+        <div class="offset-md-3">
+          <button class="btn btn-accent m-3"
+                  name="create-cluster"
+                  [routerLink]="'/dashboard'"
+                  (click)="createCluster()"
+                  i18n>Create Cluster</button>
+          <button class="btn btn-light"
+                  name="skip-cluster-creation"
+                  [routerLink]="'/dashboard'"
+                  (click)="skipClusterCreation()"
+                  i18n>Skip</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
