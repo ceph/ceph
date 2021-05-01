@@ -1,6 +1,6 @@
 language: cpp
 cache: ccache
-dist: xenial
+dist: focal
 sudo: false
 branches:
   only:
@@ -12,8 +12,6 @@ compiler:
   - gcc
 addons:
   apt:
-    sources:
-      - ubuntu-toolchain-r-test
     packages:
       - cmake
       - libgtest-dev
