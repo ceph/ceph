@@ -4,9 +4,79 @@ import string
 import json
 import argparse
 import sys
+import socket
+
+DEFAULT_PORT = 8000
 
 def rand_alphanum_lower(l):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=l))
+
+def get_endpoints(endpoints):
+    if endpoints:
+        return endpoints
+
+    hostname = socket.getfqdn()
+
+    return 'http://%s:%d' % (hostname, DEFAULT_PORT)
+
+class JSONObj:
+    def to_json(self):
+        return json.dumps(self, default=lambda o: o.__dict__, indent=4)
+
+class RGWZone(JSONObj):
+    def __init__(self, zone_dict):
+        self.id = zone_dict['id']
+        self.name = zone_dict['name']
+        self.endpoints = zone_dict['endpoints']
+
+class RGWZoneGroup(JSONObj):
+    def __init__(self, zg_dict):
+        self.id = zg_dict['id']
+        self.name = zg_dict['name']
+        self.api_name = zg_dict['api_name']
+        self.is_master = zg_dict['is_master']
+        self.endpoints = zg_dict['endpoints']
+
+        self.zones_by_id = {}
+        self.zones_by_name = {}
+
+        for zone in zg_dict['zones']:
+            self.zones_by_id[zone['id']] = RGWZone(zone)
+            self.zones_by_name[zone['name']] = RGWZone(zone)
+
+class RGWPeriod(JSONObj):
+    def __init__(self, period_dict):
+        self.id = period_dict['id']
+        self.epoch = period_dict['epoch']
+        pm = period_dict['period_map']
+        self.zonegroups_by_id = {}
+        self.zonegroups_by_name = {}
+
+        for zg in pm['zonegroups']:
+            self.zonegroups_by_id[zg['id']] = RGWZoneGroup(zg)
+            self.zonegroups_by_name[zg['name']] = RGWZoneGroup(zg)
+
+class RGWAccessKey(JSONObj):
+    def __init__(self, d):
+        self.uid = d['user']
+        self.access_key = d['access_key']
+        self.secret_key = d['secret_key']
+
+class RGWUser(JSONObj):
+    def __init__(self, d):
+        self.uid = d['user_id']
+        self.display_name = d['display_name']
+        self.email = d['email']
+
+        self.keys = []
+
+        for k in d['keys']:
+            self.keys.append(RGWAccessKey(k))
+
+        is_system = d.get('system') or 'false'
+        self.system = (is_system == 'true')
+
+
 
 class RGWAMException(BaseException):
     def __init__(self, message):
@@ -46,12 +116,125 @@ class RealmOp(RGWAdminCmd):
 
         return self.info
 
+class ZonegroupOp(RGWAdminCmd):
+    def __init__(self):
+        RGWAdminCmd.__init__(self)
+        
+    def create(self, realm, name = None, endpoints = None, is_master = True, is_default = True):
+        self.name = name
+        if not self.name:
+            self.name = 'zg-' + rand_alphanum_lower(8)
+
+        params = [ 'zonegroup',
+                   'create',
+                   '--rgw-realm', realm,
+                   '--rgw-zonegroup', self.name,
+                   '--endpoints', endpoints ]
+
+        if is_master:
+            params += [ '--master' ]
+
+        if is_default:
+            params += [ '--default' ]
+
+        retcode, stdout = RGWAdminCmd.run(self, params)
+        if retcode != 0:
+            return None
+
+        self.info = json.loads(stdout)
+
+        return self.info
+
+class ZoneOp(RGWAdminCmd):
+    def __init__(self):
+        RGWAdminCmd.__init__(self)
+        
+    def create(self, realm, zonegroup, name = None, endpoints = None, is_master = True, is_default = True):
+        self.name = name
+        if not self.name:
+            self.name = 'zg-' + rand_alphanum_lower(8)
+
+        params = [ 'zone',
+                   'create',
+                   '--rgw-realm', realm,
+                   '--rgw-zonegroup', zonegroup,
+                   '--rgw-zone', self.name,
+                   '--endpoints', endpoints ]
+
+        if is_master:
+            params += [ '--master' ]
+
+        if is_default:
+            params += [ '--default' ]
+
+        retcode, stdout = RGWAdminCmd.run(self, params)
+        if retcode != 0:
+            return None
+
+        self.info = json.loads(stdout)
+
+        return self.info
+
+class PeriodOp(RGWAdminCmd):
+    def __init__(self):
+        RGWAdminCmd.__init__(self)
+        
+    def update(self, realm, commit = True):
+
+        params = [ 'period',
+                   'update',
+                   '--rgw-realm', realm ]
+
+        if commit:
+            params += [ '--commit' ]
+
+        retcode, stdout = RGWAdminCmd.run(self, params)
+        if retcode != 0:
+            return None
+
+        self.info = json.loads(stdout)
+
+        return self.info
+
+class UserOp(RGWAdminCmd):
+    def __init__(self):
+        RGWAdminCmd.__init__(self)
+        
+    def create(self, uid = None, display_name = None, email = None, is_system = False):
+        self.uid = uid
+        if not self.uid:
+            self.uid = 'uid-' + rand_alphanum_lower(6)
+
+        self.display_name = display_name
+        if not self.display_name:
+            self.display_name = self.uid
+
+        params = [ 'user',
+                   'create',
+                   '--uid', self.uid,
+                   '--display-name', self.display_name ]
+
+        if email:
+            params += [ '--email', email ]
+
+        if is_system:
+            params += [ '--system' ]
+
+        retcode, stdout = RGWAdminCmd.run(self, params)
+        if retcode != 0:
+            return None
+
+        self.info = json.loads(stdout)
+
+        return self.info
 
 class RGWAM:
     def __init__(self):
         pass
 
     def realm_bootstrap(self, realm, zonegroup, zone, endpoints):
+        endpoints = get_endpoints(endpoints)
+
         realm_info = RealmOp().create(realm)
         if not realm_info:
             return
@@ -60,16 +243,34 @@ class RGWAM:
         realm_id = realm_info['id']
         print('Created realm %s (%s)' % (realm_name, realm_id))
 
-    def zonegroup_create(self, realm, zonegroup, zone, endpoints):
-        realm_op = RealmOp()
+        zg_info = ZonegroupOp().create(realm_name, zonegroup, endpoints, True, True)
 
-        realm_info = realm_op.create(realm)
-        if not realm_info:
-            return
+        zg_name = zg_info['name']
+        zg_id = zg_info['id']
+        print('Created zonegroup %s (%s)' % (zg_name, zg_id))
 
-        realm_name = realm_info['name']
-        realm_id = realm_info['id']
-        print('Created realm %s (%s)' % (realm_name, realm_id))
+        zone_info = ZoneOp().create(realm_name, zg_name, zone, endpoints, True, True)
+
+        zone_name = zone_info['name']
+        zone_id = zone_info['id']
+        print('Created zone %s (%s)' % (zone_name, zone_id))
+
+        period_info = PeriodOp().update(realm_name, True)
+
+        period = RGWPeriod(period_info)
+
+        print('Period: ' + period.id)
+
+        user_info = UserOp().create(is_system = True)
+
+        user = RGWUser(user_info)
+
+        print('Created system user: %s' % user.uid)
+
+
+
+
+
 
 
 class RealmCommand:
