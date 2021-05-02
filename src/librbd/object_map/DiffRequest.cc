@@ -175,7 +175,7 @@ void DiffRequest<I>::handle_load_object_map(int r) {
     m_object_map.resize(num_objs);
   }
 
-  size_t prev_object_diff_state_size = m_object_diff_state->size();
+  uint64_t prev_object_diff_state_size = m_object_diff_state->size();
   if (prev_object_diff_state_size < num_objs) {
     // the diff state should be the largest of all snapshots in the set
     m_object_diff_state->resize(num_objs);
