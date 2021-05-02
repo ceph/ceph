@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE = '''
 .. confval_option:: {{ opt.name }}
-{% if desc | length > 1 %}
+{% if desc %}
    {{ desc | wordwrap(70) | indent(3) }}
 {% endif %}
    :type: ``{{opt.type}}``
