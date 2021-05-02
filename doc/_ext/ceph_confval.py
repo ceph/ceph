@@ -108,6 +108,8 @@ def do_plain_num(value: str, typ: str) -> str:
 
 
 def iec_size(value: int) -> str:
+    if value == 0:
+        return '0B'
     units = dict(Ei=60,
                  Pi=50,
                  Ti=40,
