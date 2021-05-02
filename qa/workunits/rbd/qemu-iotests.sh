@@ -5,7 +5,7 @@
 # require the admin ceph user, as there's no way to pass the ceph user
 # to qemu-iotests currently.
 
-testlist='001 002 003 004 005 008 009 010 011 021 025 032 033 055'
+testlist='001 002 003 004 005 008 009 010 011 021 025 032 033'
 
 git clone https://github.com/qemu/qemu.git
 cd qemu
@@ -34,11 +34,6 @@ then
     ln -s /usr/bin/qemu-nbd
 else
     QEMU='/usr/libexec/qemu-kvm'
-
-    # disable test 055 since qemu-kvm (RHEL/CentOS) doesn't support the
-    # required QMP commands under EL7 and Python 3 is not supported by
-    # the test under EL8
-    testlist=$(echo ${testlist} | sed "s/ 055//g")
 fi
 ln -s $QEMU bin/qemu
 
