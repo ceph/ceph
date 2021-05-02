@@ -14,6 +14,7 @@ Synopsis
 | **rbd-nbd** list-mapped
 | **rbd-nbd** attach --device *nbd device* *image-spec* | *snap-spec*
 | **rbd-nbd** detach *nbd device* | *image-spec* | *snap-spec*
+| **rbd-nbd** restore [--attach-list *<nbd-device,image-spec,snap-spec,...>* | --saveconfig-file *file*]
 
 Description
 ===========
@@ -66,6 +67,19 @@ Options
    Specify timeout for the kernel to wait for a new rbd-nbd process is
    attached after the old process is detached. The default is 30
    second.
+
+.. option:: --attach-list *<nbd-device,image-spec,snap-spec,...>*
+
+   Should be used with the restore command, it specifies the comma-separated
+   list of nbd-devices and/or image-specs and/or snap-specs which needs to be
+   re-attached. If this option is not specified, the restore command will
+   attempt to re-attach all the rbd-nbd devices available in the saveconfig
+   file.
+
+.. option:: --saveconfig-file *file*
+
+   Path of the JSON file that will contain data about the rbd-nbd devices.
+   The default file path is /etc/ceph/saveconfig.json
 
 Image and snap specs
 ====================

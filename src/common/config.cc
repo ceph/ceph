@@ -703,6 +703,7 @@ int md_config_t::parse_argv(ConfigValues& values,
 	r = bl.read_fd(STDIN_FILENO, 1024);
       } else {
 	r = bl.read_file(val.c_str(), &err);
+	set_val_or_die(values, tracker, "keyfile", val.c_str());
       }
       if (r >= 0) {
 	string k(bl.c_str(), bl.length());
