@@ -561,6 +561,17 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 		    << dendl;
   } else if (w->kind == TokenKind::cond_key) {
     auto& t = pp->policy.statements.back();
+    if (l > 0 && *s == '$') {
+      if (l >= 2 && *(s+1) == '{') {
+        if (l > 0 && *(s+l-1) == '}') {
+          t.conditions.back().isruntime = true;
+        } else {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
     t.conditions.back().vals.emplace_back(s, l);
 
     // Principals
@@ -672,6 +683,7 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
 }
 
 bool Condition::eval(const Environment& env) const {
+  std::vector<std::string> runtime_vals;
   auto i = env.find(key);
   if (op == TokenID::Null) {
     return i == env.end() ? true : false;
@@ -686,6 +698,16 @@ bool Condition::eval(const Environment& env) const {
       return ifexists;
     }
   }
+
+  if (isruntime) {
+    string k = vals.back();
+    k.erase(0,2); //erase $, {
+    k.erase(k.length() - 1, 1); //erase }
+    const auto& it = env.equal_range(k);
+    for (auto itr = it.first; itr != it.second; itr++) {
+      runtime_vals.emplace_back(itr->second);
+    }
+  }
   const auto& s = i->second;
 
   const auto& itr = env.equal_range(key);
@@ -694,34 +716,34 @@ bool Condition::eval(const Environment& env) const {
     // String!
   case TokenID::ForAnyValueStringEquals:
   case TokenID::StringEquals:
-    return orrible(std::equal_to<std::string>(), itr, vals);
+    return orrible(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEquals:
     return orrible(std::not_fn(std::equal_to<std::string>()),
-		   itr, vals);
+		   itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAnyValueStringEqualsIgnoreCase:
   case TokenID::StringEqualsIgnoreCase:
-    return orrible(ci_equal_to(), itr, vals);
+    return orrible(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return orrible(std::not_fn(ci_equal_to()), itr, vals);
+    return orrible(std::not_fn(ci_equal_to()), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAnyValueStringLike:
   case TokenID::StringLike:
-    return orrible(string_like(), itr, vals);
+    return orrible(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotLike:
-    return orrible(std::not_fn(string_like()), itr, vals);
+    return orrible(std::not_fn(string_like()), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAllValuesStringEquals:
-    return andible(std::equal_to<std::string>(), itr, vals);
+    return andible(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAllValuesStringLike:
-    return andible(string_like(), itr, vals);
+    return andible(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAllValuesStringEqualsIgnoreCase:
-    return andible(ci_equal_to(), itr, vals);
+    return andible(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
     // Numeric
   case TokenID::NumericEquals:

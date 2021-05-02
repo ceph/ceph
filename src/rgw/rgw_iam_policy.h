@@ -279,6 +279,7 @@ struct Condition {
   // In future development, use symbol internment.
   std::string key;
   bool ifexists = false;
+  bool isruntime = false; //Is evaluated during run-time
   // Much to my annoyance there is no actual way to do this in a
   // typed way that is compatible with AWS. I know this because I've
   // seen examples where the same value is used as a string in one
