@@ -4504,6 +4504,10 @@ def command_shell(ctx):
                                             os.path.join(home, f))
             mounts[home] = '/root'
 
+    for i in ctx.volume:
+        a, b = i.split(':', 1)
+        mounts[a] = b
+
     c = CephContainer(
         ctx,
         image=ctx.image,
@@ -7675,6 +7679,11 @@ def _get_parser():
         nargs='+')
     parser_shell.add_argument(
         '--env', '-e',
+        action='append',
+        default=[],
+        help='set environment variable')
+    parser_shell.add_argument(
+        '--volume', '-v',
         action='append',
         default=[],
         help='set environment variable')
