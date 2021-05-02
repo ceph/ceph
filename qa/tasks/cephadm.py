@@ -986,11 +986,11 @@ def shell(ctx, config):
     """
     cluster_name = config.get('cluster', 'ceph')
 
-    env = []
-    if 'env' in config:
-        for k in config['env']:
-            env.extend(['-e', k + '=' + ctx.config.get(k, '')])
-        del config['env']
+    args = []
+    for k in config.pop('env', []):
+        args.extend(['-e', k + '=' + ctx.config.get(k, '')])
+    for k in config.pop('volumes', []):
+        args.extend(['-v', k])
 
     if 'all-roles' in config and len(config) == 1:
         a = config['all-roles']
@@ -1008,12 +1008,12 @@ def shell(ctx, config):
             for c in cmd:
                 _shell(ctx, cluster_name, remote,
                        ['bash', '-c', subst_vip(ctx, c)],
-                       extra_cephadm_args=env)
+                       extra_cephadm_args=args)
         else:
             assert isinstance(cmd, str)
             _shell(ctx, cluster_name, remote,
                    ['bash', '-ex', '-c', subst_vip(ctx, cmd)],
-                   extra_cephadm_args=env)
+                   extra_cephadm_args=args)
 
 
 def apply(ctx, config):
