@@ -55,9 +55,11 @@ class NFSService(CephService):
                         self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
     def config(self, spec: NFSServiceSpec, daemon_id: str) -> None:  # type: ignore
+        from nfs.cluster import create_ganesha_pool
+
         assert self.TYPE == spec.service_type
         assert spec.pool
-        self.mgr._check_pool_exists(spec.pool, spec.service_name())
+        create_ganesha_pool(self.mgr, spec.pool)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
