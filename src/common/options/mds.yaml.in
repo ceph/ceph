@@ -446,7 +446,17 @@ options:
   default: true
   services:
   - mds
-  with_legacy: true
+  flags:
+  - runtime
+- name: mds_client_async_dirop
+  type: bool
+  level: advanced
+  desc: allow clients do file creation/unlink asynchronously
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_replay_unsafe_with_closed_session
   type: bool
   level: advanced

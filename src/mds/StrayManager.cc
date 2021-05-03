@@ -232,6 +232,8 @@ void StrayManager::_purge_stray_purged(
     CDir *dir = dn->get_dir();
     auto pf = dir->project_fnode(mut);
     pf->version = dir->pre_dirty();
+    dir->resync_accounted_fragstat();
+    dir->resync_accounted_rstat();
     if (in->is_dir())
       pf->fragstat.nsubdirs--;
     else
@@ -438,7 +440,7 @@ bool StrayManager::_eval_stray(CDentry *dn)
   dout(10) << " inode is " << *dnl->get_inode() << dendl;
   CInode *in = dnl->get_inode();
   ceph_assert(in);
-  ceph_assert(!in->state_test(CInode::STATE_REJOINUNDEF));
+  ceph_assert(!in->is_rejoin_undef());
 
   // The only dentries elegible for purging are those
   // in the stray directories
@@ -716,7 +718,7 @@ void StrayManager::truncate(CDentry *dn)
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
   ceph_assert(!dn->is_replicated());
 
-  const SnapRealm *realm = in->find_snaprealm();
+  SnapRealm *realm = in->find_snaprealm();
   ceph_assert(realm);
   dout(10) << " realm " << *realm << dendl;
   const SnapContext *snapc = &realm->get_snap_context();

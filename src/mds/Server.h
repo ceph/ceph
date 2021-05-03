@@ -149,7 +149,6 @@ public:
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void reconnect_gather_finish();
   void reconnect_tick();
-  void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
   std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, RecallFlags=RecallFlags::NONE);
   void force_clients_readonly();
@@ -163,7 +162,7 @@ public:
                           MDRequestRef& mdr, std::string_view event);
   void dispatch_client_request(MDRequestRef& mdr);
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
-  void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
+  void early_reply(MDRequestRef& mdr, EMetaBlob *blob, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      MDRequestRef& mdr);
@@ -455,6 +454,8 @@ private:
 
   bool forward_all_requests_to_auth = false;
   bool replay_unsafe_with_closed_session = false;
+  bool early_reply_enabled = false;
+  bool client_async_dirop = false;
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;
   unsigned delegate_inos_pct = 0;

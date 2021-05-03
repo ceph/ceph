@@ -136,8 +136,11 @@ public:
 
   bool is_any_remote_auth_pin() const { return num_remote_auth_pins > 0; }
 
+  void enable_lock_cache() {
+    lock_cache_enabled = true;
+  }
   void disable_lock_cache() {
-    lock_cache_disabled = true;
+    lock_cache_enabled = false;
   }
 
   lock_iterator emplace_lock(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) {
@@ -239,7 +242,8 @@ public:
 
   lock_set locks;  // full ordering
   MDLockCache* lock_cache = nullptr;
-  bool lock_cache_disabled = false;
+  bool lock_cache_enabled = false;
+
   SimpleLock *last_locked = nullptr;
   // Lock we are currently trying to acquire. If we give up for some reason,
   // be sure to eval() this.
@@ -375,11 +379,13 @@ struct MDRequestImpl : public MutationImpl {
   bool peer_did_prepare();
   bool peer_rolling_back();
   bool freeze_auth_pin(CInode *inode);
-  void unfreeze_auth_pin(bool clear_inode=false);
+  void unfreeze_auth_pin(MDSContext::vec& finished);
+  void unfreeze_auth_pin();
   void set_remote_frozen_auth_pin(CInode *inode);
   bool can_auth_pin(MDSCacheObject *object);
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
+  void clear_ambiguous_auth(MDSContext::vec& finished);
   void clear_ambiguous_auth();
   const filepath& get_filepath();
   const filepath& get_filepath2();
@@ -498,7 +504,19 @@ struct MDLockCache : public MutationImpl {
   const file_layout_t& get_dir_layout() const {
     return dir_layout;
   }
+  int get_cap_bit() const {
+    switch(opcode) {
+      case CEPH_MDS_OP_CREATE:
+	return CEPH_CAP_DIR_CREATE;
+      case CEPH_MDS_OP_UNLINK:
+	return CEPH_CAP_DIR_UNLINK;
+      default:
+	ceph_assert(0 == "unsupported operation");
+	return 0;
+    }
+  }
 
+  void update_caps_allowed(LogSegment *ls);
   void attach_locks();
   void attach_dirfrags(std::vector<CDir*>&& dfv);
   void detach_locks();
@@ -517,6 +535,8 @@ struct MDLockCache : public MutationImpl {
   // link myself to auth-pinned dirfrags
   std::unique_ptr<DirItem[]> items_dir;
   std::vector<CDir*> auth_pinned_dirfrags;
+
+  MDSContext::vec cap_waiters;
 
   int ref = 1;
   bool invalidating = false;

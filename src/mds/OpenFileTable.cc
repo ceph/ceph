@@ -1056,7 +1056,7 @@ void OpenFileTable::_prefetch_dirfrags()
     CInode *diri = mdcache->get_inode(ino);
     if (!diri)
       continue;
-    if (diri->state_test(CInode::STATE_REJOINUNDEF))
+    if (diri->is_rejoin_undef())
       continue;
 
     for (auto& fg: anchor.frags) {
@@ -1083,7 +1083,7 @@ void OpenFileTable::_prefetch_dirfrags()
   MDSGatherBuilder gather(g_ceph_context);
   int num_opening_dirfrags = 0;
   for (const auto& dir : fetch_queue) {
-    if (dir->state_test(CDir::STATE_REJOINUNDEF))
+    if (dir->is_rejoin_undef())
       ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
 
@@ -1193,7 +1193,7 @@ bool OpenFileTable::should_log_open(CInode *in)
 {
   if (in->state_test(CInode::STATE_TRACKEDBYOFT)) {
     // inode just journaled
-    if (in->last_journaled >= committing_log_seq)
+    if (in->last_journal >= committing_log_seq)
       return false;
     // item not dirty. it means the item has already been saved
     auto p = dirty_items.find(in->ino());

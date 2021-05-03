@@ -29,6 +29,7 @@
 #include "events/EPurged.h"
 
 #include "events/EExport.h"
+#include "events/EExportCommitted.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
@@ -153,29 +154,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  // leader ops with possibly uncommitted peers
-  for (set<metareqid_t>::iterator p = uncommitted_leaders.begin();
-       p != uncommitted_leaders.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for peers to ack commit on " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_leader(*p, gather_bld.new_sub());
-  }
-
-  // peer ops that haven't been committed
-  for (set<metareqid_t>::iterator p = uncommitted_peers.begin();
-       p != uncommitted_peers.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for leader to ack OP_FINISH on " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_peer(*p, gather_bld.new_sub());
-  }
-
-  // uncommitted fragments
-  for (set<dirfrag_t>::iterator p = uncommitted_fragments.begin();
-       p != uncommitted_fragments.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for uncommitted fragment " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_fragment(*p, gather_bld.new_sub());
-  }
+  // uncommitted leader/peers/fragments
+  if (is_any_uncommitted())
+    uncommitted_waiters.push_back(gather_bld.new_sub());
 
   // nudge scatterlocks
   for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
@@ -215,6 +196,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 	}
 	le->add_clean_inode(in);
 	ls->open_files.push_back(&in->item_open_file);
+      } else if (in->is_auth() && in->is_dir() &&
+		 mds->locker->revoke_async_dirop_caps(in, gather_bld)) {
+	dout(20) << "try_to_expire invalidating caps for dir ops " << *in << dendl;
       } else {
 	// open files are tracked by open file table, no need to journal them again
 	in->item_open_file.remove_myself();
@@ -328,22 +312,16 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 // -----------------------
 // EMetaBlob
 
-void EMetaBlob::add_dir_context(CDir *dir, int mode)
+void EMetaBlob::add_dir_context(CDir *dir)
 {
   MDSRank *mds = dir->mdcache->mds;
 
   list<CDentry*> parents;
 
-  // it may be okay not to include the maybe items, if
-  //  - we journaled the maybe child inode in this segment
-  //  - that subtree turns out to be unambiguously auth
-  list<CDentry*> maybe;
-  bool maybenot = false;
-
   while (true) {
     // already have this dir?  (we must always add in order)
     if (lump_map.count(dir->dirfrag())) {
-      dout(20) << "EMetaBlob::add_dir_context(" << dir << ") have lump " << dir->dirfrag() << dendl;
+      dout(20) << "EMetaBlob::add_dir_context already have lump " << dir->dirfrag() << dendl;
       break;
     }
 
@@ -351,68 +329,54 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
     CInode *diri = dir->get_inode();
     CDentry *parent = diri->get_projected_parent_dn();
 
-    if (mode == TO_AUTH_SUBTREE_ROOT) {
-      // subtree root?
-      if (dir->is_subtree_root()) {
-	// match logic in MDCache::create_subtree_map()
-	if (dir->get_dir_auth().first == mds->get_nodeid()) {
-	  mds_authority_t parent_auth = parent ? parent->authority() : CDIR_AUTH_UNDEF;
-	  if (parent_auth.first == dir->get_dir_auth().first) {
-	    if (parent_auth.second == CDIR_AUTH_UNKNOWN &&
-		!dir->is_ambiguous_dir_auth() &&
-		!dir->state_test(CDir::STATE_EXPORTBOUND) &&
-		!dir->state_test(CDir::STATE_AUXSUBTREE) &&
-		!diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
-	      dout(0) << "EMetaBlob::add_dir_context unexpected subtree " << *dir << dendl;
-	      ceph_abort();
-	    }
-	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") ambiguous or transient subtree " << dendl;
-	  } else {
-	    // it's an auth subtree, we don't need maybe (if any), and we're done.
-	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached unambig auth subtree, don't need " << maybe
-		     << " at " << *dir << dendl;
-	    maybe.clear();
-	    break;
+    // subtree root?
+    if (dir->is_subtree_root()) {
+      // match logic in MDCache::create_subtree_map()
+      if (dir->get_dir_auth().first == mds->get_nodeid()) {
+	mds_authority_t parent_auth = parent ? parent->authority() : CDIR_AUTH_UNDEF;
+	if (parent_auth.first == dir->get_dir_auth().first) {
+	  if (parent_auth.second == CDIR_AUTH_UNKNOWN &&
+	      !dir->is_ambiguous_dir_auth() &&
+	      !dir->state_test(CDir::STATE_EXPORTBOUND) &&
+	      !diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+	    dout(0) << "EMetaBlob::add_dir_context unexpected subtree " << *dir << dendl;
+	    ceph_abort();
 	  }
+	  dout(20) << "EMetaBlob::add_dir_context ambiguous or transient subtree " << *dir << dendl;
 	} else {
-	  dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached ambig or !auth subtree, need " << maybe
-		   << " at " << *dir << dendl;
-	  // we need the maybe list after all!
-	  parents.splice(parents.begin(), maybe);
-	  maybenot = false;
+	  // it's an auth subtree, we don't need maybe (if any), and we're done.
+	  dout(20) << "EMetaBlob::add_dir_context reached unambig auth subtree " << *dir << dendl;
+	  break;
 	}
+      } else {
+	dout(20) << "EMetaBlob::add_dir_context reached ambig or !auth subtree " << *dir << dendl;
+	ceph_abort();
       }
+    } else if (parent && !parent->is_auth()) {
+      // rename to nonauth ?
+      if (!diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+	dout(0) << "EMetaBlob::add_dir_context unexpected non-auth parent " << *dir << dendl;
+	ceph_abort();
+      }
+      ceph_assert(parent->authority().first != mds->get_nodeid());
+      dout(20) << "EMetaBlob::add_dir_context reached ambig diri " << *diri << dendl;
+      break;
+    }
 
-      // was the inode journaled in this blob?
-      if (event_seq && diri->last_journaled == event_seq) {
-	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri this blob " << *diri << dendl;
-	break;
-      }
-
-      // have we journaled this inode since the last subtree map?
-      if (!maybenot && last_subtree_map && diri->last_journaled >= last_subtree_map) {
-	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri in this segment (" 
-		 << diri->last_journaled << " >= " << last_subtree_map << "), setting maybenot flag "
-		 << *diri << dendl;
-	maybenot = true;
-      }
+    // was the inode journaled in this blob?
+    if (event_seq && diri->last_journal == event_seq) {
+      dout(20) << "EMetaBlob::add_dir_context already have diri this blob " << *diri << dendl;
+      break;
     }
 
     if (!parent)
       break;
 
-    if (maybenot) {
-      dout(25) << "EMetaBlob::add_dir_context(" << dir << ")      maybe " << *parent << dendl;
-      maybe.push_front(parent);
-    } else {
-      dout(25) << "EMetaBlob::add_dir_context(" << dir << ") definitely " << *parent << dendl;
-      parents.push_front(parent);
-    }
-    
+    dout(25) << "EMetaBlob::add_dir_context definitely " << *parent << dendl;
+    parents.push_front(parent);
+
     dir = parent->get_dir();
   }
-  
-  parents.splice(parents.begin(), maybe);
 
   dout(20) << "EMetaBlob::add_dir_context final: " << parents << dendl;
   for (const auto& dentry : parents) {
@@ -587,16 +551,6 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 	       << dirfragtree << " on " << *in << dendl;
       in->dirfragtree = std::move(dirfragtree);
       in->force_dirfrags();
-      if (in->get_num_dirfrags() && in->authority() == CDIR_AUTH_UNDEF) {
-	auto&& ls = in->get_nested_dirfrags();
-	for (const auto& dir : ls) {
-	  if (dir->get_num_any() == 0 &&
-	      mds->mdcache->can_trim_non_auth_dirfrag(dir)) {
-	    dout(10) << " closing empty non-auth dirfrag " << *dir << dendl;
-	    in->close_dirfrag(dir->get_frag());
-	  }
-	}
-      }
     }
   } else if (in->is_symlink()) {
     in->symlink = symlink;
@@ -1177,29 +1131,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     dout(10) << "EMetaBlob.replay " << (isnew ? " added root ":" updated root ") << *in << dendl;    
   }
 
-  CInode *renamed_diri = 0;
-  CDir *olddir = 0;
-  if (renamed_dirino) {
-    renamed_diri = mds->mdcache->get_inode(renamed_dirino);
-    if (renamed_diri)
-      dout(10) << "EMetaBlob.replay renamed inode is " << *renamed_diri << dendl;
-    else
-      dout(10) << "EMetaBlob.replay don't have renamed ino " << renamed_dirino << dendl;
-
-    int nnull = 0;
-    for (const auto& lp : lump_order) {
-      dirlump &lump = lump_map[lp];
-      if (lump.nnull) {
-	dout(10) << "EMetaBlob.replay found null dentry in dir " << lp << dendl;
-	nnull += lump.nnull;
-      }
-    }
-    ceph_assert(nnull <= 1);
-  }
-
-  // keep track of any inodes we unlink and don't relink elsewhere
-  map<CInode*, CDir*> unlinked;
-  set<CInode*> linked;
+  // keep track of any inodes we unlink
+  set<CInode*> unlinked;
 
   // walk through my dirs (in order!)
   int count = 0;
@@ -1212,35 +1145,23 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     if (!dir) {
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((lp).ino);
-      if (!diri) {
-	if (MDS_INO_IS_MDSDIR(lp.ino)) {
-	  ceph_assert(MDS_INO_MDSDIR(mds->get_nodeid()) != lp.ino);
-	  diri = mds->mdcache->create_system_inode(lp.ino, S_IFDIR|0755);
-	  diri->state_clear(CInode::STATE_AUTH);
-	  dout(10) << "EMetaBlob.replay created base " << *diri << dendl;
-	} else {
-	  dout(0) << "EMetaBlob.replay missing dir ino  " << lp.ino << dendl;
-          mds->clog->error() << "failure replaying journal (EMetaBlob)";
-          mds->damaged();
-          ceph_abort();  // Should be unreachable because damaged() calls respawn()
-	}
-      }
+      if (!diri)
+	diri = mds->mdcache->create_unconnected_inode(lp.ino, S_IFDIR|0755);
 
       // create the dirfrag
       dir = diri->get_or_open_dirfrag(mds->mdcache, lp.frag);
 
-      if (MDS_INO_IS_BASE(lp.ino))
-	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
+      if (diri->is_unconnected() || diri->is_ambiguous_auth()) {
+	diri->dirfragtree.force_to_leaf(g_ceph_context, lp.frag);
+	dir->state_set(CDir::STATE_AUTH);
+	mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+      }
 
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
     }
     dir->reset_fnode(std::move(lump.fnode));
     dir->update_projected_version();
 
-    if (lump.is_importing()) {
-      dir->state_set(CDir::STATE_AUTH);
-      dir->state_clear(CDir::STATE_COMPLETE);
-    }
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
 
@@ -1269,6 +1190,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       dir->mark_new(logseg);
     if (lump.is_complete())
       dir->mark_complete();
+    else if (lump.is_importing())
+      dir->state_clear(CDir::STATE_COMPLETE);
     
     dout(10) << "EMetaBlob.replay updated dir " << *dir << dendl;  
 
@@ -1290,8 +1213,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	dn->first = fb.dnfirst;
 	ceph_assert(dn->last == fb.dnlast);
       }
-      if (lump.is_importing())
-	dn->state_set(CDentry::STATE_AUTH);
 
       CInode *in = mds->mdcache->get_inode(fb.inode->ino, fb.dnlast);
       if (!in) {
@@ -1300,7 +1221,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	mds->mdcache->add_inode(in);
 	if (!dn->get_linkage()->is_null()) {
 	  if (dn->get_linkage()->is_primary()) {
-	    unlinked[dn->get_linkage()->get_inode()] = dir;
+	    unlinked.insert(dn->get_linkage()->get_inode());
 	    CachedStackStringStream css;
 	    *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *dn->get_linkage()->get_inode() << " should be " << in->ino();
@@ -1309,8 +1230,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  }
 	  dir->unlink_inode(dn, false);
 	}
-	if (unlinked.count(in))
-	  linked.insert(in);
 	dir->link_primary_inode(dn, in);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
@@ -1318,13 +1237,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	fb.update_inode(mds, in);
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
-	  unlinked[in] = in->get_parent_dir();
+	  unlinked.insert(in);
 	  in->get_parent_dir()->unlink_inode(in->get_parent_dn());
 	}
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
 	    if (dn->get_linkage()->is_primary()) {
-	      unlinked[dn->get_linkage()->get_inode()] = dir;
+	      unlinked.insert(dn->get_linkage()->get_inode());
 	      CachedStackStringStream css;
 	      *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 		 << " " << *dn->get_linkage()->get_inode() << " should be " << in->ino();
@@ -1333,8 +1252,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	    }
 	    dir->unlink_inode(dn, false);
 	  }
-	  if (unlinked.count(in))
-	    linked.insert(in);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
 	} else {
@@ -1349,10 +1266,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	in->mark_dirty_parent(logseg, fb.is_dirty_pool());
       if (fb.need_snapflush())
 	logseg->open_files.push_back(&in->item_open_file);
-      if (dn->is_auth())
-	in->state_set(CInode::STATE_AUTH);
-      else
-	in->state_clear(CInode::STATE_AUTH);
       ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
 
       if (!(++count % 1000))
@@ -1371,7 +1284,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  if (dn->get_linkage()->is_primary()) {
-	    unlinked[dn->get_linkage()->get_inode()] = dir;
+	    unlinked.insert(dn->get_linkage()->get_inode());
 	    CachedStackStringStream css;
 	    *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *dn->get_linkage()->get_inode() << " should be remote " << rb.ino;
@@ -1387,8 +1300,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	dn->first = rb.dnfirst;
 	ceph_assert(dn->last == rb.dnlast);
       }
-      if (lump.is_importing())
-	dn->state_set(CDentry::STATE_AUTH);
 
       if (!(++count % 1000))
         mds->heartbeat_reset();
@@ -1407,23 +1318,15 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  CInode *in = dn->get_linkage()->get_inode();
-	  // For renamed inode, We may call CInode::force_dirfrag() later.
-	  // CInode::force_dirfrag() doesn't work well when inode is detached
-	  // from the hierarchy.
-	  if (!renamed_diri || renamed_diri != in) {
-	    if (dn->get_linkage()->is_primary())
-	      unlinked[in] = dir;
-	    dir->unlink_inode(dn);
-	  }
+	  if (dn->get_linkage()->is_primary())
+	    unlinked.insert(in);
+	  dir->unlink_inode(dn);
 	}
 	dn->set_version(nb.dnv);
 	if (nb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
 	ceph_assert(dn->last == nb.dnlast);
       }
-      olddir = dir;
-      if (lump.is_importing())
-	dn->state_set(CDentry::STATE_AUTH);
 
       // Make null dentries the first things we trim
       dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
@@ -1436,87 +1339,28 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
   ceph_assert(g_conf()->mds_kill_journal_replay_at != 3);
 
   if (renamed_dirino) {
-    if (renamed_diri) {
-      ceph_assert(unlinked.count(renamed_diri));
-      ceph_assert(linked.count(renamed_diri));
-      olddir = unlinked[renamed_diri];
-    } else {
-      // we imported a diri we haven't seen before
-      renamed_diri = mds->mdcache->get_inode(renamed_dirino);
-      ceph_assert(renamed_diri);  // it was in the metablob
-    }
-
-    if (olddir) {
-      if (olddir->authority() != CDIR_AUTH_UNDEF &&
-	  renamed_diri->authority() == CDIR_AUTH_UNDEF) {
-	ceph_assert(peerup); // auth to non-auth, must be peer prepare
-        frag_vec_t leaves;
-	renamed_diri->dirfragtree.get_leaves(leaves);
-	for (const auto& leaf : leaves) {
-	  CDir *dir = renamed_diri->get_dirfrag(leaf);
-	  ceph_assert(dir);
-	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
-	    // preserve subtree bound until peer commit
-	    peerup->olddirs.insert(dir->inode);
-	  else
-	    dir->state_set(CDir::STATE_AUTH);
-
-          if (!(++count % 1000))
-            mds->heartbeat_reset();
-	}
-      }
-
-      mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir, false);
-      
-      // see if we can discard the subtree we renamed out of
-      CDir *root = mds->mdcache->get_subtree_root(olddir);
-      if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
-	if (peerup) // preserve the old dir until peer commit
-	  peerup->olddirs.insert(olddir->inode);
-	else
-	  mds->mdcache->try_trim_non_auth_subtree(root);
-      }
-    }
-
-    // if we are the srci importer, we'll also have some dirfrags we have to open up...
-    if (renamed_diri->authority() != CDIR_AUTH_UNDEF) {
-      for (const auto& p : renamed_dir_frags) {
-	CDir *dir = renamed_diri->get_dirfrag(p);
-	if (dir) {
-	  // we already had the inode before, and we already adjusted this subtree accordingly.
-	  dout(10) << " already had+adjusted rename import bound " << *dir << dendl;
-	  ceph_assert(olddir); 
-	  continue;
-	}
-	dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, p);
-	dout(10) << " creating new rename import bound " << *dir << dendl;
-	dir->state_clear(CDir::STATE_AUTH);
-	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
-
-        if (!(++count % 1000))
-          mds->heartbeat_reset();
-      }
-    }
-
-    // rename may overwrite an empty directory and move it into stray dir.
-    unlinked.erase(renamed_diri);
-    for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
-      if (!linked.count(p->first))
-	continue;
-      ceph_assert(p->first->is_dir());
-      mds->mdcache->adjust_subtree_after_rename(p->first, p->second, false);
-
-      if (!(++count % 1000))
-        mds->heartbeat_reset();
+    CInode* diri = mds->mdcache->get_inode(renamed_dirino);
+    assert(diri);  // it was in the metablob
+    if (diri->get_parent_dn()) {
+      auto&& dfls = diri->get_subtree_dirfrags();
+      for (auto& d : dfls)
+	mds->mdcache->try_subtree_merge(d);
+    } else if (diri->get_num_dirfrags()) {
+      diri->state_clear(CInode::STATE_AUTH);
+      mds->mdcache->add_unconnected_inode(diri);
+      auto&& dfls = diri->get_nested_dirfrags();
+      for (auto& d : dfls)
+	mds->mdcache->adjust_subtree_auth(d, mds->get_nodeid());
+      unlinked.erase(diri);
     }
   }
 
   if (!unlinked.empty()) {
-    for (set<CInode*>::iterator p = linked.begin(); p != linked.end(); ++p)
-      unlinked.erase(*p);
     dout(10) << " unlinked set contains " << unlinked << dendl;
-    for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
-      CInode *in = p->first;
+    for (auto& in : unlinked) {
+      if (in->get_parent_dn())
+	continue;
+
       if (peerup) { // preserve unlinked inodes until peer commit
 	peerup->unlinked.insert(in);
 	if (in->snaprealm)
@@ -1593,7 +1437,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  if (!session->info.prealloc_inos.empty()) {
 	    inodeno_t ino = session->take_ino(used_preallocated_ino);
 	    session->info.prealloc_inos.erase(ino);
-	    ceph_assert(ino == used_preallocated_ino);
+	    ceph_assert(ino == used_preallocated_ino ||
+			g_conf()->mds_wipe_sessions);
 	  }
           mds->sessionmap.replay_dirty_session(session);
 	}
@@ -2208,7 +2053,7 @@ void EUpdate::update_segment()
     segment->sessionmapv = cmapv;
 
   if (had_peers)
-    segment->uncommitted_leaders.insert(reqid);
+    segment->uncommitted_leaders_peers.insert(reqid);
 }
 
 void EUpdate::replay(MDSRank *mds)
@@ -2218,7 +2063,7 @@ void EUpdate::replay(MDSRank *mds)
   
   if (had_peers) {
     dout(10) << "EUpdate.replay " << reqid << " had peers, expecting a matching ECommitted" << dendl;
-    segment->uncommitted_leaders.insert(reqid);
+    segment->uncommitted_leaders_peers.insert(reqid);
     set<mds_rank_t> peers;
     mds->mdcache->add_uncommitted_leader(reqid, segment, peers, true);
   }
@@ -2326,7 +2171,7 @@ void ECommitted::replay(MDSRank *mds)
 {
   if (mds->mdcache->uncommitted_leaders.count(reqid)) {
     dout(10) << "ECommitted.replay " << reqid << dendl;
-    mds->mdcache->uncommitted_leaders[reqid].ls->uncommitted_leaders.erase(reqid);
+    mds->mdcache->uncommitted_leaders[reqid].ls->uncommitted_leaders_peers.erase(reqid);
     mds->mdcache->uncommitted_leaders.erase(reqid);
   } else {
     dout(10) << "ECommitted.replay " << reqid << " -- didn't see original op" << dendl;
@@ -2642,7 +2487,7 @@ void EPeerUpdate::replay(MDSRank *mds)
 
 void ESubtreeMap::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 7, bl);
   encode(stamp, bl);
   encode(metablob, bl, features);
   encode(subtrees, bl);
@@ -2654,17 +2499,23 @@ void ESubtreeMap::encode(bufferlist& bl, uint64_t features) const
  
 void ESubtreeMap::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
-  if (struct_v >= 2)
-    decode(stamp, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  decode(stamp, bl);
   decode(metablob, bl);
   decode(subtrees, bl);
-  if (struct_v >= 4)
-    decode(ambiguous_subtrees, bl);
-  if (struct_v >= 3)
+  if (struct_v <= 6) {
+    set<dirfrag_t> _ambiguous_subtrees;
+    decode(_ambiguous_subtrees, bl);
+    for (auto& df : _ambiguous_subtrees)
+      ambiguous_subtrees[df].bounds = subtrees.at(df);
     decode(expire_pos, bl);
-  if (struct_v >= 6)
+    if (struct_v == 6)
+      decode(event_seq, bl);
+  } else {
+    decode(ambiguous_subtrees, bl);
+    decode(expire_pos, bl);
     decode(event_seq, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2688,9 +2539,9 @@ void ESubtreeMap::dump(Formatter *f) const
   f->close_section(); // subtrees
 
   f->open_array_section("ambiguous subtrees");
-  for(set<dirfrag_t>::const_iterator i = ambiguous_subtrees.begin();
-      i != ambiguous_subtrees.end(); ++i) {
-    f->dump_stream("dirfrag") << *i;
+  for(auto& p : ambiguous_subtrees) {
+    f->dump_stream("dirfrag") << p.first;
+    f->dump_stream("bounds") << p.second.bounds;
   }
   f->close_section(); // ambiguous subtrees
 
@@ -2710,92 +2561,10 @@ void ESubtreeMap::replay(MDSRank *mds)
   // suck up the subtree map?
   if (mds->mdcache->is_subtrees()) {
     dout(10) << "ESubtreeMap.replay -- i already have import map; verifying" << dendl;
-    int errors = 0;
 
-    for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = subtrees.begin();
-	 p != subtrees.end();
-	 ++p) {
-      CDir *dir = mds->mdcache->get_dirfrag(p->first);
-      if (!dir) {
-	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			  << " subtree root " << p->first << " not in cache";
-	++errors;
-	continue;
-      }
-      
-      if (!mds->mdcache->is_subtree(dir)) {
-	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			  << " subtree root " << p->first << " not a subtree in cache";
-	++errors;
-	continue;
-      }
-      if (dir->get_dir_auth().first != mds->get_nodeid()) {
-	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			  << " subtree root " << p->first
-			  << " is not mine in cache (it's " << dir->get_dir_auth() << ")";
-	++errors;
-	continue;
-      }
-
-      for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
-	mds->mdcache->get_force_dirfrag(*q, true);
-
-      set<CDir*> bounds;
-      mds->mdcache->get_subtree_bounds(dir, bounds);
-      for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-	CDir *b = mds->mdcache->get_dirfrag(*q);
-	if (!b) {
-	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			    << " subtree " << p->first << " bound " << *q << " not in cache";
-	++errors;
-	  continue;
-	}
-	if (bounds.count(b) == 0) {
-	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			    << " subtree " << p->first << " bound " << *q << " not a bound in cache";
-	++errors;
-	  continue;
-	}
-	bounds.erase(b);
-      }
-      for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q) {
-	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			  << " subtree " << p->first << " has extra bound in cache " << (*q)->dirfrag();
-	++errors;
-      }
-      
-      if (ambiguous_subtrees.count(p->first)) {
-	if (!mds->mdcache->have_ambiguous_import(p->first)) {
-	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			    << " subtree " << p->first << " is ambiguous but is not in our cache";
-	  ++errors;
-	}
-      } else {
-	if (mds->mdcache->have_ambiguous_import(p->first)) {
-	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			    << " subtree " << p->first << " is not ambiguous but is in our cache";
-	  ++errors;
-	}
-      }
-    }
-    
-    std::vector<CDir*> dirs;
-    mds->mdcache->get_subtrees(dirs);
-    for (const auto& dir : dirs) {
-      if (dir->get_dir_auth().first != mds->get_nodeid())
-	continue;
-      if (subtrees.count(dir->dirfrag()) == 0) {
-	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			  << " does not include cache subtree " << dir->dirfrag();
-	++errors;
-      }
-    }
-
-    if (errors) {
-      dout(0) << "journal subtrees: " << subtrees << dendl;
-      dout(0) << "journal ambig_subtrees: " << ambiguous_subtrees << dendl;
+    if (mds->mdcache->migrator->replay_check_ambiguous_subtrees(this)) {
       mds->mdcache->show_subtrees();
-      ceph_assert(!g_conf()->mds_debug_subtrees || errors == 0);
+      ceph_assert(!g_conf()->mds_debug_subtrees);
     }
     return;
   }
@@ -2806,28 +2575,21 @@ void ESubtreeMap::replay(MDSRank *mds)
   //metablob.print(*_dout);
   metablob.replay(mds, get_segment());
   
-  // restore import/export maps
-  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *dir = mds->mdcache->get_dirfrag(p->first);
+  // restore root/mydir subtree
+  for (auto &p : subtrees) {
+    CDir *dir = mds->mdcache->get_dirfrag(p.first);
     ceph_assert(dir);
-    if (ambiguous_subtrees.count(p->first)) {
-      // ambiguous!
-      mds->mdcache->add_ambiguous_import(p->first, p->second);
-      mds->mdcache->adjust_bounded_subtree_auth(dir, p->second,
-						mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
-    } else {
-      // not ambiguous
-      mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
-    }
+    // not ambiguous
+    mds->mdcache->adjust_bounded_subtree_auth(dir, p.second, mds->get_nodeid());
   }
 
-  mds->mdcache->recalc_auth_bits(true);
+  for (auto &p : ambiguous_subtrees) {
+    mds->mdcache->migrator->replay_import_start(p.first, p.second.bounds,
+						p.second.from, p.second.tid);
+  }
 
   mds->mdcache->show_subtrees();
 }
-
 
 
 // -----------------------
@@ -2964,39 +2726,26 @@ void EExport::replay(MDSRank *mds)
   dout(10) << "EExport.replay " << base << dendl;
   auto&& segment = get_segment();
   metablob.replay(mds, segment);
-  
-  CDir *dir = mds->mdcache->get_dirfrag(base);
-  ceph_assert(dir);
-  
-  set<CDir*> realbounds;
-  for (set<dirfrag_t>::iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = mds->mdcache->get_dirfrag(*p);
-    ceph_assert(bd);
-    realbounds.insert(bd);
-  }
 
-  // adjust auth away
-  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, CDIR_AUTH_UNDEF);
-
-  mds->mdcache->try_trim_non_auth_subtree(dir);
+  mds->mdcache->migrator->replay_export_dir(base, bounds, target,
+					    tid, segment);
 }
 
 void EExport::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   encode(stamp, bl);
   encode(metablob, bl, features);
   encode(base, bl);
   encode(bounds, bl);
   encode(target, bl);
+  encode(tid, bl);
   ENCODE_FINISH(bl);
 }
 
 void EExport::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(metablob, bl);
@@ -3004,6 +2753,8 @@ void EExport::decode(bufferlist::const_iterator &bl)
   decode(bounds, bl);
   if (struct_v >= 4)
     decode(target, bl);
+  if (struct_v >= 5)
+    decode(tid, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3015,10 +2766,8 @@ void EExport::dump(Formatter *f) const
   f->close_section();*/
   f->dump_stream("base dirfrag") << base;
   f->open_array_section("bounds dirfrags");
-  for (set<dirfrag_t>::const_iterator i = bounds.begin();
-      i != bounds.end(); ++i) {
-    f->dump_stream("dirfrag") << *i;
-  }
+  for (auto& df : bounds)
+    f->dump_stream("dirfrag") << df;
   f->close_section(); // bounds dirfrags
 }
 
@@ -3028,6 +2777,39 @@ void EExport::generate_test_instances(std::list<EExport*>& ls)
   ls.push_back(sample);
 }
 
+void EExportCommitted::replay(MDSRank *mds)
+{
+  dout(10) << "EExportCommitted.replay " << base << dendl;
+  mds->mdcache->migrator->replay_export_committed(base, tid);
+}
+
+void EExportCommitted::encode(bufferlist& bl, uint64_t features) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(base, bl);
+  encode(tid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EExportCommitted::decode(bufferlist::const_iterator &bl)
+{
+  DECODE_START(1, bl);
+  decode(base, bl);
+  decode(tid, bl);
+  DECODE_FINISH(bl);
+}
+
+void EExportCommitted::dump(Formatter *f) const
+{
+  f->dump_stream("base") << base;
+  f->dump_stream("tid") << tid;
+}
+
+void EExportCommitted::generate_test_instances(std::list<EExportCommitted*>& ls)
+{
+  EExportCommitted *sample = new EExportCommitted();
+  ls.push_back(sample);
+}
 
 // -----------------------
 // EImportStart
@@ -3044,26 +2826,7 @@ void EImportStart::replay(MDSRank *mds)
   auto&& segment = get_segment();
   metablob.replay(mds, segment);
 
-  // put in ambiguous import list
-  mds->mdcache->add_ambiguous_import(base, bounds);
-
-  // set auth partially to us so we don't trim it
-  CDir *dir = mds->mdcache->get_dirfrag(base);
-  ceph_assert(dir);
-
-  set<CDir*> realbounds;
-  for (vector<dirfrag_t>::iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = mds->mdcache->get_dirfrag(*p);
-    ceph_assert(bd);
-    if (!bd->is_subtree_root())
-      bd->state_clear(CDir::STATE_AUTH);
-    realbounds.insert(bd);
-  }
-
-  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds,
-					    mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
+  mds->mdcache->migrator->replay_import_start(base, bounds, from, tid);
 
   // open client sessions?
   if (mds->sessionmap.get_version() >= cmapv) {
@@ -3085,7 +2848,7 @@ void EImportStart::replay(MDSRank *mds)
 }
 
 void EImportStart::encode(bufferlist &bl, uint64_t features) const {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   encode(stamp, bl);
   encode(base, bl);
   encode(metablob, bl, features);
@@ -3093,11 +2856,12 @@ void EImportStart::encode(bufferlist &bl, uint64_t features) const {
   encode(cmapv, bl);
   encode(client_map, bl);
   encode(from, bl);
+  encode(tid, bl);
   ENCODE_FINISH(bl);
 }
 
 void EImportStart::decode(bufferlist::const_iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(base, bl);
@@ -3107,6 +2871,8 @@ void EImportStart::decode(bufferlist::const_iterator &bl) {
   decode(client_map, bl);
   if (struct_v >= 4)
     decode(from, bl);
+  if (struct_v >= 5)
+    decode(tid, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3131,46 +2897,32 @@ void EImportStart::generate_test_instances(std::list<EImportStart*>& ls)
 
 void EImportFinish::replay(MDSRank *mds)
 {
-  if (mds->mdcache->have_ambiguous_import(base)) {
-    dout(10) << "EImportFinish.replay " << base << " success=" << success << dendl;
-    if (success) {
-      mds->mdcache->finish_ambiguous_import(base);
-    } else {
-      CDir *dir = mds->mdcache->get_dirfrag(base);
-      ceph_assert(dir);
-      vector<dirfrag_t> bounds;
-      mds->mdcache->get_ambiguous_import_bounds(base, bounds);
-      mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
-      mds->mdcache->cancel_ambiguous_import(dir);
-      mds->mdcache->try_trim_non_auth_subtree(dir);
-   }
-  } else {
-    // this shouldn't happen unless this is an old journal
-    dout(10) << "EImportFinish.replay " << base << " success=" << success
-	     << " on subtree not marked as ambiguous" 
-	     << dendl;
-    mds->clog->error() << "failure replaying journal (EImportFinish)";
-    mds->damaged();
-    ceph_abort();  // Should be unreachable because damaged() calls respawn()
-  }
+  dout(10) << "EImportFinish.replay " << base << " tid " << tid << dendl;
+  mds->mdcache->migrator->replay_import_finish(base, tid, success);
 }
 
 void EImportFinish::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   encode(stamp, bl);
   encode(base, bl);
   encode(success, bl);
+  encode(from, bl);
+  encode(tid, bl);
   ENCODE_FINISH(bl);
 }
 
 void EImportFinish::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(base, bl);
   decode(success, bl);
+  if (struct_v >= 4) {
+    decode(from, bl);
+    decode(tid, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3229,11 +2981,8 @@ void EResetJournal::replay(MDSRank *mds)
   CDir *mydir = mds->mdcache->get_myin()->get_or_open_dirfrag(mds->mdcache, frag_t());
   mds->mdcache->adjust_subtree_auth(mydir, mds->get_nodeid());   
 
-  mds->mdcache->recalc_auth_bits(true);
-
   mds->mdcache->show_subtrees();
 }
-
 
 void ENoOp::encode(bufferlist &bl, uint64_t features) const
 {

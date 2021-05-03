@@ -59,7 +59,6 @@ public:
   bool try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
 			      int n=0, bool want_layout=false);
 
-  void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);
   void drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
@@ -67,12 +66,12 @@ public:
   void drop_rdlocks_for_early_reply(MutationImpl *mut);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
-  int get_cap_bit_for_lock_cache(int op);
   void create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout=nullptr);
   bool find_and_attach_lock_cache(MDRequestRef& mdr, CInode *diri);
   void invalidate_lock_caches(CDir *dir);
   void invalidate_lock_caches(SimpleLock *lock);
   void invalidate_lock_cache(MDLockCache *lock_cache);
+  bool revoke_async_dirop_caps(CInode *in, MDSGatherBuilder &gather_bld);
   void eval_lock_caches(Capability *cap);
   void put_lock_cache(MDLockCache* lock_cache);
 

@@ -32,15 +32,12 @@ private:
   dirfrag_t get_dirfrag() const { return dirfrag; }
   const filepath& get_path() const { return path; }
 
-  bool started;
-
 protected:
   MExportDirDiscover() :     
-    MMDSOp{MSG_MDS_EXPORTDIRDISCOVER, HEAD_VERSION, COMPAT_VERSION},
-    started(false) { }
+    MMDSOp{MSG_MDS_EXPORTDIRDISCOVER, HEAD_VERSION, COMPAT_VERSION} { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
     MMDSOp{MSG_MDS_EXPORTDIRDISCOVER, HEAD_VERSION, COMPAT_VERSION},
-    from(f), dirfrag(df), path(p), started(false) {
+    from(f), dirfrag(df), path(p) {
     set_tid(tid);
   }
   ~MExportDirDiscover() final {}

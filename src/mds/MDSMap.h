@@ -47,6 +47,7 @@
 #define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
 #define MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 CompatSet::Feature(9, "file layout v2")
 #define MDS_FEATURE_INCOMPAT_SNAPREALM_V2 CompatSet::Feature(10, "snaprealm v2")
+#define MDS_FEATURE_INCOMPAT_NO_SUBTREEMAP CompatSet::Feature(11, "no subtreemap")
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 

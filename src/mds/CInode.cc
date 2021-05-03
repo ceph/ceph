@@ -784,12 +784,16 @@ CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
 {
   ceph_assert(is_dir());
 
+  // safety check
+  if (mdcache->mds->is_rejoin() && !mdcache->rejoin_is_dirfrag_auth(ino(), fg))
+    return nullptr;
+
   // have it?
   CDir *dir = get_dirfrag(fg);
   if (!dir) {
     // create it.
-    ceph_assert(is_auth() || mdcache->mds->is_any_replay());
-    dir = new CDir(this, fg, mdcache, is_auth());
+    ceph_assert(is_auth() || !mdcache->is_subtrees_connected());
+    dir = new CDir(this, fg, mdcache, true);
     add_dirfrag(dir);
   }
   return dir;
@@ -834,9 +838,16 @@ void CInode::close_dirfrag(frag_t fg)
   for (const auto &p : dir->items)
     dout(14) << __func__ << " LEFTOVER dn " << *p.second << dendl;
 
-  ceph_assert(dir->get_num_ref() == 0);
-  delete dir;
   dirfrags.erase(fg);
+  if (dir->get_num_ref() == 0) {
+    delete dir;
+  } else {
+#ifdef MDS_REF_SET
+    ceph_assert(dir->get_num_ref() == dir->get_num_ref(CDir::PIN_PTRWAITER));
+#endif
+    put(CInode::PIN_DIRFRAG);
+    dir->inode = nullptr;
+  }
 }
 
 void CInode::close_dirfrags()
@@ -2816,6 +2827,8 @@ bool CInode::freeze_inode(int auth_pin_allowance)
       get(PIN_FROZEN);
       state_set(STATE_FROZEN);
       dir->num_frozen_inodes++;
+      if (is_frozen_auth_pin())
+	unfreeze_auth_pin();
     }
     return true;
   }
@@ -2826,6 +2839,9 @@ bool CInode::freeze_inode(int auth_pin_allowance)
 
   get(PIN_FREEZING);
   state_set(STATE_FREEZING);
+
+  if (is_frozen_auth_pin())
+    unfreeze_auth_pin();
 
   if (!dir->lock_caches_with_auth_pins.empty())
     mdcache->mds->locker->invalidate_lock_caches(dir);
@@ -2844,7 +2860,7 @@ bool CInode::freeze_inode(int auth_pin_allowance)
   return state_test(STATE_FROZEN);
 }
 
-void CInode::unfreeze_inode(MDSContext::vec& finished) 
+void CInode::unfreeze_inode(MDSContext::vec& finished)
 {
   dout(10) << __func__ << dendl;
   if (state_test(STATE_FREEZING)) {
@@ -2862,28 +2878,39 @@ void CInode::unfreeze_inode(MDSContext::vec& finished)
 
 void CInode::unfreeze_inode()
 {
-    MDSContext::vec finished;
-    unfreeze_inode(finished);
+  MDSContext::vec finished;
+  unfreeze_inode(finished);
+  if (!finished.empty())
     mdcache->mds->queue_waiters(finished);
 }
 
 void CInode::freeze_auth_pin()
 {
   ceph_assert(state_test(CInode::STATE_FROZEN));
+  ceph_assert(!state_test(CInode::STATE_FROZENAUTHPIN));
   state_set(CInode::STATE_FROZENAUTHPIN);
   get_parent_dir()->num_frozen_inodes++;
+
+  MDSContext::vec finished;
+  unfreeze_inode(finished);
+  if (!finished.empty())
+    mdcache->mds->queue_waiters(finished);
+}
+
+void CInode::unfreeze_auth_pin(MDSContext::vec& finished)
+{
+  state_clear(CInode::STATE_FROZENAUTHPIN);
+  get_parent_dir()->num_frozen_inodes--;
+  if (!state_test(STATE_FREEZING|STATE_FROZEN))
+    take_waiting(WAIT_UNFREEZE, finished);
 }
 
 void CInode::unfreeze_auth_pin()
 {
-  ceph_assert(state_test(CInode::STATE_FROZENAUTHPIN));
-  state_clear(CInode::STATE_FROZENAUTHPIN);
-  get_parent_dir()->num_frozen_inodes--;
-  if (!state_test(STATE_FREEZING|STATE_FROZEN)) {
-    MDSContext::vec finished;
-    take_waiting(WAIT_UNFREEZE, finished);
+  MDSContext::vec finished;
+  unfreeze_auth_pin(finished);
+  if (!finished.empty())
     mdcache->mds->queue_waiters(finished);
-  }
 }
 
 void CInode::clear_ambiguous_auth(MDSContext::vec& finished)
@@ -2897,7 +2924,8 @@ void CInode::clear_ambiguous_auth()
 {
   MDSContext::vec finished;
   clear_ambiguous_auth(finished);
-  mdcache->mds->queue_waiters(finished);
+  if (!finished.empty())
+    mdcache->mds->queue_waiters(finished);
 }
 
 // auth_pins
@@ -3127,6 +3155,9 @@ void CInode::close_snaprealm(bool nojoin)
 
 SnapRealm *CInode::find_snaprealm() const
 {
+  if (!mdcache->is_subtrees_connected())
+    return nullptr;
+
   const CInode *cur = this;
   while (!cur->snaprealm) {
     const CDentry *pdn = cur->get_oldest_parent_dn();
@@ -3256,12 +3287,13 @@ bool CInode::try_drop_loner()
 
   int other_allowed = get_caps_allowed_by_type(CAP_ANY);
   Capability *cap = get_client_cap(loner_cap);
-  if (!cap ||
-      (cap->issued() & ~other_allowed) == 0) {
-    set_loner_cap(-1);
-    return true;
-  }
-  return false;
+  if (cap && (cap->issued() & ~other_allowed))
+    return false;
+
+  if (cap)
+    cap->clear_lock_cache_allowed(-1);
+  set_loner_cap(-1);
+  return true;
 }
 
 
@@ -3356,6 +3388,14 @@ void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
     if (mds_caps_wanted.empty())
       adjust_num_caps_notable(-1);
   }
+}
+
+void CInode::clear_mds_caps_wanted()
+{
+  if (mds_caps_wanted.empty())
+    return;
+  mds_caps_wanted.clear();
+  adjust_num_caps_notable(-1);
 }
 
 Capability *CInode::add_client_cap(client_t client, Session *session,
@@ -3462,16 +3502,35 @@ void CInode::clear_client_caps_after_export()
     remove_client_cap(client_caps.begin()->first);
   loner_cap = -1;
   want_loner_cap = -1;
-  if (!get_mds_caps_wanted().empty()) {
-    mempool::mds_co::compact_map<int32_t,int32_t> empty;
-    set_mds_caps_wanted(empty);
-  }
+  clear_mds_caps_wanted();
 }
 
 void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
 {
   for (const auto &p : client_caps) {
     cl[p.first] = p.second.make_export();
+  }
+}
+
+void CInode::reconnect_filelocks(client_t client, bufferlist& locks)
+{
+  using ceph::decode;
+  int numlocks;
+  ceph_filelock lock;
+  auto p = locks.cbegin();
+  decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    decode(lock, p);
+    lock.client = client.v;
+    get_fcntl_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock>(lock.start, lock));
+    ++get_fcntl_lock_state()->client_held_lock_counts[client.v];
+  }
+  decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    decode(lock, p);
+    lock.client = client.v;
+    get_flock_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock> (lock.start, lock));
+    ++get_flock_lock_state()->client_held_lock_counts[client.v];
   }
 }
 
@@ -3501,12 +3560,15 @@ int CInode::get_caps_allowed_ever() const
 
 int CInode::get_caps_allowed_by_type(int type) const
 {
-  return 
+  int allowed =
     CEPH_CAP_PIN |
     (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
     (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
     (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
     (linklock.gcaps_allowed(type) << linklock.get_cap_shift());
+  if (is_dir() && !(allowed & CEPH_CAP_FILE_EXCL))
+    allowed &= ~CEPH_CAP_ANY_DIR_OPS;
+  return allowed;
 }
 
 int CInode::get_caps_careful() const
@@ -5226,19 +5288,18 @@ void CInode::queue_export_pin(mds_rank_t export_pin)
       target = mdcache->hash_into_rank_bucket(ino(), dir->get_frag());
     }
 
-    if (target != MDS_RANK_NONE) {
-      if (dir->is_subtree_root()) {
-	// set auxsubtree bit or export it
-	if (!dir->state_test(CDir::STATE_AUXSUBTREE) ||
-	    target != dir->get_dir_auth().first)
-	  queue = true;
-      } else {
-	// create aux subtree or export it
-	queue = true;
+    if (target == MDS_RANK_NONE) {
+      if (dir->state_test(CDir::STATE_AUXBOUND)) {
+	dout(10) << " clear aux bound on " << *dir << dendl;
+	dir->state_clear(CDir::STATE_AUXBOUND);
       }
     } else {
-      // clear aux subtrees ?
-      queue = dir->state_test(CDir::STATE_AUXSUBTREE);
+      if (!dir->state_test(CDir::STATE_AUXBOUND)) {
+	dout(10) << " create aux bound on " << *dir << dendl;
+	dir->state_set(CDir::STATE_AUXBOUND);
+      }
+      if (target != dir->authority().first)
+	queue = true;
     }
 
     if (queue)

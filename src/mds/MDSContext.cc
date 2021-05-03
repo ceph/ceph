@@ -13,6 +13,7 @@
  */
 
 
+#include "CDir.h"
 #include "MDSRank.h"
 
 #include "MDSContext.h"
@@ -91,7 +92,8 @@ bool MDSIOContextBase::check_ios_in_flight(ceph::coarse_mono_time cutoff,
   }
 }
 
-void MDSIOContextBase::complete(int r) {
+void MDSIOContextBase::complete(int r)
+{
   MDSRank *mds = get_mds();
 
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
@@ -100,7 +102,12 @@ void MDSIOContextBase::complete(int r) {
   // lock here when MDSContext::complete would otherwise assume the lock is
   // already acquired.
   std::lock_guard l(mds->mds_lock);
+  complete_locked(r);
+}
 
+void MDSIOContextBase::complete_locked(int r)
+{
+  MDSRank *mds = get_mds();
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
             << typeid(*this).name() << dendl;
@@ -115,14 +122,26 @@ void MDSIOContextBase::complete(int r) {
   }
 }
 
-void MDSLogContextBase::complete(int r) {
-  MDLog *mdlog = get_mds()->mdlog;
-  uint64_t safe_pos = write_pos;
+void MDSLogContextBase::complete(int r)
+{
+  MDSRank *mds = get_mds();
+  uint64_t pos = write_pos;
+  uint64_t seq = event_seq;
+
   pre_finish(r);
-  // MDSIOContext::complete() free this
-  MDSIOContextBase::complete(r);
+  {
+    std::lock_guard l(mds->mds_lock);
+
+    for (auto& d : subtrees) {
+      d->last_journaled = seq;
+      d->put(CDir::PIN_PTRWAITER);
+    }
+    // will free 'this'
+    complete_locked(r);
+  }
   // safe_pos must be updated after MDSIOContext::complete() call
-  mdlog->set_safe_pos(safe_pos);
+  if (pos)
+    mds->mdlog->set_safe_pos(pos, seq);
 }
 
 void MDSIOContextWrapper::finish(int r)

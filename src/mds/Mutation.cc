@@ -16,6 +16,7 @@
 #include "ScatterLock.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "LogSegment.h"
 
 // MutationImpl
 
@@ -315,21 +316,29 @@ bool MDRequestImpl::freeze_auth_pin(CInode *inode)
     return false;
   }
   inode->freeze_auth_pin();
-  inode->unfreeze_inode();
   return true;
 }
 
-void MDRequestImpl::unfreeze_auth_pin(bool clear_inode)
+void MDRequestImpl::unfreeze_auth_pin(MDSContext::vec& finished)
 {
-  ceph_assert(more()->is_freeze_authpin);
+  CInode *inode = more()->rename_inode;
+  if (inode->is_frozen_auth_pin())
+    inode->unfreeze_auth_pin(finished);
+  else
+    inode->unfreeze_inode(finished);
+  more()->is_freeze_authpin = false;
+  more()->rename_inode = nullptr;
+}
+
+void MDRequestImpl::unfreeze_auth_pin()
+{
   CInode *inode = more()->rename_inode;
   if (inode->is_frozen_auth_pin())
     inode->unfreeze_auth_pin();
   else
     inode->unfreeze_inode();
   more()->is_freeze_authpin = false;
-  if (clear_inode)
-    more()->rename_inode = NULL;
+  more()->rename_inode = nullptr;
 }
 
 void MDRequestImpl::set_remote_frozen_auth_pin(CInode *inode)
@@ -348,11 +357,15 @@ void MDRequestImpl::set_ambiguous_auth(CInode *inode)
   more()->is_ambiguous_auth = true;
 }
 
+void MDRequestImpl::clear_ambiguous_auth(MDSContext::vec& finished)
+{
+  more()->rename_inode->clear_ambiguous_auth(finished);
+  more()->is_ambiguous_auth = false;
+}
+
 void MDRequestImpl::clear_ambiguous_auth()
 {
-  CInode *inode = more()->rename_inode;
-  ceph_assert(inode && more()->is_ambiguous_auth);
-  inode->clear_ambiguous_auth();
+  more()->rename_inode->clear_ambiguous_auth();
   more()->is_ambiguous_auth = false;
 }
 
@@ -367,7 +380,7 @@ bool MDRequestImpl::can_auth_pin(MDSCacheObject *object)
 void MDRequestImpl::drop_local_auth_pins()
 {
   if (has_more() && more()->is_freeze_authpin)
-    unfreeze_auth_pin(true);
+    unfreeze_auth_pin();
   MutationImpl::drop_local_auth_pins();
 }
 
@@ -608,4 +621,16 @@ void MDLockCache::detach_dirfrags()
     ++i;
   }
   items_dir.reset();
+}
+
+void MDLockCache::update_caps_allowed(LogSegment *ls)
+{
+  if (invalidating)
+    return;
+
+  client_t loner = diri->get_loner();
+  if (loner >= 0 && loner == client_cap->get_client()) {
+    client_cap->set_lock_cache_allowed(get_cap_bit());
+    ls->open_files.push_back(&diri->item_open_file);
+  }
 }

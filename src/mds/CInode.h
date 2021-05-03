@@ -368,6 +368,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_DISTEPHEMERALPIN       = (1<<20);
   static const int STATE_RANDEPHEMERALPIN       = (1<<21);
   static const int STATE_CLIENTWRITEABLE	= (1<<22);
+  static const int STATE_UNCONNECTED		= (1<<23);
 
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
@@ -662,6 +663,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   bool is_head() const { return last == CEPH_NOSNAP; }
 
+  bool is_unconnected() const { return state_test(STATE_UNCONNECTED); }
+
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() const {
     return state_test(STATE_AMBIGUOUSAUTH) ||
@@ -870,6 +873,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   const mempool::mds_co::compact_map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
   void set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m);
   void set_mds_caps_wanted(mds_rank_t mds, int32_t wanted);
+  void clear_mds_caps_wanted();
 
   const mempool_cap_map& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
@@ -898,6 +902,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
   void clear_client_caps_after_export();
   void export_client_caps(std::map<client_t,Capability::Export>& cl);
+
+  void reconnect_filelocks(client_t client, bufferlist& locks);
 
   // caps allowed
   int get_caps_liked() const;
@@ -943,6 +949,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void unfreeze_inode();
 
   void freeze_auth_pin();
+  void unfreeze_auth_pin(MDSContext::vec& finished);
   void unfreeze_auth_pin();
 
   // -- reference counting --
@@ -1060,8 +1067,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   snapid_t          first, last;
   mempool::mds_co::compact_set<snapid_t> dirty_old_rstats;
 
-  uint64_t last_journaled = 0;       // log offset for the last time i was journaled
-  //loff_t last_open_journaled;  // log offset for the last journaled EOpen
+  uint64_t last_journal = 0;	// log event seq for the last time i was added to log event
   utime_t last_dirstat_prop;
 
   // list item node for when we have unpropagated rstat data

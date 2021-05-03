@@ -138,7 +138,8 @@ public:
   static const unsigned STATE_DIRTYDFT =      (1<<16);  // dirty dirfragtree
   static const unsigned STATE_BADFRAG =       (1<<17);  // bad dirfrag
   static const unsigned STATE_TRACKEDBYOFT =  (1<<18);  // tracked by open file table
-  static const unsigned STATE_AUXSUBTREE =    (1<<19);  // no subtree merge
+  static const unsigned STATE_AUXBOUND =      (1<<19);  // auxiliary export bound
+  static const unsigned STATE_EXPIRABLETREE = (1<<20);  // expirable subtree
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -154,7 +155,8 @@ public:
    STATE_EXPORTBOUND |
    STATE_FROZENTREE |
    STATE_STICKY |
-   STATE_TRACKEDBYOFT);
+   STATE_TRACKEDBYOFT |
+   STATE_EXPIRABLETREE);
   static const unsigned MASK_STATE_EXPORT_KEPT = 
   (STATE_EXPORTING |
    STATE_IMPORTBOUND |
@@ -162,13 +164,15 @@ public:
    STATE_FROZENTREE |
    STATE_FROZENDIR |
    STATE_STICKY |
-   STATE_TRACKEDBYOFT);
+   STATE_TRACKEDBYOFT|
+   STATE_EXPIRABLETREE);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
   (STATE_DIRTY |
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND |
-   STATE_AUXSUBTREE |
-   STATE_REJOINUNDEF);
+   STATE_AUXBOUND |
+   STATE_REJOINUNDEF |
+   STATE_EXPIRABLETREE);
 
   // -- rep spec --
   static const int REP_NONE =     0;
@@ -454,6 +458,57 @@ public:
     DECODE_FINISH(p);
   }
 
+  // pin/unpin subtree
+  void pin_subtree() {
+    ceph_assert(is_subtree_root());
+    if (!state_test(STATE_EXPIRABLETREE))
+      return;
+    state_clear(STATE_EXPIRABLETREE);
+    get(PIN_SUBTREE);
+    if (num_replicas() == 1)
+      get(PIN_REPLICATED);
+  }
+  void unpin_subtree() {
+    ceph_assert(is_subtree_root());
+    if (state_test(STATE_EXPIRABLETREE))
+      return;
+    state_set(STATE_EXPIRABLETREE);
+    put(PIN_SUBTREE);
+    if (num_replicas() == 1)
+      put(PIN_REPLICATED);
+  }
+
+  unsigned add_replica(mds_rank_t mds) {
+    auto it = get_replicas().find(mds);
+    if (it != get_replicas().end())
+      return ++it->second;  // inc nonce
+    if (num_replicas() == (int)(state_test(STATE_EXPIRABLETREE) ? 1 : 0))
+      get(PIN_REPLICATED);
+    return get_replicas()[mds] = 1;
+  }
+  void add_replica(mds_rank_t mds, unsigned nonce) {
+    auto it = get_replicas().find(mds);
+    if (it != get_replicas().end()) {
+      it->second = nonce;
+      return;
+    }
+    if (num_replicas() == (int)(state_test(STATE_EXPIRABLETREE) ? 1 : 0))
+      get(PIN_REPLICATED);
+    get_replicas()[mds] = nonce;
+  }
+  void remove_replica(mds_rank_t mds) {
+    auto it = get_replicas().find(mds);
+    ceph_assert(it != get_replicas().end());
+    get_replicas().erase(it);
+    if (num_replicas() == (int)(state_test(STATE_EXPIRABLETREE) ? 1 : 0))
+      put(PIN_REPLICATED);
+  }
+  void clear_replica_map() {
+    if (num_replicas() > (int)(state_test(STATE_EXPIRABLETREE) ? 1 : 0))
+      put(PIN_REPLICATED);
+    replica_map.clear();
+  }
+
   // -- state --
   bool is_complete() { return state & STATE_COMPLETE; }
   bool is_exporting() { return state & STATE_EXPORTING; }
@@ -614,6 +669,9 @@ public:
   frag_t frag;   // my frag
 
   snapid_t first = 2;
+
+  uint64_t last_journaled = 0;	// log event seq for the last time i was journaled
+
   mempool::mds_co::compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data

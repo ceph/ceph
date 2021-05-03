@@ -628,6 +628,13 @@ void CDentry::dump(Formatter *f) const
   f->close_section();
 }
 
+unsigned char CDentry::linkage_t::get_d_type() const
+{
+  if (is_primary())
+    return inode->d_type();
+  return is_remote() ? remote_d_type : 0;
+}
+
 std::string CDentry::linkage_t::get_remote_d_type_string() const
 {
   switch (DTTOIF(remote_d_type)) {

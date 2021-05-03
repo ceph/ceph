@@ -20,6 +20,7 @@
 // events i know of
 #include "events/ESubtreeMap.h"
 #include "events/EExport.h"
+#include "events/EExportCommitted.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
@@ -145,6 +146,9 @@ std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, 
     break;
   case EVENT_EXPORT:
     le = std::make_unique<EExport>();
+    break;
+  case EVENT_EXPORTCOMMITTED:
+    le = std::make_unique<EExportCommitted>();
     break;
   case EVENT_IMPORTSTART:
     le = std::make_unique<EImportStart>();

@@ -28,17 +28,18 @@ public:
   EMetaBlob metablob; // exported dir
 protected:
   dirfrag_t      base;
-  set<dirfrag_t> bounds;
+  vector<dirfrag_t> bounds;
   mds_rank_t target;
+  uint64_t tid;
   
 public:
   EExport() :
     LogEvent(EVENT_EXPORT), target(MDS_RANK_NONE) { }
-  EExport(MDLog *mdlog, CDir *dir, mds_rank_t t) :
+  EExport(dirfrag_t b, const vector<dirfrag_t>& bds, mds_rank_t t, uint64_t _tid) :
     LogEvent(EVENT_EXPORT),
-    base(dir->dirfrag()), target(t) { }
+    base(b), bounds(bds), target(t), tid(_tid) { }
   
-  set<dirfrag_t> &get_bounds() { return bounds; }
+  const vector<dirfrag_t>& get_bounds() const { return bounds; }
   
   void print(ostream& out) const override {
     out << "EExport " << base << " to mds." << target << " " << metablob;

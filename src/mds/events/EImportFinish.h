@@ -24,13 +24,17 @@
 class EImportFinish : public LogEvent {
  protected:
   dirfrag_t base; // imported dir
+  mds_rank_t from;
+  uint64_t tid;
   bool success;
 
  public:
-  EImportFinish(CDir *dir, bool s) : LogEvent(EVENT_IMPORTFINISH), 
-				     base(dir->dirfrag()),
-				     success(s) { }
-  EImportFinish() : LogEvent(EVENT_IMPORTFINISH), base(), success(false) { }
+  EImportFinish(dirfrag_t b, mds_rank_t f, uint64_t t, bool s) :
+    LogEvent(EVENT_IMPORTFINISH),
+    base(b), from(f), tid(t), success(s) { }
+  EImportFinish() :
+    LogEvent(EVENT_IMPORTFINISH),
+    base(), from(MDS_RANK_NONE), tid(0), success(false) { }
   
   void print(ostream& out) const override {
     out << "EImportFinish " << base;

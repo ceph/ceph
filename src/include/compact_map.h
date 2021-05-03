@@ -247,6 +247,10 @@ public:
      return reverse_iterator(this);
    return reverse_iterator(this, map->rend());
   }
+  T& at(const Key& k) {
+    ceph_assert(map);
+    return map->at(k);
+  }
   iterator find(const Key& k) {
     if (!map)
       return iterator(this);

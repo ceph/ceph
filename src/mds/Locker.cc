@@ -362,12 +362,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     if (!object->is_auth()) {
-      if (mdr->lock_cache) { // debug
-	ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
-	CDentry *dn = mdr->dn[0].back();
-	ceph_assert(dn->get_projected_linkage()->is_remote());
-      }
-
       if (object->is_ambiguous_auth()) {
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
@@ -386,7 +380,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       if (mdr->lock_cache) {
 	CDir *dir;
 	if (CInode *in = dynamic_cast<CInode*>(object)) {
-	  ceph_assert(!in->is_frozen_inode() && !in->is_frozen_auth_pin());
 	  dir = in->get_projected_parent_dir();
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(object)) {
 	  dir = dn->get_dir();
@@ -396,12 +389,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	if (dir->get_inode() == mdr->lock_cache->get_dir_inode()) {
 	  // forcibly auth pin if there is lock cache on parent dir
 	  continue;
-	}
-
-	{ // debug
-	  ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
-	  CDentry *dn = mdr->dn[0].back();
-	  ceph_assert(dn->get_projected_linkage()->is_remote());
 	}
       }
 
@@ -423,9 +410,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
       object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-
-      if (mdr->is_any_remote_auth_pin())
-	notify_freeze_waiter(object);
 
       return false;
     }
@@ -519,6 +503,12 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	} else {
 	  if (mdr->locking && lock != mdr->locking)
 	    cancel_locking(mdr.get(), &issue_set);
+	  if (it != mdr->locks.end() && it->is_wrlock()) {
+	    bool ni = false;
+	    wrlock_finish(it, mdr.get(), &ni);
+	    if (ni)
+	      issue_set.insert(static_cast<CInode*>(lock->get_parent()));
+	  }
 	  marker.message = "waiting for remote wrlocks";
 	  remote_wrlock_start(lock, p.wrlock_target, mdr);
 	  goto out;
@@ -591,29 +581,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   return result;
 }
 
-void Locker::notify_freeze_waiter(MDSCacheObject *o)
-{
-  CDir *dir = NULL;
-  if (CInode *in = dynamic_cast<CInode*>(o)) {
-    if (!in->is_root())
-      dir = in->get_parent_dir();
-  } else if (CDentry *dn = dynamic_cast<CDentry*>(o)) {
-    dir = dn->get_dir();
-  } else {
-    dir = dynamic_cast<CDir*>(o);
-    ceph_assert(dir);
-  }
-  if (dir) {
-    if (dir->is_freezing_dir())
-      mdcache->fragment_freeze_inc_num_waiters(dir);
-    if (dir->is_freezing_tree()) {
-      while (!dir->is_freezing_tree_root())
-	dir = dir->get_parent_dir();
-      mdcache->migrator->export_freeze_inc_num_waiters(dir);
-    }
-  }
-}
-
 void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
 {
   for (const auto &p : mut->locks) {
@@ -622,7 +589,7 @@ void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
     MDSCacheObject *obj = p.lock->get_parent();
     ceph_assert(obj->is_auth());
     if (skip_dentry &&
-	(p.lock->get_type() == CEPH_LOCK_DN || p.lock->get_type() == CEPH_LOCK_DVERSION))
+	(p.lock->get_type() == CEPH_LOCK_DN || p.lock->get_type() == CEPH_LOCK_ISNAP))
       continue;
     dout(10) << "set_xlocks_done on " << *p.lock << " " << *obj << dendl;
     p.lock->set_xlock_done();
@@ -770,7 +737,8 @@ void Locker::drop_locks_for_fragment_unfreeze(MutationImpl *mut)
 
   for (auto it = mut->locks.begin(); it != mut->locks.end(); ) {
     SimpleLock *lock = it->lock;
-    if (lock->get_type() == CEPH_LOCK_IDFT) {
+    if (lock->get_type() == CEPH_LOCK_ISNAP ||
+	lock->get_type() == CEPH_LOCK_IDFT) {
       ++it;
       continue;
     }
@@ -814,19 +782,6 @@ void Locker::put_lock_cache(MDLockCache* lock_cache)
   mds->queue_waiter(new C_MDL_DropCache(this, lock_cache));
 }
 
-int Locker::get_cap_bit_for_lock_cache(int op)
-{
-  switch(op) {
-    case CEPH_MDS_OP_CREATE:
-      return CEPH_CAP_DIR_CREATE;
-    case CEPH_MDS_OP_UNLINK:
-      return CEPH_CAP_DIR_UNLINK;
-    default:
-      ceph_assert(0 == "unsupported operation");
-      return 0;
-  }
-}
-
 void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
 {
   ceph_assert(lock_cache->item_cap_lock_cache.is_on_list());
@@ -839,7 +794,7 @@ void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
 
   Capability *cap = lock_cache->client_cap;
   if (cap) {
-    int cap_bit = get_cap_bit_for_lock_cache(lock_cache->opcode);
+    auto cap_bit = lock_cache->get_cap_bit();
     cap->clear_lock_cache_allowed(cap_bit);
     if (cap->issued() & cap_bit)
       issue_caps(lock_cache->get_dir_inode(), cap);
@@ -849,6 +804,9 @@ void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
 
   if (!cap) {
     lock_cache->item_cap_lock_cache.remove_myself();
+    lock_cache->client_cap = nullptr;
+    if (!lock_cache->cap_waiters.empty())
+      mds->queue_waiters(lock_cache->cap_waiters);
     put_lock_cache(lock_cache);
   }
 }
@@ -860,9 +818,11 @@ void Locker::eval_lock_caches(Capability *cap)
     ++p;
     if (!lock_cache->invalidating)
       continue;
-    int cap_bit = get_cap_bit_for_lock_cache(lock_cache->opcode);
-    if (!(cap->issued() & cap_bit)) {
+    if (!(cap->issued() & lock_cache->get_cap_bit())) {
       lock_cache->item_cap_lock_cache.remove_myself();
+      lock_cache->client_cap = nullptr;
+      if (!lock_cache->cap_waiters.empty())
+	mds->queue_waiters(lock_cache->cap_waiters);
       put_lock_cache(lock_cache);
     }
   }
@@ -887,6 +847,36 @@ void Locker::invalidate_lock_caches(SimpleLock *lock)
     for (auto& lc : lock_caches)
       invalidate_lock_cache(lc);
   }
+}
+
+bool Locker::revoke_async_dirop_caps(CInode *in, MDSGatherBuilder &gather_bld)
+{
+  dout(10) << "revoke_async_dirop_caps on " << *in << dendl;
+  client_t loner = in->get_loner();
+  if (loner < 0)
+    return false;
+  Capability *cap = in->get_client_cap(loner);
+  if (!cap)
+    return false;
+
+  cap->clear_lock_cache_allowed(-1);
+  if (!(cap->issued() & CEPH_CAP_ANY_DIR_OPS))
+    return false;
+
+  for (auto it = cap->lock_caches.begin(); !it.end(); ) {
+    MDLockCache* lock_cache = *it;
+    ++it;
+    if (!lock_cache->invalidating)
+      invalidate_lock_cache(lock_cache);
+  }
+
+  unsigned n = 0;
+  for (auto it = cap->lock_caches.begin(); !it.end(); ++it) {
+    MDLockCache* lock_cache = *it;
+    lock_cache->cap_waiters.push_back(gather_bld.new_sub());
+    ++n;
+  }
+  return n > 0;
 }
 
 void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout)
@@ -978,7 +968,6 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *d
   auto lock_cache = new MDLockCache(cap, opcode);
   if (dir_layout)
     lock_cache->set_dir_layout(*dir_layout);
-  cap->set_lock_cache_allowed(get_cap_bit_for_lock_cache(opcode));
 
   for (auto dir : dfv) {
     // prevent subtree migration
@@ -1313,6 +1302,8 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
     eval_any(&in->nestlock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IFLOCK)
     eval_any(&in->flocklock, &need_issue, &finishers, caps_imported);
+  if (mask & CEPH_LOCK_ISNAP)
+    eval_any(&in->snaplock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IPOLICY)
     eval_any(&in->policylock, &need_issue, &finishers, caps_imported);
 
@@ -1664,10 +1655,23 @@ bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, MDRequestRef& mdr)
   for (const auto& p : lov) {
     auto lock = p.lock;
     ceph_assert(p.is_rdlock());
-    if (!mdr->is_rdlocked(lock) && !rdlock_try(lock, mdr->get_client())) {
-      lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD,
-                       new C_MDS_RetryRequest(mdcache, mdr));
-      goto failed;
+    if (mdr->is_rdlocked(lock))
+      continue;
+
+    if (!lock->can_rdlock(mdr->get_client())) {
+      MDSCacheObject *object = lock->get_parent();
+      if (object->is_auth() && !object->can_auth_pin()) {
+	object->add_waiter(MDSCacheObject::WAIT_UNFREEZE,
+			   new C_MDS_RetryRequest(mdcache, mdr));
+	goto failed;
+      }
+
+      _rdlock_kick(lock, false);
+      if (!lock->can_rdlock(mdr->get_client())) {
+	lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD,
+			 new C_MDS_RetryRequest(mdcache, mdr));
+	goto failed;
+      }
     }
     lock->get_rdlock();
     mdr->emplace_lock(lock, MutationImpl::LockOp::RDLOCK);
@@ -1708,7 +1712,8 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   dout(7) << "wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->get_wrlock(true);
-  mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  it->flags |= MutationImpl::LockOp::WRLOCK; // may already remote_wrlocked
 }
 
 bool Locker::wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client)
@@ -2487,6 +2492,7 @@ bool Locker::revoke_stale_caps(Session *session)
 
   // invalidate all caps
   session->inc_cap_gen();
+  bool can_evict = !session->is_importing();
 
   bool ret = true;
   std::vector<CInode*> to_eval;
@@ -2505,7 +2511,7 @@ bool Locker::revoke_stale_caps(Session *session)
     if (!revoking)
       continue;
 
-    if (revoking & CEPH_CAP_ANY_WR) {
+    if ((revoking & CEPH_CAP_ANY_WR) && can_evict) {
       ret = false;
       break;
     }
@@ -5374,6 +5380,13 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
       dout(10) << "file_eval read-only FS, syncing " << *lock << " on " << *lock->get_parent() << dendl;
       simple_sync(lock, need_issue);
     }
+    return;
+  }
+
+  if (in->is_stray()) {
+    // we want to keep straydir writable at all times.
+    if (!lock->is_rdlocked() && lock->get_state() != LOCK_LOCK)
+      simple_lock(lock, need_issue);
     return;
   }
 

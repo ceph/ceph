@@ -413,9 +413,8 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
     const entity_name_t name = *i;
     Session *session = session_map[name];
 
-    if (session->is_open() ||
+    if (session->is_open_or_stale() ||
 	session->is_closing() ||
-	session->is_stale() ||
 	session->is_killing()) {
       dout(20) << "  " << name << dendl;
       // Serialize K
@@ -499,7 +498,7 @@ uint64_t SessionMap::set_state(Session *session, int s) {
       by_state_entry = by_state.emplace(s, new xlist<Session*>).first;
     by_state_entry->second->push_back(&session->item_session_list);
 
-    if (session->is_open() || session->is_stale()) {
+    if (session->is_open_or_stale()) {
       session->set_load_avg_decay_rate(decay_rate);
     }
 
