@@ -14,9 +14,16 @@ import sys
 import tempfile
 import threading
 import time
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from mgr_module import CLIWriteCommand, MgrModule, MgrStandbyModule, Option, _get_localized_key
+if TYPE_CHECKING:
+    if sys.version_info >= (3, 8):
+        from typing import Literal
+    else:
+        from typing_extensions import Literal
+
+from mgr_module import CLIWriteCommand, HandleCommandResult, MgrModule, \
+    MgrStandbyModule, Option, _get_localized_key
 from mgr_util import ServerConfigException, create_self_signed_cert, \
     get_default_addr, verify_tls_files
 
@@ -214,6 +221,10 @@ class CherryPyConfig(object):
                 return uri
 
 
+if TYPE_CHECKING:
+    SslConfigKey = Literal['crt', 'key']
+
+
 class Module(MgrModule, CherryPyConfig):
     """
     dashboard module entrypoint
@@ -357,31 +368,36 @@ class Module(MgrModule, CherryPyConfig):
         logger.info('Stopping engine...')
         self.shutdown_event.set()
 
-    @CLIWriteCommand("dashboard set-ssl-certificate")
-    def set_ssl_certificate(self,
-                            mgr_id: Optional[str] = None,
-                            inbuf: Optional[bytes] = None):
+    def _set_ssl_item(self, item_label: str, item_key: 'SslConfigKey' = 'crt',
+                      mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
         if inbuf is None:
-            return -errno.EINVAL, '',\
-                'Please specify the certificate file with "-i" option'
+            return -errno.EINVAL, '', f'Please specify the {item_label} with "-i" option'
+
         if mgr_id is not None:
-            self.set_store(_get_localized_key(mgr_id, 'crt'), inbuf.decode())
+            self.set_store(_get_localized_key(mgr_id, item_key), inbuf)
         else:
-            self.set_store('crt', inbuf.decode())
-        return 0, 'SSL certificate updated', ''
+            self.set_store(item_key, inbuf)
+        return 0, f'SSL {item_label} updated', ''
+
+    @CLIWriteCommand("dashboard set-ssl-certificate")
+    def set_ssl_certificate(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+        return self._set_ssl_item('certificate', 'crt', mgr_id, inbuf)
 
     @CLIWriteCommand("dashboard set-ssl-certificate-key")
-    def set_ssl_certificate_key(self,
-                                mgr_id: Optional[str] = None,
-                                inbuf: Optional[bytes] = None):
-        if inbuf is None:
-            return -errno.EINVAL, '',\
-                'Please specify the certificate key file with "-i" option'
-        if mgr_id is not None:
-            self.set_store(_get_localized_key(mgr_id, 'key'), inbuf.decode())
-        else:
-            self.set_store('key', inbuf.decode())
-        return 0, 'SSL certificate key updated', ''
+    def set_ssl_certificate_key(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+        return self._set_ssl_item('certificate key', 'key', mgr_id, inbuf)
+
+    @CLIWriteCommand("dashboard create-self-signed-cert")
+    def set_mgr_created_self_signed_cert(self):
+        cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
+        result = HandleCommandResult(*self.set_ssl_certificate(inbuf=cert))
+        if result.retval != 0:
+            return result
+
+        result = HandleCommandResult(*self.set_ssl_certificate_key(inbuf=pkey))
+        if result.retval != 0:
+            return result
+        return 0, 'Self-signed certificate created', ''
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
@@ -397,20 +413,12 @@ class Module(MgrModule, CherryPyConfig):
         if cmd['prefix'] == 'dashboard get-jwt-token-ttl':
             ttl = self.get_module_option('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
             return 0, str(ttl), ''
-        if cmd['prefix'] == 'dashboard create-self-signed-cert':
-            self.create_self_signed_cert()
-            return 0, 'Self-signed certificate created', ''
         if cmd['prefix'] == 'dashboard grafana dashboards update':
             push_local_dashboards()
             return 0, 'Grafana dashboards updated', ''
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))
-
-    def create_self_signed_cert(self):
-        cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
-        self.set_store('crt', cert)
-        self.set_store('key', pkey)
 
     def notify(self, notify_type, notify_id):
         NotificationQueue.new_notification(notify_type, notify_id)
