@@ -1409,8 +1409,9 @@ Then run the following:
                 'args': [f'{k}={v}' for k, v in spec.location.items()],
             })
 
+        if spec.hostname not in self.inventory:
+            self.cache.prime_empty_host(spec.hostname)
         self.inventory.add_host(spec)
-        self.cache.prime_empty_host(spec.hostname)
         self.offline_hosts_remove(spec.hostname)
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
