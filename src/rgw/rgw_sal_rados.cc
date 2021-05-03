@@ -543,8 +543,20 @@ int RadosBucket::set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy &
 
   acls = acl;
   acl.encode(aclbl);
+  map<string, bufferlist>& attrs = get_attrs();
 
-  return store->ctl()->bucket->set_acl(acl.get_owner(), info.bucket, info, aclbl, y, dpp);
+  attrs[RGW_ATTR_ACL] = aclbl;
+  info.owner = acl.get_owner().get_id();
+
+  int r = store->ctl()->bucket->store_bucket_instance_info(info.bucket,
+                 info, y, dpp,
+                 RGWBucketCtl::BucketInstance::PutParams().set_attrs(&attrs));
+  if (r < 0) {
+    cerr << "ERROR: failed to set bucket owner: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+  
+  return 0;
 }
 
 std::unique_ptr<Object> RadosBucket::get_object(const rgw_obj_key& k)

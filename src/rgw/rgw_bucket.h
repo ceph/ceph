@@ -694,10 +694,6 @@ public:
             const rgw_user& user_id, const std::string& display_name,
             const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp);
 
-  int set_acl(ACLOwner& owner, rgw_bucket& bucket,
-              RGWBucketInfo& bucket_info, bufferlist& bl, optional_yield y,
-              const DoutPrefixProvider *dpp);
-
   int read_buckets_stats(map<string, RGWBucketEnt>& m,
                          optional_yield y,
                          const DoutPrefixProvider *dpp);
