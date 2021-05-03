@@ -660,16 +660,18 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
+    DEFAULT_POOL = 'nfs-ganesha'
+
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
-                 pool: Optional[str] = None,
-                 namespace: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 pool: Optional[str] = None,
+                 namespace: Optional[str] = None,
                  port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
@@ -679,10 +681,10 @@ class NFSServiceSpec(ServiceSpec):
             config=config, networks=networks)
 
         #: RADOS pool where NFS client recovery data is stored.
-        self.pool = pool
+        self.pool = pool or self.DEFAULT_POOL
 
         #: RADOS namespace where NFS client recovery data is stored in the pool.
-        self.namespace = namespace
+        self.namespace = namespace or self.service_id
 
         self.port = port
 
