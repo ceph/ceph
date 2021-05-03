@@ -99,7 +99,6 @@ private:
   WriteLogPoolRootUpdateList m_poolroot_to_update; /* pool root list to update to SSD */
   bool m_updating_pool_root = false;
 
-  uint64_t m_log_pool_ring_buffer_size; /* Size of ring buffer */
   std::atomic<int> m_async_update_superblock = {0};
   BlockDevice *bdev = nullptr;
   uint64_t pool_size;
