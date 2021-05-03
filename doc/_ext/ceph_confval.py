@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE = '''
 .. confval_option:: {{ opt.name }}
-{% if desc | length > 1 %}
+{% if desc %}
    {{ desc | wordwrap(70) | indent(3) }}
 {% endif %}
    :type: ``{{opt.type}}``
-{%- if default is defined %}
+{%- if default is not none %}
   {%- if opt.type == 'size' %}
    :default: ``{{ default | eval_size | iec_size }}``
   {%- elif opt.type == 'secs' %}
@@ -108,6 +108,8 @@ def do_plain_num(value: str, typ: str) -> str:
 
 
 def iec_size(value: int) -> str:
+    if value == 0:
+        return '0B'
     units = dict(Ei=60,
                  Pi=50,
                  Ti=40,
