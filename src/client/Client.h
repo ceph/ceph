@@ -540,6 +540,17 @@ public:
   int get_caps_issued(int fd);
   int get_caps_issued(const char *path, const UserPerm& perms);
 
+  auto get_caps_wanted_delay_min() const { return caps_wanted_delay_min; }
+  auto get_caps_wanted_delay_max() const { return caps_wanted_delay_max; }
+  int get_caps_dirop_wanted() const {
+    int want = 0;
+    if (async_dirop_mask & ASYNC_CREATE)
+      want |= CEPH_CAP_DIR_CREATE;
+    if (async_dirop_mask & ASYNC_UNLINK)
+      want |= CEPH_CAP_DIR_UNLINK;
+    return want;
+  }
+
   snapid_t ll_get_snapid(Inode *in);
   vinodeno_t ll_get_vino(Inode *in) {
     std::lock_guard lock(client_lock);
@@ -733,7 +744,7 @@ public:
 
   void flush_snaps(Inode *in);
   void get_cap_ref(Inode *in, int cap);
-  void put_cap_ref(Inode *in, int cap);
+  void put_cap_ref(Inode *in, int cap, bool nocheck=false);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
@@ -780,6 +791,7 @@ public:
 
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
   void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
+  void parse_create_reply_extra(MetaRequest *request, MetaSession *session);
   Inode* insert_trace(MetaRequest *request, MetaSession *session);
   void update_inode_file_size(Inode *in, int issued, uint64_t size,
 			      uint64_t truncate_seq, uint64_t truncate_size);
@@ -792,6 +804,7 @@ public:
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
+  bool is_dentry_lease_valid(Inode *dir, Dentry *dn);
 
   bool use_faked_inos() { return _use_faked_inos; }
   vinodeno_t map_faked_ino(ino_t ino);
@@ -881,10 +894,9 @@ public:
 
 protected:
   /* Flags for check_caps() */
-  static const unsigned CHECK_CAPS_NODELAY = 0x1;
-  static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
+  static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x1;
 
-  void check_caps(Inode *in, unsigned flags);
+  void check_caps(Inode *in, unsigned flags=0);
 
   void set_cap_epoch_barrier(epoch_t e);
 
@@ -916,18 +928,17 @@ protected:
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
   void put_request(MetaRequest *request);
+  void register_unsafe_request(MetaRequest *request, MetaSession *session);
   void unregister_request(MetaRequest *request);
 
+  bool wait_for_async_dirop(MetaRequest *req);
   int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
-			 const MConstRef<MClientReply>& reply,
-			 InodeRef *ptarget, bool *pcreated,
-			 const UserPerm& perms);
+			 InodeRef *ptarget, bool *pcreated);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
   int encode_inode_release(Inode *in, MetaRequest *req,
 			   mds_rank_t mds, int drop,
 			   int unless,int force=0);
-  void encode_dentry_release(Dentry *dn, MetaRequest *req,
-			     mds_rank_t mds, int drop, int unless);
+  void encode_dentry_release(Dentry *dn, MetaRequest *req, mds_rank_t mds);
   mds_rank_t choose_target_mds(MetaRequest *req, Inode** phash_diri=NULL);
   void connect_mds_targets(mds_rank_t mds);
   void send_request(MetaRequest *request, MetaSession *session,
@@ -1285,11 +1296,9 @@ private:
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
 
-  bool _dentry_valid(const Dentry *dn);
-
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
+  int _do_lookup(Inode *dir, Dentry *dn, int mask, InodeRef *target,
 		 const UserPerm& perms);
 
   int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
@@ -1297,6 +1306,7 @@ private:
 
   int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm, std::string alternate_name,
 	    InodeRef *inp = 0);
+  void _async_unlink_cb(MetaRequest *req, MetaSession *session, int err);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
@@ -1345,6 +1355,8 @@ private:
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
 	      const char *data_pool, bool *created, const UserPerm &perms,
               std::string alternate_name);
+  void _async_create_cb(MetaRequest *req, MetaSession *session, int err);
+  void update_async_create_stat(MetaRequest* req, MetaSession *session);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
@@ -1467,8 +1479,6 @@ private:
   int user_id, group_id;
   int acl_type = NO_ACL;
 
-  epoch_t cap_epoch_barrier = 0;
-
   // mds sessions
   map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
   std::set<mds_rank_t> mds_ranks_closing;  // mds ranks currently tearing down sessions
@@ -1519,6 +1529,12 @@ private:
   // dirty_list keeps all the dirty inodes before flushing.
   xlist<Inode*> delayed_list, dirty_list;
   int num_flushing_caps = 0;
+
+  epoch_t cap_epoch_barrier = 0;
+
+  unsigned caps_wanted_delay_min;
+  unsigned caps_wanted_delay_max;
+
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 
@@ -1554,6 +1570,14 @@ private:
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
+
+  unsigned async_dirop_mask = 0;
+  enum {
+    ASYNC_UNLINK = 1,
+    ASYNC_CREATE = 2,
+  };
+
+  int debug_stat_cap_mask = -1;
 };
 
 /**

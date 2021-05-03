@@ -4096,7 +4096,7 @@ void MDCache::rejoin_send_rejoins()
       if (p.first == 0 && root) {
 	p.second->add_strong_inode(root->vino(),
 				    root->get_replica_nonce(),
-				    root->get_caps_wanted(),
+				    root->replica_caps_wanted,
 				    root->filelock.get_state(),
 				    root->nestlock.get_state(),
 				    root->dirfragtreelock.get_state());
@@ -4110,7 +4110,7 @@ void MDCache::rejoin_send_rejoins()
       if (CInode *in = get_inode(MDS_INO_MDSDIR(p.first))) {
 	p.second->add_strong_inode(in->vino(),
 				    in->get_replica_nonce(),
-				    in->get_caps_wanted(),
+				    in->replica_caps_wanted,
 				    in->filelock.get_state(),
 				    in->nestlock.get_state(),
 				    in->dirfragtreelock.get_state());
@@ -4299,7 +4299,7 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
 	dout(15) << " add_strong_inode " << *in << dendl;
 	rejoin->add_strong_inode(in->vino(),
 				 in->get_replica_nonce(),
-				 in->get_caps_wanted(),
+				 in->replica_caps_wanted,
 				 in->filelock.get_state(),
 				 in->nestlock.get_state(),
 				 in->dirfragtreelock.get_state());

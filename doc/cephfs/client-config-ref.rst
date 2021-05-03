@@ -201,6 +201,12 @@ Client Config Reference
 :Type: Boolean
 :Default: ``false``
 
+``client async dirop mask``
+
+:Description: Set bit mask of enabled types of async dir operations (1: unlink; 2: create). When certain conditions are met, dir operations enabled for async can return before receiving request reply from mds.
+:Type: Integer
+:Default: ``255``
+
 ``fuse_default_permissions``
 
 :Description: When set to ``false``, ``ceph-fuse`` utility checks does its own permissions checking, instead of relying on the permissions enforcement in FUSE. Set to ``false`` together with the ``client acl type=posix_acl`` option to enable POSIX ACL.

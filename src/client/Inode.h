@@ -106,13 +106,19 @@ struct CapSnap {
   void dump(Formatter *f) const;
 };
 
+struct AsyncCreateStat {
+  file_layout_t layout;
+};
+
 // inode flags
 #define I_COMPLETE		(1 << 0)
 #define I_DIR_ORDERED		(1 << 1)
 #define I_SNAPDIR_OPEN		(1 << 2)
 #define I_KICK_FLUSH		(1 << 3)
-#define I_CAP_DROPPED		(1 << 4)
-#define I_ERROR_FILELOCK	(1 << 5)
+#define I_ERROR_FILELOCK	(1 << 4)
+#define I_ASYNC_CREATING	(1 << 5)
+
+static const int FMODE_WAIT_BIAS = 1000;
 
 struct Inode : RefCountedObject {
   Client *client;
@@ -219,8 +225,12 @@ struct Inode : RefCountedObject {
   InodeRef snapdir_parent;  // only if we are a snapdir inode
   map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
-  //int open_by_mode[CEPH_FILE_MODE_NUM];
-  map<int,int> open_by_mode;
+  std::map<std::string, MetaRequest*> async_dirops;
+  unique_ptr<AsyncCreateStat> async_create_stat;
+
+  std::array<int, CEPH_FILE_MODE_BITS> open_by_mode = {};
+  utime_t last_rd, last_wr;
+
   map<int,int> cap_refs;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
@@ -303,7 +313,10 @@ struct Inode : RefCountedObject {
   // CAPS --------
   void get_open_ref(int mode);
   bool put_open_ref(int mode);
+  void touch_open_ref(int mode);
 
+  void inc_cap_waiter(int cap);
+  void dec_cap_waiter(int cap);
   void get_cap_ref(int cap);
   int put_cap_ref(int cap);
   bool is_any_caps();
@@ -335,22 +348,20 @@ struct Inode : RefCountedObject {
 
   void mark_caps_dirty(int caps);
   void mark_caps_clean();
-private:
-  // how many opens for write on this Inode?
-  long open_count_for_write()
-  {
-    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
-		  open_by_mode[CEPH_FILE_MODE_WR]);
-  };
 
+  bool is_opened_for_read() const {
+    if (snapid != CEPH_NOSNAP)
+      return snap_cap_refs; 
+    return open_by_mode[ffs(CEPH_FILE_MODE_RD)];
+  }
+  bool is_opened_for_write() const {
+    return open_by_mode[ffs(CEPH_FILE_MODE_WR)];
+  }
   // how many opens of any sort on this inode?
-  long open_count()
-  {
-    return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
-				  [] (int value, const std::map<int, int>::value_type& p)
-                   { return value + p.second; });
-  };
-
+  bool is_opened() const {
+    return open_by_mode[0];
+  }
+private:
   void break_deleg(bool skip_read);
   bool delegations_broken(bool skip_read);
 

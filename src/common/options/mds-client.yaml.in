@@ -125,12 +125,28 @@ options:
   services:
   - mds_client
   with_legacy: true
-- name: client_caps_release_delay
-  type: int
-  level: dev
+- name: client_caps_wanted_delay_min
+  type: uint
+  level: advanced
+  desc: delay to clear wanted caps that are not used by any open file
   default: 5
   services:
   - mds_client
+  flags:
+  - runtime
+  min: 1
+  max: 30
+  with_legacy: true
+- name: client_caps_wanted_delay_max
+  type: uint
+  level: advanced
+  desc: delay to clear wanted caps that are not used by any open file
+  default: 60
+  services:
+  - mds_client
+  flags:
+  - runtime
+  min: 30
   with_legacy: true
 - name: client_quota_df
   type: bool
