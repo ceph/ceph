@@ -11,11 +11,12 @@ from unittest.mock import Mock
 import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
-from mgr_module import CLICommand
+from mgr_module import HandleCommandResult
 from pyfakefs import fake_filesystem
 
 from .. import DEFAULT_VERSION, mgr
 from ..controllers import generate_controller_routes, json_error_page
+from ..module import Module
 from ..plugins import PLUGIN_MANAGER, debug, feature_toggles  # noqa
 from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
@@ -28,32 +29,20 @@ PLUGIN_MANAGER.hook.register_commands()
 logger = logging.getLogger('tests')
 
 
+class ModuleTestClass(Module):
+    """Dashboard module subclass for testing the module methods."""
+
+    def __init__(self) -> None:
+        pass
+
+    def _unconfigure_logging(self) -> None:
+        pass
+
+
 class CmdException(Exception):
     def __init__(self, retcode, message):
         super(CmdException, self).__init__(message)
         self.retcode = retcode
-
-
-def exec_dashboard_cmd(command_handler, cmd, **kwargs):
-    inbuf = kwargs['inbuf'] if 'inbuf' in kwargs else None
-    cmd_dict = {'prefix': 'dashboard {}'.format(cmd)}
-    cmd_dict.update(kwargs)
-    if cmd_dict['prefix'] not in CLICommand.COMMANDS:
-        ret, out, err = command_handler(cmd_dict)
-        if ret < 0:
-            raise CmdException(ret, err)
-        try:
-            return json.loads(out)
-        except ValueError:
-            return out
-
-    ret, out, err = CLICommand.COMMANDS[cmd_dict['prefix']].call(mgr, cmd_dict, inbuf)
-    if ret < 0:
-        raise CmdException(ret, err)
-    try:
-        return json.loads(out)
-    except ValueError:
-        return out
 
 
 class KVStoreMockMixin(object):
@@ -81,10 +70,24 @@ class KVStoreMockMixin(object):
         return cls.CONFIG_KEY_DICT.get(key, None)
 
 
+# pylint: disable=protected-access
 class CLICommandTestMixin(KVStoreMockMixin):
+    _dashboard_module = ModuleTestClass()
+
     @classmethod
     def exec_cmd(cls, cmd, **kwargs):
-        return exec_dashboard_cmd(None, cmd, **kwargs)
+        inbuf = kwargs['inbuf'] if 'inbuf' in kwargs else None
+        cmd_dict = {'prefix': 'dashboard {}'.format(cmd)}
+        cmd_dict.update(kwargs)
+
+        result = HandleCommandResult(*cls._dashboard_module._handle_command(inbuf, cmd_dict))
+
+        if result.retval < 0:
+            raise CmdException(result.retval, result.stderr)
+        try:
+            return json.loads(result.stdout)
+        except ValueError:
+            return result.stdout
 
 
 class FakeFsMixin(object):
