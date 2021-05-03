@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Tuple, cast, Optional
 
 from ceph.deployment.service_spec import IngressSpec
 from cephadm.utils import resolve_ip
-
+from orchestrator import OrchestratorError
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 
 logger = logging.getLogger(__name__)
@@ -209,7 +209,9 @@ class IngressService(CephService):
                     )
                     break
         if not interface:
-            interface = 'eth0'
+            raise OrchestratorError(
+                "Unable to identify interface for {spec.virtual_ip} on {host}"
+            )
 
         # script to monitor health
         script = '/usr/bin/false'
