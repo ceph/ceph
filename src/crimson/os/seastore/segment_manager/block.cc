@@ -130,29 +130,92 @@ block_sm_superblock_t make_superblock(
   };
 }
 
+using check_create_device_ertr = BlockSegmentManager::access_ertr;
+using check_create_device_ret = check_create_device_ertr::future<>;
+static check_create_device_ret check_create_device(
+  const std::string &path,
+  size_t size)
+{
+  logger().error(
+    "block.cc:check_create_device path {}, size {}",
+    path,
+    size);
+  return seastar::open_file_dma(
+    path,
+    seastar::open_flags::exclusive |
+    seastar::open_flags::rw |
+    seastar::open_flags::create
+  ).then([size](auto file) {
+    return seastar::do_with(
+      file,
+      [size](auto &f) -> seastar::future<> {
+	logger().error(
+	  "block.cc:check_create_device: created device, truncating to {}",
+	  size);
+	ceph_assert(f);
+	return f.truncate(
+	  size
+	).then([&f, size] {
+	  return f.allocate(0, size);
+	}).finally([&f] {
+	  return f.close();
+	});
+      });
+  }).then_wrapped([&path](auto f) -> check_create_device_ret {
+    logger().error(
+      "block.cc:check_create_device: complete failed: {}",
+      f.failed());
+    if (f.failed()) {
+      try {
+	f.get();
+	return seastar::now();
+      } catch (const std::system_error &e) {
+	if (e.code().value() == EEXIST) {
+	  logger().error(
+	    "block.cc:check_create_device device {} exists",
+	    path);
+	  return seastar::now();
+	} else {
+	  logger().error(
+	    "block.cc:check_create_device device {} creation error {}",
+	    path,
+	    e);
+	  return crimson::ct_error::input_output_error::make();
+	}
+      } catch (...) {
+	return crimson::ct_error::input_output_error::make();
+      }
+    } else {
+      std::ignore = f.discard_result();
+      return seastar::now();
+    }
+  });
+}
+
 using open_device_ret = 
   BlockSegmentManager::access_ertr::future<
   std::pair<seastar::file, seastar::stat_data>
   >;
 static
-open_device_ret open_device(const std::string &in_path, seastar::open_flags mode)
+open_device_ret open_device(
+  const std::string &path,
+  seastar::open_flags mode)
 {
-  return seastar::do_with(
-    in_path,
-    [mode](auto &path) {
-      return seastar::file_stat(path, seastar::follow_symlink::yes
-      ).then([mode, &path](auto stat) mutable {
-	return seastar::open_file_dma(path, mode).then([=](auto file) {
-	  logger().debug("open_device: open successful");
-	  return std::make_pair(file, stat);
-	});
-      }).handle_exception([](auto e) -> open_device_ret {
-	logger().error(
-	  "open_device: got error {}",
-	  e);
-	return crimson::ct_error::input_output_error::make();
-      });
+  return seastar::file_stat(path, seastar::follow_symlink::yes
+  ).then([mode, &path](auto stat) mutable {
+    return seastar::open_file_dma(path, mode).then([=](auto file) {
+      logger().error(
+	"open_device: open successful, size {}",
+	stat.size
+      );
+      return std::make_pair(file, stat);
     });
+  }).handle_exception([](auto e) -> open_device_ret {
+    logger().error(
+      "open_device: got error {}",
+      e);
+    return crimson::ct_error::input_output_error::make();
+  });
 }
 
   
@@ -313,9 +376,17 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(seastore_meta_t meta)
     block_sm_superblock_t{},
     std::unique_ptr<SegmentStateTracker>(),
     [=](auto &device, auto &stat, auto &sb, auto &tracker) {
-      return open_device(
-	device_path, seastar::open_flags::rw
-      ).safe_then([&, meta](auto p) {
+      logger().error("BlockSegmentManager::mkfs path {}", device_path);
+      check_create_device_ret maybe_create = check_create_device_ertr::now();
+      using crimson::common::get_conf;
+      if (get_conf<bool>("seastore_block_create")) {
+	auto size = get_conf<Option::size_t>("seastore_device_size");
+	maybe_create = check_create_device(device_path, size);
+      }
+
+      return maybe_create.safe_then([this] {
+	return open_device(device_path, seastar::open_flags::rw);
+      }).safe_then([&, meta](auto p) {
 	device = p.first;
 	stat = p.second;
 	sb = make_superblock(meta, stat);
