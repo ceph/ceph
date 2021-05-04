@@ -36,9 +36,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              cluster_id=clusterid, pseudo_path=binding,
                                              read_only=readonly, path=path)
 
+    @CLICommand('nfs export rm', perm='rw')
+    def _cmd_nfs_export_rm(self, clusterid: str, binding: str) -> Tuple[int, str, str]:
+        """Remove a cephfs export"""
+        return self.export_mgr.delete_export(cluster_id=clusterid, pseudo_path=binding)
+
     @CLICommand('nfs export delete', perm='rw')
     def _cmd_nfs_export_delete(self, clusterid: str, binding: str) -> Tuple[int, str, str]:
-        """Delete a cephfs export"""
+        """Delete a cephfs export (DEPRECATED)"""
         return self.export_mgr.delete_export(cluster_id=clusterid, pseudo_path=binding)
 
     @CLICommand('nfs export ls', perm='r')
@@ -68,9 +73,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Updates an NFS Cluster"""
         return self.nfs.update_nfs_cluster(cluster_id=clusterid, placement=placement)
 
+    @CLICommand('nfs cluster rm', perm='rw')
+    def _cmd_nfs_cluster_rm(self, clusterid: str) -> Tuple[int, str, str]:
+        """Removes an NFS Cluster"""
+        return self.nfs.delete_nfs_cluster(cluster_id=clusterid)
+
     @CLICommand('nfs cluster delete', perm='rw')
     def _cmd_nfs_cluster_delete(self, clusterid: str) -> Tuple[int, str, str]:
-        """Deletes an NFS Cluster"""
+        """Removes an NFS Cluster (DEPRECATED)"""
         return self.nfs.delete_nfs_cluster(cluster_id=clusterid)
 
     @CLICommand('nfs cluster ls', perm='r')
