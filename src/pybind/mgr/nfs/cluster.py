@@ -3,7 +3,7 @@ import socket
 import json
 import re
 
-from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
 
 import orchestrator
 
@@ -49,12 +49,32 @@ class NFSCluster:
     def _get_user_conf_obj_name(self):
         return f'userconf-nfs.{self.cluster_id}'
 
-    def _call_orch_apply_nfs(self, placement):
-        spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
-                              pool=self.pool_name, namespace=self.pool_ns,
-                              placement=PlacementSpec.from_string(placement))
-        completion = self.mgr.apply_nfs(spec)
-        orchestrator.raise_if_exception(completion)
+    def _call_orch_apply_nfs(self, placement, virtual_ip=None):
+        if virtual_ip:
+            # nfs + ingress
+            # run NFS on non-standard port
+            spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
+                                  pool=self.pool_name, namespace=self.pool_ns,
+                                  placement=PlacementSpec.from_string(placement),
+                                  # use non-default port so we don't conflict with ingress
+                                  port=12049)
+            completion = self.mgr.apply_nfs(spec)
+            orchestrator.raise_if_exception(completion)
+            ispec = IngressSpec(service_type='ingress',
+                                service_id='nfs.' + self.cluster_id,
+                                backend_service='nfs.' + self.cluster_id,
+                                frontend_port=2049,  # default nfs port
+                                monitor_port=9049,
+                                virtual_ip=virtual_ip)
+            completion = self.mgr.apply_ingress(ispec)
+            orchestrator.raise_if_exception(completion)
+        else:
+            # standalone nfs
+            spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
+                                  pool=self.pool_name, namespace=self.pool_ns,
+                                  placement=PlacementSpec.from_string(placement))
+            completion = self.mgr.apply_nfs(spec)
+            orchestrator.raise_if_exception(completion)
 
     def create_empty_rados_obj(self):
         common_conf = self._get_common_conf_obj_name()
@@ -67,7 +87,7 @@ class NFSCluster:
                  f"{self.pool_ns}")
 
     @cluster_setter
-    def create_nfs_cluster(self, cluster_id, placement):
+    def create_nfs_cluster(self, cluster_id, placement, virtual_ip):
         try:
             invalid_str = re.search('[^A-Za-z0-9-_.]', cluster_id)
             if invalid_str:
@@ -79,7 +99,7 @@ class NFSCluster:
             self.create_empty_rados_obj()
 
             if cluster_id not in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(placement)
+                self._call_orch_apply_nfs(placement, virtual_ip)
                 return 0, "NFS Cluster Created Successfully", ""
             return 0, "", f"{cluster_id} cluster already exists"
         except Exception as e:
@@ -91,6 +111,8 @@ class NFSCluster:
             cluster_list = available_clusters(self.mgr)
             if cluster_id in cluster_list:
                 self.mgr.export_mgr.delete_all_exports(cluster_id)
+                completion = self.mgr.remove_service('ingress.nfs.' + self.cluster_id)
+                orchestrator.raise_if_exception(completion)
                 completion = self.mgr.remove_service('nfs.' + self.cluster_id)
                 orchestrator.raise_if_exception(completion)
                 self.delete_config_obj()
