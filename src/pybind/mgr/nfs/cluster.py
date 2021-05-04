@@ -2,8 +2,10 @@ import logging
 import socket
 import json
 import re
+from typing import cast, Dict, List, Any, Union
 
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
+from cephadm.utils import resolve_ip
 
 import orchestrator
 
@@ -127,31 +129,38 @@ class NFSCluster:
         except Exception as e:
             return exception_handler(e, "Failed to list NFS Cluster")
 
-    def _show_nfs_cluster_info(self, cluster_id):
+    def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
         self._set_cluster_id(cluster_id)
         completion = self.mgr.list_daemons(daemon_type='nfs')
         orchestrator.raise_if_exception(completion)
-        host_ip = []
+        backends: List[Dict[str, Union[str, int]]] = []
         # Here completion.result is a list DaemonDescription objects
         for cluster in completion.result:
             if self.cluster_id == cluster.service_id():
-                """
-                getaddrinfo sample output: [(<AddressFamily.AF_INET: 2>,
-                <SocketKind.SOCK_STREAM: 1>, 6, 'xyz', ('172.217.166.98',2049)),
-                (<AddressFamily.AF_INET6: 10>, <SocketKind.SOCK_STREAM: 1>, 6, '',
-                ('2404:6800:4009:80d::200e', 2049, 0, 0))]
-                """
                 try:
-                    host_ip.append({
+                    backends.append({
                             "hostname": cluster.hostname,
-                            "ip": list(set([ip[4][0] for ip in socket.getaddrinfo(
-                                cluster.hostname, 2049, flags=socket.AI_CANONNAME,
-                                type=socket.SOCK_STREAM)])),
-                            "port": 2049  # Default ganesha port
+                            "ip": cluster.ip or resolve_ip(cluster.hostname),
+                            "port": cluster.ports[0]
                             })
-                except socket.gaierror:
+                except OrchestratorError:
                     continue
-        return host_ip
+
+        r: Dict[str, Any] = {
+            'virtual_ip': None,
+            'backend': backends,
+        }
+        sc = self.mgr.describe_service(service_type='ingress')
+        orchestrator.raise_if_exception(sc)
+        for i in sc.result:
+            spec = cast(IngressSpec, i.spec)
+            if spec.backend_service == f'nfs.{cluster_id}':
+                r['virtual_ip'] = i.virtual_ip.split('/')[0]
+                if i.ports:
+                    r['port'] = i.ports[0]
+                    if len(i.ports) > 1:
+                        r['monitor_port'] = i.ports[1]
+        return r
 
     def show_nfs_cluster_info(self, cluster_id=None):
         try:
