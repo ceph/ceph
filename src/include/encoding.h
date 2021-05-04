@@ -246,6 +246,23 @@ inline void encode(const char *s, bufferlist& bl)
   encode(std::string_view(s, strlen(s)), bl);
 }
 
+// opaque byte vectors
+inline void encode(std::vector<uint8_t>& v, bufferlist& bl)
+{
+  uint32_t len = v.size();
+  encode(len, bl);
+  if (len)
+    bl.append((char *)v.data(), len);
+}
+
+inline void decode(std::vector<uint8_t>& v, bufferlist::const_iterator& p)
+{
+  uint32_t len;
+
+  decode(len, p);
+  v.resize(len);
+  p.copy(len, (char *)v.data());
+}
 
 // -----------------------------
 // buffers
