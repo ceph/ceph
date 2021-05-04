@@ -833,3 +833,38 @@ class TestMirroring(CephFSTestCase):
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_with_parent_snapshot(self):
+        """Test snapshot synchronization with parent directory snapshots"""
+        self.mount_a.run_shell(["mkdir", "-p", "d0/d1/d2/d3"])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0/d1/d2/d3')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # take a snapshot
+        self.mount_a.run_shell(["mkdir", "d0/d1/d2/d3/.snap/snap0"])
+
+        time.sleep(30)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0/d1/d2/d3', 'snap0', 1)
+
+        # create snapshots in parent directories
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_d0"])
+        self.mount_a.run_shell(["mkdir", "d0/d1/.snap/snap_d1"])
+        self.mount_a.run_shell(["mkdir", "d0/d1/d2/.snap/snap_d2"])
+
+        # try syncing more snapshots
+        self.mount_a.run_shell(["mkdir", "d0/d1/d2/d3/.snap/snap1"])
+        time.sleep(30)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0/d1/d2/d3', 'snap1', 2)
+
+        self.mount_a.run_shell(["rmdir", "d0/d1/d2/d3/.snap/snap0"])
+        self.mount_a.run_shell(["rmdir", "d0/d1/d2/d3/.snap/snap1"])
+        time.sleep(15)
+        self.check_peer_status_deleted_snap(self.primary_fs_name, self.primary_fs_id,
+                                            "client.mirror_remote@ceph", '/d0/d1/d2/d3', 2)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0/d1/d2/d3')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
