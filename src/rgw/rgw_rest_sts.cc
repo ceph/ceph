@@ -301,12 +301,50 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
   return {t, principal_tags};
 }
 
+std::string
+WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, optional_yield y) const
+{
+  string cert_url;
+  string openidc_wellknown_url = iss + "/.well-known/openid-configuration";
+  bufferlist openidc_resp;
+  RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
+
+  //Headers
+  openidc_req.append_header("Content-Type", "application/x-www-form-urlencoded");
+
+  int res = openidc_req.process(y);
+  if (res < 0) {
+    ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
+    throw -EINVAL;
+  }
+
+  //Debug only
+  ldpp_dout(dpp, 20) << "HTTP status: " << openidc_req.get_http_status() << dendl;
+  ldpp_dout(dpp, 20) << "JSON Response is: " << openidc_resp.c_str() << dendl;
+
+  JSONParser parser;
+  if (parser.parse(openidc_resp.c_str(), openidc_resp.length())) {
+    JSONObj::data_val val;
+    if (parser.get_data("jwks_uri", &val)) {
+      cert_url = val.str.c_str();
+      ldpp_dout(dpp, 20) << "Cert URL is: " << cert_url.c_str() << dendl;
+    } else {
+      ldpp_dout(dpp, 0) << "Malformed json returned while fetching openidc url" << dendl;
+    }
+  }
+  return cert_url;
+}
+
 void
 WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
+    string cert_url = get_cert_url(iss, dpp, y);
+    if (cert_url.empty()) {
+      throw -EINVAL;
+    }
+
     // Get certificate
-    string cert_url = iss + "/protocol/openid-connect/certs";
     bufferlist cert_resp;
     RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
     //Headers
