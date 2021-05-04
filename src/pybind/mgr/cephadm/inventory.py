@@ -345,6 +345,7 @@ class HostCache():
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
         self.facts = {}                # type: Dict[str, Dict[str, Any]]
         self.last_facts_update = {}    # type: Dict[str, datetime.datetime]
+        self.last_autotune = {}        # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
         self.osdspec_last_applied = {}  # type: Dict[str, Dict[str, datetime.datetime]]
         self.networks = {}             # type: Dict[str, Dict[str, Dict[str, List[str]]]]
@@ -428,6 +429,9 @@ class HostCache():
         # type: (str, Dict[str, Dict[str, Any]]) -> None
         self.facts[host] = facts
         self.last_facts_update[host] = datetime_now()
+
+    def update_autotune(self, host: str) -> None:
+        self.last_autotune[host] = datetime_now()
 
     def devices_changed(self, host: str, b: List[inventory.Device]) -> bool:
         a = self.devices[host]
@@ -576,6 +580,8 @@ class HostCache():
             del self.facts[host]
         if host in self.last_facts_update:
             del self.last_facts_update[host]
+        if host in self.last_autotune:
+            del self.last_autotune[host]
         if host in self.osdspec_previews:
             del self.osdspec_previews[host]
         if host in self.osdspec_last_applied:
@@ -605,6 +611,9 @@ class HostCache():
             r.append(host)
         return r
 
+    def get_facts(self, host: str) -> Dict[str, Any]:
+        return self.facts.get(host, {})
+
     def get_daemons(self):
         # type: () -> List[orchestrator.DaemonDescription]
         r = []
@@ -612,6 +621,9 @@ class HostCache():
             for name, dd in dm.items():
                 r.append(dd)
         return r
+
+    def get_daemons_by_host(self, host: str) -> List[orchestrator.DaemonDescription]:
+        return list(self.daemons.get(host, {}).values())
 
     def get_daemon(self, daemon_name: str) -> orchestrator.DaemonDescription:
         assert not daemon_name.startswith('ha-rgw.')
@@ -709,6 +721,17 @@ class HostCache():
         cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.facts_cache_timeout)
         if host not in self.last_facts_update or self.last_facts_update[host] < cutoff:
+            return True
+        return False
+
+    def host_needs_autotune_memory(self, host):
+        # type: (str) -> bool
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Skipping autotune')
+            return False
+        cutoff = datetime_now() - datetime.timedelta(
+            seconds=self.mgr.autotune_interval)
+        if host not in self.last_autotune or self.last_autotune[host] < cutoff:
             return True
         return False
 
