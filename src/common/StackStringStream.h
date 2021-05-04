@@ -54,7 +54,7 @@ public:
   }
 
 protected:
-  std::streamsize xsputn(const char *s, std::streamsize n)
+  std::streamsize xsputn(const char *s, std::streamsize n) final
   {
     std::streamsize capacity = epptr() - pptr();
     std::streamsize left = n;
@@ -72,7 +72,7 @@ protected:
     return n;
   }
 
-  int overflow(int c)
+  int overflow(int c) final
   {
     if (traits_type::not_eof(c)) {
       char str = traits_type::to_char_type(c);
