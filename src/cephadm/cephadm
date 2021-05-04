@@ -2706,7 +2706,7 @@ def deploy_daemon_units(
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f, \
-         open(data_dir + '/unit.meta.new', 'w') as metaf:
+            open(data_dir + '/unit.meta.new', 'w') as metaf:
         f.write('set -e\n')
 
         if daemon_type in Ceph.daemons:
@@ -6853,12 +6853,14 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
             The token is installed at deployment time and must be provided to
             ensure we only respond to callers who know our token i.e. mgr
             """
+
             def wrapper(self, *args, **kwargs):
                 auth = self.headers.get('Authorization', None)
                 if auth != 'Bearer ' + self.server.token:
                     self.send_error(401)
                     return
                 f(self, *args, **kwargs)
+
             return wrapper
 
     def _help_page(self):
