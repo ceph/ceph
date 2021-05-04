@@ -268,7 +268,7 @@ void MDCache::add_inode(CInode *in)
   }
 
   if (in->ino() < MDS_INO_SYSTEM_BASE) {
-    if (in->ino() == MDS_INO_ROOT)
+    if (in->ino() == CEPH_INO_ROOT)
       root = in;
     else if (in->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
       myin = in;
@@ -409,7 +409,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 
 CInode *MDCache::create_root_inode()
 {
-  CInode *in = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  CInode *in = create_system_inode(CEPH_INO_ROOT, S_IFDIR|0755);
   auto _inode = in->_get_inode();
   _inode->uid = g_conf()->mds_root_ino_uid;
   _inode->gid = g_conf()->mds_root_ino_gid;
@@ -608,10 +608,10 @@ void MDCache::open_root_inode(MDSContext *c)
 {
   if (mds->get_nodeid() == mds->mdsmap->get_root()) {
     CInode *in;
-    in = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);  // initially inaccurate!
+    in = create_system_inode(CEPH_INO_ROOT, S_IFDIR|0755);  // initially inaccurate!
     in->fetch(c);
   } else {
-    discover_base_ino(MDS_INO_ROOT, c, mds->mdsmap->get_root());
+    discover_base_ino(CEPH_INO_ROOT, c, mds->mdsmap->get_root());
   }
 }
 
@@ -1037,7 +1037,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const set<CDir*>& bounds, m
   show_subtrees();
 
   CDir *root;
-  if (dir->ino() == MDS_INO_ROOT) {
+  if (dir->ino() == CEPH_INO_ROOT) {
     root = dir;  // bootstrap hack.
     if (subtrees.count(root) == 0) {
       subtrees[root];
@@ -9721,7 +9721,7 @@ void MDCache::request_kill(MDRequestRef& mdr)
 void MDCache::create_global_snaprealm()
 {
   CInode *in = new CInode(this); // dummy inode
-  create_unlinked_system_inode(in, MDS_INO_GLOBAL_SNAPREALM, S_IFDIR|0755);
+  create_unlinked_system_inode(in, CEPH_INO_GLOBAL_SNAPREALM, S_IFDIR|0755);
   add_inode(in);
   global_snaprealm = in->snaprealm;
 }
@@ -10731,7 +10731,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     in->_decode_base(p);
     in->_decode_locks_state_for_replica(p, true);
     add_inode(in);
-    if (in->ino() == MDS_INO_ROOT)
+    if (in->ino() == CEPH_INO_ROOT)
       in->inode_auth.first = 0;
     else if (in->is_mdsdir())
       in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
@@ -11333,7 +11333,7 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     dout(7) << "can_fragment: i won't merge|split anything in stray" << dendl;
     return false;
   }
-  if (diri->is_mdsdir() || diri->ino() == MDS_INO_CEPH) {
+  if (diri->is_mdsdir() || diri->ino() == CEPH_INO_CEPH) {
     dout(7) << "can_fragment: i won't fragment mdsdir or .ceph" << dendl;
     return false;
   }
@@ -12416,7 +12416,7 @@ void MDCache::show_subtrees(int dbl, bool force_print)
     dout(ceph::dout::need_dynamic(dbl)) << indent << "|_" << pad << s
 					<< " " << auth << *dir << dendl;
 
-    if (dir->ino() == MDS_INO_ROOT)
+    if (dir->ino() == CEPH_INO_ROOT)
       ceph_assert(dir->inode == root);
     if (dir->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
       ceph_assert(dir->inode == myin);
