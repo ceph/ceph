@@ -331,6 +331,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=10,
             desc='max number of daemons per service per host',
         ),
+        Option(
+            'autotune_memory_target_ratio',
+            type='float',
+            default=.7,
+            desc='ratio of total system memory to divide amongst autotuned daemons'
+        ),
+        Option(
+            'autotune_interval',
+            type='secs',
+            default=10 * 60,
+            desc='how frequently to autotune daemon memory'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -378,6 +390,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.registry_password: Optional[str] = None
             self.use_repo_digest = True
             self.default_registry = ''
+            self.autotune_memory_target_ratio = 0.0
+            self.autotune_interval = 0
 
         self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
                                     remoto.backends.LegacyModuleExecute]] = {}
