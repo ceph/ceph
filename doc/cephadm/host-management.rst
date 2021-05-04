@@ -140,6 +140,12 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   an existing host that already contains Ceph daemons, it will cause cephadm to move
   those daemons elsewhere (except OSDs, which are not removed automatically).
 
+* ``_no_autotune_memory``: *Do not autotune memory on this host*.
+
+  This label will prevent daemon memory from being tuned even when the
+  ``osd_memory_target_autotune`` or similar option is enabled for one or more daemons
+  on that host.
+
 * ``_admin``: *Distribute client.admin and ceph.conf to this host*.
 
   By default, an ``_admin`` label is applied to the first host in the cluster (where
