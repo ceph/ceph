@@ -107,8 +107,8 @@ static ceph::spinlock debug_lock;
 	   unsigned align,
 	   int mempool = mempool::mempool_buffer_anon)
     {
-      if (!align)
-	align = sizeof(size_t);
+      // posix_memalign() requires a multiple of sizeof(void *)
+      align = std::max<unsigned>(align, sizeof(void *));
       size_t rawlen = round_up_to(sizeof(buffer::raw_combined),
 				  alignof(buffer::raw_combined));
       size_t datalen = round_up_to(len, alignof(buffer::raw_combined));
@@ -169,8 +169,8 @@ static ceph::spinlock debug_lock;
     MEMPOOL_CLASS_HELPERS();
 
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
-      align = _align;
-      ceph_assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
+      // posix_memalign() requires a multiple of sizeof(void *)
+      align = std::max<unsigned>(_align, sizeof(void *));
 #ifdef DARWIN
       data = (char *) valloc(len);
 #else
