@@ -23,9 +23,11 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
+from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
 from mgr_module import MonCommandFailed
+from mgr_util import format_bytes
 
 from . import utils
 
@@ -127,6 +129,51 @@ class CephadmServe:
             if 'CEPHADM_PAUSED' in self.mgr.health_checks:
                 del self.mgr.health_checks['CEPHADM_PAUSED']
                 self.mgr.set_health_checks(self.mgr.health_checks)
+
+    def _autotune_host_memory(self, host: str) -> None:
+        total_mem = self.mgr.cache.get_facts(host).get('memory_total_kb', 0)
+        if not total_mem:
+            val = None
+        else:
+            total_mem *= 1024   # kb -> bytes
+            total_mem *= self.mgr.autotune_memory_target_ratio
+            a = MemoryAutotuner(
+                daemons=self.mgr.cache.get_daemons_by_host(host),
+                config_get=self.mgr.get_foreign_ceph_option,
+                total_mem=total_mem,
+            )
+            val, osds = a.tune()
+            any_changed = False
+            for o in osds:
+                if self.mgr.get_foreign_ceph_option(o, 'osd_memory_target') != val:
+                    self.mgr.check_mon_command({
+                        'prefix': 'config rm',
+                        'who': o,
+                        'name': 'osd_memory_target',
+                    })
+                    any_changed = True
+        if val is not None:
+            if any_changed:
+                self.mgr.log.info(
+                    f'Adjusting osd_memory_target on {host} to {format_bytes(val, 6)}'
+                )
+                ret, out, err = self.mgr.mon_command({
+                    'prefix': 'config set',
+                    'who': f'osd/host:{host}',
+                    'name': 'osd_memory_target',
+                    'value': str(val),
+                })
+                if ret:
+                    self.log.warning(
+                        f'Unable to set osd_memory_target on {host} to {val}: {err}'
+                    )
+        else:
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': f'osd/host:{host}',
+                'name': 'osd_memory_target',
+            })
+        self.mgr.cache.update_autotune(host)
 
     def _refresh_hosts_and_daemons(self) -> None:
         bad_hosts = []
@@ -232,6 +279,10 @@ class CephadmServe:
                 r = self._refresh_host_osdspec_previews(host)
                 if r:
                     failures.append(r)
+
+            if self.mgr.cache.host_needs_autotune_memory(host):
+                self.log.debug(f"autotuning memory for {host}")
+                self._autotune_host_memory(host)
 
             # client files
             updated_files = False
