@@ -432,6 +432,10 @@ class HostCache():
     def update_autotune(self, host: str) -> None:
         self.last_autotune[host] = datetime_now()
 
+    def invalidate_autotune(self, host: str) -> None:
+        if host in self.last_autotune:
+            del self.last_autotune[host]
+
     def devices_changed(self, host: str, b: List[inventory.Device]) -> bool:
         a = self.devices[host]
         if len(a) != len(b):

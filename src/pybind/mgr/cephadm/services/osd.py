@@ -140,6 +140,7 @@ class OSDService(CephService):
 
         if created:
             self.mgr.cache.invalidate_host_devices(host)
+            self.mgr.cache.invalidate_autotune(host)
             return "Created osd(s) %s on host '%s'" % (','.join(created), host)
         else:
             return "Created no osd(s) on host %s; already created?" % host
