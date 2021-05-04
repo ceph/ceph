@@ -9,6 +9,7 @@ include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
 
+check_function_exists(memset_s HAVE_MEMSET_S)
 check_function_exists(fallocate CEPH_HAVE_FALLOCATE)
 check_function_exists(posix_fadvise HAVE_POSIX_FADVISE)
 check_function_exists(posix_fallocate HAVE_POSIX_FALLOCATE)
@@ -143,6 +144,21 @@ int main(int argc, char **argv)
 else(NOT CMAKE_CROSSCOMPILING)
   message(STATUS "Assuming unaligned access is supported")
 endif(NOT CMAKE_CROSSCOMPILING)
+
+set(version_script_source "v1 { }; v2 { } v1;")
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_FLAGS -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt)
+check_c_source_compiles("
+void func_v1() {}
+__asm__(\".symver func_v1, func@v1\");
+void func_v2() {}
+__asm__(\".symver func_v2, func@v2\");
+
+int main() {}"
+  HAVE_ASM_SYMVER)
+file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt)
+cmake_pop_check_state()
 
 # should use LINK_OPTIONS instead of LINK_LIBRARIES, if we can use cmake v3.14+
 try_compile(HAVE_LINK_VERSION_SCRIPT

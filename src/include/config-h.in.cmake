@@ -3,6 +3,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+/* Define to 1 if you have the `memset_s()` function. */
+#cmakedefine HAVE_MEMSET_S
+
 /* fallocate(2) is supported */
 #cmakedefine CEPH_HAVE_FALLOCATE
 
@@ -65,6 +68,9 @@
 
 /* Define if the system has the type `in_addr_t' */
 #cmakedefine HAVE_IN_ADDR_T
+
+/* Define if you have suseconds_t */
+#cmakedefine HAVE_SUSECONDS_T
 
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
@@ -270,6 +276,9 @@
 
 /* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
+
+/* Define if the C compiler supports __asm__(".symver ..") */
+#cmakedefine HAVE_ASM_SYMVER
 
 /* Have eventfd extension. */
 #cmakedefine HAVE_EVENTFD
