@@ -1211,7 +1211,7 @@ class FileLock(object):
                         lock_id, lock_filename, poll_intervall
                     )
                     time.sleep(poll_intervall)
-        except:  # noqa
+        except Exception:
             # Something did go wrong, so decrement the counter.
             self._lock_counter = max(0, self._lock_counter - 1)
 
@@ -5562,10 +5562,10 @@ def command_rm_cluster(ctx):
         _zap_osds(ctx)
 
     # rm units
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
-                      '/ceph-%s@.service' % ctx.fsid])
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
-                      '/ceph-%s.target' % ctx.fsid])
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir
+                      + '/ceph-%s@.service' % ctx.fsid])
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir
+                      + '/ceph-%s.target' % ctx.fsid])
     call_throws(ctx, ['rm', '-rf',
                       ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
     # rm data
@@ -5574,8 +5574,8 @@ def command_rm_cluster(ctx):
     if not ctx.keep_logs:
         # rm logs
         call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
-        call_throws(ctx, ['rm', '-rf', ctx.log_dir +  # noqa: W504
-                          '/*.wants/ceph-%s@*' % ctx.fsid])
+        call_throws(ctx, ['rm', '-rf', ctx.log_dir
+                          + '/*.wants/ceph-%s@*' % ctx.fsid])
 
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
