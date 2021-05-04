@@ -12,6 +12,7 @@ tasks:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
+    avoid_pacific_features: true
 - print: "**** done end installing pacific cephadm ..."
 
 - print: "**** done start cephadm.shell ceph config set mgr..."
