@@ -63,10 +63,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.update_export(export_config=inbuf)
 
     @CLICommand('nfs cluster create', perm='rw')
-    def _cmd_nfs_cluster_create(self, clusterid: str,
-                                placement: str = None) -> Tuple[int, str, str]:
+    def _cmd_nfs_cluster_create(self,
+                                clusterid: str,
+                                placement: Optional[str]=None,
+                                virtual_ip: Optional[str]=None) -> Tuple[int, str, str]:
         """Create an NFS Cluster"""
-        return self.nfs.create_nfs_cluster(cluster_id=clusterid, placement=placement)
+        return self.nfs.create_nfs_cluster(cluster_id=clusterid, placement=placement,
+                                           virtual_ip=virtual_ip)
 
     @CLICommand('nfs cluster rm', perm='rw')
     def _cmd_nfs_cluster_rm(self, clusterid: str) -> Tuple[int, str, str]:
