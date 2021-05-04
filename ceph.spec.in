@@ -2317,6 +2317,7 @@ fi
 %files -n cephfs-shell
 %{python3_sitelib}/cephfs_shell-*.egg-info
 %{_bindir}/cephfs-shell
+%{_mandir}/man8/cephfs-shell.8*
 %endif
 
 %files -n cephfs-top
