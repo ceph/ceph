@@ -120,7 +120,7 @@ TEST(LibRadosService, StatusFormat) {
     });
   }
 
-  int retry = 5;
+  int retry = 15;
   while (retry) {
     rados_t cluster;
 
