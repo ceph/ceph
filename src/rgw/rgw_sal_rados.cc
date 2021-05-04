@@ -229,7 +229,6 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp, bool delete_childr
 
   ListResults results;
 
-  bool is_truncated = false;
   do {
     results.objs.clear();
 
@@ -251,7 +250,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp, bool delete_childr
 	return ret;
       }
     }
-  } while(is_truncated);
+  } while(results.is_truncated);
 
   /* If there's a prefix, then we are aborting multiparts as well */
   if (!prefix.empty()) {
