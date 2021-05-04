@@ -5,13 +5,11 @@ from __future__ import absolute_import
 import errno
 import unittest
 
-from ..services.sso import handle_sso_command, load_sso_db
-from . import CmdException  # pylint: disable=no-name-in-module
-from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
-from . import exec_dashboard_cmd  # pylint: disable=no-name-in-module
+from ..services.sso import load_sso_db
+from . import CLICommandTestMixin, CmdException  # pylint: disable=no-name-in-module
 
 
-class AccessControlTest(unittest.TestCase, KVStoreMockMixin):
+class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     IDP_METADATA = '''<?xml version="1.0"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
                      xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
@@ -63,10 +61,6 @@ class AccessControlTest(unittest.TestCase, KVStoreMockMixin):
     def setUp(self):
         self.mock_kv_store()
         load_sso_db()
-
-    @classmethod
-    def exec_cmd(cls, cmd, **kwargs):
-        return exec_dashboard_cmd(handle_sso_command, cmd, **kwargs)
 
     def validate_onelogin_settings(self, onelogin_settings, ceph_dashboard_base_url, uid,
                                    sp_x509cert, sp_private_key, signature_enabled):
