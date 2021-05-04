@@ -280,7 +280,10 @@ class CephadmServe:
                 if r:
                     failures.append(r)
 
-            if self.mgr.cache.host_needs_autotune_memory(host):
+            if (
+                    self.mgr.cache.host_needs_autotune_memory(host)
+                    and not self.mgr.inventory.has_label(host, '_no_autotune_memory')
+            ):
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
 
