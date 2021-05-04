@@ -140,6 +140,13 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   an existing host that already contains Ceph daemons, it will cause cephadm to move
   those daemons elsewhere (except OSDs, which are not removed automatically).
 
+* ``_admin``: *Distribute client.admin and ceph.conf to this host*.
+
+  By default, an ``_admin`` label is applied to the first host in the cluster (where
+  bootstrap was originally run), and the ``client.admin`` key is set to be distributed
+  to that host via the ``ceph orch client-keyring ...`` function.  Adding this label
+  to additional hosts will normally cause cephadm to deploy config and keyring files
+  in ``/etc/ceph``.
 
 Maintenance Mode
 ================
