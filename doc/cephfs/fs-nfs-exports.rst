@@ -64,7 +64,7 @@ Delete NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster delete <clusterid>
+    $ ceph nfs cluster rm <clusterid>
 
 This deletes the deployed cluster.
 
@@ -191,7 +191,7 @@ Delete CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export delete <clusterid> <binding>
+    $ ceph nfs export rm <clusterid> <binding>
 
 This deletes an export in an NFS Ganesha cluster, where:
 

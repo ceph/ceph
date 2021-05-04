@@ -127,7 +127,7 @@ class TestNFS(MgrTestCase):
         '''
         Test deletion of a single nfs cluster.
         '''
-        self._nfs_cmd('cluster', 'delete', self.cluster_id)
+        self._nfs_cmd('cluster', 'rm', self.cluster_id)
         self._check_nfs_cluster_status('No daemons reported',
                                        'NFS Ganesha cluster could not be deleted')
 
@@ -179,7 +179,7 @@ class TestNFS(MgrTestCase):
         '''
         Delete an export.
         '''
-        self._nfs_cmd('export', 'delete', self.cluster_id, self.pseudo_path)
+        self._nfs_cmd('export', 'rm', self.cluster_id, self.pseudo_path)
         self._check_auth_ls()
 
     def _test_list_export(self):
@@ -297,7 +297,7 @@ class TestNFS(MgrTestCase):
         Test idempotency of cluster create and delete commands.
         '''
         self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.cluster_id])
-        self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'delete', self.cluster_id])
+        self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'rm', self.cluster_id])
 
     def test_create_cluster_with_invalid_cluster_id(self):
         '''
@@ -333,7 +333,7 @@ class TestNFS(MgrTestCase):
         self._test_idempotency(self._create_default_export, ['nfs', 'export', 'create', 'cephfs',
                                                              self.fs_name, self.cluster_id,
                                                              self.pseudo_path])
-        self._test_idempotency(self._delete_export, ['nfs', 'export', 'delete', self.cluster_id,
+        self._test_idempotency(self._delete_export, ['nfs', 'export', 'rm', self.cluster_id,
                                                      self.pseudo_path])
         self._test_delete_cluster()
 
