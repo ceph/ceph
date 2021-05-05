@@ -347,11 +347,11 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                         assert_equal(key.etag[1:-1], record['s3']['object']['eTag'])
                         if etags:
                             assert_in(key.etag[1:-1], etags)
-                        if deletions and 'ObjectRemoved' in record['eventName']:
+                        if deletions and record['eventName'].startswith('ObjectRemoved'):
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
-                        elif not deletions and 'ObjectCreated' in record['eventName']:
+                        elif not deletions and record['eventName'].startswith('ObjectCreated'):
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
@@ -363,11 +363,11 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                     assert_equal(key.etag, record['s3']['object']['eTag'])
                     if etags:
                         assert_in(key.etag[1:-1], etags)
-                    if deletions and 'ObjectRemoved' in record['eventName']:
+                    if deletions and record['eventName'].startswith('ObjectRemoved'):
                         key_found = True
                         object_size = record['s3']['object']['size']
                         break
-                    elif not deletions and 'ObjectCreated' in record['eventName']:
+                    elif not deletions and record['eventName'].startswith('ObjectCreated'):
                         key_found = True
                         object_size = record['s3']['object']['size']
                         break
@@ -1652,12 +1652,12 @@ def test_ps_s3_multipart_on_master():
 
     events = receiver2.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:Post')
+    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:Post')
     assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_2')
 
     events = receiver3.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:CompleteMultipartUpload')
+    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:CompleteMultipartUpload')
     assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_3')
     print(events[0]['Records'][0]['s3']['object']['size'])
 
@@ -2009,10 +2009,10 @@ def test_ps_s3_versioned_deletion_on_master():
     delete_marker_create_events = 0
     for event_list in events:
         for event in event_list['Records']:
-            if event['eventName'] == 's3:ObjectRemoved:Delete':
+            if event['eventName'] == 'ObjectRemoved:Delete':
                 delete_events += 1
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_3']
-            if event['eventName'] == 's3:ObjectRemoved:DeleteMarkerCreated':
+            if event['eventName'] == 'ObjectRemoved:DeleteMarkerCreated':
                 delete_marker_create_events += 1
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_2']
 
@@ -2282,10 +2282,10 @@ def test_ps_s3_persistent_gateways_recovery():
         creations = 0
         deletions = 0
         for event in events:
-            if event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+            if event['Records'][0]['eventName'] == 'ObjectCreated:Put' and \
                     key.name == event['Records'][0]['s3']['object']['key']:
                 creations += 1
-            elif event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+            elif event['Records'][0]['eventName'] == 'ObjectRemoved:Delete' and \
                     key.name == event['Records'][0]['s3']['object']['key']:
                 deletions += 1
         assert_equal(creations, 1)
@@ -2365,11 +2365,11 @@ def test_ps_s3_persistent_multiple_gateways():
         topic1_count = 0
         topic2_count = 0
         for event in events:
-            if event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+            if event['Records'][0]['eventName'] == 'ObjectCreated:Put' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic1_opaque == event['Records'][0]['opaqueData']:
                 topic1_count += 1
-            elif event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+            elif event['Records'][0]['eventName'] == 'ObjectCreated:Put' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic2_opaque == event['Records'][0]['opaqueData']:
                 topic2_count += 1
@@ -2390,11 +2390,11 @@ def test_ps_s3_persistent_multiple_gateways():
         topic1_count = 0
         topic2_count = 0
         for event in events:
-            if event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+            if event['Records'][0]['eventName'] == 'ObjectRemoved:Delete' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic1_opaque == event['Records'][0]['opaqueData']:
                 topic1_count += 1
-            elif event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+            elif event['Records'][0]['eventName'] == 'ObjectRemoved:Delete' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic2_opaque == event['Records'][0]['opaqueData']:
                 topic2_count += 1

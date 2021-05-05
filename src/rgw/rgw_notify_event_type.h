@@ -27,6 +27,8 @@ namespace rgw::notify {
 
   std::string to_ceph_string(EventType t);
 
+  std::string to_event_string(EventType t);
+
   EventType from_string(const std::string& s);
  
   // create a vector of event types from comma separated list of event types
