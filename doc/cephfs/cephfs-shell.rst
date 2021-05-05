@@ -1,22 +1,10 @@
-:orphan:
 
-===================================================
-cephfs-shell -- Shell-like tool talking with CephFS
-===================================================
-
-.. program:: cephfs-shell
-
-Synopsis
-========
-
-| **cephfs-shell** [options] [command]
-| **cephfs-shell** [options] -- [command, command,...]
-
-Description
-===========
+=============
+CephFS Shell
+=============
 
 CephFS Shell provides shell-like commands that directly interact with the
-Ceph File System.
+:term:`Ceph File System`.
 
 This tool can be used in interactive mode as well as in non-interactive mode.
 In former mode, cephfs-shell opens a shell session and after the given command
@@ -29,20 +17,16 @@ return value.
 Behaviour of CephFS Shell can be tweaked using ``cephfs-shell.conf``. Refer to
 `CephFS Shell Configuration File`_ for details.
 
-Options
-=======
+Usage :
 
-.. option:: -c, --config FILE
+    cephfs-shell [options] [command]
+    cephfs-shell [options] -- [command, command,...]
 
-   Path to cephfs-shell.conf
+Options :
+    -c, --config FILE     Path to cephfs-shell.conf
+    -b, --batch FILE      Path to batch file.
+    -t, --test FILE       Path to transcript(s) in FILE for testing
 
-.. option:: -b, --batch FILE
-
-   Path to batch file.
-
-.. option:: -t, --test FILE
-
-   Path to transcript(s) in FILE for testing
 
 .. note::
 
@@ -532,9 +516,7 @@ Right now, CephFS Shell inherits all its options from its dependency ``cmd2``.
 Therefore, these options might vary with the version of ``cmd2`` installed on
 your system. Refer to ``cmd2`` docs for a description of these options.
 
-Following is a sample ``cephfs-shell.conf``
-
-.. code-block:: ini
+Following is a sample ``cephfs-shell.conf``::
 
     [cephfs-shell]
     prompt = CephFS:~/>>>
@@ -604,8 +586,3 @@ Following exit codes are returned by cephfs shell
 +-----------------------------------------------+-----------+
 | Interrupted function call                     |     22    |
 +-----------------------------------------------+-----------+
-
-Files
-=====
-
-``~/.cephfs-shell.conf``
