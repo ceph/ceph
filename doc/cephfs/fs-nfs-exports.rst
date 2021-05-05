@@ -53,15 +53,6 @@ cluster)::
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
 
-Update NFS Ganesha Cluster
-==========================
-
-.. code:: bash
-
-    $ ceph nfs cluster update <clusterid> <placement>
-
-This updates the deployed cluster according to the placement value.
-
 Delete NFS Ganesha Cluster
 ==========================
 
