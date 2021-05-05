@@ -75,7 +75,7 @@ public:
 
   // traverse all the way back to the beginning of the period history, and
   // return a cursor to the first period in a fully attached history
-  RGWPeriodHistory::Cursor find_oldest_period(optional_yield y);
+  RGWPeriodHistory::Cursor find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y);
 
   /// initialize the oldest log period if it doesn't exist, and attach it to
   /// our current history
@@ -87,19 +87,22 @@ public:
 
   /// read the oldest log period asynchronously and write its result to the
   /// given cursor pointer
-  RGWCoroutine* read_oldest_log_period_cr(RGWPeriodHistory::Cursor *period,
+  RGWCoroutine* read_oldest_log_period_cr(const DoutPrefixProvider *dpp, 
+                                          RGWPeriodHistory::Cursor *period,
                                           RGWObjVersionTracker *objv) const;
 
   /// try to advance the oldest log period when the given period is trimmed,
   /// using a rados lock to provide atomicity
-  RGWCoroutine* trim_log_period_cr(RGWPeriodHistory::Cursor period,
+  RGWCoroutine* trim_log_period_cr(const DoutPrefixProvider *dpp, 
+                                   RGWPeriodHistory::Cursor period,
                                    RGWObjVersionTracker *objv) const;
   int read_history(RGWMetadataLogHistory *state, RGWObjVersionTracker *objv_tracker,optional_yield y, const DoutPrefixProvider *dpp) const;
-  int write_history(const RGWMetadataLogHistory& state,
+  int write_history(const DoutPrefixProvider *dpp, 
+                    const RGWMetadataLogHistory& state,
                     RGWObjVersionTracker *objv_tracker,
 		    optional_yield y, bool exclusive = false);
 
-  int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
+  int add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl);
 
   int get_shard_id(const string& hash_key, int *shard_id);
 
@@ -107,7 +110,7 @@ public:
     return period_history.get();
   }
 
-  int pull_period(const std::string& period_id, RGWPeriod& period, optional_yield y);
+  int pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period, optional_yield y);
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);

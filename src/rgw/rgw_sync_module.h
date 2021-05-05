@@ -190,7 +190,7 @@ public:
 
   ~RGWCallStatRemoteObjCR() override {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 
   virtual RGWStatRemoteObjCBCR *allocate_callback() {
     return nullptr;

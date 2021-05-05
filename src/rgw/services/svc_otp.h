@@ -66,23 +66,27 @@ public:
                RGWObjVersionTracker *objv_tracker,
                optional_yield y,
                const DoutPrefixProvider *dpp);
-  int store_all(RGWSI_OTP_BE_Ctx& ctx,
+  int store_all(const DoutPrefixProvider *dpp, 
+                RGWSI_OTP_BE_Ctx& ctx,
                 const string& key,
                 const otp_devices_list_t& devices,
                 real_time mtime,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
-  int store_all(RGWSI_OTP_BE_Ctx& ctx,
+  int store_all(const DoutPrefixProvider *dpp, 
+                RGWSI_OTP_BE_Ctx& ctx,
                 const rgw_user& uid,
                 const otp_devices_list_t& devices,
                 real_time mtime,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
-  int remove_all(RGWSI_OTP_BE_Ctx& ctx,
+  int remove_all(const DoutPrefixProvider *dpp, 
+                 RGWSI_OTP_BE_Ctx& ctx,
                  const string& key,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
-  int remove_all(RGWSI_OTP_BE_Ctx& ctx,
+  int remove_all(const DoutPrefixProvider *dpp, 
+                 RGWSI_OTP_BE_Ctx& ctx,
                  const rgw_user& uid,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);

@@ -163,17 +163,13 @@ protected:
 
   string tail_instance; /* tail object's instance */
 
-  void convert_to_explicit(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
-  int append_explicit(RGWObjManifest& m, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
+  void convert_to_explicit(const DoutPrefixProvider *dpp, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
+  int append_explicit(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
   void append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& iter, string *override_prefix);
 
-  void update_iterators() {
-    begin_iter.seek(0);
-    end_iter.seek(obj_size);
-  }
 public:
 
-  RGWObjManifest() : begin_iter(this), end_iter(this) {}
+  RGWObjManifest() = default;
   RGWObjManifest(const RGWObjManifest& rhs) {
     *this = rhs;
   }
@@ -188,13 +184,6 @@ public:
     tail_placement = rhs.tail_placement;
     rules = rhs.rules;
     tail_instance = rhs.tail_instance;
-
-    begin_iter.set_manifest(this);
-    end_iter.set_manifest(this);
-
-    begin_iter.seek(rhs.begin_iter.get_ofs());
-    end_iter.seek(rhs.end_iter.get_ofs());
-
     return *this;
   }
 
@@ -209,7 +198,8 @@ public:
     set_obj_size(_size);
   }
 
-  void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location);
+  void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs,
+                             string *override_prefix, rgw_obj_select *location) const;
 
   void set_trivial_rule(uint64_t tail_ofs, uint64_t stripe_max_size) {
     RGWObjManifestRule rule(0, tail_ofs, 0, stripe_max_size);
@@ -318,34 +308,33 @@ public:
       decode(tail_placement.placement_rule, bl);
     }
 
-    update_iterators();
     DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWObjManifest*>& o);
 
-  int append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
+  int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
-  int append(RGWObjManifest& m, rgw::sal::Zone* zone);
+  int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, rgw::sal::Zone* zone);
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
 
-  bool empty() {
+  bool empty() const {
     if (explicit_objs)
       return objs.empty();
     return rules.empty();
   }
 
-  bool has_explicit_objs() {
+  bool has_explicit_objs() const {
     return explicit_objs;
   }
 
-  bool has_tail() {
+  bool has_tail() const {
     if (explicit_objs) {
       if (objs.size() == 1) {
-        map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
-        rgw_obj& o = iter->second.loc;
+        auto iter = objs.begin();
+        const rgw_obj& o = iter->second.loc;
         return !(obj == o);
       }
       return (objs.size() >= 2);
@@ -364,7 +353,7 @@ public:
     }
   }
 
-  const rgw_obj& get_obj() {
+  const rgw_obj& get_obj() const {
     return obj;
   }
 
@@ -373,11 +362,11 @@ public:
     tail_placement.bucket = _b;
   }
 
-  const rgw_bucket_placement& get_tail_placement() {
+  const rgw_bucket_placement& get_tail_placement() const {
     return tail_placement;
   }
 
-  const rgw_placement_rule& get_head_placement_rule() {
+  const rgw_placement_rule& get_head_placement_rule() const {
     return head_placement_rule;
   }
 
@@ -385,7 +374,7 @@ public:
     prefix = _p;
   }
 
-  const string& get_prefix() {
+  const string& get_prefix() const {
     return prefix;
   }
 
@@ -393,7 +382,7 @@ public:
     tail_instance = _ti;
   }
 
-  const string& get_tail_instance() {
+  const string& get_tail_instance() const {
     return tail_instance;
   }
 
@@ -403,24 +392,23 @@ public:
 
   void set_obj_size(uint64_t s) {
     obj_size = s;
-
-    update_iterators();
   }
 
-  uint64_t get_obj_size() {
+  uint64_t get_obj_size() const {
     return obj_size;
   }
 
-  uint64_t get_head_size() {
+  uint64_t get_head_size() const {
     return head_size;
   }
 
-  uint64_t get_max_head_size() {
+  uint64_t get_max_head_size() const {
     return max_head_size;
   }
 
   class obj_iterator {
-    RGWObjManifest *manifest = nullptr;
+    const DoutPrefixProvider *dpp;
+    const RGWObjManifest *manifest = nullptr;
     uint64_t part_ofs = 0;   /* where current part starts */
     uint64_t stripe_ofs = 0; /* where current stripe starts */
     uint64_t ofs = 0;        /* current position within the object */
@@ -432,26 +420,18 @@ public:
 
     rgw_obj_select location;
 
-    map<uint64_t, RGWObjManifestRule>::iterator rule_iter;
-    map<uint64_t, RGWObjManifestRule>::iterator next_rule_iter;
-
-    map<uint64_t, RGWObjManifestPart>::iterator explicit_iter;
+    map<uint64_t, RGWObjManifestRule>::const_iterator rule_iter;
+    map<uint64_t, RGWObjManifestRule>::const_iterator next_rule_iter;
+    map<uint64_t, RGWObjManifestPart>::const_iterator explicit_iter;
 
     void update_explicit_pos();
 
-
-  protected:
-
-    void set_manifest(RGWObjManifest *m) {
-      manifest = m;
-    }
-
   public:
     obj_iterator() = default;
-    explicit obj_iterator(RGWObjManifest *_m)
-      : obj_iterator(_m, 0)
+    explicit obj_iterator(const DoutPrefixProvider *_dpp, const RGWObjManifest *_m)
+      : obj_iterator(_dpp, _m, 0)
     {}
-    obj_iterator(RGWObjManifest *_m, uint64_t _ofs) : manifest(_m) {
+    obj_iterator(const DoutPrefixProvider *_dpp, const RGWObjManifest *_m, uint64_t _ofs) : dpp(_dpp), manifest(_m) {
       seek(_ofs);
     }
     void seek(uint64_t ofs);
@@ -508,16 +488,14 @@ public:
 
     void update_location();
 
-    friend class RGWObjManifest;
     void dump(Formatter *f) const;
   }; // class obj_iterator
 
-  const obj_iterator& obj_begin();
-  const obj_iterator& obj_end();
-  obj_iterator obj_find(uint64_t ofs);
-
-  obj_iterator begin_iter;
-  obj_iterator end_iter;
+  obj_iterator obj_begin(const DoutPrefixProvider *dpp) const { return obj_iterator{dpp, this}; }
+  obj_iterator obj_end(const DoutPrefixProvider *dpp) const { return obj_iterator{dpp, this, obj_size}; }
+  obj_iterator obj_find(const DoutPrefixProvider *dpp, uint64_t ofs) const {
+    return obj_iterator{dpp, this, std::min(ofs, obj_size)};
+  }
 
   /*
    * simple object generator. Using a simple single rule manifest.

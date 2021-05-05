@@ -1857,7 +1857,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
 
         }
       } catch (const std::exception& e) {
-        lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
+        ldpp_dout(op, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
       }
     }
     rgw_build_iam_environment(store, s);

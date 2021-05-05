@@ -108,7 +108,7 @@ int RGWCreateRole::get_params()
   max_session_duration = s->info.args.get("MaxSessionDuration");
 
   if (role_name.empty() || trust_policy.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of role name or assume role policy document is empty"
+    ldpp_dout(this, 20) << "ERROR: one of role name or assume role policy document is empty"
     << dendl;
     return -EINVAL;
   }
@@ -118,7 +118,7 @@ int RGWCreateRole::get_params()
     const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
   }
   catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
     return -ERR_MALFORMED_DOC;
   }
 
@@ -161,7 +161,7 @@ int RGWDeleteRole::get_params()
   role_name = s->info.args.get("RoleName");
 
   if (role_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: Role name is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
     return -EINVAL;
   }
 
@@ -220,7 +220,7 @@ int RGWGetRole::get_params()
   role_name = s->info.args.get("RoleName");
 
   if (role_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: Role name is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
     return -EINVAL;
   }
 
@@ -264,12 +264,12 @@ int RGWModifyRole::get_params()
   trust_policy = s->info.args.get("PolicyDocument");
 
   if (role_name.empty() || trust_policy.empty()) {
-    ldout(s->cct, 20) << "ERROR: One of role name or trust policy is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: One of role name or trust policy is empty"<< dendl;
     return -EINVAL;
   }
   JSONParser p;
   if (!p.parse(trust_policy.c_str(), trust_policy.length())) {
-    ldout(s->cct, 20) << "ERROR: failed to parse assume role policy doc" << dendl;
+    ldpp_dout(this, 20) << "ERROR: failed to parse assume role policy doc" << dendl;
     return -ERR_MALFORMED_DOC;
   }
 
@@ -354,7 +354,7 @@ int RGWPutRolePolicy::get_params()
   perm_policy = s->info.args.get("PolicyDocument");
 
   if (role_name.empty() || policy_name.empty() || perm_policy.empty()) {
-    ldout(s->cct, 20) << "ERROR: One of role name, policy name or perm policy is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: One of role name, policy name or perm policy is empty"<< dendl;
     return -EINVAL;
   }
   bufferlist bl = bufferlist::static_from_string(perm_policy);
@@ -362,7 +362,7 @@ int RGWPutRolePolicy::get_params()
     const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
   }
   catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
     return -ERR_MALFORMED_DOC;
   }
   return 0;
@@ -393,7 +393,7 @@ int RGWGetRolePolicy::get_params()
   policy_name = s->info.args.get("PolicyName");
 
   if (role_name.empty() || policy_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
     return -EINVAL;
   }
   return 0;
@@ -431,7 +431,7 @@ int RGWListRolePolicies::get_params()
   role_name = s->info.args.get("RoleName");
 
   if (role_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: Role name is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
     return -EINVAL;
   }
   return 0;
@@ -465,7 +465,7 @@ int RGWDeleteRolePolicy::get_params()
   policy_name = s->info.args.get("PolicyName");
 
   if (role_name.empty() || policy_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
     return -EINVAL;
   }
   return 0;

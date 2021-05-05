@@ -86,7 +86,7 @@ string render_log_object_name(const string& format,
 }
 
 /* usage logger */
-class UsageLogger {
+class UsageLogger : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Store* store;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
@@ -165,8 +165,12 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    store->log_usage(old_map);
+    store->log_usage(this, old_map);
   }
+
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const override { return out << "rgw UsageLogger: "; }
 };
 
 static UsageLogger *usage_logger = NULL;
@@ -225,7 +229,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!s->is_err())
     data.successful_ops = 1;
 
-  ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
+  ldpp_dout(s, 30) << "log_usage: bucket_name=" << bucket_name
 	<< " tenant=" << s->bucket_tenant
 	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
 	<< bytes_received << ", success=" << data.successful_ops << dendl;
@@ -341,12 +345,12 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
     return 0;
 
   if (s->bucket_name.empty()) {
-    ldout(s->cct, 5) << "nothing to log for operation" << dendl;
+    ldpp_dout(s, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
   if (s->err.ret == -ERR_NO_SUCH_BUCKET || rgw::sal::Bucket::empty(s->bucket.get())) {
     if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
-      ldout(s->cct, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
+      ldpp_dout(s, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = "";
@@ -356,7 +360,7 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
   entry.bucket = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
 
   if (check_utf8(entry.bucket.c_str(), entry.bucket.size()) != 0) {
-    ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
+    ldpp_dout(s, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
 
@@ -462,14 +466,14 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
   if (s->cct->_conf->rgw_ops_log_rados) {
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        entry.bucket_id, entry.bucket);
-    ret = store->log_op(oid, bl);
+    ret = store->log_op(s, oid, bl);
   }
 
   if (olog) {
     olog->log(entry);
   }
   if (ret < 0)
-    ldout(s->cct, 0) << "ERROR: failed to log entry" << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to log entry" << dendl;
 
   return ret;
 }
