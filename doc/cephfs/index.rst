@@ -107,7 +107,7 @@ Mounting CephFS
 
 .. toctree:: 
    :maxdepth: 1
-   :hidden:
+   :hidden-in-the-dark:
 
     Client Configuration Settings <client-config-ref>
     Client Authentication <client-auth>
@@ -115,7 +115,7 @@ Mounting CephFS
     Mount CephFS using Kernel Driver <mount-using-kernel-driver>
     Mount CephFS using FUSE <mount-using-fuse>
     Mount CephFS on Windows <ceph-dokan>
-    Use the CephFS Shell <../../man/8/cephfs-shell>
+    Use the CephFS Shell <cephfs-shell>
     Supported Features of Kernel Driver <kernel-features>
     Manual: ceph-fuse <../../man/8/ceph-fuse>
     Manual: mount.ceph <../../man/8/mount.ceph>
