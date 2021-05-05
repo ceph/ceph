@@ -54,8 +54,9 @@ ImageCacheState<I>::ImageCacheState(
   present = (bool)f["present"];
   empty = (bool)f["empty"];
   clean = (bool)f["clean"];
-  host = (string)f["pwl_host"];
-  path = (string)f["pwl_path"];
+  cache_type = f["cache_type"];
+  host = f["pwl_host"];
+  path = f["pwl_path"];
   uint64_t pwl_size;
   std::istringstream iss(f["pwl_size"]);
   iss >> pwl_size;
@@ -142,19 +143,10 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     }
 
     bool cache_exists = (bool)f["present"];
-    int cache_type = (int)f["cache_type"];
-
-    switch (cache_type) {
-      case IMAGE_CACHE_TYPE_SSD:
-      case IMAGE_CACHE_TYPE_RWL:
-        if (!cache_exists) {
-          cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
-        } else {
-          cache_state = new ImageCacheState<I>(image_ctx, f, plugin_api);
-        }
-        break;
-      default:
-	r = -EINVAL;
+    if (!cache_exists) {
+      cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
+    } else {
+      cache_state = new ImageCacheState<I>(image_ctx, f, plugin_api);
     }
   }
   return cache_state;
