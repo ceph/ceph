@@ -890,8 +890,6 @@ class IngressSpec(ServiceSpec):
                  keepalived_password: Optional[str] = None,
                  virtual_ip: Optional[str] = None,
                  virtual_interface_networks: Optional[List[str]] = [],
-                 haproxy_container_image: Optional[str] = None,
-                 keepalived_container_image: Optional[str] = None,
                  unmanaged: bool = False,
                  ssl: bool = False
                  ):
@@ -914,8 +912,6 @@ class IngressSpec(ServiceSpec):
         self.keepalived_password = keepalived_password
         self.virtual_ip = virtual_ip
         self.virtual_interface_networks = virtual_interface_networks or []
-        self.haproxy_container_image = haproxy_container_image
-        self.keepalived_container_image = keepalived_container_image
         self.unmanaged = unmanaged
         self.ssl = ssl
 
