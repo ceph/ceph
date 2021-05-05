@@ -675,7 +675,7 @@ void populate_event_from_request(const req_state *s,
         EventType event_type,
         rgw_pubsub_s3_event& event) { 
   event.eventTime = mtime;
-  event.eventName = to_string(event_type);
+  event.eventName = to_event_string(event_type);
   event.userIdentity = s->user->get_id().id;    // user that triggered the change
   event.x_amz_request_id = s->req_id;          // request ID of the original change
   event.x_amz_id_2 = s->host_id;               // RGW on which the change was made
