@@ -56,6 +56,7 @@ setup()
         rbd --dest-pool ${POOL} --dest-namespace "${ns}" --no-progress import \
             ${DATA} ${IMAGE}
     done
+
 }
 
 function cleanup()
@@ -69,7 +70,7 @@ function cleanup()
     rm -Rf ${TEMPDIR}
     if [ -n "${DEV}" ]
     then
-	_sudo rbd-nbd unmap ${DEV}
+	_sudo rbd device --device-type nbd unmap ${DEV}
     fi
 
     for ns in '' ${NS}; do
@@ -84,6 +85,7 @@ function cleanup()
         fi
     done
     rbd namespace remove ${POOL}/${NS}
+
 }
 
 function expect_false()
@@ -95,7 +97,7 @@ function get_pid()
 {
     local ns=$1
 
-    PID=$(rbd-nbd --format xml list-mapped | $XMLSTARLET sel -t -v \
+    PID=$(rbd device --device-type nbd --format xml list | $XMLSTARLET sel -t -v \
       "//devices/device[pool='${POOL}'][namespace='${ns}'][image='${IMAGE}'][device='${DEV}']/id")
     test -n "${PID}" || return 1
     ps -p ${PID} -C rbd-nbd
@@ -106,8 +108,8 @@ unmap_device()
     local dev=$1
     local pid=$2
 
-    _sudo rbd-nbd unmap ${dev}
-    rbd-nbd list-mapped | expect_false grep "^${pid}\\b" || return 1
+    _sudo rbd device --device-type nbd unmap ${dev}
+    rbd device --device-type nbd list | expect_false grep "^${pid}\\b" || return 1
     ps -C rbd-nbd | expect_false grep "^ *${pid}\\b" || return 1
 
     # workaround possible race between unmap and following map
@@ -125,18 +127,18 @@ expect_false rbd-nbd
 expect_false rbd-nbd INVALIDCMD
 if [ `id -u` -ne 0 ]
 then
-    expect_false rbd-nbd map ${IMAGE}
+    expect_false rbd device --device-type nbd map ${IMAGE}
 fi
-expect_false _sudo rbd-nbd map INVALIDIMAGE
+expect_false _sudo rbd device --device-type nbd map INVALIDIMAGE
 expect_false _sudo rbd-nbd --device INVALIDDEV map ${IMAGE}
 
 # list format test
-expect_false rbd-nbd --format INVALID list-mapped
-rbd-nbd --format json --pretty-format list-mapped
-rbd-nbd --format xml list-mapped
+expect_false rbd device --device-type nbd --format INVALID list
+rbd device --device-type nbd --format json --pretty-format list
+rbd device --device-type nbd --format xml list
 
 # map test using the first unused device
-DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
 get_pid
 # map test specifying the device
 expect_false _sudo rbd-nbd --device ${DEV} map ${POOL}/${IMAGE}
@@ -146,7 +148,7 @@ DEV=
 # XXX: race possible when the device is reused by other process
 DEV=`_sudo rbd-nbd --device ${dev1} map ${POOL}/${IMAGE}`
 [ "${DEV}" = "${dev1}" ]
-rbd-nbd list-mapped | grep "${IMAGE}"
+rbd device --device-type nbd list | grep "${IMAGE}"
 get_pid
 
 # read test
@@ -187,8 +189,8 @@ test ${blocks2} -eq ${blocks}
 
 # read-only option test
 unmap_device ${DEV} ${PID}
-DEV=`_sudo rbd-nbd map --read-only ${POOL}/${IMAGE}`
-PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
+DEV=`_sudo rbd --device-type nbd map --read-only ${POOL}/${IMAGE}`
+PID=$(rbd device --device-type nbd list | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
     '$2 == pool && $3 == img && $5 == dev {print $1}')
 test -n "${PID}"
 ps -p ${PID} -C rbd-nbd
@@ -198,7 +200,7 @@ expect_false _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 unmap_device ${DEV} ${PID}
 
 # exclusive option test
-DEV=`_sudo rbd-nbd map --exclusive ${POOL}/${IMAGE}`
+DEV=`_sudo rbd --device-type nbd map --exclusive ${POOL}/${IMAGE}`
 get_pid
 
 _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
@@ -209,48 +211,48 @@ DEV=
 rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 # unmap by image name test
-DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
 get_pid
 unmap_device ${IMAGE} ${PID}
 DEV=
 
 # map/unmap snap test
 rbd snap create ${POOL}/${IMAGE}@snap
-DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}@snap`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}@snap`
 get_pid
 unmap_device "${IMAGE}@snap" ${PID}
 DEV=
 
 # map/unmap namespace test
 rbd snap create ${POOL}/${NS}/${IMAGE}@snap
-DEV=`_sudo rbd-nbd map ${POOL}/${NS}/${IMAGE}@snap`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${NS}/${IMAGE}@snap`
 get_pid ${NS}
 unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${PID}
 DEV=
 
 # unmap by image name test 2
-DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
 get_pid
 pid=$PID
-DEV=`_sudo rbd-nbd map ${POOL}/${NS}/${IMAGE}`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${NS}/${IMAGE}`
 get_pid ${NS}
 unmap_device ${POOL}/${NS}/${IMAGE} ${PID}
 DEV=
 unmap_device ${POOL}/${IMAGE} ${pid}
 
 # auto unmap test
-DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
 get_pid
 _sudo kill ${PID}
 for i in `seq 10`; do
-  rbd-nbd list-mapped | expect_false grep "^${PID} *${POOL} *${IMAGE}" && break
+  rbd device --device-type nbd list | expect_false grep "^${PID} *${POOL} *${IMAGE}" && break
   sleep 1
 done
-rbd-nbd list-mapped | expect_false grep "^${PID} *${POOL} *${IMAGE}"
+rbd device --device-type nbd list | expect_false grep "^${PID} *${POOL} *${IMAGE}"
 
 # quiesce test
 QUIESCE_HOOK=${TEMPDIR}/quiesce.sh
-DEV=`_sudo rbd-nbd map --quiesce --quiesce-hook ${QUIESCE_HOOK} ${POOL}/${IMAGE}`
+DEV=`_sudo rbd device --device-type nbd map --quiesce --quiesce-hook ${QUIESCE_HOOK} ${POOL}/${IMAGE}`
 get_pid
 
 # test it fails if the hook does not exists
@@ -296,10 +298,10 @@ unmap_device ${DEV} ${PID}
 LOG_FILE=${TEMPDIR}/rbd-nbd.log
 if [ -n "${CEPH_SRC}" ]; then
     QUIESCE_HOOK=${CEPH_SRC}/tools/rbd_nbd/rbd-nbd_quiesce
-    DEV=`_sudo rbd-nbd map --quiesce --quiesce-hook ${QUIESCE_HOOK} \
+    DEV=`_sudo rbd device --device-type nbd map --quiesce --quiesce-hook ${QUIESCE_HOOK} \
                ${POOL}/${IMAGE} --log-file=${LOG_FILE}`
 else
-    DEV=`_sudo rbd-nbd map --quiesce ${POOL}/${IMAGE} --log-file=${LOG_FILE}`
+    DEV=`_sudo rbd device --device-type nbd map --quiesce ${POOL}/${IMAGE} --log-file=${LOG_FILE}`
 fi
 get_pid
 _sudo mkfs ${DEV}
@@ -314,7 +316,7 @@ cat ${LOG_FILE}
 expect_false grep 'quiesce failed' ${LOG_FILE}
 
 # test detach/attach
-DEV=`_sudo rbd-nbd map --try-netlink ${POOL}/${IMAGE}`
+DEV=`_sudo rbd device --device-type nbd --options try-netlink map ${POOL}/${IMAGE}`
 get_pid
 _sudo mount ${DEV} ${TEMPDIR}/mnt
 _sudo rbd-nbd detach ${POOL}/${IMAGE}
