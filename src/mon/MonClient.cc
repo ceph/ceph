@@ -547,7 +547,6 @@ int MonClient::authenticate(double timeout)
   until += ceph::make_timespan(timeout);
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
-  authenticate_err = 1;  // == in progress
   while (!active_con && authenticate_err >= 0) {
     if (timeout > 0.0) {
       auto r = auth_cond.wait_until(lock, until);
@@ -648,18 +647,6 @@ void MonClient::_finish_auth(int auth_err)
     _check_auth_tickets();
   }
   auth_cond.notify_all();
-
-  if (!auth_err) {
-    Context *cb = nullptr;
-    if (session_established_context) {
-      cb = session_established_context.release();
-    }
-    if (cb) {
-      monc_lock.unlock();
-      cb->complete(0);
-      monc_lock.lock();
-    }
-  }
 }
 
 // ---------
@@ -691,6 +678,8 @@ void MonClient::_reopen_session(int rank)
 
   active_con.reset();
   pending_cons.clear();
+
+  authenticate_err = 1;  // == in progress
 
   _start_hunting();
 
