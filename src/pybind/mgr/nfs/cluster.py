@@ -22,6 +22,15 @@ def cluster_setter(func):
     return set_pool_ns_clusterid
 
 
+def create_ganesha_pool(mgr, pool):
+    pool_list = [p['pool_name'] for p in mgr.get_osdmap().dump().get('pools', [])]
+    if pool not in pool_list:
+        mgr.check_mon_command({'prefix': 'osd pool create', 'pool': pool})
+        mgr.check_mon_command({'prefix': 'osd pool application enable',
+                               'pool': pool,
+                               'app': 'nfs'})
+
+
 class NFSCluster:
     def __init__(self, mgr):
         self.pool_name = POOL_NAME
@@ -65,12 +74,7 @@ class NFSCluster:
                 raise NFSInvalidOperation(f"cluster id {cluster_id} is invalid. "
                                           f"{invalid_str.group()} is char not permitted")
 
-            pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
-
-            if self.pool_name not in pool_list:
-                self.mgr.check_mon_command({'prefix': 'osd pool create', 'pool': self.pool_name})
-                self.mgr.check_mon_command({'prefix': 'osd pool application enable',
-                                            'pool': self.pool_name, 'app': 'nfs'})
+            create_ganesha_pool(self.mgr, self.pool_name)
 
             self.create_empty_rados_obj()
 
