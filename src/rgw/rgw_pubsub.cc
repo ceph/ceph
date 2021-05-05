@@ -562,6 +562,29 @@ int RGWPubSub::Bucket::create_notification(const string& topic_name,const rgw::n
   ldout(store->ctx(), 20) << "successfully read " << bucket_topics.topics.size() << " topics from bucket '" << 
     bucket.name << "'" << dendl;
 
+  /*If the notification already exists, let us delete the unique_topic_name and recreate it.*/
+  RGWObjVersionTracker topic_objv_tracker;
+  rgw_pubsub_user_topics topics;
+  ret = ps->read_user_topics(&topics, &topic_objv_tracker);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+    return ret;
+  } else if (ret == -ENOENT) {
+    // its not an error if no topics exist, just a no-op
+    ldout(store->ctx(), 10) << "WARNING: failed to read topics info, deletion is a no-op: ret=" << ret << dendl;
+    return 0;
+  }
+  
+  std::map<std::string, rgw_pubsub_topic_filter>::iterator iter;
+  for(iter = bucket_topics.topics.begin(); iter != bucket_topics.topics.end(); iter++){
+    if(iter->second.s3_id == notif_name){
+      auto unique_topic_name = iter->first;
+      bucket_topics.topics.erase(unique_topic_name);
+      topics.topics.erase(unique_topic_name);
+      ldout(store->ctx(), 1) << "Topic " << iter->first << "already exists, remove it!" << dendl;
+    }
+  }
+
   auto& topic_filter = bucket_topics.topics[topic_name];
   topic_filter.topic = topic_info.topic;
   topic_filter.events = events;
@@ -575,7 +598,13 @@ int RGWPubSub::Bucket::create_notification(const string& topic_name,const rgw::n
     ldout(store->ctx(), 1) << "ERROR: failed to write topics to bucket '" << bucket.name << "': ret=" << ret << dendl;
     return ret;
   }
-    
+
+  ret = ps->write_user_topics(topics, &topic_objv_tracker);
+  if (ret < 0) {
+    ldout(store->ctx(), 1) << "ERROR: failed to remove topics info: ret=" << ret << dendl;
+    return ret;
+  }  
+   
   ldout(store->ctx(), 20) << "successfully wrote " << bucket_topics.topics.size() << " topics to bucket '" << bucket.name << "'" << dendl;
 
   return 0;
