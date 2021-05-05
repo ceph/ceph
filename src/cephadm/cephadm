@@ -4799,7 +4799,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     ],
                                     verbosity=CallVerbosity.DEBUG)
                                 if not code:
-                                    image_digests = out.strip()[1:-1].split(' ')
+                                    image_digests = list(set(map(
+                                        normalize_image_digest,
+                                        out.strip()[1:-1].split(' '))))
                                     seen_digests[image_id] = image_digests
 
                             # identify software version inside the container (if we can)
