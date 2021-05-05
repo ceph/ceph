@@ -157,7 +157,8 @@ class CephadmServe:
                         0o644, 0, 0, bytes(config), str(config_digest)
                     )
             except Exception as e:
-                self.mgr.log.warning(f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
+                self.mgr.log.warning(
+                    f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
 
         # client keyrings
         for ks in self.mgr.keys.keys.values():
@@ -171,7 +172,8 @@ class CephadmServe:
                 if ret:
                     self.log.warning(f'unable to fetch keyring for {ks.entity}')
                     continue
-                digest = ''.join('%02x' % c for c in hashlib.sha256(keyring.encode('utf-8')).digest())
+                digest = ''.join('%02x' % c for c in hashlib.sha256(
+                    keyring.encode('utf-8')).digest())
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=ks.placement),
                     hosts=self.mgr._schedulable_hosts(),
@@ -189,7 +191,8 @@ class CephadmServe:
                         ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest
                     )
             except Exception as e:
-                self.log.warning(f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
+                self.log.warning(
+                    f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
 
         @forall_hosts
         def refresh(host: str) -> None:
