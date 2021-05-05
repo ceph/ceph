@@ -8,6 +8,7 @@ else()
 endif()
 
 add_library(libglobal_objs OBJECT ${libglobal_srcs})
+add_dependencies(libglobal_objs legacy-option-headers)
 
 add_library(global-static STATIC
   $<TARGET_OBJECTS:libglobal_objs>)
