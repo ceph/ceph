@@ -68,11 +68,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Create an NFS Cluster"""
         return self.nfs.create_nfs_cluster(cluster_id=clusterid, placement=placement)
 
-    @CLICommand('nfs cluster update', perm='rw')
-    def _cmd_nfs_cluster_update(self, clusterid: str, placement: str) -> Tuple[int, str, str]:
-        """Updates an NFS Cluster"""
-        return self.nfs.update_nfs_cluster(cluster_id=clusterid, placement=placement)
-
     @CLICommand('nfs cluster rm', perm='rw')
     def _cmd_nfs_cluster_rm(self, clusterid: str) -> Tuple[int, str, str]:
         """Removes an NFS Cluster"""

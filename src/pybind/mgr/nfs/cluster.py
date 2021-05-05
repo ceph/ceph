@@ -86,16 +86,6 @@ class NFSCluster:
             return exception_handler(e, f"NFS Cluster {cluster_id} could not be created")
 
     @cluster_setter
-    def update_nfs_cluster(self, cluster_id, placement):
-        try:
-            if cluster_id in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(placement)
-                return 0, "NFS Cluster Updated Successfully", ""
-            raise ClusterNotFound()
-        except Exception as e:
-            return exception_handler(e, f"NFS Cluster {cluster_id} could not be updated")
-
-    @cluster_setter
     def delete_nfs_cluster(self, cluster_id):
         try:
             cluster_list = available_clusters(self.mgr)
