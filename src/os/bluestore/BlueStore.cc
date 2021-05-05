@@ -13395,7 +13395,7 @@ void BlueStore::_do_write_small(
 		b_off, bl,
 		[&](uint64_t offset, bufferlist& t) {
 		  bdev->aio_write(offset, t,
-				  &txc->ioc, wctx->buffered);
+				  &txc->ioc, false);
 		});
 	    }
 	  }
