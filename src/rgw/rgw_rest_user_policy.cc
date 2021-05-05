@@ -62,13 +62,13 @@ int RGWRestUserPolicy::verify_permission(optional_yield y)
 bool RGWRestUserPolicy::validate_input()
 {
   if (policy_name.length() > MAX_POLICY_NAME_LEN) {
-    ldout(s->cct, 0) << "ERROR: Invalid policy name length " << dendl;
+    ldpp_dout(this, 0) << "ERROR: Invalid policy name length " << dendl;
     return false;
   }
 
   std::regex regex_policy_name("[A-Za-z0-9:=,.@-]+");
   if (! std::regex_match(policy_name, regex_policy_name)) {
-    ldout(s->cct, 0) << "ERROR: Invalid chars in policy name " << dendl;
+    ldpp_dout(this, 0) << "ERROR: Invalid chars in policy name " << dendl;
     return false;
   }
 
@@ -97,7 +97,7 @@ int RGWPutUserPolicy::get_params()
   policy = url_decode(s->info.args.get("PolicyDocument"), true);
 
   if (policy_name.empty() || user_name.empty() || policy.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of policy name, user name or policy document is empty"
+    ldpp_dout(this, 20) << "ERROR: one of policy name, user name or policy document is empty"
     << dendl;
     return -EINVAL;
   }
@@ -133,7 +133,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -156,7 +156,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
       op_ret = -ERR_INTERNAL_ERROR;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -ERR_MALFORMED_DOC;
   }
 
@@ -180,7 +180,7 @@ int RGWGetUserPolicy::get_params()
   user_name = s->info.args.get("UserName");
 
   if (policy_name.empty() || user_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of policy name or user name is empty"
+    ldpp_dout(this, 20) << "ERROR: one of policy name or user name is empty"
     << dendl;
     return -EINVAL;
   }
@@ -244,7 +244,7 @@ int RGWListUserPolicies::get_params()
   user_name = s->info.args.get("UserName");
 
   if (user_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: user name is empty" << dendl;
+    ldpp_dout(this, 20) << "ERROR: user name is empty" << dendl;
     return -EINVAL;
   }
 
@@ -305,7 +305,7 @@ int RGWDeleteUserPolicy::get_params()
   user_name = s->info.args.get("UserName");
 
   if (policy_name.empty() || user_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: One of policy name or user name is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: One of policy name or user name is empty"<< dendl;
     return -EINVAL;
   }
 
@@ -333,7 +333,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     // a policy might've been uploaded to this site when there was no sync
     // req. in earlier releases, proceed deletion

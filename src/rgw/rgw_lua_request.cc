@@ -33,7 +33,7 @@ int RequestLog(lua_State* L)
     const auto rc = rgw_log_op(store, rest, s, op_name, olog);
     lua_pushinteger(L, rc);
   } else {
-    ldout(s->cct, 1) << "Lua ERROR: missing rados store, cannot use ops log"  << dendl;
+    ldpp_dout(s, 1) << "Lua ERROR: missing rados store, cannot use ops log"  << dendl;
     lua_pushinteger(L, -EINVAL);
   }
 
@@ -805,11 +805,11 @@ int execute(
     // execute the lua script
     if (luaL_dostring(L, script.c_str()) != LUA_OK) {
       const std::string err(lua_tostring(L, -1));
-      ldout(s->cct, 1) << "Lua ERROR: " << err << dendl;
+      ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
       return -1;
     }
   } catch (const std::runtime_error& e) {
-    ldout(s->cct, 1) << "Lua ERROR: " << e.what() << dendl;
+    ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;
     return -1;
   }
 

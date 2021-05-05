@@ -346,7 +346,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   if (t) {
     string role_session = s->info.args.get("RoleSessionName");
     if (role_session.empty()) {
-      ldout(s->cct, 0) << "Role Session Name is empty " << dendl;
+      ldpp_dout(dpp, 0) << "Role Session Name is empty " << dendl;
       return result_t::deny(-EACCES);
     }
     string role_arn = s->info.args.get("RoleArn");
@@ -381,16 +381,16 @@ int RGWREST_STS::verify_permission(optional_yield y)
     // If yes, then return 0, else -EPERM
     auto p_res = p.eval_principal(s->env, *s->auth.identity);
     if (p_res == rgw::IAM::Effect::Deny) {
-      ldout(s->cct, 0) << "evaluating principal returned deny" << dendl;
+      ldpp_dout(this, 0) << "evaluating principal returned deny" << dendl;
       return -EPERM;
     }
     auto c_res = p.eval_conditions(s->env);
     if (c_res == rgw::IAM::Effect::Deny) {
-      ldout(s->cct, 0) << "evaluating condition returned deny" << dendl;
+      ldpp_dout(this, 0) << "evaluating condition returned deny" << dendl;
       return -EPERM;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 0) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << dendl;
     return -EPERM;
   }
 
@@ -414,7 +414,7 @@ int RGWSTSGetSessionToken::verify_permission(optional_yield y)
                               s,
                               rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
                               rgw::IAM::stsGetSessionToken)) {
-    ldout(s->cct, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
+    ldpp_dout(this, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
     return -EACCES;
   }
 
@@ -431,13 +431,13 @@ int RGWSTSGetSessionToken::get_params()
     string err;
     uint64_t duration_in_secs = strict_strtoll(duration.c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(s->cct, 0) << "Invalid value of input duration: " << duration << dendl;
+      ldpp_dout(this, 0) << "Invalid value of input duration: " << duration << dendl;
       return -EINVAL;
     }
 
     if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
             duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration) {
-      ldout(s->cct, 0) << "Invalid duration in secs: " << duration_in_secs << dendl;
+      ldpp_dout(this, 0) << "Invalid duration in secs: " << duration_in_secs << dendl;
       return -EINVAL;
     }
   }
@@ -480,7 +480,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   aud = s->info.args.get("aud");
 
   if (roleArn.empty() || roleSessionName.empty() || sub.empty() || aud.empty()) {
-    ldout(s->cct, 0) << "ERROR: one of role arn or role session name or token is empty" << dendl;
+    ldpp_dout(this, 0) << "ERROR: one of role arn or role session name or token is empty" << dendl;
     return -EINVAL;
   }
 
@@ -490,7 +490,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
       const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
     }
     catch (rgw::IAM::PolicyParseException& e) {
-      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
       return -ERR_MALFORMED_DOC;
     }
   }
@@ -539,7 +539,7 @@ int RGWSTSAssumeRole::get_params()
   tokenCode = s->info.args.get("TokenCode");
 
   if (roleArn.empty() || roleSessionName.empty()) {
-    ldout(s->cct, 0) << "ERROR: one of role arn or role session name is empty" << dendl;
+    ldpp_dout(this, 0) << "ERROR: one of role arn or role session name is empty" << dendl;
     return -EINVAL;
   }
 
@@ -549,7 +549,7 @@ int RGWSTSAssumeRole::get_params()
       const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
     }
     catch (rgw::IAM::PolicyParseException& e) {
-      ldout(s->cct, 0) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
       return -ERR_MALFORMED_DOC;
     }
   }
@@ -594,7 +594,7 @@ int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
 void RGWHandler_REST_STS::rgw_sts_parse_input()
 {
   if (post_body.size() > 0) {
-    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
       boost::char_separator<char> sep("&");
@@ -637,7 +637,7 @@ int RGWHandler_REST_STS::init(rgw::sal::Store* store,
   s->dialect = "sts";
 
   if (int ret = RGWHandler_REST_STS::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
-    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
 

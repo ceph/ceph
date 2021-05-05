@@ -115,7 +115,7 @@ public:
                           off_t bl_len) override;
   virtual int flush() override;
 
-  int read_manifest(bufferlist& manifest_bl);
+  int read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl);
 }; /* RGWGetObj_BlockDecrypt */
 
 
