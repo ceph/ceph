@@ -428,8 +428,8 @@ def check_buckets_sync_status_obj_not_exist(zone, buckets):
         for bucket in buckets:
             if log_list.find(':'+bucket+":") >= 0:
                 break
-        else:
-            return
+            else:
+                return
         time.sleep(config.checkpoint_delay)
     assert False
 

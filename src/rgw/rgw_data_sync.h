@@ -603,8 +603,7 @@ enum class BucketSyncState : uint8_t {
   Init = 0,
   Full,
   Incremental,
-  Stopped,
-  StoppedIndication
+  Stopped
 };
 inline std::ostream& operator<<(std::ostream& out, const BucketSyncState& s) {
   switch (s) {
@@ -612,7 +611,6 @@ inline std::ostream& operator<<(std::ostream& out, const BucketSyncState& s) {
   case BucketSyncState::Full: out << "full"; break;
   case BucketSyncState::Incremental: out << "incremental"; break;
   case BucketSyncState::Stopped: out << "stopped"; break;
-  case BucketSyncState::StoppedIndication: out << "stopped indication"; break;
   }
   return out;
 }
