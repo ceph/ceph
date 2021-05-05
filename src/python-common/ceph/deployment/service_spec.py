@@ -947,6 +947,9 @@ class IngressSpec(ServiceSpec):
                 'Cannot add ingress: No virtual_ip provided')
 
 
+yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
+
+
 class CustomContainerSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'container',
