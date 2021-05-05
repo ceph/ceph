@@ -6558,9 +6558,15 @@ options:
   desc: Enabled buffered IO for bluefs reads.
   long_desc: When this option is enabled, bluefs will in some cases perform buffered
     reads.  This allows the kernel page cache to act as a secondary cache for things
-    like RocksDB compaction.  For example, if the rocksdb block cache isn't large
-    enough to hold blocks from the compressed SST files itself, they can be read from
-    page cache instead of from the disk.
+    like RocksDB block reads.  For example, if the rocksdb block cache isn't large
+    enough to hold all blocks during OMAP iteration, it may be possible to read them
+    from page cache instead of from the disk.  This can dramatically improve
+    performance when the osd_memory_target is too small to hold all entries in block
+    cache but it does come with downsides.  It has been reported to occasionally
+    cause excessive kernel swapping (and associated stalls) under certain workloads.
+    Currently the best and most consistent performing combination appears to be
+    enabling bluefs_buffered_io and disabling system level swap.  It is possible
+    that this recommendation may change in the future however.
   default: true
   with_legacy: true
 - name: bluefs_sync_write
