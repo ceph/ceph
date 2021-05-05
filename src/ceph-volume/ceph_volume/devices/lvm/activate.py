@@ -3,7 +3,7 @@ import argparse
 import logging
 import os
 from textwrap import dedent
-from ceph_volume import process, conf, decorators, terminal, __release__, configuration
+from ceph_volume import process, conf, decorators, terminal, configuration
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
@@ -185,11 +185,7 @@ def activate_bluestore(osd_lvs, no_systemd=False):
     prime_command = [
         'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
         'prime-osd-dir', '--dev', osd_lv_path,
-        '--path', osd_path]
-
-    if __release__ != "luminous":
-        # mon-config changes are not available in Luminous
-        prime_command.append('--no-mon-config')
+        '--path', osd_path, '--no-mon-config']
 
     process.run(prime_command)
     # always re-do the symlink regardless if it exists, so that the block,

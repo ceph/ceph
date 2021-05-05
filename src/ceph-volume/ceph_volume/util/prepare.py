@@ -9,7 +9,7 @@ import os
 import logging
 import json
 import time
-from ceph_volume import process, conf, __release__, terminal
+from ceph_volume import process, conf, terminal
 from ceph_volume.util import system, constants, str_to_int, disk
 
 logger = logging.getLogger(__name__)
@@ -512,11 +512,8 @@ def osd_mkfs_filestore(osd_id, fsid, keyring):
     if get_osdspec_affinity():
         command.extend(['--osdspec-affinity', get_osdspec_affinity()])
 
-    if __release__ != 'luminous':
-        # goes through stdin
-        command.extend(['--keyfile', '-'])
-
     command.extend([
+        '--keyfile', '-',
         '--osd-data', path,
         '--osd-journal', journal,
         '--osd-uuid', fsid,
