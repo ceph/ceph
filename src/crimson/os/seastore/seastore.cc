@@ -556,6 +556,15 @@ seastar::future<> SeaStore::do_transaction(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
+  /* TODO: add ordering to Collection
+   *
+   * TransactionManager::submit_transction will ensure that
+   * beginning at that point operations remain ordered through
+   * to the jorunal.  We still need a pipeline stage associated
+   * with each collection to ensure that this portion in
+   * SeaStore::do_transaction remains correctly ordered for operations
+   * submitted on the same collection. TODO
+   */
   return repeat_with_internal_context(
     _ch,
     std::move(_t),
