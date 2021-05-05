@@ -14,7 +14,9 @@ from mgr_module import ERROR_MSG_NO_INPUT_FILE
 
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
+from ..exceptions import DashboardException
 from ..rest_client import RequestException
+from ..services.exception import handle_request_error
 from ..services.iscsi_client import IscsiClient
 from ..services.orchestrator import OrchClient
 from ..tools import NotificationQueue, TaskManager
@@ -196,6 +198,35 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         self.assertJsonBody(response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_create_acl_enabled(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw2"
+        request = copy.deepcopy(iscsi_target_request)
+        request['target_iqn'] = target_iqn
+        request['acl_enabled'] = False
+        self._task_post('/api/iscsi/target', request)
+        self.assertStatus(201)
+        self._get('/api/iscsi/target/{}'.format(request['target_iqn']))
+        self.assertStatus(200)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['acl_enabled'] = False
+        self.assertJsonBody(response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._create')
+    def test_create_error(self, _create_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw2"
+        request = copy.deepcopy(iscsi_target_request)
+        request['target_iqn'] = target_iqn
+        request['config'] = ""
+        request['settings'] = ""
+        request['task_progress_begin'] = 0
+        request['task_progress_end'] = 100
+        _create_mock.side_effect = RequestException("message error")
+        with self.assertRaises(DashboardException):
+            with handle_request_error('iscsi'):
+                IscsiTarget._create(**request)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_delete(self, _validate_image_mock):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw3"
         request = copy.deepcopy(iscsi_target_request)
@@ -207,6 +238,15 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         self._get('/api/iscsi/target')
         self.assertStatus(200)
         self.assertJsonBody([])
+
+    @mock.patch('dashboard.tools.TaskManager.current_task')
+    def test_delete_raises_exception(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw3"
+        request = copy.deepcopy(iscsi_target_request)
+        request['target_iqn'] = target_iqn
+        configs = {'targets': {target_iqn: {'portals': {}}}}
+        with self.assertRaises(DashboardException):
+            IscsiTarget._delete(target_iqn, configs, 0, 100)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_add_client(self, _validate_image_mock):

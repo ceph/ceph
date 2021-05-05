@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import html
 import json
 from enum import Enum
 
@@ -80,10 +81,11 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy,  # pylint: disable=too-many
 
     def custom_error_response(self, status, message, traceback, version):
         self.response.headers['Content-Type'] = 'application/json'
-        error_response = dict(status=status, detail=message, request_id=str(self.request.unique_id))
+        error_response = dict(status=status, detail=html.unescape(message),
+                              request_id=str(self.request.unique_id))
 
         if self.get_option(self.NAME):
-            error_response.update(dict(traceback=traceback, version=version))
+            error_response.update(dict(traceback=html.unescape(traceback), version=version))
 
         return json.dumps(error_response)
 

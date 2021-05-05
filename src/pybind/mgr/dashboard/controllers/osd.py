@@ -5,9 +5,11 @@ import json
 import logging
 import time
 from typing import Any, Dict, List, Optional, Union
+from typing_extensions import TypedDict
 
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError  # type: ignore
 from mgr_util import get_most_recent_rate
+from typeguard import typechecked
 
 from .. import mgr
 from ..exceptions import DashboardException
@@ -46,6 +48,11 @@ EXPORT_INDIV_FLAGS_GET_SCHEMA = {
     "flags": ([str], "List of active flags")
 }
 
+class IndividualFlags(TypedDict):
+    noout: bool
+    noin: bool
+    noup: bool
+    nodown: bool
 
 def osd_task(name, metadata, wait_for=2.0):
     return Task("osd/{}".format(name), metadata, wait_for)
@@ -434,7 +441,8 @@ class OsdFlagsController(RESTController):
                                       'Additionally `purged_snapshots` cannot even be set.')
                  },
                  responses={200: EXPORT_FLAGS_SCHEMA})
-    def bulk_set(self, flags):
+    @typechecked
+    def bulk_set(self, flags: List[str]):
         """
         The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit` flags cannot be unset.
         `purged_snapshots` cannot even be set. It is therefore required to at
@@ -454,6 +462,7 @@ class OsdFlagsController(RESTController):
 
         return sorted(enabled_flags - removed | added)
 
+
     @Endpoint('PUT', 'individual')
     @UpdatePermission
     @EndpointDoc('Sets OSD flags for a subset of individual OSDs.',
@@ -469,7 +478,8 @@ class OsdFlagsController(RESTController):
                                     'to.')
                  },
                  responses={200: EXPORT_INDIV_FLAGS_SCHEMA})
-    def set_individual(self, flags, ids):
+    @typechecked
+    def set_individual(self, flags: IndividualFlags, ids: List[int]):
         """
         Updates flags (`noout`, `noin`, `nodown`, `noup`) for an individual
         subset of OSDs.

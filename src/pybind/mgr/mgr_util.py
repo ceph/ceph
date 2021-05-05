@@ -407,14 +407,14 @@ def create_self_signed_cert(organisation: str = 'Ceph',
                             common_name: str = 'mgr',
                             dname: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
     """Returns self-signed PEM certificates valid for 10 years.
-    
+
     The optional dname parameter provides complete control of the cert/key
     creation by supporting all valid RDNs via a dictionary. However, if dname
     is not provided the default O and CN settings will be applied.
 
     :param organisation: String representing the Organisation(O) RDN (default='Ceph')
     :param common_name: String representing the Common Name(CN) RDN (default='mgr')
-    :param dname: Optional dictionary containing RDNs to use for crt/key generation 
+    :param dname: Optional dictionary containing RDNs to use for crt/key generation
 
     :return: ssl crt and key in utf-8 format
 
@@ -726,3 +726,4 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
             return result
         return wrapper
     return outer
+
