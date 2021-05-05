@@ -335,11 +335,11 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                 for record in record_list['Records']:
                     if record['s3']['bucket']['name'] == key.bucket.name and \
                         record['s3']['object']['key'] == key.name:
-                        if deletions and 'ObjectRemoved' in record['eventName']:
+                        if deletions and record['eventName'].startswith('ObjectRemoved'):
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
-                        elif not deletions and 'ObjectCreated' in record['eventName']:
+                        elif not deletions and record['eventName'].startswith('ObjectCreated'):
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
@@ -347,11 +347,11 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
             for record in records['Records']:
                 if record['s3']['bucket']['name'] == key.bucket.name and \
                     record['s3']['object']['key'] == key.name:
-                    if deletions and 'ObjectRemoved' in record['eventName']:
+                    if deletions and record['eventName'].startswith('ObjectRemoved'):
                         key_found = True
                         object_size = record['s3']['object']['size']
                         break
-                    elif not deletions and 'ObjectCreated' in record['eventName']:
+                    elif not deletions and record['eventName'].startswith('ObjectCreated'):
                         key_found = True
                         object_size = record['s3']['object']['size']
                         break
