@@ -59,7 +59,7 @@ public:
 						 uint32_t op_flags = 0) final;
 					      
 
-  get_attr_errorator::future<ceph::bufferptr> get_attr(CollectionRef c,
+  get_attr_errorator::future<ceph::bufferlist> get_attr(CollectionRef c,
                                             const ghobject_t& oid,
                                             std::string_view name) const final;
   get_attrs_ertr::future<attrs_t> get_attrs(CollectionRef c,
