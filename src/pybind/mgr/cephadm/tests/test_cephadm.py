@@ -1095,10 +1095,12 @@ class TestCephadm(object):
             assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
 
             # Make sure, _check_daemons does a redeploy due to monmap change:
-            before_digest = cephadm_module.cache.get_host_client_files('test')['/etc/ceph/ceph.conf'][0]
+            before_digest = cephadm_module.cache.get_host_client_files('test')[
+                '/etc/ceph/ceph.conf'][0]
             cephadm_module._set_extra_ceph_conf('[mon]\nk2=v2')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            after_digest = cephadm_module.cache.get_host_client_files('test')['/etc/ceph/ceph.conf'][0]
+            after_digest = cephadm_module.cache.get_host_client_files('test')[
+                '/etc/ceph/ceph.conf'][0]
             assert before_digest != after_digest
 
     def test_etc_ceph_init(self):
