@@ -426,19 +426,22 @@ enum {
 
 extern const char *ceph_mds_op_name(int op);
 
+// setattr mask is an int
 #ifndef CEPH_SETATTR_MODE
-#define CEPH_SETATTR_MODE	(1 << 0)
-#define CEPH_SETATTR_UID	(1 << 1)
-#define CEPH_SETATTR_GID	(1 << 2)
-#define CEPH_SETATTR_MTIME	(1 << 3)
-#define CEPH_SETATTR_ATIME	(1 << 4)
-#define CEPH_SETATTR_SIZE	(1 << 5)
-#define CEPH_SETATTR_CTIME	(1 << 6)
-#define CEPH_SETATTR_MTIME_NOW	(1 << 7)
-#define CEPH_SETATTR_ATIME_NOW	(1 << 8)
-#define CEPH_SETATTR_BTIME	(1 << 9)
+#define CEPH_SETATTR_MODE		(1 << 0)
+#define CEPH_SETATTR_UID		(1 << 1)
+#define CEPH_SETATTR_GID		(1 << 2)
+#define CEPH_SETATTR_MTIME		(1 << 3)
+#define CEPH_SETATTR_ATIME		(1 << 4)
+#define CEPH_SETATTR_SIZE		(1 << 5)
+#define CEPH_SETATTR_CTIME		(1 << 6)
+#define CEPH_SETATTR_MTIME_NOW		(1 << 7)
+#define CEPH_SETATTR_ATIME_NOW		(1 << 8)
+#define CEPH_SETATTR_BTIME		(1 << 9)
+#define CEPH_SETATTR_KILL_SGUID		(1 << 10)
+#define CEPH_SETATTR_FSCRYPT_AUTH	(1 << 11)
+#define CEPH_SETATTR_FSCRYPT_FILE	(1 << 12)
 #endif
-#define CEPH_SETATTR_KILL_SGUID	(1 << 10)
 
 /*
  * open request flags
