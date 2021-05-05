@@ -16,17 +16,14 @@ To deploy a NFS Ganesha gateway, run the following command:
 
 .. prompt:: bash #
 
-    ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* --placement="*<num-daemons>* [*<host1>* ...]"
+    ceph orch apply nfs *<svc_id>* [--port *<port>*] [--placement ...]
 
-For example, to deploy NFS with a service id of *foo* that will use the RADOS
-pool *nfs-ganesha* and the namespace *nfs-ns*, run this command:
+For example, to deploy NFS with a service id of *foo* on the default
+port 2049 with the default placement of a single daemon:
 
 .. prompt:: bash #
 
-   ceph orch apply nfs foo nfs-ganesha nfs-ns
-
-.. note::
-   If the *nfs-ganesha* pool doesn't exist, create it.
+   ceph orch apply nfs foo
 
 See :ref:`orchestrator-cli-placement-spec` for the details of the placement
 specification.
@@ -35,9 +32,6 @@ Service Specification
 =====================
 
 Alternatively, an NFS service can be applied using a YAML specification. 
-
-A service of type ``nfs`` requires a pool name and can contain
-an optional namespace:
 
 .. code-block:: yaml
 
@@ -48,12 +42,10 @@ an optional namespace:
         - host1
         - host2
     spec:
-      pool: mypool
-      namespace: mynamespace
+      port: 12345
 
-In this example, ``pool`` is a RADOS pool where NFS client recovery data is
-stored and ``namespace`` is a RADOS namespace where NFS client recovery data
-is stored.
+In this example, we run the server on the non-default ``port`` of
+12345 (instead of the default 2049) on ``host1`` and ``host2``.
 
 The specification can then be applied by running the following command:
 
