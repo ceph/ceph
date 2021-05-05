@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import errno
+import tempfile
 import unittest
 
 from ..services.sso import load_sso_db
@@ -115,6 +116,43 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                                idp_metadata=self.IDP_METADATA)
         self.validate_onelogin_settings(result, 'https://cephdashboard.local', 'uid', '', '',
                                         False)
+
+    def test_sso_saml2_setup_error(self):
+        default_kwargs = {
+            "ceph_dashboard_base_url": 'https://cephdashboard.local',
+            "idp_metadata": self.IDP_METADATA
+        }
+        params = [
+            ({"sp_x_509_cert": "some/path"},
+             "Missing parameter `sp_private_key`."),
+            ({"sp_private_key": "some/path"},
+             "Missing parameter `sp_x_509_cert`."),
+            ({"sp_private_key": "some/path", "sp_x_509_cert": "invalid/path"},
+             "`some/path` not found."),
+        ]
+        for param in params:
+            kwargs = param[0]
+            msg = param[1]
+            kwargs.update(default_kwargs)
+            with self.assertRaises(CmdException) as ctx:
+                self.exec_cmd('sso setup saml2', **kwargs)
+            self.assertEqual(str(ctx.exception), msg)
+            self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
+
+    def test_sso_saml2_setup_with_files(self):
+        tmpfile = tempfile.NamedTemporaryFile()
+        tmpfile2 = tempfile.NamedTemporaryFile()
+        kwargs = {
+            "ceph_dashboard_base_url": 'https://cephdashboard.local',
+            "idp_metadata": self.IDP_METADATA,
+            "sp_private_key": tmpfile.name,
+            "sp_x_509_cert": tmpfile2.name,
+        }
+        result = self.exec_cmd('sso setup saml2', **kwargs)
+        self.validate_onelogin_settings(result, 'https://cephdashboard.local', 'uid', '', '',
+                                        True)
+        tmpfile.close()
+        tmpfile2.close()
 
     def test_sso_enable_saml2(self):
         with self.assertRaises(CmdException) as ctx:
