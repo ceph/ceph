@@ -202,33 +202,7 @@ class ControllerTestCase(helper.CPWebCase):
         task_name = res['name']
         task_metadata = res['metadata']
 
-        # pylint: disable=protected-access
-        class Waiter(threading.Thread):
-            def __init__(self, task_name, task_metadata, tc):
-                super(Waiter, self).__init__()
-                self.task_name = task_name
-                self.task_metadata = task_metadata
-                self.ev = threading.Event()
-                self.abort = False
-                self.res_task = None
-                self.tc = tc
-
-            def run(self):
-                running = True
-                while running and not self.abort:
-                    logger.info("task (%s, %s) is still executing", self.task_name,
-                                self.task_metadata)
-                    time.sleep(1)
-                    self.tc._get('/api/task?name={}'.format(self.task_name), version=version)
-                    res = self.tc.json_body()
-                    for task in res['finished_tasks']:
-                        if task['metadata'] == self.task_metadata:
-                            # task finished
-                            running = False
-                            self.res_task = task
-                            self.ev.set()
-
-        thread = Waiter(task_name, task_metadata, self)
+        thread = Waiter(task_name, task_metadata, self, version)
         thread.start()
         status = thread.ev.wait(timeout)
         if not status:
@@ -240,19 +214,21 @@ class ControllerTestCase(helper.CPWebCase):
         logger.info("task (%s, %s) finished", task_name, task_metadata)
         if thread.res_task['success']:
             self.body = json.dumps(thread.res_task['ret_value'])
-            if method == 'POST':
-                self.status = '201 Created'
-            elif method == 'PUT':
-                self.status = '200 OK'
-            elif method == 'DELETE':
-                self.status = '204 No Content'
-            return
-
-        if 'status' in thread.res_task['exception']:
-            self.status = thread.res_task['exception']['status']
+            self._set_success_status(method)
         else:
-            self.status = 500
-        self.body = json.dumps(thread.res_task['exception'])
+            if 'status' in thread.res_task['exception']:
+                self.status = thread.res_task['exception']['status']
+            else:
+                self.status = 500
+            self.body = json.dumps(thread.res_task['exception'])
+
+    def _set_success_status(self, method):
+        if method == 'POST':
+            self.status = '201 Created'
+        elif method == 'PUT':
+            self.status = '200 OK'
+        elif method == 'DELETE':
+            self.status = '204 No Content'
 
     def _task_post(self, url, data=None, timeout=60, version=DEFAULT_VERSION):
         self._task_request('POST', url, data, timeout, version=version)
@@ -326,3 +302,31 @@ class RgwStub(Stub):
             'RGW_API_SECRET_KEY': 'fake-secret-key',
         }
         mgr.get_module_option = Mock(side_effect=settings.get)
+
+
+# pylint: disable=protected-access
+class Waiter(threading.Thread):
+    def __init__(self, task_name, task_metadata, tc, version):
+        super(Waiter, self).__init__()
+        self.task_name = task_name
+        self.task_metadata = task_metadata
+        self.ev = threading.Event()
+        self.abort = False
+        self.res_task = None
+        self.tc = tc
+        self.version = version
+
+    def run(self):
+        running = True
+        while running and not self.abort:
+            logger.info("task (%s, %s) is still executing", self.task_name,
+                        self.task_metadata)
+            time.sleep(1)
+            self.tc._get('/api/task?name={}'.format(self.task_name), version=self.version)
+            res = self.tc.json_body()
+            for task in res['finished_tasks']:
+                if task['metadata'] == self.task_metadata:
+                    # task finished
+                    running = False
+                    self.res_task = task
+                    self.ev.set()

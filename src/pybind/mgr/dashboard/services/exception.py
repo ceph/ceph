@@ -11,6 +11,7 @@ import rbd
 from orchestrator import OrchestratorError
 
 from ..exceptions import DashboardException, ViewCacheNoDataException
+from ..rest_client import RequestException
 from ..services.ceph_service import SendCommandError
 
 logger = logging.getLogger('exception')
@@ -89,3 +90,17 @@ def handle_orchestrator_error(component):
         yield
     except OrchestratorError as e:
         raise DashboardException(e, component=component)
+
+
+@contextmanager
+def handle_request_error(component):
+    try:
+        yield
+    except RequestException as e:
+        if e.content:
+            content = json.loads(e.content)
+            content_message = content.get('message')
+            if content_message:
+                raise DashboardException(
+                    msg=content_message, component=component)
+        raise DashboardException(e=e, component=component)
