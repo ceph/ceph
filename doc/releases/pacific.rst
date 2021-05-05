@@ -12,6 +12,14 @@ v16.2.2 Pacific
 This is the second backport release in the Pacific series. We recommend all
 users update to this release.
 
+Notable Changes
+---------------
+
+* Cephadm now supports an *ingress* service type that provides load
+  balancing and HA (via haproxy and keepalived on a virtual IP) for
+  RGW service (see :ref:`orchestrator-haproxy-service-spec`).  (The experimental
+  *rgw-ha* service has been removed.)
+
 Changelog
 ---------
 
