@@ -105,7 +105,6 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     I* image_ctx, plugin::Api<I>& plugin_api, int &r) {
   std::string cache_state_str;
   ImageCacheState<I>* cache_state = nullptr;
-  ldout(image_ctx->cct, 20) << "image_cache_state:" << cache_state_str << dendl;
 
   r = 0;
   bool dirty_cache = plugin_api.test_image_features(image_ctx, RBD_FEATURE_DIRTY_CACHE);
@@ -113,6 +112,8 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
                              IMAGE_CACHE_STATE, &cache_state_str);
   }
+
+  ldout(image_ctx->cct, 20) << "image_cache_state: " << cache_state_str << dendl;
 
   bool pwl_enabled = cache::util::is_pwl_enabled(*image_ctx);
   bool cache_desired = pwl_enabled;
