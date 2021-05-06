@@ -16,7 +16,7 @@ describe('Hosts page', () => {
 
     it('should display correct inventory', function () {
       for (const host of this.hosts) {
-        hosts.clickHostTab(host.name, 'Inventory');
+        hosts.clickHostTab(host.name, 'Physical Disks');
         cy.get('cd-host-details').within(() => {
           hosts.getTableCount('total').should('be.eq', host.devices.length);
         });
