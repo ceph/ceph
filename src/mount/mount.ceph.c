@@ -30,6 +30,8 @@ static const char * const EMPTY_STRING = "";
 struct ceph_mount_info {
 	unsigned long	cmi_flags;
 	char		*cmi_name;
+	char		*cmi_fsname;
+	char		*cmi_fsid;
 	char		*cmi_path;
 	char		*cmi_mons;
 	char		*cmi_conf;
@@ -37,6 +39,27 @@ struct ceph_mount_info {
 	int		cmi_opts_len;
 	char 		cmi_secret[SECRET_BUFSIZE];
 };
+
+static void mon_addr_as_resolve_param(char *mon_addr)
+{
+	for (; *mon_addr; ++mon_addr)
+		if (*mon_addr == '/')
+			*mon_addr = ',';
+}
+
+static void resolved_mon_addr_as_mount_opt(char *mon_addr)
+{
+	for (; *mon_addr; ++mon_addr)
+		if (*mon_addr == ',')
+			*mon_addr = '/';
+}
+
+static void resolved_mon_addr_as_mount_dev(char *mon_addr)
+{
+	for (; *mon_addr; ++mon_addr)
+		if (*mon_addr == '/')
+			*mon_addr = ',';
+}
 
 static void block_signals (int how)
 {
@@ -59,45 +82,172 @@ void mount_ceph_debug(const char *fmt, ...)
 	}
 }
 
-static int parse_src(const char *orig_str, struct ceph_mount_info *cmi)
+/*
+ * append a key value pair option to option string.
+ */
+static void append_opt(const char *key, const char *value,
+		       struct ceph_mount_info *cmi, int *pos)
 {
-	size_t len;
-	char *mount_path;
+	if (*pos != 0)
+		*pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, *pos, ",");
 
-	mount_path = strstr(orig_str, ":/");
-	if (!mount_path) {
-		fprintf(stderr, "source mount path was not specified\n");
-		return -EINVAL;
+	if (value) {
+		*pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, *pos, key);
+		*pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, *pos, "=");
+		*pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, *pos, value);
+	} else {
+		*pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, *pos, key);
+	}
+}
+
+/*
+ * remove a key value pair from option string. caller should ensure that the
+ * key value pair is separated by "=".
+ */
+static int remove_opt(struct ceph_mount_info *cmi, const char *key, char **value)
+{
+	char *key_start = strstr(cmi->cmi_opts, key);
+	if (!key_start) {
+		return -ENOENT;
 	}
 
-	len = mount_path - orig_str;
-	if (len != 0) {
-		cmi->cmi_mons = strndup(orig_str, len);
-		if (!cmi->cmi_mons)
+	/* key present -- try to split */
+	char *key_sep = strstr(key_start, "=");
+	if (!key_sep) {
+		return -ENOENT;
+	}
+
+	if (strncmp(key, key_start, key_sep - key_start) != 0) {
+		return -ENOENT;
+	}
+
+	++key_sep;
+	char *value_end = strstr(key_sep, ",");
+	if (!value_end)
+		value_end = key_sep + strlen(key_sep);
+
+	if (value_end != key_sep && value) {
+		size_t len1 = value_end - key_sep;
+		*value = strndup(key_sep, len1+1);
+		if (!*value)
 			return -ENOMEM;
+		(*value)[len1] = '\0';
 	}
 
-	mount_path++;
-	cmi->cmi_path = strdup(mount_path);
-	if (!cmi->cmi_path)
-		return -ENOMEM;
+	/* purge it */
+	size_t len2 = strlen(value_end);
+	if (len2) {
+		++value_end;
+		memmove(key_start, value_end, len2+1);
+	} else {
+                /* last kv pair - swallow the comma */
+		--key_start;
+		*key_start = '\0';
+	}
+
 	return 0;
 }
 
-static char *finalize_src(struct ceph_mount_info *cmi)
+static void record_name(const char *name, struct ceph_mount_info *cmi)
 {
-	int pos, len;
+	int name_pos = 0;
+	int name_len = 0;
+
+	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos, "client.");
+	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos, name);
+}
+
+/* parse device string of format: name@<fsid>.fs_name=/path */
+static int parse_dev(const char *dev_str, struct ceph_mount_info *cmi,
+		     int *opt_pos)
+{
+	size_t len;
+	char *name;
+	char *name_end;
+	char *fsid;
+	char *fs_name;
+
+	name_end = strstr(dev_str, "@");
+	if (!name_end) {
+		fprintf(stderr, "invalid device string format\n");
+		return -EINVAL;
+	}
+
+	len = name_end - dev_str;
+	if (!len) {
+		fprintf(stderr, "missing <name> in device\n");
+		return -EINVAL;
+	}
+
+	name = (char *)alloca(len+1);
+	memcpy(name, dev_str, len);
+	name[len] = '\0';
+
+	/* record name and store in option string */
+	record_name(name, cmi);
+	append_opt("name", name, cmi, opt_pos);
+
+	++name_end;
+	/* check if an fsid is provided in the device string */
+	fsid = strstr(name_end, ".");
+	if (fsid) {
+		len = fsid - name_end;
+		/* check if this _looks_ like a UUID -- the actual fsid
+		   verification is done in the kernel */
+		if (len != CLUSTER_FSID_LEN - 1) {
+			fprintf(stderr, "invalid device string format\n");
+			return -EINVAL;
+		}
+
+		cmi->cmi_fsid = strndup(name_end, len);
+		if (!cmi->cmi_fsid)
+			return -ENOMEM;
+		++fsid;
+		name_end = fsid;
+	}
+
+	fs_name = strstr(name_end, "=");
+	if (!fs_name) {
+		fprintf(stderr, "invalid device string format\n");
+		return -EINVAL;
+	}
+	len = fs_name - name_end;
+	if (!len) {
+		fprintf(stderr, "missing <fs_name> in device\n");
+		return -EINVAL;
+	}
+	cmi->cmi_fsname = strndup(name_end, len);
+	if (!cmi->cmi_fsname)
+		return -ENOMEM;
+
+	++fs_name;
+	if (strlen(fs_name)) {
+		cmi->cmi_path = strdup(fs_name);
+		if (!cmi->cmi_path)
+			return -ENOMEM;
+	}
+
+	return 0;
+}
+
+/* resolve monitor host and record in option string */
+static int finalize_src(struct ceph_mount_info *cmi, int *opt_pos)
+{
 	char *src;
+        size_t len = strlen(cmi->cmi_mons);
+        char *addr = alloca(len+1);
 
-	src = resolve_addrs(cmi->cmi_mons);
+        memcpy(addr, cmi->cmi_mons, len+1);
+        mon_addr_as_resolve_param(addr);
+
+	src = resolve_addrs(addr);
 	if (!src)
-		return NULL;
+		return -1;
 
-	len = strlen(src);
-	pos = safe_cat(&src, &len, len, ":");
-	safe_cat(&src, &len, pos, cmi->cmi_path);
-
-	return src;
+	resolved_mon_addr_as_mount_opt(src);
+	append_opt("mon_addr", src, cmi, opt_pos);
+	free(src);
+	return 0;
 }
 
 static int
@@ -126,7 +276,7 @@ drop_capabilities()
  * fork(), have the child drop privileges and do the processing and then hand
  * back the results via memory shared with the parent.
  */
-static int fetch_config_info(struct ceph_mount_info *cmi)
+static int fetch_config_info(struct ceph_mount_info *cmi, int *opt_pos)
 {
 	int ret = 0;
 	pid_t pid;
@@ -206,13 +356,10 @@ out:
 /*
  * this one is partially based on parse_options() from cifs.mount.c
  */
-static int parse_options(const char *data, struct ceph_mount_info *cmi)
+static int parse_options(const char *data, struct ceph_mount_info *cmi,
+			 int *opt_pos)
 {
 	char * next_keyword = NULL;
-	int pos = 0;
-	char *name = NULL;
-	int name_len = 0;
-	int name_pos = 0;
 
 	if (data == EMPTY_STRING)
 		goto out;
@@ -277,13 +424,6 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			/* ignore */
 		} else if (strcmp(data, "nofail") == 0) {
 			/* ignore */
-		} else if (strcmp(data, "fs") == 0) {
-			if (!value || !*value) {
-				fprintf(stderr, "mount option fs requires a value.\n");
-				return -EINVAL;
-			}
-			data = "mds_namespace";
-			skip = false;
 		} else if (strcmp(data, "secretfile") == 0) {
 			int ret;
 
@@ -316,14 +456,6 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			cmi->cmi_conf = strdup(value);
 			if (!cmi->cmi_conf)
 				return -ENOMEM;
-		} else if (strcmp(data, "name") == 0) {
-			if (!value || !*value) {
-				fprintf(stderr, "mount option name requires a value.\n");
-				return -EINVAL;
-			}
-			/* keep pointer to value */
-			name = value;
-			skip = false;
 		} else if (strcmp(data, "ms_mode") == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option ms_mode requires a value.\n");
@@ -347,29 +479,14 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 		}
 
 		/* Copy (possibly modified) option to out */
-		if (!skip) {
-			if (pos)
-				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
-
-			if (value) {
-				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, data);
-				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, "=");
-				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, value);
-			} else {
-				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, data);
-			}
-		}
+		if (!skip)
+                        append_opt(data, value, cmi, opt_pos);
 		data = next_keyword;
 	} while (data);
 
 out:
-	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos, "client.");
-	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos,
-			    name ? name : CEPH_AUTH_NAME_DEFAULT);
-
 	if (cmi->cmi_opts)
-		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel.\n",
-						 cmi->cmi_opts);
+		mount_ceph_debug("mount.ceph: options \"%s\".\n",  cmi->cmi_opts);
 
 	if (!cmi->cmi_opts) {
 		cmi->cmi_opts = strdup(EMPTY_STRING);
@@ -456,9 +573,111 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 {
 	free(cmi->cmi_opts);
 	free(cmi->cmi_name);
+	free(cmi->cmi_fsname);
+	free(cmi->cmi_fsid);
 	free(cmi->cmi_path);
 	free(cmi->cmi_mons);
 	free(cmi->cmi_conf);
+}
+
+static int mount_new_device_format(const char *node, struct ceph_mount_info *cmi)
+{
+	int r;
+	char *rsrc = NULL;
+	int pos = 0;
+	int len = 0;
+
+	/* so that we can try to mount using old syntax */
+	if (!cmi->cmi_fsid)
+		return EINVAL;
+
+	pos = safe_cat(&rsrc, &len, pos, cmi->cmi_name);
+	pos = safe_cat(&rsrc, &len, pos, "@");
+	pos = safe_cat(&rsrc, &len, pos, cmi->cmi_fsid);
+	pos = safe_cat(&rsrc, &len, pos, ".");
+	pos = safe_cat(&rsrc, &len, pos, cmi->cmi_fsname);
+	pos = safe_cat(&rsrc, &len, pos, "=");
+	if (cmi->cmi_path)
+		safe_cat(&rsrc, &len, pos, cmi->cmi_path);
+
+	mount_ceph_debug("mount.ceph: trying mount with new device syntax: %s\n",
+			 rsrc);
+	if (cmi->cmi_opts)
+		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
+				 cmi->cmi_opts);
+	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	free(rsrc);
+
+	return r;
+}
+
+static int mount_old_device_format(const char *node, struct ceph_mount_info *cmi)
+{
+	int r;
+	int len = 0;
+	int pos = 0;
+	char *mon_addr;
+	char *rsrc = NULL;
+
+	r = remove_opt(cmi, "mon_addr", &mon_addr);
+	if (r) {
+		fprintf(stderr, "failed to switch using old device format\n");
+		return -EINVAL;
+	}
+
+	pos = strlen(cmi->cmi_opts);
+	append_opt("mds_namespace", cmi->cmi_fsname, cmi, &pos);
+	if (cmi->cmi_fsid)
+		append_opt("fsid", cmi->cmi_fsid, cmi, &pos);
+
+	pos = 0;
+	resolved_mon_addr_as_mount_dev(mon_addr);
+	pos = safe_cat(&rsrc, &len, pos, mon_addr);
+	pos = safe_cat(&rsrc, &len, pos, ":");
+	if (cmi->cmi_path)
+		safe_cat(&rsrc, &len, pos, cmi->cmi_path);
+
+	mount_ceph_debug("mount.ceph: trying mount with old device syntax: %s\n",
+			 rsrc);
+	if (cmi->cmi_opts)
+		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
+				 cmi->cmi_opts);
+
+	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	free(mon_addr);
+	free(rsrc);
+
+	return r;
+}
+
+static int do_mount(const char *dev, const char *node,
+		    struct ceph_mount_info *cmi) {
+	int retval;
+
+	retval = mount_new_device_format(node, cmi);
+	if (errno == EINVAL) {
+		/* fallback to old-style mount device */
+		retval = mount_old_device_format(node, cmi);
+	}
+	if (retval) {
+		retval = EX_FAIL;
+		switch (errno) {
+		case ENODEV:
+			fprintf(stderr, "mount error: ceph filesystem not supported by the system\n");
+			break;
+		case EHOSTUNREACH:
+			fprintf(stderr, "mount error: no mds server is up or the cluster is laggy\n");
+			break;
+		default:
+			fprintf(stderr, "mount error %d = %s\n", errno, strerror(errno));
+		}
+	}
+
+	if (!retval && !skip_mtab_flag) {
+		update_mtab_entry(dev, node, "ceph", cmi->cmi_opts, cmi->cmi_flags, 0, 0);
+	}
+
+	return retval;
 }
 
 static int append_key_or_secret_option(struct ceph_mount_info *cmi)
@@ -499,34 +718,34 @@ static int append_key_or_secret_option(struct ceph_mount_info *cmi)
 
 int main(int argc, char *argv[])
 {
-	const char *src, *node, *opts;
-	char *rsrc = NULL;
+	int opt_pos = 0;
+	const char *dev, *node, *opts;
 	int retval;
 	struct ceph_mount_info cmi = { 0 };
 
-	retval = parse_arguments(argc, argv, &src, &node, &opts);
+	retval = parse_arguments(argc, argv, &dev, &node, &opts);
 	if (retval) {
 		usage(argv[0]);
 		retval = (retval > 0) ? 0 : EX_USAGE;
 		goto out;
 	}
 
-	retval = parse_options(opts, &cmi);
+	retval = parse_options(opts, &cmi, &opt_pos);
 	if (retval) {
 		fprintf(stderr, "failed to parse ceph_options: %d\n", retval);
 		retval = EX_USAGE;
 		goto out;
 	}
 
-	retval = parse_src(src, &cmi);
+	retval = parse_dev(dev, &cmi, &opt_pos);
 	if (retval) {
-		fprintf(stderr, "unable to parse mount source: %d\n", retval);
+		fprintf(stderr, "unable to parse mount device string: %d\n", retval);
 		retval = EX_USAGE;
 		goto out;
 	}
 
 	/* We don't care if this errors out, since this is best-effort */
-	fetch_config_info(&cmi);
+	fetch_config_info(&cmi, &opt_pos);
 
 	if (!cmi.cmi_mons) {
 		fprintf(stderr, "unable to determine mon addresses\n");
@@ -534,8 +753,8 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	rsrc = finalize_src(&cmi);
-	if (!rsrc) {
+	retval = finalize_src(&cmi, &opt_pos);
+	if (retval) {
 		fprintf(stderr, "failed to resolve source\n");
 		retval = EX_USAGE;
 		goto out;
@@ -552,29 +771,10 @@ int main(int argc, char *argv[])
 	}
 
 	block_signals(SIG_BLOCK);
-
-	if (mount(rsrc, node, "ceph", cmi.cmi_flags, cmi.cmi_opts)) {
-		retval = EX_FAIL;
-		switch (errno) {
-		case ENODEV:
-			fprintf(stderr, "mount error: ceph filesystem not supported by the system\n");
-			break;
-		case EHOSTUNREACH:
-			fprintf(stderr, "mount error: no mds server is up or the cluster is laggy\n");
-			break;
-		default:
-			fprintf(stderr, "mount error %d = %s\n",errno,strerror(errno));
-		}
-	} else {
-		if (!skip_mtab_flag) {
-			update_mtab_entry(rsrc, node, "ceph", cmi.cmi_opts, cmi.cmi_flags, 0, 0);
-		}
-	}
-
+	retval = do_mount(dev, node, &cmi);
 	block_signals(SIG_UNBLOCK);
 out:
 	ceph_mount_info_free(&cmi);
-	free(rsrc);
 	return retval;
 }
 
