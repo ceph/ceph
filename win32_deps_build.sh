@@ -24,8 +24,8 @@ curlSrcDir="${depsSrcDir}/curl"
 curlDir="${depsToolsetDir}/curl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.73.0/source/boost_1_73_0.tar.gz"
-boostSrcDir="${depsSrcDir}/boost_1_73_0"
+boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.tar.gz"
+boostSrcDir="${depsSrcDir}/boost_1_75_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
@@ -192,122 +192,6 @@ patch -N boost/thread/pthread/thread_data.hpp <<EOL
  #else
            std::size_t page_size = ::sysconf( _SC_PAGESIZE);
  #endif
-EOL
-
-# Use pthread if requested
-patch -N boost/asio/detail/thread.hpp <<EOL
---- boost/asio/detail/thread.hpp        2019-10-11 16:26:11.191094656 +0300
-+++ boost/asio/detail/thread.hpp.new    2019-10-11 16:26:03.310542438 +0300
-@@ -19,6 +19,8 @@
-
- #if !defined(BOOST_ASIO_HAS_THREADS)
- # include <boost/asio/detail/null_thread.hpp>
-+#elif defined(BOOST_ASIO_HAS_PTHREADS)
-+# include <boost/asio/detail/posix_thread.hpp>
- #elif defined(BOOST_ASIO_WINDOWS)
- # if defined(UNDER_CE)
- #  include <boost/asio/detail/wince_thread.hpp>
-@@ -27,8 +29,6 @@
- # else
- #  include <boost/asio/detail/win_thread.hpp>
- # endif
--#elif defined(BOOST_ASIO_HAS_PTHREADS)
--# include <boost/asio/detail/posix_thread.hpp>
- #elif defined(BOOST_ASIO_HAS_STD_THREAD)
- # include <boost/asio/detail/std_thread.hpp>
- #else
-@@ -41,6 +41,8 @@
-
- #if !defined(BOOST_ASIO_HAS_THREADS)
- typedef null_thread thread;
-+#elif defined(BOOST_ASIO_HAS_PTHREADS)
-+typedef posix_thread thread;
- #elif defined(BOOST_ASIO_WINDOWS)
- # if defined(UNDER_CE)
- typedef wince_thread thread;
-@@ -49,8 +51,6 @@
- # else
- typedef win_thread thread;
- # endif
--#elif defined(BOOST_ASIO_HAS_PTHREADS)
--typedef posix_thread thread;
- #elif defined(BOOST_ASIO_HAS_STD_THREAD)
- typedef std_thread thread;
- #endif
-EOL
-
-# Unix socket support for Windows is currently disabled by Boost.
-# https://github.com/huangqinjin/asio/commit/d27a8ad1870
-patch -N boost/asio/detail/socket_types.hpp <<EOL
---- boost/asio/detail/socket_types.hpp       2019-11-29 16:50:58.647125797 +0000
-+++ boost/asio/detail/socket_types.hpp.new   2020-01-13 11:45:05.015104678 +0000
-@@ -200,6 +200,8 @@
- typedef ipv6_mreq in6_mreq_type;
- typedef sockaddr_in6 sockaddr_in6_type;
- typedef sockaddr_storage sockaddr_storage_type;
-+struct sockaddr_un_type { u_short sun_family;
-+  char sun_path[108]; }; /* copy from afunix.h */
- typedef addrinfo addrinfo_type;
- # endif
- typedef ::linger linger_type;
-EOL
-patch -N boost/asio/detail/config.hpp <<EOL
---- boost/asio/detail/config.hpp       2019-11-29 16:50:58.691126211 +0000
-+++ boost/asio/detail/config.hpp.new   2020-01-13 13:09:17.966771750 +0000
-@@ -1142,13 +1142,9 @@
- // UNIX domain sockets.
- #if !defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
- # if !defined(BOOST_ASIO_DISABLE_LOCAL_SOCKETS)
--#  if !defined(BOOST_ASIO_WINDOWS) \\
--  && !defined(BOOST_ASIO_WINDOWS_RUNTIME) \\
--  && !defined(__CYGWIN__)
-+#  if !defined(BOOST_ASIO_WINDOWS_RUNTIME)
- #   define BOOST_ASIO_HAS_LOCAL_SOCKETS 1
--#  endif // !defined(BOOST_ASIO_WINDOWS)
--         //   && !defined(BOOST_ASIO_WINDOWS_RUNTIME)
--         //   && !defined(__CYGWIN__)
-+#  endif // !defined(BOOST_ASIO_WINDOWS_RUNTIME)
- # endif // !defined(BOOST_ASIO_DISABLE_LOCAL_SOCKETS)
- #endif // !defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
-EOL
-
-# TODO: drop this when switching to Boost>=1.75, it's unreleased as of 1.74.
-patch -N boost/process/detail/windows/handle_workaround.hpp <<EOL
---- boost/process/detail/windows/handle_workaround.hpp
-+++ boost/process/detail/windows/handle_workaround.hpp.new
-@@ -198,20 +198,20 @@ typedef struct _OBJECT_TYPE_INFORMATION_ {
- 
- 
- /*
--__kernel_entry NTSTATUS NtQuerySystemInformation(
-+NTSTATUS NtQuerySystemInformation(
-   IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
-   OUT PVOID                   SystemInformation,
-   IN ULONG                    SystemInformationLength,
-   OUT PULONG                  ReturnLength
- );
-  */
--typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_system_query_information_p )(
-+typedef ::boost::winapi::NTSTATUS_ (*nt_system_query_information_p )(
-         SYSTEM_INFORMATION_CLASS_,
-         void *,
-         ::boost::winapi::ULONG_,
-         ::boost::winapi::PULONG_);
- /*
--__kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
-+NTSYSCALLAPI NTSTATUS NtQueryObject(
-   HANDLE                   Handle,
-   OBJECT_INFORMATION_CLASS ObjectInformationClass,
-   PVOID                    ObjectInformation,
-@@ -220,7 +220,7 @@ __kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
- );
-  */
- 
--typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_query_object_p )(
-+typedef ::boost::winapi::NTSTATUS_ (*nt_query_object_p )(
-         ::boost::winapi::HANDLE_,
-         OBJECT_INFORMATION_CLASS_,
-         void *,
 EOL
 
 ./bootstrap.sh
