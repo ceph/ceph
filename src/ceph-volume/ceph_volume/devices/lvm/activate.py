@@ -270,7 +270,7 @@ class Activate(object):
         elif not osd_id and osd_fsid:
             tags = {'ceph.osd_fsid': osd_fsid}
         else:
-            raise RuntimeError('If you pass an an osd ID you need to pass '
+            raise RuntimeError('If you pass an osd ID you need to pass '
                                'also an osd FSID')
 
         lvs = api.get_lvs(tags=tags)
