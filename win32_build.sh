@@ -112,9 +112,9 @@ if [[ -z $SKIP_BINDIR_CLEAN ]]; then
 fi
 
 if [[ ! -f ${depsToolsetDir}/completed ]]; then
-    echo "Preparing dependencies: $DEPS_DIR"
+    echo "Preparing dependencies: $DEPS_DIR. Log: ${BUILD_DIR}/build_deps.log"
     NUM_WORKERS=$NUM_WORKERS DEPS_DIR=$DEPS_DIR OS="$OS"\
-        "$SCRIPT_DIR/win32_deps_build.sh"
+        "$SCRIPT_DIR/win32_deps_build.sh" | tee "${BUILD_DIR}/build_deps.log"
 fi
 
 mkdir -p $BUILD_DIR
