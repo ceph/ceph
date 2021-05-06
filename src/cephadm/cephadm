@@ -3117,6 +3117,10 @@ class CephContainer:
             'run',
             '--rm',
             '--ipc=host',
+            # some containers (ahem, haproxy) override this, but we want a fast
+            # shutdown always (and, more importantly, a successful exit even if we
+            # fall back to SIGKILL).
+            '--stop-signal=SIGTERM',
         ]
 
         if isinstance(self.ctx.container_engine, Podman):
