@@ -37,7 +37,7 @@ To add each new host to the cluster, perform two steps:
 
    .. prompt:: bash #
 
-     ceph orch host add *newhost*
+     ceph orch host add *newhost* [*<label1> ...*]
 
    For example:
 
@@ -45,7 +45,16 @@ To add each new host to the cluster, perform two steps:
 
      ceph orch host add host2
      ceph orch host add host3
-     
+
+   One or more labels can also be included to immediately label the
+   new host.  For example, by default the ``_admin`` label will make
+   cephadm maintain a copy of the ``ceph.conf`` file and a
+   ``client.admin`` keyring file in ``/etc/ceph``:
+
+   .. prompt:: bash #
+
+       ceph orch host add host4 _admin
+
 .. _cephadm-removing-hosts:
 
 Removing Hosts
@@ -117,7 +126,21 @@ To remove a label, run::
 
   ceph orch host label rm my_hostname my_label
 
-  
+
+.. _cephadm-special-host-labels:
+
+Special host labels
+-------------------
+
+The following host labels have a special meaning to cephadm.  All start with ``_``.
+
+* ``_no_schedule``: *Do not schedule or deploy daemons on this host*.
+
+  This label prevents cephadm from deploying daemons on this host.  If it is added to
+  an existing host that already contains Ceph daemons, it will cause cephadm to move
+  those daemons elsewhere (except OSDs, which are not removed automatically).
+
+
 Maintenance Mode
 ================
 
@@ -255,7 +278,6 @@ names etc. When cephadm initiates an ssh connection to a remote host,
 the host name  can be resolved in four different ways:
 
 -  a custom ssh config resolving the name to an IP
--  via an externally maintained ``/etc/hosts``
 -  via explicitly providing an IP address to cephadm: ``ceph orch host add <hostname> <IP>``
 -  automatic name resolution via DNS.
 

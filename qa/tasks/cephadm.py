@@ -69,6 +69,8 @@ def update_archive_setting(ctx, key, value):
     """
     Add logs directory to job's info log file
     """
+    if ctx.archive is None:
+        return
     with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
@@ -393,6 +395,10 @@ def ceph_bootstrap(ctx, config):
             cmd += ['--skip-dashboard']
         if config.get('skip_monitoring_stack'):
             cmd += ['--skip-monitoring-stack']
+        if config.get('single_host_defaults'):
+            cmd += ['--single-host-defaults']
+        if not config.get('avoid_pacific_features', False):
+            cmd += ['--skip-admin-label']
         # bootstrap makes the keyring root 0600, so +r it for our purposes
         cmd += [
             run.Raw('&&'),
@@ -433,10 +439,20 @@ def ceph_bootstrap(ctx, config):
             _shell(ctx, cluster_name, bootstrap_remote,
                    ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
 
+        if not config.get('avoid_pacific_features', False):
+            log.info('Distributing conf and client.admin keyring to all hosts + 0755')
+            _shell(ctx, cluster_name, bootstrap_remote,
+                   ['ceph', 'orch', 'client-keyring', 'set', 'client.admin',
+                    '*', '--mode', '0755'],
+                   check_status=False)
+
         # add other hosts
         for remote in ctx.cluster.remotes.keys():
             if remote == bootstrap_remote:
                 continue
+
+            # note: this may be redundant (see above), but it avoids
+            # us having to wait for cephadm to do it.
             log.info('Writing (initial) conf and keyring to %s' % remote.shortname)
             remote.write_file(
                 path='/etc/ceph/{}.conf'.format(cluster_name),

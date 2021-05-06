@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import errno
 try:
     from typing import Optional, List, Any
@@ -45,7 +46,7 @@ class HostSpec(object):
         return {
             'hostname': self.hostname,
             'addr': self.addr,
-            'labels': list(set((self.labels))),
+            'labels': list(OrderedDict.fromkeys((self.labels))),
             'status': self.status,
         }
 
@@ -54,7 +55,8 @@ class HostSpec(object):
         host_spec = cls.normalize_json(host_spec)
         _cls = cls(host_spec['hostname'],
                    host_spec['addr'] if 'addr' in host_spec else None,
-                   list(set(host_spec['labels'])) if 'labels' in host_spec else None,
+                   list(OrderedDict.fromkeys(
+                       host_spec['labels'])) if 'labels' in host_spec else None,
                    host_spec['status'] if 'status' in host_spec else None)
         return _cls
 

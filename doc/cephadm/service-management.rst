@@ -132,6 +132,10 @@ For the orchestrator to deploy a *service*, it needs to know where to deploy
 specification.  Placement specifications can either be passed as command line arguments
 or in a YAML files.
 
+.. note::
+
+   cephadm will not deploy daemons on hosts with the ``_no_schedule`` label; see :ref:`cephadm-special-host-labels`.
+
 Explicit placements
 -------------------
 
