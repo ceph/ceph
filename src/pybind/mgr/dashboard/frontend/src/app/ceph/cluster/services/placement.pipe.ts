@@ -37,7 +37,7 @@ export class PlacementPipe implements PipeTransform {
       kv.push(this.i18n('label:{{label}}', { label }));
     }
     if (_.isString(hostPattern)) {
-      kv.push(...hostPattern);
+      kv.push(hostPattern);
     }
     return kv.join(';');
   }
