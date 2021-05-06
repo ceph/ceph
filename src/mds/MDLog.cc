@@ -1055,8 +1055,6 @@ void MDLog::_recovery_thread(MDSContext *completion)
   front_journal->recover(&recover_wait);
   dout(4) << "Waiting for journal " << jp.front << " to recover..." << dendl;
   int recovery_result = recover_wait.wait();
-  dout(4) << "Journal " << jp.front << " recovered." << dendl;
-
   if (recovery_result == -CEPHFS_EBLOCKLISTED) {
     derr << "Blocklisted during journal recovery!  Respawning..." << dendl;
     mds->respawn();
@@ -1067,6 +1065,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
     mds->damaged_unlocked();
     ceph_assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
   }
+  dout(4) << "Journal " << jp.front << " recovered." << dendl;
 
   /* Check whether the front journal format is acceptable or needs re-write */
   if (front_journal->get_stream_format() > JOURNAL_FORMAT_MAX) {
