@@ -35,6 +35,24 @@ describe('RGW buckets page', () => {
     it('should delete bucket', () => {
       buckets.delete(bucket_name);
     });
+
+    it('should create bucket with object locking enabled', () => {
+      buckets.navigateTo('create');
+      buckets.create(
+        bucket_name,
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        'default-placement',
+        true
+      );
+      buckets.getFirstTableCell(bucket_name).should('exist');
+    });
+
+    it('should not allow to edit versioning if object locking is enabled', () => {
+      buckets.edit(bucket_name, 'dev', true);
+      buckets.getDataTables().should('contain.text', 'dev');
+
+      buckets.delete(bucket_name);
+    });
   });
 
   describe('Invalid Input in Create and Edit tests', () => {

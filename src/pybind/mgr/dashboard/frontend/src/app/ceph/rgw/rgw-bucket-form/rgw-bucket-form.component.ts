@@ -147,6 +147,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
             this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
             this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
             this.setMfaDeleteValidators();
+            if (value['lock_enabled']) {
+              this.bucketForm.controls['versioning'].disable();
+            }
           }
         }
 
