@@ -1,3 +1,4 @@
+import errno
 import logging
 import threading
 from typing import Tuple, Optional, List
@@ -66,8 +67,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_nfs_cluster_create(self,
                                 clusterid: str,
                                 placement: Optional[str]=None,
+                                ingress: Optional[bool]=None,
                                 virtual_ip: Optional[str]=None) -> Tuple[int, str, str]:
         """Create an NFS Cluster"""
+        if virtual_ip and not ingress:
+            return (-errno.EINVAL, '',
+                    '--virtual-ip can only be provided with --ingress')
+        if ingress and not virtual_ip:
+            return (-errno.EINVAL, '',
+                    '--ingress current requires --virtual-ip')
         return self.nfs.create_nfs_cluster(cluster_id=clusterid, placement=placement,
                                            virtual_ip=virtual_ip)
 
