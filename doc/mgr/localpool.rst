@@ -35,3 +35,5 @@ change the replication level to 2x with only 64 PGs, ::
 
   ceph config set mgr mgr/localpool/num_rep 2
   ceph config set mgr mgr/localpool/pg_num 64
+
+.. mgr_module:: None
