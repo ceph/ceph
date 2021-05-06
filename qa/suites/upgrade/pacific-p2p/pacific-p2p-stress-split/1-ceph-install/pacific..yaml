@@ -1,0 +1,19 @@
+meta:
+- desc: install ceph/pacific v16.2.0
+tasks:
+- install:
+    tag: v16.2.0
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
+- print: "**** done install pacific v16.2.0"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release pacific
+      - ceph osd set-require-min-compat-client pacific
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false
