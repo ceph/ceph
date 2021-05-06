@@ -19,20 +19,23 @@ Keep in mind that the Ceph cluster health status is likely to switch to
 Starting the upgrade
 ====================
 
-Before you start, you should verify that all hosts are currently online
-and your cluster is healthy.
+Before you begin using cephadm to upgrade Ceph, verify that all hosts are currently online and that your cluster is healthy:
 
-::
+.. prompt:: bash #
 
-  # ceph -s
+   ceph -s
 
-To upgrade (or downgrade) to a specific release::
+To upgrade (or downgrade) to a specific release:
 
-  # ceph orch upgrade start --ceph-version <version>
+.. prompt:: bash #
 
-For example, to upgrade to v15.2.1::
+  ceph orch upgrade start --ceph-version <version>
 
-  # ceph orch upgrade start --ceph-version 15.2.1
+For example, to upgrade to v15.2.1:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --ceph-version 15.2.1
 
 
 Monitoring the upgrade
