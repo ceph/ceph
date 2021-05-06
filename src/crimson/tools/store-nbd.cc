@@ -91,7 +91,7 @@ public:
 	 po::value<std::string>()
 	 ->required()
 	 ->notifier([this](auto s) { path = s; }),
-	 "Number of writes outstanding"
+	 "Path to device for backend"
 	)
 	("mkfs",
 	 po::value<bool>()
