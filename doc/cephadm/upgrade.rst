@@ -73,33 +73,41 @@ There are a few health alerts that can arise during the upgrade process.
 UPGRADE_NO_STANDBY_MGR
 ----------------------
 
-Ceph requires an active and standby manager daemon in order to proceed, but
-there is currently no standby.
+This alert means that Ceph requires an active and standby manager daemon in
+order to proceed, but there is currently no standby.
 
-You can ensure that Cephadm is configured to run 2 (or more) managers with::
+You can ensure that Cephadm is configured to run 2 (or more) managers by running the following command:
 
-  # ceph orch apply mgr 2  # or more
+.. prompt:: bash #
 
-You can check the status of existing mgr daemons with::
+  ceph orch apply mgr 2  # or more
 
-  # ceph orch ps --daemon-type mgr
+You can check the status of existing mgr daemons by running the following command:
 
-If an existing mgr daemon has stopped, you can try restarting it with::
+.. prompt:: bash #
 
-  # ceph orch daemon restart <name>
+  ceph orch ps --daemon-type mgr
+
+If an existing mgr daemon has stopped, you can try to restart it by running the following command: 
+
+.. prompt:: bash #
+
+  ceph orch daemon restart <name>
 
 UPGRADE_FAILED_PULL
 -------------------
 
-Ceph was unable to pull the container image for the target version.
-This can happen if you specify an version or container image that does
-not exist (e.g., 1.2.3), or if the container registry is not reachable from
-one or more hosts in the cluster.
+This alert means that Ceph was unable to pull the container image for the
+target version. This can happen if you specify a version or container image
+that does not exist (e.g. "1.2.3"), or if the container registry can not
+be reached by one or more hosts in the cluster.
 
-You can cancel the existing upgrade and specify a different target version with::
+To cancel the existing upgrade and to specify a different target version, run the following commands: 
 
-  # ceph orch upgrade stop
-  # ceph orch upgrade start --ceph-version <version>
+.. prompt:: bash #
+
+  ceph orch upgrade stop
+  ceph orch upgrade start --ceph-version <version>
 
 
 Using customized container images
