@@ -121,6 +121,7 @@ class ThreadPool {
     return stopping.load(std::memory_order_relaxed);
   }
   static void pin(const std::vector<uint64_t>& cpus);
+  static void block_sighup();
   seastar::semaphore& local_free_slots() {
     return submit_queue.local().free_slots;
   }

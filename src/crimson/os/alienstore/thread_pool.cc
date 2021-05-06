@@ -26,6 +26,7 @@ ThreadPool::ThreadPool(size_t n_threads,
       if (!cpus.empty()) {
         pin(cpus);
       }
+      block_sighup();
       (void) pthread_setname_np(pthread_self(), "alien-store-tp");
       loop(queue_max_wait, i);
     });
@@ -49,6 +50,19 @@ void ThreadPool::pin(const std::vector<uint64_t>& cpus)
   [[maybe_unused]] auto r = pthread_setaffinity_np(pthread_self(),
                                                    sizeof(cs), &cs);
   ceph_assert(r == 0);
+}
+
+void ThreadPool::block_sighup()
+{
+  sigset_t sigs;
+  sigemptyset(&sigs);
+  // alien threads must ignore the SIGHUP. It's necessary as in
+  // `crimson/osd/main.cc` we set a handler using the Seastar's
+  // signal handling infrastrucute which assumes the `_backend`
+  // of `seastar::engine()` is not null. Grep `reactor.cc` for
+  // `sigaction` or just visit `reactor::signals::handle_signal()`.
+  sigaddset(&sigs, SIGHUP);
+  pthread_sigmask(SIG_BLOCK, &sigs, nullptr);
 }
 
 void ThreadPool::loop(std::chrono::milliseconds queue_max_wait, size_t shard)
