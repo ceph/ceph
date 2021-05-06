@@ -497,8 +497,8 @@ TEST(cls_rgw, bi_list)
   ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, num_objs + 10, &entries,
 			    &is_truncated);
   ASSERT_EQ(ret, 0);
-  if (cct->_conf->osd_max_omap_entries_per_request < num_objs) {
-    ASSERT_EQ(entries.size(), cct->_conf->osd_max_omap_entries_per_request);
+  if (is_truncated) {
+    ASSERT_LT(entries.size(), num_objs);
   } else {
     ASSERT_EQ(entries.size(), num_objs);
   }
@@ -511,7 +511,7 @@ TEST(cls_rgw, bi_list)
 			  &is_truncated);
     ASSERT_EQ(ret, 0);
     if (is_truncated) {
-      ASSERT_EQ(entries.size(), std::min(max, cct->_conf->osd_max_omap_entries_per_request));
+      ASSERT_LT(entries.size(), num_objs - num_entries);
     } else {
       ASSERT_EQ(entries.size(), num_objs - num_entries);
     }
@@ -535,7 +535,7 @@ TEST(cls_rgw, bi_list)
 			    &is_truncated);
       ASSERT_EQ(ret, 0);
       if (is_truncated) {
-	ASSERT_EQ(entries.size(), cct->_conf->osd_max_omap_entries_per_request);
+	ASSERT_LT(entries.size(), num_objs - num_entries);
       } else {
 	ASSERT_EQ(entries.size(), num_objs - num_entries);
       }
