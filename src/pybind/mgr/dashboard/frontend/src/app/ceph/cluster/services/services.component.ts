@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
-import { delay, finalize } from 'rxjs/operators';
+import { delay } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -201,15 +201,10 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
           })
           .pipe(
             // Delay closing the dialog, otherwise the datatable still
-            // shows the deleted service after forcing a reload.
+            // shows the deleted service after an auto-reload.
             // Showing the dialog while delaying is done to increase
             // the user experience.
-            delay(2000),
-            finalize(() => {
-              // Force reloading the data table content because it is
-              // auto-reloaded only every 60s.
-              this.table.refreshBtn();
-            })
+            delay(5000)
           )
     });
   }
