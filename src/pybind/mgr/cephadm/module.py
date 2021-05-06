@@ -1704,7 +1704,7 @@ Then run the following:
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
         if refresh:
             self._invalidate_daemons_and_kick_serve()
-            self.log.info('Kicked serve() loop to refresh all services')
+            self.log.debug('Kicked serve() loop to refresh all services')
 
         sm: Dict[str, orchestrator.ServiceDescription] = {}
 
@@ -1788,7 +1788,7 @@ Then run the following:
                      refresh: bool = False) -> List[orchestrator.DaemonDescription]:
         if refresh:
             self._invalidate_daemons_and_kick_serve(host)
-            self.log.info('Kicked serve() loop to refresh all daemons')
+            self.log.debug('Kicked serve() loop to refresh all daemons')
 
         result = []
         for h, dm in self.cache.get_daemons_with_volatile_status():
@@ -1954,13 +1954,15 @@ Then run the following:
         if refresh:
             if host_filter and host_filter.hosts:
                 for h in host_filter.hosts:
+                    self.log.debug(f'will refresh {h} devs')
                     self.cache.invalidate_host_devices(h)
             else:
                 for h in self.cache.get_hosts():
+                    self.log.debug(f'will refresh {h} devs')
                     self.cache.invalidate_host_devices(h)
 
             self.event.set()
-            self.log.info('Kicked serve() loop to refresh devices')
+            self.log.debug('Kicked serve() loop to refresh devices')
 
         result = []
         for host, dls in self.cache.devices.items():
