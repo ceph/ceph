@@ -210,7 +210,7 @@ class IngressService(CephService):
                     break
         if not interface:
             raise OrchestratorError(
-                "Unable to identify interface for {spec.virtual_ip} on {host}"
+                f"Unable to identify interface for {spec.virtual_ip} on {host}"
             )
 
         # script to monitor health
