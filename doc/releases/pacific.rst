@@ -5,6 +5,18 @@ Pacific
 Pacific is the 16th stable release of Ceph.  It is named after the
 giant pacific octopus (Enteroctopus dofleini).
 
+v16.2.3 Pacific
+===============
+
+This is the third backport release in the Pacific series.  We recommend all users
+update to this release.
+
+Notable Changes
+---------------
+
+* This release fixes a cephadm upgrade bug that caused some systems to get stuck in a loop
+  restarting the first mgr daemon.
+
 
 v16.2.2 Pacific
 ===============
