@@ -65,6 +65,7 @@ mkdir -p $DEPS_DIR
 mkdir -p $depsToolsetDir
 mkdir -p $depsSrcDir
 
+echo "Installing required packages."
 case "$OS" in
     ubuntu)
         sudo apt-get update
@@ -84,6 +85,7 @@ esac
 MINGW_CMAKE_FILE="$DEPS_DIR/mingw.cmake"
 source "$SCRIPT_DIR/mingw_conf.sh"
 
+echo "Building zlib."
 cd $depsSrcDir
 if [[ ! -d $zlibSrcDir ]]; then
     git clone https://github.com/madler/zlib
@@ -98,6 +100,7 @@ _make BINARY_PATH=$zlibDir \
      SHARED_MODE=1 \
      -f win32/Makefile.gcc install
 
+echo "Building lz4."
 cd $depsToolsetDir
 if [[ ! -d $lz4Dir ]]; then
     git clone https://github.com/lz4/lz4
@@ -109,6 +112,7 @@ _make BUILD_STATIC=no CC=${MINGW_CC%-posix*} \
       WINDRES=${MINGW_WINDRES} \
       TARGET_OS=Windows_NT
 
+echo "Building OpenSSL."
 cd $depsSrcDir
 if [[ ! -d $sslSrcDir ]]; then
     git clone https://github.com/openssl/openssl
@@ -122,6 +126,7 @@ _make depend
 _make
 _make install
 
+echo "Building libcurl."
 cd $depsSrcDir
 if [[ ! -d $curlSrcDir ]]; then
     git clone https://github.com/curl/curl
@@ -135,8 +140,10 @@ _make
 _make install
 
 
+echo "Building boost."
 cd $depsSrcDir
 if [[ ! -d $boostSrcDir ]]; then
+    echo "Downloading boost."
     wget -qO- $boostUrl | tar xz
 fi
 
@@ -155,6 +162,7 @@ sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.jam
 export PTW32_INCLUDE=${PTW32Include}
 export PTW32_LIB=${PTW32Lib}
 
+echo "Patching boost."
 # Fix getting Windows page size
 # TODO: send this upstream and maybe use a fork until it merges.
 # Meanwhile, we might consider moving those to ceph/cmake/modules/BuildBoost.cmake.
@@ -313,6 +321,7 @@ EOL
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \
     --without-python --without-mpi --without-log --without-wave
 
+echo "Building libbacktrace."
 cd $depsSrcDir
 if [[ ! -d $backtraceSrcDir ]]; then
     git clone https://github.com/ianlancetaylor/libbacktrace
@@ -325,6 +334,7 @@ cd $backtraceSrcDir/build
 _make LDFLAGS="-no-undefined"
 _make install
 
+echo "Building snappy."
 cd $depsSrcDir
 if [[ ! -d $snappySrcDir ]]; then
     git clone https://github.com/google/snappy
@@ -351,6 +361,7 @@ cmake -DCMAKE_INSTALL_PREFIX=$snappyDir \
 _make
 _make install
 
+echo "Generating mswsock.lib."
 # mswsock.lib is not provided by mingw, so we'll have to generate
 # it.
 mkdir -p $winLibDir
@@ -386,6 +397,7 @@ EOF
 $MINGW_DLLTOOL -d $winLibDir/mswsock.def \
                -l $winLibDir/libmswsock.a
 
+echo "Fetching libwnbd."
 cd $depsSrcDir
 if [[ ! -d $wnbdSrcDir ]]; then
     git clone $wnbdUrl
@@ -397,6 +409,7 @@ $MINGW_DLLTOOL -d $wnbdSrcDir/libwnbd/libwnbd.def \
                -D libwnbd.dll \
                -l $wnbdLibDir/libwnbd.a
 
+echo "Fetching dokany."
 cd $depsSrcDir
 if [[ ! -d $dokanSrcDir ]]; then
     git clone $dokanUrl
@@ -413,4 +426,5 @@ $MINGW_DLLTOOL -d $dokanSrcDir/dokan/dokan.def \
 # sys/public.h without the "sys" prefix.
 cp $dokanSrcDir/sys/public.h $dokanSrcDir/dokan
 
+echo "Finished building Ceph dependencies."
 touch $depsToolsetDir/completed
