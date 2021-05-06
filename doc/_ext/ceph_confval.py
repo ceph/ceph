@@ -6,14 +6,17 @@ from typing import Any, Dict, List, Union
 
 from docutils.nodes import Node
 from docutils.parsers.rst import directives
-from docutils.parsers.rst import Directive
+from docutils.statemachine import StringList
+
 from sphinx import addnodes
+from sphinx.directives import ObjectDescription
 from sphinx.domains.python import PyField
 from sphinx.environment import BuildEnvironment
 from sphinx.locale import _
 from sphinx.util import logging, status_iterator, ws_re
+from sphinx.util.docutils import switch_source_input, SphinxDirective
 from sphinx.util.docfields import Field
-
+from sphinx.util.nodes import make_id
 import jinja2
 import jinja2.filters
 import yaml
@@ -22,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 
 TEMPLATE = '''
-.. confval_option:: {{ opt.name }}
 {% if desc %}
    {{ desc | wordwrap(70) | indent(3) }}
 {% endif %}
@@ -171,7 +173,7 @@ def jinja_template() -> jinja2.Template:
 FieldValueT = Union[bool, float, int, str]
 
 
-class CephModule(Directive):
+class CephModule(SphinxDirective):
     """
     Directive to name the mgr module for which options are documented.
     """
@@ -182,15 +184,14 @@ class CephModule(Directive):
 
     def run(self) -> List[Node]:
         module = self.arguments[0].strip()
-        env = self.state.document.settings.env
         if module == 'None':
-            env.ref_context.pop('ceph:module', None)
+            self.env.ref_context.pop('ceph:module', None)
         else:
-            env.ref_context['ceph:module'] = module
+            self.env.ref_context['ceph:module'] = module
         return []
 
 
-class CephOption(Directive):
+class CephOption(ObjectDescription):
     """
     emit option loaded from given command/options/<name>.yaml.in file
     """
@@ -199,6 +200,19 @@ class CephOption(Directive):
     optional_arguments = 0
     final_argument_whitespace = False
     option_spec = {'default': directives.unchanged}
+
+
+    doc_field_types = [
+        Field('default',
+              label=_('Default'),
+              has_arg=False,
+              names=('default',)),
+        Field('type',
+              label=_('Type'),
+              has_arg=False,
+              names=('type',),
+              bodyrolename='class'),
+    ]
 
     template = jinja_template()
     opts: Dict[str, Dict[str, FieldValueT]] = {}
@@ -210,13 +224,12 @@ class CephOption(Directive):
     def _load_yaml(self) -> Dict[str, Dict[str, FieldValueT]]:
         if CephOption.opts:
             return CephOption.opts
-        env = self.state.document.settings.env
         opts = []
-        for fn in status_iterator(env.config.ceph_confval_imports,
+        for fn in status_iterator(self.config.ceph_confval_imports,
                                   'loading options...', 'red',
-                                  len(env.config.ceph_confval_imports),
-                                  env.app.verbosity):
-            env.note_dependency(fn)
+                                  len(self.config.ceph_confval_imports),
+                                  self.env.app.verbosity):
+            self.env.note_dependency(fn)
             try:
                 with open(fn, 'r') as f:
                     yaml_in = io.StringIO()
@@ -307,11 +320,10 @@ class CephOption(Directive):
         mgr_opts = CephOption.mgr_opts.get(module)
         if mgr_opts is not None:
             return mgr_opts
-        env = self.state.document.settings.env
-        python_path = env.config.ceph_confval_mgr_python_path
+        python_path = self.config.ceph_confval_mgr_python_path
         for path in python_path.split(':'):
             sys.path.insert(0, self._normalize_path(path))
-        module_path = env.config.ceph_confval_mgr_module_path
+        module_path = self.env.config.ceph_confval_mgr_module_path
         module_path = self._normalize_path(module_path)
         sys.path.insert(0, module_path)
         os.environ['UNITTEST'] = 'true'
@@ -322,18 +334,16 @@ class CephOption(Directive):
         for module in status_iterator(modules,
                                       'loading module...', 'darkgreen',
                                       len(modules),
-                                      env.app.verbosity):
+                                      self.env.app.verbosity):
             fn = os.path.join(module_path, module, 'module.py')
             if os.path.exists(fn):
-                env.note_dependency(fn)
+                self.env.note_dependency(fn)
             opts += self._collect_options_from_module(module)
         CephOption.mgr_opts[module] = dict((opt['name'], opt) for opt in opts)
         return CephOption.mgr_opts[module]
 
-    def run(self) -> List[Any]:
-        name = self.arguments[0]
-        env = self.state.document.settings.env
-        cur_module = env.ref_context.get('ceph:module')
+    def _render_option(self, name) -> str:
+        cur_module = self.env.ref_context.get('ceph:module')
         if cur_module:
             opt = self._load_module(cur_module).get(name)
         else:
@@ -344,18 +354,51 @@ class CephOption(Directive):
         opt_default = opt.get('default')
         default = self.options.get('default', opt_default)
         try:
-            rendered = self.template.render(opt=opt,
-                                            desc=desc,
-                                            default=default)
+            return self.template.render(opt=opt,
+                                        desc=desc,
+                                        default=default)
         except Exception as e:
             message = (f'Unable to render option "{name}": {e}. ',
                        f'opt={opt}, desc={desc}, default={default}')
             raise self.error(message)
 
-        lineno = self.lineno - self.state_machine.input_offset - 1
-        source = self.state_machine.input_lines.source(lineno)
-        self.state_machine.insert_input(rendered.split('\n'), source)
-        return []
+    def handle_signature(self,
+                         sig: str,
+                         signode: addnodes.desc_signature) -> str:
+        signode.clear()
+        signode += addnodes.desc_name(sig, sig)
+        # normalize whitespace like XRefRole does
+        name = ws_re.sub(' ', sig)
+        return name
+
+    def transform_content(self, contentnode: addnodes.desc_content) -> None:
+        name = self.arguments[0]
+        source, lineno = self.get_source_info()
+        source = f'{source}:{lineno}:<confval>'
+        fields = StringList(self._render_option(name).splitlines() + [''],
+                            source=source, parent_offset=lineno)
+        with switch_source_input(self.state, fields):
+            self.state.nested_parse(fields, 0, contentnode)
+
+    def add_target_and_index(self,
+                             name: str,
+                             sig: str,
+                             signode: addnodes.desc_signature) -> None:
+        cur_module = self.env.ref_context.get('ceph:module')
+        if cur_module:
+            prefix = '-'.join(['mgr', cur_module, self.objtype])
+        else:
+            prefix = self.objtype
+        node_id = make_id(self.env, self.state.document, prefix, name)
+        signode['ids'].append(node_id)
+        self.state.document.note_explicit_target(signode)
+        if cur_module:
+            entry = f'{cur_module} {name}; mgr module option'
+        else:
+            entry = f'{name}; configuration option'
+        self.indexnode['entries'].append(('pair', entry, node_id, '', None))
+        std = self.env.get_domain('std')
+        std.note_object(self.objtype, name, node_id, location=signode)
 
 
 def setup(app) -> Dict[str, Any]:
@@ -371,41 +414,6 @@ def setup(app) -> Dict[str, Any]:
                          default=[],
                          rebuild='',
                          types=[str])
-    app.add_directive('confval', CephOption)
-    app.add_directive('mgr_module', CephModule)
-    app.add_object_type(
-        'confval_option',
-        'confval',
-        objname='configuration value',
-        indextemplate='pair: %s; configuration value',
-        parse_node=_parse_option_desc,
-        doc_field_types=[
-            PyField(
-                'type',
-                label=_('Type'),
-                has_arg=False,
-                names=('type',),
-                bodyrolename='class'
-            ),
-            Field(
-                'default',
-                label=_('Default'),
-                has_arg=False,
-                names=('default',),
-            ),
-            Field(
-                'required',
-                label=_('Required'),
-                has_arg=False,
-                names=('required',),
-            ),
-            Field(
-                'example',
-                label=_('Example'),
-                has_arg=False,
-            )
-        ]
-    )
     app.add_object_type(
         'confsec',
         'confsec',
@@ -418,6 +426,13 @@ def setup(app) -> Dict[str, Any]:
                 has_arg=False,
             )]
     )
+    app.add_object_type(
+        'confval',
+        'confval',
+        objname='configuration option',
+    )
+    app.add_directive_to_domain('std', 'mgr_module', CephModule)
+    app.add_directive_to_domain('std', 'confval', CephOption, override=True)
 
     return {
         'version': 'builtin',
