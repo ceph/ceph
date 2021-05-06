@@ -6,6 +6,18 @@ Pacific is the 16th stable release of Ceph.  It is named after the
 giant pacific octopus (Enteroctopus dofleini).
 
 
+v16.2.3 Pacific
+===============
+
+This is the first *hotfix* release in the Pacific series. It fixes a bug that
+wasn't quite fixed in the 16.2.2 release.  We recommend all users upgrade to
+this release.
+
+Changelog
+---------
+
+* cephadm: normalize image digest in 'ls' output too (`c74662e6 <https://github.com/ceph/ceph/commit/c74662e6d4812be9bc7e321bc2abe0ae044b37b1>`_ Sage Weil)
+
 v16.2.2 Pacific
 ===============
 
