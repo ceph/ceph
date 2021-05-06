@@ -1,18 +1,22 @@
 import io
+import contextlib
+import os
+import sys
 from typing import Any, Dict, List, Union
 
+from docutils.nodes import Node
 from docutils.parsers.rst import directives
 from docutils.parsers.rst import Directive
-
+from sphinx import addnodes
 from sphinx.domains.python import PyField
+from sphinx.environment import BuildEnvironment
 from sphinx.locale import _
-from sphinx.util import logging, status_iterator
+from sphinx.util import logging, status_iterator, ws_re
 from sphinx.util.docfields import Field
 
 import jinja2
 import jinja2.filters
 import yaml
-
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +171,25 @@ def jinja_template() -> jinja2.Template:
 FieldValueT = Union[bool, float, int, str]
 
 
+class CephModule(Directive):
+    """
+    Directive to name the mgr module for which options are documented.
+    """
+    has_content = False
+    required_arguments = 1
+    optional_arguments = 0
+    final_argument_whitespace = False
+
+    def run(self) -> List[Node]:
+        module = self.arguments[0].strip()
+        env = self.state.document.settings.env
+        if module == 'None':
+            env.ref_context.pop('ceph:module', None)
+        else:
+            env.ref_context['ceph:module'] = module
+        return []
+
+
 class CephOption(Directive):
     """
     emit option loaded from given command/options/<name>.yaml.in file
@@ -179,6 +202,10 @@ class CephOption(Directive):
 
     template = jinja_template()
     opts: Dict[str, Dict[str, FieldValueT]] = {}
+    mgr_opts: Dict[str,            # module name
+                   Dict[str,       # option name
+                        Dict[str,  # field_name
+                             FieldValueT]]] = {}
 
     def _load_yaml(self) -> Dict[str, Dict[str, FieldValueT]]:
         if CephOption.opts:
@@ -204,9 +231,113 @@ class CephOption(Directive):
         CephOption.opts = dict((opt['name'], opt) for opt in opts)
         return CephOption.opts
 
+    def _normalize_path(self, dirname):
+        my_dir = os.path.dirname(os.path.realpath(__file__))
+        src_dir = os.path.abspath(os.path.join(my_dir, '../..'))
+        return os.path.join(src_dir, dirname)
+
+    def _is_mgr_module(self, dirname, name):
+        if not os.path.isdir(os.path.join(dirname, name)):
+            return False
+        if not os.path.isfile(os.path.join(dirname, name, '__init__.py')):
+            return False
+        return name not in ['tests']
+
+    @contextlib.contextmanager
+    def mocked_modules(self):
+        # src/pybind/mgr/tests
+        from tests import mock
+        mock_imports = ['rados',
+                        'rbd',
+                        'cephfs',
+                        'dateutil',
+                        'dateutil.parser']
+        # make dashboard happy
+        mock_imports += ['OpenSSL',
+                         'jwt',
+                         'bcrypt',
+                         'jsonpatch',
+                         'rook.rook_client',
+                         'rook.rook_client.ceph',
+                         'rook.rook_client._helper',
+                         'cherrypy=3.2.3']
+        # make diskprediction_local happy
+        mock_imports += ['numpy',
+                         'scipy']
+        # make restful happy
+        mock_imports += ['pecan',
+                         'pecan.rest',
+                         'pecan.hooks',
+                         'werkzeug',
+                         'werkzeug.serving']
+
+        for m in mock_imports:
+            args = {}
+            parts = m.split('=', 1)
+            mocked = parts[0]
+            if len(parts) > 1:
+                args['__version__'] = parts[1]
+            sys.modules[mocked] = mock.Mock(**args)
+
+        try:
+            yield
+        finally:
+            for m in mock_imports:
+                mocked = m.split('=', 1)[0]
+                sys.modules.pop(mocked)
+
+    def _collect_options_from_module(self, name):
+        with self.mocked_modules():
+            mgr_mod = __import__(name, globals(), locals(), [], 0)
+            # import 'M' from src/pybind/mgr/tests
+            from tests import M
+
+            def subclass(x):
+                try:
+                    return issubclass(x, M)
+                except TypeError:
+                    return False
+            ms = [c for c in mgr_mod.__dict__.values()
+                  if subclass(c) and 'Standby' not in c.__name__]
+            [m] = ms
+            assert isinstance(m.MODULE_OPTIONS, list)
+            return m.MODULE_OPTIONS
+
+    def _load_module(self, module) -> Dict[str, Dict[str, FieldValueT]]:
+        mgr_opts = CephOption.mgr_opts.get(module)
+        if mgr_opts is not None:
+            return mgr_opts
+        env = self.state.document.settings.env
+        python_path = env.config.ceph_confval_mgr_python_path
+        for path in python_path.split(':'):
+            sys.path.insert(0, self._normalize_path(path))
+        module_path = env.config.ceph_confval_mgr_module_path
+        module_path = self._normalize_path(module_path)
+        sys.path.insert(0, module_path)
+        os.environ['UNITTEST'] = 'true'
+
+        modules = [name for name in os.listdir(module_path)
+                   if self._is_mgr_module(module_path, name)]
+        opts = []
+        for module in status_iterator(modules,
+                                      'loading module...', 'darkgreen',
+                                      len(modules),
+                                      env.app.verbosity):
+            fn = os.path.join(module_path, module, 'module.py')
+            if os.path.exists(fn):
+                env.note_dependency(fn)
+            opts += self._collect_options_from_module(module)
+        CephOption.mgr_opts[module] = dict((opt['name'], opt) for opt in opts)
+        return CephOption.mgr_opts[module]
+
     def run(self) -> List[Any]:
         name = self.arguments[0]
-        opt = self._load_yaml().get(name)
+        env = self.state.document.settings.env
+        cur_module = env.ref_context.get('ceph:module')
+        if cur_module:
+            opt = self._load_module(cur_module).get(name)
+        else:
+            opt = self._load_yaml().get(name)
         if opt is None:
             raise self.error(f'Option "{name}" not found!')
         desc = opt.get('fmt_desc') or opt.get('long_desc') or opt.get('desc')
@@ -232,12 +363,22 @@ def setup(app) -> Dict[str, Any]:
                          default=[],
                          rebuild='html',
                          types=[str])
+    app.add_config_value('ceph_confval_mgr_module_path',
+                         default=[],
+                         rebuild='html',
+                         types=[str])
+    app.add_config_value('ceph_confval_mgr_python_path',
+                         default=[],
+                         rebuild='',
+                         types=[str])
     app.add_directive('confval', CephOption)
+    app.add_directive('mgr_module', CephModule)
     app.add_object_type(
         'confval_option',
         'confval',
         objname='configuration value',
         indextemplate='pair: %s; configuration value',
+        parse_node=_parse_option_desc,
         doc_field_types=[
             PyField(
                 'type',
