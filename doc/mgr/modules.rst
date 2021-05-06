@@ -24,7 +24,8 @@ The most important methods to override are:
 * a ``notify`` member function if your module needs to
   take action when new cluster data is available.
 * a ``handle_command`` member function if your module
-  exposes CLI commands.
+  exposes CLI commands. But this approach for exposing commands
+  is deprecated. For more details, see :ref:`mgr-module-exposing-commands`.
 
 Some modules interface with external orchestrators to deploy
 Ceph services.  These also inherit from ``Orchestrator``, which adds
@@ -100,6 +101,7 @@ following commands::
 
 
 
+.. _mgr-module-exposing-commands:
 
 Exposing commands
 -----------------
@@ -207,12 +209,10 @@ Modules can load and store configuration options using the
 You must declare your available configuration options in the
 ``MODULE_OPTIONS`` class attribute, like this:
 
-::
+.. code-block:: python
 
     MODULE_OPTIONS = [
-        {
-            "name": "my_option"
-        }
+        Option(name="my_option")
     ]
 
 If you try to use set_module_option or get_module_option on options not declared

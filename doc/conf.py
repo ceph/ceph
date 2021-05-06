@@ -231,6 +231,8 @@ openapi_logger.setLevel(logging.WARNING)
 ceph_confval_imports = glob.glob(os.path.join(top_level,
                                               'src/common/options',
                                               '*.yaml.in'))
+ceph_confval_mgr_module_path = 'src/pybind/mgr'
+ceph_confval_mgr_python_path = 'src/pybind'
 
 # handles edit-on-github and old version warning display
 def setup(app):
