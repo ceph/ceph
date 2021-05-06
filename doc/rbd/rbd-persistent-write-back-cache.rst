@@ -47,8 +47,8 @@ need to be enabled.::
         rbd persistent cache mode = {cache-mode}
         rbd plugins = pwl_cache
 
-Value of {cache-mode} can be ``rwl`` or ``ssd``. By default it is
-``disabled``
+Value of {cache-mode} can be ``rwl``, ``ssd`` or ``disabled``. By default the
+cache is disabled.
 
 Here are some cache configuration settings:
 
@@ -56,10 +56,12 @@ Here are some cache configuration settings:
   have DAX enabled (see `DAX`_) when using ``rwl`` mode to avoid performance
   degradation.
 
-- ``rbd_persistent_cache_size`` The cache size per image.
+- ``rbd_persistent_cache_size`` The cache size per image. The minimum cache
+  size is 1 GB.
 
 - ``rbd_persistent_cache_log_periodic_stats`` This is a debug option. It is
-  used to emit periodic perf stats to the debug log.
+  used to emit periodic perf stats to the debug log if ``debug rbd pwl`` is
+  set to ``1`` or higher.
 
 The above configurations can be set per-host, per-pool, per-image etc. Eg, to
 set per-host, add the overrides to the appropriate `section`_ in the host's
