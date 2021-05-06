@@ -70,21 +70,21 @@ Cache Status
 ------------
 
 The persistent write-back cache is enabled when the exclusive lock is acquired,
-and it is closed when the exclusive lock is released. To check the transient
-cache status, users may use the command ``rbd status``.  ::
+and it is closed when the exclusive lock is released. To check the cache status,
+users may use the command ``rbd status``.  ::
 
         rbd status {pool-name}/{image-name}
 
 The status of the cache is shown, including present, clean, cache size and the
-position.
+location. Currently the status is updated only at the time the cache is opened
+and closed and therefore may appear to be out of date (e.g. show that the cache
+is clean when it is actually dirty).
 
 For example::
 
         $ rbd status rbd/foo
         Watchers: none
-        image cache state:
-        clean: false  size: 1 GiB  host: sceph9  path: /tmp
-
+        Image cache state: {"present":"true","empty":"false","clean":"true","cache_type":"ssd","pwl_host":"sceph9","pwl_path":"/tmp/rbd-pwl.rbd.abcdef123456.pool","pwl_size":1073741824}
 
 Discard Cache
 -------------
