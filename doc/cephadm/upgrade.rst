@@ -60,7 +60,9 @@ You can also watch the cephadm log with::
 Canceling an upgrade
 ====================
 
-You can stop the upgrade process at any time with::
+You can stop the upgrade process at any time with:
+
+.. prompt:: bash #
 
   # ceph orch upgrade stop
 
