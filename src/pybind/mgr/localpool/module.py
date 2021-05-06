@@ -12,17 +12,20 @@ class Module(MgrModule):
             type='str',
             default='rack',
             desc='CRUSH level for which to create a local pool',
+            long_desc='which CRUSH subtree type the module should create a pool for.',
             runtime=True),
         Option(
             name='failure_domain',
             type='str',
             default='host',
             desc='failure domain for any created local pool',
+            long_desc='what failure domain we should separate data replicas across.',
             runtime=True),
         Option(
             name='min_size',
             type='int',
             desc='default min_size for any created local pool',
+            long_desc='value to set min_size to (unchanged from Ceph\'s default if this option is not set)',
             runtime=True),
         Option(
             name='num_rep',
