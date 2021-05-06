@@ -207,6 +207,16 @@ int execute_unmap(const po::variables_map &vm,
   return call_ggate_cmd(vm, args, ceph_global_init_args);
 }
 
+int execute_attach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  return -EOPNOTSUPP;
+}
+
+int execute_detach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  return -EOPNOTSUPP;
+}
+
 } // namespace ggate
 } // namespace action
 } // namespace rbd
