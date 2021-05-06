@@ -105,14 +105,17 @@ You can cancel the existing upgrade and specify a different target version with:
 Using customized container images
 =================================
 
-For most users, simplify specifying the Ceph version is sufficient.
-Cephadm will locate the specific Ceph container image to use by
-combining the ``container_image_base`` configuration option (default:
-``docker.io/ceph/ceph``) with a tag of ``vX.Y.Z``.
+For most users, upgrading requires nothing more complicated than specifying the
+Ceph version number to upgrade to.  In such cases, cephadm locates the specific
+Ceph container image to use by combining the ``container_image_base``
+configuration option (default: ``docker.io/ceph/ceph``) with a tag of
+``vX.Y.Z``.
 
-You can also upgrade to an arbitrary container image.  For example, to
-upgrade to a development build::
+But it is possible to upgrade to an arbitrary container image, if that's what
+you need. For example, the following command upgrades to a development build:
 
-  # ceph orch upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
+.. prompt:: bash #
+
+  ceph orch upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
 
 For more information about available container images, see :ref:`containers`.
