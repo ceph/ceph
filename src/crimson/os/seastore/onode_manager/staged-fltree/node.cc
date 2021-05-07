@@ -618,7 +618,7 @@ node_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
   return parent_info().ptr->erase_child(c, std::move(this_ref));
 }
 
-template <bool FORCE_MERGE = false>
+template <bool FORCE_MERGE>
 node_future<> Node::fix_parent_index(
     context_t c, Ref<Node>&& this_ref, bool check_downgrade)
 {
