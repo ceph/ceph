@@ -219,7 +219,7 @@ OMapInnerNode::list(
 	  return omap_load_extent(
 	    oc, laddr,
 	    get_meta().depth - 1
-	  ).safe_then([&, config, oc, this] (auto &&extent) {
+	  ).safe_then([&, config, oc] (auto &&extent) {
 	    return extent->list(
 	      oc,
 	      start,

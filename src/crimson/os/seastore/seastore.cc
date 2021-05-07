@@ -835,7 +835,7 @@ SeaStore::tm_ret SeaStore::_omap_rmkeys(
       BtreeOMapManager(*transaction_manager),
       onode->get_layout().omap_root.get(),
       std::move(keys),
-      [&ctx, &onode, this](
+      [&ctx, &onode](
 	auto &omap_manager,
 	auto &omap_root,
 	auto &keys) {
