@@ -257,6 +257,13 @@ class Batch(object):
             help='Skip creating and enabling systemd units and starting OSD services',
         )
         parser.add_argument(
+            '--no-tmpfs',
+            dest='no_tmpfs',
+            action='store_true',
+            help=('Skip mountng a tmpfs filesystem when activating the OSD '
+                 'even if a mounted one is not detected.'),
+        )
+        parser.add_argument(
             '--osds-per-device',
             type=int,
             default=1,
