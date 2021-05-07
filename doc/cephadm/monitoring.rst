@@ -152,6 +152,17 @@ For example
 
      ceph config set mgr mgr/cephadm/container_image_prometheus prom/prometheus:v1.4.1
 
+If there were already running monitoring stack daemon(s) of the type whose
+image you've changed, you must redeploy the daemon(s) in order to have them
+actually use the new image.
+
+For example, if you had changed the prometheus image
+
+.. prompt:: bash #
+
+     ceph orch redeploy prometheus
+
+
 .. note::
 
      By setting a custom image, the default value will be overridden (but not
