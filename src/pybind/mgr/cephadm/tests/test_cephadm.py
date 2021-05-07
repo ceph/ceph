@@ -755,6 +755,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.purge", mock.MagicMock())
     @mock.patch("cephadm.services.nfs.NFSService.create_rados_config_obj", mock.MagicMock())
     def test_nfs(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
