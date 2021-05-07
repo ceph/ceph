@@ -7,6 +7,8 @@
 
 #include "common/ceph_time.h"
 
+#include "osd/osd_types.h"
+
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal.h"
@@ -210,10 +212,6 @@ class SegmentCleaner : public JournalSegmentProvider {
 public:
   /// Config
   struct config_t {
-    size_t num_segments = 0;
-    size_t segment_size = 0;
-    size_t block_size = 0;
-
     size_t target_journal_segments = 0;
     size_t max_journal_segments = 0;
 
@@ -229,12 +227,8 @@ public:
     /// Number of bytes of journal entries to rewrite per cycle
     size_t journal_rewrite_per_cycle = 0;
 
-    static config_t default_from_segment_manager(
-      SegmentManager &manager) {
+    static config_t get_default() {
       return config_t{
-	manager.get_num_segments(),
-	static_cast<size_t>(manager.get_segment_size()),
-	(size_t)manager.get_block_size(),
 	  2,    // target_journal_segments
 	  4,    // max_journal_segments
 	  .9,   // available_ratio_gc_max
@@ -342,7 +336,12 @@ public:
   };
 
 private:
+  const bool detailed;
   const config_t config;
+
+  size_t num_segments = 0;
+  size_t segment_size = 0;
+  size_t block_size = 0;
 
   SpaceTrackerIRef space_tracker;
   std::vector<segment_info_t> segments;
@@ -366,18 +365,34 @@ private:
 
 public:
   SegmentCleaner(config_t config, bool detailed = false)
-    : config(config),
-      space_tracker(
-	detailed ?
-	(SpaceTrackerI*)new SpaceTrackerDetailed(
-	  config.num_segments,
-	  config.segment_size,
-	  config.block_size) :
-	(SpaceTrackerI*)new SpaceTrackerSimple(
-	  config.num_segments)),
-      segments(config.num_segments),
-      empty_segments(config.num_segments),
+    : detailed(detailed),
+      config(config),
       gc_process(*this) {}
+
+  void mount(SegmentManager &sm) {
+    init_complete = false;
+    used_bytes = 0;
+    journal_tail_target = journal_seq_t{};
+    journal_tail_committed = journal_seq_t{};
+    journal_head = journal_seq_t{};
+
+    num_segments = sm.get_num_segments();
+    segment_size = static_cast<size_t>(sm.get_segment_size());
+    block_size = static_cast<size_t>(sm.get_block_size());
+
+    space_tracker.reset(
+      detailed ?
+      (SpaceTrackerI*)new SpaceTrackerDetailed(
+	num_segments,
+	segment_size,
+	block_size) :
+      (SpaceTrackerI*)new SpaceTrackerSimple(
+	num_segments));
+
+    segments.clear();
+    segments.resize(num_segments);
+    empty_segments = num_segments;
+  }
 
   get_segment_ret get_segment() final;
 
@@ -501,6 +516,18 @@ public:
   void complete_init() {
     init_complete = true;
     start();
+  }
+
+  store_statfs_t stat() const {
+    store_statfs_t st;
+    st.total = get_total_bytes();
+    st.available = get_total_bytes() - get_used_bytes();
+    st.allocated = get_used_bytes();
+    st.data_stored = get_used_bytes();
+
+    // TODO add per extent type counters for omap_allocated and
+    // internal metadata
+    return st;
   }
 
   seastar::future<> stop() {
@@ -650,7 +677,7 @@ private:
   }
 
   size_t get_bytes_available_current_segment() const {
-    return config.segment_size - get_bytes_used_current_segment();
+    return segment_size - get_bytes_used_current_segment();
   }
 
   /**
@@ -668,14 +695,14 @@ private:
 
   /// Returns free space available for writes
   size_t get_available_bytes() const {
-    return (empty_segments * config.segment_size) +
+    return (empty_segments * segment_size) +
       get_bytes_available_current_segment() +
       get_bytes_scanned_current_segment();
   }
 
   /// Returns total space available
   size_t get_total_bytes() const {
-    return config.segment_size * config.num_segments;
+    return segment_size * num_segments;
   }
 
   /// Returns total space not free
@@ -692,7 +719,7 @@ private:
   size_t get_journal_segment_bytes() const {
     assert(journal_head >= journal_tail_committed);
     return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
-      config.segment_size;
+      segment_size;
   }
 
   /**

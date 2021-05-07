@@ -8,6 +8,8 @@
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
+
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -94,23 +96,27 @@ public:
 
   /// Creates empty transaction
   TransactionRef create_transaction() {
+    LOG_PREFIX(Cache::create_transaction);
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       false,
       last_commit
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
+    DEBUGT("created", *ret);
     return ret;
   }
 
   /// Creates empty weak transaction
   TransactionRef create_weak_transaction() {
+    LOG_PREFIX(Cache::create_weak_transaction);
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       true,
       last_commit
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
+    DEBUGT("created", *ret);
     return ret;
   }
 

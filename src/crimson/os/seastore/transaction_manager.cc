@@ -4,17 +4,10 @@
 #include "include/denc.h"
 #include "include/intarith.h"
 
-#include "crimson/common/log.h"
-
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/journal.h"
-
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
-  }
-}
 
 namespace crimson::os::seastore {
 
@@ -36,19 +29,23 @@ TransactionManager::TransactionManager(
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
-  return journal->open_for_write().safe_then([this](auto addr) {
-    logger().debug("TransactionManager::mkfs: about to do_with");
+  LOG_PREFIX(TransactionManager::mkfs);
+  segment_cleaner->mount(segment_manager);
+  return journal->open_for_write().safe_then([this, FNAME](auto addr) {
+    DEBUG("TransactionManager::mkfs: about to do_with");
     segment_cleaner->init_mkfs(addr);
     return seastar::do_with(
       create_transaction(),
-      [this](auto &transaction) {
-	logger().debug("TransactionManager::mkfs: about to cache->mkfs");
+      [this, FNAME](auto &transaction) {
+	DEBUGT(
+	  "about to cache->mkfs",
+	  *transaction);
 	cache->init();
 	return cache->mkfs(*transaction
 	).safe_then([this, &transaction] {
 	  return lba_manager->mkfs(*transaction);
-	}).safe_then([this, &transaction] {
-	  logger().debug("TransactionManager::mkfs: about to submit_transaction");
+	}).safe_then([this, FNAME, &transaction] {
+	  DEBUGT("about to submit_transaction", *transaction);
 	  return submit_transaction_direct(std::move(transaction)).handle_error(
 	    crimson::ct_error::eagain::handle([] {
 	      ceph_assert(0 == "eagain impossible");
@@ -59,37 +56,43 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 	});
       });
   }).safe_then([this] {
-    return journal->close();
+    return close();
   });
 }
 
 TransactionManager::mount_ertr::future<> TransactionManager::mount()
 {
+  LOG_PREFIX(TransactionManager::mount);
   cache->init();
+  segment_cleaner->mount(segment_manager);
   return journal->replay([this](auto seq, auto paddr, const auto &e) {
     return cache->replay_delta(seq, paddr, e);
   }).safe_then([this] {
     return journal->open_for_write();
-  }).safe_then([this](auto addr) {
+  }).safe_then([this, FNAME](auto addr) {
     segment_cleaner->set_journal_head(addr);
     return seastar::do_with(
       create_weak_transaction(),
-      [this](auto &t) {
+      [this, FNAME](auto &t) {
 	return cache->init_cached_extents(*t, [this](auto &t, auto &e) {
 	  return lba_manager->init_cached_extent(t, e);
-	}).safe_then([this, &t] {
+	}).safe_then([this, FNAME, &t] {
           assert(segment_cleaner->debug_check_space(
                    *segment_cleaner->get_empty_space_tracker()));
           return lba_manager->scan_mapped_space(
             *t,
-            [this](paddr_t addr, extent_len_t len) {
-              logger().trace("TransactionManager::mount: marking {}~{} used",
-			     addr,
-			     len);
-              segment_cleaner->mark_space_used(
-                addr,
-                len ,
-                /* init_scan = */ true);
+            [this, FNAME, &t](paddr_t addr, extent_len_t len) {
+              TRACET(
+		"marking {}~{} used",
+		t,
+		addr,
+		len);
+	      if (addr.is_real()) {
+		segment_cleaner->mark_space_used(
+		  addr,
+		  len ,
+		  /* init_scan = */ true);
+	      }
             });
         });
       });
@@ -138,11 +141,13 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
+  LOG_PREFIX(TransactionManager::dec_ref);
   return lba_manager->decref_extent(t, ref->get_laddr()
-  ).safe_then([this, &t, ref](auto ret) {
+  ).safe_then([this, FNAME, &t, ref](auto ret) {
     if (ret.refcount == 0) {
-      logger().debug(
-	"TransactionManager::dec_ref: extent {} refcount 0",
+      DEBUGT(
+	"extent {} refcount 0",
+	t,
 	*ref);
       cache->retire_extent(t, ref);
     }
@@ -154,12 +159,11 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   Transaction &t,
   laddr_t offset)
 {
+  LOG_PREFIX(TransactionManager::dec_ref);
   return lba_manager->decref_extent(t, offset
-  ).safe_then([this, offset, &t](auto result) -> ref_ret {
+  ).safe_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     if (result.refcount == 0 && !result.addr.is_zero()) {
-      logger().debug(
-	"TransactionManager::dec_ref: offset {} refcount 0",
-	offset);
+      DEBUGT("offset {} refcount 0", t, offset);
       return cache->retire_extent(
 	t, result.addr, result.length
       ).safe_then([] {
@@ -197,7 +201,8 @@ TransactionManager::submit_transaction_ertr::future<>
 TransactionManager::submit_transaction(
   TransactionRef t)
 {
-  logger().debug("TransactionManager::submit_transaction");
+  LOG_PREFIX(TransactionManager::submit_transaction);
+  DEBUGT("about to await throttle", *t);
   auto &tref = *t;
   return tref.handle.enter(write_pipeline.wait_throttle
   ).then([this] {
@@ -211,21 +216,24 @@ TransactionManager::submit_transaction_direct_ret
 TransactionManager::submit_transaction_direct(
   TransactionRef t)
 {
-  logger().debug("TransactionManager::submit_transaction_direct");
+  LOG_PREFIX(TransactionManager::submit_transaction_direct);
+  DEBUGT("about to prepare", *t);
   auto &tref = *t;
   return tref.handle.enter(write_pipeline.prepare
-  ).then([this, &tref]() mutable
+  ).then([this, FNAME, &tref]() mutable
 	 -> submit_transaction_ertr::future<> {
     auto record = cache->try_construct_record(tref);
     if (!record) {
-      logger().debug("TransactionManager::submit_transaction_direct: "
-                     "conflict detected, returning eagain.");
+      DEBUGT("conflict detected, returning eagain.", tref);
       return crimson::ct_error::eagain::make();
     }
 
+    DEBUGT("about to submit to journal", tref);
+
     return journal->submit_record(std::move(*record), tref.handle
-    ).safe_then([this, &tref](auto p) mutable {
+    ).safe_then([this, FNAME, &tref](auto p) mutable {
       auto [addr, journal_seq] = p;
+      DEBUGT("journal commit to {} seq {}", tref, addr, journal_seq);
       segment_cleaner->set_journal_head(journal_seq);
       cache->complete_commit(tref, addr, journal_seq, segment_cleaner.get());
       lba_manager->complete_transaction(tref);
@@ -264,23 +272,18 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
+  LOG_PREFIX(TransactionManager::rewrite_extent);
   {
     auto updated = cache->update_extent_from_transaction(t, extent);
     if (!updated) {
-      logger().debug(
-	"{}: {} is already retired, skipping",
-	__func__,
-	*extent);
+      DEBUGT("{} is already retired, skipping", t, *extent);
       return rewrite_extent_ertr::now();
     }
     extent = updated;
   }
 
   if (extent->get_type() == extent_types_t::ROOT) {
-    logger().debug(
-      "{}: marking root {} for rewrite",
-      __func__,
-      *extent);
+    DEBUGT("marking root {} for rewrite", t, *extent);
     cache->duplicate_for_write(t, extent);
     return rewrite_extent_ertr::now();
   }
@@ -294,16 +297,11 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
   laddr_t laddr,
   segment_off_t len)
 {
-  logger().debug(
-    "TransactionManager::get_extent_if_live:"
-    " type {}, addr {}, laddr {}, len {}",
-    type,
-    addr,
-    laddr,
-    len);
+  LOG_PREFIX(TransactionManager::get_extent_if_live);
+  DEBUGT("type {}, addr {}, laddr {}, len {}", t, type, addr, laddr, len);
 
   return cache->get_extent_if_cached(t, addr
-  ).then([this, &t, type, addr, laddr, len](auto extent)
+  ).then([this, FNAME, &t, type, addr, laddr, len](auto extent)
 	 -> get_extent_if_live_ret {
     if (extent) {
       return get_extent_if_live_ret(
@@ -357,9 +355,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 	  }
 	});
     } else {
-      logger().debug(
-	"TransactionManager::get_extent_if_live: non-logical extent {}",
-	addr);
+      DEBUGT("non-logical extent {}", t, addr);
       return lba_manager->get_physical_extent_if_live(
 	t,
 	type,
