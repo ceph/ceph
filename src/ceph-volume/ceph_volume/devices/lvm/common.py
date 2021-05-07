@@ -79,6 +79,12 @@ common_args = {
         'action': 'store_true',
         'help': 'Skip creating and enabling systemd units and starting OSD services when activating',
     },
+    '--no-tmpfs': {
+        'dest': 'no_tmpfs',
+        'action': 'store_true',
+        'help': ('Skip mountng a tmpfs filesystem when activating the OSD '
+                 'even if a mounted one is not detected.'),
+    },
 }
 
 bluestore_args = {

@@ -360,7 +360,8 @@ class Activate(object):
             '--no-tmpfs',
             dest='no_tmpfs',
             action='store_true',
-            help='Do not create a tmpfs for the OSD directory',
+            help='Skip mountng a tmpfs filesystem when activating the OSD '
+                 'even if a mounted one is not detected.',
         )
         if len(self.argv) == 0:
             print(sub_command_help)
