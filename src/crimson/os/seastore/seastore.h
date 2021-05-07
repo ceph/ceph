@@ -17,6 +17,7 @@
 #include "os/Transaction.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
@@ -30,15 +31,15 @@ using OnodeRef = boost::intrusive_ptr<Onode>;
 class TransactionManager;
 
 class SeaStore final : public FuturizedStore {
-  uuid_d osd_fsid;
-
 public:
 
   SeaStore(
+    SegmentManagerRef sm,
     TransactionManagerRef tm,
     CollectionManagerRef cm,
     OnodeManagerRef om
-  ) : transaction_manager(std::move(tm)),
+  ) : segment_manager(std::move(sm)),
+      transaction_manager(std::move(tm)),
       collection_manager(std::move(cm)),
       onode_manager(std::move(om)) {}
 
@@ -241,6 +242,7 @@ private:
     const std::optional<std::string>& start,
     OMapManager::omap_list_config_t config);
 
+  SegmentManagerRef segment_manager;
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
@@ -305,4 +307,7 @@ private:
   boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 };
 
+std::unique_ptr<SeaStore> make_seastore(
+  const std::string &device,
+  const ConfigValues &config);
 }

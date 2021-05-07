@@ -20,6 +20,7 @@
 
 #include "crimson/osd/exceptions.h"
 
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
@@ -32,16 +33,18 @@ class Journal;
 
 template <typename F>
 auto repeat_eagain(F &&f) {
+  LOG_PREFIX("repeat_eagain");
   return seastar::do_with(
     std::forward<F>(f),
-    [](auto &f) {
+    [FNAME](auto &f) {
       return crimson::do_until(
-	[&f] {
+	[FNAME, &f] {
 	  return std::invoke(f
 	  ).safe_then([] {
 	    return true;
 	  }).handle_error(
-	    [](const crimson::ct_error::eagain &e) {
+	    [FNAME](const crimson::ct_error::eagain &e) {
+	      DEBUG("hit eagain, restarting");
 	      return seastar::make_ready_future<bool>(false);
 	    },
 	    crimson::ct_error::pass_further_all{}
@@ -124,15 +127,14 @@ public:
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
     LBAPinRef pin) {
+    LOG_PREFIX(TransactionManager::pin_to_extent);
     using ret = pin_to_extent_ret<T>;
-    crimson::get_logger(ceph_subsys_filestore).debug(
-      "pin_to_extent: getting extent {}",
-      *pin);
+    DEBUGT("getting extent {}", t, *pin);
     return cache->get_extent<T>(
       t,
       pin->get_paddr(),
       pin->get_length()
-    ).safe_then([this, pin=std::move(pin)](auto ref) mutable -> ret {
+    ).safe_then([this, FNAME, &t, pin=std::move(pin)](auto ref) mutable -> ret {
       if (!ref->has_pin()) {
 	if (pin->has_been_invalidated() || ref->has_been_invalidated()) {
 	  return crimson::ct_error::eagain::make();
@@ -141,9 +143,7 @@ public:
 	  lba_manager->add_pin(ref->get_pin());
 	}
       }
-      crimson::get_logger(ceph_subsys_filestore).debug(
-	"pin_to_extent: got extent {}",
-	*ref);
+      DEBUGT("got extent {}", t, *ref);
       return pin_to_extent_ret<T>(
 	pin_to_extent_ertr::ready_future_marker{},
 	std::move(ref));
@@ -165,18 +165,16 @@ public:
     Transaction &t,
     laddr_t offset,
     extent_len_t length) {
+    LOG_PREFIX(TransactionManager::read_extent);
     return get_pins(
       t, offset, length
-    ).safe_then([this, &t, offset, length](auto pins) {
+    ).safe_then([this, FNAME, &t, offset, length](auto pins) {
       if (pins.size() != 1 || !pins.front()->get_paddr().is_real()) {
-	auto &logger = crimson::get_logger(ceph_subsys_filestore);
-	logger.error(
-	  "TransactionManager::read_extent offset {} len {} got {} extents:",
-	  offset,
-	  length,
-	  pins.size());
+	ERRORT(
+	  "offset {} len {} got {} extents:",
+	  t, offset, length, pins.size());
 	for (auto &i: pins) {
-	  logger.error("\t{}", *i);
+	  ERRORT("\t{}", t, *i);
 	}
 	ceph_assert(0 == "Should be impossible");
       }
@@ -186,21 +184,21 @@ public:
 
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
-    auto &logger = crimson::get_logger(ceph_subsys_filestore);
+    LOG_PREFIX(TransactionManager::get_mutable_extent);
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
     if (!ret->has_pin()) {
-      logger.debug(
-	"{}: duplicating {} for write: {}",
-	__func__,
+      DEBUGT(
+	"duplicating {} for write: {}",
+	t,
 	*ref,
 	*ret);
       ret->set_pin(ref->get_pin().duplicate());
     } else {
-      logger.debug(
-	"{}: {} already pending",
-	__func__,
+      DEBUGT(
+	"{} already pending",
+	t,
 	*ref);
       assert(ref->is_pending());
       assert(&*ref == &*ret);
@@ -375,50 +373,52 @@ public:
   }
 
   /**
-   * get_root
+   * read_root_meta
    *
-   * Get root block's ondisk layout
+   * Read root block meta entry for key.
    */
-  using get_root_ertr = base_ertr;
-  using get_root_ret = get_root_ertr::future<RootBlockRef>;
-  get_root_ret get_root(Transaction &t) {
-    return cache->get_root(t);
+  using read_root_meta_ertr = base_ertr;
+  using read_root_meta_bare = std::optional<std::string>;
+  using read_root_meta_ret = read_root_meta_ertr::future<
+    read_root_meta_bare>;
+  read_root_meta_ret read_root_meta(
+    Transaction &t,
+    const std::string &key) {
+    return cache->get_root(
+      t
+    ).safe_then([&key](auto root) {
+      auto meta = root->root.get_meta();
+      auto iter = meta.find(key);
+      if (iter == meta.end()) {
+	return seastar::make_ready_future<read_root_meta_bare>(std::nullopt);
+      } else {
+	return seastar::make_ready_future<read_root_meta_bare>(iter->second);
+      }
+    });
   }
 
   /**
    * update_root_meta
    *
-   * modify root block's meta field
+   * Update root block meta entry for key to value.
    */
-  using update_root_meta_ertr = base_ertr::extend<
-    crimson::ct_error::value_too_large>;
+  using update_root_meta_ertr = base_ertr;
   using update_root_meta_ret = update_root_meta_ertr::future<>;
-  update_root_meta_ret update_root_meta(Transaction& t,
-                                        const std::string& key,
-                                        const std::string& value) {
-    auto root = cache->get_root_fast(t);
-    root = cache->duplicate_for_write(t, root)->cast<RootBlock>();
-    root->meta[key] = value;
+  update_root_meta_ret update_root_meta(
+    Transaction& t,
+    const std::string& key,
+    const std::string& value) {
+    return cache->get_root(
+      t
+    ).safe_then([this, &t, &key, &value](RootBlockRef root) {
+      root = cache->duplicate_for_write(t, root)->cast<RootBlock>();
 
-    // calculate meta size
-    // TODO: we probably need a uniformal interface for calcuting
-    // the encoded size of data structures
-    uint32_t meta_size = 4; // initial 4 bytes for std::map size
-    for (auto& [key, val] : root->meta) {
-      // sizes of length fields for key and val + sizes of key and val
-      meta_size += 8 + key.length() + val.length();
-    }
+      auto meta = root->root.get_meta();
+      meta[key] = value;
 
-    if (meta_size > root_t::MAX_META_LENGTH) {
-      return crimson::ct_error::value_too_large::make();
-    }
-
-    ceph::bufferlist bl(1);
-    bl.rebuild(ceph::buffer::ptr_node::create(
-      &root->get_root().meta[0], root_t::MAX_META_LENGTH));
-    encode(root->meta, bl);
-    root->get_root().have_meta = true;
-    return update_root_meta_ertr::now();
+      root->root.set_meta(meta);
+      return seastar::now();
+    });
   }
 
   /**
@@ -473,6 +473,10 @@ public:
 
   extent_len_t get_block_size() const {
     return segment_manager.get_block_size();
+  }
+
+  store_statfs_t store_stat() const {
+    return segment_cleaner->stat();
   }
 
   ~TransactionManager();
