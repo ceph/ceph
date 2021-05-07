@@ -1,5 +1,6 @@
 tasks:
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: progress-stats
+      git_remote: https://github.com/galsalomon66/
       rgw_server: client.0
