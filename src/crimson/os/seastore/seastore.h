@@ -187,7 +187,7 @@ private:
 	  t = transaction_manager->create_transaction();
 	  return onode_manager->get_onode(
 	    *t, oid
-	  ).safe_then([&, this](auto onode_ret) {
+	  ).safe_then([&](auto onode_ret) {
 	    onode = std::move(onode_ret);
 	    return f(*t, *onode);
 	  }).safe_then([&ret](auto _ret) {
@@ -216,7 +216,7 @@ private:
 	  t = transaction_manager->create_transaction();
 	  return onode_manager->get_onode(
 	    *t, oid
-	  ).safe_then([&, this](auto onode_ret) {
+	  ).safe_then([&](auto onode_ret) {
 	    onode = std::move(onode_ret);
 	    return f(*t, *onode);
 	  }).safe_then([&ret](auto _ret) {

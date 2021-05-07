@@ -224,7 +224,7 @@ OMapInnerNode::list(
 	      oc,
 	      start,
 	      config.with_reduced_max(result.size())
-	    ).safe_then([&, config, this](auto &&child_ret) mutable {
+	    ).safe_then([&, config](auto &&child_ret) mutable {
 	      auto &[child_complete, child_result] = child_ret;
 	      if (result.size() && child_result.size()) {
 		assert(child_result.begin()->first > result.rbegin()->first);
