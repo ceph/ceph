@@ -35,7 +35,7 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
     private ngZone: NgZone,
     private titleService: Title
   ) {
-    this.titleService.setTitle('Cluster/Inventory');
+    this.titleService.setTitle('Cluster/Physical Disks');
   }
 
   ngOnInit() {
