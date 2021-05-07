@@ -443,6 +443,15 @@ struct Condition {
   bool has_key_p(const std::string& _key, F p) const {
     return p(key, _key);
   }
+
+  template <typename F>
+  bool has_val_p(const std::string& _val, F p) const {
+    for (auto val : vals) {
+      if (p(val, _val))
+        return true;
+    }
+    return false;
+  }
 };
 
 std::ostream& operator <<(std::ostream& m, const Condition& c);
@@ -516,12 +525,27 @@ struct Policy {
     return false;
   }
 
-  bool has_conditional(const string& c) const {
+  template <typename F>
+  bool has_conditional_value(const std::string& conditional, F p) const {
+    for (const auto&s: statements){
+      if (std::any_of(s.conditions.begin(), s.conditions.end(),
+		      [&](const Condition& c) { return c.has_val_p(conditional, p);}))
+	    return true;
+    }
+    return false;
+  }
+
+  bool has_conditional(const std::string& c) const {
     return has_conditional(c, Condition::ci_equal_to());
   }
 
   bool has_partial_conditional(const string& c) const {
     return has_conditional(c, Condition::ci_starts_with());
+  }
+
+  // Example: ${s3:ResourceTag}
+  bool has_partial_conditional_value(const std::string& c) const {
+    return has_conditional_value(c, Condition::ci_starts_with());
   }
 };
 
