@@ -4450,19 +4450,18 @@ options:
   type: str
   level: advanced
   desc: which operation priority queue algorithm to use
-  long_desc: which operation priority queue algorithm to use; mclock_scheduler is
-    currently experimental
+  long_desc: which operation priority queue algorithm to use
   fmt_desc: This sets the type of queue to be used for prioritizing ops
     within each OSD. Both queues feature a strict sub-queue which is
     dequeued before the normal queue. The normal queue is different
     between implementations. The WeightedPriorityQueue (``wpq``)
     dequeues operations in relation to their priorities to prevent
     starvation of any queue. WPQ should help in cases where a few OSDs
-    are more overloaded than others. The new mClockQueue
+    are more overloaded than others. The mClockQueue
     (``mclock_scheduler``) prioritizes operations based on which class
     they belong to (recovery, scrub, snaptrim, client op, osd subop).
     See `QoS Based on mClock`_. Requires a restart.
-  default: wpq
+  default: mclock_scheduler
   see_also:
   - osd_op_queue_cut_off
   enum_values:
