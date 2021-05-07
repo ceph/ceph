@@ -138,7 +138,7 @@ const routes: Routes = [
             section_info: 'Orchestrator',
             header: 'Orchestrator is not available'
           },
-          breadcrumbs: 'Cluster/Inventory'
+          breadcrumbs: 'Cluster/Physical Disks'
         }
       },
       {
