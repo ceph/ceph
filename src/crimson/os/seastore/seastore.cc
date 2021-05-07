@@ -764,7 +764,7 @@ SeaStore::tm_ret SeaStore::_write(
 }
 
 SeaStore::omap_set_kvs_ret
-SeaStore::__omap_set_kvs(
+SeaStore::_omap_set_kvs(
   const omap_root_le_t& omap_root,
   Transaction& t,
   omap_root_le_t& mutable_omap_root,
@@ -802,7 +802,7 @@ SeaStore::tm_ret SeaStore::_omap_set_values(
 {
   LOG_PREFIX(SeaStore::_omap_set_values);
   DEBUGT("{} {} keys", *ctx.transaction, *onode, aset.size());
-  return __omap_set_kvs(
+  return _omap_set_kvs(
     onode->get_layout().omap_root,
     *ctx.transaction,
     onode->get_mutable_layout(*ctx.transaction).omap_root,
@@ -928,7 +928,7 @@ SeaStore::tm_ret SeaStore::_setattrs(
     return tm_ertr::now();
   }
 
-  return __omap_set_kvs(
+  return _omap_set_kvs(
     onode->get_layout().xattr_root,
     *ctx.transaction,
     layout.xattr_root,
