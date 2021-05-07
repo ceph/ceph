@@ -39,8 +39,8 @@
   properly.
 
 * The ``nfs cluster delete`` and ``nfs export delete`` commands are
-  deprecated; please use ``nfs cluster rm`` and ``nfs export rm``
-  instead.
+  deprecated and will be removed in a future release.  Please use
+  ``nfs cluster rm`` and ``nfs export rm`` instead.
 
 * mgr-pg_autoscaler: Autoscaler will now start out by scaling each
   pool to have a full complements of pgs from the start and will only
