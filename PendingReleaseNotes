@@ -28,6 +28,20 @@
   support an NFS export of both ``rgw`` and ``cephfs`` from a single
   NFS cluster instance.
 
+* The ``nfs cluster update`` command has been removed.  You can modify
+  the placement of an existing NFS service (and/or its associated
+  ingress service) using ``orch ls --export`` and ``orch apply -i
+  ...``.
+
+* The ``orch apply nfs`` command no longer requires a pool or
+  namespace argument. We strongly encourage users to use the defaults
+  so that the ``nfs cluster ls`` and related commands will work
+  properly.
+
+* The ``nfs cluster delete`` and ``nfs export delete`` commands are
+  deprecated; please use ``nfs cluster rm`` and ``nfs export rm``
+  instead.
+
 * mgr-pg_autoscaler: Autoscaler will now start out by scaling each
   pool to have a full complements of pgs from the start and will only
   decrease it when other pools need more pgs due to increased usage.
