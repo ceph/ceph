@@ -260,6 +260,7 @@ def get_mounts(devices=False, paths=False, realpath=False):
 
     - tmpfs
     - devtmpfs
+    - /dev/root
 
     If ``devices`` is set to ``True`` the mapping will be a device-to-path(s),
     if ``paths`` is set to ``True`` then the mapping will be
@@ -270,7 +271,7 @@ def get_mounts(devices=False, paths=False, realpath=False):
     """
     devices_mounted = {}
     paths_mounted = {}
-    do_not_skip = ['tmpfs', 'devtmpfs']
+    do_not_skip = ['tmpfs', 'devtmpfs', '/dev/root']
     default_to_devices = devices is False and paths is False
 
     with open(PROCDIR + '/mounts', 'rb') as mounts:
