@@ -2048,22 +2048,38 @@ Then run the following:
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None
                           ) -> dict:
+
         if not osdspecs:
             return {'n/a': [{'error': True,
                              'message': 'No OSDSpec or matching hosts found.'}]}
+
         matching_hosts = self.osd_service.resolve_hosts_for_osdspecs(specs=osdspecs)
         if not matching_hosts:
             return {'n/a': [{'error': True,
                              'message': 'No OSDSpec or matching hosts found.'}]}
-        # Is any host still loading previews or still in the queue to be previewed
+
+        # Is any host still loading previews?
         pending_hosts = {h for h in self.cache.loading_osdspec_preview if h in matching_hosts}
-        if pending_hosts or any(item in self.cache.osdspec_previews_refresh_queue for item in matching_hosts):
+        if pending_hosts:
             # Report 'pending' when any of the matching hosts is still loading previews (flag is True)
             return {'n/a': [{'error': True,
                              'message': 'Preview data is being generated.. '
                                         'Please re-run this command in a bit.'}]}
+
+        # Is any host still in the queue to be previewed and we do not have information about it?
+
+        hosts_with_preview = set(
+            [host for host in self.cache.osdspec_previews if self.cache.osdspec_previews[host]])
+        still_need_refresh = set(self.cache.osdspec_previews_refresh_queue) - hosts_with_preview
+        if still_need_refresh:
+            # Report 'pending' when we have hosts without information and the preview is stil pending
+            return {'n/a': [{'error': True,
+                             'message': 'Preview data is being generated.. '
+                                        'Please re-run this command in a bit.'}]}
+
         # drop all keys that are not in search_hosts and only select reports that match the requested osdspecs
         previews_for_specs = {}
+
         for host, raw_reports in self.cache.osdspec_previews.items():
             if host not in matching_hosts:
                 continue
@@ -2072,6 +2088,22 @@ Then run the following:
                 if osd_report.get('osdspec') in [x.service_id for x in osdspecs]:
                     osd_reports.append(osd_report)
             previews_for_specs.update({host: osd_reports})
+
+        # The spec provided is not going to generate osds:
+        generate_osds = False
+        for host, specs in previews_for_specs.items():
+            for spec in specs:
+                if spec.get('data') or spec.get('err'):
+                    generate_osds = True
+                    break
+            if generate_osds:
+                break
+
+        if not generate_osds:
+            # Report that the osd spec provided does not generate any valid osd
+            return {'n/a': [{'error': True,
+                             'message': 'The drive group specification provided '
+                                        'does not generate any OSD.'}]}
         return previews_for_specs
 
     def _calc_daemon_deps(self,
