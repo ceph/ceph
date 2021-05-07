@@ -298,7 +298,7 @@ private:
     internal_context_t &ctx,
     const coll_t& cid);
   using omap_set_kvs_ret = tm_ertr::future<>;
-  omap_set_kvs_ret __omap_set_kvs(
+  omap_set_kvs_ret _omap_set_kvs(
     const omap_root_le_t& omap_root,
     Transaction& t,
     omap_root_le_t& mutable_omap_root,
