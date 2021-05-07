@@ -12,6 +12,8 @@
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.
 
+* OSD: Ceph now uses mclock_scheduler as its default osd_op_queue to provide QoS.
+
 >=16.0.0
 --------
 * mgr/nfs: ``nfs`` module is moved out of volumes plugin. Prior using the
