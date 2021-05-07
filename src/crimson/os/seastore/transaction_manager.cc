@@ -187,7 +187,7 @@ TransactionManager::refs_ret TransactionManager::dec_ref(
       [this, &t] (auto &&offsets, auto &refcnt) {
       return crimson::do_for_each(offsets.begin(), offsets.end(),
         [this, &t, &refcnt] (auto &laddr) {
-        return dec_ref(t, laddr).safe_then([&refcnt] (auto ref) {
+        return this->dec_ref(t, laddr).safe_then([&refcnt] (auto ref) {
           refcnt.push_back(ref);
           return ref_ertr::now();
         });
