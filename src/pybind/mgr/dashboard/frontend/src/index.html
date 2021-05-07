@@ -3,10 +3,9 @@
 <head>
   <meta charset="utf-8">
   <title>Ceph</title>
-  <base href="/">
 
   <script>
-    window['base-href'] = window.location.pathname;
+    document.write('<base href="' + document.location+ '" />');
   </script>
 
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
