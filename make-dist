@@ -102,7 +102,7 @@ tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfi
 # at the three URLs referenced below (may involve uploading to download.ceph.com)
 boost_version=1.66.0
 download_boost $boost_version b2dfbd6c717be4a7bb2d88018eaccf75 \
-               https://dl.bintray.com/boostorg/release/$boost_version/source \
+               https://boostorg.jfrog.io/artifactory/main/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
