@@ -1,6 +1,5 @@
 import json
 from contextlib import contextmanager
-from unittest.mock import ANY
 
 import pytest
 
@@ -984,6 +983,37 @@ class TestCephadm(object):
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test').to_json()
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_dont_touch_offline_or_maintenance_host_daemons(self, cephadm_module):
+        # test daemons on offline/maint hosts not removed when applying specs
+        # test daemons not added to hosts in maint/offline state
+        with with_host(cephadm_module, 'test1'):
+            with with_host(cephadm_module, 'test2'):
+                with with_host(cephadm_module, 'test3'):
+                    with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*'))):
+                        # should get a mgr on all 3 hosts
+                        # CephadmServe(cephadm_module)._apply_all_services()
+                        assert len(cephadm_module.cache.get_daemons_by_type('mgr')) == 3
+
+                        # put one host in offline state and one host in maintenance state
+                        cephadm_module.inventory._inventory['test2']['status'] = 'offline'
+                        cephadm_module.inventory._inventory['test3']['status'] = 'maintenance'
+                        cephadm_module.inventory.save()
+
+                        # being in offline/maint mode should disqualify hosts from being
+                        # candidates for scheduling
+                        candidates = [
+                            h.hostname for h in cephadm_module._schedulable_hosts()]
+                        assert 'test2' not in candidates
+                        assert 'test3' not in candidates
+
+                        with with_service(cephadm_module, ServiceSpec('crash', placement=PlacementSpec(host_pattern='*'))):
+                            # re-apply services. No mgr should be removed from maint/offline hosts
+                            # crash daemon should only be on host not in maint/offline mode
+                            CephadmServe(cephadm_module)._apply_all_services()
+                            assert len(cephadm_module.cache.get_daemons_by_type('mgr')) == 3
+                            assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 1
+
     def test_stale_connections(self, cephadm_module):
         class Connection(object):
             """
@@ -1028,14 +1058,16 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
-    def test_etc_ceph(self, _check, _get_connection, cephadm_module):
+    @mock.patch("cephadm.module.CephadmServe._write_remote_file")
+    def test_etc_ceph(self, _write_file, _check, _get_connection, cephadm_module):
         _get_connection.return_value = mock.Mock(), mock.Mock()
         _check.return_value = '{}', '', 0
+        _write_file.return_value = None
 
         assert cephadm_module.manage_etc_ceph_ceph_conf is False
 
         with with_host(cephadm_module, 'test'):
-            assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+            assert '/etc/ceph/ceph.conf' not in cephadm_module.cache.get_host_client_files('test')
 
         with with_host(cephadm_module, 'test'):
             cephadm_module.set_module_option('manage_etc_ceph_ceph_conf', True)
@@ -1043,32 +1075,29 @@ class TestCephadm(object):
             assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')
+            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf', b'',
+                                           0o644, 0, 0)
 
-            assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+            assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
 
             # set extra config and expect that we deploy another ceph.conf
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _check.assert_called_with(
-                ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'\n\n[mon]\nk=v\n')
+            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf',
+                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0)
 
             # reload
-            cephadm_module.cache.last_etc_ceph_ceph_conf = {}
+            cephadm_module.cache.last_client_files = {}
             cephadm_module.cache.load()
 
-            assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+            assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
 
             # Make sure, _check_daemons does a redeploy due to monmap change:
-            cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
-                'modified': datetime_to_str(datetime_now()),
-                'fsid': 'foobar',
-            })
-            cephadm_module.notify('mon_map', mock.MagicMock())
-            assert cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
-            cephadm_module.cache.last_etc_ceph_ceph_conf = {}
-            cephadm_module.cache.load()
-            assert cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+            before_digest = cephadm_module.cache.get_host_client_files('test')['/etc/ceph/ceph.conf'][0]
+            cephadm_module._set_extra_ceph_conf('[mon]\nk2=v2')
+            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+            after_digest = cephadm_module.cache.get_host_client_files('test')['/etc/ceph/ceph.conf'][0]
+            assert before_digest != after_digest
 
     def test_etc_ceph_init(self):
         with with_cephadm_module({'manage_etc_ceph_ceph_conf': True}) as m:

@@ -171,21 +171,43 @@ For example:
 Declarative State
 -----------------
 
-Note that the effect of ``ceph orch apply`` is persistent; that is, drives which are added to the system
-or become available (say, by zapping) after the command is complete will be automatically found and added to the cluster.
+The effect of ``ceph orch apply`` is persistent. This means that drives that
+are added to the system after the ``ceph orch apply`` command completes will be
+automatically found and added to the cluster.  It also means that drives that
+become available (by zapping, for example) after the ``ceph orch apply``
+command completes will be automatically found and added to the cluster.
 
-That is, after using::
+We will examine the effects of the following command:
 
-    ceph orch apply osd --all-available-devices
+   .. prompt:: bash #
 
-* If you add new disks to the cluster they will automatically be used to create new OSDs.
-* A new OSD will be created automatically if you remove an OSD and clean the LVM physical volume.
+     ceph orch apply osd --all-available-devices
+
+After running the above command: 
+
+* If you add new disks to the cluster, they will automatically be used to
+  create new OSDs.
+* If you remove an OSD and clean the LVM physical volume, a new OSD will be
+  created automatically.
+
+To disable the automatic creation of OSD on available devices, use the
+``unmanaged`` parameter:
 
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
 
 .. prompt:: bash #
 
    ceph orch apply osd --all-available-devices --unmanaged=true
+
+.. note::
+
+  Keep these three facts in mind:
+
+  - The default behavior of ``ceph orch apply`` causes cephadm constantly to reconcile. This means that cephadm creates OSDs as soon as new drives are detected.
+
+  - Setting ``unmanaged: True`` disables the creation of OSDs. If ``unmanaged: True`` is set, nothing will happen even if you apply a new OSD service.
+
+  - ``ceph orch daemon add`` creates OSDs, but does not add an OSD service.
 
 * For cephadm, see also :ref:`cephadm-spec-unmanaged`.
 
@@ -346,20 +368,24 @@ Example command:
 Advanced OSD Service Specifications
 ===================================
 
-:ref:`orchestrator-cli-service-spec` of type ``osd`` are a way to describe a cluster layout using the properties of disks.
-It gives the user an abstract way tell ceph which disks should turn into an OSD
-with which configuration without knowing the specifics of device names and paths.
+:ref:`orchestrator-cli-service-spec`\s of type ``osd`` are a way to describe a
+cluster layout, using the properties of disks. Service specifications give the
+user an abstract way to tell Ceph which disks should turn into OSDs with which
+configurations, without knowing the specifics of device names and paths.
 
-Instead of doing this
+Service specifications make it possible to define a yaml or json file that can
+be used to reduce the amount of manual work involved in creating OSDs.
+
+For example, instead of running the following command:
 
 .. prompt:: bash [monitor.1]#
 
   ceph orch daemon add osd *<host>*:*<path-to-device>*
 
-for each device and each host, we can define a yaml|json file that allows us to describe
-the layout. Here's the most basic example.
+for each device and each host, we can define a yaml or json file that allows us
+to describe the layout. Here's the most basic example.
 
-Create a file called i.e. osd_spec.yml
+Create a file called (for example) ``osd_spec.yml``:
 
 .. code-block:: yaml
 
@@ -370,58 +396,60 @@ Create a file called i.e. osd_spec.yml
     data_devices:                    <- the type of devices you are applying specs to
       all: true                      <- a filter, check below for a full list
 
-This would translate to:
+This means :
 
-Turn any available(ceph-volume decides what 'available' is) into an OSD on all hosts that match
-the glob pattern '*'. (The glob pattern matches against the registered hosts from `host ls`)
-There will be a more detailed section on host_pattern down below.
+#. Turn any available device (ceph-volume decides what 'available' is) into an
+   OSD on all hosts that match the glob pattern '*'. (The glob pattern matches
+   against the registered hosts from `host ls`) A more detailed section on
+   host_pattern is available below.
 
-and pass it to `osd create` like so
+#. Then pass it to `osd create` like this:
 
-.. prompt:: bash [monitor.1]#
+   .. prompt:: bash [monitor.1]#
 
-  ceph orch apply osd -i /path/to/osd_spec.yml
+     ceph orch apply osd -i /path/to/osd_spec.yml
 
-This will go out on all the matching hosts and deploy these OSDs.
+   This instruction will be issued to all the matching hosts, and will deploy
+   these OSDs.
 
-Since we want to have more complex setups, there are more filters than just the 'all' filter.
+   Setups more complex than the one specified by the ``all`` filter are
+   possible. See :ref:`osd_filters` for details.
 
-Also, there is a `--dry-run` flag that can be passed to the `apply osd` command, which gives you a synopsis
-of the proposed layout.
+   A ``--dry-run`` flag can be passed to the ``apply osd`` command to display a
+   synopsis of the proposed layout.
 
 Example
 
 .. prompt:: bash [monitor.1]#
 
-  [monitor.1]# ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
+   ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
 
 
+
+.. _osd_filters:
 
 Filters
 -------
 
 .. note::
-   Filters are applied using a `AND` gate by default. This essentially means that a drive needs to fulfill all filter
-   criteria in order to get selected.
-   If you wish to change this behavior you can adjust this behavior by setting
+   Filters are applied using an `AND` gate by default. This means that a drive
+   must fulfill all filter criteria in order to get selected. This behavior can
+   be adjusted by setting ``filter_logic: OR`` in the OSD specification. 
 
-    `filter_logic: OR`  # valid arguments are `AND`, `OR`
+Filters are used to assign disks to groups, using their attributes to group
+them. 
 
-   in the OSD Specification.
-
-You can assign disks to certain groups by their attributes using filters.
-
-The attributes are based off of ceph-volume's disk query. You can retrieve the information
-with
+The attributes are based off of ceph-volume's disk query. You can retrieve
+information about the attributes with this command:
 
 .. code-block:: bash
 
   ceph-volume inventory </path/to/disk>
 
-Vendor or Model:
-^^^^^^^^^^^^^^^^
+Vendor or Model
+^^^^^^^^^^^^^^^
 
-You can target specific disks by their Vendor or by their Model
+Specific disks can be targeted by vendor or model:
 
 .. code-block:: yaml
 
@@ -434,19 +462,19 @@ or
     vendor: disk_vendor_name
 
 
-Size:
-^^^^^
+Size
+^^^^
 
-You can also match by disk `Size`.
+Specific disks can be targeted by `Size`:
 
 .. code-block:: yaml
 
     size: size_spec
 
-Size specs:
-___________
+Size specs
+__________
 
-Size specification of format can be of form:
+Size specifications can be of the following forms:
 
 * LOW:HIGH
 * :HIGH
@@ -455,38 +483,38 @@ Size specification of format can be of form:
 
 Concrete examples:
 
-Includes disks of an exact size
+To include disks of an exact size
 
 .. code-block:: yaml
 
     size: '10G'
 
-Includes disks which size is within the range
+To include disks within a given range of size: 
 
 .. code-block:: yaml
 
     size: '10G:40G'
 
-Includes disks less than or equal to 10G in size
+To include disks that are less than or equal to 10G in size:
 
 .. code-block:: yaml
 
     size: ':10G'
 
-
-Includes disks equal to or greater than 40G in size
+To include disks equal to or greater than 40G in size:
 
 .. code-block:: yaml
 
     size: '40G:'
 
-Sizes don't have to be exclusively in Gigabyte(G).
+Sizes don't have to be specified exclusively in Gigabytes(G).
 
-Supported units are Megabyte(M), Gigabyte(G) and Terrabyte(T). Also appending the (B) for byte is supported. MB, GB, TB
+Other units of size are supported: Megabyte(M), Gigabyte(G) and Terrabyte(T).
+Appending the (B) for byte is also supported: ``MB``, ``GB``, ``TB``.
 
 
-Rotational:
-^^^^^^^^^^^
+Rotational
+^^^^^^^^^^
 
 This operates on the 'rotational' attribute of the disk.
 
@@ -499,8 +527,8 @@ This operates on the 'rotational' attribute of the disk.
 `0` to match all disks that are non-rotational (SSD, NVME etc)
 
 
-All:
-^^^^
+All
+^^^
 
 This will take all disks that are 'available'
 
@@ -511,17 +539,17 @@ Note: This is exclusive for the data_devices section.
     all: true
 
 
-Limiter:
-^^^^^^^^
+Limiter
+^^^^^^^
 
-When you specified valid filters but want to limit the amount of matching disks you can use the 'limit' directive.
+If you have specified some valid filters but want to limit the number of disks that they match, use the ``limit`` directive:
 
 .. code-block:: yaml
 
     limit: 2
 
-For example, if you used `vendor` to match all disks that are from `VendorA` but only want to use the first two
-you could use `limit`.
+For example, if you used `vendor` to match all disks that are from `VendorA`
+but want to use only the first two, you could use `limit`:
 
 .. code-block:: yaml
 
@@ -529,7 +557,7 @@ you could use `limit`.
     vendor: VendorA
     limit: 2
 
-Note: Be aware that `limit` is really just a last resort and shouldn't be used if it can be avoided.
+Note: `limit` is a last resort and shouldn't be used if it can be avoided.
 
 
 Additional Options
