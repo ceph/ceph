@@ -111,14 +111,14 @@ if [[ -z $SKIP_BINDIR_CLEAN ]]; then
     rm -rf $binDir
 fi
 
+mkdir -p $BUILD_DIR
+cd $BUILD_DIR
+
 if [[ ! -f ${depsToolsetDir}/completed ]]; then
     echo "Preparing dependencies: $DEPS_DIR. Log: ${BUILD_DIR}/build_deps.log"
     NUM_WORKERS=$NUM_WORKERS DEPS_DIR=$DEPS_DIR OS="$OS"\
         "$SCRIPT_DIR/win32_deps_build.sh" | tee "${BUILD_DIR}/build_deps.log"
 fi
-
-mkdir -p $BUILD_DIR
-cd $BUILD_DIR
 
 # Due to distribution specific mingw settings, the mingw.cmake file
 # must be built prior to running cmake.
