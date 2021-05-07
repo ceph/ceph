@@ -223,7 +223,8 @@ int main(int argc, char* argv[])
           ceph_abort_msg(fmt::format("pidfile_write failed with {} {}",
                                      ret, cpp_strerror(-ret)));
         }
-        // just ignore SIGHUP, we don't reread settings
+        // just ignore SIGHUP, we don't reread settings. keep in mind signals
+        // handled by S* must be blocked for alien threads (see AlienStore).
         seastar::engine().handle_signal(SIGHUP, [] {});
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = get_nonce();
