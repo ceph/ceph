@@ -197,4 +197,9 @@ inline ConfigProxy::ShardedConfig& sharded_conf() {
   return ConfigProxy::sharded_conf;
 }
 
+template<typename T>
+const T get_conf(const std::string& key) {
+  return local_conf().template get_val<T>(key);
+}
+
 }
