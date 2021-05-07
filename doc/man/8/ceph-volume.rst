@@ -116,6 +116,10 @@ Optional arguments:
 
    Do not enable or create any systemd units
 
+.. option:: --no-tmpfs
+
+   Skip mountng a tmpfs filesystem when activating the OSD even if a mounted one is not detected
+
 .. option:: --osds-per-device
 
    Provision more than 1 (the default) OSD per device
