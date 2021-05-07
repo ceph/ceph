@@ -178,7 +178,7 @@ public:
 	}
 	ceph_assert(0 == "Should be impossible");
       }
-      return pin_to_extent<T>(t, std::move(pins.front()));
+      return this->pin_to_extent<T>(t, std::move(pins.front()));
     });
   }
 
