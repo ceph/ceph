@@ -574,8 +574,10 @@ Node::try_merge_adjacent(
         // fresh extent, thus no need to generate delta.
         auto left_addr = left_for_merge->impl->laddr();
         return left_for_merge->rebuild_extent(c
-        ).safe_then([c, merge_stage, merge_size, update_index_after_merge,
+        ).safe_then([c, update_index_after_merge,
                      left_addr,
+                     merge_stage = merge_stage,
+                     merge_size = merge_size,
                      left_for_merge = std::move(left_for_merge),
                      right_for_merge = std::move(right_for_merge)] (auto left_mut) mutable {
           if (left_for_merge->impl->node_type() == node_type_t::LEAF) {
@@ -616,7 +618,7 @@ node_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
   return parent_info().ptr->erase_child(c, std::move(this_ref));
 }
 
-template <bool FORCE_MERGE = false>
+template <bool FORCE_MERGE>
 node_future<> Node::fix_parent_index(
     context_t c, Ref<Node>&& this_ref, bool check_downgrade)
 {
