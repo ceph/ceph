@@ -232,10 +232,8 @@ OMapInnerNode::list(
 	      if (child_result.size() && start) {
 		assert(child_result.begin()->first > *start);
 	      }
-	      result.insert(
-		child_result.begin(),
-		child_result.end());
-	      biter++;
+	      result.merge(std::move(child_result));
+	      ++biter;
 	      assert(child_complete || result.size() == config.max_result_size);
 	      return list_ertr::make_ready_future<bool>(false);
 	    });
