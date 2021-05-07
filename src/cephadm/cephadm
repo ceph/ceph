@@ -4569,7 +4569,7 @@ def command_ceph_volume(ctx):
         image=ctx.image,
         entrypoint='/usr/sbin/ceph-volume',
         envs=ctx.env,
-        args=ctx.command,
+        args=ctx.command + ["--no-tmpfs"],
         privileged=True,
         volume_mounts=mounts,
     )
