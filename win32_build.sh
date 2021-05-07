@@ -96,6 +96,12 @@ dokanLibDir="${depsToolsetDir}/dokany/lib"
 depsDirs="$lz4Dir;$curlDir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
 depsDirs+=";$winLibDir"
 
+# Cmake recommends using CMAKE_PREFIX_PATH instead of link_directories.
+# Still, some library dependencies may not include the full path (e.g. Boost
+# sets the "-lz" flag through INTERFACE_LINK_LIBRARIES), which is why
+# we have to ensure that the linker will be able to locate them.
+linkDirs="$zlibDir/lib"
+
 lz4Lib="${lz4Dir}/lib/dll/liblz4-1.dll"
 lz4Include="${lz4Dir}/lib"
 curlLib="${curlDir}/lib/libcurl.dll.a"
@@ -149,6 +155,7 @@ fi
 # symbols. Until we fix the dependencies (which are either unspecified
 # or circular), we'll have to stick to static linking.
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
+      -D MINGW_LINK_DIRECTORIES="$linkDirs" \
       -D CMAKE_TOOLCHAIN_FILE="$MINGW_CMAKE_FILE" \
       -D WITH_LIBCEPHSQLITE=OFF \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
