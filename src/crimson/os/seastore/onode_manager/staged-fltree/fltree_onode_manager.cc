@@ -17,7 +17,7 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   const ghobject_t &hoid) {
   return tree.find(
     trans, hoid
-  ).safe_then([this, &trans, &hoid](auto cursor)
+  ).safe_then([this, &hoid](auto cursor)
 	      -> get_onode_ret {
     if (cursor == tree.end()) {
       logger().debug(
@@ -83,7 +83,7 @@ FLTreeOnodeManager::get_or_create_onodes(
 	hoids,
 	[this, &trans, &ret](auto &hoid) {
 	  return get_or_create_onode(trans, hoid
-	  ).safe_then([this, &ret](auto &&onoderef) {
+	  ).safe_then([&ret](auto &&onoderef) {
 	    ret.push_back(std::move(onoderef));
 	  });
 	}).safe_then([&ret] {
