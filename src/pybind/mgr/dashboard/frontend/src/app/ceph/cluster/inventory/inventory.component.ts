@@ -1,4 +1,5 @@
 import { Component, Input, NgZone, OnChanges, OnDestroy, OnInit } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import { Subscription, timer as observableTimer } from 'rxjs';
 
@@ -31,8 +32,11 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
   constructor(
     private orchService: OrchestratorService,
     private hostService: HostService,
-    private ngZone: NgZone
-  ) {}
+    private ngZone: NgZone,
+    private titleService: Title
+  ) {
+    this.titleService.setTitle('Cluster/Inventory');
+  }
 
   ngOnInit() {
     this.orchService.status().subscribe((status) => {

@@ -1,4 +1,5 @@
 import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -41,9 +42,11 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
     private cdDatePipe: CdDatePipe,
-    @Inject(PrometheusService) prometheusService: PrometheusService
+    @Inject(PrometheusService) prometheusService: PrometheusService,
+    private titleService: Title
   ) {
     super(prometheusService);
+    this.titleService.setTitle('Active Alerts');
     this.permission = this.authStorageService.getPermissions().prometheus;
     this.tableActions = [
       {

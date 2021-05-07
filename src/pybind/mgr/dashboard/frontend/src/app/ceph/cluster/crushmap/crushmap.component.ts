@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import {
   ITreeOptions,
@@ -40,7 +41,13 @@ export class CrushmapComponent implements OnInit, OnDestroy {
   metadataTitle: string;
   metadataKeyMap: { [key: number]: any } = {};
 
-  constructor(private healthService: HealthService, private timerService: TimerService) {}
+  constructor(
+    private healthService: HealthService,
+    private timerService: TimerService,
+    private titleService: Title
+  ) {
+    this.titleService.setTitle('Cluster/CRUSH map');
+  }
 
   ngOnInit() {
     this.healthService.getFullHealth().subscribe((data: any) => {

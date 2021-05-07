@@ -1,4 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -109,9 +110,11 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     private taskWrapper: TaskWrapperService,
     public taskListService: TaskListService,
     private urlBuilder: URLBuilderService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('Images');
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
       this.selection.first() &&

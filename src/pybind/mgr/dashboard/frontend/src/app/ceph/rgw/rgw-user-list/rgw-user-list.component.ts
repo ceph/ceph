@@ -1,4 +1,5 @@
 import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import * as _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
@@ -49,9 +50,11 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('Users');
   }
 
   ngOnInit() {

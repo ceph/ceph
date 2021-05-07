@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -65,9 +66,11 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     private nfsService: NfsService,
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('NFS');
     this.permission = this.authStorageService.getPermissions().nfs;
     const getNfsUri = () =>
       this.selection.first() &&

@@ -1,4 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import _ from 'lodash';
 import { mergeMap } from 'rxjs/operators';
@@ -73,9 +74,11 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private dimlessPipe: DimlessPipe,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('Pools');
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {

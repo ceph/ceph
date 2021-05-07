@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import { take } from 'rxjs/operators';
 
@@ -26,9 +27,11 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
     private rgwDaemonService: RgwDaemonService,
     private authStorageService: AuthStorageService,
     private cephShortVersionPipe: CephShortVersionPipe,
-    private rgwSiteService: RgwSiteService
+    private rgwSiteService: RgwSiteService,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('Daemons');
   }
 
   ngOnInit(): void {

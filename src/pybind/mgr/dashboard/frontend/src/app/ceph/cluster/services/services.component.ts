@@ -1,4 +1,5 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import { delay, finalize } from 'rxjs/operators';
 
@@ -66,9 +67,11 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     private cephServiceService: CephServiceService,
     private relativeDatePipe: RelativeDatePipe,
     private taskWrapperService: TaskWrapperService,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('Cluster/Services');
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {

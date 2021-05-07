@@ -1,4 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -87,9 +88,11 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     private configurationService: ConfigurationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('Cluster/Configuration');
     this.permission = this.authStorageService.getPermissions().configOpt;
     const getConfigOptUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;

@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { ValidatorFn, Validators } from '@angular/forms';
+import { Title } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -50,9 +51,11 @@ export class TelemetryComponent extends CdForm implements OnInit {
     private notificationService: NotificationService,
     private router: Router,
     private telemetryService: TelemetryService,
-    private telemetryNotificationService: TelemetryNotificationService
+    private telemetryNotificationService: TelemetryNotificationService,
+    private titleService: Title
   ) {
     super();
+    this.titleService.setTitle('Telemetry Configuration');
   }
 
   ngOnInit() {
