@@ -562,7 +562,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "enum_allowed");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q) {
 	  auto r = PyObject_Str(q);
@@ -573,7 +573,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "see_also");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
 	  option.see_also.insert(PyUnicode_AsUTF8(q));
@@ -582,7 +582,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "tags");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
 	  option.tags.insert(PyUnicode_AsUTF8(q));
