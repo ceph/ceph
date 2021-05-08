@@ -163,9 +163,9 @@ std::ostream& operator<<(std::ostream& os, SparseExtentState state);
 
 struct SparseExtent {
   SparseExtentState state;
-  size_t length;
+  uint64_t length;
 
-  SparseExtent(SparseExtentState state, size_t length)
+  SparseExtent(SparseExtentState state, uint64_t length)
     : state(state), length(length) {
   }
 
@@ -214,11 +214,11 @@ typedef std::map<WriteReadSnapIds, SparseExtents> SnapshotDelta;
 struct SparseBufferlistExtent : public SparseExtent {
   ceph::bufferlist bl;
 
-  SparseBufferlistExtent(SparseExtentState state, size_t length)
+  SparseBufferlistExtent(SparseExtentState state, uint64_t length)
     : SparseExtent(state, length) {
     ceph_assert(state != SPARSE_EXTENT_STATE_DATA);
   }
-  SparseBufferlistExtent(SparseExtentState state, size_t length,
+  SparseBufferlistExtent(SparseExtentState state, uint64_t length,
                          ceph::bufferlist&& bl_)
     : SparseExtent(state, length), bl(std::move(bl_)) {
     ceph_assert(state != SPARSE_EXTENT_STATE_DATA || length == bl.length());
