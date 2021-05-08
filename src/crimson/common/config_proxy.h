@@ -125,11 +125,11 @@ public:
       }
     });
   }
-  int get_val(const std::string &key, std::string *val) const {
+  int get_val(std::string_view key, std::string *val) const {
     return get_config().get_val(*values, key, val);
   }
   template<typename T>
-  const T get_val(const std::string& key) const {
+  const T get_val(std::string_view key) const {
     return get_config().template get_val<T>(*values, key);
   }
 
