@@ -24,7 +24,18 @@ public:
   struct config_t {
     std::string type;
     bool mkfs = false;
+    unsigned num_collections = 128;
+    unsigned object_size = 4<<20 /* 4MB, rbd default */;
     std::optional<std::string> path;
+
+    bool is_futurized_store() const {
+      return type == "seastore" || type == "bluestore";
+    }
+
+    std::string get_fs_type() const {
+      ceph_assert(is_futurized_store());
+      return type;
+    }
 
     void populate_options(
       boost::program_options::options_description &desc)
@@ -35,13 +46,23 @@ public:
 	 po::value<std::string>()
 	 ->default_value("transaction_manager")
 	 ->notifier([this](auto s) { type = s; }),
-	 "Backend to use, options are transaction_manager"
+	 "Backend to use, options are transaction_manager, seastore"
 	)
 	("device-path",
 	 po::value<std::string>()
 	 ->required()
 	 ->notifier([this](auto s) { path = s; }),
 	 "Path to device for backend"
+	)
+	("num-collections",
+	 po::value<unsigned>()
+	 ->notifier([this](auto s) { num_collections = s; }),
+	 "Number of collections to use for futurized_store backends"
+	)
+	("object-size",
+	 po::value<unsigned>()
+	 ->notifier([this](auto s) { object_size = s; }),
+	 "Object size to use for futurized_store backends"
 	)
 	("mkfs",
 	 po::value<bool>()
