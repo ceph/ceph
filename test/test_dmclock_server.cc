@@ -1106,7 +1106,8 @@ namespace crimson {
 
       auto now = dmc::get_time();
 
-      for (int i = 0; i < 5; ++i) {
+      unsigned num_requests = 10;
+      for (int i = 0; i < num_requests; i += 2) {
 	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
 	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
@@ -1114,23 +1115,35 @@ namespace crimson {
 
       int c1_count = 0;
       int c2_count = 0;
-      for (int i = 0; i < 10; ++i) {
+      for (int i = 0; i < num_requests; ++i) {
 	Queue::PullReq pr = pq->pull_request();
 	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	// only count the first half of the served requests, so we can check
+	// the prioritized ones
+	if (i > num_requests / 2) {
+	  continue;
+	}
 	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
-
-	if (i > 5) continue;
-	if (client1 == retn.client) ++c1_count;
-	else if (client2 == retn.client) ++c2_count;
-	else ADD_FAILURE() << "got request from neither of two clients";
+	if (client1 == retn.client) {
+	  ++c1_count;
+	} else if (client2 == retn.client) {
+	  ++c2_count;
+	} else {
+	  ADD_FAILURE() << "got request from neither of two clients";
+	}
 
 	EXPECT_EQ(PhaseType::priority, retn.phase);
       }
 
-      EXPECT_EQ(2, c1_count) <<
-	"before: one-third of request should have come from first client";
-      EXPECT_EQ(4, c2_count) <<
-	"before: two-thirds of request should have come from second client";
+      float prop1, prop2;
+      prop1 = float(info1[cli_info_group].weight) / (info1[cli_info_group].weight +
+						     info2[cli_info_group].weight);
+      prop2 = float(info2[cli_info_group].weight) / (info1[cli_info_group].weight +
+						     info2[cli_info_group].weight);
+      EXPECT_FLOAT_EQ(float(c1_count) / (c1_count + c2_count), prop1) <<
+	"before: " << prop1 << " of request should have come from first client";
+      EXPECT_FLOAT_EQ(float(c2_count) / (c1_count + c2_count), prop2) <<
+	"before: " << prop2 << " of request should have come from second client";
 
       std::chrono::seconds dura(1);
       std::this_thread::sleep_for(dura);
@@ -1139,7 +1152,8 @@ namespace crimson {
  
       now = dmc::get_time();
 
-      for (int i = 0; i < 6; ++i) {
+      num_requests = 12;
+      for (int i = 0; i < num_requests; i += 2) {
 	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
 	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
@@ -1147,24 +1161,33 @@ namespace crimson {
 
       c1_count = 0;
       c2_count = 0;
-      for (int i = 0; i < 8; ++i) {
+
+      for (int i = 0; i < num_requests; ++i) {
 	Queue::PullReq pr = pq->pull_request();
 	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	if (i >= num_requests * 2 / 3) {
+	  continue;
+	}
 	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
-
-	if (client1 == retn.client) ++c1_count;
-	else if (client2 == retn.client) ++c2_count;
-	else ADD_FAILURE() << "got request from neither of two clients";
-
+	if (client1 == retn.client) {
+	  ++c1_count;
+	} else if (client2 == retn.client) {
+	  ++c2_count;
+	} else {
+	  ADD_FAILURE() << "got request from neither of two clients";
+	}
 	EXPECT_EQ(PhaseType::priority, retn.phase);
       }
 
-      EXPECT_EQ(6, c1_count) <<
-	"after: one-third of request should have come from first client";
-      EXPECT_EQ(2, c2_count) <<
-	"after: two-thirds of request should have come from second client";
+      prop1 = float(info1[cli_info_group].weight) / (info1[cli_info_group].weight +
+						     info2[cli_info_group].weight);
+      prop2 = float(info2[cli_info_group].weight) / (info1[cli_info_group].weight +
+						     info2[cli_info_group].weight);
+      EXPECT_FLOAT_EQ(float(c1_count) / (c1_count + c2_count), prop1) <<
+	"before: " << prop1 << " of request should have come from first client";
+      EXPECT_FLOAT_EQ(float(c2_count) / (c1_count + c2_count), prop2) <<
+	"before: " << prop2 << " of request should have come from second client";
     }
-
 
     // This test shows what happens when a request can be ready (under
     // limit) but not schedulable since proportion tag is 0. We expect
