@@ -1106,7 +1106,7 @@ namespace crimson {
 
       auto now = dmc::get_time();
 
-      unsigned num_requests = 10;
+      constexpr unsigned num_requests = 1000;
       for (int i = 0; i < num_requests; i += 2) {
 	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
 	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
@@ -1136,13 +1136,15 @@ namespace crimson {
       }
 
       float prop1, prop2;
+      constexpr float tolerance = 0.002;
       prop1 = float(info1[cli_info_group].weight) / (info1[cli_info_group].weight +
 						     info2[cli_info_group].weight);
       prop2 = float(info2[cli_info_group].weight) / (info1[cli_info_group].weight +
 						     info2[cli_info_group].weight);
-      EXPECT_FLOAT_EQ(float(c1_count) / (c1_count + c2_count), prop1) <<
+      EXPECT_NEAR(float(c1_count) / (c1_count + c2_count), prop1, tolerance) <<
 	"before: " << prop1 << " of request should have come from first client";
-      EXPECT_FLOAT_EQ(float(c2_count) / (c1_count + c2_count), prop2) <<
+      EXPECT_NEAR
+	(float(c2_count) / (c1_count + c2_count), prop2, tolerance) <<
 	"before: " << prop2 << " of request should have come from second client";
 
       std::chrono::seconds dura(1);
@@ -1152,7 +1154,6 @@ namespace crimson {
  
       now = dmc::get_time();
 
-      num_requests = 12;
       for (int i = 0; i < num_requests; i += 2) {
 	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
 	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
@@ -1165,7 +1166,10 @@ namespace crimson {
       for (int i = 0; i < num_requests; ++i) {
 	Queue::PullReq pr = pq->pull_request();
 	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-	if (i >= num_requests * 2 / 3) {
+	// check the middle part of the request sequence which is less likely
+	// to be impacted by previous requests served before we switch to the
+	// new client info.
+	if (i < num_requests / 3 || i >= num_requests * 2 / 3) {
 	  continue;
 	}
 	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
@@ -1183,9 +1187,9 @@ namespace crimson {
 						     info2[cli_info_group].weight);
       prop2 = float(info2[cli_info_group].weight) / (info1[cli_info_group].weight +
 						     info2[cli_info_group].weight);
-      EXPECT_FLOAT_EQ(float(c1_count) / (c1_count + c2_count), prop1) <<
+      EXPECT_NEAR(float(c1_count) / (c1_count + c2_count), prop1, tolerance) <<
 	"before: " << prop1 << " of request should have come from first client";
-      EXPECT_FLOAT_EQ(float(c2_count) / (c1_count + c2_count), prop2) <<
+      EXPECT_NEAR(float(c2_count) / (c1_count + c2_count), prop2, tolerance) <<
 	"before: " << prop2 << " of request should have come from second client";
     }
 
