@@ -48,6 +48,16 @@ Cache::retire_extent_ret Cache::retire_extent(
   }
 }
 
+void Cache::dump_contents()
+{
+  LOG_PREFIX(Cache::dump_contents);
+  DEBUG("enter");
+  for (auto &&i: extents) {
+    DEBUG("live {}", i);
+  }
+  DEBUG("exit");
+}
+
 void Cache::add_extent(CachedExtentRef ref)
 {
   LOG_PREFIX(Cache::add_extent);

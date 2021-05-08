@@ -107,11 +107,17 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 }
 
 TransactionManager::close_ertr::future<> TransactionManager::close() {
+  LOG_PREFIX(TransactionManager::close);
+  DEBUG("enter");
   return segment_cleaner->stop(
   ).then([this] {
     return cache->close();
   }).safe_then([this] {
+    cache->dump_contents();
     return journal->close();
+  }).safe_then([this, FNAME] {
+    DEBUG("completed");
+    return seastar::now();
   });
 }
 

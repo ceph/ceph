@@ -119,6 +119,7 @@ public:
     bpin->parent = nullptr;
   }
 
+  ~BtreeLBAManager();
 private:
   SegmentManager &segment_manager;
   Cache &cache;
