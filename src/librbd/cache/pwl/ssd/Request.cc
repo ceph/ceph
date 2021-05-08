@@ -22,7 +22,6 @@ void C_WriteRequest<T>::setup_buffer_resources(
   auto image_extents_size = this->image_extents.size();
   *bytes_cached = 0;
   *bytes_allocated = 0;
-  *number_lanes = image_extents_size;
   *number_log_entries = image_extents_size;
 
   for (auto &extent : this->image_extents) {
