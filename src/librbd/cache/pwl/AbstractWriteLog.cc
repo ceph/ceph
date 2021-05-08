@@ -1458,10 +1458,10 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
 }
 
 template <typename I>
-bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves) {
+bool AbstractWriteLog<I>::check_allocation(
+    C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
+    uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+    uint32_t num_unpublished_reserves) {
   bool alloc_succeeds = true;
   bool no_space = false;
   {
