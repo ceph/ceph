@@ -399,13 +399,14 @@ LBAInternalNode::merge_entry(
 	    auto mut_croot = c.cache.duplicate_for_write(c.trans, croot);
 	    croot = mut_croot->cast<RootBlock>();
 	  }
+	  auto new_root_addr = begin()->get_val().maybe_relative_to(get_paddr());
 	  croot->get_root().lba_root = lba_root_t{
-	    begin()->get_val(),
+	    new_root_addr,
 	    get_meta().depth - 1};
 	  logger().debug(
 	    "LBAInternalNode::merge_entry: collapsing root {} to addr {}",
 	    *this,
-	    begin()->get_val());
+	    new_root_addr);
 	  c.cache.retire_extent(c.trans, this);
 	  return merge_ertr::make_ready_future<LBANodeRef>(replacement);
 	});
