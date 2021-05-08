@@ -30,19 +30,34 @@ namespace action {
 namespace import {
 
 struct ImportDiffContext {
-  librbd::Image *image;
   int fd;
-  size_t size;
   utils::ProgressContext pc;
   OrderedThrottle throttle;
-  uint64_t last_offset;
+  size_t size = 0;
+  uint64_t last_offset = 0;
 
-  ImportDiffContext(librbd::Image *image, int fd, size_t size, bool no_progress)
-    : image(image), fd(fd), size(size), pc("Importing image diff", no_progress),
-      throttle((fd == STDIN_FILENO) ? 1 :
-                  g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
-               false),
-      last_offset(0) {
+  ImportDiffContext(int fd, uint64_t throttle_max, bool no_progress)
+    : fd(fd), pc("Importing image diff", no_progress),
+      throttle(throttle_max, false) {
+  }
+
+  virtual ~ImportDiffContext() {
+  }
+
+  virtual int write_zeroes(uint64_t offset, uint64_t length,
+                           Context *on_finish) = 0;
+  virtual int write(uint64_t offset, uint64_t length, bufferlist &data,
+                    Context *on_finish) = 0;
+
+  virtual void resize(uint64_t size) = 0;
+
+  virtual int snap_exists(const std::string &snap_name, bool *exists) const = 0;
+  virtual int snap_create(const std::string &snap_name) = 0;
+  virtual int snap_protect(const std::string &snap_name) = 0;
+
+  void set_size(size_t s)
+  {
+    size = s;
   }
 
   void update_size(size_t new_size)
@@ -80,6 +95,74 @@ struct ImportDiffContext {
   }
 };
 
+class ImportDiffToImageContext : public ImportDiffContext {
+public:
+  ImportDiffToImageContext(librbd::Image *image, int fd, bool no_progress)
+    : ImportDiffContext(
+        fd,
+        fd == STDIN_FILENO ?
+          1 : g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
+        no_progress),
+      m_image(image) {
+  }
+
+  int write_zeroes(uint64_t offset, uint64_t length,
+                   Context *on_finish) override {
+    auto aio_completion =
+      new librbd::RBD::AioCompletion(on_finish, &utils::aio_context_callback);
+
+    int r =  m_image->aio_write_zeroes(offset, length, aio_completion, 0U,
+                                       LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+    if (r < 0) {
+      aio_completion->release();
+      on_finish->complete(r);
+      return r;
+    }
+
+    return 0;
+  }
+
+  int write(uint64_t offset, uint64_t length, bufferlist &data,
+            Context *on_finish) override {
+    auto aio_completion =
+      new librbd::RBD::AioCompletion(on_finish, &utils::aio_context_callback);
+
+    int r = m_image->aio_write2(offset, length, data, aio_completion,
+                                LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+    if (r < 0) {
+      aio_completion->release();
+      on_finish->complete(r);
+      return r;
+    }
+
+    return 0;
+  }
+
+  void resize(uint64_t size) override {
+    uint64_t cur_size;
+    m_image->size(&cur_size);
+
+    if (cur_size != size) {
+      m_image->resize(size);
+    }
+  }
+
+  int snap_exists(const std::string &snap_name, bool *exists) const override {
+    return m_image->snap_exists2(snap_name.c_str(), exists);
+  }
+
+  int snap_create(const std::string &snap_name) override {
+    return m_image->snap_create(snap_name.c_str());
+  }
+
+  int snap_protect(const std::string &snap_name) override {
+    return m_image->snap_protect(snap_name.c_str());
+  }
+
+private:
+  librbd::Image *m_image;
+};
+
 class C_ImportDiff : public Context {
 public:
   C_ImportDiff(ImportDiffContext *idiffctx, bufferlist data, uint64_t offset,
@@ -102,23 +185,12 @@ public:
     }
 
     C_OrderedThrottle *ctx = m_idiffctx->throttle.start_op(this);
-    librbd::RBD::AioCompletion *aio_completion =
-      new librbd::RBD::AioCompletion(ctx, &utils::aio_context_callback);
 
     int r;
     if (m_write_zeroes) {
-      r = m_idiffctx->image->aio_write_zeroes(m_offset, m_length,
-                                              aio_completion, 0U,
-                                              LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+      r = m_idiffctx->write_zeroes(m_offset, m_length, ctx);
     } else {
-      r = m_idiffctx->image->aio_write2(m_offset, m_length, m_data,
-                                        aio_completion,
-                                        LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
-    }
-
-    if (r < 0) {
-      aio_completion->release();
-      ctx->complete(r);
+      r = m_idiffctx->write(m_offset, m_length, m_data, ctx);
     }
 
     return r;
@@ -150,10 +222,13 @@ static int do_image_snap_from(ImportDiffContext *idiffctx)
   }
 
   bool exists;
-  r = idiffctx->image->snap_exists2(from.c_str(), &exists);
+  r = idiffctx->snap_exists(from, &exists);
   if (r < 0) {
-    std::cerr << "rbd: failed to query start snap state" << std::endl;
-    return r;
+    if (r != -EOPNOTSUPP) {
+      std::cerr << "rbd: failed to query start snap state" << std::endl;
+      return r;
+    }
+    exists = true;
   }
 
   if (!exists) {
@@ -177,10 +252,13 @@ static int do_image_snap_to(ImportDiffContext *idiffctx, std::string *tosnap)
   }
 
   bool exists;
-  r = idiffctx->image->snap_exists2(to.c_str(), &exists);
+  r = idiffctx->snap_exists(to, &exists);
   if (r < 0) {
-    std::cerr << "rbd: failed to query end snap state" << std::endl;
-    return r;
+    if (r != -EOPNOTSUPP) {
+      std::cerr << "rbd: failed to query end snap state" << std::endl;
+      return r;
+    }
+    exists = false;
   }
 
   if (exists) {
@@ -228,11 +306,7 @@ static int do_image_resize(ImportDiffContext *idiffctx)
   auto p = bl.cbegin();
   decode(end_size, p);
 
-  uint64_t cur_size;
-  idiffctx->image->size(&cur_size);
-  if (cur_size != end_size) {
-    idiffctx->image->resize(end_size);
-  }
+  idiffctx->resize(end_size);
 
   idiffctx->update_size(end_size);
   idiffctx->update_progress();
@@ -377,12 +451,11 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
   return 0;
 }
 
-int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
-		      bool no_progress, int format, size_t sparse_size)
-{
+int do_import_diff_fd(ImportDiffContext *idiffctx, int format,
+                      size_t sparse_size) {
+  int fd = idiffctx->fd;
   int r;
 
-  uint64_t size = 0;
   bool from_stdin = (fd == STDIN_FILENO);
   if (!from_stdin) {
     struct stat stat_buf;
@@ -391,7 +464,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
       std::cerr << "rbd: failed to stat specified diff file" << std::endl;
       return r;
     }
-    size = (uint64_t)stat_buf.st_size;
+    idiffctx->set_size(stat_buf.st_size);
   }
 
   r = validate_banner(fd, (format == 1 ? utils::RBD_DIFF_BANNER :
@@ -403,7 +476,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
   // begin image import
   std::string tosnap;
   bool is_protected = false;
-  ImportDiffContext idiffctx(&image, fd, size, no_progress);
+
   while (r == 0) {
     __u8 tag;
     uint64_t length = 0;
@@ -414,15 +487,15 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
     }
 
     if (tag == RBD_DIFF_FROM_SNAP) {
-      r = do_image_snap_from(&idiffctx);
+      r = do_image_snap_from(idiffctx);
     } else if (tag == RBD_DIFF_TO_SNAP) {
-      r = do_image_snap_to(&idiffctx, &tosnap);
+      r = do_image_snap_to(idiffctx, &tosnap);
     } else if (tag == RBD_SNAP_PROTECTION_STATUS) {
-      r = get_snap_protection_status(&idiffctx, &is_protected);
+      r = get_snap_protection_status(idiffctx, &is_protected);
     } else if (tag == RBD_DIFF_IMAGE_SIZE) {
-      r = do_image_resize(&idiffctx);
+      r = do_image_resize(idiffctx);
     } else if (tag == RBD_DIFF_WRITE || tag == RBD_DIFF_ZERO) {
-      r = do_image_io(&idiffctx, (tag == RBD_DIFF_ZERO), sparse_size);
+      r = do_image_io(idiffctx, (tag == RBD_DIFF_ZERO), sparse_size);
     } else {
       std::cerr << "unrecognized tag byte " << (int)tag << " in stream; skipping"
                 << std::endl;
@@ -430,21 +503,29 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
     }
   }
 
-  int temp_r = idiffctx.throttle.wait_for_ret();
+  int temp_r = idiffctx->throttle.wait_for_ret();
   r = (r < 0) ? r : temp_r; // preserve original error
   if (r == 0 && tosnap.length()) {
-    r = idiffctx.image->snap_create(tosnap.c_str());
+    r = idiffctx->snap_create(tosnap);
     if (r == 0 && is_protected) {
-      r = idiffctx.image->snap_protect(tosnap.c_str());
+      r = idiffctx->snap_protect(tosnap);
     }
   }
 
-  idiffctx.finish(r);
+  idiffctx->finish(r);
+  delete idiffctx;
   return r;
 }
 
-int do_import_diff(librados::Rados &rados, librbd::Image &image,
-		   const char *path, bool no_progress, size_t sparse_size)
+int do_import_diff_fd(librbd::Image &image, int fd, bool no_progress,
+                      int format, size_t sparse_size) {
+  return do_import_diff_fd(
+      new ImportDiffToImageContext(&image, fd, no_progress),
+      format, sparse_size);
+}
+
+int do_import_diff(librbd::Image &image, const char *path, bool no_progress,
+                   size_t sparse_size)
 {
   int r;
   int fd;
@@ -459,7 +540,7 @@ int do_import_diff(librados::Rados &rados, librbd::Image &image,
       return r;
     }
   }
-  r = do_import_diff_fd(rados, image, fd, no_progress, 1, sparse_size);
+  r = do_import_diff_fd(image, fd, no_progress, 1, sparse_size);
 
   if (fd != 0)
     close(fd);
@@ -513,8 +594,8 @@ int execute_diff(const po::variables_map &vm,
     return r;
   }
 
-  r = do_import_diff(rados, image, path.c_str(),
-		     vm[at::NO_PROGRESS].as<bool>(), sparse_size);
+  r = do_import_diff(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(),
+                     sparse_size);
   if (r == -EDOM) {
     r = -EBADMSG;
   }
@@ -710,7 +791,7 @@ static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
   uint64_t diff_num;
   decode(diff_num, p);
   for (size_t i = 0; i < diff_num; i++) {
-    r = do_import_diff_fd(rados, image, fd, true, 2, sparse_size);
+    r = do_import_diff_fd(image, fd, true, 2, sparse_size);
     if (r < 0) {
       pc.fail();
       std::cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
