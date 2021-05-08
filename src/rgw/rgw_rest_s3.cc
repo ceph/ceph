@@ -6128,193 +6128,146 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
 
 using namespace s3selectEngine;
 
-class aws_response_handler
-{//TODO this class should reside on s3select submodule 
+std::string &aws_response_handler::get_sql_result()
+{
+  return sql_result;
+}
 
-private:
-  std::string sql_result;
-  struct req_state *s;//TODO will be replace by callback
-  uint32_t header_size;
-  std::unique_ptr<boost::crc_32_type> crc32;
-  RGWOp *m_rgwop;
-  std::string m_buff_header;
+void aws_response_handler::push_header(const char *header_name, const char *header_value)
+{
+  char x;
+  short s;
 
-  enum header_name_En
-  {
-    EVENT_TYPE,
-    CONTENT_TYPE,
-    MESSAGE_TYPE,
-    ERROR_CODE,
-    ERROR_MESSAGE
+  x = char(strlen(header_name));
+  m_buff_header.append(&x, sizeof(x));
+  m_buff_header.append(header_name);
 
+  x = char(7);
+  m_buff_header.append(&x, sizeof(x));
+
+  s = htons(uint16_t(strlen(header_value)));
+  m_buff_header.append(reinterpret_cast<char *>(&s), sizeof(s));
+  m_buff_header.append(header_value);
+}
+
+int aws_response_handler::create_header_records()
+{
+  //headers description(AWS)
+  //[header-name-byte-length:1][header-name:variable-length][header-value-type:1][header-value:variable-length]
+
+  //1
+  push_header(header_name_str[EVENT_TYPE], header_value_str[RECORDS]);
+  //2
+  push_header(header_name_str[CONTENT_TYPE], header_value_str[OCTET_STREAM]);
+  //3
+  push_header(header_name_str[MESSAGE_TYPE], header_value_str[EVENT]);
+
+  return m_buff_header.size();
+}
+
+int aws_response_handler::create_error_header_records(const char *error_message)
+{
+  //headers description(AWS)
+  //[header-name-byte-length:1][header-name:variable-length][header-value-type:1][header-value:variable-length]
+
+  //1
+  push_header(header_name_str[ERROR_CODE], header_value_str[ENGINE_ERROR]);
+  //2
+  push_header(header_name_str[ERROR_MESSAGE], error_message);
+  //3
+  push_header(header_name_str[MESSAGE_TYPE], header_value_str[ERROR_TYPE]);
+
+  return m_buff_header.size();
+}
+
+int aws_response_handler::create_message(u_int32_t header_len)
+{
+  //message description(AWS):
+  //[total-byte-length:4][header-byte-length:4][crc:4][headers:variable-length][payload:variable-length][crc:4]
+  //s3select result is produced into sql_result, the sql_result is also the response-message, thus the attach headers and CRC
+  //are created later to the produced SQL result, and actually wrapping the payload.
+
+  auto push_encode_int = [&](u_int32_t s, int pos) {
+    u_int32_t x = htonl(s);
+    sql_result.replace(pos, sizeof(x), reinterpret_cast<char *>(&x), sizeof(x));
   };
 
-  enum header_value_En
+  u_int32_t total_byte_len = 0;
+  u_int32_t preload_crc = 0;
+  u_int32_t message_crc = 0;
+
+  total_byte_len = sql_result.size() + 4; //the total is greater in 4 bytes than current size
+
+  push_encode_int(total_byte_len, 0);
+  push_encode_int(header_len, 4);
+
+  crc32->reset();
+  *crc32 = std::for_each(sql_result.data(), sql_result.data() + 8, *crc32); //crc for starting 8 bytes
+  preload_crc = (*crc32)();
+  push_encode_int(preload_crc, 8);
+
+  crc32->reset();
+  *crc32 = std::for_each(sql_result.begin(), sql_result.end(), *crc32); //crc for payload + checksum
+  message_crc = (*crc32)();
+
+  u_int32_t x = htonl(message_crc);
+  sql_result.append(reinterpret_cast<char *>(&x), sizeof(x));
+
+  return sql_result.size();
+}
+
+void aws_response_handler::init_response()
+{ //12 positions for header-crc
+  sql_result = "012345678901";
+}
+
+void aws_response_handler::init_success_response()
+{
+  m_buff_header.clear();
+  header_size = create_header_records();
+  sql_result.append(m_buff_header.c_str(), header_size);
+  sql_result.append(PAYLOAD_LINE);
+}
+
+void aws_response_handler::init_error_response(const char *error_message)
+{ //currently not in use. the headers in the case of error, are not extracted by AWS-cli.
+  m_buff_header.clear();
+  header_size = create_error_header_records(error_message);
+  sql_result.append(m_buff_header, header_size);
+}
+
+void aws_response_handler::send_success_response()
+{
+  if (sql_result.size() > strlen(PAYLOAD_LINE))
   {
-    RECORDS,
-    OCTET_STREAM,
-    EVENT,
-    ENGINE_ERROR,
-    ERROR_TYPE
-  };
-
-  const char *PAYLOAD_LINE= "\n<Payload>\n<Records>\n<Payload>\n";
-  const char *END_PAYLOAD_LINE= "\n</Payload></Records></Payload>";
-  const char *header_name_str[5] =  {":event-type", ":content-type", ":message-type","error-code","error-message"};
-  const char *header_value_str[5] = {"Records", "application/octet-stream", "event","s3select-engine-error","error"};
-
-public:
-  //12 positions for header-crc
-  aws_response_handler(struct req_state *ps,RGWOp *rgwop) : sql_result("012345678901"), s(ps),m_rgwop(rgwop)
-  {
-    // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
-    crc32 = std::unique_ptr<boost::crc_32_type>(new boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true>);
+    sql_result.append(END_PAYLOAD_LINE);
+    int buff_len = create_message(header_size);
+    s->formatter->write_bin_data(sql_result.data(), buff_len);
   }
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
 
-  std::string &get_sql_result()
-  {
-    return sql_result;
-  }
+void aws_response_handler::send_error_response(const char *error_code,
+                                               const char *error_message,
+                                               const char *resource_id)
+{
 
-  void push_header(const char * header_name,const char* header_value)
-  {
-    char x;
-    short s;
-    
-    x = char(strlen(header_name));
-    m_buff_header.append(&x,sizeof(x));
-    m_buff_header.append(header_name);
-      
-    x = char(7);
-    m_buff_header.append(&x,sizeof(x));
+  set_req_state_err(s, 0); //TODO what err_no?
+  dump_errno(s, 400);
+  end_header(s, m_rgwop, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  dump_start(s);
 
-    s = htons(uint16_t(strlen(header_value)));
-    m_buff_header.append(reinterpret_cast<char*>(&s),sizeof(s)); 
-    m_buff_header.append(header_value);
-  }
+  s->formatter->open_object_section("Error");
 
-  int create_header_records()
-  {
-    //headers description(AWS)
-    //[header-name-byte-length:1][header-name:variable-length][header-value-type:1][header-value:variable-length]
+  s->formatter->dump_string("Code", error_code);
+  s->formatter->dump_string("Message", error_message);
+  s->formatter->dump_string("Resource", "#Resource#");
+  s->formatter->dump_string("RequestId", resource_id);
 
-    //1
-    push_header(header_name_str[EVENT_TYPE],header_value_str[RECORDS]);
-    //2
-    push_header(header_name_str[CONTENT_TYPE],header_value_str[OCTET_STREAM]);
-    //3
-    push_header(header_name_str[MESSAGE_TYPE],header_value_str[EVENT]);
+  s->formatter->close_section();
 
-    return m_buff_header.size();
-  }
-
-  int create_error_header_records(const char* error_message)
-  {
-    //headers description(AWS)
-    //[header-name-byte-length:1][header-name:variable-length][header-value-type:1][header-value:variable-length]
-
-    //1
-    push_header(header_name_str[ERROR_CODE],header_value_str[ENGINE_ERROR]);
-    //2
-    push_header(header_name_str[ERROR_MESSAGE],error_message);
-    //3
-    push_header(header_name_str[MESSAGE_TYPE],header_value_str[ERROR_TYPE]);
-
-    return m_buff_header.size();
-  }
-
-  int create_message(u_int32_t header_len)
-  {
-    //message description(AWS):
-    //[total-byte-length:4][header-byte-length:4][crc:4][headers:variable-length][payload:variable-length][crc:4]
-    //s3select result is produced into sql_result, the sql_result is also the response-message, thus the attach headers and CRC
-    //are created later to the produced SQL result, and actually wrapping the payload.
-
-    auto push_encode_int = [&](u_int32_t s,int pos)
-    {
-      u_int32_t x = htonl(s);
-      sql_result.replace(pos,sizeof(x),reinterpret_cast<char*>(&x),sizeof(x));
-    };
-
-
-    u_int32_t total_byte_len = 0;
-    u_int32_t preload_crc = 0;
-    u_int32_t message_crc = 0;
-
-    total_byte_len = sql_result.size() + 4; //the total is greater in 4 bytes than current size
-
-    push_encode_int(total_byte_len,0);
-    push_encode_int(header_len,4);
-
-    crc32->reset();
-    *crc32 = std::for_each(sql_result.data(), sql_result.data() + 8, *crc32); //crc for starting 8 bytes
-    preload_crc = (*crc32)();
-    push_encode_int(preload_crc,8);
-
-    crc32->reset();
-    *crc32 = std::for_each(sql_result.begin(),  sql_result.end(), *crc32); //crc for payload + checksum
-    message_crc = (*crc32)();
-
-    u_int32_t x = htonl(message_crc);
-    sql_result.append(reinterpret_cast<char*>(&x), sizeof(x));
-
-    return sql_result.size();
-  }
-
-  void init_response()
-  { //12 positions for header-crc
-    sql_result = "012345678901";
-  }
-
-  void init_success_response()
-  {
-    m_buff_header.clear();
-    header_size = create_header_records();
-    sql_result.append(m_buff_header.c_str(), header_size);
-    sql_result.append(PAYLOAD_LINE);
-  }
-
-  void init_error_response(const char* error_message)
-  {//currently not in use. the headers in the case of error, are not extracted by AWS-cli.
-    m_buff_header.clear();
-    header_size = create_error_header_records(error_message);
-    sql_result.append(m_buff_header, header_size);
-  }
-
-  void send_success_response()
-  {
-    if (sql_result.size() > strlen(PAYLOAD_LINE))
-    {
-      sql_result.append(END_PAYLOAD_LINE);
-      int buff_len = create_message(header_size);
-      s->formatter->write_bin_data(sql_result.data(), buff_len);
-    }
-    rgw_flush_formatter_and_reset(s, s->formatter);
-  }
-
-  void send_error_response(const char* error_code,
-                          const char* error_message,
-                          const char* resource_id)
-  {
-
-    set_req_state_err(s, 0);//TODO what err_no?
-    dump_errno(s, 400);
-    end_header(s, m_rgwop, "application/xml", CHUNKED_TRANSFER_ENCODING);
-    dump_start(s);
-
-    s->formatter->open_object_section("Error");
-
-    s->formatter->dump_string("Code", error_code);
-    s->formatter->dump_string("Message", error_message);
-    s->formatter->dump_string("Resource", "#Resource#");
-    s->formatter->dump_string("RequestId", resource_id);
-
-    s->formatter->close_section();
-
-    rgw_flush_formatter_and_reset(s, s->formatter);
-  }
-
-}; //end class aws_response_handler
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
 
 RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3() : s3select_syntax(std::make_unique<s3selectEngine::s3select>()),
                                                        m_s3_csv_object(std::unique_ptr<s3selectEngine::csv_object>()),
