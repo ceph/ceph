@@ -141,6 +141,10 @@ public:
    */
   std::string_view scrub_summary();
 
+  static bool is_idle(std::string_view state_str) {
+    return state_str == "idle";
+  }
+
 private:
   // scrub abort is _not_ a state, rather it's an operation that's
   // performed after in-progress scrubs are finished.
