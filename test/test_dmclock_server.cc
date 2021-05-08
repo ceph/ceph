@@ -1080,14 +1080,12 @@ namespace crimson {
       ClientId client1 = 17;
       ClientId client2 = 98;
 
-      std::vector<dmc::ClientInfo> info1;
-      std::vector<dmc::ClientInfo> info2;
-
-      info1.push_back(dmc::ClientInfo(0.0, 100.0, 0.0));
-      info1.push_back(dmc::ClientInfo(0.0, 150.0, 0.0));
-
-      info2.push_back(dmc::ClientInfo(0.0, 200.0, 0.0));
-      info2.push_back(dmc::ClientInfo(0.0, 50.0, 0.0));
+      dmc::ClientInfo info1[] = {
+        dmc::ClientInfo(0.0, 100.0, 0.0),
+        dmc::ClientInfo(0.0, 150.0, 0.0)};
+      dmc::ClientInfo info2[] = {
+        dmc::ClientInfo(0.0, 200.0, 0.0),
+        dmc::ClientInfo(0.0, 50.0, 0.0)};
 
       size_t cli_info_group = 0;
 
