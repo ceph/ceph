@@ -81,8 +81,8 @@ public:
         f->open_object_section("free");
         char off_hex[30];
         char len_hex[30];
-        snprintf(off_hex, sizeof(off_hex) - 1, "0x%lx", off);
-        snprintf(len_hex, sizeof(len_hex) - 1, "0x%lx", len);
+        snprintf(off_hex, sizeof(off_hex) - 1, "0x%zx", off);
+        snprintf(len_hex, sizeof(len_hex) - 1, "0x%zx", len);
         f->dump_string("offset", off_hex);
         f->dump_string("length", len_hex);
         f->close_section();
