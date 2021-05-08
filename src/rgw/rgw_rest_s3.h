@@ -914,7 +914,72 @@ class s3select;
 class csv_object;
 }
 
-class aws_response_handler;
+
+class aws_response_handler
+{//TODO this class should reside on s3select submodule 
+
+private:
+  std::string sql_result;
+  struct req_state *s;//TODO will be replace by callback
+  uint32_t header_size;
+  std::unique_ptr<boost::crc_32_type> crc32;
+  RGWOp *m_rgwop;
+  std::string m_buff_header;
+
+  enum header_name_En
+  {
+    EVENT_TYPE,
+    CONTENT_TYPE,
+    MESSAGE_TYPE,
+    ERROR_CODE,
+    ERROR_MESSAGE
+  };
+
+  enum header_value_En
+  {
+    RECORDS,
+    OCTET_STREAM,
+    EVENT,
+    ENGINE_ERROR,
+    ERROR_TYPE
+  };
+
+  const char *PAYLOAD_LINE= "\n<Payload>\n<Records>\n<Payload>\n";
+  const char *END_PAYLOAD_LINE= "\n</Payload></Records></Payload>";
+  const char *header_name_str[5] =  {":event-type", ":content-type", ":message-type",":error-code",":error-message"};
+  const char *header_value_str[5] = {"Records", "application/octet-stream", "event","s3select-engine-error","error"};
+
+  void push_header(const char * header_name,const char* header_value);
+
+  int create_message(u_int32_t header_len);
+
+public:
+  //12 positions for header-crc
+  aws_response_handler(struct req_state *ps,RGWOp *rgwop) : sql_result("012345678901"), s(ps),m_rgwop(rgwop)
+  {
+    // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
+    crc32 = std::unique_ptr<boost::crc_32_type>(new boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true>);
+  }
+
+  std::string &get_sql_result();
+
+  int create_header_records();
+
+  int create_error_header_records(const char* error_message);
+
+  void init_response();
+
+  void init_success_response();
+
+  void init_error_response(const char* error_message);
+
+  void send_success_response();
+
+  void send_error_response(const char* error_code,
+                          const char* error_message,
+                          const char* resource_id);
+
+}; //end class aws_response_handler
 
 class RGWSelectObj_ObjStore_S3 : public RGWGetObj_ObjStore_S3
 {
