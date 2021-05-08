@@ -49,17 +49,17 @@ function(distutils_add_cython_module target name src)
   string(STRIP "${CMAKE_CXX_COMPILER_ARG1}" cxx_compiler_arg1)
   # Note: no quotes, otherwise distutils will execute "/usr/bin/ccache gcc"
   # CMake's implicit conversion between strings and lists is wonderful, isn't it?
-  set(cflags ${COMPILE_OPTIONS})
-  list(APPEND cflags -iquote${CMAKE_SOURCE_DIR}/src/include -w)
-  # This little bit of magic wipes out __Pyx_check_single_interpreter()
-  # Note: this is reproduced in distutils_install_cython_module
-  list(APPEND cflags -D'void0=dead_function\(void\)')
-  list(APPEND cflags -D'__Pyx_check_single_interpreter\(ARG\)=ARG \#\# 0')
+  set(PY_CFLAGS ${COMPILE_OPTIONS})
   cmake_parse_arguments(DU "DISABLE_VTA" "" "" ${ARGN})
   if(DU_DISABLE_VTA AND HAS_VTA)
-    list(APPEND cflags -fno-var-tracking-assignments)
+    list(APPEND PY_CFLAGS -fno-var-tracking-assignments)
   endif()
-  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} ${cflags})
+  list(APPEND PY_CPPFLAGS -iquote${CMAKE_SOURCE_DIR}/src/include -w)
+  # This little bit of magic wipes out __Pyx_check_single_interpreter()
+  # Note: this is reproduced in distutils_install_cython_module
+  list(APPEND PY_CPPFLAGS -D'void0=dead_function\(void\)')
+  list(APPEND PY_CPPFLAGS -D'__Pyx_check_single_interpreter\(ARG\)=ARG \#\# 0')
+  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
 
@@ -80,6 +80,8 @@ function(distutils_add_cython_module target name src)
     COMMAND
     env
     CC="${PY_CC}"
+    CFLAGS="${PY_CFLAGS}"
+    CPPFLAGS="${PY_CPPFLAGS}"
     CXX="${PY_CXX}"
     LDSHARED="${PY_LDSHARED}"
     OPT=\"-DNDEBUG -g -fwrapv -O2 -w\"
