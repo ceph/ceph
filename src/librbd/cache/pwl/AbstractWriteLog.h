@@ -351,11 +351,9 @@ protected:
   void complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
 
   bool check_allocation(
-      C_BlockIORequestT *req,
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied,
-      uint64_t &bytes_allocated,
-      uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves);
+      C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
+      uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+      uint32_t num_unpublished_reserves);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
       bool isRWL=false);
