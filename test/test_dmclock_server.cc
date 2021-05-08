@@ -1140,10 +1140,10 @@ namespace crimson {
         float prop2 = float(info2[cli_info_group].weight) / (info1[cli_info_group].weight +
                                                              info2[cli_info_group].weight);
         EXPECT_NEAR(float(c1_count) / (c1_count + c2_count), prop1, tolerance) <<
-          "before: " << prop1 << " of request should have come from first client";
+          "before: " << prop1 << " of requests should have come from first client";
         EXPECT_NEAR
           (float(c2_count) / (c1_count + c2_count), prop2, tolerance) <<
-          "before: " << prop2 << " of request should have come from second client";
+          "before: " << prop2 << " of requests should have come from second client";
       };
       cli_info_group = 0;
       // only count the first half of the served requests, so we can check
