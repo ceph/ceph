@@ -54,8 +54,9 @@ ImageCacheState<I>::ImageCacheState(
   present = (bool)f["present"];
   empty = (bool)f["empty"];
   clean = (bool)f["clean"];
-  host = (string)f["pwl_host"];
-  path = (string)f["pwl_path"];
+  cache_type = f["cache_type"];
+  host = f["pwl_host"];
+  path = f["pwl_path"];
   uint64_t pwl_size;
   std::istringstream iss(f["pwl_size"]);
   iss >> pwl_size;
@@ -105,7 +106,6 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     I* image_ctx, plugin::Api<I>& plugin_api, int &r) {
   std::string cache_state_str;
   ImageCacheState<I>* cache_state = nullptr;
-  ldout(image_ctx->cct, 20) << "image_cache_state:" << cache_state_str << dendl;
 
   r = 0;
   bool dirty_cache = plugin_api.test_image_features(image_ctx, RBD_FEATURE_DIRTY_CACHE);
@@ -113,6 +113,8 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
                              IMAGE_CACHE_STATE, &cache_state_str);
   }
+
+  ldout(image_ctx->cct, 20) << "image_cache_state: " << cache_state_str << dendl;
 
   bool pwl_enabled = cache::util::is_pwl_enabled(*image_ctx);
   bool cache_desired = pwl_enabled;
@@ -141,19 +143,10 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     }
 
     bool cache_exists = (bool)f["present"];
-    int cache_type = (int)f["cache_type"];
-
-    switch (cache_type) {
-      case IMAGE_CACHE_TYPE_SSD:
-      case IMAGE_CACHE_TYPE_RWL:
-        if (!cache_exists) {
-          cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
-        } else {
-          cache_state = new ImageCacheState<I>(image_ctx, f, plugin_api);
-        }
-        break;
-      default:
-	r = -EINVAL;
+    if (!cache_exists) {
+      cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
+    } else {
+      cache_state = new ImageCacheState<I>(image_ctx, f, plugin_api);
     }
   }
   return cache_state;
