@@ -18,6 +18,7 @@
 #include <boost/program_options.hpp>
 #include <boost/scoped_ptr.hpp>
 #include "include/ceph_assert.h"
+#include <unistd.h>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
@@ -161,6 +162,54 @@ public:
 
 private:
   librbd::Image *m_image;
+};
+
+class ImportDiffToFileFmtV1Context : public ImportDiffContext {
+public:
+  ImportDiffToFileFmtV1Context(int to_fd, int from_fd, bool no_progress)
+    : ImportDiffContext(from_fd, 1, no_progress), m_to_fd(to_fd) {
+  }
+
+  int write_zeroes(uint64_t offset, uint64_t length,
+                   Context *on_finish) override {
+    bufferlist zeros;
+    zeros.append_zero(length);
+
+    return write(offset, length, zeros, on_finish);
+  }
+
+  int write(uint64_t offset, uint64_t length, bufferlist &data,
+            Context *on_finish) override {
+    ceph_assert(data.length() == length);
+
+    int r = data.write_fd(m_to_fd, offset);
+    if (r < 0) {
+      cerr << "rbd: error writing to destination file at offset "
+           << offset << std::endl;
+    }
+
+    on_finish->complete(r);
+    return r;
+  }
+
+  void resize(uint64_t size) override {
+    ::ftruncate(m_to_fd, size);
+  }
+
+  int snap_exists(const std::string &snap_name, bool *exists) const override {
+    return -EOPNOTSUPP;
+  }
+
+  int snap_create(const std::string &snap_name) override {
+    return 0;
+  }
+
+  int snap_protect(const std::string &snap_name) override {
+    return 0;
+  }
+
+private:
+  int m_to_fd;
 };
 
 class C_ImportDiff : public Context {
@@ -547,6 +596,30 @@ int do_import_diff(librbd::Image &image, const char *path, bool no_progress,
   return r;
 }
 
+int do_import_diff(int to_fd, const char *path, bool no_progress,
+                   size_t sparse_size)
+{
+  int r;
+  int fd;
+
+  if (strcmp(path, "-") == 0) {
+    fd = STDIN_FILENO;
+  } else {
+    fd = open(path, O_RDONLY|O_BINARY);
+    if (fd < 0) {
+      r = -errno;
+      std::cerr << "rbd: error opening " << path << std::endl;
+      return r;
+    }
+  }
+  r = do_import_diff_fd(
+      new ImportDiffToFileFmtV1Context(to_fd, fd, no_progress), 1, sparse_size);
+  if (fd != 0) {
+    close(fd);
+  }
+  return r;
+}
+
 namespace at = argument_types;
 namespace po = boost::program_options;
 
@@ -557,6 +630,8 @@ void get_arguments_diff(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_sparse_size_option(options);
   at::add_no_progress_option(options);
+  options->add_options()
+    ("to-file", po::value<std::string>(), "destination file");
 }
 
 int execute_diff(const po::variables_map &vm,
@@ -568,34 +643,47 @@ int execute_diff(const po::variables_map &vm,
     return r;
   }
 
-  std::string pool_name;
-  std::string namespace_name;
-  std::string image_name;
-  std::string snap_name;
-  r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
-    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
-    utils::SPEC_VALIDATION_NONE);
-  if (r < 0) {
-    return r;
-  }
-
   size_t sparse_size = utils::RBD_DEFAULT_SPARSE_SIZE;
   if (vm.count(at::IMAGE_SPARSE_SIZE)) {
     sparse_size = vm[at::IMAGE_SPARSE_SIZE].as<size_t>();
   }
 
-  librados::Rados rados;
-  librados::IoCtx io_ctx;
-  librbd::Image image;
-  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
-                                 false, &rados, &io_ctx, &image);
-  if (r < 0) {
-    return r;
-  }
+  if (vm.count("to-file")) {
+    int to_fd = open(vm["to-file"].as<std::string>().c_str(),
+                     O_WRONLY | O_EXCL | O_BINARY);
+    if (to_fd < 0) {
+      cerr << "rbd: failed to open destination file: " << cpp_strerror(r)
+           << std::endl;
+      return -errno;
+    }
 
-  r = do_import_diff(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(),
-                     sparse_size);
+    r = do_import_diff(to_fd, path.c_str(), vm[at::NO_PROGRESS].as<bool>(),
+                       sparse_size);
+  } else {
+    std::string pool_name;
+    std::string namespace_name;
+    std::string image_name;
+    std::string snap_name;
+    r = utils::get_pool_image_snapshot_names(
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+      &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
+    if (r < 0) {
+      return r;
+    }
+
+    librados::Rados rados;
+    librados::IoCtx io_ctx;
+    librbd::Image image;
+    r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                   "", false, &rados, &io_ctx, &image);
+    if (r < 0) {
+      return r;
+    }
+
+    r = do_import_diff(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(),
+                       sparse_size);
+  }
   if (r == -EDOM) {
     r = -EBADMSG;
   }

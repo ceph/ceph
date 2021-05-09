@@ -1250,6 +1250,7 @@
   usage: rbd import-diff [--path <path>] [--pool <pool>] 
                          [--namespace <namespace>] [--image <image>] 
                          [--sparse-size <sparse-size>] [--no-progress] 
+                         [--to-file <to-file>] 
                          <path-name> <image-spec> 
   
   Import an incremental diff.
@@ -1266,6 +1267,7 @@
     --image arg          image name
     --sparse-size arg    sparse size in B/K/M [default: 4K]
     --no-progress        disable progress output
+    --to-file arg        destination file
   
   rbd help info
   usage: rbd info [--pool <pool>] [--namespace <namespace>] [--image <image>] 
