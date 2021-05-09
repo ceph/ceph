@@ -41,39 +41,51 @@ Manager <https://prometheus.io/docs/alerting/alertmanager/>`_ and `Grafana
 Deploying monitoring with cephadm
 ---------------------------------
 
-By default, bootstrap will deploy a basic monitoring stack.  If you
-did not do this (by passing ``--skip-monitoring-stack``, or if you
-converted an existing cluster to cephadm management, you can set up
-monitoring by following the steps below.
+The default behavior of ``cephadm`` is to deploy a basic monitoring stack.  It
+is however possible that you have a Ceph cluster without a monitoring stack,
+and you would like to add a monitoring stack to it. (Here are some ways that
+you might have come to have a Ceph cluster without a monitoring stack: You
+might have passed the ``--skip-monitoring stack`` option to ``cephadm`` during
+the installation of the cluster, or you might have converted an existing
+cluster (which had no monitoring stack) to cephadm management.)
 
-#. Enable the prometheus module in the ceph-mgr daemon.  This exposes the internal Ceph metrics so that prometheus can scrape them.
+To set up monitoring on a Ceph cluster that has no monitoring, follow the
+steps below:
 
-   .. code-block:: bash
+#. Enable the Prometheus module in the ceph-mgr daemon. This exposes the internal Ceph metrics so that Prometheus can scrape them:
+
+   .. prompt:: bash #
 
      ceph mgr module enable prometheus
 
-#. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization.
+#. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization:
 
-   .. code-block:: bash
+   .. prompt:: bash #
 
      ceph orch apply node-exporter '*'
 
-#. Deploy alertmanager
+#. Deploy alertmanager:
 
-   .. code-block:: bash
+   .. prompt:: bash #
 
      ceph orch apply alertmanager 1
 
-#. Deploy prometheus.  A single prometheus instance is sufficient, but
-   for HA you may want to deploy two.
+#. Deploy Prometheus. A single Prometheus instance is sufficient, but
+   for high availablility (HA) you might want to deploy two:
 
-   .. code-block:: bash
+   .. prompt:: bash #
 
-     ceph orch apply prometheus 1    # or 2
+     ceph orch apply prometheus 1 
 
-#. Deploy grafana
+   or 
 
-   .. code-block:: bash
+   .. prompt:: bash #
+     
+     ceph orch apply prometheus 2    
+
+#. Deploy grafana:
+
+   .. prompt:: bash #
 
      ceph orch apply grafana 1
 
