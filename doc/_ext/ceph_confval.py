@@ -199,7 +199,10 @@ class CephOption(ObjectDescription):
     required_arguments = 1
     optional_arguments = 0
     final_argument_whitespace = False
-    option_spec = {'default': directives.unchanged}
+    option_spec = {
+        'module': directives.unchanged,
+        'default': directives.unchanged
+    }
 
 
     doc_field_types = [
@@ -372,7 +375,8 @@ class CephOption(ObjectDescription):
         signode += addnodes.desc_name(sig, sig)
         # normalize whitespace like XRefRole does
         name = ws_re.sub(' ', sig)
-        cur_module = self.env.ref_context.get('ceph:module')
+        cur_module = self.options.get('module',
+                                      self.env.ref_context.get('ceph:module'))
         if cur_module:
             return '/'.join(['mgr', cur_module, name])
         else:
