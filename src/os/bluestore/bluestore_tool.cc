@@ -302,7 +302,7 @@ int main(int argc, char **argv)
     ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
-    ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'/'bluefs-slow'")
+    ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ;
@@ -326,6 +326,7 @@ int main(int argc, char **argv)
         "bluefs-log-dump, "
         "free-dump, "
         "free-score, "
+        "free-fragmentation, "
         "bluefs-stats, "
         "reshard, "
         "show-sharding")
@@ -453,7 +454,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  if (action == "free-score" || action == "free-dump") {
+  if (action == "free-score" || action == "free-dump" || action == "free-fragmentation") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -462,14 +463,13 @@ int main(int argc, char **argv)
       if (!name.empty() &&
           name != "block" &&
           name != "bluefs-db" &&
-          name != "bluefs-wal" &&
-          name != "bluefs-slow") {
+          name != "bluefs-wal") {
         cerr << "unknown allocator '" << name << "'" << std::endl;
         exit(EXIT_FAILURE);
       }
     }
     if (allocs_name.empty())
-      allocs_name = vector<string>{"block", "bluefs-db", "bluefs-wal", "bluefs-slow"};
+      allocs_name = vector<string>{"block", "bluefs-db", "bluefs-wal"};
   }
   if (action == "reshard") {
     if (path.empty()) {
@@ -922,10 +922,11 @@ int main(int argc, char **argv)
       }
       return r;
     }
-  } else  if (action == "free-dump" || action == "free-score") {
+  } else  if (action == "free-dump" || action == "free-score" || action == "fragmentation") {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
-    std::string action_name = action == "free-dump" ? "dump" : "score";
+    std::string action_name = action == "free-dump" ? "dump" :
+                              action == "free-score" ? "score" : "fragmentation";
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
     int r = bluestore.cold_open();
@@ -942,10 +943,10 @@ int main(int argc, char **argv)
 	in, err, &out);
       if (r != 0) {
         cerr << "failure querying '" << alloc_name << "'" << std::endl;
-        exit(EXIT_FAILURE);
+      } else {
+        cout << alloc_name << ":" << std::endl;
+        cout << std::string(out.c_str(),out.length()) << std::endl;
       }
-      cout << alloc_name << ":" << std::endl;
-      cout << std::string(out.c_str(),out.length()) << std::endl;
     }
 
     bluestore.cold_close();
