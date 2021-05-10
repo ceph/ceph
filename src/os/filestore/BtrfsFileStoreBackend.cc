@@ -326,7 +326,17 @@ int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
   list<string> snaps;
   char path[PATH_MAX];
   struct dirent *de;
-  while ((de = ::readdir(dir))) {
+  while (true) {
+    errno = 0;
+    de = ::readdir(dir);
+    if (de == nullptr) {
+      if (errno != 0) {
+        err = -errno;
+        dout(0) << "list_checkpoints: readdir '" << get_basedir_path() << "' failed: "
+                << cpp_strerror(err) << dendl;
+      }
+      break;
+    }
     snprintf(path, sizeof(path), "%s/%s", get_basedir_path().c_str(), de->d_name);
 
     struct stat st;

@@ -516,7 +516,7 @@ public:
   void execute(optional_yield y) override;
 
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   const char* name() const override { return "put_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_TAGGING; }
@@ -802,7 +802,6 @@ protected:
   std::string end_marker;
   int64_t limit;
   uint64_t limit_max;
-  rgw::sal::Attrs attrs;
   bool is_truncated;
 
   RGWUsageStats global_stats;
@@ -1348,8 +1347,6 @@ protected:
   RGWQuotaInfo new_quota;
   bool new_quota_extracted;
 
-  RGWObjVersionTracker acct_op_tracker;
-
   RGWAccessControlPolicy policy;
   bool has_policy;
 
@@ -1815,7 +1812,7 @@ public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
-  bool check_previously_completed(const DoutPrefixProvider* dpp, const RGWMultiCompleteUpload* parts);
+  bool check_previously_completed(const RGWMultiCompleteUpload* parts);
   void complete() override;
 
   virtual int get_params(optional_yield y) = 0;
@@ -2035,7 +2032,7 @@ inline int get_system_versioning_params(req_state *s,
       string err;
       *olh_epoch = strict_strtol(epoch_str.c_str(), 10, &err);
       if (!err.empty()) {
-        lsubdout(s->cct, rgw, 0) << "failed to parse versioned-epoch param"
+        ldpp_subdout(s, rgw, 0) << "failed to parse versioned-epoch param"
 				 << dendl;
         return -EINVAL;
       }
@@ -2079,7 +2076,8 @@ static inline void format_xattr(std::string &xattr)
  * On failure returns a negative error code.
  *
  */
-inline int rgw_get_request_metadata(CephContext* const cct,
+inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
+                                    CephContext* const cct,
 				    struct req_info& info,
 				    std::map<std::string, ceph::bufferlist>& attrs,
 				    const bool allow_empty_attrs = true)
@@ -2097,10 +2095,10 @@ inline int rgw_get_request_metadata(CephContext* const cct,
     std::string& xattr = kv.second;
 
     if (blocklisted_headers.count(name) == 1) {
-      lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
+      ldpp_subdout(dpp, rgw, 10) << "skipping x>> " << name << dendl;
       continue;
     } else if (allow_empty_attrs || !xattr.empty()) {
-      lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
+      ldpp_subdout(dpp, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
       format_xattr(xattr);
 
       std::string attr_name(RGW_ATTR_PREFIX);

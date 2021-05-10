@@ -116,7 +116,7 @@ The import-only live-migration process is initiated by running the same
 and providing a JSON-encoded ``source-spec`` to describe how to access
 the source image data. This ``source-spec`` can either be passed
 directly via the `--source-spec` optional, or via a file or STDIN via the
-`--source-spec-file` optional::
+`--source-spec-path` optional::
 
         $ rbd migration prepare --import-only --source-spec "<JSON>" migration_target
 

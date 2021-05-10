@@ -10,6 +10,7 @@ tasks:
     allow_ptrace: false
     # deploy additional mons the "old" (octopus) way
     add_mons_via_daemon_add: true
+    avoid_pacific_features: true
 
 roles:
 - - mon.a

@@ -40,6 +40,11 @@ struct seastore_test_t :
       return seastore->create_new_collection(coll_name);
     }).then([this](auto coll_ref) {
       coll = coll_ref;
+      CTransaction t;
+      t.create_collection(coll_name, 4);
+      return seastore->do_transaction(
+	coll,
+	std::move(t));
     });
   }
 
@@ -177,20 +182,31 @@ struct seastore_test_t :
       EXPECT_EQ(contents.length(), st.st_size);
     }
 
-    void set_attr_oi(
+    void set_attr(
       SeaStore &seastore,
+      std::string key,
       bufferlist& val) {
       CTransaction t;
-      t.setattr(cid, oid, OI_ATTR, val);
+      t.setattr(cid, oid, key, val);
       seastore.do_transaction(
         coll,
         std::move(t)).get0();
     }
 
-    SeaStore::attrs_t get_attr_oi(
+    SeaStore::attrs_t get_attrs(
       SeaStore &seastore) {
-      return seastore.get_attrs(
-        coll, oid).handle_error(SeaStore::get_attrs_ertr::discard_all{}).get();
+      return seastore.get_attrs(coll, oid)
+		     .handle_error(SeaStore::get_attrs_ertr::discard_all{})
+		     .get();
+    }
+
+    ceph::bufferlist get_attr(
+      SeaStore& seastore,
+      std::string_view name) {
+      return seastore.get_attr(coll, oid, name)
+		      .handle_error(
+			SeaStore::get_attr_errorator::discard_all{})
+		      .get();
     }
 
     void check_omap_key(
@@ -277,6 +293,11 @@ TEST_F(seastore_test_t, collection_create_list_remove)
     coll_t test_coll{spg_t{pg_t{1, 0}}};
     {
       seastore->create_new_collection(test_coll).get0();
+      {
+	CTransaction t;
+	t.create_collection(test_coll, 4);
+	do_transaction(std::move(t));
+      }
       auto collections = seastore->list_collections().get0();
       EXPECT_EQ(collections.size(), 2);
       EXPECT_TRUE(contains(collections, coll_name));
@@ -284,9 +305,11 @@ TEST_F(seastore_test_t, collection_create_list_remove)
     }
 
     {
-      CTransaction t;
-      t.remove_collection(test_coll);
-      do_transaction(std::move(t));
+      {
+	CTransaction t;
+	t.remove_collection(test_coll);
+	do_transaction(std::move(t));
+      }
       auto collections = seastore->list_collections().get0();
       EXPECT_EQ(collections.size(), 1);
       EXPECT_TRUE(contains(collections, coll_name));
@@ -350,16 +373,64 @@ TEST_F(seastore_test_t, attr)
 {
   run_async([this] {
     auto& test_obj = get_object(make_oid(0));
-    std::string s("asdfasdfasdf");
+
+    std::string oi("asdfasdfasdf");
     bufferlist bl;
-    encode(s, bl);
-    test_obj.set_attr_oi(*seastore, bl);
-    auto attrs = test_obj.get_attr_oi(*seastore);
-    std::string s2;
-    bufferlist bl2;
-    bl2.push_back(attrs[OI_ATTR]);
-    decode(s2, bl);
-    EXPECT_EQ(s, s2);
+    encode(oi, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    std::string ss("fdsfdsfs");
+    bl.clear();
+    encode(ss, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    std::string test_val("ssssssssssss");
+    bl.clear();
+    encode(test_val, bl);
+    test_obj.set_attr(*seastore, "test_key", bl);
+
+    auto attrs = test_obj.get_attrs(*seastore);
+    std::string oi2;
+    bufferlist bl2 = attrs[OI_ATTR];
+    decode(oi2, bl2);
+    bl2.clear();
+    bl2 = attrs[SS_ATTR];
+    std::string ss2;
+    decode(ss2, bl2);
+    std::string test_val2;
+    bl2.clear();
+    bl2 = attrs["test_key"];
+    decode(test_val2, bl2);
+    EXPECT_EQ(ss, ss2);
+    EXPECT_EQ(oi, oi2);
+    EXPECT_EQ(test_val, test_val2);
+
+    bl2.clear();
+    bl2 = test_obj.get_attr(*seastore, "test_key");
+    test_val2.clear();
+    decode(test_val2, bl2);
+    EXPECT_EQ(test_val, test_val2);
+
+    std::cout << "test_key passed" << std::endl;
+    char ss_array[256] = {0};
+    std::string ss_str(&ss_array[0], 256);
+    bl.clear();
+    encode(ss_str, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    attrs = test_obj.get_attrs(*seastore);
+    std::cout << "got attr" << std::endl;
+    bl2.clear();
+    bl2 = attrs[SS_ATTR];
+    std::string ss_str2;
+    decode(ss_str2, bl2);
+    EXPECT_EQ(ss_str, ss_str2);
+
+    bl2.clear();
+    ss_str2.clear();
+    bl2 = test_obj.get_attr(*seastore, SS_ATTR);
+    decode(ss_str2, bl2);
+    EXPECT_EQ(ss_str, ss_str2);
   });
 }
 

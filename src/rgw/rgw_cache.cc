@@ -9,7 +9,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
+int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
 
   std::shared_lock rl{lock};
@@ -18,7 +18,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   }
   auto iter = cache_map.find(name);
   if (iter == cache_map.end()) {
-    ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
+    ldpp_dout(dpp, 10) << "cache get: name=" << name << " : miss" << dendl;
     if (perfcounter) {
       perfcounter->inc(l_rgw_cache_miss);
     }
@@ -27,7 +27,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
 
   if (expiry.count() &&
        (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
-    ldout(cct, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
+    ldpp_dout(dpp, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
     rl.unlock();
     std::unique_lock wl{lock};  // write lock for insertion
     // check that wasn't already removed by other thread
@@ -47,14 +47,14 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   ObjectCacheEntry *entry = &iter->second;
 
   if (lru_counter - entry->lru_promotion_ts > lru_window) {
-    ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter
+    ldpp_dout(dpp, 20) << "cache get: touching lru, lru_counter=" << lru_counter
                    << " promotion_ts=" << entry->lru_promotion_ts << dendl;
     rl.unlock();
     std::unique_lock wl{lock};  // write lock for insertion
     /* need to redo this because entry might have dropped off the cache */
     iter = cache_map.find(name);
     if (iter == cache_map.end()) {
-      ldout(cct, 10) << "lost race! cache get: name=" << name << " : miss" << dendl;
+      ldpp_dout(dpp, 10) << "lost race! cache get: name=" << name << " : miss" << dendl;
       if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
       return -ENOENT;
     }
@@ -62,24 +62,24 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
     entry = &iter->second;
     /* check again, we might have lost a race here */
     if (lru_counter - entry->lru_promotion_ts > lru_window) {
-      touch_lru(name, *entry, iter->second.lru_iter);
+      touch_lru(dpp, name, *entry, iter->second.lru_iter);
     }
   }
 
   ObjectCacheInfo& src = iter->second.info;
   if(src.status == -ENOENT) {
-    ldout(cct, 10) << "cache get: name=" << name << " : hit (negative entry)" << dendl;
+    ldpp_dout(dpp, 10) << "cache get: name=" << name << " : hit (negative entry)" << dendl;
     if (perfcounter) perfcounter->inc(l_rgw_cache_hit);
     return -ENODATA;
   }
   if ((src.flags & mask) != mask) {
-    ldout(cct, 10) << "cache get: name=" << name << " : type miss (requested=0x"
+    ldpp_dout(dpp, 10) << "cache get: name=" << name << " : type miss (requested=0x"
                    << std::hex << mask << ", cached=0x" << src.flags
                    << std::dec << ")" << dendl;
     if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
-  ldout(cct, 10) << "cache get: name=" << name << " : hit (requested=0x"
+  ldpp_dout(dpp, 10) << "cache get: name=" << name << " : hit (requested=0x"
                  << std::hex << mask << ", cached=0x" << src.flags
                  << std::dec << ")" << dendl;
 
@@ -93,7 +93,8 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   return 0;
 }
 
-bool ObjectCache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
+bool ObjectCache::chain_cache_entry(const DoutPrefixProvider *dpp,
+                                    std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
 				    RGWChainedCache::Entry *chained_entry)
 {
   std::unique_lock l{lock};
@@ -106,18 +107,18 @@ bool ObjectCache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info*>
   entries.reserve(cache_info_entries.size());
   /* first verify that all entries are still valid */
   for (auto cache_info : cache_info_entries) {
-    ldout(cct, 10) << "chain_cache_entry: cache_locator="
+    ldpp_dout(dpp, 10) << "chain_cache_entry: cache_locator="
 		   << cache_info->cache_locator << dendl;
     auto iter = cache_map.find(cache_info->cache_locator);
     if (iter == cache_map.end()) {
-      ldout(cct, 20) << "chain_cache_entry: couldn't find cache locator" << dendl;
+      ldpp_dout(dpp, 20) << "chain_cache_entry: couldn't find cache locator" << dendl;
       return false;
     }
 
     auto entry = &iter->second;
 
     if (entry->gen != cache_info->gen) {
-      ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry->gen
+      ldpp_dout(dpp, 20) << "chain_cache_entry: entry.gen (" << entry->gen
 		     << ") != cache_info.gen (" << cache_info->gen << ")"
 		     << dendl;
       return false;
@@ -136,7 +137,7 @@ bool ObjectCache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info*>
   return true;
 }
 
-void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
+void ObjectCache::put(const DoutPrefixProvider *dpp, const string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
 {
   std::unique_lock l{lock};
 
@@ -144,7 +145,7 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
     return;
   }
 
-  ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
+  ldpp_dout(dpp, 10) << "cache put: name=" << name << " info.flags=0x"
                  << std::hex << info.flags << std::dec << dendl;
 
   auto [iter, inserted] = cache_map.emplace(name, ObjectCacheEntry{});
@@ -160,7 +161,7 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
   entry.chained_entries.clear();
   entry.gen++;
 
-  touch_lru(name, entry, entry.lru_iter);
+  touch_lru(dpp, name, entry, entry.lru_iter);
 
   target.status = info.status;
 
@@ -190,16 +191,16 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
     target.xattrs = info.xattrs;
     map<string, bufferlist>::iterator iter;
     for (iter = target.xattrs.begin(); iter != target.xattrs.end(); ++iter) {
-      ldout(cct, 10) << "updating xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
+      ldpp_dout(dpp, 10) << "updating xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
     }
   } else if (info.flags & CACHE_FLAG_MODIFY_XATTRS) {
     map<string, bufferlist>::iterator iter;
     for (iter = info.rm_xattrs.begin(); iter != info.rm_xattrs.end(); ++iter) {
-      ldout(cct, 10) << "removing xattr: name=" << iter->first << dendl;
+      ldpp_dout(dpp, 10) << "removing xattr: name=" << iter->first << dendl;
       target.xattrs.erase(iter->first);
     }
     for (iter = info.xattrs.begin(); iter != info.xattrs.end(); ++iter) {
-      ldout(cct, 10) << "appending xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
+      ldpp_dout(dpp, 10) << "appending xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
       target.xattrs[iter->first] = iter->second;
     }
   }
@@ -211,7 +212,7 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
     target.version = info.version;
 }
 
-bool ObjectCache::remove(const string& name)
+bool ObjectCache::remove(const DoutPrefixProvider *dpp, const string& name)
 {
   std::unique_lock l{lock};
 
@@ -223,7 +224,7 @@ bool ObjectCache::remove(const string& name)
   if (iter == cache_map.end())
     return false;
 
-  ldout(cct, 10) << "removing " << name << " from cache" << dendl;
+  ldpp_dout(dpp, 10) << "removing " << name << " from cache" << dendl;
   ObjectCacheEntry& entry = iter->second;
 
   for (auto& kv : entry.chained_entries) {
@@ -235,7 +236,7 @@ bool ObjectCache::remove(const string& name)
   return true;
 }
 
-void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
+void ObjectCache::touch_lru(const DoutPrefixProvider *dpp, const string& name, ObjectCacheEntry& entry,
 			    std::list<string>::iterator& lru_iter)
 {
   while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
@@ -262,9 +263,9 @@ void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
     lru.push_back(name);
     lru_size++;
     lru_iter--;
-    ldout(cct, 10) << "adding " << name << " to cache LRU end" << dendl;
+    ldpp_dout(dpp, 10) << "adding " << name << " to cache LRU end" << dendl;
   } else {
-    ldout(cct, 10) << "moving " << name << " to cache LRU end" << dendl;
+    ldpp_dout(dpp, 10) << "moving " << name << " to cache LRU end" << dendl;
     lru.erase(lru_iter);
     lru.push_back(name);
     lru_iter = lru.end();

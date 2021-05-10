@@ -18,14 +18,11 @@
 /**
  * tree.h
  *
- * An example implementation to expose tree interfaces to users. The current
- * interface design is based on:
- * - ceph::os::Transaction::create/touch/remove()
- * - ceph::ObjectStore::collection_list()
- * - ceph::BlueStore::get_onode()
- * - db->get_iterator(PREFIIX_OBJ) by ceph::BlueStore::fsck()
- *
- * TODO: Redesign the interfaces based on real onode manager requirements.
+ * A special-purpose and b-tree-based implementation that:
+ * - Fulfills requirements of OnodeManager to index ordered onode key-values;
+ * - Runs above seastore block and transaction layer;
+ * - Specially optimized for onode key structures and seastore
+ *   delta/transaction semantics;
  */
 
 namespace crimson::os::seastore::onode {
@@ -68,11 +65,15 @@ class Btree {
     ~Cursor() = default;
 
     bool is_end() const {
-      if (p_cursor) {
-        assert(!p_cursor->is_end());
+      if (p_cursor->is_tracked()) {
         return false;
-      } else {
+      } else if (p_cursor->is_invalid()) {
         return true;
+      } else {
+        // we don't actually store end cursor because it will hold a reference
+        // to an end leaf node and is not kept updated.
+        assert(p_cursor->is_end());
+        ceph_abort("impossible");
       }
     }
 
@@ -109,11 +110,32 @@ class Btree {
       });
     }
 
+    template <bool FORCE_MERGE = false>
+    btree_future<Cursor> erase(Transaction& t) {
+      assert(!is_end());
+      auto this_obj = *this;
+      return p_cursor->erase<FORCE_MERGE>(p_tree->get_context(t), true
+      ).safe_then([this_obj, this] (Ref<tree_cursor_t> next_cursor) {
+        assert(p_cursor->is_invalid());
+        if (next_cursor) {
+          assert(!next_cursor->is_end());
+          return Cursor{p_tree, next_cursor};
+        } else {
+          return Cursor{p_tree};
+        }
+      });
+    }
+
    private:
     Cursor(Btree* p_tree, Ref<tree_cursor_t> _p_cursor) : p_tree(p_tree) {
-      if (_p_cursor->is_end()) {
-        // no need to hold the leaf node
+      if (_p_cursor->is_invalid()) {
+        // we don't create Cursor from an invalid tree_cursor_t.
+        ceph_abort("impossible");
+      } else if (_p_cursor->is_end()) {
+        // we don't actually store end cursor because it will hold a reference
+        // to an end leaf node and is not kept updated.
       } else {
+        assert(_p_cursor->is_tracked());
         p_cursor = _p_cursor;
       }
     }
@@ -121,16 +143,8 @@ class Btree {
 
     MatchKindCMP compare_to(const Cursor& o) const {
       assert(p_tree == o.p_tree);
-      if (p_cursor && o.p_cursor) {
-        return p_cursor->compare_to(
-            *o.p_cursor, p_tree->value_builder.get_header_magic());
-      } else if (!p_cursor && !o.p_cursor) {
-        return MatchKindCMP::EQ;
-      } else if (!p_cursor) {
-        return MatchKindCMP::GT;
-      } else { // !o.p_cursor
-        return MatchKindCMP::LT;
-      }
+      return p_cursor->compare_to(
+          *o.p_cursor, p_tree->value_builder.get_header_magic());
     }
 
     static Cursor make_end(Btree* p_tree) {
@@ -138,7 +152,7 @@ class Btree {
     }
 
     Btree* p_tree;
-    Ref<tree_cursor_t> p_cursor;
+    Ref<tree_cursor_t> p_cursor = tree_cursor_t::get_invalid();
 
     friend class Btree;
   };
@@ -212,6 +226,10 @@ class Btree {
     );
   }
 
+  btree_future<Cursor> get_next(Transaction& t, Cursor& cursor) {
+    return cursor.get_next(t);
+  }
+
   /*
    * modifiers
    */
@@ -235,27 +253,29 @@ class Btree {
     );
   }
 
-  btree_future<size_t> erase(Transaction& t, const ghobject_t& obj) {
-    // TODO
-    return btree_ertr::make_ready_future<size_t>(0u);
+  btree_future<std::size_t> erase(Transaction& t, const ghobject_t& obj) {
+    return seastar::do_with(
+      full_key_t<KeyT::HOBJ>(obj),
+      [this, &t](auto& key) -> btree_future<std::size_t> {
+        return get_root(t).safe_then([this, &t, &key](auto root) {
+          return root->erase(get_context(t), key);
+        });
+      }
+    );
   }
 
-  btree_future<Cursor> erase(Transaction &t, Cursor& pos) {
-    // TODO
-    return btree_ertr::make_ready_future<Cursor>(
-        Cursor::make_end(this));
+  btree_future<Cursor> erase(Transaction& t, Cursor& pos) {
+    return pos.erase(t);
   }
 
-  btree_future<Cursor> erase(Transaction &t, Cursor& first, Cursor& last) {
-    // TODO
-    return btree_ertr::make_ready_future<Cursor>(
-        Cursor::make_end(this));
-  }
-
-  btree_future<Cursor> erase(Transaction &t, Value &value) {
-    // TODO
-    return btree_ertr::make_ready_future<Cursor>(
-        Cursor::make_end(this));
+  btree_future<> erase(Transaction& t, Value& value) {
+    assert(value.is_tracked());
+    auto ref_cursor = value.p_cursor;
+    return ref_cursor->erase(get_context(t), false
+    ).safe_then([ref_cursor] (auto next_cursor) {
+      assert(ref_cursor->is_invalid());
+      assert(!next_cursor);
+    });
   }
 
   /*

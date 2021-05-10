@@ -105,7 +105,7 @@ ObjectDataHandler::write_ret do_insertions(
 	  ctx.t,
 	  region.addr,
 	  region.len
-	).safe_then([ctx, &region](auto extent) {
+	).safe_then([&region](auto extent) {
 	  if (extent->get_laddr() != region.addr) {
 	    logger().debug(
 	      "object_data_handler::do_insertions alloc got addr {},"

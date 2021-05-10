@@ -452,7 +452,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
     if (block_crypt != nullptr) {
       auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s->cct, cb, std::move(block_crypt));
       if (manifest_bl != nullptr) {
-        res = f->read_manifest(*manifest_bl);
+        res = f->read_manifest(this, *manifest_bl);
         if (res == 0) {
           *filter = std::move(f);
         }
@@ -609,7 +609,7 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
     try {
       tagset.decode(iter);
     } catch (buffer::error& err) {
-      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      ldpp_dout(this,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
       op_ret= -EIO;
       return;
     }
@@ -621,7 +621,7 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
   }
 }
 
-int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
+int RGWPutBucketTags_ObjStore_S3::get_params(const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWXMLParser parser;
 
@@ -647,7 +647,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
     RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
   } catch (RGWXMLDecoder::err& err) {
 
-    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+    ldpp_dout(dpp, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
   }
 
@@ -657,7 +657,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
     return r;
 
   obj_tags.encode(tags_bl);
-  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+  ldpp_dout(dpp, 20) << "Read " << obj_tags.count() << "tags" << dendl;
 
   // forward bucket tags requests to meta master zone
   if (!store->is_meta_master()) {
@@ -1131,7 +1131,7 @@ struct ReplicationConfiguration {
       bool enabled;
       int r = rule.to_sync_policy_pipe(s, store, &pipe, &enabled);
       if (r < 0) {
-        ldout(s->cct, 5) << "NOTICE: failed to convert replication configuration into sync policy pipe (rule.id=" << rule.id << "): " << cpp_strerror(-r) << dendl;
+        ldpp_dout(s, 5) << "NOTICE: failed to convert replication configuration into sync policy pipe (rule.id=" << rule.id << "): " << cpp_strerror(-r) << dendl;
         return r;
       }
 
@@ -1215,7 +1215,7 @@ int RGWPutBucketReplication_ObjStore_S3::get_params(optional_yield y)
     RGWXMLDecoder::decode_xml("ReplicationConfiguration", conf, &parser);
   } catch (RGWXMLDecoder::err& err) {
 
-    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+    ldpp_dout(this, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
   }
 
@@ -1469,7 +1469,7 @@ int RGWListBucket_ObjStore_S3::get_common_params()
       string err;
       shard_id = strict_strtol(shard_id_str, 10, &err);
       if (!err.empty()) {
-        ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
+        ldpp_dout(this, 5) << "bad shard id specified: " << shard_id_str << dendl;
         return -EINVAL;
       }
     } else {
@@ -2066,16 +2066,16 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
 
   if (website_conf.is_redirect_all && website_conf.redirect_all.hostname.empty()) {
     s->err.message = "A host name must be provided to redirect all requests (e.g. \"example.com\").";
-    ldout(s->cct, 5) << s->err.message << dendl;
+    ldpp_dout(this, 5) << s->err.message << dendl;
     return -EINVAL;
   } else if (!website_conf.is_redirect_all && !website_conf.is_set_index_doc) {
     s->err.message = "A value for IndexDocument Suffix must be provided if RedirectAllRequestsTo is empty";
-    ldout(s->cct, 5) << s->err.message << dendl;
+    ldpp_dout(this, 5) << s->err.message << dendl;
     return -EINVAL;
   } else if (!website_conf.is_redirect_all && website_conf.is_set_index_doc &&
              website_conf.index_doc_suffix.empty()) {
     s->err.message = "The IndexDocument Suffix is not well formed";
-    ldout(s->cct, 5) << s->err.message << dendl;
+    ldpp_dout(this, 5) << s->err.message << dendl;
     return -EINVAL;
   }
 
@@ -2557,7 +2557,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
       //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
       if (f != nullptr) {
         if (manifest_bl != nullptr) {
-          res = f->read_manifest(*manifest_bl);
+          res = f->read_manifest(this, *manifest_bl);
           if (res == 0) {
             *filter = std::move(f);
           }
@@ -3442,7 +3442,7 @@ void RGWGetCORS_ObjStore_S3::send_response()
 
 int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
 {
-  RGWCORSXMLParser_S3 parser(s->cct);
+  RGWCORSXMLParser_S3 parser(this, s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
@@ -3956,7 +3956,7 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   ::encode_json("head", head_obj, &f);
   ::encode_json("manifest", *manifest, &f);
   f.open_array_section("data_location");
-  for (auto miter = manifest->obj_begin(); miter != manifest->obj_end(); ++miter) {
+  for (auto miter = manifest->obj_begin(this); miter != manifest->obj_end(this); ++miter) {
     f.open_object_section("obj");
     rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
     uint64_t ofs = miter.get_ofs();
@@ -4634,7 +4634,7 @@ static int verify_mfa(rgw::sal::Store* store, RGWUserInfo *user,
     return -EACCES;
   }
 
-  int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->cls->mfa.check_mfa(user->user_id, serial, pin, y);
+  int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->cls->mfa.check_mfa(dpp, user->user_id, serial, pin, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
     return -EACCES;
@@ -4986,7 +4986,7 @@ RGWOp* RGWHandler_REST_S3Website::op_head()
   return get_obj_op(false);
 }
 
-int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errordoc_key, optional_yield y) {
+int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string& errordoc_key, optional_yield y) {
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
@@ -5099,7 +5099,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
        On success, it will return zero, and no further content should be sent to the socket
        On failure, we need the double-error handler
      */
-    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(http_error_code, s->bucket->get_info().website_conf.error_doc, y);
+    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(s, http_error_code, s->bucket->get_info().website_conf.error_doc, y);
     if (new_err_no != -1) {
       err_no = new_err_no;
     }
@@ -5615,7 +5615,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
   std::string string_to_sign;
   utime_t header_time;
-  if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
+  if (! rgw_create_s3_canonical_header(s, s->info, &header_time, string_to_sign,
         qsr)) {
     ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
@@ -5946,7 +5946,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
       auto iter = dec_output.cbegin();
       decode(token, iter);
     } catch (const buffer::error& e) {
-      ldout(cct, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
       return -EINVAL;
     }
   }
@@ -6042,7 +6042,7 @@ rgw::auth::s3::STSEngine::authenticate(
   user = store->get_user(token.user);
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
-    int ret = user->load_by_id(dpp, y);
+    int ret = user->load_user(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
@@ -6105,16 +6105,16 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
   int max_size = 4096;
   std::tie(ret, data) = read_all_input(s, max_size, false);
   if (ret != 0) {
-    ldout(s->cct, 10) << "s3-select query: failed to retrieve query; ret = " << ret << dendl;
+    ldpp_dout(this, 10) << "s3-select query: failed to retrieve query; ret = " << ret << dendl;
     return ret;
   }
 
   m_s3select_query = data.to_str();
   if (m_s3select_query.length() > 0) {
-    ldout(s->cct, 10) << "s3-select query: " << m_s3select_query << dendl;
+    ldpp_dout(this, 10) << "s3-select query: " << m_s3select_query << dendl;
   }
   else {
-    ldout(s->cct, 10) << "s3-select query: failed to retrieve query;" << dendl;
+    ldpp_dout(this, 10) << "s3-select query: failed to retrieve query;" << dendl;
     return -1;
   }
 
@@ -6265,7 +6265,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
 
   if (s3select_syntax->get_error_description().empty() == false) {
     m_result.append(s3select_syntax->get_error_description());
-    ldout(s->cct, 10) << "s3-select query: failed to prase query; {" << s3select_syntax->get_error_description() << "}"<< dendl;
+    ldpp_dout(this, 10) << "s3-select query: failed to prase query; {" << s3select_syntax->get_error_description() << "}"<< dendl;
     status = -1;
   }
   else {
@@ -6316,7 +6316,7 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag("QuoteEscapeCharacter", m_escape_char);
   extract_by_tag("CompressionType", m_compression_type);
   if (m_compression_type.length()>0 && m_compression_type.compare("NONE") != 0) {
-    ldout(s->cct, 10) << "RGW supports currently only NONE option for compression type" << dendl;
+    ldpp_dout(this, 10) << "RGW supports currently only NONE option for compression type" << dendl;
     return -1;
   }
 
@@ -6368,11 +6368,11 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
 
   for(auto& it : bl.buffers()) {
 
-    ldout(s->cct, 10) << "processing segment " << i << " out of " << bl_len << " off " << ofs
+    ldpp_dout(this, 10) << "processing segment " << i << " out of " << bl_len << " off " << ofs
                       << " len " << len << " obj-size " << s->obj_size << dendl;
 
     if(it.length() == 0) {
-      ldout(s->cct, 10) << "s3select:it->_len is zero. segment " << i << " out of " << bl_len
+      ldpp_dout(this, 10) << "s3select:it->_len is zero. segment " << i << " out of " << bl_len
                         <<  " obj-size " << s->obj_size << dendl;
       continue; 
     }

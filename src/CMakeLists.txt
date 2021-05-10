@@ -380,6 +380,11 @@ if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
 
+include(CheckTypeSize)
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/time.h")
+CHECK_TYPE_SIZE(suseconds_t SUSECONDS_T)
+unset(CMAKE_EXTRA_INCLUDE_FILES)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -534,7 +539,7 @@ if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
     if(WITH_RBD_RWL)
       list(APPEND pmem_COMPONENTS pmemobj)
     endif()
-    find_package(pmem 1.7 REQUIRED COMPONENTS ${pmem_COMPONENTS})
+    find_package(pmem 1.10 REQUIRED COMPONENTS ${pmem_COMPONENTS})
   else()
     include(Buildpmem)
     build_pmem()
@@ -584,7 +589,8 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-if(NOT WIN32)
+# RGW also support Lua scripting
+if(WITH_CEPHFS OR WITH_RADOSGW)
   find_package(Lua 5.3 REQUIRED)
 endif()
 

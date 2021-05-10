@@ -34,39 +34,39 @@ public:
     return nullptr;
   }
 
-  virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y, sal::Attrs* uattrs, RGWObjVersionTracker* tracker) override {
+  virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  virtual int read_stats(optional_yield y, RGWStorageStats* stats, ceph::real_time *last_stats_sync, ceph::real_time *last_stats_update) override {
+  virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWStorageStats* stats, ceph::real_time *last_stats_sync, ceph::real_time *last_stats_update) override {
     return 0;
   }
 
-  virtual int read_stats_async(RGWGetUserStats_CB *cb) override {
+  virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB *cb) override {
     return 0;
   }
 
-  virtual int complete_flush_stats(optional_yield y) override {
+  virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage) override {
+  virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage) override {
     return 0;
   }
 
-  virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) override {
+  virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override {
     return 0;
   }
 
-  virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override {
+  virtual int load_user(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params) override {
+  virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info) override {
     return 0;
   }
 
-  virtual int remove_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::RemoveParams& params) override {
+  virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
 

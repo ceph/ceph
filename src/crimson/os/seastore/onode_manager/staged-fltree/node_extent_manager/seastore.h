@@ -74,7 +74,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
 
   tm_future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) override {
-    logger().debug("OTree::Seastore: reading {}B at {:#x} ...", len, addr);
+    logger().trace("OTree::Seastore: reading {}B at {:#x} ...", len, addr);
     return tm.read_extent<SeastoreNodeExtent>(t, addr, len
     ).safe_then([addr, len](auto&& e) {
       logger().trace("OTree::Seastore: read {}B at {:#x}",
@@ -89,7 +89,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
 
   tm_future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) override {
-    logger().debug("OTree::Seastore: allocating {}B ...", len);
+    logger().trace("OTree::Seastore: allocating {}B ...", len);
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
     ).safe_then([len](auto extent) {
       logger().debug("OTree::Seastore: allocated {}B at {:#x}",
@@ -100,11 +100,23 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     });
   }
 
+  tm_future<> retire_extent(
+      Transaction& t, NodeExtentRef _extent) override {
+    LogicalCachedExtentRef extent = _extent;
+    auto addr = extent->get_laddr();
+    auto len = extent->get_length();
+    logger().debug("OTree::Seastore: retiring {}B at {:#x} ...", len, addr);
+    return tm.dec_ref(t, extent).safe_then([addr, len] (unsigned cnt) {
+      assert(cnt == 0);
+      logger().trace("OTree::Seastore: retired {}B at {:#x} ...", len, addr);
+    });
+  }
+
   tm_future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     logger().trace("OTree::Seastore: get root ...");
     return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
-      logger().debug("OTree::Seastore: got root {:#x}", root_addr);
+      logger().trace("OTree::Seastore: got root {:#x}", root_addr);
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
     });
   }

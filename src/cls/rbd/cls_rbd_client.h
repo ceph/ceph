@@ -652,9 +652,9 @@ int sparse_copyup(librados::IoCtx *ioctx, const std::string &oid,
                   const std::map<uint64_t, uint64_t> &extent_map,
                   ceph::buffer::list data);
 
-void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
+void sparsify(librados::ObjectWriteOperation *op, uint64_t sparse_size,
               bool remove_empty);
-int sparsify(librados::IoCtx *ioctx, const std::string &oid, size_t sparse_size,
+int sparsify(librados::IoCtx *ioctx, const std::string &oid, uint64_t sparse_size,
              bool remove_empty);
 
 } // namespace cls_client

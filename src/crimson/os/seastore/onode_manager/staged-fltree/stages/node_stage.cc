@@ -176,6 +176,22 @@ node_offset_t NODE_T::trim_at(
   return 0;
 }
 
+template <typename FieldType, node_type_t NODE_TYPE>
+node_offset_t NODE_T::erase_at(
+    NodeExtentMutable& mut, const node_extent_t& node,
+    index_t index, const char* p_left_bound)
+{
+  if constexpr (FIELD_TYPE == field_type_t::N0 ||
+                FIELD_TYPE == field_type_t::N1) {
+    assert(node.keys() > 0);
+    assert(index < node.keys());
+    assert(p_left_bound == node.p_left_bound());
+    return FieldType::erase_at(mut, node.fields(), index, p_left_bound);
+  } else {
+    ceph_abort("not implemented");
+  }
+}
+
 #define NODE_TEMPLATE(FT, NT) template class NODE_INST(FT, NT)
 NODE_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL);
 NODE_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL);
@@ -187,6 +203,37 @@ NODE_TEMPLATE(node_fields_2_t, node_type_t::LEAF);
 NODE_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF);
 
 #define APPEND_T node_extent_t<FieldType, NODE_TYPE>::Appender<KT>
+
+template <typename FieldType, node_type_t NODE_TYPE>
+template <KeyT KT>
+APPEND_T::Appender(NodeExtentMutable* p_mut, const node_extent_t& node, bool open)
+    : p_mut{p_mut}, p_start{p_mut->get_write()}
+{
+  assert(p_start == node.p_start());
+  assert(node.keys());
+  if (open) {
+    // seek as open_nxt()
+    if constexpr (FIELD_TYPE == field_type_t::N0 ||
+                  FIELD_TYPE == field_type_t::N1) {
+      p_append_left = p_start + node.fields().get_key_start_offset(node.keys() - 1);
+      p_append_left += sizeof(typename FieldType::key_t);
+      p_append_right = p_start + node.fields().get_item_end_offset(node.keys() - 1);
+    } else if constexpr (FIELD_TYPE == field_type_t::N2) {
+      ceph_abort("not implemented");
+    } else {
+      ceph_abort("impossible path");
+    }
+    num_keys = node.keys() - 1;
+  } else {
+    if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
+      ceph_abort("not implemented");
+    } else {
+      p_append_left = p_start + node.fields().get_key_start_offset(node.keys());
+      p_append_right = p_start + node.fields().get_item_end_offset(node.keys());
+    }
+    num_keys = node.keys();
+  }
+}
 
 template <typename FieldType, node_type_t NODE_TYPE>
 template <KeyT KT>
@@ -205,7 +252,7 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
   assert(from + items <= src.keys());
   num_keys += items;
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    ceph_abort("impossible path");
+    ceph_abort("not implemented");
   } else {
     // append left part forwards
     node_offset_t offset_left_start = src.fields().get_key_start_offset(from);

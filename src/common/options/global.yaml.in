@@ -1173,13 +1173,6 @@ options:
   fmt_desc: Throttles total size of messages waiting to be dispatched.
   default: 100_M
   with_legacy: true
-- name: ms_bind_exclude_lo_iface
-  type: bool
-  level: advanced
-  desc: Allow servers to bind loopback network interfaces (lo)
-  default: true
-  flags:
-  - startup
 - name: ms_bind_ipv4
   type: bool
   level: advanced
@@ -4457,19 +4450,18 @@ options:
   type: str
   level: advanced
   desc: which operation priority queue algorithm to use
-  long_desc: which operation priority queue algorithm to use; mclock_scheduler is
-    currently experimental
+  long_desc: which operation priority queue algorithm to use
   fmt_desc: This sets the type of queue to be used for prioritizing ops
     within each OSD. Both queues feature a strict sub-queue which is
     dequeued before the normal queue. The normal queue is different
     between implementations. The WeightedPriorityQueue (``wpq``)
     dequeues operations in relation to their priorities to prevent
     starvation of any queue. WPQ should help in cases where a few OSDs
-    are more overloaded than others. The new mClockQueue
+    are more overloaded than others. The mClockQueue
     (``mclock_scheduler``) prioritizes operations based on which class
     they belong to (recovery, scrub, snaptrim, client op, osd subop).
     See `QoS Based on mClock`_. Requires a restart.
-  default: wpq
+  default: mclock_scheduler
   see_also:
   - osd_op_queue_cut_off
   enum_values:
@@ -4833,12 +4825,16 @@ options:
     Increasing this value will slow down snap trimming.
     This option overrides backend specific variants.
   default: 0
+  flags:
+  - runtime
   with_legacy: true
 - name: osd_snap_trim_sleep_hdd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next snap trim for HDDs
   default: 5
+  flags:
+  - runtime
 - name: osd_snap_trim_sleep_ssd
   type: float
   level: advanced
@@ -4846,6 +4842,8 @@ options:
   fmt_desc: Time in seconds to sleep before next snap trim op
     for SSD OSDs (including NVMe).
   default: 0
+  flags:
+  - runtime
 - name: osd_snap_trim_sleep_hybrid
   type: float
   level: advanced
@@ -4854,6 +4852,8 @@ options:
   fmt_desc: Time in seconds to sleep before next snap trim op
     when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
   default: 2
+  flags:
+  - runtime
 - name: osd_scrub_invalid_stats
   type: bool
   level: advanced
@@ -5279,6 +5279,8 @@ options:
   fmt_desc: Time to sleep before scrubbing the next group of chunks. Increasing this value will slow
     down the overall rate of scrubbing so that client operations will be less impacted.
   default: 0
+  flags:
+  - runtime
   with_legacy: true
 # more sleep between [deep]scrub ops
 - name: osd_scrub_extended_sleep
@@ -5761,22 +5763,30 @@ options:
   fmt_desc: Time in seconds to sleep before the next removal transaction. This
     throttles the PG deletion process.
   default: 0
+  flags:
+  - runtime
 - name: osd_delete_sleep_hdd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for HDDs
   default: 5
+  flags:
+  - runtime
 - name: osd_delete_sleep_ssd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for SSDs
   default: 1
+  flags:
+  - runtime
 - name: osd_delete_sleep_hybrid
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
     and OSD journal or WAL+DB is on SSD
   default: 1
+  flags:
+  - runtime
 # what % full makes an OSD "full" (failsafe)
 - name: osd_failsafe_full_ratio
   type: float
@@ -6225,6 +6235,7 @@ options:
   - filestore
   - memstore
   - kstore
+  - seastore
   flags:
   - create
   with_legacy: true
@@ -6547,9 +6558,15 @@ options:
   desc: Enabled buffered IO for bluefs reads.
   long_desc: When this option is enabled, bluefs will in some cases perform buffered
     reads.  This allows the kernel page cache to act as a secondary cache for things
-    like RocksDB compaction.  For example, if the rocksdb block cache isn't large
-    enough to hold blocks from the compressed SST files itself, they can be read from
-    page cache instead of from the disk.
+    like RocksDB block reads.  For example, if the rocksdb block cache isn't large
+    enough to hold all blocks during OMAP iteration, it may be possible to read them
+    from page cache instead of from the disk.  This can dramatically improve
+    performance when the osd_memory_target is too small to hold all entries in block
+    cache but it does come with downsides.  It has been reported to occasionally
+    cause excessive kernel swapping (and associated stalls) under certain workloads.
+    Currently the best and most consistent performing combination appears to be
+    enabling bluefs_buffered_io and disabling system level swap.  It is possible
+    that this recommendation may change in the future however.
   default: true
   with_legacy: true
 - name: bluefs_sync_write

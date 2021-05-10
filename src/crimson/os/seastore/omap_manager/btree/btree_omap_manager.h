@@ -77,6 +77,11 @@ public:
     Transaction &t,
     const std::string &key, const ceph::bufferlist &value) final;
 
+  omap_set_keys_ret omap_set_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    std::map<std::string, ceph::bufferlist>&& keys) final;
+
   omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
     Transaction &t,

@@ -99,7 +99,6 @@ private:
   WriteLogPoolRootUpdateList m_poolroot_to_update; /* pool root list to update to SSD */
   bool m_updating_pool_root = false;
 
-  uint64_t m_log_pool_ring_buffer_size; /* Size of ring buffer */
   std::atomic<int> m_async_update_superblock = {0};
   BlockDevice *bdev = nullptr;
   uint64_t pool_size;
@@ -135,7 +134,6 @@ private:
   int update_pool_root_sync(std::shared_ptr<pwl::WriteLogPoolRoot> root);
   void update_pool_root(std::shared_ptr<WriteLogPoolRoot> root,
                                           AioTransContext *aio);
-  void pre_io_check(WriteLogCacheEntry *log_entry, uint64_t &length);
   void aio_read_data_block(WriteLogCacheEntry *log_entry, bufferlist *bl,
                            Context *ctx);
   void aio_read_data_block(std::vector<WriteLogCacheEntry*> &log_entries,

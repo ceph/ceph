@@ -25,7 +25,6 @@
 #include <json_spirit/json_spirit.h>
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/image/ListWatchersRequest.h"
-#include <experimental/map>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -295,19 +294,20 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     if (r < 0) {
       return r;
     }
-
-    std::experimental::erase_if(
-      trash_image_specs, [image_name](const auto& pair) {
-        const auto& spec = pair.second;
-        return (spec.source != cls::rbd::TRASH_IMAGE_SOURCE_USER ||
-                spec.state != cls::rbd::TRASH_IMAGE_STATE_MOVING ||
-                spec.name != image_name);
-      });
-    if (trash_image_specs.empty()) {
+    if (auto found_image =
+        std::find_if(
+          trash_image_specs.begin(), trash_image_specs.end(),
+          [&](const auto& pair) {
+            const auto& spec = pair.second;
+            return (spec.source == cls::rbd::TRASH_IMAGE_SOURCE_USER &&
+                    spec.state == cls::rbd::TRASH_IMAGE_STATE_MOVING &&
+                    spec.name == image_name);
+          });
+        found_image != trash_image_specs.end()) {
+      image_id = found_image->first;
+    } else {
       return -ENOENT;
     }
-
-    image_id = trash_image_specs.begin()->first;
     ldout(cct, 15) << "derived image id " << image_id << " from existing "
                    << "trash entry" << dendl;
   } else if (r < 0) {

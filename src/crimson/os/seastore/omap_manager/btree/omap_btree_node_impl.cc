@@ -207,7 +207,8 @@ OMapInnerNode::list(
     iter_cend(),
     list_bare_ret(false, {}),
     [=, &start](auto &biter, auto &eiter, auto &ret) {
-      auto &[complete, result] = ret;
+      auto &complete = ret.first;
+      auto &result = ret.second;
       return crimson::do_until(
 	[&, config, oc, this]() -> list_ertr::future<bool> {
 	  if (biter == eiter  || result.size() == config.max_result_size) {
@@ -218,12 +219,12 @@ OMapInnerNode::list(
 	  return omap_load_extent(
 	    oc, laddr,
 	    get_meta().depth - 1
-	  ).safe_then([&, config, oc, this] (auto &&extent) {
+	  ).safe_then([&, config, oc] (auto &&extent) {
 	    return extent->list(
 	      oc,
 	      start,
 	      config.with_reduced_max(result.size())
-	    ).safe_then([&, config, this](auto &&child_ret) mutable {
+	    ).safe_then([&, config](auto &&child_ret) mutable {
 	      auto &[child_complete, child_result] = child_ret;
 	      if (result.size() && child_result.size()) {
 		assert(child_result.begin()->first > result.rbegin()->first);
@@ -231,10 +232,8 @@ OMapInnerNode::list(
 	      if (child_result.size() && start) {
 		assert(child_result.begin()->first > *start);
 	      }
-	      result.insert(
-		child_result.begin(),
-		child_result.end());
-	      biter++;
+	      result.merge(std::move(child_result));
+	      ++biter;
 	      assert(child_complete || result.size() == config.max_result_size);
 	      return list_ertr::make_ready_future<bool>(false);
 	    });

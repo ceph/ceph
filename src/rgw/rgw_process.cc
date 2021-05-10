@@ -82,7 +82,7 @@ RGWRequest* RGWProcess::RGWWQ::_dequeue() {
 
 void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
   perfcounter->inc(l_rgw_qactive);
-  process->handle_request(req);
+  process->handle_request(this, req);
   process->req_throttle.put(1);
   perfcounter->inc(l_rgw_qactive, -1);
 }

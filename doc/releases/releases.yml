@@ -15,6 +15,10 @@ releases:
   pacific:
     target_eol: 2023-06-01
     releases:
+      - version: 16.2.3
+        released: 2021-05-06
+      - version: 16.2.2
+        released: 2021-05-05
       - version: 16.2.1
         released: 2021-04-19
       - version: 16.2.0

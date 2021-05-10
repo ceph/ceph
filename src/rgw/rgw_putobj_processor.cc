@@ -369,7 +369,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     bucket->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
   meta_obj->set_in_extra_data(true);
 
-  r = meta_obj->omap_set_val_by_key(p, bl, true, null_yield);
+  r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
   if (r < 0) {
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
@@ -504,7 +504,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   //For Append obj, disable versioning
   obj_op->params.versioning_disabled = true;
   if (cur_manifest) {
-    cur_manifest->append(manifest, store->get_zone());
+    cur_manifest->append(dpp, manifest, store->get_zone());
     obj_op->params.manifest = cur_manifest;
   } else {
     obj_op->params.manifest = &manifest;

@@ -897,6 +897,12 @@ void WriteLog<I>::reserve_cache(C_BlockIORequestT *req,
                                 << *req << dendl;
       alloc_succeeds = false;
       no_space = true; /* Entries need to be retired */
+
+      if (this->m_free_log_entries == this->m_total_log_entries - 1) {
+        /* When the cache is empty, there is still no space to allocate.
+         * Defragment. */
+        pmemobj_defrag(m_log_pool, NULL, 0, NULL);
+      }
       break;
     } else {
       buffer.allocated = true;
@@ -932,9 +938,9 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
                               &num_lanes, &num_log_entries, &num_unpublished_reserves);
 
-  alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied, bytes_allocated,
-                              num_lanes, num_log_entries, num_unpublished_reserves,
-                              this->m_bytes_allocated_cap);
+  alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
+                                          bytes_allocated, num_lanes, num_log_entries,
+                                          num_unpublished_reserves);
 
   std::vector<WriteBufferAllocation>& buffers = req->get_resources_buffers();
   if (!alloc_succeeds) {

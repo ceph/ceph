@@ -6,6 +6,7 @@ options:
   type: size
   level: basic
   desc: soft maximum number of directory entries in client cache
+  fmt_desc: Set the number of inodes that the client keeps in the metadata cache.
   default: 16_K
   services:
   - mds_client
@@ -14,6 +15,8 @@ options:
   type: float
   level: advanced
   desc: mid-point of client cache LRU
+  fmt_desc: Set client cache midpoint. The midpoint splits the least recently used
+    lists into a hot and warm list.
   default: 0.75
   services:
   - mds_client
@@ -22,6 +25,7 @@ options:
   type: bool
   level: dev
   desc: issue new requests to a random active MDS
+  fmt_desc: Choose random MDS for each request.
   default: false
   services:
   - mds_client
@@ -30,6 +34,7 @@ options:
   type: float
   level: advanced
   desc: timeout for mounting CephFS (seconds)
+  fmt_desc: Set the timeout for CephFS mount in seconds.
   default: 5_min
   services:
   - mds_client
@@ -38,6 +43,7 @@ options:
   type: secs
   level: dev
   desc: seconds between client upkeep ticks
+  fmt_desc: Set the interval in seconds between capability renewal and other upkeep.
   default: 1
   services:
   - mds_client
@@ -52,6 +58,7 @@ options:
   type: size
   level: advanced
   desc: minimum bytes to readahead in a file
+  fmt_desc: Set the minimum number bytes that the client reads ahead.
   default: 128_K
   services:
   - mds_client
@@ -60,6 +67,9 @@ options:
   type: size
   level: advanced
   desc: maximum bytes to readahead in a file (zero is unlimited)
+  fmt_desc: Set the maximum number of bytes that the client reads ahead for
+    future read operations. Overridden by the ``client_readahead_max_periods``
+    setting.
   default: 0
   services:
   - mds_client
@@ -69,6 +79,9 @@ options:
   type: int
   level: advanced
   desc: maximum stripe periods to readahead in a file
+  fmt_desc: Set the number of file layout periods (object size * number of
+    stripes) that the client reads ahead. Overrides the
+    ``client_readahead_max_bytes`` setting.
   default: 4
   services:
   - mds_client
@@ -84,6 +97,7 @@ options:
   type: str
   level: advanced
   desc: pseudo directory for snapshot access to a directory
+  fmt_desc: Set the snapshot directory name.
   default: .snap
   services:
   - mds_client
@@ -92,6 +106,8 @@ options:
   type: str
   level: advanced
   desc: default mount-point
+  fmt_desc: Directory to mount on the CephFS file system. An alternative to the
+    ``-r`` option of the ``ceph-fuse`` command.
   default: /
   services:
   - mds_client
@@ -102,11 +118,13 @@ options:
   default: -1
   services:
   - mds_client
+  fmt_desc: Set the user ID of CephFS mount.
   with_legacy: true
 - name: client_mount_gid
   type: int
   level: advanced
   desc: gid to mount as
+  fmt_desc: Set the group ID of CephFS mount.
   default: -1
   services:
   - mds_client
@@ -131,11 +149,16 @@ options:
   default: 5
   services:
   - mds_client
+  fmt_desc: Set the delay between capability releases in seconds. The delay
+    sets how many   seconds a client waits to release capabilities that it no
+    longer needs in case the capabilities are needed for another user space
+    operation.
   with_legacy: true
 - name: client_quota_df
   type: bool
   level: advanced
   desc: show quota usage for statfs (df)
+  fmt_desc: Report root directory quota for the ``statfs`` operation.
   default: true
   services:
   - mds_client
@@ -152,6 +175,7 @@ options:
   type: size
   level: advanced
   desc: maximum size of object cache
+  fmt_desc: Set how many bytes of data will the client cache.
   default: 200_M
   services:
   - mds_client
@@ -163,6 +187,7 @@ options:
   type: size
   level: advanced
   desc: maximum size of dirty pages in object cache
+  fmt_desc: Set the maximum number of dirty bytes in the object cache.
   default: 100_M
   services:
   - mds_client
@@ -174,6 +199,7 @@ options:
   type: size
   level: advanced
   desc: target size of dirty pages object cache
+  fmt_desc: Set the target size of dirty data. We recommend to keep this number low.
   default: 8_M
   services:
   - mds_client
@@ -184,6 +210,8 @@ options:
   type: float
   level: advanced
   desc: maximum age of dirty pages in object cache (seconds)
+  fmt_desc: Set the maximum age in seconds of dirty data in the object cache
+    before writeback.
   default: 5
   services:
   - mds_client
@@ -194,6 +222,7 @@ options:
   type: int
   level: advanced
   desc: maximum number of objects in cache
+  fmt_desc: Set the maximum number of objects in the object cache.
   default: 1000
   services:
   - mds_client
@@ -215,6 +244,8 @@ options:
   default: false
   services:
   - mds_client
+  fmt_desc: If set to ``true``, clients read data directly from OSDs instead
+    of using a local page cache.
   with_legacy: true
 - name: client_debug_inject_tick_delay
   type: secs
@@ -228,6 +259,9 @@ options:
   default: 4_K
   services:
   - mds_client
+  fmt_desc: Set the maximum size of inlined data stored in a file inode rather
+    than in a separate data object in RADOS. This setting only applies if the
+    ``inline_data`` flag is set on the MDS map.
   with_legacy: true
 # synthetic client bug for testing
 - name: client_inject_release_failure
@@ -249,6 +283,8 @@ options:
   type: str
   level: advanced
   desc: metadata key=value comma-delimited pairs appended to session metadata
+  fmt_desc: Comma-delimited strings for client metadata sent to each MDS, in addition
+    to the automatically generated version, host name, and other metadata.
   services:
   - mds_client
   with_legacy: true
@@ -256,6 +292,9 @@ options:
   type: str
   level: advanced
   desc: ACL type to enforce (none or "posix_acl")
+  fmt_desc: Set the ACL type. Currently, only possible value is ``"posix_acl"`` to
+    enable POSIX ACL, or an empty string. This option only takes effect when the
+    ``fuse_default_permissions`` is set to ``false``.
   services:
   - mds_client
   with_legacy: true
@@ -263,6 +302,7 @@ options:
   type: bool
   level: advanced
   desc: client-enforced permission checking
+  fmt_desc: Check client permissions on all I/O operations.
   default: true
   services:
   - mds_client
@@ -295,6 +335,10 @@ options:
   type: bool
   level: advanced
   desc: disable page caching in the kernel for this FUSE mount
+  fmt_desc: If set to ``true``, kernel page cache is disabled for ``ceph-fuse``
+    mounts. When multiple clients read/write to a file at the same
+    time, readers may get stale data from page cache. Due to
+    limitations of FUSE, ``ceph-fuse`` can't disable page cache dynamically.
   default: false
   services:
   - mds_client
@@ -309,6 +353,10 @@ options:
   type: bool
   level: advanced
   desc: pass default_permisions to FUSE on mount
+  fmt_desc: When set to ``false``, ``ceph-fuse`` utility checks does its own
+    permissions checking, instead of relying on the permissions enforcement in
+    FUSE. Set to ``false`` together with the ``client acl type=posix_acl``
+    option to enable POSIX ACL.
   default: false
   services:
   - mds_client
@@ -349,6 +397,8 @@ options:
   long_desc: Set the maximum number of bytes in a single write operation that may
     pass atomically through FUSE. The FUSE default is 128kB and may be indicated by
     setting this option to 0.
+  fmt_desc: Set the maximum number of bytes in a single write operation. A value of
+    0 indicates no change; the FUSE default of 128 kbytes remains in force.
   default: 0
   services:
   - mds_client

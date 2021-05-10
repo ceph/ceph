@@ -82,18 +82,21 @@ struct fltree_onode_manager_test_t
   virtual seastar::future<> _mkfs() final {
     return TMTestState::_mkfs(
     ).then([this] {
-      return seastar::do_with(
-        tm->create_transaction(),
-        [this](auto &t) {
-          return manager->mkfs(*t
-          ).safe_then([this, &t] {
-            return tm->submit_transaction(std::move(t));
-          }).handle_error(
-            crimson::ct_error::assert_all{
-              "Invalid error in _mkfs"
-            }
-          );
-        });
+      return tm->mount(
+      ).safe_then([this] {
+	return seastar::do_with(
+	  tm->create_transaction(),
+	  [this](auto &t) {
+	    return manager->mkfs(*t
+	    ).safe_then([this, &t] {
+	      return tm->submit_transaction(std::move(t));
+	    });
+	  });
+      }).safe_then([this] {
+	return tm->close();
+      }).handle_error(
+	crimson::ct_error::assert_all{"Invalid error in _mkfs"}
+      );
     });
   }
 

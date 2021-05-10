@@ -273,7 +273,7 @@ public:
   [[gnu::always_inline]]
   auto handle_interruption(Func&& func) {
     return core_type::then_wrapped(
-      [this, func=std::move(func),
+      [func=std::move(func),
       interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable {
       if (fut.failed()) {
 	std::exception_ptr ex = fut.get_exception();

@@ -25,8 +25,10 @@ if(WITH_ZBD)
     zoned/HMSMRDevice.cc)
 endif()
 
-add_library(blk STATIC ${libblk_srcs})
-target_include_directories(blk PRIVATE "./")
+if(libblk_srcs)
+  add_library(blk STATIC ${libblk_srcs})
+  target_include_directories(blk PRIVATE "./")
+endif()
 
 if(HAVE_LIBAIO)
   target_link_libraries(blk PUBLIC ${AIO_LIBRARIES})

@@ -164,7 +164,8 @@ done:
   return r;
 }
 
-static int decode_policy(CephContext *cct,
+static int decode_policy(const DoutPrefixProvider *dpp,
+                         CephContext *cct,
                          bufferlist& bl,
                          RGWAccessControlPolicy *policy)
 {
@@ -172,11 +173,11 @@ static int decode_policy(CephContext *cct,
   try {
     policy->decode(iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     return -EIO;
   }
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
+    ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
     RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
     s3policy->to_xml(*_dout);
     *_dout << dendl;
@@ -185,13 +186,14 @@ static int decode_policy(CephContext *cct,
 }
 
 
-static int get_user_policy_from_attr(CephContext * const cct,
+static int get_user_policy_from_attr(const DoutPrefixProvider *dpp,
+                                     CephContext * const cct,
 				     map<string, bufferlist>& attrs,
 				     RGWAccessControlPolicy& policy    /* out */)
 {
   auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
-    int ret = decode_policy(cct, aiter->second, &policy);
+    int ret = decode_policy(dpp, cct, aiter->second, &policy);
     if (ret < 0) {
       return ret;
     }
@@ -220,14 +222,14 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
   if (aiter != bucket_attrs.end()) {
-    int ret = decode_policy(cct, aiter->second, policy);
+    int ret = decode_policy(dpp, cct, aiter->second, policy);
     if (ret < 0)
       return ret;
   } else {
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
     /* object exists, but policy is broken */
-    int r = user->load_by_id(dpp, y);
+    int r = user->load_user(dpp, y);
     if (r < 0)
       return r;
 
@@ -254,14 +256,14 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
-    ret = decode_policy(cct, bl, policy);
+    ret = decode_policy(dpp, cct, bl, policy);
     if (ret < 0)
       return ret;
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
     std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
-    ret = user->load_by_id(dpp, y);
+    ret = user->load_user(dpp, y);
     if (ret < 0)
       return ret;
 
@@ -488,8 +490,15 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
     if (bucket_owner.compare(s->user->get_id()) != 0 &&
         ! s->auth.identity->is_admin_of(bucket_owner)) {
+      auto r = eval_user_policies(s->iam_user_policies, s->env,
+                                  *s->auth.identity, rgw::IAM::s3ListBucket,
+                                  ARN(bucket->get_key()));
+      if (r == Effect::Allow)
+        return -ENOENT;
+      if (r == Effect::Deny)
+        return -EACCES;
       if (policy) {
-        auto r =  policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
+        r = policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
         if (r == Effect::Allow)
           return -ENOENT;
         if (r == Effect::Deny)
@@ -640,12 +649,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 
   /* handle user ACL only for those APIs which support it */
   if (s->user_acl) {
-    rgw::sal::Attrs uattrs;
     std::unique_ptr<rgw::sal::User> acl_user = store->get_user(acct_acl_user.uid);
 
-    ret = acl_user->read_attrs(dpp, y, &uattrs);
+    ret = acl_user->read_attrs(dpp, y);
     if (!ret) {
-      ret = get_user_policy_from_attr(s->cct, uattrs, *s->user_acl);
+      ret = get_user_policy_from_attr(dpp, s->cct, acl_user->get_attrs(), *s->user_acl);
     }
     if (-ENOENT == ret) {
       /* In already existing clusters users won't have ACL. In such case
@@ -668,10 +676,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
   // hence the check for user type
   if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
     try {
-      rgw::sal::Attrs uattrs;
-      ret = s->user->read_attrs(dpp, y, &uattrs);
+      ret = s->user->read_attrs(dpp, y);
       if (ret == 0) {
-          auto user_policies = get_iam_user_policy_from_attr(s->cct, uattrs, s->user->get_tenant());
+	auto user_policies = get_iam_user_policy_from_attr(s->cct,
+							   s->user->get_attrs(),
+							   s->user->get_tenant());
           s->iam_user_policies.insert(s->iam_user_policies.end(),
                                       std::make_move_iterator(user_policies.begin()),
                                       std::make_move_iterator(user_policies.end()));
@@ -681,7 +690,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
         else ret = -EACCES;
       }
     } catch (const std::exception& e) {
-      lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
+      ldpp_dout(dpp, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
       ret = -EACCES;
     }
   }
@@ -1112,11 +1121,11 @@ int RGWPutBucketTags::verify_permission(optional_yield y) {
 void RGWPutBucketTags::execute(optional_yield y)
 {
 
-  op_ret = get_params(y);
+  op_ret = get_params(this, y);
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
@@ -1142,7 +1151,7 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
 void RGWDeleteBucketTags::execute(optional_yield y)
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1190,7 +1199,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1228,7 +1237,7 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
 void RGWDeleteBucketReplication::execute(optional_yield y)
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1298,7 +1307,7 @@ int RGWOp::init_quota()
   if (s->user->get_id() == s->bucket_owner.get_id()) {
     user = s->user.get();
   } else {
-    int r = owner_user->load_by_id(this, s->yield);
+    int r = owner_user->load_user(this, s->yield);
     if (r < 0)
       return r;
     user = owner_user.get();
@@ -1545,7 +1554,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 	  }
   }
 
-  op_ret = rgw_policy_from_attrset(s->cct, part->get_attrs(), &obj_policy);
+  op_ret = rgw_policy_from_attrset(s, s->cct, part->get_attrs(), &obj_policy);
   if (op_ret < 0)
     return op_ret;
 
@@ -2036,7 +2045,7 @@ static inline void rgw_cond_decode_objtags(
       bufferlist::const_iterator iter{&tags->second};
       s->tagset.decode(iter);
     } catch (buffer::error& err) {
-      ldout(s->cct, 0)
+      ldpp_dout(s, 0)
 	<< "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
     }
   }
@@ -2288,7 +2297,7 @@ void RGWListBuckets::execute(optional_yield y)
   }
 
   if (supports_account_metadata()) {
-    op_ret = s->user->read_attrs(this, s->yield, &attrs);
+    op_ret = s->user->read_attrs(this, s->yield);
     if (op_ret < 0) {
       goto send_end;
     }
@@ -2395,7 +2404,7 @@ void RGWGetUsage::execute(optional_yield y)
   RGWUsageIter usage_iter;
   
   while (s->bucket && is_truncated) {
-    op_ret = s->bucket->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+    op_ret = s->bucket->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
 				   usage_iter, usage);
     if (op_ret == -ENOENT) {
       op_ret = 0;
@@ -2419,7 +2428,7 @@ void RGWGetUsage::execute(optional_yield y)
     return;
   }
 
-  op_ret = s->user->read_stats(y, &stats);
+  op_ret = s->user->read_stats(this, y, &stats);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: can't read user header"  << dendl;
     return;
@@ -2484,7 +2493,7 @@ void RGWStatAccount::execute(optional_yield y)
 
     }
     if (!lastmarker) {
-	lderr(s->cct) << "ERROR: rgw_read_user_buckets, stasis at marker="
+	ldpp_dout(this, -1) << "ERROR: rgw_read_user_buckets, stasis at marker="
 	      << marker << " uid=" << s->user->get_id() << dendl;
 	break;
     }
@@ -2566,7 +2575,7 @@ void RGWSetBucketVersioning::execute(optional_yield y)
     }
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2642,7 +2651,7 @@ void RGWSetBucketWebsite::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2676,7 +2685,7 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
 {
   bufferlist in_data;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
       << "returned err=" << op_ret << dendl;
@@ -3122,7 +3131,7 @@ void RGWCreateBucket::execute(optional_yield y)
   if (need_metadata_upload()) {
     /* It's supposed that following functions WILL NOT change any special
      * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
-    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+    op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
     if (op_ret < 0) {
       return;
     }
@@ -3215,7 +3224,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
       attrs.clear();
 
-      op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+      op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
       if (op_ret < 0) {
         return;
       }
@@ -3293,7 +3302,7 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->sync_user_stats(y);
+  op_ret = s->bucket->sync_user_stats(this, y);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -3304,7 +3313,7 @@ void RGWDeleteBucket::execute(optional_yield y)
   }
 
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), &ot.read_version, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), &ot.read_version, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       /* adjust error, we want to return with NoSuchBucket and not
@@ -3773,7 +3782,7 @@ void RGWPutObj::execute(optional_yield y)
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
 						s, rgw::notify::ObjectCreatedPut);
-  op_ret = res->publish_reserve(obj_tags.get());
+  op_ret = res->publish_reserve(this, obj_tags.get());
   if (op_ret < 0) {
     return;
   }
@@ -4015,7 +4024,7 @@ void RGWPutObj::execute(optional_yield y)
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   populate_with_generic_attrs(s, attrs);
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
   if (op_ret < 0) {
     return;
   }
@@ -4127,7 +4136,7 @@ void RGWPostObj::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(), s, rgw::notify::ObjectCreatedPost);
-  op_ret = res->publish_reserve();
+  op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
   }
@@ -4347,10 +4356,11 @@ int RGWPutMetadataAccount::init_processing(optional_yield y)
     return op_ret;
   }
 
-  op_ret = s->user->read_attrs(this, y, &orig_attrs, &acct_op_tracker);
+  op_ret = s->user->read_attrs(this, y);
   if (op_ret < 0) {
     return op_ret;
   }
+  orig_attrs = s->user->get_attrs();
 
   if (has_policy) {
     bufferlist acl_bl;
@@ -4358,7 +4368,7 @@ int RGWPutMetadataAccount::init_processing(optional_yield y)
     attrs.emplace(RGW_ATTR_ACL, std::move(acl_bl));
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -4407,11 +4417,10 @@ int RGWPutMetadataAccount::verify_permission(optional_yield y)
 void RGWPutMetadataAccount::execute(optional_yield y)
 {
   /* Params have been extracted earlier. See init_processing(). */
-  op_ret = s->user->load_by_id(this, y);
+  op_ret = s->user->load_user(this, y);
   if (op_ret < 0) {
     return;
   }
-  acct_op_tracker = s->user->get_version_tracker();
 
   /* Handle the TempURL-related stuff. */
   if (!temp_url_keys.empty()) {
@@ -4427,10 +4436,8 @@ void RGWPutMetadataAccount::execute(optional_yield y)
 
   /* We are passing here the current (old) user info to allow the function
    * optimize-out some operations. */
-  op_ret = s->user->store_info(this, y, RGWUserCtl::PutParams()
-			     .set_old_info(&s->user->get_info())
-			     .set_objv_tracker(&acct_op_tracker)
-			     .set_attrs(&attrs));
+  s->user->set_attrs(attrs);
+  op_ret = s->user->store_user(this, y, false, &s->user->get_info());
 }
 
 int RGWPutMetadataBucket::verify_permission(optional_yield y)
@@ -4454,7 +4461,7 @@ void RGWPutMetadataBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
   if (op_ret < 0) {
     return;
   }
@@ -4549,7 +4556,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
   if (op_ret < 0) {
     return;
   }
@@ -4764,7 +4771,7 @@ void RGWDeleteObj::execute(optional_yield y)
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
     std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
 									s, event_type);
-    op_ret = res->publish_reserve();
+    op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
       return;
     }
@@ -5033,7 +5040,7 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -5081,7 +5088,7 @@ void RGWCopyObj::execute(optional_yield y)
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
 						s, rgw::notify::ObjectCreatedCopy);
-  op_ret = res->publish_reserve();
+  op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
   }
@@ -5365,7 +5372,7 @@ void RGWPutACLs::execute(optional_yield y)
     if (s->canned_acl.empty()) {
       in_data.append(data);
     }
-    op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+    op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -5390,7 +5397,7 @@ void RGWPutACLs::execute(optional_yield y)
 
   if (s->bucket_access_conf &&
       s->bucket_access_conf->block_public_acls() &&
-      new_policy.is_public()) {
+      new_policy.is_public(this)) {
     op_ret = -EACCES;
     return;
   }
@@ -5490,7 +5497,7 @@ void RGWPutLC::execute(optional_yield y)
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5506,7 +5513,7 @@ void RGWPutLC::execute(optional_yield y)
 void RGWDeleteLC::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5550,7 +5557,7 @@ void RGWPutCORS::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5572,7 +5579,7 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
 void RGWDeleteCORS::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5682,7 +5689,7 @@ void RGWSetRequestPayment::pre_exec()
 void RGWSetRequestPayment::execute(optional_yield y)
 {
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5762,7 +5769,7 @@ void RGWInitMultipart::execute(optional_yield y)
   if (op_ret != 0)
     return;
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
   if (op_ret < 0) {
     return;
   }
@@ -5770,7 +5777,7 @@ void RGWInitMultipart::execute(optional_yield y)
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
 				s, rgw::notify::ObjectCreatedPost);
-  op_ret = res->publish_reserve();
+  op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
   }
@@ -5918,7 +5925,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
 				s, rgw::notify::ObjectCreatedCompleteMultipartUpload);
-  op_ret = res->publish_reserve();
+  op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
   }
@@ -5952,11 +5959,11 @@ void RGWCompleteMultipart::execute(optional_yield y)
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   utime_t dur(max_lock_secs_mp, 0);
 
-  serializer = meta_obj->get_serializer("RGWCompleteMultipart");
-  op_ret = serializer->try_lock(dur, y);
+  serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
+  op_ret = serializer->try_lock(this, dur, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "failed to acquire lock" << dendl;
-    if (op_ret == -ENOENT && check_previously_completed(this, parts)) {
+    if (op_ret == -ENOENT && check_previously_completed(parts)) {
       ldpp_dout(this, 1) << "NOTICE: This multipart completion is already completed" << dendl;
       op_ret = 0;
       return;
@@ -5975,7 +5982,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   attrs = meta_obj->get_attrs();
 
   do {
-    op_ret = list_multipart_parts(s, upload_id, meta_oid, max_parts,
+    op_ret = list_multipart_parts(this, s, upload_id, meta_oid, max_parts,
 				  marker, obj_parts, &marker, &truncated);
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_UPLOAD;
@@ -6032,7 +6039,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
         op_ret = -ERR_INVALID_PART;
         return;
       } else {
-        manifest.append(obj_part.manifest, store->get_zone());
+        manifest.append(this, obj_part.manifest, store->get_zone());
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
@@ -6144,13 +6151,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 }
 
-bool RGWCompleteMultipart::check_previously_completed(const DoutPrefixProvider* dpp, const RGWMultiCompleteUpload* parts)
+bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUpload* parts)
 {
   // re-calculate the etag from the parts and compare to the existing object
   s->object->set_bucket(s->bucket.get());
   int ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, this);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << __func__ << "() ERROR: get_obj_attrs() returned ret=" << ret << dendl;
+    ldpp_dout(this, 0) << __func__ << "() ERROR: get_obj_attrs() returned ret=" << ret << dendl;
     return false;
   }
   rgw::sal::Attrs sattrs = s->object->get_attrs();
@@ -6162,7 +6169,7 @@ bool RGWCompleteMultipart::check_previously_completed(const DoutPrefixProvider* 
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     hex_to_buf(partetag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
     hash.Update((const unsigned char *)petag, sizeof(petag));
-    ldpp_dout(dpp, 20) << __func__ << "() re-calculating multipart etag: part: "
+    ldpp_dout(this, 20) << __func__ << "() re-calculating multipart etag: part: "
                                    << index << ", etag: " << partetag << dendl;
   }
 
@@ -6174,11 +6181,11 @@ bool RGWCompleteMultipart::check_previously_completed(const DoutPrefixProvider* 
            "-%lld", (long long)parts->parts.size());
 
   if (oetag.compare(final_etag_str) != 0) {
-    ldpp_dout(dpp, 1) << __func__ << "() NOTICE: etag mismatch: object etag:"
+    ldpp_dout(this, 1) << __func__ << "() NOTICE: etag mismatch: object etag:"
                                   << oetag << ", re-calculated etag:" << final_etag_str << dendl;
     return false;
   }
-  ldpp_dout(dpp, 5) << __func__ << "() object etag and re-calculated etag match, etag: " << oetag << dendl;
+  ldpp_dout(this, 5) << __func__ << "() object etag and re-calculated etag match, etag: " << oetag << dendl;
   return true;
 }
 
@@ -6283,7 +6290,7 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = list_multipart_parts(s, upload_id, meta_oid, max_parts,
+  op_ret = list_multipart_parts(this, s, upload_id, meta_oid, max_parts,
 				marker, parts, NULL, &truncated);
 }
 
@@ -6544,7 +6551,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
     std::unique_ptr<rgw::sal::Notification> res = store->get_notification(obj.get(),
 									s, event_type);
-    op_ret = res->publish_reserve();
+    op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
       send_partial_response(*iter, false, "", op_ret);
       continue;
@@ -7527,7 +7534,7 @@ int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yiel
 {
   int ret = rgw_build_bucket_policies(dpp, store, s, y);
   if (ret < 0) {
-    ldpp_dout(s, 10) << "init_permissions on " << s->bucket
+    ldpp_dout(dpp, 10) << "init_permissions on " << s->bucket
         << " failed, ret=" << ret << dendl;
     return ret==-ENODATA ? -EACCES : ret;
   }
@@ -7620,7 +7627,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -7755,7 +7762,7 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
   try {
     RGWXMLDecoder::decode_xml("ObjectLockConfiguration", obj_lock, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
-    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
+    ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -7766,9 +7773,9 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
-    ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+    ldpp_dout(this, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
 
@@ -7925,7 +7932,7 @@ void RGWGetObjRetention::execute(optional_yield y)
   try {
     obj_retention.decode(iter);
   } catch (const buffer::error& e) {
-    ldout(s->cct, 0) << __func__ <<  "decode object retention config failed" << dendl;
+    ldpp_dout(this, 0) << __func__ <<  "decode object retention config failed" << dendl;
     op_ret = -EIO;
     return;
   }
@@ -7972,7 +7979,7 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
   try {
     RGWXMLDecoder::decode_xml("LegalHold", obj_legal_hold, &parser, true);
   } catch (RGWXMLDecoder::err &err) {
-    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
+    ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -8021,7 +8028,7 @@ void RGWGetObjLegalHold::execute(optional_yield y)
   try {
     obj_legal_hold.decode(iter);
   } catch (const buffer::error& e) {
-    ldout(s->cct, 0) << __func__ <<  "decode object legal hold config failed" << dendl;
+    ldpp_dout(this, 0) << __func__ <<  "decode object legal hold config failed" << dendl;
     op_ret = -EIO;
     return;
   }
@@ -8044,7 +8051,7 @@ int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
 
 void RGWGetBucketPolicyStatus::execute(optional_yield y)
 {
-  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl->is_public();
+  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl->is_public(this);
 }
 
 int RGWPutBucketPublicAccessBlock::verify_permission(optional_yield y)
@@ -8090,7 +8097,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

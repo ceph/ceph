@@ -5,6 +5,96 @@ Pacific
 Pacific is the 16th stable release of Ceph.  It is named after the
 giant pacific octopus (Enteroctopus dofleini).
 
+v16.2.3 Pacific
+===============
+
+This is the third backport release in the Pacific series.  We recommend all users
+update to this release.
+
+Notable Changes
+---------------
+
+* This release fixes a cephadm upgrade bug that caused some systems to get stuck in a loop
+  restarting the first mgr daemon.
+
+
+v16.2.2 Pacific
+===============
+
+This is the second backport release in the Pacific series. We recommend all
+users update to this release.
+
+Notable Changes
+---------------
+
+* Cephadm now supports an *ingress* service type that provides load
+  balancing and HA (via haproxy and keepalived on a virtual IP) for
+  RGW service (see :ref:`orchestrator-haproxy-service-spec`).  (The experimental
+  *rgw-ha* service has been removed.)
+
+Changelog
+---------
+
+* ceph-fuse: src/include/buffer.h: 1187: FAILED ceph_assert(_num <= 1024) (`pr#40628 <https://github.com/ceph/ceph/pull/40628>`_, Yanhu Cao)
+* ceph-volume: fix "device" output (`pr#41054 <https://github.com/ceph/ceph/pull/41054>`_, Sébastien Han)
+* ceph-volume: fix raw listing when finding OSDs from different clusters (`pr#40985 <https://github.com/ceph/ceph/pull/40985>`_, Sébastien Han)
+* ceph.spec.in: Enable tcmalloc on IBM Power and Z (`pr#39488 <https://github.com/ceph/ceph/pull/39488>`_, Nathan Cutler, Yaakov Selkowitz)
+* cephadm april batch 3 (`issue#49737 <http://tracker.ceph.com/issues/49737>`_, `pr#40922 <https://github.com/ceph/ceph/pull/40922>`_, Adam King, Sage Weil, Daniel Pivonka, Shreyaa Sharma, Sebastian Wagner, Juan Miguel Olmo Martínez, Zac Dover, Jeff Layton, Guillaume Abrioux, 胡玮文, Melissa Li, Nathan Cutler, Yaakov Selkowitz)
+* cephadm: april batch 1 (`pr#40544 <https://github.com/ceph/ceph/pull/40544>`_, Sage Weil, Daniel Pivonka, Joao Eduardo Luis, Adam King)
+* cephadm: april batch backport 2 (`pr#40746 <https://github.com/ceph/ceph/pull/40746>`_, Guillaume Abrioux, Sage Weil, Paul Cuzner)
+* cephadm: specify addr on bootstrap's host add (`pr#40554 <https://github.com/ceph/ceph/pull/40554>`_, Joao Eduardo Luis)
+* cephfs: minor ceph-dokan improvements (`pr#40627 <https://github.com/ceph/ceph/pull/40627>`_, Lucian Petrut)
+* client: items pinned in cache preventing unmount (`pr#40629 <https://github.com/ceph/ceph/pull/40629>`_, Xiubo Li)
+* client: only check pool permissions for regular files (`pr#40686 <https://github.com/ceph/ceph/pull/40686>`_, Xiubo Li)
+* cmake: define BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT globally (`pr#40706 <https://github.com/ceph/ceph/pull/40706>`_, Kefu Chai)
+* cmake: pass unparsed args to add_ceph_test() (`pr#40523 <https://github.com/ceph/ceph/pull/40523>`_, Kefu Chai)
+* cmake: use --smp 1 --memory 256M to crimson tests (`pr#40568 <https://github.com/ceph/ceph/pull/40568>`_, Kefu Chai)
+* crush/CrushLocation: do not print logging message in constructor (`pr#40679 <https://github.com/ceph/ceph/pull/40679>`_, Alex Wu)
+* doc/cephfs/nfs: add user id, fs name and key to FSAL block (`pr#40687 <https://github.com/ceph/ceph/pull/40687>`_, Varsha Rao)
+* include/librados: fix doxygen syntax for docs build (`pr#40805 <https://github.com/ceph/ceph/pull/40805>`_, Josh Durgin)
+* mds: "cluster [WRN] Scrub error on inode 0x1000000039d (/client.0/tmp/blogbench-1.0/src/blogtest_in) see mds.a log and `damage ls` output for details" (`pr#40825 <https://github.com/ceph/ceph/pull/40825>`_, Milind Changire)
+* mds: skip the buffer in UnknownPayload::decode() (`pr#40682 <https://github.com/ceph/ceph/pull/40682>`_, Xiubo Li)
+* mgr/PyModule: put mgr_module_path before Py_GetPath() (`pr#40517 <https://github.com/ceph/ceph/pull/40517>`_, Kefu Chai)
+* mgr/dashboard: Device health status is not getting listed under hosts section (`pr#40494 <https://github.com/ceph/ceph/pull/40494>`_, Aashish Sharma)
+* mgr/dashboard: Fix for alert notification message being undefined (`pr#40588 <https://github.com/ceph/ceph/pull/40588>`_, Nizamudeen A)
+* mgr/dashboard: Fix for broken User management role cloning (`pr#40398 <https://github.com/ceph/ceph/pull/40398>`_, Nizamudeen A)
+* mgr/dashboard: Improve descriptions in some parts of the dashboard (`pr#40545 <https://github.com/ceph/ceph/pull/40545>`_, Nizamudeen A)
+* mgr/dashboard: Remove username and password from request body (`pr#40981 <https://github.com/ceph/ceph/pull/40981>`_, Nizamudeen A)
+* mgr/dashboard: Remove username, password fields from Manager Modules/dashboard,influx (`pr#40489 <https://github.com/ceph/ceph/pull/40489>`_, Aashish Sharma)
+* mgr/dashboard: Revoke read-only user's access to Manager modules (`pr#40648 <https://github.com/ceph/ceph/pull/40648>`_, Nizamudeen A)
+* mgr/dashboard: Unable to login to ceph dashboard until clearing cookies manually (`pr#40586 <https://github.com/ceph/ceph/pull/40586>`_, Avan Thakkar)
+* mgr/dashboard: debug nodeenv hangs (`pr#40815 <https://github.com/ceph/ceph/pull/40815>`_, Ernesto Puerta)
+* mgr/dashboard: filesystem pool size should use stored stat (`pr#40980 <https://github.com/ceph/ceph/pull/40980>`_, Avan Thakkar)
+* mgr/dashboard: fix broken feature toggles (`pr#40474 <https://github.com/ceph/ceph/pull/40474>`_, Ernesto Puerta)
+* mgr/dashboard: fix duplicated rows when creating NFS export (`pr#40990 <https://github.com/ceph/ceph/pull/40990>`_, Alfonso Martínez)
+* mgr/dashboard: fix errors when creating NFS export (`pr#40822 <https://github.com/ceph/ceph/pull/40822>`_, Alfonso Martínez)
+* mgr/dashboard: improve telemetry opt-in reminder notification message (`pr#40887 <https://github.com/ceph/ceph/pull/40887>`_, Waad Alkhoury)
+* mgr/dashboard: test prometheus rules through promtool (`pr#40929 <https://github.com/ceph/ceph/pull/40929>`_, Aashish Sharma, Kefu Chai)
+* mon: Modifying trim logic to change paxos_service_trim_max dynamically (`pr#40691 <https://github.com/ceph/ceph/pull/40691>`_, Aishwarya Mathuria)
+* monmaptool: Don't call set_port on an invalid address (`pr#40690 <https://github.com/ceph/ceph/pull/40690>`_, Brad Hubbard, Kefu Chai)
+* os/FileStore: don't propagate split/merge error to "create"/"remove" (`pr#40989 <https://github.com/ceph/ceph/pull/40989>`_, Mykola Golub)
+* os/bluestore/BlueFS: do not _flush_range deleted files (`pr#40677 <https://github.com/ceph/ceph/pull/40677>`_, weixinwei)
+* osd/PeeringState: fix acting_set_writeable min_size check (`pr#40759 <https://github.com/ceph/ceph/pull/40759>`_, Samuel Just)
+* packaging: require ceph-common for immutable object cache daemon (`pr#40665 <https://github.com/ceph/ceph/pull/40665>`_, Ilya Dryomov)
+* pybind/mgr/volumes: deadlock on async job hangs finisher thread (`pr#40630 <https://github.com/ceph/ceph/pull/40630>`_, Kefu Chai, Patrick Donnelly)
+* qa/suites/krbd: don't require CEPHX_V2 for unmap subsuite (`pr#40826 <https://github.com/ceph/ceph/pull/40826>`_, Ilya Dryomov)
+* qa/suites/rados/cephadm: stop testing on broken focal kubic podman (`pr#40512 <https://github.com/ceph/ceph/pull/40512>`_, Sage Weil)
+* qa/tasks/ceph.conf: shorten cephx TTL for testing (`pr#40663 <https://github.com/ceph/ceph/pull/40663>`_, Sage Weil)
+* qa/tasks/cephfs: create enough subvolumes (`pr#40688 <https://github.com/ceph/ceph/pull/40688>`_, Ramana Raja)
+* qa/tasks/vstart_runner.py: start max required mgrs (`pr#40612 <https://github.com/ceph/ceph/pull/40612>`_, Alfonso Martínez)
+* qa/tasks: Add wait_for_clean() check prior to initiating scrubbing (`pr#40461 <https://github.com/ceph/ceph/pull/40461>`_, Sridhar Seshasayee)
+* qa: "AttributeError: 'NoneType' object has no attribute 'mon_manager'" (`pr#40645 <https://github.com/ceph/ceph/pull/40645>`_, Rishabh Dave)
+* qa: "log [ERR] : error reading sessionmap 'mds2_sessionmap'" (`pr#40852 <https://github.com/ceph/ceph/pull/40852>`_, Patrick Donnelly)
+* qa: fix ino_release_cb racy behavior (`pr#40683 <https://github.com/ceph/ceph/pull/40683>`_, Patrick Donnelly)
+* qa: fs:cephadm mount does not wait for mds to be created (`pr#40528 <https://github.com/ceph/ceph/pull/40528>`_, Patrick Donnelly)
+* qa: test standby_replay in workloads (`pr#40853 <https://github.com/ceph/ceph/pull/40853>`_, Patrick Donnelly)
+* rbd-mirror: fix UB while registering perf counters (`pr#40680 <https://github.com/ceph/ceph/pull/40680>`_, Arthur Outhenin-Chalandre)
+* rgw: add latency to the request summary of an op (`pr#40448 <https://github.com/ceph/ceph/pull/40448>`_, Ali Maredia)
+* rgw: Backport of datalog improvements to Pacific (`pr#40559 <https://github.com/ceph/ceph/pull/40559>`_, Yuval Lifshitz, Adam C. Emerson)
+* test: disable mgr/mirroring for `test_mirroring_init_failure_with_recovery` test (`issue#50020 <http://tracker.ceph.com/issues/50020>`_, `pr#40684 <https://github.com/ceph/ceph/pull/40684>`_, Venky Shankar)
+* tools/cephfs_mirror/PeerReplayer.cc: add missing include (`pr#40678 <https://github.com/ceph/ceph/pull/40678>`_, Duncan Bellamy)
+* vstart.sh: disable "auth_allow_insecure_global_id_reclaim" (`pr#40957 <https://github.com/ceph/ceph/pull/40957>`_, Kefu Chai)
+
 
 v16.2.1 Pacific
 ===============

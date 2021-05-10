@@ -175,7 +175,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
     dump_account_metadata(s,
             global_stats,
             policies_stats,
-            attrs,
+            s->user->get_attrs(),
             s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
@@ -281,7 +281,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
     dump_account_metadata(s,
             global_stats,
             policies_stats,
-            attrs,
+            s->user->get_attrs(),
             s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
@@ -545,7 +545,8 @@ static void dump_container_metadata(struct req_state *s,
 void RGWStatAccount_ObjStore_SWIFT::execute(optional_yield y)
 {
   RGWStatAccount_ObjStore::execute(y);
-  op_ret = s->user->read_attrs(s, s->yield, &attrs);
+  op_ret = s->user->read_attrs(s, s->yield);
+  attrs = s->user->get_attrs();
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
@@ -623,7 +624,7 @@ static int get_swift_container_settings(req_state * const s,
     RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
     int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
     if (r < 0) {
-      dout(0) << "Error creating/updating the cors configuration" << dendl;
+      ldpp_dout(s, 0) << "Error creating/updating the cors configuration" << dendl;
       delete swift_cors;
       return r;
     }
@@ -2082,7 +2083,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
       const rgw_user tenanted_uid(uid.id, uid.id);
       user = store->get_user(tenanted_uid);
 
-      if (user->load_by_id(s, s->yield) >= 0) {
+      if (user->load_user(s, s->yield) >= 0) {
         /* Succeeded. */
         found = true;
       }
@@ -2090,7 +2091,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
     if (!found) {
       user = store->get_user(uid);
-      if (user->load_by_id(s, s->yield) < 0) {
+      if (user->load_user(s, s->yield) < 0) {
 	throw -EPERM;
       }
     }
@@ -2107,7 +2108,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
                  << dendl;
 
   user = store->get_user(bucket->get_info().owner);
-  if (user->load_by_id(s, s->yield) < 0) {
+  if (user->load_user(s, s->yield) < 0) {
     throw -EPERM;
   }
 
@@ -3005,7 +3006,7 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Store* store,
 
   next_tok(req, first, '/');
 
-  dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
+  ldpp_dout(s, 10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
   if (first.size() == 0)
     return 0;
 

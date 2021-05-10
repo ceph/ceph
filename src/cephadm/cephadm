@@ -2327,19 +2327,20 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             # these do not search for their keyrings in a data directory
             mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
 
-    if daemon_type in ['mon', 'osd']:
+    if daemon_type in ['mon', 'osd', 'clusterless-ceph-volume']:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
         mounts['/run/udev'] = '/run/udev'
-    if daemon_type == 'osd':
+    if daemon_type in ['osd', 'clusterless-ceph-volume']:
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
+        mounts['/run/lvm'] = '/run/lvm'
+        mounts['/run/lock/lvm'] = '/run/lock/lvm'
+    if daemon_type == 'osd':
         # selinux-policy in the container may not match the host.
         if HostFacts(ctx).selinux_enabled:
             selinux_folder = '/var/lib/ceph/%s/selinux' % fsid
             if not os.path.exists(selinux_folder):
                 os.makedirs(selinux_folder, mode=0o755)
             mounts[selinux_folder] = '/sys/fs/selinux:ro'
-        mounts['/run/lvm'] = '/run/lvm'
-        mounts['/run/lock/lvm'] = '/run/lock/lvm'
 
     try:
         if ctx.shared_ceph_folder:  # make easy manager modules/ceph-volume development
@@ -3174,6 +3175,8 @@ class CephContainer:
 
         if self.host_network:
             cmd_args.append('--net=host')
+        if self.ctx.no_hosts:
+            cmd_args.append('--no-hosts')
         if self.privileged:
             cmd_args.extend([
                 '--privileged',
@@ -3963,6 +3966,12 @@ def command_bootstrap(ctx):
             except PermissionError:
                 raise Error(f'Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.')
 
+    if ctx.config and os.path.exists(ctx.config):
+        with open(ctx.config) as f:
+            user_conf = f.read()
+    else:
+        user_conf = None
+
     if not ctx.skip_prepare_host:
         command_prepare_host(ctx)
     else:
@@ -4057,6 +4066,19 @@ def command_bootstrap(ctx):
     # create mgr
     create_mgr(ctx, uid, gid, fsid, mgr_id, mgr_key, config, cli)
 
+    if user_conf:
+        # user given config settings were already assimilated earlier
+        # but if the given settings contained any attributes in
+        # the mgr (e.g. mgr/cephadm/container_image_prometheus)
+        # they don't seem to be stored if there isn't a mgr yet.
+        # Since re-assimilating the same conf settings should be
+        # idempotent we can just do it aain here.
+        with tempfile.NamedTemporaryFile(buffering=0) as tmp:
+            tmp.write(user_conf.encode('utf-8'))
+            cli(['config', 'assimilate-conf',
+                 '-i', '/var/lib/ceph/user.conf'],
+                {tmp.name: '/var/lib/ceph/user.conf:z'})
+
     def json_loads_retry(cli_func):
         for sleep_secs in [1, 4, 4]:
             try:
@@ -4127,6 +4149,14 @@ def command_bootstrap(ctx):
 
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
+
+    if ctx.output_config == '/etc/ceph/ceph.conf' and not ctx.skip_admin_label:
+        logger.info('Enabling client.admin keyring and conf on hosts with "admin" label')
+        try:
+            cli(['orch', 'client-keyring', 'set', 'client.admin', 'label:_admin'])
+            cli(['orch', 'host', 'label', 'add', get_hostname(), '_admin'])
+        except Exception:
+            logger.info('Unable to set up "admin" label; assuming older version of Ceph')
 
     if ctx.apply_spec:
         logger.info('Applying %s to cluster' % ctx.apply_spec)
@@ -4542,8 +4572,8 @@ def command_ceph_volume(ctx):
         privileged=True,
         volume_mounts=mounts,
     )
-    verbosity = CallVerbosity.VERBOSE if ctx.log_output else CallVerbosity.VERBOSE_ON_FAILURE
-    out, err, code = call_throws(ctx, c.run_cmd(), verbosity=verbosity)
+
+    out, err, code = call_throws(ctx, c.run_cmd())
     if not code:
         print(out)
 
@@ -4831,7 +4861,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     ],
                                     verbosity=CallVerbosity.DEBUG)
                                 if not code:
-                                    image_digests = out.strip()[1:-1].split(' ')
+                                    image_digests = list(set(map(
+                                        normalize_image_digest,
+                                        out.strip()[1:-1].split(' '))))
                                     seen_digests[image_id] = image_digests
 
                             # identify software version inside the container (if we can)
@@ -5372,6 +5404,68 @@ def command_rm_daemon(ctx):
 ##################################
 
 
+def _zap(ctx, what):
+    mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
+    c = CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/sbin/ceph-volume',
+        envs=ctx.env,
+        args=['lvm', 'zap', '--destroy', what],
+        privileged=True,
+        volume_mounts=mounts,
+    )
+    logger.info(f'Zapping {what}...')
+    out, err, code = call_throws(ctx, c.run_cmd())
+
+
+@infer_image
+def _zap_osds(ctx):
+    # assume fsid lock already held
+
+    # list
+    mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
+    c = CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/sbin/ceph-volume',
+        envs=ctx.env,
+        args=['inventory', '--format', 'json'],
+        privileged=True,
+        volume_mounts=mounts,
+    )
+    out, err, code = call_throws(ctx, c.run_cmd())
+    if code:
+        raise Error('failed to list osd inventory')
+    try:
+        ls = json.loads(out)
+    except ValueError as e:
+        raise Error(f'Invalid JSON in ceph-volume inventory: {e}')
+
+    for i in ls:
+        matches = [lv.get('cluster_fsid') == ctx.fsid for lv in i.get('lvs', [])]
+        if any(matches) and all(matches):
+            _zap(ctx, i.get('path'))
+        elif any(matches):
+            lv_names = [lv['name'] for lv in i.get('lvs', [])]
+            # TODO: we need to map the lv_names back to device paths (the vg
+            # id isn't part of the output here!)
+            logger.warning(f'Not zapping LVs (not implemented): {lv_names}')
+
+
+def command_zap_osds(ctx):
+    if not ctx.force:
+        raise Error('must pass --force to proceed: '
+                    'this command may destroy precious data!')
+
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+
+    _zap_osds(ctx)
+
+##################################
+
+
 def command_rm_cluster(ctx):
     # type: (CephadmContext) -> None
     if not ctx.force:
@@ -5408,6 +5502,10 @@ def command_rm_cluster(ctx):
     call(ctx, ['systemctl', 'stop', slice_name],
          verbosity=CallVerbosity.DEBUG)
 
+    # osds?
+    if ctx.zap_osds:
+        _zap_osds(ctx)
+
     # rm units
     call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
                       '/ceph-%s@.service' % ctx.fsid])
@@ -5439,6 +5537,7 @@ def command_rm_cluster(ctx):
             for n in range(0, len(files)):
                 if os.path.exists(files[n]):
                     os.remove(files[n])
+
 
 ##################################
 
@@ -5775,6 +5874,7 @@ class YumDnf(Packager):
         'centos': ('centos', 'el'),
         'rhel': ('centos', 'el'),
         'scientific': ('centos', 'el'),
+        'rocky': ('centos', 'el'),
         'fedora': ('fedora', 'fc'),
     }
 
@@ -6982,7 +7082,6 @@ class CephadmDaemon():
         # expects to use
         self.ctx.command = 'inventory --format=json'.split()
         self.ctx.fsid = self.fsid
-        self.ctx.log_output = False
 
         ctr = 0
         exception_encountered = False
@@ -7519,6 +7618,10 @@ def _get_parser():
         '--keep-logs',
         action='store_true',
         help='do not remove log files')
+    parser_rm_cluster.add_argument(
+        '--zap-osds',
+        action='store_true',
+        help='zap OSD devices for this cluster')
 
     parser_run = subparsers.add_parser(
         'run', help='run a ceph daemon, in a container, in the foreground')
@@ -7562,6 +7665,10 @@ def _get_parser():
     parser_shell.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command (optional)')
+    parser_shell.add_argument(
+        '--no-hosts',
+        action='store_true',
+        help='dont pass /etc/hosts through to the container')
 
     parser_enter = subparsers.add_parser(
         'enter', help='run an interactive shell inside a running daemon container')
@@ -7593,13 +7700,20 @@ def _get_parser():
         '--keyring', '-k',
         help='ceph.keyring to pass through to the container')
     parser_ceph_volume.add_argument(
-        '--log-output',
-        action='store_true',
-        default=True,
-        help='suppress ceph volume output from the log')
-    parser_ceph_volume.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
+
+    parser_zap_osds = subparsers.add_parser(
+        'zap-osds', help='zap all OSDs associated with a particular fsid')
+    parser_zap_osds.set_defaults(func=command_zap_osds)
+    parser_zap_osds.add_argument(
+        '--fsid',
+        required=True,
+        help='cluster FSID')
+    parser_zap_osds.add_argument(
+        '--force',
+        action='store_true',
+        help='proceed, even though this may destroy valuable data')
 
     parser_unit = subparsers.add_parser(
         'unit', help="operate on the daemon's systemd unit")
@@ -7665,6 +7779,10 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--output-pub-ssh-key',
         help="location to write the cluster's public SSH key")
+    parser_bootstrap.add_argument(
+        '--skip-admin-label',
+        action='store_true',
+        help='do not create admin label for ceph.conf and client.admin keyring distribution')
     parser_bootstrap.add_argument(
         '--skip-ssh',
         action='store_true',

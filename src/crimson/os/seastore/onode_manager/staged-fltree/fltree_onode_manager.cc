@@ -17,7 +17,7 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   const ghobject_t &hoid) {
   return tree.find(
     trans, hoid
-  ).safe_then([this, &trans, &hoid](auto cursor)
+  ).safe_then([this, &hoid](auto cursor)
 	      -> get_onode_ret {
     if (cursor == tree.end()) {
       logger().debug(
@@ -49,7 +49,7 @@ FLTreeOnodeManager::get_or_create_onode(
   return tree.insert(
     trans, hoid,
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
-  ).safe_then([this, &trans, &hoid](auto p)
+  ).safe_then([&trans, &hoid](auto p)
 	      -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
     auto val = OnodeRef(new FLTreeOnode(cursor.value()));
@@ -83,7 +83,7 @@ FLTreeOnodeManager::get_or_create_onodes(
 	hoids,
 	[this, &trans, &ret](auto &hoid) {
 	  return get_or_create_onode(trans, hoid
-	  ).safe_then([this, &ret](auto &&onoderef) {
+	  ).safe_then([&ret](auto &&onoderef) {
 	    ret.push_back(std::move(onoderef));
 	  });
 	}).safe_then([&ret] {
@@ -105,7 +105,7 @@ FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
 	return seastar::now();
       }
       case FLTreeOnode::status_t::DELETED: {
-	return tree.erase(trans, flonode).safe_then([](auto) {});
+	return tree.erase(trans, flonode);
       }
       case FLTreeOnode::status_t::STABLE: {
 	return seastar::now();

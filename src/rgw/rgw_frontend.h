@@ -249,7 +249,7 @@ public:
     rgw_user uid(uid_str);
     std::unique_ptr<rgw::sal::User> user = env.store->get_user(uid);
 
-    int ret = user->load_by_id(this, null_yield);
+    int ret = user->load_user(this, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
