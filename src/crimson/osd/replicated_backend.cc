@@ -67,7 +67,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       if (pg_shard == whoami) {
         return shard_services.get_store().do_transaction(coll,std::move(txn));
       } else {
-        auto m = make_message<MOSDRepOp>(req_id, whoami,
+        auto m = crimson::net::make_message<MOSDRepOp>(req_id, whoami,
                                          spg_t{pgid, pg_shard.shard}, hoid,
                                          CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
                                          map_epoch, min_epoch,

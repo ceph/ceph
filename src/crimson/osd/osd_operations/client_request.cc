@@ -172,7 +172,7 @@ ClientRequest::process_op(Ref<PG> &pg)
       [this, pg](bool completed, int ret) mutable
       -> PG::load_obc_iertr::future<> {
       if (completed) {
-        auto reply = make_message<MOSDOpReply>(
+        auto reply = crimson::net::make_message<MOSDOpReply>(
           m.get(), ret, pg->get_osdmap_epoch(),
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
         return conn->send(std::move(reply));
@@ -231,7 +231,7 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
       return seastar::now();
     } else if (const hobject_t& hoid = m->get_hobj();
                !pg->get_peering_state().can_serve_replica_read(hoid)) {
-      auto reply = make_message<MOSDOpReply>(
+      auto reply = crimson::net::make_message<MOSDOpReply>(
 	m.get(), -EAGAIN, pg->get_osdmap_epoch(),
 	m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
 	!m->has_flag(CEPH_OSD_FLAG_RETURNVEC));

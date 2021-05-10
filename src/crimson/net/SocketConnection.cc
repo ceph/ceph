@@ -69,6 +69,12 @@ bool SocketConnection::peer_wins() const
   return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
+seastar::future<> SocketConnection::send(MessageURef msg)
+{
+  assert(seastar::this_shard_id() == shard_id());
+  return protocol->send(MessageRef{msg.release()});
+}
+
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
   assert(seastar::this_shard_id() == shard_id());
