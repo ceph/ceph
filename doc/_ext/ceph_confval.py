@@ -56,6 +56,12 @@ TEMPLATE = '''
 {%- elif opt.max is defined %}
    :max: ``{{ opt.max }}``
 {%- endif %}
+{%- if opt.constraint %}
+   :constraint: {{ opt.constraint }}
+{% endif %}
+{%- if opt.policies %}
+   :policies: {{ opt.policies }}
+{% endif %}
 {%- if opt.see_also %}
    :see also: {{ opt.see_also | map('ref_confval') | join(', ') }}
 {%- endif %}
