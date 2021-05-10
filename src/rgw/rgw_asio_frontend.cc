@@ -250,7 +250,10 @@ void handle_connection(boost::asio::io_context& context,
                                   rgw::io::add_conlen_controlling(
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
-      auto y = optional_yield{context, yield};
+      optional_yield y = null_yield;
+      if (cct->_conf->rgw_beast_enable_async) {
+        y = optional_yield{context, yield};
+      }
       int http_ret = 0;
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
