@@ -269,11 +269,15 @@ class MetricCollectionThread(threading.Thread):
 class Module(MgrModule):
     MODULE_OPTIONS = [
         Option(
-            'server_addr'
+            'server_addr',
+            default=get_default_addr(),
+            desc='the IPv4 or IPv6 address on which the module listens for HTTP requests',
         ),
         Option(
             'server_port',
-            type='int'
+            type='int',
+            default=DEFAULT_PORT,
+            desc='the port on which the module listens for HTTP requests'
         ),
         Option(
             'scrape_interval',
