@@ -1,4 +1,3 @@
-import { APP_BASE_HREF } from '@angular/common';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
@@ -40,10 +39,6 @@ import { SharedModule } from './shared/shared.module';
       provide: HTTP_INTERCEPTORS,
       useClass: ApiInterceptorService,
       multi: true
-    },
-    {
-      provide: APP_BASE_HREF,
-      useValue: window['base-href']
     }
   ],
   bootstrap: [AppComponent]
