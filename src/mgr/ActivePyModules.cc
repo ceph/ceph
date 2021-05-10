@@ -23,6 +23,7 @@
 #include "mon/MonMap.h"
 
 #include "mgr/MgrContext.h"
+#include "mgr/Injector.h"
 
 // For ::mgr_store_prefix
 #include "PyModule.h"
@@ -169,6 +170,9 @@ PyObject *ActivePyModules::get_daemon_status_python(
 
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
+  /* INJECT */
+  PyObject *injected_map = Injector::get_python(what);
+  if (injected_map != nullptr) return injected_map;
   PyFormatter f;
 
   // Drop the GIL, as most of the following blocks will block on
@@ -1228,7 +1232,7 @@ void ActivePyModules::config_notify()
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "notify (config) " << name << dendl;
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module](int r){ 
+    finisher.queue(new LambdaContext([module=module](int r){
       module->config_notify();
     }));
   }
