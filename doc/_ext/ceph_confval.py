@@ -339,8 +339,12 @@ class CephOption(ObjectDescription):
         CephOption.mgr_opts[module] = dict((opt['name'], opt) for opt in opts)
         return CephOption.mgr_opts[module]
 
+    def _current_module(self) -> str:
+        return self.options.get('module',
+                                self.env.ref_context.get('ceph:module'))
+
     def _render_option(self, name) -> str:
-        cur_module = self.env.ref_context.get('ceph:module')
+        cur_module = self._current_module()
         if cur_module:
             opt = self._load_module(cur_module).get(name)
         else:
@@ -369,8 +373,7 @@ class CephOption(ObjectDescription):
         signode += addnodes.desc_name(sig, sig)
         # normalize whitespace like XRefRole does
         name = ws_re.sub(' ', sig)
-        cur_module = self.options.get('module',
-                                      self.env.ref_context.get('ceph:module'))
+        cur_module = self._current_module()
         if cur_module:
             return '/'.join(['mgr', cur_module, name])
         else:
