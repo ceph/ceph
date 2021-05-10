@@ -283,7 +283,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = actual_bucket->link(dpp, user, null_yield);
+	  r = actual_bucket->chown(dpp, user, nullptr, null_yield);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -537,131 +537,6 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
   return false;
 }
 
-int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp,
-                    std::string *err_msg)
-{
-  if (!op_state.is_user_op()) {
-    set_err_msg(err_msg, "empty user id");
-    return -EINVAL;
-  }
-
-  string bucket_id = op_state.get_bucket_id();
-  std::string display_name = op_state.get_user_display_name();
-  std::unique_ptr<rgw::sal::Bucket> loc_bucket;
-  std::unique_ptr<rgw::sal::Bucket> old_bucket;
-
-  loc_bucket = op_state.get_bucket()->clone();
-
-  if (!bucket_id.empty() && bucket_id != loc_bucket->get_bucket_id()) {
-    set_err_msg(err_msg,
-	"specified bucket id does not match " + loc_bucket->get_bucket_id());
-    return -EINVAL;
-  }
-
-  old_bucket = loc_bucket->clone();
-
-  loc_bucket->get_key().tenant = op_state.get_user_id().tenant;
-
-  if (!op_state.new_bucket_name.empty()) {
-    auto pos = op_state.new_bucket_name.find('/');
-    if (pos != string::npos) {
-      loc_bucket->get_key().tenant = op_state.new_bucket_name.substr(0, pos);
-      loc_bucket->get_key().name = op_state.new_bucket_name.substr(pos + 1);
-    } else {
-      loc_bucket->get_key().name = op_state.new_bucket_name;
-    }
-  }
-
-  RGWObjVersionTracker objv_tracker;
-  RGWObjVersionTracker old_version = loc_bucket->get_info().objv_tracker;
-
-  map<string, bufferlist>::iterator aiter = loc_bucket->get_attrs().find(RGW_ATTR_ACL);
-  if (aiter == loc_bucket->get_attrs().end()) {
-	// should never happen; only pre-argonaut buckets lacked this.
-    ldpp_dout(dpp, 0) << "WARNING: can't bucket link because no acl on bucket=" << old_bucket << dendl;
-    set_err_msg(err_msg,
-	"While crossing the Anavros you have displeased the goddess Hera."
-	"  You must sacrifice your ancient bucket " + loc_bucket->get_bucket_id());
-    return -EINVAL;
-  }
-  bufferlist& aclbl = aiter->second;
-  RGWAccessControlPolicy policy;
-  ACLOwner owner;
-  try {
-   auto iter = aclbl.cbegin();
-   decode(policy, iter);
-   owner = policy.get_owner();
-  } catch (buffer::error& err) {
-    set_err_msg(err_msg, "couldn't decode policy");
-    return -EIO;
-  }
-
-  std::unique_ptr<rgw::sal::User> owner_user = store->get_user(owner.get_id());
-
-  int r = old_bucket->unlink(dpp, owner_user.get(), y, false);
-  if (r < 0) {
-    set_err_msg(err_msg, "could not unlink policy from user " + owner_user->get_id().to_str());
-    return r;
-  }
-
-  // now update the user for the bucket...
-  if (display_name.empty()) {
-    ldpp_dout(dpp, 0) << "WARNING: user " << user << " has no display name set" << dendl;
-  }
-
-  RGWAccessControlPolicy policy_instance;
-  policy_instance.create_default(user->get_id(), display_name);
-  owner = policy_instance.get_owner();
-
-  aclbl.clear();
-  policy_instance.encode(aclbl);
-
-  bool exclusive = false;
-  loc_bucket->get_info().owner = user->get_id();
-  if (*loc_bucket != *old_bucket) {
-  ldpp_dout(dpp, 20) << "Lando 10" << dendl;
-    loc_bucket->get_info().bucket = loc_bucket->get_key();
-    loc_bucket->get_info().objv_tracker.version_for_read()->ver = 0;
-    exclusive = true;
-  }
-
-  ldpp_dout(dpp, 20) << "Lando 11" << dendl;
-  r = loc_bucket->put_instance_info(dpp, exclusive, ceph::real_time());
-  ldpp_dout(dpp, 20) << "Lando 12 r=" << r << dendl;
-  if (r < 0) {
-    set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
-    return r;
-  }
-
-  RGWObjVersionTracker objv;
-
-  /* link to user */
-  ldpp_dout(dpp, 20) << "Lando 13" << dendl;
-  r = loc_bucket->link(dpp, user.get(), y, true, &objv);
-  ldpp_dout(dpp, 20) << "Lando 14 r=" << r << dendl;
-  if (r < 0) {
-    set_err_msg(err_msg, "failed to relink bucket");
-    return r;
-  }
-
-  if (*loc_bucket != *old_bucket) {
-    // like RGWRados::delete_bucket -- excepting no bucket_index work.
-    r = old_bucket->remove_entrypoint(dpp, &objv, y);
-    if (r < 0) {
-      set_err_msg(err_msg, "failed to unlink old bucket endpoint " + old_bucket->get_tenant() + "/" + old_bucket->get_name());
-      return r;
-    }
-
-    r = old_bucket->remove_instance_info(dpp, &old_version, y);
-    if (r < 0) {
-      set_err_msg(err_msg, "failed to unlink old bucket info");
-      return r;
-    }
-  }
-
-  return 0;
-}
-
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
                      optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
@@ -671,22 +546,6 @@ int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
   }
   
   return ret;
-}
-
-int RGWBucket::unlink(RGWBucketAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
-{
-  bucket = op_state.get_bucket()->clone();
-  if (!op_state.is_user_op()) {
-    set_err_msg(err_msg, "could not fetch user or user bucket info");
-    return -EINVAL;
-  }
-
-  int r = bucket->unlink(dpp, user.get(), y);
-  if (r < 0) {
-    set_err_msg(err_msg, "error unlinking bucket" + cpp_strerror(-r));
-  }
-
-  return r;
 }
 
 int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg)
@@ -1095,18 +954,135 @@ int RGWBucketAdminOp::unlink(rgw::sal::Store* store, RGWBucketAdminOpState& op_s
   if (ret < 0)
     return ret;
 
-  return bucket.unlink(op_state, null_yield, dpp);
+  return static_cast<rgw::sal::RadosStore*>(store)->ctl()->bucket->unlink_bucket(op_state.get_user_id(), op_state.get_bucket()->get_info().bucket, null_yield, dpp, true);
 }
 
 int RGWBucketAdminOp::link(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, string *err)
 {
+  if (!op_state.is_user_op()) {
+    set_err_msg(err, "empty user id");
+    return -EINVAL;
+  }
+
   RGWBucket bucket;
   int ret = bucket.init(store, op_state, null_yield, dpp, err);
   if (ret < 0)
     return ret;
 
-  return bucket.link(op_state, null_yield, dpp, err);
+  string bucket_id = op_state.get_bucket_id();
+  std::string display_name = op_state.get_user_display_name();
+  std::unique_ptr<rgw::sal::Bucket> loc_bucket;
+  std::unique_ptr<rgw::sal::Bucket> old_bucket;
 
+  loc_bucket = op_state.get_bucket()->clone();
+
+  if (!bucket_id.empty() && bucket_id != loc_bucket->get_bucket_id()) {
+    set_err_msg(err,
+	"specified bucket id does not match " + loc_bucket->get_bucket_id());
+    return -EINVAL;
+  }
+
+  old_bucket = loc_bucket->clone();
+
+  loc_bucket->get_key().tenant = op_state.get_user_id().tenant;
+
+  if (!op_state.new_bucket_name.empty()) {
+    auto pos = op_state.new_bucket_name.find('/');
+    if (pos != string::npos) {
+      loc_bucket->get_key().tenant = op_state.new_bucket_name.substr(0, pos);
+      loc_bucket->get_key().name = op_state.new_bucket_name.substr(pos + 1);
+    } else {
+      loc_bucket->get_key().name = op_state.new_bucket_name;
+    }
+  }
+
+  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker old_version = loc_bucket->get_info().objv_tracker;
+
+  map<string, bufferlist>::iterator aiter = loc_bucket->get_attrs().find(RGW_ATTR_ACL);
+  if (aiter == loc_bucket->get_attrs().end()) {
+	// should never happen; only pre-argonaut buckets lacked this.
+    ldpp_dout(dpp, 0) << "WARNING: can't bucket link because no acl on bucket=" << old_bucket << dendl;
+    set_err_msg(err,
+	"While crossing the Anavros you have displeased the goddess Hera."
+	"  You must sacrifice your ancient bucket " + loc_bucket->get_bucket_id());
+    return -EINVAL;
+  }
+  bufferlist& aclbl = aiter->second;
+  RGWAccessControlPolicy policy;
+  ACLOwner owner;
+  try {
+   auto iter = aclbl.cbegin();
+   decode(policy, iter);
+   owner = policy.get_owner();
+  } catch (buffer::error& e) {
+    set_err_msg(err, "couldn't decode policy");
+    return -EIO;
+  }
+
+  int r = static_cast<rgw::sal::RadosStore*>(store)->ctl()->bucket->unlink_bucket(owner.get_id(), old_bucket->get_info().bucket, null_yield, dpp, false);
+  if (r < 0) {
+    set_err_msg(err, "could not unlink policy from user " + owner.get_id().to_str());
+    return r;
+  }
+
+  // now update the user for the bucket...
+  if (display_name.empty()) {
+    ldpp_dout(dpp, 0) << "WARNING: user " << op_state.get_user_id() << " has no display name set" << dendl;
+  }
+
+  RGWAccessControlPolicy policy_instance;
+  policy_instance.create_default(op_state.get_user_id(), display_name);
+  owner = policy_instance.get_owner();
+
+  aclbl.clear();
+  policy_instance.encode(aclbl);
+
+  bool exclusive = false;
+  loc_bucket->get_info().owner = op_state.get_user_id();
+  if (*loc_bucket != *old_bucket) {
+    loc_bucket->get_info().bucket = loc_bucket->get_key();
+    loc_bucket->get_info().objv_tracker.version_for_read()->ver = 0;
+    exclusive = true;
+  }
+
+  r = loc_bucket->put_instance_info(dpp, exclusive, ceph::real_time());
+  if (r < 0) {
+    set_err_msg(err, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
+    return r;
+  }
+
+  /* link to user */
+  RGWBucketEntryPoint ep;
+  ep.bucket = loc_bucket->get_info().bucket;
+  ep.owner = op_state.get_user_id();
+  ep.creation_time = loc_bucket->get_info().creation_time;
+  ep.linked = true;
+  rgw::sal::Attrs ep_attrs;
+  rgw_ep_info ep_data{ep, ep_attrs};
+
+  r = static_cast<rgw::sal::RadosStore*>(store)->ctl()->bucket->link_bucket(op_state.get_user_id(), loc_bucket->get_info().bucket, loc_bucket->get_info().creation_time, null_yield, dpp, true, &ep_data);
+  if (r < 0) {
+    set_err_msg(err, "failed to relink bucket");
+    return r;
+  }
+
+  if (*loc_bucket != *old_bucket) {
+    // like RGWRados::delete_bucket -- excepting no bucket_index work.
+    r = old_bucket->remove_entrypoint(dpp, &ep_data.ep_objv, null_yield);
+    if (r < 0) {
+      set_err_msg(err, "failed to unlink old bucket endpoint " + old_bucket->get_tenant() + "/" + old_bucket->get_name());
+      return r;
+    }
+
+    r = old_bucket->remove_instance_info(dpp, &old_version, null_yield);
+    if (r < 0) {
+      set_err_msg(err, "failed to unlink old bucket info");
+      return r;
+    }
+  }
+
+  return 0;
 }
 
 int RGWBucketAdminOp::chown(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const string& marker, const DoutPrefixProvider *dpp, string *err)
@@ -1114,10 +1090,6 @@ int RGWBucketAdminOp::chown(rgw::sal::Store* store, RGWBucketAdminOpState& op_st
   RGWBucket bucket;
 
   int ret = bucket.init(store, op_state, null_yield, dpp, err);
-  if (ret < 0)
-    return ret;
-
-  ret = bucket.link(op_state, null_yield, dpp, err);
   if (ret < 0)
     return ret;
 
