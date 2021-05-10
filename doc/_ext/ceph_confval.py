@@ -369,7 +369,11 @@ class CephOption(ObjectDescription):
         signode += addnodes.desc_name(sig, sig)
         # normalize whitespace like XRefRole does
         name = ws_re.sub(' ', sig)
-        return name
+        cur_module = self.env.ref_context.get('ceph:module')
+        if cur_module:
+            return '/'.join(['mgr', cur_module, name])
+        else:
+            return name
 
     def transform_content(self, contentnode: addnodes.desc_content) -> None:
         name = self.arguments[0]
@@ -384,18 +388,10 @@ class CephOption(ObjectDescription):
                              name: str,
                              sig: str,
                              signode: addnodes.desc_signature) -> None:
-        cur_module = self.env.ref_context.get('ceph:module')
-        if cur_module:
-            prefix = '-'.join(['mgr', cur_module, self.objtype])
-        else:
-            prefix = self.objtype
-        node_id = make_id(self.env, self.state.document, prefix, name)
+        node_id = make_id(self.env, self.state.document, self.objtype, name)
         signode['ids'].append(node_id)
         self.state.document.note_explicit_target(signode)
-        if cur_module:
-            entry = f'{cur_module} {name}; mgr module option'
-        else:
-            entry = f'{name}; configuration option'
+        entry = f'{name}; configuration option'
         self.indexnode['entries'].append(('pair', entry, node_id, '', None))
         std = self.env.get_domain('std')
         std.note_object(self.objtype, name, node_id, location=signode)
