@@ -1,0 +1,20 @@
+@use './src/styles/vendor/variables' as vv;
+
+.wizard-step-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+span.circle-step {
+  background: vv.$gray-500;
+  border-radius: 0.8em;
+  color: vv.$white;
+  display: inline-block;
+  font-weight: bold;
+  line-height: 1.6em;
+  margin-right: 5px;
+  text-align: center;
+  width: 1.6em;
+}

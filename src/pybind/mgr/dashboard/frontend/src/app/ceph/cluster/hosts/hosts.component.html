@@ -5,12 +5,13 @@
     <a ngbNavLink
        i18n>Hosts List</a>
     <ng-template ngbNavContent>
-      <cd-table [data]="hosts"
+      <cd-table #table
+                [data]="hosts"
                 [columns]="columns"
                 columnMode="flex"
                 (fetchData)="getHosts($event)"
                 selectionType="single"
-                [hasDetails]="true"
+                [hasDetails]="!clusterCreation"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)">
         <div class="table-actions btn-toolbar">
@@ -29,7 +30,7 @@
     </ng-template>
   </li>
   <li ngbNavItem
-      *ngIf="permissions.grafana.read">
+      *ngIf="permissions.grafana.read && !clusterCreation">
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>
