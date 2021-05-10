@@ -61,6 +61,7 @@ DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
 LOGROTATE_DIR = '/etc/logrotate.d'
+SYSCTL_DIR = '/usr/lib/sysctl.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
@@ -109,6 +110,7 @@ class BaseConfig:
         self.data_dir: str = DATA_DIR
         self.log_dir: str = LOG_DIR
         self.logrotate_dir: str = LOGROTATE_DIR
+        self.sysctl_dir: str = SYSCTL_DIR
         self.unit_dir: str = UNIT_DIR
         self.verbose: bool = False
         self.timeout: Optional[int] = DEFAULT_TIMEOUT
@@ -245,6 +247,18 @@ class TimeoutExpired(Error):
 class Ceph(object):
     daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror')
+
+##################################
+
+
+class OSD(object):
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# allow a large number of OSDs',
+            'fs.aio-max-nr = 1048576',
+            'kernel.pid_max = 4194304',
+        ]
 
 ##################################
 
@@ -2793,6 +2807,9 @@ def deploy_daemon_units(
             os.rename(data_dir + '/unit.image.new',
                       data_dir + '/unit.image')
 
+    # sysctl
+    install_sysctl(ctx, fsid, daemon_type)
+
     # systemd
     install_base_units(ctx, fsid)
     unit = get_unit_file(ctx, fsid)
@@ -2933,6 +2950,32 @@ def update_firewalld(ctx, daemon_type):
 
     firewall.open_ports(fw_ports)
     firewall.apply_rules()
+
+
+def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
+    """
+    Set up sysctl settings
+    """
+    def _write(conf: Path, lines: List[str]) -> None:
+        lines = [
+            '# created by cephadm',
+            '',
+            *lines,
+            '',
+        ]
+        with open(conf, 'w') as f:
+            f.write('\n'.join(lines))
+
+    conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
+    lines: Optional[List] = None
+
+    if daemon_type == 'osd':
+        lines = OSD.get_sysctl_settings()
+
+    # apply the sysctl settings
+    if lines:
+        _write(conf, lines)
+        call_throws(ctx, ['sysctl', '--system'])
 
 
 def install_base_units(ctx, fsid):
@@ -5525,6 +5568,11 @@ def command_rm_cluster(ctx):
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
+    # rm sysctl settings
+    sysctl_dir = Path(ctx.sysctl_dir)
+    for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
+        p.unlink()
+
     # clean up config, keyring, and pub key files
     files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
 
@@ -7483,6 +7531,10 @@ def _get_parser():
         '--logrotate-dir',
         default=LOGROTATE_DIR,
         help='location of logrotate configuration files')
+    parser.add_argument(
+        '--sysctl-dir',
+        default=SYSCTL_DIR,
+        help='location of sysctl configuration files')
     parser.add_argument(
         '--unit-dir',
         default=UNIT_DIR,
