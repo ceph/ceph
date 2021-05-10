@@ -594,13 +594,15 @@ class CephadmServe:
 
         def matches_network(host):
             # type: (str) -> bool
-            if len(public_networks) == 0:
-                return False
             # make sure we have 1 or more IPs for any of those networks on that
             # host
             for network in public_networks:
                 if len(self.mgr.cache.networks[host].get(network, [])) > 0:
                     return True
+            self.log.info(
+                f"Filtered out host {host}: does not belong to mon public_network"
+                f" ({','.join(public_networks)})"
+            )
             return False
 
         ha = HostAssignment(
