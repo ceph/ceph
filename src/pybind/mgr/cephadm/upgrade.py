@@ -251,9 +251,9 @@ class CephadmUpgrade:
                             self.upgrade_state.progress_id)
         target_image = self.target_image
         self.mgr.log.info('Upgrade: Stopped')
-        self.upgrade_state = None
         self.upgrade_completion_message = 'Stopped upgrade to %s at %s' % (
-            target_image, datetime_to_str(datetime_now()))
+            self.upgrade_state._target_name, datetime_to_str(datetime_now()))
+        self.upgrade_state = None
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
@@ -455,7 +455,8 @@ class CephadmUpgrade:
         if not target_id or not target_version or not target_digests:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
-            self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
+            self.upgrade_info_str = 'Doing first pull of %s image' % (
+                self.upgrade_state._target_name)
             try:
                 target_id, target_version, target_digests = CephadmServe(self.mgr)._get_container_image_info(
                     target_image)
@@ -620,7 +621,7 @@ class CephadmUpgrade:
                     logger.info('Upgrade: Pulling %s on %s' % (target_image,
                                                                d.hostname))
                     self.upgrade_info_str = 'Pulling %s image on host %s' % (
-                        target_image, d.hostname)
+                        self.upgrade_state._target_name, d.hostname)
                     out, errs, code = CephadmServe(self.mgr)._run_cephadm(
                         d.hostname, '', 'pull', [],
                         image=target_image, no_fsid=True, error_ok=True)
@@ -639,7 +640,7 @@ class CephadmUpgrade:
                         logger.info('Upgrade: image %s pull on %s got new digests %s (not %s), restarting' % (
                             target_image, d.hostname, r['repo_digests'], target_digests))
                         self.upgrade_info_str = 'Image %s pull on %s got new digests %s (not %s), restarting' % (
-                            target_image, d.hostname, r['repo_digests'], target_digests)
+                            self.upgrade_state._target_name, d.hostname, r['repo_digests'], target_digests)
                         self.upgrade_state.target_digests = r['repo_digests']
                         self._save_upgrade_state()
                         return
@@ -783,8 +784,8 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
+        self.upgrade_completion_message = 'Completed upgrade to %s at %s' % (
+            self.upgrade_state._target_name, datetime_to_str(datetime_now()))
         self.upgrade_state = None
         self._save_upgrade_state()
-        self.upgrade_completion_message = 'Completed upgrade to %s at %s' % (
-            target_image, datetime_to_str(datetime_now()))
         return
