@@ -350,6 +350,9 @@ class CephOption(ObjectDescription):
             opt = self._load_yaml().get(name)
         if opt is None:
             raise self.error(f'Option "{name}" not found!')
+        if cur_module and 'type' not in opt:
+            # the type of module option defaults to 'str'
+            opt['type'] = 'str'
         desc = opt.get('fmt_desc') or opt.get('long_desc') or opt.get('desc')
         opt_default = opt.get('default')
         default = self.options.get('default', opt_default)
