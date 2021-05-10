@@ -1942,7 +1942,7 @@ namespace rgw {
       cs_info.blocks = std::move(compressor->get_compression_blocks());
       encode(cs_info, tmp);
       attrs[RGW_ATTR_COMPRESSION] = tmp;
-      ldout(state->cct, 20) << "storing " << RGW_ATTR_COMPRESSION
+      ldpp_dout(this, 20) << "storing " << RGW_ATTR_COMPRESSION
 			<< " with type=" << cs_info.compression_type
 			<< ", orig_size=" << cs_info.orig_size
 			<< ", blocks=" << cs_info.blocks.size() << dendl;
@@ -1973,7 +1973,7 @@ namespace rgw {
       attrbl.append(val.c_str(), val.size() + 1);
     }
 
-    op_ret = rgw_get_request_metadata(state->cct, state->info, attrs);
+    op_ret = rgw_get_request_metadata(this, state->cct, state->info, attrs);
     if (op_ret < 0) {
       goto done;
     }
@@ -2034,7 +2034,8 @@ void rgwfile_version(int *major, int *minor, int *extra)
 				  sec_key, "/");
   ceph_assert(new_fs);
 
-  rc = new_fs->authorize(rgwlib.get_store());
+  const DoutPrefix dp(rgwlib.get_store()->ctx(), dout_subsys, "rgw mount: ");
+  rc = new_fs->authorize(&dp, rgwlib.get_store());
   if (rc != 0) {
     delete new_fs;
     return -EINVAL;
@@ -2065,7 +2066,8 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
 				  sec_key, root);
   ceph_assert(new_fs);
 
-  rc = new_fs->authorize(rgwlib.get_store());
+  const DoutPrefix dp(rgwlib.get_store()->ctx(), dout_subsys, "rgw mount2: ");
+  rc = new_fs->authorize(&dp, rgwlib.get_store());
   if (rc != 0) {
     delete new_fs;
     return -EINVAL;

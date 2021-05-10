@@ -82,7 +82,7 @@ RGWRequest* RGWProcess::RGWWQ::_dequeue() {
 
 void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
   perfcounter->inc(l_rgw_qactive);
-  process->handle_request(req);
+  process->handle_request(this, req);
   process->req_throttle.put(1);
   perfcounter->inc(l_rgw_qactive, -1);
 }
@@ -232,7 +232,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
     abort_early(s, nullptr, init_error, nullptr, yield);
     goto done;
   }
-  dout(10) << "handler=" << typeid(*handler).name() << dendl;
+  ldpp_dout(s, 10) << "handler=" << typeid(*handler).name() << dendl;
 
   should_log = mgr->get_logging();
 
@@ -266,7 +266,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
     goto done;
   }
   req->op = op;
-  dout(10) << "op=" << typeid(*op).name() << dendl;
+  ldpp_dout(op, 10) << "op=" << typeid(*op).name() << dendl;
 
   s->op_type = op->get_type();
 

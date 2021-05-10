@@ -731,6 +731,7 @@ protected:
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
-  const rgw::auth::Identity::aclspec_t& aclspec);
+  const rgw::auth::Identity::aclspec_t& aclspec,
+  const DoutPrefixProvider *dpp);
 
 #endif /* CEPH_RGW_AUTH_H */

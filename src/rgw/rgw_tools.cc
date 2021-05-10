@@ -35,7 +35,8 @@
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+int rgw_init_ioctx(const DoutPrefixProvider *dpp,
+                   librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
 		   bool mostly_omap)
 {
@@ -43,7 +44,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
   if (r == -ENOENT && create) {
     r = rados->pool_create(pool.name.c_str());
     if (r == -ERANGE) {
-      dout(0)
+      ldpp_dout(dpp, 0)
         << __func__
         << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
         << " (this can be due to a pool or placement group misconfiguration, e.g."
@@ -74,7 +75,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
       // set pg_num_min
@@ -85,7 +86,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_num_min on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_num_min on "
 		 << pool.name << dendl;
       }
       // set recovery_priority
@@ -96,7 +97,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(p) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set recovery_priority on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
       }
     }
@@ -155,7 +156,8 @@ int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
   return 0;
 }
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
+                       RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
@@ -171,13 +173,13 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data, y);
+                  .write(dpp, data, y);
 
   return ret;
 }
 
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
 		       boost::optional<obj_version> refresh_version)
 {
@@ -197,13 +199,13 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
     int ret = rop.set_attrs(pattrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
-                 .stat(y);
+                 .stat(y, dpp);
     if (ret < 0)
       return ret;
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
-             .read(&bl, y);
+             .read(dpp, &bl, y);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -228,7 +230,8 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
   return 0;
 }
 
-int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
+int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
+                          RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
   auto obj_ctx = sysobj_svc->init_obj_ctx();
@@ -236,12 +239,12 @@ int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const 
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove(y);
+               .remove(dpp, y);
 }
 
 thread_local bool is_asio_thread = false;
 
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
                       optional_yield y, int flags)
 {
@@ -260,12 +263,12 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   }
   // work on asio threads should be asynchronous, so warn when they block
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.operate(oid, op, nullptr, flags);
 }
 
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
 		      int flags)
 {
@@ -277,12 +280,12 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     return -ec.value();
   }
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.operate(oid, op, flags);
 }
 
-int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y)
 {
@@ -298,7 +301,7 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
     return -ec.value();
   }
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
@@ -432,13 +435,14 @@ int RGWDataAccess::Bucket::finish_init()
   return 0;
 }
 
-int RGWDataAccess::Bucket::init(optional_yield y)
+int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret = sd->store->getRados()->get_bucket_info(sd->store->svc(),
 				       tenant, name,
 				       bucket_info,
 				       &mtime,
                                        y,
+                                       dpp,
 				       &attrs);
   if (ret < 0) {
     return ret;
