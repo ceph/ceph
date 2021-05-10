@@ -21,6 +21,7 @@
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
 #include "mon/PGMap.h"
+#include "mgr/Injector.h"
 #include "mgr/ServiceMap.h"
 
 class MMgrDigest;
@@ -118,12 +119,21 @@ public:
     return monc->with_monmap(std::forward<Args>(args)...);
   }
 
-  template<typename... Args>
-  auto with_osdmap(Args &&... args) const ->
-    decltype(objecter->with_osdmap(std::forward<Args>(args)...))
+  bool inject_python_on() const {
+    return g_conf().get_val<bool>("mgr_inject");
+  }
+  template <typename Callback, typename ...Args>
+  auto with_osdmap(Callback&& cb, Args&& ...args) const ->
+    decltype(objecter->with_osdmap(std::forward<Callback>(cb),
+	  std::forward<Args>(args)...))
   {
-    ceph_assert(objecter != nullptr);
-    return objecter->with_osdmap(std::forward<Args>(args)...);
+    if(inject_python_on()) {
+      OSDMap *osdmap = Injector::get_osdmap();
+      return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
+    } else {
+      ceph_assert(objecter != nullptr);
+      return objecter->with_osdmap(std::forward<Callback>(cb), std::forward<Args>(args)...);
+    }
   }
 
   // call cb(osdmap, pg_map, ...args) with the appropriate locks

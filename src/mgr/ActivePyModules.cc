@@ -1251,7 +1251,7 @@ void ActivePyModules::config_notify()
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "notify (config) " << name << dendl;
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module](int r){ 
+    finisher.queue(new LambdaContext([module=module](int r){
       module->config_notify();
     }));
   }
