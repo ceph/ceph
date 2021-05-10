@@ -68,7 +68,7 @@ static int decode_policy(CephContext* cct,
 
 static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider* dpp,
 					      RadosStore* store,
-					      User& user,
+					      User* user,
 					      Attrs& bucket_attrs,
 					      RGWAccessControlPolicy* policy,
 					      optional_yield y)
@@ -82,11 +82,11 @@ static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider* dpp,
   } else {
     ldout(store->ctx(), 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     /* object exists, but policy is broken */
-    int r = user.load_user(dpp, y);
+    int r = user->load_user(dpp, y);
     if (r < 0)
       return r;
 
-    policy->create_default(user.get_id(), user.get_display_name());
+    policy->create_default(user->get_id(), user->get_display_name());
   }
   return 0;
 }
@@ -432,6 +432,14 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, User* new_user, User* old_
   if (marker == nullptr)
     marker = &obj_marker;
 
+  int r = this->link(dpp, new_user, y);
+  if (r < 0) {
+    return r;
+  }
+  if (!old_user) {
+    return r;
+  }
+
   return store->ctl()->bucket->chown(store, this, new_user->get_id(),
 			   old_user->get_display_name(), *marker, y, dpp);
 }
@@ -705,7 +713,7 @@ int RadosStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::st
 }
 
 int RadosStore::create_bucket(const DoutPrefixProvider* dpp,
-				 User& u, const rgw_bucket& b,
+				 User* u, const rgw_bucket& b,
 				 const std::string& zonegroup_id,
 				 rgw_placement_rule& placement_rule,
 				 std::string& swift_ver_location,
@@ -731,7 +739,7 @@ int RadosStore::create_bucket(const DoutPrefixProvider* dpp,
   obj_version objv,* pobjv = NULL;
 
   /* If it exists, look it up; otherwise create it */
-  ret = get_bucket(dpp, &u, b, &bucket, y);
+  ret = get_bucket(dpp, u, b, &bucket, y);
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
@@ -751,14 +759,14 @@ int RadosStore::create_bucket(const DoutPrefixProvider* dpp,
       return -EEXIST;
     }
   } else {
-    bucket = std::unique_ptr<Bucket>(new RadosBucket(this, b, &u));
+    bucket = std::unique_ptr<Bucket>(new RadosBucket(this, b, u));
     *existed = false;
     bucket->set_attrs(attrs);
   }
 
   if (!svc()->zone->is_meta_master()) {
     JSONParser jp;
-    ret = forward_request_to_master(dpp, &u, NULL, in_data, &jp, req_info, y);
+    ret = forward_request_to_master(dpp, u, NULL, in_data, &jp, req_info, y);
     if (ret < 0) {
       return ret;
     }
@@ -790,7 +798,7 @@ int RadosStore::create_bucket(const DoutPrefixProvider* dpp,
 
   if (*existed) {
     rgw_placement_rule selected_placement_rule;
-    ret = svc()->zone->select_bucket_placement(dpp, u.get_info(),
+    ret = svc()->zone->select_bucket_placement(dpp, u->get_info(),
 					       zid, placement_rule,
 					       &selected_placement_rule, nullptr, y);
     if (selected_placement_rule != info.placement_rule) {
@@ -800,13 +808,22 @@ int RadosStore::create_bucket(const DoutPrefixProvider* dpp,
     }
   } else {
 
-    ret = getRados()->create_bucket(u.get_info(), bucket->get_key(),
+    ret = getRados()->create_bucket(u->get_info(), bucket->get_key(),
 				    zid, placement_rule, swift_ver_location, pquota_info,
 				    attrs, info, pobjv, &ep_objv, creation_time,
 				    pmaster_bucket, pmaster_num_shards, y, dpp,
 				    exclusive);
     if (ret == -EEXIST) {
       *existed = true;
+      /* bucket already existed, might have raced with another bucket creation,
+       * or might be partial bucket creation that never completed. Read existing
+       * bucket info, verify that the reported bucket owner is the current user.
+       * If all is ok then update the user's list of buckets.  Otherwise inform
+       * client about a name conflict.
+       */
+      if (info.owner.compare(u->get_id()) != 0) {
+	return -EEXIST;
+      }
       ret = 0;
     } else if (ret != 0) {
       return ret;
@@ -815,6 +832,19 @@ int RadosStore::create_bucket(const DoutPrefixProvider* dpp,
 
   bucket->set_version(ep_objv);
   bucket->get_info() = info;
+
+  RadosBucket* rbucket = static_cast<RadosBucket*>(bucket.get());
+  ret = rbucket->link(dpp, u, y, false);
+  if (ret && !*existed && ret != -EEXIST) {
+    /* if it exists (or previously existed), don't remove it! */
+    ret = rbucket->unlink(dpp, u, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << ret
+		       << dendl;
+    }
+  } else if (ret == -EEXIST || (ret == 0 && *existed)) {
+    ret = -ERR_BUCKET_EXISTS;
+  }
 
   bucket_out->swap(bucket);
 

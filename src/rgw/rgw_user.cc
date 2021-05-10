@@ -1708,12 +1708,6 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         return ret;
       }
 
-      ret = bucket->link(dpp, new_user.get(), y);
-      if (ret < 0) {
-        set_err_msg(err_msg, "failed to link bucket " + bucket->get_name());
-        return ret;
-      }
-
       ret = bucket->chown(dpp, new_user.get(), old_user.get(), y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to run bucket chown" + cpp_strerror(-ret));

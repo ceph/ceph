@@ -143,7 +143,7 @@ class Store {
     virtual int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket) = 0;
     virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
     virtual int create_bucket(const DoutPrefixProvider* dpp,
-                            User& u, const rgw_bucket& b,
+                            User* u, const rgw_bucket& b,
                             const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
                             std::string& swift_ver_location,
@@ -390,8 +390,6 @@ class Bucket {
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int update_container_stats(const DoutPrefixProvider* dpp) = 0;
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp) = 0;
-    virtual int link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr) = 0;
-    virtual int unlink(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true) = 0;
     virtual int chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) = 0;
     virtual int put_instance_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) = 0;
     virtual int remove_entrypoint(const DoutPrefixProvider* dpp, RGWObjVersionTracker* objv, optional_yield y) = 0;
