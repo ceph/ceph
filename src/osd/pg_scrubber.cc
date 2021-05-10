@@ -333,6 +333,7 @@ void PgScrubber::reset_epoch(epoch_t epoch_queued)
   m_epoch_start = epoch_queued;
   m_needs_sleep = true;
   m_is_deep = state_test(PG_STATE_DEEP_SCRUB);
+  update_op_mode_text();
 }
 
 unsigned int PgScrubber::scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const
@@ -744,6 +745,16 @@ std::string PgScrubber::dump_awaited_maps() const
   return m_maps_status.dump();
 }
 
+void PgScrubber::update_op_mode_text()
+{
+  auto visible_repair = state_test(PG_STATE_REPAIR);
+  m_mode_desc = (visible_repair ? "repair"sv : (m_is_deep ? "deep-scrub"sv : "scrub"sv));
+
+  dout(10) << __func__ << ": repair: visible: " << (visible_repair ? "true" : "false")
+	   << ", internal: " << (m_is_repair ? "true" : "false")
+	   << ". Displayed: " << m_mode_desc << dendl;
+}
+
 void PgScrubber::_request_scrub_map(pg_shard_t replica,
 				    eversion_t version,
 				    hobject_t start,
@@ -1133,8 +1144,15 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
     state_set(PG_STATE_DEEP_SCRUB);
   }
 
-  if (request.must_repair || m_flags.auto_repair) {
+  // m_is_repair is set for either 'must_repair' or 'repair-on-the-go' (i.e.
+  // deep-scrub with the auto_repair configuration flag set). m_is_repair value
+  // determines the scrubber behavior.
+  // PG_STATE_REPAIR, on the other hand, is only used for status reports (inc. the
+  // PG status as appearing in the logs).
+  m_is_repair = request.must_repair || m_flags.auto_repair;
+  if (request.must_repair) {
     state_set(PG_STATE_REPAIR);
+    // not calling update_op_mode_text() yet, as m_is_deep not set yet
   }
 
   // the publishing here seems to be required for tests synchronization
@@ -1191,7 +1209,7 @@ void PgScrubber::scrub_compare_maps()
     ss.clear();
 
     m_pg->get_pgbackend()->be_compare_scrubmaps(
-      maps, master_set, state_test(PG_STATE_REPAIR), m_missing, m_inconsistent,
+      maps, master_set, m_is_repair, m_missing, m_inconsistent,
       authoritative, missing_digest, m_shallow_errors, m_deep_errors, m_store.get(),
       m_pg->info.pgid, m_pg->recovery_state.get_acting(), ss);
     dout(2) << ss.str() << dendl;
@@ -1228,7 +1246,7 @@ void PgScrubber::scrub_compare_maps()
 
   if (!m_store->empty()) {
 
-    if (state_test(PG_STATE_REPAIR)) {
+    if (m_is_repair) {
       dout(10) << __func__ << ": discarding scrub results" << dendl;
       m_store->flush(nullptr);
     } else {
@@ -1439,25 +1457,25 @@ void PgScrubber::unreserve_replicas()
 
 [[nodiscard]] bool PgScrubber::scrub_process_inconsistent()
 {
-  dout(10) << __func__ << ": checking authoritative" << dendl;
-
-  bool repair = state_test(PG_STATE_REPAIR);
-  const bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
-  const char* mode = (repair ? "repair" : (deep_scrub ? "deep-scrub" : "scrub"));
-  dout(20) << __func__ << " deep_scrub: " << deep_scrub << " m_is_deep: " << m_is_deep
-	   << " repair: " << repair << dendl;
+  dout(10) << __func__ << ": checking authoritative (mode="
+	   << m_mode_desc << ", auth remaining #: " << m_authoritative.size()
+	   << ")" << dendl;
 
   // authoritative only store objects which are missing or inconsistent.
   if (!m_authoritative.empty()) {
 
     stringstream ss;
-    ss << m_pg->info.pgid << " " << mode << " " << m_missing.size() << " missing, "
+    ss << m_pg->info.pgid << " " << m_mode_desc << " " << m_missing.size() << " missing, "
        << m_inconsistent.size() << " inconsistent objects";
     dout(2) << ss.str() << dendl;
     m_osds->clog->error(ss);
 
-    if (repair) {
+    if (m_is_repair) {
       state_clear(PG_STATE_CLEAN);
+      // we know we have a problem, so it's OK to set the user-visible flag
+      // even if we only reached here via auto-repair
+      state_set(PG_STATE_REPAIR);
+      update_op_mode_text();
 
       for (const auto& [hobj, shrd_list] : m_authoritative) {
 
@@ -1475,7 +1493,7 @@ void PgScrubber::unreserve_replicas()
       }
     }
   }
-  return (!m_authoritative.empty() && repair);
+  return (!m_authoritative.empty() && m_is_repair);
 }
 
 /*
@@ -1492,24 +1510,21 @@ void PgScrubber::scrub_finish()
 
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
-
-  bool repair = state_test(PG_STATE_REPAIR);
-  if (repair && m_flags.auto_repair &&
+  if (m_is_repair && m_flags.auto_repair &&
       m_authoritative.size() > m_pg->cct->_conf->osd_scrub_auto_repair_num_errors) {
 
     dout(10) << __func__ << " undoing the repair" << dendl;
-    state_clear(PG_STATE_REPAIR);
-    repair = false;
+    state_clear(PG_STATE_REPAIR); // not expected to be set, anyway
+    m_is_repair = false;
+    update_op_mode_text();
   }
 
-  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
-  const char* mode = (repair ? "repair" : (deep_scrub ? "deep-scrub" : "scrub"));
   bool do_auto_scrub = false;
 
   // if a regular scrub had errors within the limit, do a deep scrub to auto repair
   if (m_flags.deep_scrub_on_error && m_authoritative.size() &&
       m_authoritative.size() <= m_pg->cct->_conf->osd_scrub_auto_repair_num_errors) {
-    ceph_assert(!deep_scrub);
+    ceph_assert(!m_is_deep);
     do_auto_scrub = true;
     dout(15) << __func__ << " Try to auto repair after scrub errors" << dendl;
   }
@@ -1523,16 +1538,16 @@ void PgScrubber::scrub_finish()
 
   {
     stringstream oss;
-    oss << m_pg->info.pgid.pgid << " " << mode << " ";
+    oss << m_pg->info.pgid.pgid << " " << m_mode_desc << " ";
     int total_errors = m_shallow_errors + m_deep_errors;
     if (total_errors)
       oss << total_errors << " errors";
     else
       oss << "ok";
-    if (!deep_scrub && m_pg->info.stats.stats.sum.num_deep_scrub_errors)
+    if (!m_is_deep && m_pg->info.stats.stats.sum.num_deep_scrub_errors)
       oss << " ( " << m_pg->info.stats.stats.sum.num_deep_scrub_errors
 	  << " remaining deep scrub error details lost)";
-    if (repair)
+    if (m_is_repair)
       oss << ", " << m_fixed_count << " fixed";
     if (total_errors)
       m_osds->clog->error(oss);
@@ -1542,10 +1557,10 @@ void PgScrubber::scrub_finish()
 
   // Since we don't know which errors were fixed, we can only clear them
   // when every one has been fixed.
-  if (repair) {
+  if (m_is_repair) {
     if (m_fixed_count == m_shallow_errors + m_deep_errors) {
 
-      ceph_assert(deep_scrub);
+      ceph_assert(m_is_deep);
       m_shallow_errors = 0;
       m_deep_errors = 0;
       dout(20) << __func__ << " All may be fixed" << dendl;
@@ -1574,7 +1589,7 @@ void PgScrubber::scrub_finish()
     // finish up
     ObjectStore::Transaction t;
     m_pg->recovery_state.update_stats(
-      [this, deep_scrub](auto& history, auto& stats) {
+      [this](auto& history, auto& stats) {
 	dout(10) << "m_pg->recovery_state.update_stats()" << dendl;
 	utime_t now = ceph_clock_now();
 	history.last_scrub = m_pg->recovery_state.get_info().last_update;
@@ -1584,7 +1599,7 @@ void PgScrubber::scrub_finish()
 	  history.last_deep_scrub_stamp = now;
 	}
 
-	if (deep_scrub) {
+	if (m_is_deep) {
 	  if ((m_shallow_errors == 0) && (m_deep_errors == 0))
 	    history.last_clean_scrub_stamp = now;
 	  stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
@@ -1628,7 +1643,9 @@ void PgScrubber::scrub_finish()
     m_pg->queue_peering_event(PGPeeringEventRef(std::make_shared<PGPeeringEvent>(
       get_osdmap_epoch(), get_osdmap_epoch(), PeeringState::DoRecovery())));
   } else {
+    m_is_repair = false;
     state_clear(PG_STATE_REPAIR);
+    update_op_mode_text();
   }
 
   cleanup_on_finish();
