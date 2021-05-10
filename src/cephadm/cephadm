@@ -6769,16 +6769,6 @@ def command_gather_facts(ctx: CephadmContext):
     host = HostFacts(ctx)
     print(host.dump())
 
-##################################
-
-
-def command_verify_prereqs(ctx: CephadmContext):
-    if ctx.service_type == 'haproxy' or ctx.service_type == 'keepalived':
-        out, err, code = call(
-            ctx, ['sysctl', '-n', 'net.ipv4.ip_nonlocal_bind']
-        )
-        if out.strip() != '1':
-            raise Error('net.ipv4.ip_nonlocal_bind not set to 1')
 
 ##################################
 
@@ -8143,15 +8133,6 @@ def _get_parser():
         choices=['enter', 'exit'],
         help='Maintenance action - enter maintenance, or exit maintenance')
     parser_maintenance.set_defaults(func=command_maintenance)
-
-    parser_verify_prereqs = subparsers.add_parser(
-        'verify-prereqs',
-        help='verify system prerequisites for a given service are met on this host')
-    parser_verify_prereqs.set_defaults(func=command_verify_prereqs)
-    parser_verify_prereqs.add_argument(
-        '--daemon-type',
-        required=True,
-        help='service type of service to whose prereqs will be checked')
 
     return parser
 
