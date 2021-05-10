@@ -32,7 +32,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   LOG_PREFIX(TransactionManager::mkfs);
   segment_cleaner->mount(segment_manager);
   return journal->open_for_write().safe_then([this, FNAME](auto addr) {
-    DEBUG("TransactionManager::mkfs: about to do_with");
+    DEBUG("about to do_with");
     segment_cleaner->init_mkfs(addr);
     return seastar::do_with(
       create_transaction(),
