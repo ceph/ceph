@@ -213,11 +213,9 @@ logging_config = {
         },
         'log_file': {
             'level': 'DEBUG',
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': 'logging.handlers.WatchedFileHandler',
             'formatter': 'cephadm',
             'filename': '%s/cephadm.log' % LOG_DIR,
-            'maxBytes': 1024000,
-            'backupCount': 1,
         }
     },
     'loggers': {
@@ -5606,6 +5604,10 @@ def command_rm_cluster(ctx):
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
+    # rm cephadm logrotate config if last cluster on host
+    if not os.listdir(ctx.data_dir):
+        call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/cephadm'])
+
     # rm sysctl settings
     sysctl_dir = Path(ctx.sysctl_dir)
     for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
@@ -8207,6 +8209,18 @@ def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
         os.makedirs(LOG_DIR)
     dictConfig(logging_config)
     logger = logging.getLogger()
+
+    if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
+        with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
+            f.write("""# created by cephadm
+/var/log/ceph/cephadm.log {
+    rotate 7
+    daily
+    compress
+    missingok
+    notifempty
+}
+""")
 
     if ctx.verbose:
         for handler in logger.handlers:
