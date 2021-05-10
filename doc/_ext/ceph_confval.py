@@ -398,6 +398,10 @@ class CephOption(ObjectDescription):
         std.note_object(self.objtype, name, node_id, location=signode)
 
 
+def _reset_ref_context(app, env, docname):
+    env.ref_context.pop('ceph:module', None)
+
+
 def setup(app) -> Dict[str, Any]:
     app.add_config_value('ceph_confval_imports',
                          default=[],
@@ -430,6 +434,7 @@ def setup(app) -> Dict[str, Any]:
     )
     app.add_directive_to_domain('std', 'mgr_module', CephModule)
     app.add_directive_to_domain('std', 'confval', CephOption, override=True)
+    app.connect('env-purge-doc', _reset_ref_context)
 
     return {
         'version': 'builtin',
