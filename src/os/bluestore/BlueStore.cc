@@ -1170,8 +1170,12 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   }
 
   // onodes
-  if (onode_max >= onode_lru.size() ||
-      last_pinned == onode_lru.begin()) {
+
+  if (last_pinned == onode_lru.begin()) {
+    //start over
+    last_pinned = onode_lru.end();
+  }
+  if (onode_max >= onode_lru.size()) {
     return; // don't even try
   }
   uint64_t num = onode_lru.size() - onode_max;
@@ -1199,7 +1203,6 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
         break;
       } else {
         p--;
-        num--;
         continue;
       }
     }
@@ -1471,8 +1474,11 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   }
 
   // onodes
-  if (onode_max >= onode_lru.size() ||
-     last_pinned == onode_lru.begin()) {
+  if (last_pinned == onode_lru.begin()) {
+    //start over
+    last_pinned = onode_lru.end();
+  }
+  if (onode_max >= onode_lru.size()) {
     return; // don't even try
   }
   uint64_t num = onode_lru.size() - onode_max;
@@ -1501,7 +1507,6 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
         break;
       } else {
         p--;
-        num--;
         continue;
       }
     }
