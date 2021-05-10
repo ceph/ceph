@@ -8,6 +8,7 @@ import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
+from ceph.utils import datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
 if TYPE_CHECKING:
@@ -91,6 +92,7 @@ class CephadmUpgrade:
             self.upgrade_state: Optional[UpgradeState] = UpgradeState.from_json(json.loads(t))
         else:
             self.upgrade_state = None
+        self.upgrade_completion_message = ''
 
     @property
     def target_image(self) -> str:
@@ -119,6 +121,8 @@ class CephadmUpgrade:
                 r.message = 'Error: ' + self.upgrade_state.error
             elif self.upgrade_state.paused:
                 r.message = 'Upgrade paused'
+        else:
+            r.message = self.upgrade_completion_message
         return r
 
     def _get_upgrade_info(self) -> Tuple[str, List[str]]:
@@ -211,6 +215,7 @@ class CephadmUpgrade:
             target_name=target_name,
             progress_id=str(uuid.uuid4())
         )
+        self.upgrade_completion_message = ''
         self._update_upgrade_progress(0.0)
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
@@ -247,6 +252,8 @@ class CephadmUpgrade:
         target_image = self.target_image
         self.mgr.log.info('Upgrade: Stopped')
         self.upgrade_state = None
+        self.upgrade_completion_message = 'Stopped upgrade to %s at %s' % (
+            target_image, datetime_to_str(datetime_now()))
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
@@ -778,4 +785,6 @@ class CephadmUpgrade:
                             self.upgrade_state.progress_id)
         self.upgrade_state = None
         self._save_upgrade_state()
+        self.upgrade_completion_message = 'Completed upgrade to %s at %s' % (
+            target_image, datetime_to_str(datetime_now()))
         return
