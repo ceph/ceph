@@ -106,7 +106,6 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdCreationPreviewModalComponent,
     RulesListComponent,
     ActiveAlertListComponent,
-    HostFormComponent,
     ServiceDetailsComponent,
     ServiceDaemonListComponent,
     TelemetryComponent,
