@@ -92,6 +92,15 @@ class RGWAdminCmd:
         result = subprocess.run(run_cmd, stdout=subprocess.PIPE)
         return (result.returncode, result.stdout)
 
+class RGWCmd:
+    def __init__(self):
+        self.cmd_prefix = [ 'radosgw' ]
+
+    def run(self, cmd):
+        run_cmd = self.cmd_prefix + cmd
+        result = subprocess.run(run_cmd, stdout=subprocess.PIPE)
+        return (result.returncode, result.stdout)
+
 class RealmOp(RGWAdminCmd):
     def __init__(self):
         RGWAdminCmd.__init__(self)
@@ -200,10 +209,11 @@ class UserOp(RGWAdminCmd):
     def __init__(self):
         RGWAdminCmd.__init__(self)
         
-    def create(self, uid = None, display_name = None, email = None, is_system = False):
+    def create(self, uid = None, uid_prefix = None, display_name = None, email = None, is_system = False):
         self.uid = uid
         if not self.uid:
-            self.uid = 'uid-' + rand_alphanum_lower(6)
+            prefix = uid_prefix or 'user'
+            self.uid = prefix + '-' + rand_alphanum_lower(6)
 
         self.display_name = display_name
         if not self.display_name:
@@ -232,7 +242,7 @@ class RGWAM:
     def __init__(self):
         pass
 
-    def realm_bootstrap(self, realm, zonegroup, zone, endpoints):
+    def realm_bootstrap(self, realm, zonegroup, zone, endpoints, sys_uid, uid):
         endpoints = get_endpoints(endpoints)
 
         realm_info = RealmOp().create(realm)
@@ -261,16 +271,38 @@ class RGWAM:
 
         print('Period: ' + period.id)
 
-        user_info = UserOp().create(is_system = True)
+        sys_user_info = UserOp().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
+
+        sys_user = RGWUser(sys_user_info)
+
+        print('Created system user: %s' % sys_user.uid)
+
+        user_info = UserOp().create(uid = uid, is_system = False)
 
         user = RGWUser(user_info)
 
-        print('Created system user: %s' % user.uid)
+        print('Created regular user: %s' % user.uid)
 
 
+    def run_radosgw(self, port = None, log_file = None, debug_ms = None, debug_rgw = None):
+
+        fe_cfg = 'beast'
+        if port:
+            fe_cfg += ' port=%s' % port
 
 
+        params = [ '--rgw-frontends', fe_cfg ]
 
+        if log_file:
+            params += [ '--log-file', log_file ]
+
+        if debug_ms:
+            params += [ '--debug-ms', debug_ms ]
+
+        if debug_rgw:
+            params += [ '--debug-rgw', debug_rgw ]
+
+        RGWCmd().run(params)
 
 
 class RealmCommand:
@@ -304,10 +336,51 @@ The subcommands are:
         parser.add_argument('--zonegroup')
         parser.add_argument('--zone')
         parser.add_argument('--endpoints')
+        parser.add_argument('--sys-uid')
+        parser.add_argument('--uid')
 
         args = parser.parse_args(self.args[1:])
 
-        RGWAM().realm_bootstrap(args.realm, args.zonegroup, args.zone, args.endpoints)
+        RGWAM().realm_bootstrap(args.realm, args.zonegroup, args.zone, args.endpoints,
+                                args.sys_uid, args.uid)
+
+
+class ZoneCommand:
+    def __init__(self, args):
+        self.args = args
+
+    def parse(self):
+        parser = argparse.ArgumentParser(
+            description='S3 control tool',
+            usage='''rgwam zone <subcommand>
+
+The subcommands are:
+   run                     run radosgw daemon in current zone
+''')
+        parser.add_argument('subcommand', help='Subcommand to run')
+        # parse_args defaults to [1:] for args, but you need to
+        # exclude the rest of the args too, or validation will fail
+        args = parser.parse_args(self.args[0:1])
+        if not hasattr(self, args.subcommand):
+            print('Unrecognized subcommand:', args.subcommand)
+            parser.print_help()
+            exit(1)
+        # use dispatch pattern to invoke method with same name
+        return getattr(self, args.subcommand)
+
+    def run(self):
+        parser = argparse.ArgumentParser(
+            description='Run radosgw daemon',
+            usage='rgwam zone run [<args>]')
+        parser.add_argument('--port')
+        parser.add_argument('--log-file')
+        parser.add_argument('--debug-ms')
+        parser.add_argument('--debug-rgw')
+
+        args = parser.parse_args(self.args[1:])
+
+        RGWAM().run_radosgw(port = args.port)
+
 
 class TopLevelCommand:
 
@@ -318,6 +391,7 @@ class TopLevelCommand:
 
 The commands are:
    realm bootstrap               Bootstrap realm
+   zone run                      Run radosgw in current zone
 ''')
         parser.add_argument('command', help='Subcommand to run')
         # parse_args defaults to [1:] for args, but you need to
@@ -332,6 +406,10 @@ The commands are:
 
     def realm(self):
         cmd = RealmCommand(sys.argv[2:]).parse()
+        cmd()
+
+    def zone(self):
+        cmd = ZoneCommand(sys.argv[2:]).parse()
         cmd()
 
 
