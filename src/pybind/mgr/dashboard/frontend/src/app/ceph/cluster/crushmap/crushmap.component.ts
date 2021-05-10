@@ -42,6 +42,7 @@ export class CrushmapComponent implements OnInit, OnDestroy {
   metadataKeyMap: { [key: number]: any } = {};
 
   constructor(
+    private crushRuleService: CrushRuleService,
     private healthService: HealthService,
     private timerService: TimerService,
     private titleService: Title
