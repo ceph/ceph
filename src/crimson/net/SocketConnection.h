@@ -70,6 +70,7 @@ class SocketConnection : public Connection {
   bool peer_wins() const;
 #endif
 
+  seastar::future<> send(MessageURef msg) override;
   seastar::future<> send(MessageRef msg) override;
 
   seastar::future<> keepalive() override;

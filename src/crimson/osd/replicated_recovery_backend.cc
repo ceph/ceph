@@ -53,7 +53,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
   return interruptor::parallel_for_each(get_shards_to_push(soid),
     [this, need, soid](auto shard) {
     return prep_push(soid, need, shard).then_interruptible([this, soid, shard](auto push) {
-      auto msg = make_message<MOSDPGPush>();
+      auto msg = crimson::net::make_message<MOSDPGPush>();
       msg->from = pg.get_pg_whoami();
       msg->pgid = pg.get_pgid();
       msg->map_epoch = pg.get_osdmap_epoch();
@@ -106,7 +106,7 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   recovery_waiter.pi = std::make_optional<RecoveryBackend::PullInfo>();
   auto& pi = *recovery_waiter.pi;
   prepare_pull(po, pi, soid, need);
-  auto msg = make_message<MOSDPGPull>();
+  auto msg = crimson::net::make_message<MOSDPGPull>();
   msg->from = pg.get_pg_whoami();
   msg->set_priority(pg.get_recovery_op_priority());
   msg->pgid = pg.get_pgid();
@@ -144,7 +144,7 @@ ReplicatedRecoveryBackend::push_delete(
       logger().debug("push_delete: will remove {} from {}", soid, shard);
       pg.begin_peer_recover(shard, soid);
       spg_t target_pg(pg.get_info().pgid.pgid, shard.shard);
-      auto msg = make_message<MOSDPGRecoveryDelete>(
+      auto msg = crimson::net::make_message<MOSDPGRecoveryDelete>(
 	  pg.get_pg_whoami(), target_pg, pg.get_osdmap_epoch(), min_epoch);
       msg->set_priority(pg.get_recovery_op_priority());
       msg->objects.push_back(std::make_pair(soid, need));
@@ -169,7 +169,7 @@ ReplicatedRecoveryBackend::handle_recovery_delete(
   return local_recover_delete(p.first, p.second, pg.get_osdmap_epoch())
   .then_interruptible(
     [this, m] {
-    auto reply = make_message<MOSDPGRecoveryDeleteReply>();
+    auto reply = crimson::net::make_message<MOSDPGRecoveryDeleteReply>();
     reply->from = pg.get_pg_whoami();
     reply->set_priority(m->get_priority());
     reply->pgid = spg_t(pg.get_info().pgid.pgid, m->from.shard);
@@ -608,7 +608,7 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
         }
         return build_push_op(recovery_info, progress, 0);
       }).then_interruptible([this, from](auto pop) {
-        auto msg = make_message<MOSDPGPush>();
+        auto msg = crimson::net::make_message<MOSDPGPush>();
         msg->from = pg.get_pg_whoami();
         msg->pgid = pg.get_pgid();
         msg->map_epoch = pg.get_osdmap_epoch();
@@ -738,7 +738,7 @@ ReplicatedRecoveryBackend::handle_pull_response(
 	recovering.at(pop.soid).set_pulled();
 	return seastar::make_ready_future<>();
       } else {
-	auto reply = make_message<MOSDPGPull>();
+	auto reply = crimson::net::make_message<MOSDPGPull>();
 	reply->from = pg.get_pg_whoami();
 	reply->set_priority(m->get_priority());
 	reply->pgid = pg.get_info().pgid;
@@ -813,7 +813,7 @@ ReplicatedRecoveryBackend::handle_push(
 	});
       });
     }).then_interruptible([this, m, &response]() mutable {
-      auto reply = make_message<MOSDPGPushReply>();
+      auto reply = crimson::net::make_message<MOSDPGPushReply>();
       reply->from = pg.get_pg_whoami();
       reply->set_priority(m->get_priority());
       reply->pgid = pg.get_info().pgid;
@@ -872,7 +872,7 @@ ReplicatedRecoveryBackend::handle_push_reply(
   return _handle_push_reply(from, push_reply).then_interruptible(
     [this, from](std::optional<PushOp> push_op) {
     if (push_op) {
-      auto msg = make_message<MOSDPGPush>();
+      auto msg = crimson::net::make_message<MOSDPGPush>();
       msg->from = pg.get_pg_whoami();
       msg->pgid = pg.get_pgid();
       msg->map_epoch = pg.get_osdmap_epoch();

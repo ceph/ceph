@@ -72,7 +72,7 @@ void RecoveryBackend::handle_backfill_finish(
   logger().debug("{}", __func__);
   ceph_assert(!pg.is_primary());
   ceph_assert(crimson::common::local_conf()->osd_kill_backfill_at != 1);
-  auto reply = make_message<MOSDPGBackfill>(
+  auto reply = crimson::net::make_message<MOSDPGBackfill>(
     MOSDPGBackfill::OP_BACKFILL_FINISH_ACK,
     pg.get_osdmap_epoch(),
     m.query_epoch,
@@ -234,7 +234,7 @@ RecoveryBackend::handle_scan_get_digest(
   ).then_interruptible([this,
           query_epoch=m.query_epoch,
           conn=m.get_connection()] (auto backfill_interval) {
-    auto reply = make_message<MOSDPGScan>(
+    auto reply = crimson::net::make_message<MOSDPGScan>(
       MOSDPGScan::OP_SCAN_DIGEST,
       pg.get_pg_whoami(),
       pg.get_osdmap_epoch(),
