@@ -1,0 +1,21 @@
+@use './src/styles/vendor/variables' as vv;
+
+.container-fluid {
+  align-items: flex-start;
+  display: flex;
+  width: 100%;
+}
+
+.card-body {
+  max-width: 90%;
+}
+
+.vertical-line {
+  border-left: 1px solid vv.$gray-400;
+}
+
+cd-hosts {
+  ::ng-deep .nav {
+    display: none;
+  }
+}

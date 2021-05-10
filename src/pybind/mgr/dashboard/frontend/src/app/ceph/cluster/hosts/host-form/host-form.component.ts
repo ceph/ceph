@@ -24,6 +24,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   addr: string;
   status: string;
   allLabels: any;
+  pageURL: string;
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -40,10 +41,11 @@ export class HostFormComponent extends CdForm implements OnInit {
     super();
     this.resource = $localize`host`;
     this.action = this.actionLabels.ADD;
-    this.createForm();
   }
 
   ngOnInit() {
+    this.pageURL = this.router.url.includes('hosts') ? 'hosts' : 'create-cluster';
+    this.createForm();
     this.hostService.list().subscribe((resp: any[]) => {
       this.hostnames = resp.map((host) => {
         return host['hostname'];
@@ -53,6 +55,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   }
 
   private createForm() {
+    const disableMaintenance = this.pageURL !== 'hosts';
     this.hostForm = new CdFormGroup({
       hostname: new FormControl('', {
         validators: [
@@ -66,7 +69,7 @@ export class HostFormComponent extends CdForm implements OnInit {
         validators: [CdValidators.ip()]
       }),
       labels: new FormControl([]),
-      maintenance: new FormControl(false)
+      maintenance: new FormControl({ value: disableMaintenance, disabled: disableMaintenance })
     });
   }
 
@@ -87,7 +90,7 @@ export class HostFormComponent extends CdForm implements OnInit {
           this.hostForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.router.navigate(['/hosts']);
+          this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
         }
       });
   }
