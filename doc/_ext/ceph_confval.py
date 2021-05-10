@@ -329,19 +329,13 @@ class CephOption(ObjectDescription):
         module_path = self.env.config.ceph_confval_mgr_module_path
         module_path = self._normalize_path(module_path)
         sys.path.insert(0, module_path)
+        if not self._is_mgr_module(module_path, module):
+            raise self.error(f'module "{module}" not found under {module_path}')
+        fn = os.path.join(module_path, module, 'module.py')
+        if os.path.exists(fn):
+            self.env.note_dependency(fn)
         os.environ['UNITTEST'] = 'true'
-
-        modules = [name for name in os.listdir(module_path)
-                   if self._is_mgr_module(module_path, name)]
-        opts = []
-        for module in status_iterator(modules,
-                                      'loading module...', 'darkgreen',
-                                      len(modules),
-                                      self.env.app.verbosity):
-            fn = os.path.join(module_path, module, 'module.py')
-            if os.path.exists(fn):
-                self.env.note_dependency(fn)
-            opts += self._collect_options_from_module(module)
+        opts = self._collect_options_from_module(module)
         CephOption.mgr_opts[module] = dict((opt['name'], opt) for opt in opts)
         return CephOption.mgr_opts[module]
 
