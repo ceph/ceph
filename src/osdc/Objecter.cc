@@ -2701,6 +2701,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   if (!pi) {
+    ldout(cct,1) << __func__ << " get pg pool " << t->target_oloc.pool
+		 << " failed" << dendl;
     t->osd = -1;
     return RECALC_OP_TARGET_POOL_DNE;
   }
@@ -2721,12 +2723,19 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   t->target_oid = t->base_oid;
   t->target_oloc = t->base_oloc;
   if ((t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
-    if (is_read && pi->has_read_tier())
+    bool is_tier = false;
+    if (is_read && pi->has_read_tier()) {
       t->target_oloc.pool = pi->read_tier;
-    if (is_write && pi->has_write_tier())
+      is_tier = true;
+    }
+    if (is_write && pi->has_write_tier()) {
       t->target_oloc.pool = pi->write_tier;
+      is_tier = true;
+    }
     pi = osdmap->get_pg_pool(t->target_oloc.pool);
     if (!pi) {
+      ldout(cct,1) << __func__ << " get " << (is_tier ? "tier" : "none tier")
+		   << " pg pool " << t->target_oloc.pool << " failed" << dendl;
       t->osd = -1;
       return RECALC_OP_TARGET_POOL_DNE;
     }
@@ -2742,6 +2751,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
 					   pgid);
     if (ret == -ENOENT) {
+      ldout(cct,1) << __func__ << " target " << t->target_oid << " "
+		   << t->target_oloc << " to pgid failed" << dendl;
       t->osd = -1;
       return RECALC_OP_TARGET_POOL_DNE;
     }
