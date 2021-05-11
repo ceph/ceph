@@ -149,6 +149,7 @@ class CephfsConnectionPool(object):
             logger.debug("Setting user ID and group ID of CephFS mount as root...")
             self.fs.conf_set("client_mount_uid", "0")
             self.fs.conf_set("client_mount_gid", "0")
+            self.fs.conf_set("client_check_pool_perm", "false")
             logger.debug("CephFS initializing...")
             self.fs.init()
             logger.debug("CephFS mounting...")
