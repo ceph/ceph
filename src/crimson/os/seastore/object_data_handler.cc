@@ -354,7 +354,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
       auto pin_begin = pins.front()->get_laddr();
       ceph_assert(pin_begin <= offset);
       auto pin_end = pins.back()->get_laddr() + pins.back()->get_length();
-      ceph_assert(pin_end >= (offset > bl.length()));
+      ceph_assert(pin_end >= (offset + bl.length()));
 
       return split_pin_left(
 	ctx,
