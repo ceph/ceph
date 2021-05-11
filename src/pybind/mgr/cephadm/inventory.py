@@ -232,6 +232,7 @@ class ClientKeyringSpec(object):
     """
     A client keyring file that we should maintain
     """
+
     def __init__(
             self,
             entity: str,

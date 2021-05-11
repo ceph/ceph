@@ -187,7 +187,8 @@ class IscsiService(CephService):
                                 '-n', f'mgr.{self.mgr.get_mgr_id()}',
                                 '-p', cast(str, spec.pool),
                                 'rm',
-                                'gateway.conf'])
+                                'gateway.conf'],
+                               timeout=5)
                 logger.info(f'<gateway.conf> removed from {spec.pool}')
             except subprocess.CalledProcessError as ex:
                 logger.error(f'Error executing <<{ex.cmd}>>: {ex.output}')
