@@ -42,6 +42,10 @@ body {
   font-size: 0.9em;
 }
 
+.wy-nav-content-wrap.shift {
+  top: 2em;
+}
+
 section h1,
 section h2,
 section h3,
