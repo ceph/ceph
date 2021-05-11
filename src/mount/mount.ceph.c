@@ -22,9 +22,6 @@ bool skip_mtab_flag = false;
 bool v2_addrs = false;
 static const char * const EMPTY_STRING = "";
 
-/* TODO duplicates logic from kernel */
-#define CEPH_AUTH_NAME_DEFAULT "guest"
-
 #include "mtab.c"
 
 struct ceph_mount_info {
