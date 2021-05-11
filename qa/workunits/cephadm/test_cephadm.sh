@@ -161,6 +161,9 @@ systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph 
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
 $CEPHADM shell --fsid $FSID -e FOO=BAR -- printenv | grep FOO=BAR
 
+# test stdin
+echo foo | $CEPHADM shell -- cat | grep -q foo
+
 ## bootstrap
 ORIG_CONFIG=`mktemp -p $TMPDIR`
 CONFIG=`mktemp -p $TMPDIR`
