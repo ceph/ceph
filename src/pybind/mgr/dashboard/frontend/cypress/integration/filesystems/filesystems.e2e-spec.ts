@@ -1,6 +1,6 @@
 import { FilesystemsPageHelper } from './filesystems.po';
 
-describe('Filesystems page', () => {
+describe('File Systems page', () => {
   const filesystems = new FilesystemsPageHelper();
 
   beforeEach(() => {

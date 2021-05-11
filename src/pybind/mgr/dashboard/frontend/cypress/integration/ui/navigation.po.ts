@@ -40,7 +40,7 @@ export class NavigationPageHelper extends PageHelper {
         { menu: 'iSCSI', component: 'cd-iscsi' }
       ]
     },
-    { menu: 'Filesystem', component: 'cd-cephfs-list' }
+    { menu: 'File System', component: 'cd-cephfs-list' }
   ];
 
   getVerticalMenu() {
