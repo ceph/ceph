@@ -77,6 +77,34 @@ struct seastore_test_t :
     std::map<string, bufferlist> omap;
     bufferlist contents;
 
+    void touch(
+      CTransaction &t) {
+      t.touch(cid, oid);
+    }
+
+    void touch(
+      SeaStore &seastore) {
+      CTransaction t;
+      touch(t);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
+    void remove(
+      CTransaction &t) {
+      t.remove(cid, oid);
+    }
+
+    void remove(
+      SeaStore &seastore) {
+      CTransaction t;
+      remove(t);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
     void set_omap(
       CTransaction &t,
       const string &key,
@@ -267,6 +295,28 @@ struct seastore_test_t :
 	oid,
 	object_state_t{coll_name, coll, oid})).first->second;
   }
+
+  void remove_object(
+    object_state_t &sobj) {
+
+    sobj.remove(*seastore);
+    auto erased = test_objects.erase(sobj.oid);
+    ceph_assert(erased == 1);
+  }
+
+  void validate_objects() const {
+    std::vector<ghobject_t> oids;
+    for (auto& [oid, obj] : test_objects) {
+      oids.emplace_back(oid);
+    }
+    auto ret = seastore->list_objects(
+        coll,
+        ghobject_t(),
+        ghobject_t::get_max(),
+        std::numeric_limits<uint64_t>::max()).get0();
+    EXPECT_EQ(std::get<1>(ret), ghobject_t::get_max());
+    EXPECT_EQ(std::get<0>(ret), oids);
+  }
 };
 
 ghobject_t make_oid(int i) {
@@ -275,6 +325,7 @@ ghobject_t make_oid(int i) {
   auto ret = ghobject_t(
     hobject_t(
       sobject_t(ss.str(), CEPH_NOSNAP)));
+  ret.set_shard(shard_id_t(0));
   ret.hobj.nspace = "asdf";
   return ret;
 }
@@ -331,20 +382,16 @@ TEST_F(seastore_test_t, meta) {
   });
 }
 
-TEST_F(seastore_test_t, touch_stat)
+TEST_F(seastore_test_t, touch_stat_list_remove)
 {
   run_async([this] {
-    auto test = make_oid(0);
-    {
-      CTransaction t;
-      t.touch(coll_name, test);
-      do_transaction(std::move(t));
-    }
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
+    test_obj.check_size(*seastore);
+    validate_objects();
 
-    auto result = seastore->stat(
-      coll,
-      test).get0();
-    EXPECT_EQ(result.st_size, 0);
+    remove_object(test_obj);
+    validate_objects();
   });
 }
 
