@@ -44,7 +44,6 @@ export class CrushmapComponent implements OnDestroy, OnInit {
 
   constructor(
     private crushRuleService: CrushRuleService,
-    private healthService: HealthService,
     private timerService: TimerService,
     private titleService: Title
   ) {
