@@ -941,7 +941,7 @@ class CephfsMirrorService(CephService):
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(daemon_spec.daemon_id),
-            'caps': ['mon', 'allow r',
+            'caps': ['mon', 'profile cephfs-mirror',
                      'mds', 'allow r',
                      'osd', 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*',
                      'mgr', 'allow r'],
