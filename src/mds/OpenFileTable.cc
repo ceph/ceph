@@ -317,7 +317,7 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
 			 new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
 			 mds->finisher));
   SnapContext snapc;
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
   for (auto& [idx, vops] : ops_map) {
     object_t oid = get_object_name(idx);
     for (auto& op : vops) {
@@ -345,7 +345,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   C_GatherBuilder gather(g_ceph_context);
 
   SnapContext snapc;
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   const unsigned max_write_size = mds->mdcache->max_dir_commit_size;
 
@@ -728,7 +728,7 @@ void OpenFileTable::_read_omap_values(const std::string& key, unsigned idx,
 {
     object_t oid = get_object_name(idx);
     dout(10) << __func__ << ": load from '" << oid << ":" << key << "'" << dendl;
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    object_locator_t oloc(mds->get_metadata_pool());
     C_IO_OFT_Load *c = new C_IO_OFT_Load(this, idx, first);
     ObjectOperation op;
     if (first)
@@ -867,7 +867,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
     C_GatherBuilder gather(g_ceph_context,
 			   new C_OnFinisher(new C_IO_OFT_Recover(this),
 					    mds->finisher));
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    object_locator_t oloc(mds->get_metadata_pool());
     SnapContext snapc;
 
     for (unsigned omap_idx = 0; omap_idx < loaded_journals.size(); omap_idx++) {
@@ -1113,7 +1113,7 @@ void OpenFileTable::_prefetch_inodes()
 
   int64_t pool;
   if (prefetch_state == DIR_INODES)
-    pool = mds->mdsmap->get_metadata_pool();
+    pool = mds->get_metadata_pool();
   else if (prefetch_state == FILE_INODES)
     pool = mds->mdsmap->get_first_data_pool();
   else
