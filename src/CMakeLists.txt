@@ -878,31 +878,7 @@ endif(WITH_KVS)
 
 if(WITH_RADOSGW)
   add_subdirectory(libkmip)
-
-  set(civetweb_common_files civetweb/src/civetweb.c)
-  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
-  target_include_directories(civetweb_common_objs SYSTEM PRIVATE
-	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
-  set_property(TARGET civetweb_common_objs
-    APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
-  if (LIBSSL_SONAME)
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS SSL_LIB="${LIBSSL_SONAME}")
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS CRYPTO_LIB="${LIBCRYPTO_SONAME}")
-  endif()
-
-  if (OPENSSL_FOUND)
-    # Use cmake to determine openssl version, a TODO is to make
-    # civetweb itself do this based on openssl_api_compat strings
-    if (NOT (OPENSSL_VERSION VERSION_LESS "1.1"))
-      message(STATUS "Setting civetweb to use OPENSSL >= 1.1")
-      set_property(TARGET civetweb_common_objs
-        APPEND PROPERTY COMPILE_DEFINITIONS OPENSSL_API_1_1=1)
-    endif()
-  endif(OPENSSL_FOUND)
   add_subdirectory(rgw)
-
 endif(WITH_RADOSGW)
 
 install(FILES

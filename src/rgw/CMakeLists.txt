@@ -1,16 +1,3 @@
-set(civetweb_h
-  "${CMAKE_BINARY_DIR}/src/include/civetweb/civetweb.h")
-
-add_custom_command(
-  OUTPUT ${civetweb_h}
-  COMMAND ${CMAKE_COMMAND} -E make_directory
-    "${CMAKE_BINARY_DIR}/src/include/civetweb"
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_SOURCE_DIR}/src/civetweb/include/civetweb.h"
-    ${civetweb_h}
-  DEPENDS "${CMAKE_SOURCE_DIR}/src/civetweb/include/civetweb.h"
-  COMMENT "keep civetweb.h up-to-date")
-
 find_program(GPERF gperf)
 if(NOT GPERF)
   message(FATAL_ERROR "Can't find gperf")
@@ -236,8 +223,7 @@ set(rgw_a_srcs
   rgw_usage.cc
   rgw_opa.cc
   rgw_sts.cc
-  rgw_rest_sts.cc
-  ${civetweb_h})
+  rgw_rest_sts.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
@@ -306,11 +292,7 @@ set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
   rgw_dmclock_sync_scheduler.cc)
 set(radosgw_srcs
-  rgw_loadgen_process.cc
-  rgw_civetweb.cc
-  rgw_civetweb_frontend.cc
-  rgw_civetweb_log.cc
-  ${civetweb_h})
+  rgw_loadgen_process.cc)
 if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND radosgw_srcs rgw_fcgi_process.cc)
 endif()
@@ -328,8 +310,7 @@ target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock)
 
 add_library(radosgw SHARED ${radosgw_srcs} ${rgw_a_srcs} rgw_main.cc
-  $<TARGET_OBJECTS:rgw_kmip>
-  $<TARGET_OBJECTS:civetweb_common_objs>)
+  $<TARGET_OBJECTS:rgw_kmip>)
 
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
