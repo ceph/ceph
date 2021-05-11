@@ -13,6 +13,7 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/seastore_perf_counters.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 
@@ -348,6 +349,7 @@ private:
   size_t empty_segments;
   int64_t used_bytes = 0;
   bool init_complete = false;
+  PerfCounters &sc_perf;
 
   /// target journal_tail for next fresh segment
   journal_seq_t journal_tail_target;
@@ -364,9 +366,10 @@ private:
   std::optional<seastar::promise<>> blocked_io_wake;
 
 public:
-  SegmentCleaner(config_t config, bool detailed = false)
+  SegmentCleaner(config_t config, PerfCounters &perf, bool detailed = false)
     : detailed(detailed),
       config(config),
+      sc_perf(perf),
       gc_process(*this) {}
 
   void mount(SegmentManager &sm) {
@@ -447,6 +450,7 @@ public:
   }
 
   void mark_segment_released(segment_id_t segment) {
+    sc_perf.inc(ss_sm_segments_released);
     return mark_empty(segment);
   }
 
