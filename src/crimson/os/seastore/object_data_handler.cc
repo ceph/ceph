@@ -251,7 +251,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
       ctx.t,
       0 /* TODO -- pass hint based on object hash */,
       MAX_OBJECT_SIZE
-    ).safe_then([size, &object_data](auto pin) {
+    ).safe_then([&object_data](auto pin) {
       ceph_assert(pin->get_length() == MAX_OBJECT_SIZE);
       object_data.update_reserved(
 	pin->get_laddr(),
@@ -270,12 +270,12 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
   return seastar::do_with(
     lba_pin_list_t(),
     extent_to_write_list_t(),
-    [this, ctx, size, &object_data](auto &pins, auto &to_write) {
+    [ctx, size, &object_data](auto &pins, auto &to_write) {
       return ctx.tm.get_pins(
 	ctx.t,
 	object_data.get_reserved_data_base() + size,
 	object_data.get_reserved_data_len() - size
-      ).safe_then([this, ctx, size, &pins, &object_data, &to_write](auto _pins) {
+      ).safe_then([ctx, size, &pins, &object_data, &to_write](auto _pins) {
 	_pins.swap(pins);
 	ceph_assert(pins.size());
 	auto &pin = *pins.front();
@@ -293,7 +293,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	  return read_pin(
 	    ctx,
 	    pin.duplicate()
-	  ).safe_then([ctx, size, pin_offset, &pin, &object_data, &to_write](
+	  ).safe_then([size, pin_offset, &pin, &object_data, &to_write](
 			auto extent) {
 	    bufferlist bl;
 	    bl.append(
@@ -311,9 +311,9 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	    return clear_ertr::now();
 	  });
 	}
-      }).safe_then([ctx, size, &pins] {
+      }).safe_then([ctx, &pins] {
 	return do_removals(ctx, pins);
-      }).safe_then([ctx, size, &to_write] {
+      }).safe_then([ctx, &to_write] {
 	return do_insertions(ctx, to_write);
       }).safe_then([size, &object_data] {
 	if (size == 0) {
@@ -349,7 +349,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
     std::move(bl),
     std::move(_pins),
     extent_to_write_list_t(),
-    [this, ctx](laddr_t &offset, auto &bl, auto &pins, auto &to_write) {
+    [ctx](laddr_t &offset, auto &bl, auto &pins, auto &to_write) {
       ceph_assert(pins.size() >= 1);
       auto pin_begin = pins.front()->get_laddr();
       ceph_assert(pin_begin <= offset);
@@ -360,7 +360,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
 	ctx,
 	pins.front(),
 	offset
-      ).safe_then([this, ctx, pin_begin, &offset, &bl, &pins, &to_write](
+      ).safe_then([ctx, pin_begin, &offset, &bl, &pins, &to_write](
 		    auto p) {
 	auto &[left_extent, headptr] = p;
 	if (left_extent) {
@@ -379,7 +379,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
 	  ctx,
 	  pins.back(),
 	  offset + bl.length());
-      }).safe_then([this, ctx, pin_end, &offset, &bl, &pins, &to_write](
+      }).safe_then([ctx, pin_end, &offset, &bl, &to_write](
 		     auto p) {
 	auto &[right_extent, tailptr] = p;
 	if (tailptr) {
@@ -392,9 +392,9 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
 	  to_write.push_back(std::move(*right_extent));
 	}
 	return write_ertr::now();
-      }).safe_then([this, ctx, &pins] {
+      }).safe_then([ctx, &pins] {
 	return do_removals(ctx, pins);
-      }).safe_then([this, ctx, &to_write] {
+      }).safe_then([ctx, &to_write] {
 	return do_insertions(ctx, to_write);
       });
     });
@@ -418,7 +418,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	  ctx.t,
 	  logical_offset,
 	  bl.length()
-	).safe_then([this, ctx, offset, logical_offset, &object_data, &bl](
+	).safe_then([this, ctx,logical_offset, &bl](
 		      auto pins) {
 	  return overwrite(ctx, logical_offset, bufferlist(bl), std::move(pins));
 	});
@@ -433,10 +433,10 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 {
   return seastar::do_with(
     bufferlist(),
-    [this, ctx, obj_offset, len](auto &ret) {
+    [ctx, obj_offset, len](auto &ret) {
       return with_object_data(
 	ctx,
-	[this, ctx, obj_offset, len, &ret](const auto &object_data) {
+	[ctx, obj_offset, len, &ret](const auto &object_data) {
 	  /* Assumption: callers ensure that onode size is <= reserved
 	   * size and that len is adjusted here prior to call */
 	  ceph_assert(!object_data.is_null());
@@ -448,18 +448,18 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 	    ctx.t,
 	    loffset,
 	    len
-	  ).safe_then([this, ctx, loffset, len, &ret](auto _pins) {
+	  ).safe_then([ctx, loffset, len, &ret](auto _pins) {
 	    // offset~len falls within reserved region and len > 0
 	    ceph_assert(_pins.size() >= 1);
 	    ceph_assert((*_pins.begin())->get_laddr() <= loffset);
 	    return seastar::do_with(
 	      std::move(_pins),
 	      loffset,
-	      [this, ctx, loffset, len, &ret](auto &pins, auto &current) {
+	      [ctx, loffset, len, &ret](auto &pins, auto &current) {
 		return crimson::do_for_each(
 		  std::begin(pins),
 		  std::end(pins),
-		  [this, ctx, loffset, len, &current, &ret](auto &pin)
+		  [ctx, loffset, len, &current, &ret](auto &pin)
 		  -> read_ertr::future<> {
 		    ceph_assert(current <= (loffset + len));
 		    ceph_assert(
