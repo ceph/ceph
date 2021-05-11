@@ -13,7 +13,7 @@
     <li ngbNavItem="inventory"
         *ngIf="permissions.hosts.read">
       <a ngbNavLink
-         i18n>Inventory</a>
+         i18n>Physical Disks</a>
       <ng-template ngbNavContent>
         <cd-inventory [hostname]="selectedHostname"></cd-inventory>
       </ng-template>
