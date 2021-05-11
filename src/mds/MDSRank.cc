@@ -513,6 +513,11 @@ MDSRank::MDSRank(
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
+  // The metadata pool won't change in the whole life time
+  // of the fs, with this we can get rid of the mds_lock
+  // in many places too.
+  metadata_pool = mdsmap->get_metadata_pool();
+
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
@@ -882,11 +887,6 @@ class C_MDS_VoidFn : public MDSInternalContext
     (mds->*fn)();
   }
 };
-
-int64_t MDSRank::get_metadata_pool()
-{
-    return mdsmap->get_metadata_pool();
-}
 
 MDSTableClient *MDSRank::get_table_client(int t)
 {
