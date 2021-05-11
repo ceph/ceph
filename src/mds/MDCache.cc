@@ -8650,7 +8650,7 @@ void MDCache::open_remote_dentry(CDentry *dn, bool projected, MDSContext *fin, b
   dout(10) << "open_remote_dentry " << *dn << dendl;
   CDentry::linkage_t *dnl = projected ? dn->get_projected_linkage() : dn->get_linkage();
   inodeno_t ino = dnl->get_remote_ino();
-  int64_t pool = dnl->get_remote_d_type() == DT_DIR ? mds->mdsmap->get_metadata_pool() : -1;
+  int64_t pool = dnl->get_remote_d_type() == DT_DIR ? mds->get_metadata_pool() : -1;
   open_ino(ino, pool,
       new C_MDC_OpenRemoteDentry(this, dn, ino, fin, want_xlocked), true, want_xlocked); // backtrace
 }
@@ -8780,7 +8780,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       return;
     }
   } else if (err == -CEPHFS_ENOENT) {
-    int64_t meta_pool = mds->mdsmap->get_metadata_pool();
+    int64_t meta_pool = mds->get_metadata_pool();
     if (info.pool != meta_pool) {
       dout(10) << " no object in pool " << info.pool
 	       << ", retrying pool " << meta_pool << dendl;
@@ -9025,7 +9025,7 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
   } else {
     ceph_assert(!info.ancestors.empty());
     info.checking = mds->get_nodeid();
-    open_ino(info.ancestors[0].dirino, mds->mdsmap->get_metadata_pool(),
+    open_ino(info.ancestors[0].dirino, mds->get_metadata_pool(),
 	     new C_MDC_OpenInoParentOpened(this, ino), info.want_replica);
   }
 }
@@ -11951,7 +11951,7 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, const MDRequestRef& mdr
       mds->finisher));
 
   SnapContext nullsnapc;
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
   for (const auto& fg : uf.old_frags) {
     object_t oid = CInode::get_object_name(basedirfrag.ino, fg, "");
     ObjectOperation op;

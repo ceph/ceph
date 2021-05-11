@@ -2193,7 +2193,7 @@ public:
 		      vector<string> &&r,
 		      mempool::mds_co::compact_set<mempool::mds_co::string> &&stales) :
     dir(d), op_prio(pr) {
-    metapool = dir->mdcache->mds->mdsmap->get_metadata_pool();
+    metapool = dir->mdcache->mds->get_metadata_pool();
     version = dir->get_version();
     is_new = dir->is_new();
     to_set.swap(s);
