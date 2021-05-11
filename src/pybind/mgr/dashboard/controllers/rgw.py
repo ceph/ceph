@@ -300,12 +300,16 @@ class RgwBucket(RgwRESTController):
         uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
         bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
 
+        locking = self._get_locking(uid, daemon_name, bucket_name)
         if versioning_state:
+            if versioning_state == 'Suspended' and locking['lock_enabled']:
+                raise DashboardException(msg='Bucket versioning cannot be disabled/suspended '
+                                             'on buckets with object lock enabled ',
+                                             http_status_code=409, component='rgw')
             self._set_versioning(uid, daemon_name, bucket_name, versioning_state,
                                  mfa_delete, mfa_token_serial, mfa_token_pin)
 
         # Update locking if it is enabled.
-        locking = self._get_locking(uid, daemon_name, bucket_name)
         if locking['lock_enabled']:
             self._set_locking(uid, daemon_name, bucket_name, lock_mode,
                               lock_retention_period_days,
