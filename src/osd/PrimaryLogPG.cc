@@ -12311,7 +12311,6 @@ void PrimaryLogPG::_clear_recovery_state()
   last_backfill_started = hobject_t();
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
-    ceph_assert(recovering.count(*i));
     backfills_in_flight.erase(i++);
   }
 
