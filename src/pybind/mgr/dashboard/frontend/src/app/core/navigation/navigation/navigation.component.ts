@@ -25,7 +25,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   @HostBinding('class') get class(): string {
     return 'top-notification-' + this.notifications.length;
   }
-  healthData: any;
+  iscsi_daemons: any;
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
@@ -85,8 +85,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
   }
 
   getHealth() {
-    this.healthService.getMinimalHealth().subscribe((data: any) => {
-      this.healthData = data;
+    this.healthService.getMinimalHealth().subscribe((data) => {
+      this.iscsi_daemons = data.iscsi_daemons;
     });
   }
   blockHealthColor() {
