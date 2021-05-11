@@ -14,6 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+set -e
 
 SCRIPTNAME="$(basename $0)"
 if [ `uname` == FreeBSD ]; then
