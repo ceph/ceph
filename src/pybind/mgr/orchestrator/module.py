@@ -807,7 +807,7 @@ Usage:
 
     @_cli_write_command('orch osd rm stop')
     def _osd_rm_stop(self, svc_id: List[str]) -> HandleCommandResult:
-        """Remove OSD services"""
+        """Cancel ongoing OSD removal operation"""
         completion = self.stop_remove_osds(svc_id)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
