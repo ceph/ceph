@@ -770,6 +770,7 @@ class TestCephadm(object):
                 assert_rm_daemon(cephadm_module, 'nfs.name.test', 'test')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("subprocess.run", None)
     @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
     def test_iscsi(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
@@ -909,6 +910,7 @@ class TestCephadm(object):
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
+    @mock.patch("subprocess.run", None)
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
@@ -1093,10 +1095,12 @@ class TestCephadm(object):
             assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
 
             # Make sure, _check_daemons does a redeploy due to monmap change:
-            before_digest = cephadm_module.cache.get_host_client_files('test')['/etc/ceph/ceph.conf'][0]
+            before_digest = cephadm_module.cache.get_host_client_files('test')[
+                '/etc/ceph/ceph.conf'][0]
             cephadm_module._set_extra_ceph_conf('[mon]\nk2=v2')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            after_digest = cephadm_module.cache.get_host_client_files('test')['/etc/ceph/ceph.conf'][0]
+            after_digest = cephadm_module.cache.get_host_client_files('test')[
+                '/etc/ceph/ceph.conf'][0]
             assert before_digest != after_digest
 
     def test_etc_ceph_init(self):
