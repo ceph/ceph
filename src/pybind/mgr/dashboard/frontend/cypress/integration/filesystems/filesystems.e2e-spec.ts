@@ -11,7 +11,7 @@ describe('File Systems page', () => {
 
   describe('breadcrumb test', () => {
     it('should open and show breadcrumb', () => {
-      filesystems.expectBreadcrumbText('Filesystems');
+      filesystems.expectBreadcrumbText('File Systems');
     });
   });
 });
