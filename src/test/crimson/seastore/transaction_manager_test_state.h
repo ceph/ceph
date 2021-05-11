@@ -10,6 +10,7 @@
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 #include "crimson/os/seastore/seastore.h"
+#include "crimson/os/seastore/seastore_perf_counters.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
@@ -69,11 +70,11 @@ protected:
 };
 
 auto get_transaction_manager(
-  SegmentManager &segment_manager
+  SegmentManager &segment_manager, PerfCounters &perf
 ) {
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
-    true);
+    perf, true);
   auto journal = std::make_unique<Journal>(segment_manager);
   auto cache = std::make_unique<Cache>(segment_manager);
   auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
@@ -85,20 +86,23 @@ auto get_transaction_manager(
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
-    std::move(lba_manager));
+    std::move(lba_manager),
+    perf);
   return ret;
 }
 
 auto get_seastore(
   SegmentManagerRef sm
 ) {
-  auto tm = get_transaction_manager(*sm);
+  PerfServiceRef perf_service = PerfServiceRef(new PerfService());
+  auto tm = get_transaction_manager(*sm, perf_service->get_counters());
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     std::move(sm),
     std::move(tm),
     std::move(cm),
-    std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(*tm));
+    std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(*tm),
+    std::move(perf_service));
 }
 
 
@@ -107,11 +111,13 @@ protected:
   std::unique_ptr<TransactionManager> tm;
   LBAManager *lba_manager;
   SegmentCleaner *segment_cleaner;
+  PerfServiceRef perf_service = PerfServiceRef(new PerfService());
 
   TMTestState() : EphemeralTestState() {}
 
   virtual void _init() {
-    tm = get_transaction_manager(*segment_manager);
+    perf_service->add_to_collection();
+    tm = get_transaction_manager(*segment_manager, perf_service->get_counters());
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
   }
@@ -123,6 +129,7 @@ protected:
   }
 
   virtual seastar::future<> _teardown() {
+    perf_service->remove_from_collection();
     return tm->close(
     ).handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}

@@ -4,6 +4,7 @@
 #include "block_driver.h"
 
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/seastore_perf_counters.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/segment_manager/block.h"
@@ -41,6 +42,9 @@ private:
 
   using TransactionManager = crimson::os::seastore::TransactionManager;
   std::unique_ptr<TransactionManager> tm;
+  using PerfServiceRef = crimson::os::seastore::PerfServiceRef;
+  using PerfService = crimson::os::seastore::PerfService;
+  PerfServiceRef perf_service = PerfServiceRef(new PerfService());
 
   seastar::future<> mkfs();
   void init();

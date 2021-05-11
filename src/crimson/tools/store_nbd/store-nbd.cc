@@ -40,7 +40,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/common/config_proxy.h"
-#include "crimson/common/perf_counters_collection.h"
+#include "crimson/os/seastore/seastore_perf_counters.h"
 
 #include "test/crimson/seastar_runner.h"
 
@@ -306,22 +306,24 @@ int main(int argc, char** argv)
   }
 
   sc.run([=] {
-    return crimson::common::sharded_conf(
-    ).start(EntityName{}, string_view{"ceph"}
-    ).then([=] {
-      auto backend = get_backend(backend_config);
-      return seastar::do_with(
-	NBDHandler(*backend, nbd_config),
-	std::move(backend),
-	[](auto &nbd, auto &backend) {
-	  return backend->mount(
-	  ).then([&] {
-	    logger().debug("Running nbd server...");
-	    return nbd.run();
-	  }).then([&] {
-	    return backend->close();
-	  });
+    return crimson::common::sharded_perf_coll().start().then([=] {
+      return crimson::common::sharded_conf(
+      ).start(EntityName{}, string_view{"ceph"}
+      ).then([=] {
+        auto backend = get_backend(backend_config);
+        return seastar::do_with(
+          NBDHandler(*backend, nbd_config),
+	  std::move(backend),
+	  [](auto &nbd, auto &backend) {
+	    return backend->mount(
+	    ).then([&] {
+	      logger().debug("Running nbd server...");
+	      return nbd.run();
+	    }).then([&] {
+	      return backend->close();
+	    });
 	});
+      });
     }).then([=] {
       return crimson::common::sharded_perf_coll().stop().then([] {
 	return crimson::common::sharded_conf().stop();
