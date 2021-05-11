@@ -5167,17 +5167,18 @@ void OSD::reset_heartbeat_peers(bool all)
   stale -= cct->_conf.get_val<int64_t>("osd_heartbeat_stale");
   std::lock_guard l(heartbeat_lock);
   for (auto it = heartbeat_peers.begin(); it != heartbeat_peers.end();) {
-    HeartbeatInfo& hi = it->second;
+    auto& [peer, hi] = *it;
     if (all || hi.is_stale(stale)) {
       hi.con_back->mark_down();
       if (hi.con_front) {
         hi.con_front->mark_down();
       }
       // stop sending failure_report to mon too
-      failure_queue.erase(it->first);
-      heartbeat_peers.erase(it++);
+      failure_queue.erase(peer);
+      failure_pending.erase(peer);
+      it = heartbeat_peers.erase(it);
     } else {
-      it++;
+      ++it;
     }
   }
 }
