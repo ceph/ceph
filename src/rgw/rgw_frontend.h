@@ -129,18 +129,6 @@ public:
   }
 }; /* RGWProcessFrontend */
 
-class RGWFCGXFrontend : public RGWProcessFrontend {
-public:
-  RGWFCGXFrontend(RGWProcessEnv& pe, RGWFrontendConfig* _conf)
-    : RGWProcessFrontend(pe, _conf) {}
-
-  int init() override {
-    pprocess = new RGWFCGXProcess(g_ceph_context, &env,
-				  g_conf()->rgw_thread_pool_size, conf);
-    return 0;
-  }
-}; /* RGWFCGXFrontend */
-
 class RGWLoadGenFrontend : public RGWProcessFrontend, public DoutPrefixProvider {
 public:
   RGWLoadGenFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
