@@ -55,10 +55,12 @@ struct FLTreeOnode final : Onode, Value {
   };
 
   const onode_layout_t &get_layout() const final {
+    assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
   }
 
   onode_layout_t &get_mutable_layout(Transaction &t) final {
+    assert(status != status_t::DELETED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
@@ -67,6 +69,7 @@ struct FLTreeOnode final : Onode, Value {
   };
 
   void populate_recorder(Transaction &t) {
+    assert(status == status_t::MUTATED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
@@ -75,6 +78,11 @@ struct FLTreeOnode final : Onode, Value {
         p.first);
     }
     status = status_t::STABLE;
+  }
+
+  void mark_delete() {
+    assert(status != status_t::DELETED);
+    status = status_t::DELETED;
   }
 
   ~FLTreeOnode() final {}
@@ -88,17 +96,21 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
     tree(std::make_unique<SeastoreNodeExtentManager>(
-	   tm, laddr_t{})) {}
+           tm, laddr_t{})) {}
 
   mkfs_ret mkfs(Transaction &t) {
     return tree.mkfs(t
     ).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-	"Invalid error in FLTreeOnodeManager::mkfs"
+        "Invalid error in FLTreeOnodeManager::mkfs"
       }
     );
   }
+
+  contains_onode_ret contains_onode(
+    Transaction &trans,
+    const ghobject_t &hoid) final;
 
   get_onode_ret get_onode(
     Transaction &trans,
@@ -115,6 +127,16 @@ public:
   write_dirty_ret write_dirty(
     Transaction &trans,
     const std::vector<OnodeRef> &onodes) final;
+
+  erase_onode_ret erase_onode(
+    Transaction &trans,
+    OnodeRef &onode) final;
+
+  list_onodes_ret list_onodes(
+    Transaction &trans,
+    const ghobject_t& start,
+    const ghobject_t& end,
+    uint64_t limit) final;
 
   ~FLTreeOnodeManager();
 };
