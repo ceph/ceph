@@ -41,7 +41,7 @@ TEMPLATE = '''
   {%- elif opt.type == 'bool' %}
    :default: ``{{ default | string | lower }}``
   {%- else %}
-   :default: ``{{ default }}``
+   :default: {{ default | literal }}
   {%- endif -%}
 {%- endif %}
 {%- if opt.enum_values %}
