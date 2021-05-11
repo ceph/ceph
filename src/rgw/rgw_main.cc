@@ -48,9 +48,7 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
-#if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
-#endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #include "rgw_dmclock_scheduler_ctx.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include "rgw_lua.h"
@@ -562,7 +560,6 @@ int radosgw_Main(int argc, const char **argv)
 
       fe = new RGWLoadGenFrontend(env, config);
     }
-#if defined(WITH_RADOSGW_BEAST_FRONTEND)
     else if (framework == "beast") {
       int port;
       config->get_val("port", 80, &port);
@@ -571,7 +568,6 @@ int radosgw_Main(int argc, const char **argv)
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
-#endif /* WITH_RADOSGW_BEAST_FRONTEND */
 
     service_map_meta["frontend_type#" + stringify(fe_count)] = framework;
     service_map_meta["frontend_config#" + stringify(fe_count)] = config->get_config();

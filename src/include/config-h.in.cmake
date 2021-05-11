@@ -160,9 +160,6 @@
 /* define if leveldb is enabled */
 #cmakedefine WITH_LEVELDB
 
-/* define if radosgw's beast frontend enabled */
-#cmakedefine WITH_RADOSGW_BEAST_FRONTEND
-
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
 

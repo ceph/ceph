@@ -286,21 +286,16 @@ endif()
 
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
-  rgw_dmclock_sync_scheduler.cc)
+  rgw_dmclock_sync_scheduler.cc
+  rgw_dmclock_async_scheduler.cc)
 set(radosgw_srcs
-  rgw_loadgen_process.cc)
-
-if(WITH_RADOSGW_BEAST_FRONTEND)
-  list(APPEND radosgw_srcs
-    rgw_asio_client.cc
-    rgw_asio_frontend.cc)
-  list(APPEND rgw_schedulers_srcs
-    rgw_dmclock_async_scheduler.cc)
-endif()
+  rgw_loadgen_process.cc
+  rgw_asio_client.cc
+  rgw_asio_frontend.cc)
 
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
-  PUBLIC dmclock::dmclock)
+  PUBLIC dmclock::dmclock spawn)
 
 add_library(radosgw SHARED ${radosgw_srcs} ${rgw_a_srcs} rgw_main.cc
   $<TARGET_OBJECTS:rgw_kmip>)
@@ -313,12 +308,9 @@ target_link_libraries(radosgw
   PRIVATE ${rgw_libs} rgw_schedulers kmip
   PUBLIC dmclock::dmclock
 )
-if(WITH_RADOSGW_BEAST_FRONTEND)
-  target_link_libraries(rgw_schedulers PUBLIC spawn)
-  if(WITH_RADOSGW_BEAST_OPENSSL)
-    # used by rgw_asio_frontend.cc
-    target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
-  endif()
+if(WITH_RADOSGW_BEAST_OPENSSL)
+  # used by rgw_asio_frontend.cc
+  target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
 endif()
 set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
   SOVERSION 2)
