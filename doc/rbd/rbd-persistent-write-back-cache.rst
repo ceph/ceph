@@ -47,8 +47,8 @@ need to be enabled.::
         rbd persistent cache mode = {cache-mode}
         rbd plugins = pwl_cache
 
-Value of {cache-mode} can be ``rwl`` or ``ssd``. By default it is
-``disabled``
+Value of {cache-mode} can be ``rwl``, ``ssd`` or ``disabled``. By default the
+cache is disabled.
 
 Here are some cache configuration settings:
 
@@ -56,10 +56,12 @@ Here are some cache configuration settings:
   have DAX enabled (see `DAX`_) when using ``rwl`` mode to avoid performance
   degradation.
 
-- ``rbd_persistent_cache_size`` The cache size per image.
+- ``rbd_persistent_cache_size`` The cache size per image. The minimum cache
+  size is 1 GB.
 
 - ``rbd_persistent_cache_log_periodic_stats`` This is a debug option. It is
-  used to emit periodic perf stats to the debug log.
+  used to emit periodic perf stats to the debug log if ``debug rbd pwl`` is
+  set to ``1`` or higher.
 
 The above configurations can be set per-host, per-pool, per-image etc. Eg, to
 set per-host, add the overrides to the appropriate `section`_ in the host's
@@ -70,21 +72,21 @@ Cache Status
 ------------
 
 The persistent write-back cache is enabled when the exclusive lock is acquired,
-and it is closed when the exclusive lock is released. To check the transient
-cache status, users may use the command ``rbd status``.  ::
+and it is closed when the exclusive lock is released. To check the cache status,
+users may use the command ``rbd status``.  ::
 
         rbd status {pool-name}/{image-name}
 
 The status of the cache is shown, including present, clean, cache size and the
-position.
+location. Currently the status is updated only at the time the cache is opened
+and closed and therefore may appear to be out of date (e.g. show that the cache
+is clean when it is actually dirty).
 
 For example::
 
         $ rbd status rbd/foo
         Watchers: none
-        image cache state:
-        clean: false  size: 1 GiB  host: sceph9  path: /tmp
-
+        Image cache state: {"present":"true","empty":"false","clean":"true","cache_type":"ssd","pwl_host":"sceph9","pwl_path":"/tmp/rbd-pwl.rbd.abcdef123456.pool","pwl_size":1073741824}
 
 Discard Cache
 -------------
