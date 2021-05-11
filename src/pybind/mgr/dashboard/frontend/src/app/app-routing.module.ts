@@ -269,7 +269,7 @@ const routes: Routes = [
         path: 'cephfs',
         component: CephfsListComponent,
         canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'Filesystems' }
+        data: { breadcrumbs: 'File Systems' }
       },
       // Object Gateway
       {
