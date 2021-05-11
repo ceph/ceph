@@ -19,7 +19,11 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
   filesystems: any = [];
   selection = new CdTableSelection();
 
-  constructor(private cephfsService: CephfsService, private cdDatePipe: CdDatePipe, private titleService: Title) {
+  constructor(
+    private cephfsService: CephfsService,
+    private cdDatePipe: CdDatePipe,
+    private titleService: Title
+  ) {
     super();
     this.titleService.setTitle('File Systems');
   }
