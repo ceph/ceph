@@ -1,9 +1,6 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
 	url = https://github.com/ceph/ceph-object-corpus.git
-[submodule "src/civetweb"]
-	path = src/civetweb
-	url = https://github.com/ceph/civetweb
 [submodule "src/erasure-code/jerasure/jerasure"]
 	path = src/erasure-code/jerasure/jerasure
 	url = https://github.com/ceph/jerasure.git

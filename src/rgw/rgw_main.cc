@@ -225,12 +225,12 @@ int radosgw_Main(int argc, const char **argv)
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
   if (frontends.empty()) {
-    frontends.push_back("civetweb");
+    frontends.push_back("beast");
   }
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
 
-    if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
+    if (f.find("beast") != string::npos) {
       if (f.find("port") != string::npos) {
         // check for the most common ws problems
         if ((f.find("port=") == string::npos) ||
@@ -559,19 +559,7 @@ int radosgw_Main(int argc, const char **argv)
 
     RGWFrontend *fe = NULL;
 
-    if (framework == "civetweb" || framework == "mongoose") {
-      lderr(cct.get()) << "IMPORTANT: the civetweb frontend is now deprecated "
-          "and will be removed in a future release" << dendl;
-      framework = "civetweb";
-      std::string uri_prefix;
-      config->get_val("prefix", "", &uri_prefix);
-
-      RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
-      //TODO: move all of scheduler initializations to frontends?
-
-      fe = new RGWCivetWebFrontend(env, config, sched_ctx);
-    }
-    else if (framework == "loadgen") {
+    if (framework == "loadgen") {
       int port;
       config->get_val("port", 80, &port);
       std::string uri_prefix;
