@@ -11752,8 +11752,6 @@ ObjectContextRef PrimaryLogPG::create_object_context(const object_info_t& oi,
   if (ssc)
     register_snapset_context(ssc);
   dout(10) << "create_object_context " << (void*)obc.get() << " " << oi.soid << " " << dendl;
-  if (is_active())
-    populate_obc_watchers(obc);
   return obc;
 }
 
