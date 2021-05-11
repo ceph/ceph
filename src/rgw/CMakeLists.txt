@@ -232,10 +232,6 @@ set_source_files_properties(rgw_iam_policy.cc PROPERTIES
   COMPILE_FLAGS -I${CMAKE_BINARY_DIR}/src/rgw)
 
 
-if (WITH_RADOSGW_FCGI_FRONTEND)
-  list(APPEND rgw_a_srcs rgw_fcgi.cc)
-endif()
-
 add_library(rgw_a STATIC
     ${rgw_a_srcs}
     $<TARGET_OBJECTS:rgw_common>)
@@ -293,9 +289,6 @@ set(rgw_schedulers_srcs
   rgw_dmclock_sync_scheduler.cc)
 set(radosgw_srcs
   rgw_loadgen_process.cc)
-if (WITH_RADOSGW_FCGI_FRONTEND)
-  list(APPEND radosgw_srcs rgw_fcgi_process.cc)
-endif()
 
 if(WITH_RADOSGW_BEAST_FRONTEND)
   list(APPEND radosgw_srcs
@@ -337,7 +330,7 @@ target_link_libraries(radosgwd radosgw librados
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global
-  ${FCGI_LIBRARY} ${LIB_RESOLV}
+  ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
 set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
@@ -352,7 +345,7 @@ target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
-  global ${FCGI_LIBRARY} ${LIB_RESOLV}
+  global ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
@@ -363,7 +356,7 @@ target_link_libraries(radosgw-es ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
-  global ${FCGI_LIBRARY} ${LIB_RESOLV}
+  global ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
 
@@ -381,7 +374,7 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
-  global ${FCGI_LIBRARY} ${LIB_RESOLV}
+  global ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 

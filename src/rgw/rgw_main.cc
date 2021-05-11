@@ -110,9 +110,6 @@ static void signal_fd_finalize()
 static void handle_sigterm(int signum)
 {
   dout(1) << __func__ << dendl;
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-  FCGX_ShutdownPending();
-#endif
 
   // send a signal to make fcgi's accept(2) wake up.  unfortunately the
   // initial signal often isn't sufficient because we race with accept's
@@ -327,10 +324,6 @@ int radosgw_Main(int argc, const char **argv)
   rgw_http_client_init(g_ceph_context);
   rgw_kmip_client_init(*new RGWKMIPManagerImpl(g_ceph_context));
   
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-  FCGX_Init();
-#endif
-
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
@@ -579,16 +572,6 @@ int radosgw_Main(int argc, const char **argv)
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-    else if (framework == "fastcgi" || framework == "fcgi") {
-      framework = "fastcgi";
-      std::string uri_prefix;
-      config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, uri_prefix, auth_registry };
-
-      fe = new RGWFCGXFrontend(fcgi_pe, config);
-    }
-#endif /* WITH_RADOSGW_FCGI_FRONTEND */
 
     service_map_meta["frontend_type#" + stringify(fe_count)] = framework;
     service_map_meta["frontend_config#" + stringify(fe_count)] = config->get_config();

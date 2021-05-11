@@ -137,24 +137,6 @@ public:
   }
 }; /* RGWProcess */
 
-class RGWFCGXProcess : public RGWProcess {
-  int max_connections;
-public:
-
-  /* have a bit more connections than threads so that requests are
-   * still accepted even if we're still processing older requests */
-  RGWFCGXProcess(CephContext* const cct,
-                 RGWProcessEnv* const pe,
-                 const int num_threads,
-                 RGWFrontendConfig* const conf)
-    : RGWProcess(cct, pe, num_threads, conf),
-      max_connections(num_threads + (num_threads >> 3)) {
-  }
-
-  void run() override;
-  void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;
-};
-
 class RGWProcessControlThread : public Thread {
   RGWProcess *pprocess;
 public:

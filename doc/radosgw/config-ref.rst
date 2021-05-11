@@ -57,41 +57,6 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 :Default: ``10000``
 
 
-``rgw_socket_path``
-
-:Description: The socket path for the domain socket. ``FastCgiExternalServer``
-              uses this socket. If you do not specify a socket path, Ceph
-              Object Gateway will not run as an external server. The path you
-              specify here must be the same as the path specified in the
-              ``rgw.conf`` file.
-
-:Type: String
-:Default: N/A
-
-``rgw_fcgi_socket_backlog``
-
-:Description: The socket backlog for fcgi.
-:Type: Integer
-:Default: ``1024``
-
-``rgw_host``
-
-:Description: The host for the Ceph Object Gateway instance. Can be an IP
-              address or a hostname.
-
-:Type: String
-:Default: ``0.0.0.0``
-
-
-``rgw_port``
-
-:Description: Port the instance listens for requests. If not specified,
-              Ceph Object Gateway runs external FastCGI.
-
-:Type: String
-:Default: None
-
-
 ``rgw_dns_name``
 
 :Description: The DNS name of the served domain. See also the ``hostnames`` setting within regions.
