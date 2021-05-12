@@ -115,7 +115,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   }).safe_then([this] {
     cache->dump_contents();
     return journal->close();
-  }).safe_then([this, FNAME] {
+  }).safe_then([FNAME] {
     DEBUG("completed");
     return seastar::now();
   });
