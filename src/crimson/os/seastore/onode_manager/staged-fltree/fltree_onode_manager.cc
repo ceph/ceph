@@ -1,14 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "crimson/os/seastore/logging.h"
+
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/stages/key_layout.h"
-
-namespace {
-[[maybe_unused]] seastar::logger& logger() {
-  return crimson::get_logger(ceph_subsys_test);
-}
-}
 
 namespace crimson::os::seastore::onode {
 
@@ -30,15 +26,13 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   Transaction &trans,
   const ghobject_t &hoid)
 {
+  LOG_PREFIX(FLTreeOnodeManager::get_onode);
   return tree.find(
     trans, hoid
-  ).safe_then([this, &hoid](auto cursor)
+  ).safe_then([this, &hoid, &trans, FNAME](auto cursor)
               -> get_onode_ret {
     if (cursor == tree.end()) {
-      logger().debug(
-        "FLTreeOnodeManager::{}: no entry for {}",
-        __func__,
-        hoid);
+      DEBUGT("no entry for {}", trans, hoid);
       return crimson::ct_error::enoent::make();
     }
     auto val = OnodeRef(new FLTreeOnode(cursor.value()));
@@ -58,6 +52,7 @@ FLTreeOnodeManager::get_or_create_onode(
   Transaction &trans,
   const ghobject_t &hoid)
 {
+  LOG_PREFIX(FLTreeOnodeManager::get_or_create_onode);
   if (hoid.hobj.oid.name.length() + hoid.hobj.nspace.length()
       > key_view_t::MAX_NS_OID_LENGTH) {
     return crimson::ct_error::value_too_large::make();
@@ -65,15 +60,12 @@ FLTreeOnodeManager::get_or_create_onode(
   return tree.insert(
     trans, hoid,
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
-  ).safe_then([&trans, &hoid](auto p)
+  ).safe_then([&trans, &hoid, FNAME](auto p)
               -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
     auto val = OnodeRef(new FLTreeOnode(cursor.value()));
     if (created) {
-      logger().debug(
-        "FLTreeOnodeManager::{}: created onode for entry for {}",
-        __func__,
-        hoid);
+      DEBUGT("created onode for entry for {}", trans, hoid);
       val->get_mutable_layout(trans) = onode_layout_t{};
     }
     return seastar::make_ready_future<OnodeRef>(

@@ -494,7 +494,7 @@ class TreeBuilder {
 
  private:
   static seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_test);
   }
 
   KVPool<ValueItem>& kvs;

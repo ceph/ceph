@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
+
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_delta_recorder.h"
 
@@ -27,9 +28,6 @@ class SeastoreSuper final: public Super {
   }
   void write_root_laddr(context_t c, laddr_t addr) override;
  private:
-  static seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
-  }
   laddr_t root_addr;
   TransactionManager& tm;
 };
@@ -74,11 +72,10 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
 
   tm_future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) override {
-    logger().trace("OTree::Seastore: reading {}B at {:#x} ...", len, addr);
+    TRACET("reading {}B at {:#x} ...", t, len, addr);
     return tm.read_extent<SeastoreNodeExtent>(t, addr, len
-    ).safe_then([addr, len](auto&& e) {
-      logger().trace("OTree::Seastore: read {}B at {:#x}",
-                     e->get_length(), e->get_laddr());
+    ).safe_then([addr, len, this, &t](auto&& e) {
+      TRACET("read {}B at {:#x}", t, e->get_length(), e->get_laddr());
       assert(e->get_laddr() == addr);
       assert(e->get_length() == len);
       std::ignore = addr;
@@ -89,11 +86,11 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
 
   tm_future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) override {
-    logger().trace("OTree::Seastore: allocating {}B ...", len);
+    TRACET("allocating {}B ...", t, len);
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
-    ).safe_then([len](auto extent) {
-      logger().debug("OTree::Seastore: allocated {}B at {:#x}",
-                     extent->get_length(), extent->get_laddr());
+    ).safe_then([len, this, &t](auto extent) {
+      DEBUGT("allocated {}B at {:#x}",
+             t, extent->get_length(), extent->get_laddr());
       assert(extent->get_length() == len);
       std::ignore = len;
       return NodeExtentRef(extent);
@@ -105,18 +102,18 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     LogicalCachedExtentRef extent = _extent;
     auto addr = extent->get_laddr();
     auto len = extent->get_length();
-    logger().debug("OTree::Seastore: retiring {}B at {:#x} ...", len, addr);
-    return tm.dec_ref(t, extent).safe_then([addr, len] (unsigned cnt) {
+    DEBUGT("retiring {}B at {:#x} ...", t, len, addr);
+    return tm.dec_ref(t, extent).safe_then([addr, len, this, &t] (unsigned cnt) {
       assert(cnt == 0);
-      logger().trace("OTree::Seastore: retired {}B at {:#x} ...", len, addr);
+      TRACET("retired {}B at {:#x} ...", t, len, addr);
     });
   }
 
   tm_future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
-    logger().trace("OTree::Seastore: get root ...");
+    TRACET("get root ...", t);
     return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
-      logger().trace("OTree::Seastore: got root {:#x}", root_addr);
+      TRACET("got root {:#x}", t, root_addr);
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
     });
   }
@@ -126,9 +123,8 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   }
 
  private:
-  static seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
-  }
+  static LOG_PREFIX(OTree::Seastore);
+
   TransactionManager& tm;
   const laddr_t addr_min;
 };

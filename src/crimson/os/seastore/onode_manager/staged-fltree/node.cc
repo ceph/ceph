@@ -8,19 +8,11 @@
 #include <sstream>
 
 #include "common/likely.h"
-#include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
+
 #include "node_extent_manager.h"
 #include "node_impl.h"
 #include "stages/node_stage_layout.h"
-
-namespace {
-
-seastar::logger& logger()
-{
-  return crimson::get_logger(ceph_subsys_filestore);
-}
-
-}
 
 namespace crimson::os::seastore::onode {
 
@@ -403,24 +395,24 @@ void Node::test_make_destructable(
 
 node_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
 {
+  LOG_PREFIX(OTree::Node::mkfs);
   return LeafNode::allocate_root(c, root_tracker
-  ).safe_then([](auto ret) {
-    logger().info("OTree::Node::Mkfs: allocated root {}",
-                  ret->get_name());
+  ).safe_then([c, FNAME](auto ret) {
+    INFOT("allocated root {}", c.t, ret->get_name());
   });
 }
 
 node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracker)
 {
+  LOG_PREFIX(OTree::Node::load_root);
   return c.nm.get_super(c.t, root_tracker
-  ).safe_then([c, &root_tracker](auto&& _super) {
+  ).safe_then([c, &root_tracker, FNAME](auto&& _super) {
     auto root_addr = _super->get_root_laddr();
     assert(root_addr != L_ADDR_NULL);
     return Node::load(c, root_addr, true
     ).safe_then([c, _super = std::move(_super),
-                 &root_tracker](auto root) mutable {
-      logger().trace("OTree::Node::LoadRoot: loaded {}",
-                     root->get_name());
+                 &root_tracker, FNAME](auto root) mutable {
+      TRACET("loaded {}", c.t, root->get_name());
       assert(root->impl->field_type() == field_type_t::N0);
       root->as_root(std::move(_super));
       std::ignore = c; // as only used in an assert
@@ -448,15 +440,16 @@ void Node::as_root(Super::URef&& _super)
 
 node_future<> Node::upgrade_root(context_t c)
 {
+  LOG_PREFIX(OTree::Node::upgrade_root);
   assert(is_root());
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   super->do_untrack_root(*this);
   return InternalNode::allocate_root(c, impl->level(), impl->laddr(), std::move(super)
-  ).safe_then([this](auto new_root) {
+  ).safe_then([this, c, FNAME](auto new_root) {
     as_child(search_position_t::end(), new_root);
-    logger().info("OTree::Node::UpgradeRoot: upgraded from {} to {}",
-                  get_name(), new_root->get_name());
+    INFOT("upgraded from {} to {}",
+          c.t, get_name(), new_root->get_name());
   });
 }
 
@@ -502,6 +495,7 @@ node_future<>
 Node::try_merge_adjacent(
     context_t c, bool update_parent_index, Ref<Node>&& this_ref)
 {
+  LOG_PREFIX(OTree::Node::try_merge_adjacent);
   assert(this == this_ref.get());
   impl->validate_non_empty();
   assert(!is_root());
@@ -517,7 +511,7 @@ Node::try_merge_adjacent(
   }
 
   return parent_info().ptr->get_child_peers(c, parent_info().position
-  ).safe_then([c, this_ref = std::move(this_ref), this,
+  ).safe_then([c, this_ref = std::move(this_ref), this, FNAME,
                update_parent_index] (auto lr_nodes) mutable -> node_future<> {
     auto& [lnode, rnode] = lr_nodes;
     Ref<Node> left_for_merge;
@@ -565,10 +559,10 @@ Node::try_merge_adjacent(
         } else {
           update_index_after_merge = update_parent_index;
         }
-        logger().info("OTree::Node::MergeAdjacent: merge {} and {} "
-                      "at merge_stage={}, merge_size={}B, update_index={}, is_left={} ...",
-                      left_for_merge->get_name(), right_for_merge->get_name(),
-                      merge_stage, merge_size, update_index_after_merge, is_left);
+        INFOT("merge {} and {} at merge_stage={}, merge_size={}B, "
+              "update_index={}, is_left={} ...",
+              c.t, left_for_merge->get_name(), right_for_merge->get_name(),
+              merge_stage, merge_size, update_index_after_merge, is_left);
         // we currently cannot generate delta depends on another extent content,
         // so use rebuild_extent() as a workaround to rebuild the node from a
         // fresh extent, thus no need to generate delta.
@@ -658,7 +652,8 @@ node_future<Ref<Node>> Node::load(
 
 node_future<NodeExtentMutable> Node::rebuild_extent(context_t c)
 {
-  logger().debug("OTree::Node::Rebuild: {} ...", get_name());
+  LOG_PREFIX(OTree::Node::rebuild_extent);
+  DEBUGT("{} ...", c.t, get_name());
   assert(!is_root());
   // assume I'm already ref counted by caller
 
@@ -669,7 +664,8 @@ node_future<NodeExtentMutable> Node::rebuild_extent(context_t c)
 
 node_future<> Node::retire(context_t c, Ref<Node>&& this_ref)
 {
-  logger().debug("OTree::Node::Retire: {} ...", get_name());
+  LOG_PREFIX(OTree::Node::retire);
+  DEBUGT("{} ...", c.t, get_name());
   assert(this_ref.get() == this);
   assert(!is_tracking());
   assert(!super);
@@ -683,9 +679,10 @@ node_future<> Node::retire(context_t c, Ref<Node>&& this_ref)
 
 void Node::make_tail(context_t c)
 {
+  LOG_PREFIX(OTree::Node::make_tail);
   assert(!impl->is_level_tail());
   assert(!impl->is_keys_empty());
-  logger().debug("OTree::Node::MakeTail: {} ...", get_name());
+  DEBUGT("{} ...", c.t, get_name());
   impl->prepare_mutate(c);
   auto tail_pos = impl->make_tail();
   if (impl->node_type() == node_type_t::INTERNAL) {
@@ -731,6 +728,7 @@ node_future<> InternalNode::apply_child_split(
     context_t c, Ref<Node>&& left_child, Ref<Node>&& right_child,
     bool update_right_index)
 {
+  LOG_PREFIX(OTree::InternalNode::apply_child_split);
   auto& left_pos = left_child->parent_info().position;
 
 #ifndef NDEBUG
@@ -745,10 +743,9 @@ node_future<> InternalNode::apply_child_split(
 
   impl->prepare_mutate(c);
 
-  logger().debug("OTree::Internal::ApplyChildSplit: apply {}'s child "
-                 "{} to split to {}, update_index={} ...",
-                 get_name(), left_child->get_name(),
-                 right_child->get_name(), update_right_index);
+  DEBUGT("apply {}'s child {} to split to {}, update_index={} ...",
+         c.t, get_name(), left_child->get_name(),
+         right_child->get_name(), update_right_index);
 
   // update layout from left_pos => left_child_addr to right_child_addr
   auto left_child_addr = left_child->impl->laddr();
@@ -791,6 +788,7 @@ node_future<> InternalNode::apply_child_split(
 
 node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
 {
+  LOG_PREFIX(OTree::InternalNode::erase_child);
   // this is a special version of recursive merge
   impl->validate_non_empty();
   assert(child_ref->use_count() == 1);
@@ -809,15 +807,14 @@ node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
     } else {
       return node_ertr::make_ready_future<Ref<Node>>();
     }
-  }).safe_then([c, this, child_ref = std::move(child_ref)]
+  }).safe_then([c, this, child_ref = std::move(child_ref), FNAME]
                (auto&& new_tail_child) mutable {
     auto child_pos = child_ref->parent_info().position;
     if (new_tail_child) {
-      logger().info("OTree::Internal::EraseChild: erase {}'s child {} at pos({}), "
-                    "and fix new child tail {} at pos({}) ...",
-                    get_name(), child_ref->get_name(), child_pos,
-                    new_tail_child->get_name(),
-                    new_tail_child->parent_info().position);
+      INFOT("erase {}'s child {} at pos({}), "
+            "and fix new child tail {} at pos({}) ...",
+            c.t, get_name(), child_ref->get_name(), child_pos,
+            new_tail_child->get_name(), new_tail_child->parent_info().position);
       assert(!new_tail_child->impl->is_level_tail());
       new_tail_child->make_tail(c);
       assert(new_tail_child->impl->is_level_tail());
@@ -826,21 +823,21 @@ node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
         new_tail_child.reset();
       }
     } else {
-      logger().info("OTree::Internal::EraseChild: erase {}'s child {} at pos({}) ...",
-                    get_name(), child_ref->get_name(), child_pos);
+      INFOT("erase {}'s child {} at pos({}) ...",
+            c.t, get_name(), child_ref->get_name(), child_pos);
     }
 
     do_untrack_child(*child_ref);
     Ref<Node> this_ref = this;
     child_ref->_parent_info.reset();
     return child_ref->retire(c, std::move(child_ref)
-    ).safe_then([c, this, child_pos, this_ref = std::move(this_ref)] () mutable {
+    ).safe_then([c, this, child_pos, FNAME,
+                 this_ref = std::move(this_ref)] () mutable {
       if ((impl->is_level_tail() && impl->is_keys_empty()) ||
           (!impl->is_level_tail() && impl->is_keys_one())) {
         // there is only one value left
         // fast path without mutating the extent
-        logger().debug("OTree::Internal::EraseChild: {} has one value left, erase ...",
-                       get_name());
+        DEBUGT("{} has one value left, erase ...", c.t, get_name());
 #ifndef NDEBUG
         if (impl->is_level_tail()) {
           assert(child_pos.is_end());
@@ -914,6 +911,7 @@ template <bool FORCE_MERGE>
 node_future<> InternalNode::fix_index(
     context_t c, Ref<Node>&& child, bool check_downgrade)
 {
+  LOG_PREFIX(OTree::InternalNode::fix_index);
   impl->validate_non_empty();
 
   auto& child_pos = child->parent_info().position;
@@ -924,9 +922,8 @@ node_future<> InternalNode::fix_index(
   impl->prepare_mutate(c);
 
   key_view_t new_key = *child->impl->get_pivot_index();
-  logger().debug("OTree::Internal::FixIndex: fix {}'s index of child {} at pos({}), "
-                 "new_key={} ...",
-                 get_name(), child->get_name(), child_pos, new_key);
+  DEBUGT("fix {}'s index of child {} at pos({}), new_key={} ...",
+         c.t, get_name(), child->get_name(), child_pos, new_key);
 
   // erase the incorrect item
   auto [erase_stage, next_pos] = impl->erase(child_pos);
@@ -977,14 +974,15 @@ node_future<> InternalNode::apply_children_merge(
     context_t c, Ref<Node>&& left_child, laddr_t origin_left_addr,
     Ref<Node>&& right_child, bool update_index)
 {
+  LOG_PREFIX(OTree::InternalNode::apply_children_merge);
   auto left_pos = left_child->parent_info().position;
   auto left_addr = left_child->impl->laddr();
   auto& right_pos = right_child->parent_info().position;
   auto right_addr = right_child->impl->laddr();
-  logger().debug("OTree::Internal::ApplyChildMerge: apply {}'s child {} (was {:#x}) "
-                 "at pos({}), to merge with {} at pos({}), update_index={} ...",
-                 get_name(), left_child->get_name(), origin_left_addr, left_pos,
-                 right_child->get_name(), right_pos, update_index);
+  DEBUGT("apply {}'s child {} (was {:#x}) at pos({}), "
+         "to merge with {} at pos({}), update_index={} ...",
+         c.t, get_name(), left_child->get_name(), origin_left_addr, left_pos,
+         right_child->get_name(), right_pos, update_index);
 
 #ifndef NDEBUG
   assert(left_child->parent_info().ptr == this);
@@ -1315,6 +1313,7 @@ node_future<> InternalNode::test_clone_root(
 node_future<> InternalNode::try_downgrade_root(
     context_t c, Ref<Node>&& this_ref)
 {
+  LOG_PREFIX(OTree::InternalNode::try_downgrade_root);
   assert(this_ref.get() == this);
   assert(is_root());
   assert(impl->is_level_tail());
@@ -1326,9 +1325,10 @@ node_future<> InternalNode::try_downgrade_root(
   // proceed downgrade root to the only child
   laddr_t child_addr = impl->get_tail_value()->value;
   return get_or_track_child(c, search_position_t::end(), child_addr
-  ).safe_then([c, this, this_ref = std::move(this_ref)] (auto child) mutable {
-    logger().info("OTree::Internal::DownGradeRoot: downgrade {} to new root {}",
-                  get_name(), child->get_name());
+  ).safe_then([c, this, FNAME,
+               this_ref = std::move(this_ref)] (auto child) mutable {
+    INFOT("downgrade {} to new root {}",
+          c.t, get_name(), child->get_name());
     // Invariant, see InternalNode::erase_child()
     // the new internal root should have at least 2 children.
     assert(child->impl->is_level_tail());
@@ -1352,6 +1352,7 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
     Ref<Node> insert_child,
     Ref<Node> outdated_child)
 {
+  LOG_PREFIX(OTree::InternalNode::insert_or_split);
   // XXX: check the insert_child is unlinked from this node
 #ifndef NDEBUG
   auto _insert_key = *insert_child->impl->get_pivot_index();
@@ -1359,11 +1360,10 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
 #endif
   auto insert_value = insert_child->impl->laddr();
   auto insert_pos = pos;
-  logger().debug("OTree::Internal::InsertSplit: insert {} "
-                 "with insert_key={}, insert_child={}, insert_pos({}), "
-                 "outdated_child={} ...",
-                 get_name(), insert_key, insert_child->get_name(),
-                 insert_pos, (outdated_child ? "True" : "False"));
+  DEBUGT("insert {} with insert_key={}, insert_child={}, insert_pos({}), "
+         "outdated_child={} ...",
+         c.t, get_name(), insert_key, insert_child->get_name(),
+         insert_pos, (outdated_child ? "True" : "False"));
   auto [insert_stage, insert_size] = impl->evaluate_insert(
       insert_key, insert_value, insert_pos);
   auto free_size = impl->free_size();
@@ -1398,14 +1398,14 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
         c, impl->field_type(), impl->is_level_tail(), impl->level());
   }).safe_then([this, insert_key, insert_child, insert_pos,
                 insert_stage=insert_stage, insert_size=insert_size,
-                outdated_child](auto fresh_right) mutable {
+                outdated_child, c, FNAME](auto fresh_right) mutable {
     // I'm the left_node and need to split into the right_node
     auto right_node = fresh_right.node;
-    logger().info("OTree::Internal::InsertSplit: proceed split {} to fresh {} "
-                  "with insert_child={}, outdated_child={} ...",
-                  get_name(), right_node->get_name(),
-                  insert_child->get_name(),
-                  (outdated_child ? outdated_child->get_name() : "N/A"));
+    INFOT("proceed split {} to fresh {} with insert_child={},"
+          " outdated_child={} ...",
+          c.t, get_name(), right_node->get_name(),
+          insert_child->get_name(),
+          (outdated_child ? outdated_child->get_name() : "N/A"));
     auto insert_value = insert_child->impl->laddr();
     auto [split_pos, is_insert_left, p_value] = impl->split_insert(
         fresh_right.mut, *right_node->impl, insert_key, insert_value,
@@ -1442,20 +1442,21 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
 node_future<Ref<Node>> InternalNode::get_or_track_child(
     context_t c, const search_position_t& position, laddr_t child_addr)
 {
+  LOG_PREFIX(OTree::InternalNode::get_or_track_child);
   bool level_tail = position.is_end();
   Ref<Node> child;
   auto found = tracked_child_nodes.find(position);
   Ref<Node> this_ref = this;
   return (found == tracked_child_nodes.end()
     ? (Node::load(c, child_addr, level_tail
-       ).safe_then([this, position] (auto child) {
+       ).safe_then([this, position, c, FNAME] (auto child) {
          child->as_child(position, this);
-         logger().trace("OTree::Internal::GetTrackChild: loaded child untracked {} at pos({})",
-                        child->get_name(), position);
+         TRACET("loaded child untracked {} at pos({})",
+                c.t, child->get_name(), position);
          return child;
        }))
-    : (logger().trace("OTree::Internal::GetTrackChild: loaded child tracked {} at pos({})",
-                      found->second->get_name(), position),
+    : (TRACET("loaded child tracked {} at pos({})",
+              c.t, found->second->get_name(), position),
        node_ertr::make_ready_future<Ref<Node>>(found->second))
   ).safe_then([this_ref, this, position, child_addr] (auto child) {
     assert(child_addr == child->impl->laddr());
@@ -1694,11 +1695,12 @@ template <bool FORCE_MERGE>
 node_future<Ref<tree_cursor_t>>
 LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
 {
+  LOG_PREFIX(OTree::LeafNode::erase);
   assert(!pos.is_end());
   assert(!impl->is_keys_empty());
   Ref<Node> this_ref = this;
-  logger().debug("OTree::Leaf::Erase: erase {}'s pos({}), get_next={} ...",
-                 get_name(), pos, get_next);
+  DEBUGT("erase {}'s pos({}), get_next={} ...",
+         c.t, get_name(), pos, get_next);
 
   // get the next cursor
   return node_ertr::now().safe_then([c, &pos, get_next, this] {
@@ -1708,13 +1710,14 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
       return node_ertr::make_ready_future<Ref<tree_cursor_t>>();
     }
   }).safe_then([c, &pos, this_ref = std::move(this_ref),
-                this] (Ref<tree_cursor_t> next_cursor) {
+                this, FNAME] (Ref<tree_cursor_t> next_cursor) {
     if (next_cursor && next_cursor->is_end()) {
       // reset the node reference from the end cursor
       next_cursor.reset();
     }
     return node_ertr::now(
-    ).safe_then([c, &pos, this_ref = std::move(this_ref), this] () mutable {
+    ).safe_then([c, &pos, this_ref = std::move(this_ref),
+                 this, FNAME] () mutable {
 #ifndef NDEBUG
       assert(!impl->is_keys_empty());
       if (impl->is_keys_one()) {
@@ -1725,8 +1728,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
         // we need to keep the root as an empty leaf node
         // fast path without mutating the extent
         // track_erase
-        logger().debug("OTree::Leaf::Erase: {} has one value left, erase ...",
-                       get_name());
+        DEBUGT("{} has one value left, erase ...", c.t, get_name());
         assert(tracked_cursors.size() == 1);
         auto iter = tracked_cursors.begin();
         assert(iter->first == pos);
@@ -1916,15 +1918,15 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     const search_position_t& pos, const MatchHistory& history,
     match_stat_t mstat)
 {
+  LOG_PREFIX(OTree::LeafNode::insert_value);
 #ifndef NDEBUG
   if (pos.is_end()) {
     assert(impl->is_level_tail());
   }
 #endif
-  logger().debug("OTree::Leaf::InsertValue: insert {} "
-                 "with insert_key={}, insert_value={}, insert_pos({}), "
-                 "history={}, mstat({}) ...",
-                 get_name(), key, vconf, pos, history, mstat);
+  DEBUGT("insert {} with insert_key={}, insert_value={}, insert_pos({}), "
+         "history={}, mstat({}) ...",
+         c.t, get_name(), key, vconf, pos, history, mstat);
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
       key, vconf, history, mstat, insert_pos);
@@ -1946,11 +1948,11 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   return (is_root() ? upgrade_root(c) : node_ertr::now()
   ).safe_then([this, c] {
     return LeafNode::allocate(c, impl->field_type(), impl->is_level_tail());
-  }).safe_then([this_ref = std::move(this_ref), this, c, &key, vconf,
+  }).safe_then([this_ref = std::move(this_ref), this, c, &key, vconf, FNAME,
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
-    logger().info("OTree::Leaf::InsertValue: proceed split {} to fresh {} ...",
-                  get_name(), right_node->get_name());
+    INFOT("proceed split {} to fresh {} ...",
+          c.t, get_name(), right_node->get_name());
     // no need to bump version for right node, as it is fresh
     on_layout_change();
     impl->prepare_mutate(c);

@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
+
 #include "node_extent_manager.h"
 #include "node_delta_recorder.h"
 #include "node_layout_replayable.h"
@@ -110,6 +111,7 @@ class DeltaRecorderT final: public DeltaRecorder {
   void apply_delta(ceph::bufferlist::const_iterator& delta,
                    NodeExtentMutable& node,
                    laddr_t node_laddr) override {
+    LOG_PREFIX(OTree::Extent::Replay);
     assert(is_empty());
     node_stage_t stage(reinterpret_cast<const FieldType*>(node.get_read()));
     node_delta_op_t op;
@@ -117,7 +119,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       ceph::decode(op, delta);
       switch (op) {
       case node_delta_op_t::INSERT: {
-        logger().debug("OTree::Extent::Replay: decoding INSERT ...");
+        DEBUG("decoding INSERT ...");
         auto key = key_hobj_t::decode(delta);
         auto value = decode_value(delta);
         auto insert_pos = position_t::decode(delta);
@@ -125,22 +127,22 @@ class DeltaRecorderT final: public DeltaRecorder {
         ceph::decode(insert_stage, delta);
         node_offset_t insert_size;
         ceph::decode(insert_size, delta);
-        logger().debug("OTree::Extent::Replay: apply {}, {}, "
-                       "insert_pos({}), insert_stage={}, insert_size={}B ...",
-                       key, value, insert_pos, insert_stage, insert_size);
+        DEBUG("apply {}, {}, insert_pos({}), insert_stage={}, "
+              "insert_size={}B ...",
+              key, value, insert_pos, insert_stage, insert_size);
         layout_t::template insert<KeyT::HOBJ>(
           node, stage, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::SPLIT: {
-        logger().debug("OTree::Extent::Replay: decoding SPLIT ...");
+        DEBUG("decoding SPLIT ...");
         auto split_at = StagedIterator::decode(stage.p_start(), delta);
-        logger().debug("OTree::Extent::Replay: apply split_at={} ...", split_at);
+        DEBUG("apply split_at={} ...", split_at);
         layout_t::split(node, stage, split_at);
         break;
       }
       case node_delta_op_t::SPLIT_INSERT: {
-        logger().debug("OTree::Extent::Replay: decoding SPLIT_INSERT ...");
+        DEBUG("decoding SPLIT_INSERT ...");
         auto split_at = StagedIterator::decode(stage.p_start(), delta);
         auto key = key_hobj_t::decode(delta);
         auto value = decode_value(delta);
@@ -149,47 +151,45 @@ class DeltaRecorderT final: public DeltaRecorder {
         ceph::decode(insert_stage, delta);
         node_offset_t insert_size;
         ceph::decode(insert_size, delta);
-        logger().debug("OTree::Extent::Replay: apply split_at={}, {}, {}, "
-                       "insert_pos({}), insert_stage={}, insert_size={}B ...",
-                       split_at, key, value, insert_pos, insert_stage, insert_size);
+        DEBUG("apply split_at={}, {}, {}, insert_pos({}), insert_stage={}, "
+              "insert_size={}B ...",
+              split_at, key, value, insert_pos, insert_stage, insert_size);
         layout_t::template split_insert<KeyT::HOBJ>(
           node, stage, split_at, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::UPDATE_CHILD_ADDR: {
-        logger().debug("OTree::Extent::Replay: decoding UPDATE_CHILD_ADDR ...");
+        DEBUG("decoding UPDATE_CHILD_ADDR ...");
         laddr_t new_addr;
         ceph::decode(new_addr, delta);
         node_offset_t update_offset;
         ceph::decode(update_offset, delta);
         auto p_addr = reinterpret_cast<laddr_packed_t*>(
             node.get_write() + update_offset);
-        logger().debug("OTree::Extent::Replay: apply {:#x} to offset {:#x} ...",
-                       new_addr, update_offset);
+        DEBUG("apply {:#x} to offset {:#x} ...",
+              new_addr, update_offset);
         layout_t::update_child_addr(node, new_addr, p_addr);
         break;
       }
       case node_delta_op_t::ERASE: {
-        logger().debug("OTree::Extent::Replay: decoding ERASE ...");
+        DEBUG("decoding ERASE ...");
         auto erase_pos = position_t::decode(delta);
-        logger().debug("OTree::Extent::Replay: apply erase_pos({}) ...",
-                       erase_pos);
+        DEBUG("apply erase_pos({}) ...", erase_pos);
         layout_t::erase(node, stage, erase_pos);
         break;
       }
       case node_delta_op_t::MAKE_TAIL: {
-        logger().debug("OTree::Extent::Replay: decoded MAKE_TAIL, apply ...");
+        DEBUG("decoded MAKE_TAIL, apply ...");
         layout_t::make_tail(node, stage);
         break;
       }
       case node_delta_op_t::SUBOP_UPDATE_VALUE: {
-        logger().debug("OTree::Extent::Replay: decoding SUBOP_UPDATE_VALUE ...");
+        DEBUG("decoding SUBOP_UPDATE_VALUE ...");
         node_offset_t value_header_offset;
         ceph::decode(value_header_offset, delta);
         auto p_header = node.get_read() + value_header_offset;
         auto p_header_ = reinterpret_cast<const value_header_t*>(p_header);
-        logger().debug("OTree::Extent::Replay: update {} at {:#x} ...",
-                       *p_header_, value_header_offset);
+        DEBUG("update {} at {:#x} ...", *p_header_, value_header_offset);
         auto payload_mut = p_header_->get_payload_mutable(node);
         auto value_addr = node_laddr + payload_mut.get_node_offset();
         get_value_replayer(p_header_->magic)->apply_value_delta(
@@ -197,13 +197,13 @@ class DeltaRecorderT final: public DeltaRecorder {
         break;
       }
       default:
-        logger().error("OTree::Extent::Replay: got unknown op {} when replay {:#x}",
-                       op, node_laddr);
+        ERROR("got unknown op {} when replay {:#x}",
+              op, node_laddr);
         ceph_abort();
       }
     } catch (buffer::error& e) {
-      logger().error("OTree::Extent::Replay: got decode error {} when replay {:#x}",
-                     e, node_laddr);
+      ERROR("got decode error {} when replay {:#x}",
+            e, node_laddr);
       ceph_abort();
     }
   }
@@ -252,10 +252,6 @@ class DeltaRecorderT final: public DeltaRecorder {
     } else {
       ceph_abort("impossible path");
     }
-  }
-
-  static seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
   }
 
   std::unique_ptr<ValueDeltaRecorder> value_replayer;
@@ -498,6 +494,7 @@ class NodeExtentAccessorT {
 
   using ertr = NodeExtentManager::tm_ertr;
   ertr::future<NodeExtentMutable> rebuild(context_t c) {
+    LOG_PREFIX(OTree::Extent::rebuild);
     assert(extent->is_valid());
     if (state == nextent_state_t::FRESH) {
       assert(extent->is_initial_pending());
@@ -506,9 +503,9 @@ class NodeExtentAccessorT {
     }
     assert(!extent->is_initial_pending());
     return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
-    ).safe_then([this, c] (auto fresh_extent) {
-      logger().debug("OTree::Extent::Rebuild: update addr from {:#x} to {:#x} ...",
-                     extent->get_laddr(), fresh_extent->get_laddr());
+    ).safe_then([this, c, FNAME] (auto fresh_extent) {
+      DEBUGT("update addr from {:#x} to {:#x} ...",
+             c.t, extent->get_laddr(), fresh_extent->get_laddr());
       assert(fresh_extent->is_initial_pending());
       assert(fresh_extent->get_recorder() == nullptr);
       assert(extent->get_length() == fresh_extent->get_length());
@@ -535,10 +532,6 @@ class NodeExtentAccessorT {
   }
 
  private:
-  static seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
-  }
-
   NodeExtentRef extent;
   node_stage_t node_stage;
   nextent_state_t state;
