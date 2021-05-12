@@ -300,7 +300,8 @@ public:
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
   void on_primary_error(const hobject_t &oid, eversion_t v) override;
-  void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
+  void backfill_add_missing(const hobject_t &oid, eversion_t v,
+                            bool primary_missing) override;
   void remove_missing_object(const hobject_t &oid,
 			     eversion_t v,
 			     Context *on_complete) override;

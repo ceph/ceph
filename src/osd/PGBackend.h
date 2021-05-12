@@ -127,7 +127,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void backfill_add_missing(
        const hobject_t &oid,
-       eversion_t v
+       eversion_t v,
+       bool primary_missing
        ) = 0;
 
      virtual void remove_missing_object(const hobject_t &oid,
