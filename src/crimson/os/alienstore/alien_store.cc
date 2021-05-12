@@ -161,8 +161,9 @@ AlienStore::list_objects(CollectionRef ch,
                                     &objects, &next);
     }).then([&objects, &next] (int r) {
       assert(r == 0);
-      return seastar::make_ready_future<std::tuple<std::vector<ghobject_t>, ghobject_t>>(
-	std::make_tuple(std::move(objects), std::move(next)));
+      return seastar::make_ready_future<
+	std::tuple<std::vector<ghobject_t>, ghobject_t>>(
+	  std::move(objects), std::move(next));
     });
   });
 }
@@ -244,7 +245,8 @@ AlienStore::read(CollectionRef ch,
       } else if (r == -EIO) {
         return crimson::ct_error::input_output_error::make();
       } else {
-        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+        return read_errorator::make_ready_future<ceph::bufferlist>(
+	  std::move(bl));
       }
     });
   });
@@ -269,7 +271,8 @@ AlienStore::readv(CollectionRef ch,
       } else if (r == -EIO) {
         return crimson::ct_error::input_output_error::make();
       } else {
-        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+        return read_errorator::make_ready_future<ceph::bufferlist>(
+	  std::move(bl));
       }
     });
   });
@@ -335,7 +338,8 @@ auto AlienStore::omap_get_values(CollectionRef ch,
         return crimson::ct_error::enoent::make();
       } else {
         assert(r == 0);
-        return read_errorator::make_ready_future<omap_values_t>(std::move(values));
+        return read_errorator::make_ready_future<omap_values_t>(
+	  std::move(values));
       }
     });
   });
@@ -361,7 +365,7 @@ auto AlienStore::omap_get_values(CollectionRef ch,
         return crimson::ct_error::input_output_error::make();
       } else {
         return read_errorator::make_ready_future<std::tuple<bool, omap_values_t>>(
-          std::make_tuple(true, std::move(values)));
+          true, std::move(values));
       }
     });
   });
@@ -482,7 +486,8 @@ auto AlienStore::omap_get_header(CollectionRef ch,
         logger().error("omap_get_header: {}", r);
         return crimson::ct_error::input_output_error::make();
       } else {
-        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+        return read_errorator::make_ready_future<ceph::bufferlist>(
+	  std::move(bl));
       }
     });
   });
@@ -499,9 +504,8 @@ seastar::future<std::map<uint64_t, uint64_t>> AlienStore::fiemap(
       auto c = static_cast<AlienCollection*>(ch.get());
       return store->fiemap(c->collection, oid, off, len, destmap);
     }).then([&destmap] (int i) {
-      return seastar::make_ready_future
-	  <std::map<uint64_t, uint64_t>>
-	  (std::move(destmap));
+      return seastar::make_ready_future<std::map<uint64_t, uint64_t>>(
+	std::move(destmap));
     });
   });
 }
