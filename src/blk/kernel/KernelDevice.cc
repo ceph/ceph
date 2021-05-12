@@ -94,8 +94,8 @@ int KernelDevice::_lock()
   int fd = fd_directs[WRITE_LIFE_NOT_SET];
   uint64_t nr_tries = 0;
   for (;;) {
-    struct flock fl = { F_WRLCK,
-                        SEEK_SET };
+    struct flock fl = { .l_type = F_WRLCK,
+                        .l_whence = SEEK_SET };
     int r = ::fcntl(fd, F_OFD_SETLK, &fl);
     if (r < 0) {
       if (errno == EINVAL) {
