@@ -523,8 +523,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
 
   string bi = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
   if (!bi.empty()) {
-    string bucket_name;
-    ret = rgw_bucket_parse_bucket_instance(bi, &bucket_name, &s->bucket_instance_id, &s->bucket_instance_shard_id);
+    // note: overwrites s->bucket_name, may include a tenant/
+    ret = rgw_bucket_parse_bucket_instance(bi, &s->bucket_name, &s->bucket_instance_id, &s->bucket_instance_shard_id);
     if (ret < 0) {
       return ret;
     }
