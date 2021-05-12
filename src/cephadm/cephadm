@@ -746,6 +746,13 @@ class HAproxy(object):
         mounts[os.path.join(data_dir, 'haproxy')] = '/var/lib/haproxy'
         return mounts
 
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# IP forwarding',
+            'net.ipv4.ip_forward = 1',
+        ]
+
 ##################################
 
 
@@ -2972,6 +2979,8 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
 
     if daemon_type == 'osd':
         lines = OSD.get_sysctl_settings()
+    elif daemon_type == 'haproxy':
+        lines = HAproxy.get_sysctl_settings()
     elif daemon_type == 'keepalived':
         lines = Keepalived.get_sysctl_settings()
 
