@@ -202,26 +202,6 @@ ClientRequest::process_op(Ref<PG> &pg)
 }
 
 ClientRequest::interruptible_future<>
-ClientRequest::do_recover_missing(Ref<PG>& pg, const hobject_t& soid)
-{
-  eversion_t ver;
-  logger().debug("{} check for recovery, {}", *this, soid);
-  if (!pg->is_unreadable_object(soid, &ver) &&
-      !pg->is_degraded_or_backfilling_object(soid)) {
-    return seastar::now();
-  }
-  logger().debug("{} need to wait for recovery, {}", *this, soid);
-  if (pg->get_recovery_backend()->is_recovering(soid)) {
-    return pg->get_recovery_backend()->get_recovering(soid).wait_for_recovered();
-  } else {
-    auto [op, fut] =
-      pg->get_shard_services().start_operation<UrgentRecovery>(
-        soid, ver, pg, pg->get_shard_services(), pg->get_osdmap_epoch());
-    return std::move(fut);
-  }
-}
-
-ClientRequest::interruptible_future<>
 ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
 {
   if (!pg->is_primary()) {

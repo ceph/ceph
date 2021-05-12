@@ -5,11 +5,13 @@
 
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/pg.h"
 
 namespace crimson::osd {
 
-class InternalClientRequest : public OperationT<InternalClientRequest> {
+class InternalClientRequest : public OperationT<InternalClientRequest>,
+                              private CommonClientRequest {
 public:
   explicit InternalClientRequest(Ref<PG> pg);
   ~InternalClientRequest();
@@ -37,7 +39,6 @@ private:
 
   CommonPGPipeline& pp();
 
-  interruptible_future<> do_recover_missing(Ref<PG>& pgref, const hobject_t& soid);
   seastar::future<> do_process();
 
   Ref<PG> pg;

@@ -729,6 +729,7 @@ private:
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;
+  friend struct CommonClientRequest;
   friend class PGAdvanceMap;
   friend class PeeringEvent;
   friend class RepRequest;

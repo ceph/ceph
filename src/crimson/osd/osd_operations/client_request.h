@@ -7,6 +7,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDOp.h"
@@ -15,7 +16,8 @@ namespace crimson::osd {
 class PG;
 class OSD;
 
-class ClientRequest final : public OperationT<ClientRequest> {
+class ClientRequest final : public OperationT<ClientRequest>,
+                            private CommonClientRequest {
   OSD &osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
@@ -51,7 +53,6 @@ public:
   seastar::future<> start();
 
 private:
-  interruptible_future<> do_recover_missing(Ref<PG>& pgref, const hobject_t& soid);
   interruptible_future<> do_process(
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
