@@ -47,7 +47,9 @@ public:
 
   void finish(int) final {
     return seastar::alien::submit_to(cpuid, [this] {
-      if (oncommit) oncommit->complete(0);
+      if (oncommit) {
+        oncommit->complete(0);
+      }
       alien_done.set_value();
       return seastar::make_ready_future<>();
     }).wait();
@@ -94,8 +96,9 @@ seastar::future<> AlienStore::start()
 seastar::future<> AlienStore::stop()
 {
   return tp->submit([this] {
-    for (auto [cid, ch]: coll_map)
+    for (auto [cid, ch]: coll_map) {
       static_cast<AlienCollection*>(ch.get())->collection.reset();
+    }
     store.reset();
   }).then([this] {
     return tp->stop();
