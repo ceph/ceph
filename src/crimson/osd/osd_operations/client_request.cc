@@ -122,28 +122,12 @@ seastar::future<> ClientRequest::start()
             sequencer.finish_op(get_id());
             return seastar::stop_iteration::yes;
           });
-	}, [this, pgref](std::exception_ptr eptr) mutable {
-	  if (*eptr.__cxa_exception_type() ==
-	      typeid(::crimson::common::actingset_changed)) {
-	    try {
-	      std::rethrow_exception(eptr);
-	    } catch(::crimson::common::actingset_changed& e) {
-	      if (e.is_primary()) {
-		logger().debug("{} operation restart, acting set changed", *this);
-                sequencer.maybe_reset(get_id());
-		return seastar::stop_iteration::no;
-	      } else {
-		logger().debug("{} operation abort, up primary changed", *this);
-                sequencer.abort();
-		return seastar::stop_iteration::yes;
-	      }
-	    }
-	  }
-	  assert(*eptr.__cxa_exception_type() ==
-	  typeid(crimson::common::system_shutdown_exception));
-	  crimson::get_logger(ceph_subsys_osd).debug(
-	      "{} operation skipped, system shutdown", *this);
-	  return seastar::stop_iteration::yes;
+	}, [this, pgref](std::exception_ptr eptr) {
+          if (should_abort_request(std::move(eptr))) {
+            return seastar::stop_iteration::yes;
+          } else {
+            return seastar::stop_iteration::no;
+          }
 	}, pgref);
       });
     });
