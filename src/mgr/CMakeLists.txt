@@ -16,7 +16,7 @@ if(WITH_MGR)
     DaemonServer.cc
     DaemonState.cc
     Gil.cc
-    Injector.h
+    Injector.cc
     Mgr.cc
     MgrStandby.cc
     MetricCollector.cc

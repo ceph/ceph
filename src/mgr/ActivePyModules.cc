@@ -164,10 +164,17 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
+bool inject_python_on() {
+  return g_conf().get_val<bool>("inject");
+}
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
-  /* INJECT */
-  PyObject *injected_map = Injector::get_python(what);
+  if(inject_python_on()) {
+    PyObject *injected_map = Injector::get_python(what);
+    // Structures which have no injection implemented should
+    // return the usual PyObject*
+    if (injected_map != nullptr) return injected_map;
+  }
   if (injected_map != nullptr) return injected_map;
   PyFormatter f;
 
