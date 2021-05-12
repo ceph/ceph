@@ -122,6 +122,7 @@ struct Config {
 
   Command command = None;
   int pid = 0;
+  std::string cookie;
 
   std::string image_spec() const {
     std::string spec = poolname + "/";
@@ -1324,6 +1325,8 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
   NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
   NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT, cfg->reattach_timeout);
+  if (!cfg->cookie.empty())
+    NLA_PUT_STRING(msg, NBD_ATTR_BACKEND_IDENTIFIER, cfg->cookie.c_str());
 
   sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
   if (!sock_attr) {
@@ -1557,6 +1560,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   unsigned long size;
   unsigned long blksize = RBD_NBD_BLKSIZE;
   bool use_netlink;
+  uuid_d uuid_gen;
 
   int fd[2];
 
@@ -1719,6 +1723,10 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
   use_netlink = cfg->try_netlink || reconnect;
   if (use_netlink) {
+    if (!reconnect) {
+      uuid_gen.generate_random();
+      cfg->cookie = uuid_gen.to_string();
+    }
     r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
     if (r < 0) {
       goto free_server;
