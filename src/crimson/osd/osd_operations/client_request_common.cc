@@ -33,4 +33,28 @@ CommonClientRequest::do_recover_missing(
   }
 }
 
+bool CommonClientRequest::should_abort_request(std::exception_ptr eptr)
+{
+  if (*eptr.__cxa_exception_type() ==
+      typeid(::crimson::common::actingset_changed)) {
+    try {
+      std::rethrow_exception(eptr);
+    } catch(::crimson::common::actingset_changed& e) {
+      if (e.is_primary()) {
+        logger().debug("{} operation restart, acting set changed", __func__);
+        return false;
+      } else {
+        logger().debug("{} operation abort, up primary changed", __func__);
+        return true;
+      }
+    }
+  } else {
+    assert(*eptr.__cxa_exception_type() ==
+      typeid(crimson::common::system_shutdown_exception));
+    crimson::get_logger(ceph_subsys_osd).debug(
+        "{} operation skipped, system shutdown", __func__);
+    return true;
+  }
+}
+
 } // namespace crimson::osd

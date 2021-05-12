@@ -97,26 +97,12 @@ seastar::future<> InternalClientRequest::start()
             });
           });
         });
-      }, [this](std::exception_ptr eptr) mutable {
-        if (*eptr.__cxa_exception_type() ==
-            typeid(::crimson::common::actingset_changed)) {
-          try {
-            std::rethrow_exception(eptr);
-          } catch(::crimson::common::actingset_changed& e) {
-            if (e.is_primary()) {
-              logger().debug("{} operation restart, acting set changed", *this);
-              return seastar::stop_iteration::no;
-            } else {
-              logger().debug("{} operation abort, up primary changed", *this);
-              return seastar::stop_iteration::yes;
-            }
-          }
+      }, [this](std::exception_ptr eptr) {
+        if (should_abort_request(std::move(eptr))) {
+          return seastar::stop_iteration::yes;
+        } else {
+          return seastar::stop_iteration::no;
         }
-        assert(*eptr.__cxa_exception_type() ==
-          typeid(crimson::common::system_shutdown_exception));
-        crimson::get_logger(ceph_subsys_osd).debug(
-            "{} operation skipped, system shutdown", *this);
-        return seastar::stop_iteration::yes;
       }, pg);
     });
   });
