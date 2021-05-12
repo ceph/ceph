@@ -264,12 +264,12 @@ const routes: Routes = [
         data: { breadcrumbs: true, text: 'Block', path: null },
         loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
       },
-      // Filesystems
+      // File Systems
       {
         path: 'cephfs',
         component: CephfsListComponent,
         canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'Filesystems' }
+        data: { breadcrumbs: 'File Systems' }
       },
       // Object Gateway
       {
