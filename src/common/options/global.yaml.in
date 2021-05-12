@@ -4859,17 +4859,6 @@ options:
   level: advanced
   default: true
   with_legacy: true
-- name: osd_command_thread_timeout
-  type: int
-  level: advanced
-  default: 10_min
-  fmt_desc: The maximum time in seconds before timing out a command thread.
-  with_legacy: true
-- name: osd_command_thread_suicide_timeout
-  type: int
-  level: advanced
-  default: 15_min
-  with_legacy: true
 - name: osd_heartbeat_interval
   type: int
   level: dev
