@@ -21,6 +21,7 @@
 #include "os/ObjectStore.h"
 #include "os/Transaction.h"
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
 #include "crimson/os/futurized_store.h"
 
@@ -46,7 +47,9 @@ public:
 
   void finish(int) final {
     return seastar::alien::submit_to(cpuid, [this] {
-      if (oncommit) oncommit->complete(0);
+      if (oncommit) {
+        oncommit->complete(0);
+      }
       alien_done.set_value();
       return seastar::make_ready_future<>();
     }).wait();
@@ -56,6 +59,8 @@ public:
 
 namespace crimson::os {
 
+using crimson::common::get_conf;
+
 AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   : path{path}
 {
@@ -63,10 +68,7 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   g_ceph_context = cct.get();
   cct->_conf.set_config_values(values);
   store = std::make_unique<BlueStore>(cct.get(), path);
-  const auto num_threads =
-    cct->_conf.get_val<uint64_t>("crimson_alien_op_num_threads");
   std::vector<uint64_t> cpu_cores = _parse_cpu_cores();
-
   // cores except the first "N_CORES_FOR_SEASTAR" ones will
   // be used for alien threads scheduling:
   // 	[0, N_CORES_FOR_SEASTAR) are reserved for seastar reactors
@@ -81,6 +83,8 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
       logger().error("{}: unable to get nproc: {}", __func__, errno);
     }
   }
+  const auto num_threads =
+    get_conf<uint64_t>("crimson_alien_op_num_threads");
   tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_cores);
 }
 
@@ -92,8 +96,9 @@ seastar::future<> AlienStore::start()
 seastar::future<> AlienStore::stop()
 {
   return tp->submit([this] {
-    for (auto [cid, ch]: coll_map)
+    for (auto [cid, ch]: coll_map) {
       static_cast<AlienCollection*>(ch.get())->collection.reset();
+    }
     store.reset();
   }).then([this] {
     return tp->stop();
@@ -156,8 +161,9 @@ AlienStore::list_objects(CollectionRef ch,
                                     &objects, &next);
     }).then([&objects, &next] (int r) {
       assert(r == 0);
-      return seastar::make_ready_future<std::tuple<std::vector<ghobject_t>, ghobject_t>>(
-	std::make_tuple(std::move(objects), std::move(next)));
+      return seastar::make_ready_future<
+	std::tuple<std::vector<ghobject_t>, ghobject_t>>(
+	  std::move(objects), std::move(next));
     });
   });
 }
@@ -239,7 +245,8 @@ AlienStore::read(CollectionRef ch,
       } else if (r == -EIO) {
         return crimson::ct_error::input_output_error::make();
       } else {
-        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+        return read_errorator::make_ready_future<ceph::bufferlist>(
+	  std::move(bl));
       }
     });
   });
@@ -264,7 +271,8 @@ AlienStore::readv(CollectionRef ch,
       } else if (r == -EIO) {
         return crimson::ct_error::input_output_error::make();
       } else {
-        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+        return read_errorator::make_ready_future<ceph::bufferlist>(
+	  std::move(bl));
       }
     });
   });
@@ -330,7 +338,8 @@ auto AlienStore::omap_get_values(CollectionRef ch,
         return crimson::ct_error::enoent::make();
       } else {
         assert(r == 0);
-        return read_errorator::make_ready_future<omap_values_t>(std::move(values));
+        return read_errorator::make_ready_future<omap_values_t>(
+	  std::move(values));
       }
     });
   });
@@ -356,7 +365,7 @@ auto AlienStore::omap_get_values(CollectionRef ch,
         return crimson::ct_error::input_output_error::make();
       } else {
         return read_errorator::make_ready_future<std::tuple<bool, omap_values_t>>(
-          std::make_tuple(true, std::move(values)));
+          true, std::move(values));
       }
     });
   });
@@ -477,7 +486,8 @@ auto AlienStore::omap_get_header(CollectionRef ch,
         logger().error("omap_get_header: {}", r);
         return crimson::ct_error::input_output_error::make();
       } else {
-        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+        return read_errorator::make_ready_future<ceph::bufferlist>(
+	  std::move(bl));
       }
     });
   });
@@ -494,9 +504,8 @@ seastar::future<std::map<uint64_t, uint64_t>> AlienStore::fiemap(
       auto c = static_cast<AlienCollection*>(ch.get());
       return store->fiemap(c->collection, oid, off, len, destmap);
     }).then([&destmap] (int i) {
-      return seastar::make_ready_future
-	  <std::map<uint64_t, uint64_t>>
-	  (std::move(destmap));
+      return seastar::make_ready_future<std::map<uint64_t, uint64_t>>(
+	std::move(destmap));
     });
   });
 }
@@ -588,7 +597,7 @@ std::vector<uint64_t> AlienStore::_parse_cpu_cores()
 {
   std::vector<uint64_t> cpu_cores;
   auto cpu_string =
-    cct->_conf.get_val<std::string>("crimson_alien_thread_cpu_cores");
+    get_conf<std::string>("crimson_alien_thread_cpu_cores");
 
   std::string token;
   std::istringstream token_stream(cpu_string);
