@@ -30,7 +30,9 @@ class GrafanaService(CephadmService):
         prom_services = []  # type: List[str]
         for dd in self.mgr.cache.get_daemons_by_service('prometheus'):
             assert dd.hostname is not None
-            prom_services.append(dd.hostname)
+            addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
+            port = dd.ports[0] if dd.ports else 9095
+            prom_services.append(addr + ':' + str(port))
             deps.append(dd.name())
         grafana_data_sources = self.mgr.template.render(
             'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services})
@@ -53,7 +55,10 @@ class GrafanaService(CephadmService):
             })
 
         grafana_ini = self.mgr.template.render(
-            'services/grafana/grafana.ini.j2', {'http_port': self.DEFAULT_SERVICE_PORT})
+            'services/grafana/grafana.ini.j2', {
+                'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
+                'http_addr': daemon_spec.ip if daemon_spec.ip else ''
+            })
 
         config_file = {
             'files': {
@@ -76,8 +81,9 @@ class GrafanaService(CephadmService):
         # TODO: signed cert
         dd = self.get_active_daemon(daemon_descrs)
         assert dd.hostname is not None
-        service_url = 'https://{}:{}'.format(
-            self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
+        addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
+        port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
+        service_url = 'https://{}:{}'.format(addr, port)
         self._set_service_url_on_dashboard(
             'Grafana',
             'dashboard get-grafana-api-url',
@@ -170,8 +176,9 @@ class AlertmanagerService(CephadmService):
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         dd = self.get_active_daemon(daemon_descrs)
         assert dd.hostname is not None
-        service_url = 'http://{}:{}'.format(self._inventory_get_addr(dd.hostname),
-                                            self.DEFAULT_SERVICE_PORT)
+        addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
+        port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
+        service_url = 'http://{}:{}'.format(addr, port)
         self._set_service_url_on_dashboard(
             'AlertManager',
             'dashboard get-alertmanager-api-host',
@@ -232,10 +239,11 @@ class PrometheusService(CephadmService):
         for dd in self.mgr.cache.get_daemons_by_service('node-exporter'):
             assert dd.hostname is not None
             deps.append(dd.name())
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            port = str(dd.ports[0]) if dd.ports else '9100'
             nodes.append({
                 'hostname': dd.hostname,
-                'url': addr.split(':')[0] + ':9100'
+                'url': addr.split(':')[0] + ':' + port
             })
 
         # scrape alert managers
@@ -243,8 +251,9 @@ class PrometheusService(CephadmService):
         for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
             assert dd.hostname is not None
             deps.append(dd.name())
-            addr = self.mgr.inventory.get_addr(dd.hostname)
-            alertmgr_targets.append("'{}:9093'".format(addr.split(':')[0]))
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            port = str(dd.ports[0]) if dd.ports else '9093'
+            alertmgr_targets.append("'{}:{}'".format(addr.split(':')[0], port))
 
         # scrape haproxies
         haproxy_targets = []
@@ -293,8 +302,9 @@ class PrometheusService(CephadmService):
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         dd = self.get_active_daemon(daemon_descrs)
         assert dd.hostname is not None
-        service_url = 'http://{}:{}'.format(
-            self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
+        addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
+        port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
+        service_url = 'http://{}:{}'.format(addr, port)
         self._set_service_url_on_dashboard(
             'Prometheus',
             'dashboard get-prometheus-api-host',
