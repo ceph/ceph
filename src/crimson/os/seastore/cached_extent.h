@@ -17,6 +17,7 @@
 
 namespace crimson::os::seastore {
 
+class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
 
@@ -38,6 +39,40 @@ namespace onode {
   class DummyNodeExtent;
   class TestReplayExtent;
 }
+
+template <typename T>
+class read_set_item_t {
+  boost::intrusive::list_member_hook<> list_hook;
+  using list_hook_options = boost::intrusive::member_hook<
+    read_set_item_t,
+    boost::intrusive::list_member_hook<>,
+    &read_set_item_t::list_hook>;
+
+public:
+  struct cmp_t {
+    using is_transparent = paddr_t;
+    bool operator()(const read_set_item_t<T> &lhs, const read_set_item_t &rhs) const;
+    bool operator()(const paddr_t &lhs, const read_set_item_t<T> &rhs) const;
+    bool operator()(const read_set_item_t<T> &lhs, const paddr_t &rhs) const;
+  };
+
+  using list =  boost::intrusive::list<
+    read_set_item_t,
+    list_hook_options>;
+
+  T *t = nullptr;
+  CachedExtentRef ref;
+
+  read_set_item_t(T *t, CachedExtentRef ref);
+  read_set_item_t(const read_set_item_t &) = delete;
+  read_set_item_t(read_set_item_t &&) = default;
+  ~read_set_item_t();
+};
+template <typename T>
+struct read_set_t : public std::set<
+  read_set_item_t<T>,
+  typename read_set_item_t<T>::cmp_t> {};
+
 class ExtentIndex;
 class CachedExtent : public boost::intrusive_ref_counter<
   CachedExtent, boost::thread_unsafe_counter> {
@@ -286,6 +321,9 @@ public:
   virtual ~CachedExtent();
 
 private:
+  template <typename T>
+  friend class read_set_item_t;
+
   friend struct paddr_cmp;
   friend struct ref_paddr_cmp;
   friend class ExtentIndex;
@@ -350,6 +388,8 @@ private:
       return io_wait_promise->get_shared_future();
     }
   }
+
+  read_set_item_t<Transaction>::list transactions;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;
@@ -774,6 +814,35 @@ struct ref_laddr_cmp {
     return lhs->get_laddr() < rhs;
   }
 };
+
+template <typename T>
+read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)
+  : t(t), ref(ref)
+{
+  ref->transactions.push_back(*this);
+}
+
+template <typename T>
+read_set_item_t<T>::~read_set_item_t()
+{
+  ref->transactions.erase(ref->transactions.s_iterator_to(*this));
+}
+
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const read_set_item_t<T> &lhs, const read_set_item_t<T> &rhs) const {
+  return lhs.ref->poffset < rhs.ref->poffset;
+}
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const paddr_t &lhs, const read_set_item_t<T> &rhs) const {
+  return lhs < rhs.ref->poffset;
+}
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const read_set_item_t<T> &lhs, const paddr_t &rhs) const {
+  return lhs.ref->poffset < rhs;
+}
 
 using lextent_set_t = addr_extent_set_base_t<
   laddr_t,

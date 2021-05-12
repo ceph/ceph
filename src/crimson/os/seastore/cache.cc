@@ -152,7 +152,14 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
     add_to_dirty(next);
   }
 
-  prev->state = CachedExtent::extent_state_t::INVALID;
+  invalidate(*prev);
+}
+
+void Cache::invalidate(CachedExtent &extent) {
+  for (auto &&i: extent.transactions) {
+    i.t->conflicted = true;
+  }
+  extent.state = CachedExtent::extent_state_t::INVALID;
 }
 
 CachedExtentRef Cache::alloc_new_extent_by_type(
@@ -223,14 +230,12 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   LOG_PREFIX(Cache::try_construct_record);
   DEBUGT("enter", t);
 
-  // First, validate read set
+  // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
-    if (i->state == CachedExtent::extent_state_t::INVALID) {
-      return std::nullopt;
-    }
+    assert(i.ref->is_valid());
   }
-
   DEBUGT("read_set validated", t);
+  t.read_set.clear();
 
   record_t record;
 

@@ -16,6 +16,7 @@ namespace crimson::os::seastore {
 
 struct retired_extent_gate_t;
 class SeaStore;
+class Transaction;
 
 /**
  * Transaction
@@ -44,7 +45,7 @@ public:
       auto iter = read_set.find(addr);
       iter != read_set.end()) {
       if (out)
-	*out = CachedExtentRef(*iter);
+	*out = iter->ref;
       return get_extent_ret::PRESENT;
     } else {
       return get_extent_ret::ABSENT;
@@ -73,8 +74,8 @@ public:
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) return;
 
-    ceph_assert(read_set.count(ref) == 0);
-    read_set.insert(ref);
+    auto [iter, inserted] = read_set.emplace(this, ref);
+    ceph_assert(inserted);
   }
 
   void add_fresh_extent(CachedExtentRef ref) {
@@ -130,8 +131,8 @@ private:
 
   segment_off_t offset = 0; ///< relative offset of next block
 
-  pextent_set_t read_set;   ///< set of extents read by paddr
-  ExtentIndex write_set;    ///< set of extents written by paddr
+  read_set_t<Transaction> read_set; ///< set of extents read by paddr
+  ExtentIndex write_set;            ///< set of extents written by paddr
 
   std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
   std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
@@ -146,6 +147,8 @@ private:
   journal_seq_t initiated_after;
 
   retired_extent_gate_t::token_t retired_gate_token;
+
+  bool conflicted = false;
 
 public:
   Transaction(
