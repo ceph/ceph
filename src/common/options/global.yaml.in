@@ -1495,11 +1495,11 @@ options:
 - name: mon_initial_members
   type: str
   level: advanced
-  fmt_desc: The IDs of initial monitors in a cluster during startup. If 
-    specified, Ceph requires an odd number of monitors to form an 
+  fmt_desc: The IDs of initial monitors in a cluster during startup. If
+    specified, Ceph requires an odd number of monitors to form an
     initial quorum (e.g., 3).
-  note: A *majority* of monitors in your cluster must be able to reach 
-    each other in order to establish a quorum. You can decrease the initial 
+  note: A *majority* of monitors in your cluster must be able to reach
+    each other in order to establish a quorum. You can decrease the initial
     number of monitors to establish a quorum with this setting.
   services:
   - mon
@@ -2466,13 +2466,13 @@ options:
   desc: number of PGs for new pools
   fmt_desc: The default number of placement groups for a pool. The default
     value is the same as ``pg_num`` with ``mkpool``.
-  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being 
-    `on` the number of PGs for new pools will start out with 1 pg, unless the 
+  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being
+    `on` the number of PGs for new pools will start out with 1 pg, unless the
     user specifies the pg_num.
   default: 32
   services:
   - mon
-  see_also: 
+  see_also:
   - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
@@ -6058,3 +6058,23 @@ options:
   - spdk
   - pmem
   - hm_smr
+- name: inject
+  type: bool
+  level: dev
+  desc: Enable/disable injection of fake data to the mgr_module
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+  services:
+  - mgr
+- name: inject_num_osds
+  type: int
+  level: dev
+  desc: Number of osds to inject
+  default: 0
+  flags:
+  - runtime
+  with_legacy: true
+  services:
+  - mgr
