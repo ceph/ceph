@@ -74,7 +74,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
       Transaction& t, laddr_t addr, extent_len_t len) override {
     TRACET("reading {}B at {:#x} ...", t, len, addr);
     return tm.read_extent<SeastoreNodeExtent>(t, addr, len
-    ).safe_then([addr, len, this, &t](auto&& e) {
+    ).safe_then([addr, len, &t](auto&& e) {
       TRACET("read {}B at {:#x}", t, e->get_length(), e->get_laddr());
       assert(e->get_laddr() == addr);
       assert(e->get_length() == len);
@@ -88,7 +88,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
       Transaction& t, extent_len_t len) override {
     TRACET("allocating {}B ...", t, len);
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
-    ).safe_then([len, this, &t](auto extent) {
+    ).safe_then([len, &t](auto extent) {
       DEBUGT("allocated {}B at {:#x}",
              t, extent->get_length(), extent->get_laddr());
       assert(extent->get_length() == len);
@@ -103,7 +103,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     auto addr = extent->get_laddr();
     auto len = extent->get_length();
     DEBUGT("retiring {}B at {:#x} ...", t, len, addr);
-    return tm.dec_ref(t, extent).safe_then([addr, len, this, &t] (unsigned cnt) {
+    return tm.dec_ref(t, extent).safe_then([addr, len, &t] (unsigned cnt) {
       assert(cnt == 0);
       TRACET("retired {}B at {:#x} ...", t, len, addr);
     });
