@@ -188,6 +188,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
@@ -934,6 +935,26 @@ cdef class LibCephFS(object):
             int _mode = mode
         with nogil:
             ret = ceph_chmod(self.cluster, _path, _mode)
+        if ret < 0:
+            raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
+
+    def lchmod(self, path, mode) -> None:
+        """
+        Change file mode. If the path is a symbolic link, it won't be dereferenced.
+
+        :param path: the path of the file. This must be either an absolute path or
+                     a relative path off of the current working directory.
+        :param mode: the permissions to be set .
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        cdef:
+            char* _path = path
+            int _mode = mode
+        with nogil:
+            ret = ceph_lchmod(self.cluster, _path, _mode)
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
