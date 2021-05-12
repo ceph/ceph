@@ -7,12 +7,7 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/stages/node_stage_layout.h"
 
 namespace {
-
-seastar::logger& logger()
-{
-  return crimson::get_logger(ceph_subsys_filestore);
-}
-
+LOG_PREFIX(OTree::Seastore);
 }
 
 namespace crimson::os::seastore::onode {
@@ -51,7 +46,7 @@ static DeltaRecorderURef create_replay_recorder(
 
 void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr)
 {
-  logger().debug("OTree::Seastore: update root {:#x} ...", addr);
+  DEBUGT("update root {:#x} ...", c.t, addr);
   root_addr = addr;
   auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
   nm->get_tm().write_onode_root(c.t, addr);
@@ -60,7 +55,7 @@ void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr)
 NodeExtentRef SeastoreNodeExtent::mutate(
     context_t c, DeltaRecorderURef&& _recorder)
 {
-  logger().debug("OTree::Seastore: mutate {:#x} ...", get_laddr());
+  DEBUGT("mutate {:#x} ...", c.t, get_laddr());
   auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
   auto extent = nm->get_tm().get_mutable_extent(c.t, this);
   auto ret = extent->cast<SeastoreNodeExtent>();
@@ -73,7 +68,7 @@ NodeExtentRef SeastoreNodeExtent::mutate(
 
 void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
 {
-  logger().debug("OTree::Seastore: replay {:#x} ...", get_laddr());
+  DEBUG("replay {:#x} ...", get_laddr());
   if (!recorder) {
     auto [node_type, field_type] = get_types();
     recorder = create_replay_recorder(node_type, field_type);

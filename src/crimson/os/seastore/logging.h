@@ -17,6 +17,9 @@
 #define DEBUG(...) LOG(debug, __VA_ARGS__)
 #define DEBUGT(...) LOGT(debug, __VA_ARGS__)
 
+#define INFO(...) LOG(info, __VA_ARGS__)
+#define INFOT(...) LOGT(info, __VA_ARGS__)
+
 #define WARN(...) LOG(warn, __VA_ARGS__)
 #define WARNT(...) LOGT(warn, __VA_ARGS__)
 
