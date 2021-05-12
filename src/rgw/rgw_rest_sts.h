@@ -33,6 +33,8 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   std::string get_role_tenant(const string& role_arn) const;
 
+  std::string get_cert_url(const string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
+
   boost::optional<WebTokenEngine::token_t>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
