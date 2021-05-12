@@ -101,7 +101,6 @@ private:
 
   std::atomic<int> m_async_update_superblock = {0};
   BlockDevice *bdev = nullptr;
-  uint64_t pool_size;
   pwl::WriteLogPoolRoot pool_root;
   Builder<This> *m_builderobj;
 
