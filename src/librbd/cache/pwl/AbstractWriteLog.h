@@ -264,7 +264,6 @@ protected:
 
   std::string m_log_pool_name;
   uint64_t m_log_pool_config_size; /* Configured size of RWL */
-  uint64_t m_log_pool_actual_size = 0; /* Actual size of RWL pool */
 
   uint32_t m_total_log_entries = 0;
   uint32_t m_free_log_entries = 0;
