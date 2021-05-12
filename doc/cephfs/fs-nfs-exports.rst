@@ -26,6 +26,9 @@ NOTE: Since this command also brings up NFS Ganesha daemons using a ceph-mgr
 orchestrator module (see :doc:`/mgr/orchestrator`) such as "mgr/cephadm", at
 least one such module must be enabled for it to work.
 
+   Currently, NFS Ganesha daemon deployed by cephadm listens on the standard
+   port. So only one daemon will be deployed on a host.
+
 <type> signifies the export type, which corresponds to the NFS Ganesha file
 system abstraction layer (FSAL). Permissible values are "cephfs" or "rgw", but
 currently only "cephfs" is supported.
@@ -41,11 +44,11 @@ daemon running per node). For example, the following placement string means
 
     "host1,host2"
 
-and this placement specification says to deploy two NFS Ganesha daemons each
-on nodes host1 and host2 (for a total of four NFS Ganesha daemons in the
-cluster):
+and this placement specification says to deploy single NFS Ganesha daemon each
+on nodes host1 and host2 (for a total of two NFS Ganesha daemons in the
+cluster)::
 
-    "4 host1,host2"
+    "2 host1,host2"
 
 For more details on placement specification refer to the `orchestrator doc
 <https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_
