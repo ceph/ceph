@@ -215,8 +215,8 @@ ClientRequest::do_recover_missing(Ref<PG>& pg, const hobject_t& soid)
     return pg->get_recovery_backend()->get_recovering(soid).wait_for_recovered();
   } else {
     auto [op, fut] =
-      osd.get_shard_services().start_operation<UrgentRecovery>(
-        soid, ver, pg, osd.get_shard_services(), pg->get_osdmap_epoch());
+      pg->get_shard_services().start_operation<UrgentRecovery>(
+        soid, ver, pg, pg->get_shard_services(), pg->get_osdmap_epoch());
     return std::move(fut);
   }
 }
