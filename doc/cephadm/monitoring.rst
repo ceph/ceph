@@ -256,16 +256,15 @@ Example
 Disabling monitoring
 --------------------
 
-If you have deployed monitoring and would like to remove it, you can do
-so with
+To disable monitoring and remove the software that supports it, run the following commands:
 
-.. code-block:: bash
+.. code-block:: console
 
-  ceph orch rm grafana
-  ceph orch rm prometheus --force   # this will delete metrics data collected so far
-  ceph orch rm node-exporter
-  ceph orch rm alertmanager
-  ceph mgr module disable prometheus
+  $ ceph orch rm grafana
+  $ ceph orch rm prometheus --force   # this will delete metrics data collected so far
+  $ ceph orch rm node-exporter
+  $ ceph orch rm alertmanager
+  $ ceph mgr module disable prometheus
 
 
 Deploying monitoring manually
