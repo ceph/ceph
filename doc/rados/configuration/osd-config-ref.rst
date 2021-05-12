@@ -419,7 +419,6 @@ Miscellaneous
 
 .. confval:: osd_default_notify_timeout
 .. confval:: osd_check_for_log_corruption
-.. confval:: osd_command_thread_timeout
 .. confval:: osd_delete_sleep
 .. confval:: osd_delete_sleep_hdd
 .. confval:: osd_delete_sleep_ssd
