@@ -122,13 +122,5 @@ seastar::future<> InternalClientRequest::start()
   });
 }
 
-InternalClientRequest::interruptible_future<>
-InternalClientRequest::do_recover_missing(
-  Ref<PG>& pgref, const hobject_t& soid)
-{
-  // TODO: share this with ClientRequest
-  return seastar::now();
-}
-
 } // namespace crimson::osd
 

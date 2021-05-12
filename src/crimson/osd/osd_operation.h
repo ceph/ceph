@@ -39,9 +39,7 @@ static_assert(
   (sizeof(OP_NAMES)/sizeof(OP_NAMES[0])) ==
   static_cast<int>(OperationTypeCode::last_op));
 
-template <typename T>
-class OperationT : public Operation {
-public:
+struct InterruptibleOperation : Operation {
   template <typename ValuesT = void>
   using interruptible_future =
     ::crimson::interruptible::interruptible_future<
@@ -49,6 +47,11 @@ public:
   using interruptor =
     ::crimson::interruptible::interruptor<
       ::crimson::osd::IOInterruptCondition>;
+};
+
+template <typename T>
+class OperationT : public InterruptibleOperation {
+public:
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
 

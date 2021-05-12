@@ -14,6 +14,7 @@ add_executable(crimson-osd
   ops_executer.cc
   osd_operation.cc
   osd_operations/client_request.cc
+  osd_operations/client_request_common.cc
   osd_operations/compound_peering_request.cc
   osd_operations/internal_client_request.cc
   osd_operations/peering_event.cc
