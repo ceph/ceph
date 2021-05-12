@@ -89,6 +89,7 @@ Administration
     CephFS Quotas <quota>
     Health messages <health-messages>
     Upgrading old file systems <upgrading>
+    Scheduled Snapshots <snap-schedule>
 
 
 .. raw:: html
