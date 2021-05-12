@@ -107,6 +107,7 @@ struct Config {
   bool readonly = false;
   bool set_max_part = false;
   bool try_netlink = false;
+  bool show_cookie = false;
 
   std::string poolname;
   std::string nsname;
@@ -165,6 +166,7 @@ static void usage()
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
             << "  --try-netlink                 Use the nbd netlink interface\n"
+            << "  --show-cookie                 Show device cookie\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -190,6 +192,8 @@ static int netlink_resize(int nbd_index, uint64_t size);
 static int run_quiesce_hook(const std::string &quiesce_hook,
                             const std::string &devpath,
                             const std::string &command);
+
+static std::string get_cookie(const std::string &devpath);
 
 class NBDServer
 {
@@ -929,6 +933,20 @@ private:
     return -1;
   }
 };
+
+static std::string get_cookie(const std::string &devpath)
+{
+  std::string cookie;
+  std::ifstream ifs;
+  std::string path = "/sys/block/" + devpath.substr(sizeof("/dev/") - 1) + "/backend";
+
+  ifs.open(path, std::ifstream::in);
+  if (ifs.is_open()) {
+    std::getline(ifs, cookie);
+    ifs.close();
+  }
+  return cookie;
+}
 
 static int load_module(Config *cfg)
 {
@@ -1769,7 +1787,16 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     if (r < 0)
       goto close_nbd;
 
-    cout << cfg->devpath << std::endl;
+    std::string cookie;
+    if (use_netlink && !cfg->cookie.empty()) {
+      cookie = get_cookie(cfg->devpath);
+      ceph_assert(cookie == cfg->cookie);
+    }
+    if (cfg->show_cookie && !cookie.empty()) {
+      cout << cfg->devpath << " " << cookie << std::endl;
+    } else {
+      cout << cfg->devpath << std::endl;
+    }
 
     run_server(forker, server, use_netlink);
 
@@ -2064,6 +2091,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
       cfg->try_netlink = true;
+    } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
+      cfg->show_cookie = true;
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
