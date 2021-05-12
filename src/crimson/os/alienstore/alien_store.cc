@@ -21,6 +21,7 @@
 #include "os/ObjectStore.h"
 #include "os/Transaction.h"
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
 #include "crimson/os/futurized_store.h"
 
@@ -56,6 +57,8 @@ public:
 
 namespace crimson::os {
 
+using crimson::common::get_conf;
+
 AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   : path{path}
 {
@@ -63,10 +66,7 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   g_ceph_context = cct.get();
   cct->_conf.set_config_values(values);
   store = std::make_unique<BlueStore>(cct.get(), path);
-  const auto num_threads =
-    cct->_conf.get_val<uint64_t>("crimson_alien_op_num_threads");
   std::vector<uint64_t> cpu_cores = _parse_cpu_cores();
-
   // cores except the first "N_CORES_FOR_SEASTAR" ones will
   // be used for alien threads scheduling:
   // 	[0, N_CORES_FOR_SEASTAR) are reserved for seastar reactors
@@ -81,6 +81,8 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
       logger().error("{}: unable to get nproc: {}", __func__, errno);
     }
   }
+  const auto num_threads =
+    get_conf<uint64_t>("crimson_alien_op_num_threads");
   tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_cores);
 }
 
@@ -588,7 +590,7 @@ std::vector<uint64_t> AlienStore::_parse_cpu_cores()
 {
   std::vector<uint64_t> cpu_cores;
   auto cpu_string =
-    cct->_conf.get_val<std::string>("crimson_alien_thread_cpu_cores");
+    get_conf<std::string>("crimson_alien_thread_cpu_cores");
 
   std::string token;
   std::istringstream token_stream(cpu_string);
