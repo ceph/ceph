@@ -17,6 +17,9 @@
 
 namespace crimson::os::seastore::onode {
 
+using eagain_ertr = crimson::errorator<
+  crimson::ct_error::eagain>;
+
 using crimson::os::seastore::Transaction;
 using crimson::os::seastore::TransactionRef;
 using crimson::os::seastore::laddr_t;
