@@ -104,7 +104,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
     bool succeed = true;
     if (fd >= 0) {
       if (truncate(this->m_log_pool_name.c_str(),
-                   this->m_log_pool_config_size) != 0) {
+                   this->m_log_pool_size) != 0) {
         succeed = false;
       }
       ::close(fd);
@@ -134,20 +134,20 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
     /* new pool, calculate and store metadata */
     size_t small_write_size = MIN_WRITE_ALLOC_SSD_SIZE + sizeof(struct WriteLogCacheEntry);
 
-    uint64_t num_small_writes = (uint64_t)(this->m_log_pool_config_size / small_write_size);
+    uint64_t num_small_writes = (uint64_t)(this->m_log_pool_size / small_write_size);
     if (num_small_writes > MAX_LOG_ENTRIES) {
       num_small_writes = MAX_LOG_ENTRIES;
     }
     assert(num_small_writes > 2);
     /* Size of ring buffer */
     this->m_bytes_allocated_cap =
-        this->m_log_pool_config_size - DATA_RING_BUFFER_OFFSET;
+        this->m_log_pool_size - DATA_RING_BUFFER_OFFSET;
     /* Log ring empty */
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
 
     auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
-    new_root->pool_size = this->m_log_pool_config_size;
+    new_root->pool_size = this->m_log_pool_size;
     new_root->flushed_sync_gen = this->m_flushed_sync_gen;
     new_root->block_size = MIN_WRITE_ALLOC_SSD_SIZE;
     new_root->first_free_entry = m_first_free_entry;
@@ -242,7 +242,7 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   m_first_valid_entry = next_log_pos;
   this->m_total_log_entries = current_pool_root.num_log_entries;
   this->m_flushed_sync_gen = current_pool_root.flushed_sync_gen;
-  this->m_log_pool_config_size = current_pool_root.pool_size;
+  this->m_log_pool_size = current_pool_root.pool_size;
 
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
 
@@ -275,8 +275,8 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
     }
     // along with the write_bytes, add control block size too
     next_log_pos += MIN_WRITE_ALLOC_SSD_SIZE;
-    if (next_log_pos >= this->m_log_pool_config_size) {
-      next_log_pos = next_log_pos % this->m_log_pool_config_size + DATA_RING_BUFFER_OFFSET;
+    if (next_log_pos >= this->m_log_pool_size) {
+      next_log_pos = next_log_pos % this->m_log_pool_size + DATA_RING_BUFFER_OFFSET;
     }
  }
   this->update_sync_points(missing_sync_points, sync_point_entries, later,
@@ -615,8 +615,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             ldout(cct, 20) << "The log entry is " << *(*it) << dendl;
             if ((*it)->log_entry_index < control_block_pos) {
               ceph_assert((*it)->log_entry_index ==
-                (control_block_pos + data_length + MIN_WRITE_ALLOC_SSD_SIZE)
-                % this->m_log_pool_config_size + DATA_RING_BUFFER_OFFSET);
+                  (control_block_pos + data_length + MIN_WRITE_ALLOC_SSD_SIZE) %
+                  this->m_log_pool_size + DATA_RING_BUFFER_OFFSET);
             } else {
               ceph_assert((*it)->log_entry_index == control_block_pos +
                   data_length + MIN_WRITE_ALLOC_SSD_SIZE);
@@ -672,8 +672,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     } else {
       first_valid_entry = entry->log_entry_index + MIN_WRITE_ALLOC_SSD_SIZE;
     }
-    if (first_valid_entry >= this->m_log_pool_config_size) {
-        first_valid_entry = first_valid_entry % this->m_log_pool_config_size +
+    if (first_valid_entry >= this->m_log_pool_size) {
+      first_valid_entry = first_valid_entry % this->m_log_pool_size +
           DATA_RING_BUFFER_OFFSET;
     }
     ceph_assert(first_valid_entry != initial_first_valid_entry);

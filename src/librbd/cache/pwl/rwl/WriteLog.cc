@@ -266,7 +266,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     if ((m_log_pool =
          pmemobj_create(this->m_log_pool_name.c_str(),
                         this->m_pwl_pool_layout_name,
-                        this->m_log_pool_config_size,
+                        this->m_log_pool_size,
                         (S_IWUSR | S_IRUSR))) == NULL) {
       lderr(cct) << "failed to create pool (" << this->m_log_pool_name << ")"
                  << pmemobj_errormsg() << dendl;
@@ -283,7 +283,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
 
     /* new pool, calculate and store metadata */
-    size_t effective_pool_size = (size_t)(this->m_log_pool_config_size * USABLE_SIZE);
+    size_t effective_pool_size = (size_t)(this->m_log_pool_size * USABLE_SIZE);
     size_t small_write_size = MIN_WRITE_ALLOC_SIZE + BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogCacheEntry);
     uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
     if (num_small_writes > MAX_LOG_ENTRIES) {
@@ -304,7 +304,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       D_RW(pool_root)->log_entries =
         TX_ZALLOC(struct WriteLogCacheEntry,
                   sizeof(struct WriteLogCacheEntry) * num_small_writes);
-      D_RW(pool_root)->pool_size = this->m_log_pool_config_size;
+      D_RW(pool_root)->pool_size = this->m_log_pool_size;
       D_RW(pool_root)->flushed_sync_gen = this->m_flushed_sync_gen;
       D_RW(pool_root)->block_size = MIN_WRITE_ALLOC_SIZE;
       D_RW(pool_root)->num_log_entries = num_small_writes;
@@ -347,7 +347,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       on_finish->complete(-EINVAL);
       return;
     }
-    this->m_log_pool_config_size = D_RO(pool_root)->pool_size;
+    this->m_log_pool_size = D_RO(pool_root)->pool_size;
     this->m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;
     this->m_total_log_entries = D_RO(pool_root)->num_log_entries;
     m_first_free_entry = D_RO(pool_root)->first_free_entry;
@@ -363,7 +363,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
        * entries, and n-1 free log entries */
       this->m_free_log_entries = this->m_total_log_entries - (m_first_free_entry - m_first_valid_entry) -1;
     }
-    size_t effective_pool_size = (size_t)(this->m_log_pool_config_size * USABLE_SIZE);
+    size_t effective_pool_size = (size_t)(this->m_log_pool_size * USABLE_SIZE);
     this->m_bytes_allocated_cap = effective_pool_size;
     load_existing_entries(later);
     m_cache_state->clean = this->m_dirty_log_entries.empty();

@@ -52,7 +52,7 @@ AbstractWriteLog<I>::AbstractWriteLog(
         "tp_pwl", 4, ""),
     m_cache_state(cache_state),
     m_image_ctx(image_ctx),
-    m_log_pool_config_size(DEFAULT_POOL_SIZE),
+    m_log_pool_size(DEFAULT_POOL_SIZE),
     m_image_writeback(image_writeback),
     m_plugin_api(plugin_api),
     m_log_retire_lock(ceph::make_mutex(pwl::unique_lock_name(
@@ -510,7 +510,7 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
   ldout(cct,5) << "pwl_path: " << m_cache_state->path << dendl;
 
   m_log_pool_name = m_cache_state->path;
-  m_log_pool_config_size = max(m_cache_state->size, MIN_POOL_SIZE);
+  m_log_pool_size = max(m_cache_state->size, MIN_POOL_SIZE);
 
   if ((!m_cache_state->present) &&
       (access(m_log_pool_name.c_str(), F_OK) == 0)) {
