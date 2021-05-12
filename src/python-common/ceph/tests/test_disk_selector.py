@@ -153,6 +153,13 @@ class TestSizeMatcher(object):
         ret = matcher.compare(disk_dict)
         assert ret is True
 
+    def test_compare_exact_decimal(self):
+
+        matcher = drive_selection.SizeMatcher('size', '20.12GB')
+        disk_dict = Device(path='/dev/vdb', sys_api=dict(size='20.12 GB'))
+        ret = matcher.compare(disk_dict)
+        assert ret is True
+
     @pytest.mark.parametrize("test_input,expected", [
         ("1.00 GB", False),
         ("20.00 GB", True),
