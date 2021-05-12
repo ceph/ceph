@@ -3,12 +3,13 @@ meta:
    Run ceph on two nodes, using one of them as a client,
    with a separate client-only node.
    Use xfs beneath the osds.
-   install ceph/pacific v16.2.0 and the v16.2.x point versions
+   install ceph/pacific v16.2.2 and the v16.2.x point versions
    run workload and upgrade-sequence in parallel
    (every point release should be tested)
    run workload and upgrade-sequence in parallel
    install ceph/pacific  latest version
    run workload and upgrade-sequence in parallel
+   Overall upgrade path is - pacific-latest.point-1 => pacific-latest.point => pacific-latest
 overrides:
   ceph:
     log-ignorelist:
@@ -70,30 +71,30 @@ openstack:
 tasks:
 - print: "****  done pacific v16.2.0 about to install"
 - install:
-    tag: v16.2.0
+    tag: v16.2.2
     # line below can be removed its from jewel test
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
-- print: "**** done v16.2.0 install"
+- print: "**** done v16.2.2 install"
 - ceph:
    fs: xfs
    add_osds_to_crush: true
 - print: "**** done ceph xfs"
 - sequential:
    - workload
-- print: "**** done workload v16.2.0"
+- print: "**** done workload v16.2.2"
 
 
-#######  upgrade to v16.2.2
+#######  upgrade to v16.2.3
 - install.upgrade:
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
     mon.a:
-      tag: v16.2.2
+      tag: v16.2.3
     mon.b:
-      tag: v16.2.2
+      tag: v16.2.3
 - parallel:
    - workload_pacific
    - upgrade-sequence_pacific
-- print: "**** done parallel pacific v16.2.2"
+- print: "**** done parallel pacific v16.2.3"
 
 ####  upgrade to latest pacific
 - install.upgrade:
