@@ -129,7 +129,10 @@ export class BucketsPageHelper extends PageHelper {
       .and('have.class', 'ng-invalid');
 
     // Check that error message was printed under name input field
-    cy.get('#bid + .invalid-feedback').should('have.text', 'The value is not valid.');
+    cy.get('#bid + .invalid-feedback').should(
+      'have.text',
+      'Bucket names must be 3 to 63 characters long.'
+    );
 
     // Test invalid owner input
     // select some valid option. The owner drop down error message will not appear unless a valid user was selected at

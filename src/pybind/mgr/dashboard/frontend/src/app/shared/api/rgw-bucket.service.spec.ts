@@ -80,7 +80,7 @@ describe('RgwBucketService', () => {
     service.exists('foo').subscribe((resp) => {
       result = resp;
     });
-    const req = httpTesting.expectOne(`api/rgw/bucket?${RgwHelper.DAEMON_QUERY_PARAM}`);
+    const req = httpTesting.expectOne(`api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
     expect(result).toBe(true);

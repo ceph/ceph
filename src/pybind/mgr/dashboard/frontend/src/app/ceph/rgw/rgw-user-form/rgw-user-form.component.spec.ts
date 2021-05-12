@@ -162,14 +162,14 @@ describe('RgwUserFormComponent', () => {
     it('should validate that username is valid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
       formHelper.setValue('user_id', 'ab', true);
-      tick(500);
+      tick();
       formHelper.expectValid('user_id');
     }));
 
     it('should validate that username is invalid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
       formHelper.setValue('user_id', 'abc', true);
-      tick(500);
+      tick();
       formHelper.expectError('user_id', 'notUnique');
     }));
   });
