@@ -70,7 +70,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
  protected:
   bool is_read_isolated() const override { return true; }
 
-  tm_future<NodeExtentRef> read_extent(
+  read_ertr::future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) override {
     TRACET("reading {}B at {:#x} ...", t, len, addr);
     return tm.read_extent<SeastoreNodeExtent>(t, addr, len
@@ -84,7 +84,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     });
   }
 
-  tm_future<NodeExtentRef> alloc_extent(
+  alloc_ertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) override {
     TRACET("allocating {}B ...", t, len);
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
@@ -97,7 +97,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     });
   }
 
-  tm_future<> retire_extent(
+  retire_ertr::future<> retire_extent(
       Transaction& t, NodeExtentRef _extent) override {
     LogicalCachedExtentRef extent = _extent;
     auto addr = extent->get_laddr();
@@ -109,7 +109,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     });
   }
 
-  tm_future<Super::URef> get_super(
+  getsuper_ertr::future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     TRACET("get root ...", t);
     return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
