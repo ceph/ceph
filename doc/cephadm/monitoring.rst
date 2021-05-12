@@ -145,6 +145,24 @@ configuration to be updated.
 The ``reconfig`` command also takes care of setting the right URL for Ceph
 Dashboard.
 
+Networks and Ports
+~~~~~~~~~~~~~~~~~~
+
+All monitoring services can have the network and port they bind to configured with a yaml service specification
+
+example spec file:
+
+.. code-block:: yaml
+
+    service_type: grafana
+    service_name: grafana
+    placement:
+      count: 1
+    networks:
+    - 192.169.142.0/24
+    spec:
+      port: 4200
+
 Using custom images
 ~~~~~~~~~~~~~~~~~~~
 
