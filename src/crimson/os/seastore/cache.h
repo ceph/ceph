@@ -540,6 +540,9 @@ public:
     }
   }
 
+  /// Dump live extents
+  void dump_contents();
+
 private:
   SegmentManager &segment_manager; ///< ref to segment_manager
   RootBlockRef root;               ///< ref to current root

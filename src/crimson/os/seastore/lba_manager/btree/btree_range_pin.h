@@ -117,6 +117,15 @@ public:
     extent = nextent;
   }
 
+  CachedExtent &get_extent() {
+    assert(extent);
+    return *extent;
+  }
+
+  bool has_ref() {
+    return !!ref;
+  }
+
   void take_pin(btree_range_pin_t &other);
 
   friend bool operator<(
@@ -211,6 +220,13 @@ public:
    */
   void retire(btree_range_pin_t &pin);
   void check_parent(btree_range_pin_t &pin);
+
+  template <typename F>
+  void scan(F &&f) {
+    for (auto &i : pins) {
+      std::invoke(f, i);
+    }
+  }
 
   ~btree_pin_set_t() {
     ceph_assert(pins.empty());

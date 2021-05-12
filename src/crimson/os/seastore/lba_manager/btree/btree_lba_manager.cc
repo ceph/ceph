@@ -637,4 +637,11 @@ BtreeLBAManager::update_internal_mapping(
   });
 }
 
+BtreeLBAManager::~BtreeLBAManager()
+{
+  pin_set.scan([](auto &i) {
+    logger().error("Found {} {} has_ref={}", i, i.get_extent(), i.has_ref());
+  });
+}
+
 }
