@@ -72,10 +72,19 @@ class RGWZoneGroup(JSONObj):
                 return True
         return False
 
+    def get_zone_endpoints(self, zone_id):
+        z = self.zones_by_id.get(zone_id)
+        if not z:
+            return None
+
+        return z.endpoints
+
 class RGWPeriod(JSONObj):
     def __init__(self, period_dict):
         self.id = period_dict['id']
         self.epoch = period_dict['epoch']
+        self.master_zone = period_dict['master_zone']
+        self.master_zonegroup = period_dict['master_zonegroup']
         pm = period_dict['period_map']
         self.zonegroups_by_id = {}
         self.zonegroups_by_name = {}
@@ -90,11 +99,20 @@ class RGWPeriod(JSONObj):
                 return True
         return False
     
-    def find_zonegroup(self, zonegroup):
-        for _, zg in self.zonegroups_by_id.items():
-            if not zonegroup or zg.name == zonegroup:
-                return zg.name
-        return None
+    def find_zonegroup_by_name(self, zonegroup):
+        return self.zonegroups_by_name.get(zonegroup)
+
+    def find_zonegroup_by_id(self, zonegroup):
+        return self.zonegroups_by_id.get(zonegroup)
+
+    def get_zone_endpoints(self, zonegroup_id, zone_id):
+        zg = self.zonegroups_by_id.get(zonegroup_id)
+        if not zg:
+            return None
+
+        return zg.get_zone_endpoints(zone_id)
+
+        
 
 class RGWAccessKey(JSONObj):
     def __init__(self, d):
@@ -145,6 +163,18 @@ class RealmOp(RGWAdminCmd):
     def __init__(self):
         RGWAdminCmd.__init__(self)
         
+    def get(self):
+        params = [ 'realm',
+                   'get' ]
+
+        retcode, stdout = RGWAdminCmd.run(self, params)
+        if retcode != 0:
+            return None
+
+        self.info = json.loads(stdout)
+
+        return self.info
+
     def create(self, name = None, is_default = True):
         self.name = name
         if not self.name:
@@ -218,6 +248,18 @@ class ZoneOp(RGWAdminCmd):
     def __init__(self):
         RGWAdminCmd.__init__(self)
         
+    def get(self):
+        params = [ 'zone',
+                   'get' ]
+
+        retcode, stdout = RGWAdminCmd.run(self, params)
+        if retcode != 0:
+            return None
+
+        self.info = json.loads(stdout)
+
+        return self.info
+
     def create(self, realm, zonegroup, name = None, endpoints = None, is_master = True, is_default = True,
                access_key = None, secret = None):
         self.name = name
@@ -424,6 +466,59 @@ class RGWAM:
         realm_access_b = realm_access.to_json().encode('utf-8')
         print('Realm Access Conf (b64): %s' % base64.b64encode(realm_access_b).decode('utf-8'))
 
+    def realm_new_zone_creds(self, endpoints, sys_uid):
+        period_info = PeriodOp().get()
+        if not period_info:
+            return
+
+        period = RGWPeriod(period_info)
+
+        zone_info = ZoneOp().get()
+        if not zone_info:
+            return
+
+        zone_name = zone_info['name']
+        zone_id = zone_info['id']
+
+        print('Period: ' + period.id)
+        print('Master zone: ' + period.master_zone)
+        print('Current zone: ' + zone_id)
+
+        if period.master_zone != zone_id:
+            print("ERROR: command needs to run on master zone")
+            return
+
+        ep = ''
+        if not endpoints:
+            eps = period.get_zone_endpoints(period.master_zonegroup, period.master_zone)
+        else:
+            eps = endpoints.split(',')
+
+        if len(eps) > 0:
+            ep = eps[0]
+
+        sys_user_info = UserOp().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
+        if not sys_user_info:
+            print("ERROR: failed to create new user")
+            return
+
+        sys_user = RGWUser(sys_user_info)
+
+        print('Created system user: %s' % sys_user.uid)
+
+        sys_access_key = ''
+        sys_secret = ''
+
+        if len(sys_user.keys) > 0:
+            sys_access_key = sys_user.keys[0].access_key
+            sys_secret = sys_user.keys[0].secret_key
+
+        realm_access = RealmAccessConf(ep, sys_user.uid, sys_access_key, sys_secret)
+
+        print(realm_access.to_json())
+
+        realm_access_b = realm_access.to_json().encode('utf-8')
+        print('Realm Access Conf (b64): %s' % base64.b64encode(realm_access_b).decode('utf-8'))
 
     def zone_create(self, realm_access_b64, zonegroup = None, zone = None, endpoints = None):
         if not realm_access_b64:
@@ -453,12 +548,12 @@ class RGWAM:
         print('Period: ' + period.id)
         endpoints = get_endpoints(endpoints, period)
 
-        zg_name = period.find_zonegroup(zonegroup)
-        if not zg_name:
+        zg = period.find_zonegroup_by_name(zonegroup)
+        if not zg:
             print("ERROR: zonegroup %s not found" % (zonegroup or '<none>'))
             return
 
-        zone_info = ZoneOp().create(realm_name, zg_name, zone, endpoints, False, True,
+        zone_info = ZoneOp().create(realm_name, zg.name, zone, endpoints, False, True,
                 access_key, secret)
         if not zone_info:
             return
@@ -513,18 +608,23 @@ class RealmCommand:
             usage='''rgwam realm <subcommand>
 
 The subcommands are:
-   bootstrap                     Manipulate bucket versioning
+   bootstrap                     Bootstrap new realm
+   new-zone-creds                Create credentials for connecting new zone
 ''')
         parser.add_argument('subcommand', help='Subcommand to run')
         # parse_args defaults to [1:] for args, but you need to
         # exclude the rest of the args too, or validation will fail
         args = parser.parse_args(self.args[0:1])
-        if not hasattr(self, args.subcommand):
+
+        sub = args.subcommand.replace('-', '_')
+
+        if not hasattr(self, sub):
             print('Unrecognized subcommand:', args.subcommand)
             parser.print_help()
             exit(1)
         # use dispatch pattern to invoke method with same name
-        return getattr(self, args.subcommand)
+
+        return getattr(self, sub)
 
     def bootstrap(self):
         parser = argparse.ArgumentParser(
@@ -541,6 +641,17 @@ The subcommands are:
 
         RGWAM().realm_bootstrap(args.realm, args.zonegroup, args.zone, args.endpoints,
                                 args.sys_uid, args.uid)
+
+    def new_zone_creds(self):
+        parser = argparse.ArgumentParser(
+            description='Bootstrap new realm',
+            usage='rgwam realm new-zone-creds [<args>]')
+        parser.add_argument('--endpoints')
+        parser.add_argument('--sys-uid')
+
+        args = parser.parse_args(self.args[1:])
+
+        RGWAM().realm_new_zone_creds(args.endpoints, args.sys_uid)
 
 
 class ZoneCommand:
@@ -601,7 +712,9 @@ class TopLevelCommand:
             usage='''rgwam <command> [<args>]
 
 The commands are:
-   realm bootstrap               Bootstrap realm
+   realm bootstrap               Bootstrap new realm
+   realm new-zone-creds          Create credentials to connect new zone to realm
+   zone create                   Create new zone and connect it to existing realm
    zone run                      Run radosgw in current zone
 ''')
         parser.add_argument('command', help='Subcommand to run')
