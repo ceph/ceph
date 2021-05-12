@@ -175,7 +175,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     // return the usual PyObject*
     if (injected_map != nullptr) return injected_map;
   }
-  if (injected_map != nullptr) return injected_map;
   PyFormatter f;
 
   // Drop the GIL, as most of the following blocks will block on
