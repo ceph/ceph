@@ -24,8 +24,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.inited = True
 
     @CLICommand('nfs export create cephfs', perm='rw')
-    def _cmd_nfs_export_create_cephfs(self, fsname: str, clusterid: str, binding: str,
-                                      readonly: bool=False, path: str='/') -> Tuple[int, str, str]:
+    def _cmd_nfs_export_create_cephfs(self,
+                                      fsname: str,
+                                      clusterid: str,
+                                      binding: str,
+                                      readonly: bool = False,
+                                      path: str = '/') -> Tuple[int, str, str]:
         """Create a cephfs export"""
         # TODO Extend export creation for rgw.
         return self.export_mgr.create_export(fsal_type='cephfs', fs_name=fsname,
@@ -38,7 +42,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.delete_export(cluster_id=clusterid, pseudo_path=binding)
 
     @CLICommand('nfs export ls', perm='r')
-    def _cmd_nfs_export_ls(self, clusterid: str, detailed: bool=False) -> Tuple[int, str, str]:
+    def _cmd_nfs_export_ls(self, clusterid: str, detailed: bool = False) -> Tuple[int, str, str]:
         """List exports of a NFS cluster"""
         return self.export_mgr.list_exports(cluster_id=clusterid, detailed=detailed)
 
@@ -54,7 +58,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.update_export(export_config=inbuf)
 
     @CLICommand('nfs cluster create', perm='rw')
-    def _cmd_nfs_cluster_create(self, clusterid: str, placement: str=None) -> Tuple[int, str, str]:
+    def _cmd_nfs_cluster_create(self, clusterid: str,
+                                placement: str = None) -> Tuple[int, str, str]:
         """Create an NFS Cluster"""
         return self.nfs.create_nfs_cluster(cluster_id=clusterid, placement=placement)
 
@@ -74,7 +79,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.list_nfs_cluster()
 
     @CLICommand('nfs cluster info', perm='r')
-    def _cmd_nfs_cluster_info(self, clusterid: str=None) -> Tuple[int, str, str]:
+    def _cmd_nfs_cluster_info(self, clusterid: str = None) -> Tuple[int, str, str]:
         """Displays NFS Cluster info"""
         return self.nfs.show_nfs_cluster_info(cluster_id=clusterid)
 
