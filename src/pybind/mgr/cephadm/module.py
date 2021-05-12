@@ -2408,6 +2408,16 @@ Then run the following:
             raise OrchestratorError('must specify either image or version')
 
         image_info = CephadmServe(self)._get_container_image_info(target_name)
+
+        ceph_image_version = image_info.ceph_version
+        if not ceph_image_version:
+            return f'Unable to extract ceph version from {target_name}.'
+        if ceph_image_version.startswith('ceph version '):
+            ceph_image_version = ceph_image_version.split(' ')[2]
+        version_error = self.upgrade._check_target_version(ceph_image_version)
+        if version_error:
+            return f'Incompatible upgrade: {version_error}'
+
         self.log.debug(f'image info {image} -> {image_info}')
         r: dict = {
             'target_name': target_name,
