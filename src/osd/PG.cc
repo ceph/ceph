@@ -2311,6 +2311,13 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
+  if (m->get_source().is_osd()) {
+    int from = m->get_source().num();
+    if (!get_osdmap()->exists(from) ||
+	m->get_map_epoch() <= get_osdmap()->get_down_at(from)) {
+      return true; 
+    }
+  }
 
   if (m->get_connection()->has_feature(CEPH_FEATURE_RESEND_ON_SPLIT)) {
     // >= luminous client

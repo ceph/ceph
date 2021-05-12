@@ -3224,7 +3224,8 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
     soid.oid, oloc, obj_op, snapc,
     ceph::real_clock::from_ceph_timespec(pwop->mtime),
     flags, new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())),
-    &pwop->user_version, pwop->reqid);
+    &pwop->user_version, pwop->reqid,
+    get_osdmap_epoch());
   fin->tid = tid;
   pwop->objecter_tid = tid;
   proxywrite_ops[tid] = pwop;
@@ -10877,7 +10878,9 @@ int PrimaryLogPG::start_flush(
       ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
-      NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
+      NULL /* no callback, we'll rely on the ordering w.r.t the next op */,
+      NULL, osd_reqid_t(),
+      get_osdmap_epoch());
   }
 
   FlushOpRef fop(std::make_shared<FlushOp>());
@@ -10911,7 +10914,9 @@ int PrimaryLogPG::start_flush(
     ceph::real_clock::from_ceph_timespec(oi.mtime),
     CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ENFORCE_SNAPC,
     new C_OnFinisher(fin,
-		     osd->get_objecter_finisher(get_pg_shard())));
+		     osd->get_objecter_finisher(get_pg_shard())),
+    nullptr, osd_reqid_t(),
+    get_osdmap_epoch());
   /* we're under the pg lock and fin->finish() is grabbing that */
   fin->tid = tid;
   fop->objecter_tid = tid;

@@ -3116,12 +3116,14 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   op->target.paused = false;
   op->stamp = ceph::coarse_mono_clock::now();
+  op->send_epoch = osdmap->get_epoch();
 
   hobject_t hobj = op->target.get_hobj();
   auto m = new MOSDOp(client_inc, op->tid,
 		      hobj, op->target.actual_pgid,
-		      osdmap->get_epoch(),
+		      op->send_epoch,
 		      flags, op->features);
+
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);
@@ -3181,6 +3183,15 @@ void Objecter::_send_op(Op *op)
 	return;
       }
     }
+  }
+
+  if (osd_whoami >= 0 &&
+      (!osdmap->exists(osd_whoami) ||
+       op->send_epoch <= osdmap->get_down_at(osd_whoami))) {
+    ldout(cct, 10) << __func__ << "finsh op " << op->tid
+                   << " as EAGAIN for stray epoch" << dendl;
+    _op_cancel(op->tid, -EAGAIN);
+    return;
   }
 
   ceph_assert(op->tid > 0);
@@ -4906,8 +4917,9 @@ Objecter::OSDSession::~OSDSession()
 
 Objecter::Objecter(CephContext *cct,
 		   Messenger *m, MonClient *mc,
-		   boost::asio::io_context& service) :
-  Dispatcher(cct), messenger(m), monc(mc), service(service)
+		   boost::asio::io_context& service,
+		   int osd_whoami) :
+  Dispatcher(cct), messenger(m), monc(mc), service(service), osd_whoami(osd_whoami)
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
