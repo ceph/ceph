@@ -41,7 +41,8 @@
               <select id="backend_service"
                       name="backend_service"
                       class="form-control custom-select"
-                      formControlName="backend_service">
+                      formControlName="backend_service"
+                      (change)="prePopulateId()">
                 <option *ngIf="services === null"
                         [ngValue]="null"
                         i18n>Loading...</option>

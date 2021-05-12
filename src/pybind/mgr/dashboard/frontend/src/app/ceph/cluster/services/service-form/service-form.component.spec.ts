@@ -335,7 +335,6 @@ describe('ServiceFormComponent', () => {
     describe('should test service ingress', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'ingress');
-        formHelper.setValue('service_id', 'rgw.foo');
         formHelper.setValue('backend_service', 'rgw.foo');
         formHelper.setValue('virtual_ip', '192.168.20.1/24');
         formHelper.setValue('ssl', false);
@@ -353,6 +352,12 @@ describe('ServiceFormComponent', () => {
           virtual_interface_networks: null,
           ssl: false
         });
+      });
+
+      it('should pre-populate the service id', () => {
+        component.prePopulateId();
+        const prePopulatedID = component.serviceForm.getValue('service_id');
+        expect(prePopulatedID).toBe('rgw.foo');
       });
 
       it('should submit valid frontend and monitor port', () => {
