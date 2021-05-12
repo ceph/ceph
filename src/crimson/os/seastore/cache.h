@@ -587,6 +587,9 @@ private:
   /// Replace prev with next
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
 
+  /// Invalidate extent and mark affected transactions
+  void invalidate(CachedExtent &extent);
+
   Transaction::get_extent_ret query_cache_for_extent(
     paddr_t offset,
     CachedExtentRef *out) {
