@@ -242,7 +242,7 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   m_first_valid_entry = next_log_pos;
   this->m_total_log_entries = current_pool_root.num_log_entries;
   this->m_flushed_sync_gen = current_pool_root.flushed_sync_gen;
-  this->m_log_pool_actual_size = current_pool_root.pool_size;
+  this->m_log_pool_config_size = current_pool_root.pool_size;
 
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
 
@@ -275,8 +275,8 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
     }
     // along with the write_bytes, add control block size too
     next_log_pos += MIN_WRITE_ALLOC_SSD_SIZE;
-    if (next_log_pos >= this->m_log_pool_actual_size) {
-      next_log_pos = next_log_pos % this->m_log_pool_actual_size + DATA_RING_BUFFER_OFFSET;
+    if (next_log_pos >= this->m_log_pool_config_size) {
+      next_log_pos = next_log_pos % this->m_log_pool_config_size + DATA_RING_BUFFER_OFFSET;
     }
  }
   this->update_sync_points(missing_sync_points, sync_point_entries, later,

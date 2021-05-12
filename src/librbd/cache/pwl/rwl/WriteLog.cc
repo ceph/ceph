@@ -294,7 +294,6 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       on_finish->complete(-EINVAL);
       return;
     }
-    this->m_log_pool_actual_size = this->m_log_pool_config_size;
     this->m_bytes_allocated_cap = effective_pool_size;
     /* Log ring empty */
     m_first_free_entry = 0;
@@ -305,7 +304,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       D_RW(pool_root)->log_entries =
         TX_ZALLOC(struct WriteLogCacheEntry,
                   sizeof(struct WriteLogCacheEntry) * num_small_writes);
-      D_RW(pool_root)->pool_size = this->m_log_pool_actual_size;
+      D_RW(pool_root)->pool_size = this->m_log_pool_config_size;
       D_RW(pool_root)->flushed_sync_gen = this->m_flushed_sync_gen;
       D_RW(pool_root)->block_size = MIN_WRITE_ALLOC_SIZE;
       D_RW(pool_root)->num_log_entries = num_small_writes;
@@ -348,7 +347,7 @@ void WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       on_finish->complete(-EINVAL);
       return;
     }
-    this->m_log_pool_actual_size = D_RO(pool_root)->pool_size;
+    this->m_log_pool_config_size = D_RO(pool_root)->pool_size;
     this->m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;
     this->m_total_log_entries = D_RO(pool_root)->num_log_entries;
     m_first_free_entry = D_RO(pool_root)->first_free_entry;
