@@ -39,13 +39,7 @@ struct SeastoreCollection final : public FuturizedCollection {
 
 seastar::future<> SeaStore::stop()
 {
-  return transaction_manager->close(
-  ).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::stop"
-    }
-  );
-
+  return seastar::now();
 }
 
 seastar::future<> SeaStore::mount()
@@ -62,7 +56,12 @@ seastar::future<> SeaStore::mount()
 
 seastar::future<> SeaStore::umount()
 {
-  return seastar::now();
+  return transaction_manager->close(
+  ).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::umount"
+    }
+  );
 }
 
 seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
@@ -91,7 +90,7 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 	});
       });
   }).safe_then([this] {
-    return stop();
+    return umount();
   }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid error in SeaStore::mkfs"

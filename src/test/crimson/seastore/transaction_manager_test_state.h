@@ -202,7 +202,7 @@ protected:
   }
 
   virtual seastar::future<> _teardown() {
-    return seastore->stop();
+    return seastore->umount();
   }
 
   virtual seastar::future<> _mount() {
