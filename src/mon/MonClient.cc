@@ -572,12 +572,11 @@ int MonClient::authenticate(double timeout)
   if (!_opened())
     _reopen_session();
 
-  auto until = ceph::mono_clock::now();
-  until += ceph::make_timespan(timeout);
-  if (timeout > 0.0)
-    ldout(cct, 10) << "authenticate will time out at " << until << dendl;
   while (!active_con && authenticate_err >= 0) {
     if (timeout > 0.0) {
+      auto until = ceph::mono_clock::now();
+      until += ceph::make_timespan(timeout);
+      ldout(cct, 10) << "authenticate will time out at " << until << dendl;
       auto r = auth_cond.wait_until(lock, until);
       if (r == std::cv_status::timeout && !active_con) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
