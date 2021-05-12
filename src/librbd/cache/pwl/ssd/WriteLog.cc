@@ -146,7 +146,6 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
 
-    pool_size = this->m_log_pool_config_size;
     auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
     new_root->pool_size = this->m_log_pool_config_size;
     new_root->flushed_sync_gen = this->m_flushed_sync_gen;
