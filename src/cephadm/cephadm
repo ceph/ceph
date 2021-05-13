@@ -2259,8 +2259,8 @@ def get_config_and_keyring(ctx):
         try:
             with open(ctx.config, 'r') as f:
                 config = f.read()
-        except FileNotFoundError:
-            raise Error('config file: %s does not exist' % ctx.config)
+        except FileNotFoundError as e:
+            raise Error(e)
 
     if 'key' in ctx and ctx.key:
         keyring = '[%s]\n\tkey = %s\n' % (ctx.name, ctx.key)
@@ -2268,8 +2268,8 @@ def get_config_and_keyring(ctx):
         try:
             with open(ctx.keyring, 'r') as f:
                 keyring = f.read()
-        except FileNotFoundError:
-            raise Error('keyring file: %s does not exist' % ctx.keyring)
+        except FileNotFoundError as e:
+            raise Error(e)
 
     return config, keyring
 
