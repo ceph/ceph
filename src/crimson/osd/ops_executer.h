@@ -28,7 +28,8 @@
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/shard_services.h"
 
-class OSDOp;
+struct ObjectState;
+struct OSDOp;
 
 namespace crimson::osd {
 class PG;
@@ -173,33 +174,33 @@ private:
     MainFunc&& main_func,
     EffectFunc&& effect_func);
 
-  call_ierrorator::future<> do_op_call(class OSDOp& osd_op);
+  call_ierrorator::future<> do_op_call(OSDOp& osd_op);
   watch_ierrorator::future<> do_op_watch(
-    class OSDOp& osd_op,
-    class ObjectState& os,
+    OSDOp& osd_op,
+    ObjectState& os,
     ceph::os::Transaction& txn);
   watch_ierrorator::future<> do_op_watch_subop_watch(
-    class OSDOp& osd_op,
-    class ObjectState& os,
+    OSDOp& osd_op,
+    ObjectState& os,
     ceph::os::Transaction& txn);
   watch_ierrorator::future<> do_op_watch_subop_reconnect(
-    class OSDOp& osd_op,
-    class ObjectState& os,
+    OSDOp& osd_op,
+    ObjectState& os,
     ceph::os::Transaction& txn);
   watch_ierrorator::future<> do_op_watch_subop_unwatch(
-    class OSDOp& osd_op,
-    class ObjectState& os,
+    OSDOp& osd_op,
+    ObjectState& os,
     ceph::os::Transaction& txn);
   watch_ierrorator::future<> do_op_watch_subop_ping(
-    class OSDOp& osd_op,
-    class ObjectState& os,
+    OSDOp& osd_op,
+    ObjectState& os,
     ceph::os::Transaction& txn);
   watch_ierrorator::future<> do_op_notify(
-    class OSDOp& osd_op,
-    const class ObjectState& os);
+    OSDOp& osd_op,
+    const ObjectState& os);
   watch_ierrorator::future<> do_op_notify_ack(
-    class OSDOp& osd_op,
-    const class ObjectState& os);
+    OSDOp& osd_op,
+    const ObjectState& os);
 
   template <class Func>
   auto do_const_op(Func&& f) {
@@ -258,7 +259,7 @@ public:
   }
 
   interruptible_errorated_future<osd_op_errorator>
-  execute_op(class OSDOp& osd_op);
+  execute_op(OSDOp& osd_op);
 
   template <typename MutFunc>
   osd_op_ierrorator::future<> flush_changes_n_do_ops_effects(
@@ -400,7 +401,7 @@ public:
     : pg(pg), nspace(msg.get_hobj().nspace) {
   }
 
-  interruptible_future<> execute_op(class OSDOp& osd_op);
+  interruptible_future<> execute_op(OSDOp& osd_op);
 
 private:
   const PG& pg;
