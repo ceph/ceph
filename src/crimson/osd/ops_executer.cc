@@ -137,7 +137,7 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 }
 
 static watch_info_t create_watch_info(const OSDOp& osd_op,
-                                      const MOSDOp& msg)
+                                      const OpsExecuter::ExecutableMessage& msg)
 {
   using crimson::common::local_conf;
   const uint32_t timeout =
@@ -161,7 +161,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
     crimson::net::ConnectionRef conn;
     watch_info_t info;
 
-    connect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    connect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name),
         conn(msg.get_connection()),
         info(create_watch_info(osd_op, msg)) {
@@ -180,11 +180,12 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
         const auto& [cookie, entity] = ctx.key;
-        it->second = crimson::osd::Watch::create(obc, ctx.info, entity);
+        it->second = crimson::osd::Watch::create(
+          obc, ctx.info, entity, std::move(pg));
         logger().info("op_effect: added new watcher: {}", ctx.key);
       } else {
         logger().info("op_effect: found existing watcher: {}", ctx.key);
@@ -217,9 +218,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
 
   struct disconnect_ctx_t {
     ObjectContext::watch_key_t key;
-    bool send_disconnect{ false };
-
-    disconnect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    disconnect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name) {
     }
   };
@@ -234,12 +233,12 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       if (auto nh = obc->watchers.extract(ctx.key); !nh.empty()) {
         return seastar::do_with(std::move(nh.mapped()),
                          [ctx](auto&& watcher) {
           logger().info("op_effect: disconnect watcher {}", ctx.key);
-          return watcher->remove(ctx.send_disconnect);
+          return watcher->remove();
         });
       } else {
         logger().info("op_effect: disconnect failed to find watcher {}", ctx.key);
@@ -320,7 +319,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
     const uint64_t client_gid;
     const epoch_t epoch;
 
-    notify_ctx_t(const MOSDOp& msg)
+    notify_ctx_t(const ExecutableMessage& msg)
       : conn(msg.get_connection()),
         client_gid(msg.get_reqid().name.num()),
         epoch(msg.get_map_epoch()) {
@@ -347,7 +346,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
       ceph::encode(ctx.ninfo.notify_id, osd_op.outdata);
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       auto alive_watchers = obc->watchers | boost::adaptors::map_values
                                           | boost::adaptors::filtered(
         [] (const auto& w) {
@@ -376,7 +375,8 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
     uint64_t notify_id;
     ceph::bufferlist reply_bl;
 
-    notifyack_ctx_t(const MOSDOp& msg) : entity(msg.get_reqid().name) {
+    notifyack_ctx_t(const ExecutableMessage& msg)
+      : entity(msg.get_reqid().name) {
     }
   };
   return with_effect_on_obc(notifyack_ctx_t{ get_message() },
@@ -396,7 +396,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
       }
       return watch_errorator::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       logger().info("notify_ack watch_cookie={}, notify_id={}",
                     ctx.watch_cookie, ctx.notify_id);
       return seastar::do_for_each(obc->watchers,

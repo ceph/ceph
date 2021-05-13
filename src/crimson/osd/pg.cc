@@ -566,10 +566,12 @@ seastar::future<> PG::WaitForActiveBlocker::stop()
   return seastar::now();
 }
 
-PG::interruptible_future<> PG::submit_transaction(const OpInfo& op_info,
-					 ObjectContextRef&& obc,
-					 ceph::os::Transaction&& txn,
-					 osd_op_params_t&& osd_op_p)
+PG::interruptible_future<> PG::submit_transaction(
+  const OpInfo& op_info,
+  const std::vector<OSDOp>& ops,
+  ObjectContextRef&& obc,
+  ceph::os::Transaction&& txn,
+  osd_op_params_t&& osd_op_p)
 {
   if (__builtin_expect(stopping, false)) {
     return seastar::make_exception_future<>(
@@ -583,12 +585,11 @@ PG::interruptible_future<> PG::submit_transaction(const OpInfo& op_info,
   }
 
   std::vector<pg_log_entry_t> log_entries;
-  const auto& ops = osd_op_p.req->ops;
   log_entries.emplace_back(obc->obs.exists ?
 		      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
 		    obc->obs.oi.soid, osd_op_p.at_version, obc->obs.oi.version,
 		    osd_op_p.user_modify ? osd_op_p.at_version.version : 0,
-		    osd_op_p.req->get_reqid(), osd_op_p.req->get_mtime(),
+		    osd_op_p.req_id, osd_op_p.mtime,
                     op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
   // TODO: refactor the submit_transaction
   if (op_info.allows_returnvec()) {
@@ -622,10 +623,8 @@ PG::interruptible_future<> PG::submit_transaction(const OpInfo& op_info,
 
 void PG::fill_op_params_bump_pg_version(
   osd_op_params_t& osd_op_p,
-  Ref<MOSDOp> m,
   const bool user_modify)
 {
-  osd_op_p.req = std::move(m);
   osd_op_p.at_version = next_version();
   osd_op_p.pg_trim_to = get_pg_trim_to();
   osd_op_p.min_last_complete_ondisk = get_min_last_complete_ondisk();
@@ -683,7 +682,6 @@ PG::interruptible_future<Ref<MOSDOpReply>> PG::handle_failed_op(
 }
 
 PG::interruptible_future<> PG::repair_object(
-  Ref<MOSDOp> m,
   const hobject_t& oid,
   eversion_t& v) 
 {
@@ -693,12 +691,75 @@ PG::interruptible_future<> PG::repair_object(
   // Add object to PG's missing set if it isn't there already
   assert(!get_local_missing().is_missing(oid));
   peering_state.force_object_missing(pg_whoami, oid, v);
-  auto [op, fut] = get_shard_services().start_operation<crimson::osd::UrgentRecovery>(
-		oid, v, this, get_shard_services(), m->get_min_epoch());
+  auto [op, fut] = get_shard_services().start_operation<UrgentRecovery>(
+    oid, v, this, get_shard_services(), get_osdmap_epoch());
   return std::move(fut);
 }
 
-PG::do_osd_ops_iertr::future<Ref<MOSDOpReply>> 
+template <class Ret, class SuccessFunc, class FailureFunc>
+PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
+  OpsExecuter&& ox,
+  std::vector<OSDOp> ops,
+  const OpInfo &op_info,
+  SuccessFunc&& success_func,
+  FailureFunc&& failure_func)
+{
+  auto rollbacker = ox.create_rollbacker([this] (auto& obc) {
+    return reload_obc(obc).handle_error_interruptible(
+      load_obc_ertr::assert_all{"can't live with object state messed up"});
+  });
+  return interruptor::do_for_each(ops, [&ox](OSDOp& osd_op) {
+    logger().debug(
+      "do_osd_ops_execute: object {} - handling op {}",
+      ox.get_target(),
+      ceph_osd_op_name(osd_op.op.op));
+    return ox.execute_op(osd_op);
+  }).safe_then_interruptible([this, &ox, &op_info, &ops] {
+    logger().debug(
+      "do_osd_ops_execute: object {} all operations successful",
+      ox.get_target());
+    return std::move(ox).flush_changes_n_do_ops_effects(
+      Ref<PG>{this},
+      [this, &op_info, &ops] (auto&& txn,
+                              auto&& obc,
+                              auto&& osd_op_p,
+                              bool user_modify) {
+	logger().debug(
+	  "do_osd_ops_execute: object {} submitting txn",
+	  obc->get_oid());
+        fill_op_params_bump_pg_version(osd_op_p, user_modify);
+	return submit_transaction(
+          op_info,
+          ops,
+          std::move(obc),
+          std::move(txn),
+          std::move(osd_op_p));
+    });
+  }).safe_then_interruptible_tuple([success_func=std::move(success_func)] {
+    return std::move(success_func)();
+  }, crimson::ct_error::object_corrupted::handle(
+    [rollbacker, this] (const std::error_code& e) mutable {
+    // this is a path for EIO. it's special because we want to fix the obejct
+    // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
+    // restart the execution.
+    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+      [obc=rollbacker.get_obc(), this] {
+      return repair_object(obc->obs.oi.soid,
+                           obc->obs.oi.version).then_interruptible([] {
+        return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
+      });
+    });
+  }), OpsExecuter::osd_op_errorator::all_same_way(
+    [rollbacker, failure_func=std::move(failure_func)]
+    (const std::error_code& e) mutable {
+    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+      [&e, failure_func=std::move(failure_func)] {
+      return std::move(failure_func)(e);
+    });
+  }));
+}
+
+PG::do_osd_ops_iertr::future<Ref<MOSDOpReply>>
 PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
@@ -707,74 +768,59 @@ PG::do_osd_ops(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-
-  using osd_op_ierrorator = OpsExecuter::osd_op_ierrorator;
-  using osd_op_errorator = OpsExecuter::osd_op_errorator;
-  const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
-                                                   : m->get_hobj();
   auto ox = std::make_unique<OpsExecuter>(
-    obc, op_info, get_pool().info, get_backend(), *m);
-  return interruptor::do_for_each(
-    m->ops.begin(), m->ops.end(), [m, ox = ox.get()](OSDOp& osd_op) {
-    logger().debug(
-      "do_osd_ops: {} - object {} - handling op {}",
-      *m,
-      ox->get_target(),
-      ceph_osd_op_name(osd_op.op.op));
-    return ox->execute_op(osd_op);
-  }).safe_then_interruptible([this, m, ox = ox.get(), &op_info] {
-    logger().debug(
-      "do_osd_ops: {} - object {} all operations successful",
-      *m,
-      ox->get_target());
-    return std::move(*ox).flush_changes(
-      [this, m, &op_info] (auto&& txn,
-			   auto&& obc,
-			   auto&& osd_op_p,
-                           bool user_modify) -> osd_op_ierrorator::future<> {
-	logger().debug(
-	  "do_osd_ops: {} - object {} submitting txn",
-	  *m,
-	  obc->get_oid());
-        fill_op_params_bump_pg_version(osd_op_p, std::move(m), user_modify);
-	return submit_transaction(
-          op_info,
-          std::move(obc),
-          std::move(txn),
-          std::move(osd_op_p));
-      });
-  }).safe_then_interruptible_tuple([this, m, obc, rvec = op_info.allows_returnvec()]()
-    -> PG::do_osd_ops_iertr::future<Ref<MOSDOpReply>> {
-    // TODO: should stop at the first op which returns a negative retval,
-    //       cmpext uses it for returning the index of first unmatched byte
-    int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
-    if (result > 0 && !rvec) {
-      result = 0;
+    std::move(obc), op_info, get_pool().info, get_backend(), *m);
+  return do_osd_ops_execute<Ref<MOSDOpReply>>(
+    std::move(*ox), m->ops, op_info,
+    [this, m, rvec = op_info.allows_returnvec()] {
+      // TODO: should stop at the first op which returns a negative retval,
+      //       cmpext uses it for returning the index of first unmatched byte
+      int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
+      if (result > 0 && !rvec) {
+        result = 0;
+      }
+      auto reply = make_message<MOSDOpReply>(m.get(),
+                                             result,
+                                             get_osdmap_epoch(),
+                                             0,
+                                             false);
+      reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+      logger().debug(
+        "do_osd_ops: {} - object {} sending reply",
+        *m,
+        m->get_hobj());
+      return do_osd_ops_iertr::make_ready_future<Ref<MOSDOpReply>>(
+        std::move(reply));
+    },
+    [m, this] (const std::error_code& e) {
+      auto reply = make_message<MOSDOpReply>(
+        m.get(), -e.value(), get_osdmap_epoch(), 0, false);
+      reply->set_enoent_reply_versions(
+        peering_state.get_info().last_update,
+        peering_state.get_info().last_user_version);
+      return do_osd_ops_iertr::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
     }
-    auto reply = make_message<MOSDOpReply>(m.get(),
-                                           result,
-                                           get_osdmap_epoch(),
-                                           0,
-                                           false);
-    reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-    logger().debug(
-      "do_osd_ops: {} - object {} sending reply",
-      *m,
-      obc->obs.oi.soid);
-    return PG::do_osd_ops_ertr::make_ready_future<Ref<MOSDOpReply>>(
-      std::move(reply));
-  }, crimson::ct_error::object_corrupted::handle([m, obc, this] {
-    return repair_object(m, obc->obs.oi.soid, obc->obs.oi.version)
-    .then_interruptible([] {
-      return PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>>(
-      crimson::ct_error::eagain::make());
-    });
-  }), osd_op_errorator::all_same_way([ox = std::move(ox),
-                                      m,
-                                      obc,
-                                      this] (const std::error_code& e) {
-    return handle_failed_op(e, std::move(obc), *ox, *m);
-  }));
+  ).finally([ox_deleter=std::move(ox)] {});
+}
+
+PG::do_osd_ops_iertr::future<>
+PG::do_osd_ops(
+  ObjectContextRef obc,
+  std::vector<OSDOp> ops,
+  const OpInfo &op_info,
+  const do_osd_ops_params_t& msg_params,
+  do_osd_ops_success_func_t success_func,
+  do_osd_ops_failure_func_t failure_func)
+{
+  auto ox = std::make_unique<OpsExecuter>(
+    std::move(obc), op_info, get_pool().info, get_backend(), msg_params);
+  return do_osd_ops_execute<void>(
+    std::move(*ox),
+    std::move(ops),
+    std::as_const(op_info),
+    std::move(success_func),
+    std::move(failure_func)
+  ).finally([ox_deleter=std::move(ox)] {});
 }
 
 PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
@@ -802,11 +848,9 @@ PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
   });
 }
 
-hobject_t PG::get_oid(const MOSDOp &m)
+hobject_t PG::get_oid(const hobject_t& hobj)
 {
-  return (m.get_snapid() == CEPH_SNAPDIR ?
-          m.get_hobj().get_head() :
-          m.get_hobj());
+  return hobj.snap == CEPH_SNAPDIR ? hobj.get_head() : hobj;
 }
 
 RWState::State PG::get_lock_type(const OpInfo &op_info)
@@ -856,13 +900,10 @@ std::optional<hobject_t> PG::resolve_oid(
 
 template<RWState::State State>
 PG::load_obc_iertr::future<>
-PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
+PG::with_head_obc(ObjectContextRef obc, bool existed, with_obc_func_t&& func)
 {
-  logger().debug("{} {}", __func__, oid);
-  boost::intrusive_ptr<PG> pgref{this};
-  assert(oid.is_head());
-  auto [obc, existed] =
-    shard_services.obc_registry.get_cached_obc(std::move(oid));
+  logger().debug("{} {}", __func__, obc->get_oid());
+  assert(obc->is_head());
   obc->append_to(obc_set_accessing);
   return obc->with_lock<State, IOInterruptCondition>(
     [existed=existed, obc=obc, func=std::move(func), this] {
@@ -878,10 +919,29 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
     return loaded.safe_then_interruptible([func = std::move(func)](auto obc) {
       return std::move(func)(std::move(obc));
     });
-  }).finally([this, pgref, obc=std::move(obc)] {
+  }).finally([this, pgref=boost::intrusive_ptr<PG>{this}, obc=std::move(obc)] {
     logger().debug("with_head_obc: released {}", obc->get_oid());
     obc->remove_from(obc_set_accessing);
   });
+}
+
+template<RWState::State State>
+PG::load_obc_iertr::future<>
+PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
+{
+  auto [obc, existed] =
+    shard_services.obc_registry.get_cached_obc(std::move(oid));
+  return with_head_obc<State>(std::move(obc), existed, std::move(func));
+}
+
+template<RWState::State State>
+PG::interruptible_future<>
+PG::with_existing_head_obc(ObjectContextRef obc, with_obc_func_t&& func)
+{
+  constexpr bool existed = true;
+  return with_head_obc<State>(
+    std::move(obc), existed, std::move(func)
+  ).handle_error_interruptible(load_obc_ertr::assert_all{"can't happen"});
 }
 
 template<RWState::State State>
@@ -926,6 +986,23 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
 // explicitly instantiate the used instantiations
 template PG::load_obc_iertr::future<>
 PG::with_head_obc<RWState::RWNONE>(hobject_t, with_obc_func_t&&);
+
+template<RWState::State State>
+PG::interruptible_future<>
+PG::with_existing_clone_obc(ObjectContextRef clone, with_obc_func_t&& func)
+{
+  assert(clone);
+  assert(clone->get_head_obc());
+  assert(!clone->get_oid().is_head());
+  return with_existing_head_obc<RWState::RWREAD>(clone->get_head_obc(),
+    [clone=std::move(clone), func=std::move(func)] ([[maybe_unused]] auto head) {
+    assert(head == clone->get_head_obc());
+    return clone->template with_lock<State>(
+      [clone=std::move(clone), func=std::move(func)] {
+      std::move(func)(std::move(clone));
+    });
+  });
+}
 
 PG::load_obc_iertr::future<crimson::osd::ObjectContextRef>
 PG::load_head_obc(ObjectContextRef obc)
@@ -975,13 +1052,14 @@ PG::reload_obc(crimson::osd::ObjectContext& obc) const
 }
 
 PG::load_obc_iertr::future<>
-PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
-		    with_obc_func_t &&f)
+PG::with_locked_obc(const hobject_t &hobj,
+                    const OpInfo &op_info,
+                    with_obc_func_t &&f)
 {
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-  const hobject_t oid = get_oid(*m);
+  const hobject_t oid = get_oid(hobj);
   switch (get_lock_type(op_info)) {
   case RWState::RWREAD:
     if (oid.is_head()) {
@@ -1005,6 +1083,26 @@ PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
     ceph_abort();
   };
 }
+
+template <RWState::State State>
+PG::interruptible_future<>
+PG::with_locked_obc(ObjectContextRef obc, with_obc_func_t &&f)
+{
+  // TODO: a question from rebase: do we really need such checks when
+  // the interruptible stuff is being used?
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  if (obc->is_head()) {
+    return with_existing_head_obc<State>(obc, std::move(f));
+  } else {
+    return with_existing_clone_obc<State>(obc, std::move(f));
+  }
+}
+
+// explicitly instantiate the used instantiations
+template PG::interruptible_future<>
+PG::with_locked_obc<RWState::RWEXCL>(ObjectContextRef, with_obc_func_t&&);
 
 PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 {
