@@ -30,7 +30,7 @@ extern "C" {
 extern rgw::sal::Store* newStore(void);
 }
 
-rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
+rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
 {
   rgw::sal::Store* store = nullptr;
   if (svc.compare("rados") == 0) {
@@ -38,6 +38,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(store)->getRados();
 
     if ((*rados).set_use_cache(use_cache)
+                .set_use_gc(use_gc)
                 .set_run_gc_thread(use_gc_thread)
                 .set_run_lc_thread(use_lc_thread)
                 .set_run_quota_threads(quota_threads)
