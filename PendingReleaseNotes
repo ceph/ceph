@@ -14,6 +14,10 @@
 
 * OSD: Ceph now uses mclock_scheduler as its default osd_op_queue to provide QoS.
 
+* RGW: S3 bucket notification events now contain an `eTag` key instead of `etag`,
+  and eventName values no longer carry the `s3:` prefix, fixing deviations from
+  the message format observed on AWS.
+
 >=16.0.0
 --------
 * mgr/nfs: ``nfs`` module is moved out of volumes plugin. Prior using the
