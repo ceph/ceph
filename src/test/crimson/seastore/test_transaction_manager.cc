@@ -60,7 +60,6 @@ struct transaction_manager_test_t :
 
   transaction_manager_test_t()
     : gen(rd()) {
-    init();
   }
 
   laddr_t get_random_laddr(size_t block_size, laddr_t limit) {

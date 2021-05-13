@@ -160,7 +160,7 @@ bool Journal::validate_metadata(const bufferlist &bl)
     ceph::encoded_sizeof_bounded<record_header_t>(),
     -1);
   ceph_le32 recorded_crc_le;
-  ::decode(recorded_crc_le, bliter);
+  decode(recorded_crc_le, bliter);
   uint32_t recorded_crc = recorded_crc_le;
   test_crc = bliter.crc32c(
     bliter.get_remaining(),
