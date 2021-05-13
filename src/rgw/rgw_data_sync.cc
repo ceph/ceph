@@ -3031,7 +3031,8 @@ class InitBucketShardStatusCR : public RGWCoroutine {
       objv.generate_new_write_ver(cct);
       yield call(new InitCR(sc, pair, status, marker_mgr, objv, exclusive));
       if (retcode >= 0) {
-        ldpp_dout(sc->env->dpp, 20) << "per shard status object created (exclusive). marker: " << status.inc_marker.position << dendl;
+        ldpp_dout(sc->env->dpp, 20) << "per shard status object created (exclusive). marker: " 
+          << status.inc_marker.position << ". for: " << pair.source_bs.get_key() << dendl;
         return set_cr_done();
       } else if (retcode != -EEXIST) {
         return set_cr_error(retcode);
@@ -3048,7 +3049,8 @@ class InitBucketShardStatusCR : public RGWCoroutine {
         }
         yield call(new InitCR(sc, pair, status, marker_mgr, objv, exclusive));
         if (retcode >= 0) {
-          ldpp_dout(sc->env->dpp, 20) << "per shard status object created (inexclusive). marker: " << status.inc_marker.position << dendl;
+          ldpp_dout(sc->env->dpp, 20) << "per shard status object created (inexclusive). marker: " 
+            << status.inc_marker.position << ". for: " << pair.source_bs.get_key() << dendl;
           return set_cr_done();
         } else if (retcode != -ECANCELED) {
           return set_cr_error(retcode);
@@ -3158,7 +3160,7 @@ public:
             << cpp_strerror(retcode) << dendl;
           return set_cr_error(retcode);
         }
-        ldpp_dout(sync_env->dpp, 20) << "collected init status. from: " << sync_pair << dendl;
+        ldpp_dout(sync_env->dpp, 20) << "collected init status. from: " << sync_pair.source_bs.get_key() << dendl;
 
         if (sync_env->sync_module->should_full_sync()) {
           status.state = BucketSyncState::Full;
@@ -3180,7 +3182,7 @@ public:
         return set_cr_error(retcode);
       }
       ldpp_dout(sync_env->dpp, 20) << "writing bucket shard status: " << status.state 
-        <<  " to sync object: " << status_obj.oid  << dendl;
+        <<  " to sync object: " << status_obj.oid << ". for: " << sync_pair.source_bs.get_key() << dendl;
       return set_cr_done();
     }
     return 0;
@@ -4204,7 +4206,8 @@ int RGWBucketShardIncrementalSyncCR::operate()
         return set_cr_error(-ECANCELED);
       }
       tn->log(20, SSTR("listing bilog for incremental sync; position=" << sync_info.inc_marker.position));
-      ldpp_dout(sync_env->dpp, 20) << "listing bilog for incremental sync; position: " << sync_info.inc_marker.position << dendl;
+      ldpp_dout(sync_env->dpp, 20) << "listing bilog for incremental sync. marker: " << 
+        sync_info.inc_marker.position << ". for: " << bs.get_key() << dendl;
       set_status() << "listing bilog; position=" << sync_info.inc_marker.position;
       yield call(new RGWListBucketIndexLogCR(sc, bs, sync_info.inc_marker.position, generation, &extended_result));
       if (retcode < 0 && retcode != -ENOENT) {
@@ -4228,7 +4231,8 @@ int RGWBucketShardIncrementalSyncCR::operate()
           tn->log(20, SSTR("syncstop at: " << e.timestamp));
           syncstopped = true;
           entries_end = std::next(entries_iter); // stop after this entry
-          ldpp_dout(sync_env->dpp, 20) << "syncstop at: " << e.timestamp << " marker: " << e.id << " end marker: " << entries_end->id << dendl;
+          ldpp_dout(sync_env->dpp, 20) << "syncstop at: " << e.timestamp << " marker: " 
+            << e.id << " end marker: " << entries_end->id << ". for: " << bs.get_key() << dendl;
           break;
         }
         if (e.op == RGWModifyOp::CLS_RGW_OP_RESYNC) {
@@ -4401,14 +4405,8 @@ int RGWBucketShardIncrementalSyncCR::operate()
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
     if (syncstopped) {
-      // transition to StateStopped in RGWSyncBucketShardCR. if sync is
-      // still disabled, we'll delete the sync status object. otherwise we'll
-      // restart full sync to catch any changes that happened while sync was
-      // disabled
       sync_info.state = rgw_bucket_shard_sync_info::StateStopped;
-      return set_cr_done();
     }
-
     yield call(marker_tracker.flush());
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: marker_tracker.flush() returned retcode=" << retcode));
@@ -4967,7 +4965,7 @@ class RGWSyncBucketShardCR : public RGWCoroutine {
   ceph::real_time* progress;
 
   const std::string status_oid;
-  rgw_bucket_shard_sync_info sync_status;
+  rgw_bucket_shard_sync_info sync_info;
   RGWObjVersionTracker objv_tracker;
 
   RGWSyncTraceNodeRef tn;
@@ -4993,28 +4991,30 @@ public:
 int RGWSyncBucketShardCR::operate()
 {
   reenter(this) {
-    yield call(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &sync_status, &objv_tracker));
+    yield call(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &sync_info, &objv_tracker));
     if (retcode < 0 && retcode != -ENOENT) {
       tn->log(0, SSTR("ERROR: failed to read sync status for bucket. error: " << retcode));
       return set_cr_error(retcode);
     }
 
-    tn->log(20, SSTR("sync status for source bucket shard: " << to_string(sync_status.state)));
-    sync_status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
+    tn->log(20, SSTR("sync status for source bucket shard: " << to_string(sync_info.state)));
+    sync_info.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
     if (progress) {
-      *progress = sync_status.inc_marker.timestamp;
+      *progress = sync_info.inc_marker.timestamp;
     }
 
     yield call(new RGWBucketShardIncrementalSyncCR(sc, sync_pipe,
                                                    status_oid, lease_cr,
-                                                   sync_status, tn,
+                                                   sync_info, tn,
                                                    objv_tracker, progress));
     if (retcode < 0) {
       tn->log(5, SSTR("incremental sync on bucket failed, retcode=" << retcode));
       return set_cr_error(retcode);
     }
-    tn->log(20, SSTR("sync status for source bucket changed after init to: " << to_string(sync_status.state)));
-    if (sync_status.state == rgw_bucket_shard_sync_info::StateStopped) {
+    tn->log(20, SSTR("sync status for source bucket changed after init to: " << to_string(sync_info.state)));
+    ldpp_dout(sync_env->dpp, 20) <<  "sync status changed after init to: " << sync_info.state << " for: " 
+      << sync_pair.source_bs.get_key() << dendl;
+    if (sync_info.state == rgw_bucket_shard_sync_info::StateStopped) {
       bucket_state = BucketSyncState::Stopped;
     }
 
@@ -5109,7 +5109,7 @@ int RGWSyncBucketCR::operate()
     yield call(new ReadCR(env->async_rados, env->svc->sysobj,
                           status_obj, &bucket_status, false, &objv));
     if (retcode == -ENOENT) {
-      ldpp_dout(env->dpp, 20) << "create bucket sync status for: " << sync_pair << dendl;
+      ldpp_dout(env->dpp, 20) << "create bucket sync status for: " << sync_pair.source_bs.get_key() << dendl;
       // use exclusive create to set state=Init
       objv.generate_new_write_ver(cct);
       using WriteCR = RGWSimpleRadosWriteCR<rgw_bucket_sync_status>;
@@ -5130,7 +5130,7 @@ int RGWSyncBucketCR::operate()
 
     do {
       ldpp_dout(env->dpp, 20) << "sync status at begining of loop for: " 
-        << sync_pair.source_bs.bucket << ":" << sync_pair.source_bs.shard_id << ". is: " << bucket_status.state << dendl;
+        << sync_pair.source_bs.get_key()<< ". is: " << bucket_status.state << dendl;
       tn->log(20, SSTR("sync status for source bucket: " << bucket_status.state));
 
       if (bucket_status.state == BucketSyncState::Init || 
@@ -5168,7 +5168,8 @@ int RGWSyncBucketCR::operate()
           }
         }
         if (info.syncstopped) {
-          ldout(cct, 20) << "remote bilog indicates that sync was stopped. for: " << sync_pair.source_bs.bucket << ":" << sync_pair.source_bs.shard_id << dendl;
+          ldout(cct, 20) << "remote bilog indicates that sync was stopped. for: " 
+            << sync_pair.source_bs.get_key() << dendl;
           RELEASE_LOCK(bucket_lease_cr);
           return set_cr_done();
         }
@@ -5184,7 +5185,7 @@ int RGWSyncBucketCR::operate()
           RELEASE_LOCK(bucket_lease_cr);
           return set_cr_error(retcode);
         }
-        ldpp_dout(env->dpp, 20) << "got init sync status for: " << sync_pair.source_bs.bucket << ":" << sync_pair.source_bs.shard_id
+        ldpp_dout(env->dpp, 20) << "init sync status for: " << sync_pair.source_bs.get_key()
           << ". is: " << bucket_status.state << dendl;
       }
       
@@ -5238,7 +5239,7 @@ int RGWSyncBucketCR::operate()
             << sync_pair << ". error: " << retcode << dendl;
           return set_cr_error(retcode);
         }
-        ldpp_dout(env->dpp, 20) << "incremental sync ok. for: " << sync_pair << dendl;
+        ldpp_dout(env->dpp, 20) << "incremental sync ok. for: " << sync_pair.source_bs.get_key() << dendl;
       }
       // loop back to previous states unless incremental sync returns normally
     } while (bucket_status.state != BucketSyncState::Incremental);
