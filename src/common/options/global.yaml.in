@@ -6311,9 +6311,17 @@ options:
   - bluestore_cache_autotune
   - osd_memory_cache_min
   - osd_memory_base
+  - osd_memory_target_autotune
   min: 896_M
   flags:
   - runtime
+- name: osd_memory_target_autotune
+  type: bool
+  default: false
+  level: advanced
+  desc: If enabled, allow orchestrator to automatically tune osd_memory_target
+  see_also:
+  - osd_memory_target
 - name: osd_memory_target_cgroup_limit_ratio
   type: float
   level: advanced
