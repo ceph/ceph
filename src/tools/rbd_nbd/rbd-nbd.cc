@@ -166,6 +166,7 @@ static void usage()
             << "                                (default: " << Config().reattach_timeout << ")\n"
             << "  --try-netlink                 Use the nbd netlink interface\n"
             << "  --show-cookie                 Show device cookie\n"
+            << "  --cookie                      Specify device cookie for attach\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -1010,6 +1011,17 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   }
 
   return 0;
+}
+
+static bool is_valid_uuid(const std::string &uuid)
+{
+  std::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
+                       std::regex::icase);
+  std::smatch match;
+  if (!std::regex_match(uuid, match, pattern)) {
+    return false;
+  }
+  return true;
 }
 
 static int parse_nbd_index(const std::string& devpath)
@@ -2094,6 +2106,11 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->try_netlink = true;
     } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
       cfg->show_cookie = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->cookie, "--cookie", (char *)NULL)) {
+      if (!is_valid_uuid(cfg->cookie)) {
+        *err_msg << "rbd-nbd: --cookie expects a valid device uuid cookie";
+        return -EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
@@ -2143,6 +2160,16 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     case Attach:
       if (cfg->devpath.empty()) {
         *err_msg << "rbd-nbd: must specify device to attach";
+        return -EINVAL;
+      }
+      /* FIXME: Should we allow attach for kernel versions that doesn't
+       * support NBD_ATTR_BACKEND_IDENTIFIER (danger!) ?
+       * 1. If we allow attach for lower kernel versions then, we should
+       *    also provide a way to skip cookie check here
+       * 2. If we do not want to allow, then add kernel version check here
+       */
+      if (cfg->cookie.empty()) {
+        *err_msg << "rbd-nbd: must specify cookie to attach";
         return -EINVAL;
       }
       [[fallthrough]];
