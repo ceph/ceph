@@ -965,8 +965,9 @@ void WriteLog<I>::aio_read_data_blocks(
 
     ldout(cct, 20) << "entry i=" << i << " " << log_entry->write_data_pos
                    << "~" << len << dendl;
-    ceph_assert(log_entry->write_data_pos <= pool_root.pool_size);
-    ceph_assert(align_len != 0);
+    ceph_assert(log_entry->write_data_pos >= DATA_RING_BUFFER_OFFSET &&
+                log_entry->write_data_pos < pool_root.pool_size);
+    ceph_assert(align_len);
     if (log_entry->write_data_pos + align_len > pool_root.pool_size) {
       // spans boundary, need to split
       uint64_t len1 = pool_root.pool_size - log_entry->write_data_pos;
