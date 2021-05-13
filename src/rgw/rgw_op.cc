@@ -581,7 +581,10 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
       s->bucket_exists = false;
       return -ERR_NO_SUCH_BUCKET;
     }
-
+    if (!rgw::sal::RGWObject::empty(s->object.get())) {
+      s->object->set_bucket(s->bucket.get());
+    }
+    
     s->bucket_mtime = s->bucket->get_modification_time();
     s->bucket_attrs = s->bucket->get_attrs();
     ret = read_bucket_policy(dpp, store, s, s->bucket->get_info(),
