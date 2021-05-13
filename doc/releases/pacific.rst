@@ -5,6 +5,21 @@ Pacific
 Pacific is the 16th stable release of Ceph.  It is named after the
 giant pacific octopus (Enteroctopus dofleini).
 
+v16.2.4 Pacific
+===============
+
+This is a hotfix release addressing a number of security issues and regressions. We recommend all users update to this release.
+
+Changelog
+---------
+
+* mgr/dashboard: fix base-href: revert it to previous approach (`issue#50684 <https://tracker.ceph.com/issues/50684>`_, Avan Thakkar)
+* mgr/dashboard: fix cookie injection issue (:ref:`CVE-2021-3509`, Ernesto Puerta)
+* mgr/dashboard: fix set-ssl-certificate{,-key} commands (`issue#50519 <https://tracker.ceph.com/issues/50519>`_, Alfonso Martínez)
+* rgw: RGWSwiftWebsiteHandler::is_web_dir checks empty subdir_name (:ref:`CVE-2021-3531`, Felix Huettner)
+* rgw: sanitize \r in s3 CORSConfiguration's ExposeHeader (:ref:`CVE-2021-3524`, Sergey Bobrov, Casey Bodley)
+* systemd: remove ProtectClock=true for ceph-osd@.service (`issue#50347 <https://tracker.ceph.com/issues/50347>`_, Wong Hoi Sing Edison)
+
 v16.2.3 Pacific
 ===============
 
