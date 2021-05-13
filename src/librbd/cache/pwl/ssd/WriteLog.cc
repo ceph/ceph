@@ -88,7 +88,7 @@ void WriteLog<I>::complete_read(
     std::vector<bufferlist*> &bls_to_read,
     Context *ctx) {
   if (!log_entries_to_read.empty()) {
-    aio_read_data_block(log_entries_to_read, bls_to_read, ctx);
+    aio_read_data_blocks(log_entries_to_read, bls_to_read, ctx);
   } else {
     ctx->complete(0);
   }
@@ -930,11 +930,11 @@ void WriteLog<I>::aio_read_data_block(WriteLogCacheEntry *log_entry,
                                       bufferlist *bl, Context *ctx) {
   std::vector<WriteLogCacheEntry*> log_entries {log_entry};
   std::vector<bufferlist *> bls {bl};
-  aio_read_data_block(log_entries, bls, ctx);
+  aio_read_data_blocks(log_entries, bls, ctx);
 }
 
 template <typename I>
-void WriteLog<I>::aio_read_data_block(
+void WriteLog<I>::aio_read_data_blocks(
     std::vector<WriteLogCacheEntry*> &log_entries,
     std::vector<bufferlist *> &bls, Context *ctx) {
   ceph_assert(log_entries.size() == bls.size());
