@@ -761,7 +761,7 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
   // The first block is for log entries
   uint64_t data_pos = pool_root.first_free_entry + MIN_WRITE_ALLOC_SSD_SIZE;
   ldout(m_image_ctx.cct, 20) << "data_pos: " << data_pos << dendl;
-  if (data_pos == pool_root.pool_size ) {
+  if (data_pos == pool_root.pool_size) {
     data_pos = data_pos % pool_root.pool_size + DATA_RING_BUFFER_OFFSET;
   }
 
@@ -769,7 +769,6 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
   for (auto &log_entry : log_entries) {
     log_entry->log_entry_index = pool_root.first_free_entry;
     // Append data buffer for write operations
-    persist_log_entries.push_back(log_entry->ram_entry);
     if (log_entry->is_write_entry()) {
       auto write_entry = static_pointer_cast<WriteLogEntry>(log_entry);
       auto cache_bl = write_entry->get_cache_bl();
@@ -783,6 +782,8 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
         data_pos = data_pos % pool_root.pool_size + DATA_RING_BUFFER_OFFSET;
       }
     }
+    // push_back _after_ setting write_data_pos
+    persist_log_entries.push_back(log_entry->ram_entry);
   }
 
   //aio write
