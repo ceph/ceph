@@ -14,7 +14,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
-from mgr_util import to_pretty_timedelta, format_dimless
+from mgr_util import to_pretty_timedelta, format_dimless, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
@@ -30,6 +30,12 @@ def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: s
         return to_pretty_timedelta(now - t) + suffix
     else:
         return '-'
+
+
+def nice_bytes(v: Optional[int]) -> str:
+    if not v:
+        return '-'
+    return format_bytes(v, 5)
 
 
 class Format(enum.Enum):
@@ -632,9 +638,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table = PrettyTable(
                 ['NAME', 'HOST', 'PORTS',
                  'STATUS', 'REFRESHED', 'AGE',
+                 'MEM USE', 'MEM LIM',
                  'VERSION', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
+            table._align['REFRESHED'] = 'r'
+            table._align['AGE'] = 'r'
+            table._align['MEM USE'] = 'r'
+            table._align['MEM LIM'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(daemons, key=lambda s: s.name()):
@@ -657,6 +668,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     status,
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
+                    nice_bytes(s.memory_usage),
+                    nice_bytes(s.memory_request),
                     ukn(s.version),
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
@@ -1222,9 +1235,7 @@ Usage:
     @_cli_write_command('orch cancel')
     def _cancel(self) -> HandleCommandResult:
         """
-        cancels ongoing operations
-
-        ProgressReferences might get stuck. Let's unstuck them.
+        Cancel ongoing background operations
         """
         self.cancel_completions()
         return HandleCommandResult()
