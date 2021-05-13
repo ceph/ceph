@@ -209,16 +209,11 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   decode(superblock, p);
   ldout(cct,5) << "Decoded superblock" << dendl;
 
-  WriteLogPoolRoot current_pool_root = superblock.root;
-  uint64_t next_log_pos = pool_root.first_valid_entry;
-  uint64_t first_free_entry =  pool_root.first_free_entry;
-  uint64_t curr_log_pos;
-
-  pool_root = current_pool_root;
-  m_first_free_entry = first_free_entry;
-  m_first_valid_entry = next_log_pos;
-  this->m_flushed_sync_gen = current_pool_root.flushed_sync_gen;
-  this->m_log_pool_size = current_pool_root.pool_size;
+  pool_root = superblock.root;
+  this->m_log_pool_size = pool_root.pool_size;
+  this->m_flushed_sync_gen = pool_root.flushed_sync_gen;
+  this->m_first_valid_entry = pool_root.first_valid_entry;
+  this->m_first_free_entry = pool_root.first_free_entry;
 
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
 
@@ -227,7 +222,8 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   // Iterate through the log_entries and append all the write_bytes
   // of each entry to fetch the pos of next 4k of log_entries. Iterate
   // through the log entries and append them to the in-memory vector
-  while (next_log_pos != first_free_entry) {
+  for (uint64_t next_log_pos = this->m_first_valid_entry;
+       next_log_pos != this->m_first_free_entry; ) {
     // read the entries from SSD cache and decode
     bufferlist bl_entries;
     ::IOContext ioctx_entry(cct, nullptr);
@@ -237,7 +233,7 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
     auto pl = bl_entries.cbegin();
     decode(ssd_log_entries, pl);
     ldout(cct, 5) << "decoded ssd log entries" << dendl;
-    curr_log_pos = next_log_pos;
+    uint64_t curr_log_pos = next_log_pos;
     std::shared_ptr<GenericLogEntry> log_entry = nullptr;
 
     for (auto it = ssd_log_entries.begin(); it != ssd_log_entries.end(); ++it) {
