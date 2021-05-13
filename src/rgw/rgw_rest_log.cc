@@ -26,6 +26,7 @@
 #include "rgw_zone.h"
 #include "rgw_mdlog.h"
 #include "rgw_datalog_notify.h"
+#include "rgw_trim_bilog.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
@@ -919,7 +920,8 @@ void RGWOp_MDLog_Status::send_response()
 
 // not in header to avoid pulling in rgw_data_sync.h
 class RGWOp_BILog_Status : public RGWRESTOp {
-  std::vector<rgw_bucket_shard_sync_info> status;
+  bilog_status_v2 status;
+  int version = 1;
 public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
@@ -939,6 +941,8 @@ void RGWOp_BILog_Status::execute(optional_yield y)
   const auto source_zone = s->info.args.get("source-zone");
   const auto source_key = s->info.args.get("source-bucket");
   auto key = s->info.args.get("bucket");
+  op_ret = s->info.args.get_int("version", &version, 1);
+
   if (key.empty()) {
     key = source_key;
   }
@@ -989,11 +993,28 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     ldpp_dout(this, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
 
-    op_ret = rgw_read_bucket_inc_sync_status(this, static_cast<rgw::sal::RadosStore*>(store),
-					     pipe, bucket->get_info(), nullptr, &status);
+    if (version > 1) {
+      op_ret = rgw_read_bucket_full_sync_status(
+	this,
+	static_cast<rgw::sal::RadosStore*>(store),
+	pipe,
+	&status.sync_status,
+	s->yield);
+      if (op_ret < 0) {
+	ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+	return;
+      }
+    }
 
+    op_ret = rgw_read_bucket_inc_sync_status(
+      this,
+      static_cast<rgw::sal::RadosStore*>(store),
+      pipe,
+      bucket->get_info(),
+      nullptr,
+      &status.inc_status);
     if (op_ret < 0) {
-      ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_inc_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
     }
     return;
   }
@@ -1039,24 +1060,39 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       pipe.dest.bucket = pinfo->bucket;
     }
 
+    if (version > 1) {
+      op_ret = rgw_read_bucket_full_sync_status(
+	this,
+	static_cast<rgw::sal::RadosStore*>(store),
+	pipe,
+	&status.sync_status,
+	s->yield);
+      if (op_ret < 0) {
+	ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+	return;
+      }
+    }
     int r = rgw_read_bucket_inc_sync_status(this, static_cast<rgw::sal::RadosStore*>(store),
 					    pipe, *pinfo, &bucket->get_info(), &current_status);
     if (r < 0) {
-      ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_inc_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
       op_ret = r;
       return;
     }
 
-    if (status.empty()) {
-      status = std::move(current_status);
+    if (status.inc_status.empty()) {
+      status.inc_status = std::move(current_status);
     } else {
-      if (current_status.size() !=
-          status.size()) {
+      if (current_status.size() != status.inc_status.size()) {
         op_ret = -EINVAL;
-        ldpp_dout(this, -1) << "ERROR: different number of shards for sync status of buckets syncing from the same source: status.size()= " << status.size() << " current_status.size()=" << current_status.size() << dendl;
-        return;
+        ldpp_dout(this, -1) << "ERROR: different number of shards for sync status of buckets "
+	  "syncing from the same source: status.size()= "
+			    << status.inc_status.size()
+			    << " current_status.size()="
+			    << current_status.size() << dendl;
+	return;
       }
-      auto m = status.begin();
+      auto m = status.inc_status.begin();
       for (auto& cur_shard_status : current_status) {
         auto& result_shard_status = *m++;
         // always take the first marker, or any later marker that's smaller
@@ -1075,7 +1111,11 @@ void RGWOp_BILog_Status::send_response()
   end_header(s);
 
   if (op_ret >= 0) {
-    encode_json("status", status, s->formatter);
+    if (version < 2) {
+      encode_json("status", status.inc_status, s->formatter);
+    } else {
+      encode_json("status", status, s->formatter);
+    }
   }
   flusher.flush();
 }
