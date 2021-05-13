@@ -1080,14 +1080,12 @@ namespace crimson {
       ClientId client1 = 17;
       ClientId client2 = 98;
 
-      std::vector<dmc::ClientInfo> info1;
-      std::vector<dmc::ClientInfo> info2;
-
-      info1.push_back(dmc::ClientInfo(0.0, 100.0, 0.0));
-      info1.push_back(dmc::ClientInfo(0.0, 150.0, 0.0));
-
-      info2.push_back(dmc::ClientInfo(0.0, 200.0, 0.0));
-      info2.push_back(dmc::ClientInfo(0.0, 50.0, 0.0));
+      dmc::ClientInfo info1[] = {
+        dmc::ClientInfo(0.0, 100.0, 0.0),
+        dmc::ClientInfo(0.0, 150.0, 0.0)};
+      dmc::ClientInfo info2[] = {
+        dmc::ClientInfo(0.0, 200.0, 0.0),
+        dmc::ClientInfo(0.0, 50.0, 0.0)};
 
       size_t cli_info_group = 0;
 
@@ -1104,69 +1102,65 @@ namespace crimson {
 
       pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
-      ReqParams req_params(1,1);
-
       auto now = dmc::get_time();
 
-      for (int i = 0; i < 5; ++i) {
-	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
-	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
-	now += 0.0001;
-      }
+      auto run_test = [&](float lower_bound, float upper_bound) {
+	ReqParams req_params(1,1);
+	constexpr unsigned num_requests = 1000;
 
-      int c1_count = 0;
-      int c2_count = 0;
-      for (int i = 0; i < 10; ++i) {
-	Queue::PullReq pr = pq->pull_request();
-	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+	for (int i = 0; i < num_requests; i += 2) {
+	  EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	  EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
+	  now += 0.0001;
+	}
 
-	if (i > 5) continue;
-	if (client1 == retn.client) ++c1_count;
-	else if (client2 == retn.client) ++c2_count;
-	else ADD_FAILURE() << "got request from neither of two clients";
+	int c1_count = 0;
+	int c2_count = 0;
+	for (int i = 0; i < num_requests; ++i) {
+	  Queue::PullReq pr = pq->pull_request();
+	  EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	  // only count the specified portion of the served request
+	  if (i < num_requests * lower_bound || i > num_requests * upper_bound) {
+	    continue;
+	  }
+	  auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+	  if (client1 == retn.client) {
+	    ++c1_count;
+	  } else if (client2 == retn.client) {
+	    ++c2_count;
+	  } else {
+	    ADD_FAILURE() << "got request from neither of two clients";
+	  }
+	  EXPECT_EQ(PhaseType::priority, retn.phase);
+	}
 
-	EXPECT_EQ(PhaseType::priority, retn.phase);
-      }
-
-      EXPECT_EQ(2, c1_count) <<
-	"before: one-third of request should have come from first client";
-      EXPECT_EQ(4, c2_count) <<
-	"before: two-thirds of request should have come from second client";
+        constexpr float tolerance = 0.002;
+        float prop1 = float(info1[cli_info_group].weight) / (info1[cli_info_group].weight +
+                                                             info2[cli_info_group].weight);
+        float prop2 = float(info2[cli_info_group].weight) / (info1[cli_info_group].weight +
+                                                             info2[cli_info_group].weight);
+        EXPECT_NEAR(float(c1_count) / (c1_count + c2_count), prop1, tolerance) <<
+          "before: " << prop1 << " of requests should have come from first client";
+        EXPECT_NEAR
+          (float(c2_count) / (c1_count + c2_count), prop2, tolerance) <<
+          "before: " << prop2 << " of requests should have come from second client";
+      };
+      cli_info_group = 0;
+      // only count the first half of the served requests, so we can check
+      // the prioritized ones
+      run_test(0.0F /* lower bound */,
+               0.5F /* upper bound */);
 
       std::chrono::seconds dura(1);
       std::this_thread::sleep_for(dura);
 
+      // check the middle part of the request sequence which is less likely
+      // to be impacted by previous requests served before we switch to the
+      // new client info.
       cli_info_group = 1;
- 
-      now = dmc::get_time();
-
-      for (int i = 0; i < 6; ++i) {
-	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
-	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
-	now += 0.0001;
-      }
-
-      c1_count = 0;
-      c2_count = 0;
-      for (int i = 0; i < 8; ++i) {
-	Queue::PullReq pr = pq->pull_request();
-	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
-
-	if (client1 == retn.client) ++c1_count;
-	else if (client2 == retn.client) ++c2_count;
-	else ADD_FAILURE() << "got request from neither of two clients";
-
-	EXPECT_EQ(PhaseType::priority, retn.phase);
-      }
-
-      EXPECT_EQ(6, c1_count) <<
-	"after: one-third of request should have come from first client";
-      EXPECT_EQ(2, c2_count) <<
-	"after: two-thirds of request should have come from second client";
+      run_test(1.0F/3 /* lower bound */,
+               2.0F/3 /* upper bound */);
     }
-
 
     // This test shows what happens when a request can be ready (under
     // limit) but not schedulable since proportion tag is 0. We expect
