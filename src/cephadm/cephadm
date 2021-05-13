@@ -3340,7 +3340,7 @@ def command_bootstrap():
                         ssh_key = '/etc/ceph/ceph.pub'
                         if args.ssh_public_key:
                             ssh_key = args.ssh_public_key.name
-                        out, err, code = call_throws(['ssh-copy-id', '-f', '-i', ssh_key, '%s@%s' % (args.ssh_user, split[1])])
+                        out, err, code = call_throws(['sudo', '-u', args.ssh_user, 'ssh-copy-id', '-f', '-i', ssh_key, '-o StrictHostKeyChecking=no', '%s@%s' % (args.ssh_user, split[1])])
 
         mounts = {}
         mounts[pathify(args.apply_spec)] = '/tmp/spec.yml:z'
