@@ -50,6 +50,20 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
         **kwargs
     )
 
+# this is for rook clusters
+def toolbox(ctx, cluster_name, args, **kwargs):
+    return ctx.rook[cluster_name].remote.run(
+        args=[
+            'kubectl',
+            '-n', 'rook-ceph',
+            'exec',
+            ctx.rook[cluster_name].toolbox,
+            '--',
+        ] + args,
+        **kwargs
+    )
+
+
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
     conf_fp = BytesIO()
     ctx.ceph[cluster].conf.write(conf_fp)
@@ -267,7 +281,7 @@ class OSDThrasher(Thrasher):
         self.logger.info(msg, *args, **kwargs)
 
     def cmd_exists_on_osds(self, cmd):
-        if self.ceph_manager.cephadm:
+        if self.ceph_manager.cephadm or self.ceph_manager.rook:
             return True
         allremotes = self.ceph_manager.ctx.cluster.only(\
             teuthology.is_type('osd', self.cluster)).remotes.keys()
@@ -289,6 +303,8 @@ class OSDThrasher(Thrasher):
                 wait=True, check_status=False,
                 stdout=StringIO(),
                 stderr=StringIO())
+        elif self.ceph_manager.rook:
+            assert False, 'not implemented'
         else:
             return remote.run(
                 args=['sudo', 'adjust-ulimits', 'ceph-objectstore-tool'] + cmd,
@@ -305,6 +321,8 @@ class OSDThrasher(Thrasher):
                 wait=True, check_status=False,
                 stdout=StringIO(),
                 stderr=StringIO())
+        elif self.ceph_manager.rook:
+            assert False, 'not implemented'
         else:
             return remote.run(
                 args=['sudo', 'ceph-bluestore-tool', '--err-to-stderr'] + cmd,
@@ -347,6 +365,9 @@ class OSDThrasher(Thrasher):
                 '--no-mon-config',
                 '--log-file=/var/log/ceph/objectstore_tool.$pid.log',
             ]
+
+            if self.ceph_manager.rook:
+                assert False, 'not implemented'
 
             if not self.ceph_manager.cephadm:
                 # ceph-objectstore-tool might be temporarily absent during an
@@ -1486,7 +1507,7 @@ class CephManager:
     """
 
     def __init__(self, controller, ctx=None, config=None, logger=None,
-                 cluster='ceph', cephadm=False) -> None:
+                 cluster='ceph', cephadm=False, rook=False) -> None:
         self.lock = threading.RLock()
         self.ctx = ctx
         self.config = config
@@ -1494,6 +1515,7 @@ class CephManager:
         self.next_pool_id = 0
         self.cluster = cluster
         self.cephadm = cephadm
+        self.rook = rook
         if (logger):
             self.log = lambda x: logger.info(x)
         else:
@@ -1537,6 +1559,11 @@ class CephManager:
                          args=['ceph'] + list(kwargs['args']),
                          stdout=StringIO(),
                          check_status=kwargs.get('check_status', True))
+        if self.rook:
+            return toolbox(self.ctx, self.cluster,
+                           args=['ceph'] + list(kwargs['args']),
+                           stdout=StringIO(),
+                           check_status=kwargs.get('check_status', True))
 
         testdir = teuthology.get_testdir(self.ctx)
         prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
@@ -1789,6 +1816,8 @@ class CephManager:
                 wait=True,
                 check_status=check_status,
             )
+        if self.rook:
+            assert False, 'not implemented'
 
         testdir = teuthology.get_testdir(self.ctx)
         args = [
