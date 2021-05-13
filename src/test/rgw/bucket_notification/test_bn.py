@@ -10,6 +10,7 @@ import os
 import string
 from http import server as http_server
 from random import randint
+import hashlib
 
 from boto.s3.connection import S3Connection
 
@@ -27,7 +28,7 @@ from .api import PSTopicS3, \
     put_object_tagging
 
 from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal
+from nose.tools import assert_not_equal, assert_equal, assert_in
 import boto.s3.tagging
 
 # configure logging for the tests module
@@ -329,7 +330,7 @@ def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
             log.error(events)
             assert False, err
 
-def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False, expected_sizes={}):
+def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False, expected_sizes={}, etags=[]):
     """ verify there is at least one record per element """
     err = ''
     for key in keys:
@@ -340,25 +341,33 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                 if key_found:
                     break
                 for record in record_list['Records']:
+                    assert_in('eTag', record['s3']['object'])
                     if record['s3']['bucket']['name'] == key.bucket.name and \
                         record['s3']['object']['key'] == key.name:
-                        if deletions and 'ObjectRemoved' in record['eventName']:
+                        assert_equal(key.etag[1:-1], record['s3']['object']['eTag'])
+                        if etags:
+                            assert_in(key.etag[1:-1], etags)
+                        if deletions and record['eventName'].startswith('ObjectRemoved'):
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
-                        elif not deletions and 'ObjectCreated' in record['eventName']:
+                        elif not deletions and record['eventName'].startswith('ObjectCreated'):
                             key_found = True
                             object_size = record['s3']['object']['size']
                             break
         else:
             for record in records['Records']:
+                assert_in('eTag', record['s3']['object'])
                 if record['s3']['bucket']['name'] == key.bucket.name and \
                     record['s3']['object']['key'] == key.name:
-                    if deletions and 'ObjectRemoved' in record['eventName']:
+                    assert_equal(key.etag, record['s3']['object']['eTag'])
+                    if etags:
+                        assert_in(key.etag[1:-1], etags)
+                    if deletions and record['eventName'].startswith('ObjectRemoved'):
                         key_found = True
                         object_size = record['s3']['object']['size']
                         break
-                    elif not deletions and 'ObjectCreated' in record['eventName']:
+                    elif not deletions and record['eventName'].startswith('ObjectCreated'):
                         key_found = True
                         object_size = record['s3']['object']['size']
                         break
@@ -410,9 +419,9 @@ class KafkaReceiver(object):
         self.topic = topic
         self.stop = False
 
-    def verify_s3_events(self, keys, exact_match=False, deletions=False):
+    def verify_s3_events(self, keys, exact_match=False, deletions=False, etags=[]):
         """verify stored s3 records agains a list of keys"""
-        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions)
+        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, etags=etags)
         self.events = []
 
 def kafka_receiver_thread_runner(receiver):
@@ -1092,10 +1101,13 @@ def test_ps_s3_notification_push_kafka_on_master():
         # create objects in the bucket (async)
         number_of_objects = 10
         client_threads = []
+        etags = []
         start_time = time.time()
         for i in range(number_of_objects):
             key = bucket.new_key(str(i))
             content = str(os.urandom(1024*1024))
+            etag = hashlib.md5(content.encode()).hexdigest()
+            etags.append(etag)
             thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
             thr.start()
             client_threads.append(thr)
@@ -1107,7 +1119,7 @@ def test_ps_s3_notification_push_kafka_on_master():
         print('wait for 5sec for the messages...')
         time.sleep(5)
         keys = list(bucket.list())
-        receiver.verify_s3_events(keys, exact_match=True)
+        receiver.verify_s3_events(keys, exact_match=True, etags=etags)
 
         # delete objects from the bucket
         client_threads = []
@@ -1123,7 +1135,7 @@ def test_ps_s3_notification_push_kafka_on_master():
 
         print('wait for 5sec for the messages...')
         time.sleep(5)
-        receiver.verify_s3_events(keys, exact_match=True, deletions=True)
+        receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
 
     finally:
         # cleanup
@@ -1640,12 +1652,12 @@ def test_ps_s3_multipart_on_master():
 
     events = receiver2.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:Post')
+    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:Post')
     assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_2')
 
     events = receiver3.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:CompleteMultipartUpload')
+    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:CompleteMultipartUpload')
     assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_3')
     print(events[0]['Records'][0]['s3']['object']['size'])
 
@@ -1997,10 +2009,10 @@ def test_ps_s3_versioned_deletion_on_master():
     delete_marker_create_events = 0
     for event_list in events:
         for event in event_list['Records']:
-            if event['eventName'] == 's3:ObjectRemoved:Delete':
+            if event['eventName'] == 'ObjectRemoved:Delete':
                 delete_events += 1
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_3']
-            if event['eventName'] == 's3:ObjectRemoved:DeleteMarkerCreated':
+            if event['eventName'] == 'ObjectRemoved:DeleteMarkerCreated':
                 delete_marker_create_events += 1
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_2']
 
@@ -2270,10 +2282,10 @@ def test_ps_s3_persistent_gateways_recovery():
         creations = 0
         deletions = 0
         for event in events:
-            if event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+            if event['Records'][0]['eventName'] == 'ObjectCreated:Put' and \
                     key.name == event['Records'][0]['s3']['object']['key']:
                 creations += 1
-            elif event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+            elif event['Records'][0]['eventName'] == 'ObjectRemoved:Delete' and \
                     key.name == event['Records'][0]['s3']['object']['key']:
                 deletions += 1
         assert_equal(creations, 1)
@@ -2353,11 +2365,11 @@ def test_ps_s3_persistent_multiple_gateways():
         topic1_count = 0
         topic2_count = 0
         for event in events:
-            if event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+            if event['Records'][0]['eventName'] == 'ObjectCreated:Put' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic1_opaque == event['Records'][0]['opaqueData']:
                 topic1_count += 1
-            elif event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+            elif event['Records'][0]['eventName'] == 'ObjectCreated:Put' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic2_opaque == event['Records'][0]['opaqueData']:
                 topic2_count += 1
@@ -2378,11 +2390,11 @@ def test_ps_s3_persistent_multiple_gateways():
         topic1_count = 0
         topic2_count = 0
         for event in events:
-            if event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+            if event['Records'][0]['eventName'] == 'ObjectRemoved:Delete' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic1_opaque == event['Records'][0]['opaqueData']:
                 topic1_count += 1
-            elif event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+            elif event['Records'][0]['eventName'] == 'ObjectRemoved:Delete' and \
                     key.name == event['Records'][0]['s3']['object']['key'] and \
                     topic2_opaque == event['Records'][0]['opaqueData']:
                 topic2_count += 1

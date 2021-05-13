@@ -274,7 +274,7 @@ void rgw_pubsub_s3_event::dump(Formatter *f) const {
         Formatter::ObjectSection sub_s(*f, "object");
         encode_json("key", object_key, f);
         encode_json("size", object_size, f);
-        encode_json("etag", object_etag, f);
+        encode_json("eTag", object_etag, f);
         encode_json("versionId", object_versionId, f);
         encode_json("sequencer", object_sequencer, f);
         encode_json("metadata", x_meta_map, f);

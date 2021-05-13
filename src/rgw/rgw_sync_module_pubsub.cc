@@ -269,7 +269,7 @@ static void make_s3_event_ref(CephContext *cct, const rgw_bucket& bucket,
 
   EventRef<rgw_pubsub_s3_event>& e = *event;
   e->eventTime = mtime;
-  e->eventName = rgw::notify::to_string(event_type);
+  e->eventName = rgw::notify::to_event_string(event_type);
   // userIdentity: not supported in sync module
   // x_amz_request_id: not supported in sync module
   // x_amz_id_2: not supported in sync module
