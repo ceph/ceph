@@ -23,6 +23,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/seastore_perf_counters.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/lba_manager.h"
@@ -68,7 +69,8 @@ public:
     SegmentCleanerRef segment_cleaner,
     JournalRef journal,
     CacheRef cache,
-    LBAManagerRef lba_manager);
+    LBAManagerRef lba_manager,
+    PerfCounters &perf);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = crimson::errorator<
@@ -188,6 +190,8 @@ public:
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
+    tm_perf.inc(ss_tm_extents_mutated_total);
+    tm_perf.inc(ss_tm_extents_mutated_bytes, ret->get_length());
     if (!ret->has_pin()) {
       DEBUGT(
 	"duplicating {} for write: {}",
@@ -258,8 +262,10 @@ public:
       hint,
       len,
       ext->get_paddr()
-    ).safe_then([ext=std::move(ext)](auto &&ref) mutable {
+    ).safe_then([ext=std::move(ext), len, this](auto &&ref) mutable {
       ext->set_pin(std::move(ref));
+      tm_perf.inc(ss_tm_extents_allocated_total);
+      tm_perf.inc(ss_tm_extents_allocated_bytes, len);
       return alloc_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
@@ -489,6 +495,7 @@ private:
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
+  PerfCounters &tm_perf;
 
   WritePipeline write_pipeline;
 
