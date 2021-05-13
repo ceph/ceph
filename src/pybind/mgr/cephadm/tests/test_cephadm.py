@@ -5,7 +5,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
-from cephadm.services.osd import OSD, OSDRemovalQueue
+from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 
 try:
     from typing import List
@@ -382,8 +382,10 @@ class TestCephadm(object):
         }
         json_out = json.dumps(dict_out)
         _mon_cmd.return_value = (0, json_out, '')
-        out = cephadm_module.osd_service.find_destroyed_osds()
-        assert out == {'host1': ['0']}
+        osd_claims = OsdIdClaims(cephadm_module)
+        assert osd_claims.get() == {'host1': ['0']}
+        assert osd_claims.filtered_by_host('host1') == ['0']
+        assert osd_claims.filtered_by_host('host1.domain.com') == ['0']
 
     @ pytest.mark.parametrize(
         "ceph_services, cephadm_daemons, strays_expected, metadata",
@@ -481,7 +483,7 @@ class TestCephadm(object):
     def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
         _mon_cmd.return_value = (1, "", "fail_msg")
         with pytest.raises(OrchestratorError):
-            cephadm_module.osd_service.find_destroyed_osds()
+            OsdIdClaims(cephadm_module)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
