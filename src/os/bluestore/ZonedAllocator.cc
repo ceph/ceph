@@ -229,6 +229,13 @@ void ZonedAllocator::find_zones_to_clean(void) {
   zones_to_clean = {idx.begin(), idx.begin() + num_zones_to_clean_at_once};
   num_zones_to_clean = num_zones_to_clean_at_once;
 
+  for (auto it = zones_to_clean.begin(); it != zones_to_clean.end(); ++it) {
+    if (zone_states[*it].num_dead_bytes == 0) {
+      zones_to_clean.erase(*it);
+      num_zones_to_clean--;
+    }
+  }
+
   // TODO: handle the case of disk being full.
   ceph_assert(!zones_to_clean.empty());
   ceph_assert(num_zones_to_clean != 0);

@@ -21,7 +21,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
-#define dout_prefix *_dout << "zoned freelist "
+#define dout_prefix *_dout << "ZonedFreelistManager " << this << " "
 
 using std::string;
 
