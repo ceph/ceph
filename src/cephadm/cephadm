@@ -3983,11 +3983,7 @@ def command_bootstrap(ctx):
             except PermissionError:
                 raise Error(f'Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.')
 
-    if ctx.config and os.path.exists(ctx.config):
-        with open(ctx.config) as f:
-            user_conf = f.read()
-    else:
-        user_conf = None
+    (user_conf, _) = get_config_and_keyring(ctx)
 
     if not ctx.skip_prepare_host:
         command_prepare_host(ctx)
@@ -4089,7 +4085,7 @@ def command_bootstrap(ctx):
         # the mgr (e.g. mgr/cephadm/container_image_prometheus)
         # they don't seem to be stored if there isn't a mgr yet.
         # Since re-assimilating the same conf settings should be
-        # idempotent we can just do it aain here.
+        # idempotent we can just do it again here.
         with tempfile.NamedTemporaryFile(buffering=0) as tmp:
             tmp.write(user_conf.encode('utf-8'))
             cli(['config', 'assimilate-conf',
