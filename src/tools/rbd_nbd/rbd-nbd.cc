@@ -808,6 +808,7 @@ public:
         continue;
       }
       ifs >> pid;
+      ifs.close();
 
       // If the rbd-nbd is re-attached the pid may store garbage
       // here. We are sure this is the case when it is negative or
@@ -912,6 +913,7 @@ private:
       c.devpath = cfg->devpath;
     }
 
+    c.cookie = get_cookie(cfg->devpath);
     *cfg = c;
     return 0;
   }
@@ -1938,6 +1940,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("cookie", TextTable::LEFT, TextTable::LEFT);
   }
 
   Config cfg;
@@ -1951,6 +1954,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->dump_string("image", cfg.imgname);
       f->dump_string("snap", cfg.snapname);
       f->dump_string("device", cfg.devpath);
+      f->dump_string("cookie", cfg.cookie);
       f->close_section();
     } else {
       should_print = true;
@@ -1958,7 +1962,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
         cfg.snapname = "-";
       }
       tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
-          << cfg.snapname << cfg.devpath << TextTable::endrow;
+          << cfg.snapname << cfg.devpath << cfg.cookie << TextTable::endrow;
     }
   }
 
