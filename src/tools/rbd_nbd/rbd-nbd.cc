@@ -117,6 +117,7 @@ struct Config {
 
   std::string format;
   bool pretty_format = false;
+  bool show_all = false;
 
   std::optional<librbd::encryption_format_t> encryption_format;
   std::optional<std::string> encryption_passphrase_file;
@@ -169,6 +170,7 @@ static void usage()
             << "  --cookie                      Specify device cookie for attach\n"
             << "\n"
             << "List options:\n"
+            << "  --all                   Show all the options (eg: cookie)\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
             << "  --pretty-format         Pretty formatting (json and xml)\n"
             << std::endl;
@@ -794,6 +796,7 @@ public:
 
       *cfg = Config();
       cfg->devpath = "/dev/nbd" + stringify(m_index++);
+      cfg->cookie = get_cookie(cfg->devpath);
 
       int pid;
       std::ifstream ifs;
@@ -802,6 +805,7 @@ public:
         continue;
       }
       ifs >> pid;
+      ifs.close();
 
       // If the rbd-nbd is re-attached the pid may store garbage
       // here. We are sure this is the case when it is negative or
@@ -811,7 +815,7 @@ public:
       // attached process.
       do {
         if (pid <= 0) {
-          pid = find_attached(cfg->devpath);
+          pid = find_attached(cfg->devpath, cfg->cookie);
           if (pid <= 0) {
             break;
           }
@@ -896,6 +900,7 @@ private:
     }
 
     c.pid = pid;
+    c.cookie = cfg->cookie;
     m_mapped_info_cache.erase(pid);
     if (!c.devpath.empty()) {
       m_mapped_info_cache[pid] = c;
@@ -910,7 +915,7 @@ private:
     return 0;
   }
 
-  int find_attached(const std::string &devpath) {
+  int find_attached(const std::string &devpath, const std::string &cookie) {
     for (auto &entry : fs::directory_iterator("/proc")) {
       if (!fs::is_directory(entry.status())) {
         continue;
@@ -925,6 +930,7 @@ private:
 
       Config cfg;
       cfg.devpath = devpath;
+      cfg.cookie = cookie;
       if (get_mapped_info(pid, &cfg) >=0 && cfg.command == Attach) {
         return cfg.pid;
       }
@@ -1923,7 +1929,8 @@ static int parse_imgpath(const std::string &imgpath, Config *cfg,
   return 0;
 }
 
-static int do_list_mapped_devices(const std::string &format, bool pretty_format)
+static int do_list_mapped_devices(const std::string &format,
+                                  bool pretty_format, bool show_all)
 {
   bool should_print = false;
   std::unique_ptr<ceph::Formatter> f;
@@ -1947,6 +1954,8 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
+    if (show_all)
+      tbl.define_column("cookie", TextTable::LEFT, TextTable::LEFT);
   }
 
   Config cfg;
@@ -1960,14 +1969,23 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->dump_string("image", cfg.imgname);
       f->dump_string("snap", cfg.snapname);
       f->dump_string("device", cfg.devpath);
+      if (show_all)
+        f->dump_string("cookie", cfg.cookie);
       f->close_section();
     } else {
       should_print = true;
       if (cfg.snapname.empty()) {
         cfg.snapname = "-";
       }
-      tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
-          << cfg.snapname << cfg.devpath << TextTable::endrow;
+      if (cfg.cookie.empty()) {
+        cfg.cookie = "-";
+      }
+      if (show_all)
+        tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
+            << cfg.snapname << cfg.devpath << cfg.cookie << TextTable::endrow;
+      else
+        tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
+            << cfg.snapname << cfg.devpath << TextTable::endrow;
     }
   }
 
@@ -2100,6 +2118,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       *err_msg << "rbd-nbd: --timeout is deprecated (use --io-timeout)";
     } else if (ceph_argparse_witharg(args, i, &cfg->format, err, "--format",
                                      (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--all", (char *)NULL)) {
+      cfg->show_all = true;
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
@@ -2286,7 +2306,7 @@ static int rbd_nbd(int argc, const char *argv[])
         return -EINVAL;
       break;
     case List:
-      r = do_list_mapped_devices(cfg.format, cfg.pretty_format);
+      r = do_list_mapped_devices(cfg.format, cfg.pretty_format, cfg.show_all);
       if (r < 0)
         return -EINVAL;
       break;
