@@ -303,9 +303,6 @@ class HostAssignment(object):
             for h in old:
                 if self.filter_new_host(h.hostname):
                     ls.append(h)
-                else:
-                    logger.info(
-                        f"Filtered out host {h.hostname}: could not verify host allowed virtual ips")
             if len(old) > len(ls):
                 logger.debug('Filtered %s down to %s' % (old, ls))
 
