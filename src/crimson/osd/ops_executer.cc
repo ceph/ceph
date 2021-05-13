@@ -662,7 +662,7 @@ static PG::interruptible_future<hobject_t> pgls_filter(
         logger().debug("pgls_filter: got error for obj={}", sobj);
 
         if (filter.reject_empty_xattr()) {
-          return seastar::make_ready_future<hobject_t>(hobject_t{});
+          return seastar::make_ready_future<hobject_t>();
         }
         ceph::bufferlist val;
         const bool filtered = filter.filter(sobj, val);
@@ -733,7 +733,7 @@ static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
           logger().debug("do_pgnls_common: 1st done");
           return seastar::make_ready_future<
             std::tuple<std::vector<hobject_t>, hobject_t>>(
-              std::make_tuple(std::move(items), std::move(next)));
+              std::move(items), std::move(next));
       });
   }).then_interruptible(
     [pg_end] (auto&& ret) {
@@ -862,7 +862,7 @@ static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
                 return seastar::make_ready_future<hobject_t>(obj);
               }
             } else {
-              return seastar::make_ready_future<hobject_t>(hobject_t{});
+              return seastar::make_ready_future<hobject_t>();
             }
           },
           entries_t{},
