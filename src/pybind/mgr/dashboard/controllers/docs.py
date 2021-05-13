@@ -5,8 +5,7 @@ from typing import Any, Dict, Union
 import logging
 import cherrypy
 
-from . import Controller, BaseController, Endpoint, ENDPOINT_MAP, \
-    allow_empty_body
+from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
 from .. import mgr
 
 from ..tools import str_to_bool
@@ -371,30 +370,12 @@ class Docs(BaseController):
     def api_all_json(self):
         return self._gen_spec(True, "/")
 
-    def _swagger_ui_page(self, all_endpoints=False, token=None):
+    def _swagger_ui_page(self, all_endpoints=False):
         base = cherrypy.request.base
         if all_endpoints:
             spec_url = "{}/docs/api-all.json".format(base)
         else:
             spec_url = "{}/docs/api.json".format(base)
-
-        auth_header = cherrypy.request.headers.get('authorization')
-        auth_cookie = cherrypy.request.cookie['token']
-        jwt_token = ""
-        if auth_cookie is not None:
-            jwt_token = auth_cookie.value
-        elif auth_header is not None:
-            scheme, params = auth_header.split(' ', 1)
-            if scheme.lower() == 'bearer':
-                jwt_token = params
-        else:
-            if token is not None:
-                jwt_token = token
-
-        api_key_callback = """, onComplete: () => {{
-                        ui.preauthorizeApiKey('jwt', '{}');
-                    }}
-        """.format(jwt_token)
 
         page = """
         <!DOCTYPE html>
@@ -436,23 +417,16 @@ class Docs(BaseController):
                         SwaggerUIBundle.presets.apis
                     ],
                     layout: "BaseLayout"
-                    {}
                 }})
                 window.ui = ui
             }}
         </script>
         </body>
         </html>
-        """.format(spec_url, api_key_callback)
+        """.format(spec_url)
 
         return page
 
     @Endpoint(json_response=False)
     def __call__(self, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints)
-
-    @Endpoint('POST', path="/", json_response=False,
-              query_params="{all_endpoints}")
-    @allow_empty_body
-    def _with_token(self, token, all_endpoints=False):
-        return self._swagger_ui_page(all_endpoints, token)
