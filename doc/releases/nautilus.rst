@@ -5,6 +5,19 @@ Nautilus
 Nautilus is the 14th stable release of Ceph.  It is named after the
 nautilus, a family of cephalopods characterized by a whorled shell.
 
+v14.2.21 Nautilus
+=================
+
+This is a hotfix release addressing a number of security issues and regressions. We recommend all users update to this release.
+
+Changelog
+---------
+
+* mgr/dashboard: fix base-href: revert it to previous approach (`issue#50684 <https://tracker.ceph.com/issues/50684>`_, Avan Thakkar)
+* mgr/dashboard: fix cookie injection issue (:ref:`CVE-2021-3509`, Ernesto Puerta)
+* rgw: RGWSwiftWebsiteHandler::is_web_dir checks empty subdir_name (:ref:`CVE-2021-3531`, Felix Huettner)
+* rgw: sanitize \r in s3 CORSConfiguration's ExposeHeader (:ref:`CVE-2021-3524`, Sergey Bobrov, Casey Bodley)
+
 
 v14.2.20 Nautilus
 =================
