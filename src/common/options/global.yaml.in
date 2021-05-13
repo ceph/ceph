@@ -6058,20 +6058,20 @@ options:
   - spdk
   - pmem
   - hm_smr
-- name: inject
+- name: mgr_inject
   type: bool
   level: dev
-  desc: Enable/disable injection of fake data to the mgr_module
+  desc: Enable/disable injection of fake data in the mgr module
   default: false
   flags:
   - runtime
   with_legacy: true
   services:
   - mgr
-- name: inject_num_osds
+- name: mgr_inject_num_osds
   type: int
   level: dev
-  desc: Number of osds to inject
+  desc: Number of osds to inject in the mgr module
   default: 0
   flags:
   - runtime
