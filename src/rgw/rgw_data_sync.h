@@ -639,6 +639,14 @@ struct rgw_bucket_sync_status {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_sync_status)
 
+struct bilog_status_v2 {
+  rgw_bucket_sync_status sync_status;
+  std::vector<rgw_bucket_shard_sync_info> inc_status;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
 struct rgw_bucket_index_marker_info {
   std::string bucket_ver;
   std::string master_ver;
