@@ -215,6 +215,9 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   this->m_first_valid_entry = pool_root.first_valid_entry;
   this->m_first_free_entry = pool_root.first_free_entry;
 
+  this->m_bytes_allocated_cap =
+      this->m_log_pool_size - DATA_RING_BUFFER_OFFSET;
+
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
 
   std::map<uint64_t, bool> missing_sync_points;
