@@ -1881,12 +1881,26 @@ void rgw_bucket_sync_status::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("state", state, obj);
   JSONDecoder::decode_json("full", full, obj);
+  JSONDecoder::decode_json("incremental_gen", incremental_gen, obj);
 }
 
 void rgw_bucket_sync_status::dump(Formatter *f) const
 {
   encode_json("state", state, f);
   encode_json("full", full, f);
+  encode_json("incremental_gen", incremental_gen, f);
+}
+
+void bilog_status_v2::dump(Formatter *f) const
+{
+  encode_json("sync_status", sync_status, f);
+  encode_json("inc_status", inc_status, f);
+}
+
+void bilog_status_v2::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("sync_status", sync_status, obj);
+  JSONDecoder::decode_json("inc_status", inc_status, obj);
 }
 
 /* This utility function shouldn't conflict with the overload of std::to_string
