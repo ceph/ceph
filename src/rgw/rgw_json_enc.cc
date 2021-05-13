@@ -38,12 +38,6 @@ void RGWOLHInfo::dump(Formatter *f) const
   encode_json("target", target, f);
 }
 
-void RGWOLHPendingInfo::dump(Formatter *f) const
-{
-  utime_t ut(time);
-  encode_json("time", ut, f);
-}
-
 void RGWObjManifestPart::dump(Formatter *f) const
 {
   f->open_object_section("loc");
@@ -247,24 +241,10 @@ void RGWCacheNotifyInfo::dump(Formatter *f) const
   encode_json("ns", ns, f);
 }
 
-void RGWAccessKey::dump(Formatter *f) const
-{
-  encode_json("access_key", id, f);
-  encode_json("secret_key", key, f);
-  encode_json("subuser", subuser, f);
-}
-
 void RGWAccessKey::dump_plain(Formatter *f) const
 {
   encode_json("access_key", id, f);
   encode_json("secret_key", key, f);
-}
-
-void encode_json_plain(const char *name, const RGWAccessKey& val, Formatter *f)
-{
-  f->open_object_section(name);
-  val.dump_plain(f);
-  f->close_section();
 }
 
 void RGWAccessKey::dump(Formatter *f, const string& user, bool swift) const
@@ -364,11 +344,6 @@ static struct rgw_flags_desc op_type_flags[] = {
  { RGW_OP_TYPE_DELETE, "delete" },
  { 0, NULL }
 };
-
-extern void op_type_to_str(uint32_t mask, char *buf, int len)
-{
-  return mask_to_str(op_type_flags, mask, buf, len);
-}
 
 void RGWSubUser::dump(Formatter *f) const
 {
@@ -590,34 +565,11 @@ void rgw_data_placement_target::dump(Formatter *f) const
   encode_json("data_extra_pool", data_extra_pool, f);
   encode_json("index_pool", index_pool, f);
 }
-  
+
 void rgw_data_placement_target::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("data_pool", data_pool, obj);
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   JSONDecoder::decode_json("index_pool", index_pool, obj);
-}
-
-void rgw_bucket::dump(Formatter *f) const
-{
-  encode_json("name", name, f);
-  encode_json("marker", marker, f);
-  encode_json("bucket_id", bucket_id, f);
-  encode_json("tenant", tenant, f);
-  encode_json("explicit_placement", explicit_placement, f);
-}
-
-void rgw_bucket::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("name", name, obj);
-  JSONDecoder::decode_json("marker", marker, obj);
-  JSONDecoder::decode_json("bucket_id", bucket_id, obj);
-  JSONDecoder::decode_json("tenant", tenant, obj);
-  JSONDecoder::decode_json("explicit_placement", explicit_placement, obj);
-  if (explicit_placement.data_pool.empty()) {
-    /* decoding old format */
-    JSONDecoder::decode_json("pool", explicit_placement.data_pool, obj);
-    JSONDecoder::decode_json("data_extra_pool", explicit_placement.data_extra_pool, obj);
-    JSONDecoder::decode_json("index_pool", explicit_placement.index_pool, obj);
-  }
 }
 
 void RGWBucketEntryPoint::dump(Formatter *f) const
@@ -1727,131 +1679,6 @@ void rgw_sync_error_info::dump(Formatter *f) const {
   encode_json("error_code", error_code, f);
   encode_json("message", message, f);
 }
-
-void rgw_bucket_shard_full_sync_marker::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("position", position, obj);
-  JSONDecoder::decode_json("count", count, obj);
-}
-
-void rgw_bucket_shard_full_sync_marker::dump(Formatter *f) const
-{
-  encode_json("position", position, f);
-  encode_json("count", count, f);
-}
-
-void rgw_bucket_shard_inc_sync_marker::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("position", position, obj);
-  JSONDecoder::decode_json("timestamp", timestamp, obj);
-}
-
-void rgw_bucket_shard_inc_sync_marker::dump(Formatter *f) const
-{
-  encode_json("position", position, f);
-  encode_json("timestamp", timestamp, f);
-}
-
-void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
-{
-  std::string s;
-  JSONDecoder::decode_json("status", s, obj);
-  if (s == "full-sync") {
-    state = StateFullSync;
-  } else if (s == "incremental-sync") {
-    state = StateIncrementalSync;
-  } else if (s == "stopped") {
-    state = StateStopped;
-  } else {
-    state = StateInit;
-  }
-  JSONDecoder::decode_json("inc_marker", inc_marker, obj);
-}
-
-void rgw_bucket_shard_sync_info::dump(Formatter *f) const
-{
-  const char *s{nullptr};
-  switch ((SyncState)state) {
-    case StateInit:
-    s = "init";
-    break;
-  case StateFullSync:
-    s = "full-sync";
-    break;
-  case StateIncrementalSync:
-    s = "incremental-sync";
-    break;
-  case StateStopped:
-    s = "stopped";
-    break;
-  default:
-    s = "unknown";
-    break;
-  }
-  encode_json("status", s, f);
-  encode_json("inc_marker", inc_marker, f);
-}
-
-void rgw_bucket_full_sync_status::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("position", position, obj);
-  JSONDecoder::decode_json("count", count, obj);
-}
-
-void rgw_bucket_full_sync_status::dump(Formatter *f) const
-{
-  encode_json("position", position, f);
-  encode_json("count", count, f);
-}
-
-void encode_json(const char *name, BucketSyncState state, Formatter *f)
-{
-  switch (state) {
-  case BucketSyncState::Init:
-    encode_json(name, "init", f);
-    break;
-  case BucketSyncState::Full:
-    encode_json(name, "full-sync", f);
-    break;
-  case BucketSyncState::Incremental:
-    encode_json(name, "incremental-sync", f);
-    break;
-  case BucketSyncState::Stopped:
-    encode_json(name, "stopped", f);
-    break;
-  default:
-    encode_json(name, "unknown", f);
-    break;
-  }
-}
-
-void decode_json_obj(BucketSyncState& state, JSONObj *obj)
-{
-  std::string s;
-  decode_json_obj(s, obj);
-  if (s == "full-sync") {
-    state = BucketSyncState::Full;
-  } else if (s == "incremental-sync") {
-    state = BucketSyncState::Incremental;
-  } else if (s == "stopped") {
-    state = BucketSyncState::Stopped;
-  } else {
-    state = BucketSyncState::Init;
-  }
-}
-
-void rgw_bucket_sync_status::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("state", state, obj);
-  JSONDecoder::decode_json("full", full, obj);
-}
-
-void rgw_bucket_sync_status::dump(Formatter *f) const
-{
-  encode_json("state", state, f);
-  encode_json("full", full, f);
-}
-
 /* This utility function shouldn't conflict with the overload of std::to_string
  * provided by string_ref since Boost 1.54 as it's defined outside of the std
  * namespace. I hope we'll remove it soon - just after merging the Matt's PR
@@ -1909,18 +1736,6 @@ void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
 }
 
 
-void rgw::keystone::BarbicanTokenRequestVer2::dump(Formatter* const f) const
-{
-  f->open_object_section("token_request");
-    f->open_object_section("auth");
-      f->open_object_section("passwordCredentials");
-        encode_json("username", cct->_conf->rgw_keystone_barbican_user, f);
-        encode_json("password", cct->_conf->rgw_keystone_barbican_password, f);
-      f->close_section();
-      encode_json("tenantName", cct->_conf->rgw_keystone_barbican_tenant, f);
-    f->close_section();
-  f->close_section();
-}
 
 void rgw::keystone::BarbicanTokenRequestVer3::dump(Formatter* const f) const
 {
