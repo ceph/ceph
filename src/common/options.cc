@@ -4534,7 +4534,7 @@ std::vector<Option> get_global_options() {
     .set_description("How frequently we trim the bluestore cache"),
 
     Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(64)
+    .set_default(1000)
     .set_description("Max pinned cache entries we consider before giving up"),
 
     Option("bluestore_cache_type", Option::TYPE_STR, Option::LEVEL_DEV)
@@ -5444,6 +5444,17 @@ std::vector<Option> get_global_options() {
     .set_default(CEPH_DATADIR "/mgr")
     .add_service("mgr")
     .set_description("Filesystem path to manager modules."),
+
+    Option("mgr_standby_modules", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Start modules in standby (redirect) mode when mgr is standby")
+    .set_long_description(
+      "By default, the standby modules will answer incoming requests with a "
+      "HTTP redirect to the active manager, allowing users to point their browser at any "
+      "mgr node and find their way to an active mgr.  However, this mode is problematic "
+      "when using a load balancer because (1) the redirect locations are usually private "
+      "IPs and (2) the load balancer can't identify which mgr is the right one to send "
+      "traffic to. If a load balancer is being used, set this to false."),
 
     Option("mgr_disabled_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
 #ifdef MGR_DISABLED_MODULES

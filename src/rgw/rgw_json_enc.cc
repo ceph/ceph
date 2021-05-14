@@ -143,8 +143,11 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("tail_instance", tail_instance, f);
   ::encode_json("tail_placement", tail_placement, f);
 
-  f->dump_object("begin_iter", begin_iter);
-  f->dump_object("end_iter", end_iter);
+  // nullptr being passed into iterators since there
+  // is no cct and we aren't doing anything with these
+  // iterators that would write do the log
+  f->dump_object("begin_iter", obj_begin(nullptr));
+  f->dump_object("end_iter", obj_end(nullptr));
 }
 
 void rgw_log_entry::dump(Formatter *f) const

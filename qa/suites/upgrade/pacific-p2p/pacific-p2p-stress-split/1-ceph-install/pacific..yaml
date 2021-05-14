@@ -1,0 +1,21 @@
+meta:
+- desc: |
+   install ceph/pacific v16.2.3
+   Overall upgrade path is - pacific-latest.point => pacific-latest
+tasks:
+- install:
+    tag: v16.2.3
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
+- print: "**** done install pacific v16.2.3"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release pacific
+      - ceph osd set-require-min-compat-client pacific
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

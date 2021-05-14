@@ -2,7 +2,7 @@
 #include "svc_rados.h"
 #include "svc_config_key_rados.h"
 
-int RGWSI_ConfigKey_RADOS::do_start(optional_yield)
+int RGWSI_ConfigKey_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   maybe_insecure_mon_conn = !svc.rados->check_secure_mon_conn();
 

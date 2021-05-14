@@ -272,14 +272,14 @@ protected:
     return status;
   }
 
-  virtual int operate_wrapper() {
-    return operate();
+  virtual int operate_wrapper(const DoutPrefixProvider *dpp) {
+    return operate(dpp);
   }
 public:
   RGWCoroutine(CephContext *_cct) : status(_cct), _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
   ~RGWCoroutine() override;
 
-  virtual int operate() = 0;
+  virtual int operate(const DoutPrefixProvider *dpp) = 0;
 
   bool is_done() { return (state == RGWCoroutine_Done || state == RGWCoroutine_Error); }
   bool is_error() { return (state == RGWCoroutine_Error); }
@@ -474,7 +474,7 @@ public:
     return id;
   }
 
-  int operate(RGWCoroutinesEnv *env);
+  int operate(const DoutPrefixProvider *dpp, RGWCoroutinesEnv *env);
 
   bool is_done() {
     return done_flag;
@@ -663,8 +663,8 @@ public:
     }
   }
 
-  int run(list<RGWCoroutinesStack *>& ops);
-  int run(RGWCoroutine *op);
+  int run(const DoutPrefixProvider *dpp, list<RGWCoroutinesStack *>& ops);
+  int run(const DoutPrefixProvider *dpp, RGWCoroutine *op);
   void stop() {
     bool expected = false;
     if (going_down.compare_exchange_strong(expected, true)) {
@@ -715,10 +715,10 @@ RGWAioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier(T value
 class RGWSimpleCoroutine : public RGWCoroutine {
   bool called_cleanup;
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 
   int state_init();
-  int state_send_request();
+  int state_send_request(const DoutPrefixProvider *dpp);
   int state_request_complete();
   int state_all_complete();
 
@@ -729,7 +729,7 @@ public:
   ~RGWSimpleCoroutine() override;
 
   virtual int init() { return 0; }
-  virtual int send_request() = 0;
+  virtual int send_request(const DoutPrefixProvider *dpp) = 0;
   virtual int request_complete() = 0;
   virtual int finish() { return 0; }
   virtual void request_cleanup() {}

@@ -83,7 +83,7 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
-  int rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
+  int rebuild(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
               std::string &err_msg);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
@@ -97,7 +97,7 @@ public:
     int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
     return ret;
   }
-  int create_from_headers(RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner);
+  int create_from_headers(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner);
 };
 
 /**

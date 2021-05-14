@@ -21,6 +21,9 @@
 
 using namespace std;
 
+auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+const DoutPrefix dp(cct, 1, "test rgw manifest: ");
+
 struct OldObjManifestPart {
   old_rgw_obj loc;   /* the object where the data is located */
   uint64_t loc_ofs;  /* the offset at that object where the data is located */
@@ -222,18 +225,18 @@ TEST(TestRGWManifest, head_only_obj) {
   list<rgw_obj>::iterator liter;
 
   RGWObjManifest::obj_iterator iter;
-  for (iter = manifest.obj_begin(), liter = objs.begin();
-       iter != manifest.obj_end() && liter != objs.end();
+  for (iter = manifest.obj_begin(&dp), liter = objs.begin();
+       iter != manifest.obj_end(&dp) && liter != objs.end();
        ++iter, ++liter) {
     ASSERT_TRUE(env.get_raw(*liter) == env.get_raw(iter.get_location()));
   }
 
-  ASSERT_TRUE(iter == manifest.obj_end());
+  ASSERT_TRUE(iter == manifest.obj_end(&dp));
   ASSERT_TRUE(liter == objs.end());
 
   rgw_raw_obj raw_head;
 
-  iter = manifest.obj_find(100 * 1024);
+  iter = manifest.obj_find(&dp, 100 * 1024);
   ASSERT_TRUE(env.get_raw(iter.get_location()) == env.get_raw(head));
   ASSERT_EQ((int)iter.get_stripe_size(), obj_size);
 }
@@ -258,8 +261,8 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
   rgw_obj_select last_obj;
 
   RGWObjManifest::obj_iterator iter;
-  for (iter = manifest.obj_begin(), liter = objs.begin();
-       iter != manifest.obj_end() && liter != objs.end();
+  for (iter = manifest.obj_begin(&dp), liter = objs.begin();
+       iter != manifest.obj_end(&dp) && liter != objs.end();
        ++iter, ++liter) {
     cout << "*liter=" << *liter << " iter.get_location()=" << env.get_raw(iter.get_location()) << std::endl;
     ASSERT_TRUE(env.get_raw(*liter) == env.get_raw(iter.get_location()));
@@ -267,15 +270,15 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
     last_obj = iter.get_location();
   }
 
-  ASSERT_TRUE(iter == manifest.obj_end());
+  ASSERT_TRUE(iter == manifest.obj_end(&dp));
   ASSERT_TRUE(liter == objs.end());
 
-  iter = manifest.obj_find(100 * 1024);
+  iter = manifest.obj_find(&dp, 100 * 1024);
   ASSERT_TRUE(env.get_raw(iter.get_location()) == env.get_raw(head));
   ASSERT_EQ((int)iter.get_stripe_size(), head_size);
 
   uint64_t ofs = 20 * 1024 * 1024 + head_size;
-  iter = manifest.obj_find(ofs + 100);
+  iter = manifest.obj_find(&dp, ofs + 100);
 
   ASSERT_TRUE(env.get_raw(iter.get_location()) == env.get_raw(last_obj));
   ASSERT_EQ(iter.get_stripe_ofs(), ofs);
@@ -319,11 +322,11 @@ TEST(TestRGWManifest, multipart) {
   RGWObjManifest m;
 
   for (int i = 0; i < num_parts; i++) {
-    m.append(pm[i], env.zonegroup, env.zone_params);
+    m.append(&dp, pm[i], env.zonegroup, env.zone_params);
   }
   RGWObjManifest::obj_iterator iter;
-  for (iter = m.obj_begin(); iter != m.obj_end(); ++iter) {
-    RGWObjManifest::obj_iterator fiter = m.obj_find(iter.get_ofs());
+  for (iter = m.obj_begin(&dp); iter != m.obj_end(&dp); ++iter) {
+    RGWObjManifest::obj_iterator fiter = m.obj_find(&dp, iter.get_ofs());
     ASSERT_TRUE(env.get_raw(fiter.get_location()) == env.get_raw(iter.get_location()));
   }
 
@@ -363,8 +366,8 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
   RGWObjManifest::obj_iterator iter;
   auto liter = old_objs.begin();
-  for (iter = manifest.obj_begin();
-       iter != manifest.obj_end() && liter != old_objs.end();
+  for (iter = manifest.obj_begin(&dp);
+       iter != manifest.obj_end(&dp) && liter != old_objs.end();
        ++iter, ++liter) {
     rgw_pool old_pool(liter->bucket.data_pool);
     string old_oid;
@@ -377,7 +380,7 @@ TEST(TestRGWManifest, old_obj_manifest) {
   }
 
   ASSERT_TRUE(liter == old_objs.end());
-  ASSERT_TRUE(iter == manifest.obj_end());
+  ASSERT_TRUE(iter == manifest.obj_end(&dp));
 
 }
 
