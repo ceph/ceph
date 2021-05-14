@@ -4,6 +4,7 @@ set -ex
 . $(dirname $0)/../../standalone/ceph-helpers.sh
 
 POOL=rbd
+ANOTHER_POOL=new_default_pool$$
 NS=ns
 IMAGE=testrbdnbd$$
 SIZE=64
@@ -57,6 +58,9 @@ setup()
             ${DATA} ${IMAGE}
     done
 
+    # create another pool
+    ceph osd pool create ${ANOTHER_POOL} 8
+    rbd pool init ${ANOTHER_POOL}
 }
 
 function cleanup()
@@ -86,6 +90,9 @@ function cleanup()
     done
     rbd namespace remove ${POOL}/${NS}
 
+    # cleanup/reset default pool
+    rbd config global rm global rbd_default_pool
+    ceph osd pool delete ${ANOTHER_POOL} ${ANOTHER_POOL} --yes-i-really-really-mean-it
 }
 
 function expect_false()
@@ -95,10 +102,11 @@ function expect_false()
 
 function get_pid()
 {
-    local ns=$1
+    local pool=$1
+    local ns=$2
 
     PID=$(rbd device --device-type nbd --format xml list | $XMLSTARLET sel -t -v \
-      "//devices/device[pool='${POOL}'][namespace='${ns}'][image='${IMAGE}'][device='${DEV}']/id")
+      "//devices/device[pool='${pool}'][namespace='${ns}'][image='${IMAGE}'][device='${DEV}']/id")
     test -n "${PID}" || return 1
     ps -p ${PID} -C rbd-nbd
 }
@@ -139,7 +147,7 @@ rbd device --device-type nbd --format xml list
 
 # map test using the first unused device
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
-get_pid
+get_pid ${POOL}
 # map test specifying the device
 expect_false _sudo rbd-nbd --device ${DEV} map ${POOL}/${IMAGE}
 dev1=${DEV}
@@ -149,7 +157,7 @@ DEV=
 DEV=`_sudo rbd-nbd --device ${dev1} map ${POOL}/${IMAGE}`
 [ "${DEV}" = "${dev1}" ]
 rbd device --device-type nbd list | grep "${IMAGE}"
-get_pid
+get_pid ${POOL}
 
 # read test
 [ "`dd if=${DATA} bs=1M | md5sum`" = "`_sudo dd if=${DEV} bs=1M | md5sum`" ]
@@ -201,7 +209,7 @@ unmap_device ${DEV} ${PID}
 
 # exclusive option test
 DEV=`_sudo rbd --device-type nbd map --exclusive ${POOL}/${IMAGE}`
-get_pid
+get_pid ${POOL}
 
 _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 expect_false timeout 10 \
@@ -212,37 +220,56 @@ rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 # unmap by image name test
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
-get_pid
+get_pid ${POOL}
 unmap_device ${IMAGE} ${PID}
 DEV=
 
 # map/unmap snap test
 rbd snap create ${POOL}/${IMAGE}@snap
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}@snap`
-get_pid
+get_pid ${POOL}
 unmap_device "${IMAGE}@snap" ${PID}
 DEV=
 
 # map/unmap namespace test
 rbd snap create ${POOL}/${NS}/${IMAGE}@snap
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${NS}/${IMAGE}@snap`
-get_pid ${NS}
+get_pid ${POOL} ${NS}
 unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${PID}
 DEV=
 
 # unmap by image name test 2
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
-get_pid
+get_pid ${POOL}
 pid=$PID
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${NS}/${IMAGE}`
-get_pid ${NS}
+get_pid ${POOL} ${NS}
 unmap_device ${POOL}/${NS}/${IMAGE} ${PID}
 DEV=
 unmap_device ${POOL}/${IMAGE} ${pid}
 
+# map/unmap test with just image name and expect image to come from default pool
+if [ "${POOL}" = "rbd" ];then
+    DEV=`_sudo rbd device --device-type nbd map ${IMAGE}`
+    get_pid ${POOL}
+    unmap_device ${IMAGE} ${PID}
+    DEV=
+fi
+
+# map/unmap test with just image name after changing default pool
+rbd config global set global rbd_default_pool ${ANOTHER_POOL}
+rbd create --size 10M ${IMAGE}
+DEV=`_sudo rbd device --device-type nbd map ${IMAGE}`
+get_pid ${ANOTHER_POOL}
+unmap_device ${IMAGE} ${PID}
+DEV=
+
+# reset
+rbd config global rm global rbd_default_pool
+
 # auto unmap test
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
-get_pid
+get_pid ${POOL}
 _sudo kill ${PID}
 for i in `seq 10`; do
   rbd device --device-type nbd list | expect_false grep "^${PID} *${POOL} *${IMAGE}" && break
@@ -253,7 +280,7 @@ rbd device --device-type nbd list | expect_false grep "^${PID} *${POOL} *${IMAGE
 # quiesce test
 QUIESCE_HOOK=${TEMPDIR}/quiesce.sh
 DEV=`_sudo rbd device --device-type nbd map --quiesce --quiesce-hook ${QUIESCE_HOOK} ${POOL}/${IMAGE}`
-get_pid
+get_pid ${POOL}
 
 # test it fails if the hook does not exists
 test ! -e ${QUIESCE_HOOK}
@@ -303,7 +330,7 @@ if [ -n "${CEPH_SRC}" ]; then
 else
     DEV=`_sudo rbd device --device-type nbd map --quiesce ${POOL}/${IMAGE} --log-file=${LOG_FILE}`
 fi
-get_pid
+get_pid ${POOL}
 _sudo mkfs ${DEV}
 mkdir ${TEMPDIR}/mnt
 _sudo mount ${DEV} ${TEMPDIR}/mnt
@@ -317,16 +344,16 @@ expect_false grep 'quiesce failed' ${LOG_FILE}
 
 # test detach/attach
 DEV=`_sudo rbd device --device-type nbd --options try-netlink map ${POOL}/${IMAGE}`
-get_pid
+get_pid ${POOL}
 _sudo mount ${DEV} ${TEMPDIR}/mnt
 _sudo rbd-nbd detach ${POOL}/${IMAGE}
-expect_false get_pid
+expect_false get_pid ${POOL}
 _sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
-get_pid
+get_pid ${POOL}
 _sudo rbd-nbd detach ${DEV}
-expect_false get_pid
+expect_false get_pid ${POOL}
 _sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
-get_pid
+get_pid ${POOL}
 ls ${TEMPDIR}/mnt/
 dd if=${TEMPDIR}/mnt/test of=/dev/null bs=1M count=1
 _sudo dd if=${DATA} of=${TEMPDIR}/mnt/test1 bs=1M count=1 oflag=direct
