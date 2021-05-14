@@ -465,7 +465,7 @@ def check_all_buckets_exist(zone_conn, buckets):
         try:
             zone_conn.get_bucket(b)
         except:
-            log.critical('zone %s does not contain bucket %s', zone.name, b)
+            log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
             return False
 
     return True
