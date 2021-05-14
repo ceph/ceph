@@ -1069,15 +1069,9 @@ int RGWBucketAdminOp::link(rgw::sal::Store* store, RGWBucketAdminOpState& op_sta
 
   if (*loc_bucket != *old_bucket) {
     // like RGWRados::delete_bucket -- excepting no bucket_index work.
-    r = old_bucket->remove_entrypoint(dpp, &ep_data.ep_objv, null_yield);
+    r = old_bucket->remove_metadata(dpp, &ep_data.ep_objv, null_yield);
     if (r < 0) {
-      set_err_msg(err, "failed to unlink old bucket endpoint " + old_bucket->get_tenant() + "/" + old_bucket->get_name());
-      return r;
-    }
-
-    r = old_bucket->remove_instance_info(dpp, &old_version, null_yield);
-    if (r < 0) {
-      set_err_msg(err, "failed to unlink old bucket info");
+      set_err_msg(err, "failed to unlink old bucket " + old_bucket->get_tenant() + "/" + old_bucket->get_name());
       return r;
     }
   }
