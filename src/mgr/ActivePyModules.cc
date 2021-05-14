@@ -165,7 +165,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
 }
 
 bool inject_python_on() {
-  return g_conf().get_val<bool>("inject");
+  return g_conf().get_val<bool>("mgr_inject");
 }
 PyObject *ActivePyModules::get_python(const std::string &what)
 {

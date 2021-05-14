@@ -13,7 +13,7 @@
 using namespace std;
 
 int64_t Injector::get_num_osds() {
-  return g_conf().get_val<int64_t>("inject_num_osds");
+  return g_conf().get_val<int64_t>("mgr_inject_num_osds");
 }
 
 void Injector::mark_exists_osds(OSDMap* osdmap) {
