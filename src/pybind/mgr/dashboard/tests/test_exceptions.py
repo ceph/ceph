@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import time
 
-import rados
+import rados  # pylint: disable=import-error
 
 from . import ControllerTestCase
 from ..services.ceph_service import SendCommandError

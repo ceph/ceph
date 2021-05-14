@@ -71,6 +71,7 @@ TEST(TestOSDScrub, scrub_time_permit) {
   g_ceph_context->_conf.set_val("osd_scrub_end_hour", "24");
   g_ceph_context->_conf.apply_changes(nullptr);
   tm tm;
+  tm.tm_isdst = -1;
   strptime("2015-01-16 12:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   utime_t now = utime_t(mktime(&tm), 0);
   bool ret = osd->scrub_time_permit(now);

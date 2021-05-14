@@ -8108,6 +8108,7 @@ void StoreTest::doOnodeCacheTrimTest() {
   const size_t max_pinned_onodes = 200;
   const size_t max_cached_onodes = max_pinned_onodes / 2;
   const PerfCounters* logger = store->get_perf_counters();
+
   size_t onodes;
   {
     ObjectStore::Transaction t;
@@ -8132,7 +8133,7 @@ void StoreTest::doOnodeCacheTrimTest() {
       break;
     sleep(1);
   }
-  ceph_assert(onodes == max_onodes);
+  ASSERT_EQ(onodes, max_onodes);
 
   SetVal(g_conf(), "bluestore_debug_max_cached_onodes",
     stringify(max_cached_onodes).c_str());
@@ -8144,7 +8145,7 @@ void StoreTest::doOnodeCacheTrimTest() {
     sleep(1);
   }
   onodes = logger->get(l_bluestore_onodes);
-  ceph_assert(onodes == max_cached_onodes);
+  ASSERT_EQ(onodes, max_cached_onodes);
 
 
   // revert cache size cap
@@ -8171,7 +8172,7 @@ void StoreTest::doOnodeCacheTrimTest() {
       break;
     sleep(1);
   }
-  ceph_assert(onodes == max_onodes);
+  ASSERT_EQ(onodes, max_onodes);
 
   SetVal(g_conf(), "bluestore_debug_max_cached_onodes",
     stringify(max_cached_onodes).c_str());
@@ -8183,7 +8184,7 @@ void StoreTest::doOnodeCacheTrimTest() {
     sleep(1);
   }
   onodes = logger->get(l_bluestore_onodes);
-  ceph_assert(onodes == max_pinned_onodes);
+  ASSERT_EQ(onodes, max_pinned_onodes);
 
   // unpin onodes
   omap_iterators.resize(0);
@@ -8195,7 +8196,7 @@ void StoreTest::doOnodeCacheTrimTest() {
     sleep(1);
   }
   onodes = logger->get(l_bluestore_onodes);
-  ceph_assert(onodes == max_cached_onodes);
+  ASSERT_LE(onodes, max_cached_onodes);
 
   {
     ObjectStore::Transaction t;

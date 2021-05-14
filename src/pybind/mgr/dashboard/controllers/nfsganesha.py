@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from functools import partial
 
 import cherrypy
-import cephfs
+import cephfs  # pylint: disable=import-error
 
 from . import ApiController, RESTController, UiApiController, BaseController, \
               Endpoint, Task, ReadPermission, ControllerDoc, EndpointDoc

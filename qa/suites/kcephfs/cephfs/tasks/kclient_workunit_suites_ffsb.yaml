@@ -3,6 +3,9 @@ overrides:
     log-whitelist:
     - SLOW_OPS
     - slow request
+    conf:
+      osd:
+        osd heartbeat grace: 60
 tasks:
 - workunit:
     clients:

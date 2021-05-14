@@ -86,6 +86,10 @@ if (WITH_RADOSGW)
     otp/cls_otp_types.cc
     )
   add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+  if (WITH_BOOST_CONTEXT)
+    target_include_directories(cls_otp_client PRIVATE
+      $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+  endif()
 endif (WITH_RADOSGW)
 
 # cls_refcount

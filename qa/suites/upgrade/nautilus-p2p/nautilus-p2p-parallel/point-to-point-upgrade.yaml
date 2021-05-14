@@ -1,9 +1,9 @@
 meta:
 - desc: |
    Run ceph on two nodes, using one of them as a client,
-   with a separate client-only node. 
+   with a separate client-only node.
    Use xfs beneath the osds.
-   install ceph/nautilus v14.2.2 point version
+   install ceph/nautilus v14.2.20 point version
    run workload and upgrade-sequence in parallel
    (every point reslease should be tested)
    run workload and upgrade-sequence in parallel
@@ -32,8 +32,8 @@ overrides:
     - cache pools at or near target size
     - filesystem is degraded
     - OBJECT_MISPLACED
-    ### ref: https://tracker.ceph.com/issues/40251 
-    #removed see ^ - failed to encode map 
+    ### ref: https://tracker.ceph.com/issues/40251
+    #removed see ^ - failed to encode map
 
     fs: xfs
 
@@ -46,7 +46,7 @@ overrides:
       osd:
         osd map max advance: 1000
         osd_class_default_list: "*"
-        osd_class_load_list: "*" 
+        osd_class_load_list: "*"
       client:
         rgw_crypt_require_ssl: false
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
@@ -70,19 +70,19 @@ openstack:
     size: 30 # GB
 tasks:
 # v14.2.0 removed per http://tracker.ceph.com/issues/40251
-- print: "****  done nautilus v14.2.2 about to install"
+- print: "****  done nautilus v14.2.20 about to install"
 - install:
-    tag: v14.2.2
+    tag: v14.2.20
     # line below can be removed its from jewel test
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
-- print: "**** done v14.2.2 install"
+- print: "**** done v14.2.20 install"
 - ceph:
    fs: xfs
    add_osds_to_crush: true
 - print: "**** done ceph xfs"
 - sequential:
    - workload
-- print: "**** done workload v14.2.2"
+- print: "**** done workload v14.2.20"
 
 
 # v14.2.1 removed per http://tracker.ceph.com/issues/40251

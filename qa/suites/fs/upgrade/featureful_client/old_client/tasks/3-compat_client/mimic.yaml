@@ -7,4 +7,6 @@ tasks:
     mon.a:
       - ceph fs dump --format=json-pretty
       - ceph fs set cephfs min_compat_client mimic
+- sleep:
+    duration: 5
 - fs.clients_evicted:

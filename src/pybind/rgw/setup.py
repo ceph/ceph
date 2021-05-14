@@ -49,37 +49,17 @@ else:
 
 __version__ = '2.0.0'
 
-def get_python_flags():
-    cflags = {'I': [], 'extras': []}
-    ldflags = {'l': [], 'L': [], 'extras': []}
 
-    if os.environ.get('VIRTUAL_ENV', None):
-        python = "python"
-    else:
-        python = 'python' + str(sys.version_info.major) + '.' + str(sys.version_info.minor)
-
-    python_config = python + '-config'
-
-    for cflag in filter_unsupported_flags(subprocess.check_output(
-            [python_config, "--cflags"]).strip().decode('utf-8').split()):
-        if cflag.startswith('-I'):
-            cflags['I'].append(cflag.replace('-I', ''))
-        else:
-            cflags['extras'].append(cflag)
-
-    for ldflag in filter_unsupported_flags(subprocess.check_output(
-            [python_config, "--ldflags"]).strip().decode('utf-8').split()):
-        if ldflag.startswith('-l'):
-            ldflags['l'].append(ldflag.replace('-l', ''))
-        if ldflag.startswith('-L'):
-            ldflags['L'].append(ldflag.replace('-L', ''))
-        else:
-            ldflags['extras'].append(ldflag)
-
-    return {
-        'cflags': cflags,
-        'ldflags': ldflags
-    }
+def get_python_flags(libs):
+    py_libs = sum((libs.split() for libs in
+                   distutils.sysconfig.get_config_vars('LIBS', 'SYSLIBS')), [])
+    return dict(
+        include_dirs=[distutils.sysconfig.get_python_inc()],
+        library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
+        libraries=libs + [lib.replace('-l', '') for lib in py_libs],
+        extra_compile_args=distutils.sysconfig.get_config_var('CFLAGS').split(),
+        extra_link_args=(distutils.sysconfig.get_config_var('LDFLAGS').split() +
+                         distutils.sysconfig.get_config_var('LINKFORSHARED').split()))
 
 
 def check_sanity():
@@ -178,8 +158,6 @@ if (len(sys.argv) >= 2 and
     def cythonize(x, **kwargs):
         return x
 
-flags = get_python_flags()
-
 setup(
     name='rgw',
     version=__version__,
@@ -199,12 +177,10 @@ setup(
             Extension(
                 "rgw",
                 [source],
-                include_dirs=flags['cflags']['I'],
-                library_dirs=flags['ldflags']['L'],
-                libraries=['rados', 'rgw'] + flags['ldflags']['l'],
-                extra_compile_args=flags['cflags']['extras'] + flags['ldflags']['extras'],
+                **get_python_flags(['rados', 'rgw'])
             )
         ],
+        compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
         include_path=[
             os.path.join(os.path.dirname(__file__), "..", "rados")

@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import json
 
-import rados
+import rados  # pylint: disable=import-error
 
 from mgr_module import CommandResult
 from mgr_util import get_time_series_rates, get_most_recent_rate

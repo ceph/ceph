@@ -3063,8 +3063,14 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       for (auto& i : pem) {
 	ss << "    " << i.second.message << "\n";
 	ss << "      [";
+	unsigned p;
+	if (i.second.progress >= 0.0 && i.second.progress <= 1.0) {
+	  p = (unsigned)(i.second.progress * 30.0);
+	} else {
+	  p = 0;
+	}
 	unsigned j;
-	for (j = 0; j < (unsigned)(i.second.progress * 30.0); ++j) {
+	for (j = 0; j < p; ++j) {
 	  ss << '=';
 	}
 	for (; j < 30; ++j) {

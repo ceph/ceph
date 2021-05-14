@@ -5,7 +5,6 @@ from __future__ import absolute_import
 import errno
 import json
 import tempfile
-import time
 import unittest
 
 from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
@@ -13,7 +12,8 @@ from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
 from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
-from ..services.access_control import load_access_control_db, \
+from ..services.access_control import ensure_text, \
+                                      load_access_control_db, \
                                       password_hash, AccessControlDB, \
                                       SYSTEM_ROLES
 
@@ -571,14 +571,11 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_unicode_password(self):
         self.test_create_user()
-        password = '章鱼不是密码'
-        with tempfile.TemporaryFile(mode='w+') as pwd_file:
-            pwd_file.write(password)
-            pwd_file.seek(0)
-            user = self.exec_cmd('ac-user-set-password', username='admin',
-                                 inbuf=pwd_file.read(), force_password=True)
-            pass_hash = password_hash(password, user['password'])
-            self.assertEqual(user['password'], pass_hash)
+        password = ensure_text('章鱼不是密码')
+        user = self.exec_cmd('ac-user-set-password', username='admin',
+                             inbuf=password.encode('utf-8'), force_password=True)
+        pass_hash = password_hash(password, user['password'])
+        self.assertEqual(user['password'], pass_hash)
 
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
@@ -627,69 +624,3 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         })
         self.validate_persistent_user('admin', ['read-only'], pass_hash,
                                       'admin User', 'admin@user.com')
-
-    def test_load_v1(self):
-        self.CONFIG_KEY_DICT['accessdb_v1'] = '''
-            {{
-                "users": {{
-                    "admin": {{
-                        "username": "admin",
-                        "password":
-                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
-                        "roles": ["block-manager", "test_role"],
-                        "name": "admin User",
-                        "email": "admin@user.com",
-                        "lastUpdate": {}
-                    }}
-                }},
-                "roles": {{
-                    "test_role": {{
-                        "name": "test_role",
-                        "description": "Test Role",
-                        "scopes_permissions": {{
-                            "{}": ["{}", "{}"],
-                            "{}": ["{}"]
-                        }}
-                    }}
-                }},
-                "version": 1
-            }}
-        '''.format(int(round(time.time())), Scope.ISCSI, Permission.READ,
-                   Permission.UPDATE, Scope.POOL, Permission.CREATE)
-
-        load_access_control_db()
-        role = self.exec_cmd('ac-role-show', rolename="test_role")
-        self.assertDictEqual(role, {
-            'name': 'test_role',
-            'description': "Test Role",
-            'scopes_permissions': {
-                Scope.ISCSI: [Permission.READ, Permission.UPDATE],
-                Scope.POOL: [Permission.CREATE]
-            }
-        })
-        user = self.exec_cmd('ac-user-show', username="admin")
-        self.assertDictEqual(user, {
-            'username': 'admin',
-            'lastUpdate': user['lastUpdate'],
-            'password':
-                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
-            'name': 'admin User',
-            'email': 'admin@user.com',
-            'roles': ['block-manager', 'test_role']
-        })
-
-    def test_update_from_previous_version_v1(self):
-        self.CONFIG_KEY_DICT['username'] = 'admin'
-        self.CONFIG_KEY_DICT['password'] = \
-            '$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK'
-        load_access_control_db()
-        user = self.exec_cmd('ac-user-show', username="admin")
-        self.assertDictEqual(user, {
-            'username': 'admin',
-            'lastUpdate': user['lastUpdate'],
-            'password':
-                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
-            'name': None,
-            'email': None,
-            'roles': ['administrator']
-        })

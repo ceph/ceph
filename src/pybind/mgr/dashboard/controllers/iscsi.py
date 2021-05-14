@@ -8,8 +8,8 @@ import re
 import json
 import cherrypy
 
-import rados
-import rbd
+import rados  # pylint: disable=import-error
+import rbd  # pylint: disable=import-error
 
 from . import ApiController, UiApiController, RESTController, BaseController, Endpoint,\
     ReadPermission, UpdatePermission, Task

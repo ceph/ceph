@@ -21,7 +21,11 @@ except ImportError:
     from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
-from prettytable import PrettyTable, HEADER
+try:
+    from prettytable import PrettyTable, HEADER
+except ImportError:
+    # only allowed for test
+    PrettyTable = None
 from signal import signal, SIGWINCH
 from termios import TIOCGWINSZ
 
@@ -399,6 +403,9 @@ class DaemonWatcher(object):
         """
         Show all selected stats with section, full name, nick, and prio
         """
+        if PrettyTable is None:
+            ostr.write('unable to import prettytable\n')
+            return
         table = PrettyTable(('section', 'name', 'nick', 'prio'))
         table.align['section'] = 'l'
         table.align['name'] = 'l'

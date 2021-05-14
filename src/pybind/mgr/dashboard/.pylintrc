@@ -118,7 +118,9 @@ disable=import-star-module-level,
         too-many-arguments,
         too-many-locals,
         too-many-statements,
-        useless-object-inheritance
+        useless-object-inheritance,
+        no-else-raise,
+        no-else-return
 
 
 # Enable the message, report, category or checker with the given id(s). You can

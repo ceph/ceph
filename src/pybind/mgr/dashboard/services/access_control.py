@@ -21,12 +21,21 @@ from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
                          RoleNotInUser
 
 
+def ensure_text(s, encoding='utf-8', errors='strict'):
+    """Ported from six."""
+    if isinstance(s, six.binary_type):
+        return s.decode(encoding, errors)
+    elif isinstance(s, six.text_type):
+        return s
+    else:
+        raise TypeError("not expecting type '%s'" % type(s))
+
+
 # password hashing algorithm
 def password_hash(password, salt_password=None):
     if not password:
         return None
-    if six.PY2:
-        password = unicode(password, 'utf-8') if isinstance(password, str) else password
+    password = ensure_text(password)
     if not salt_password:
         salt_password = bcrypt.gensalt()
     else:
@@ -105,7 +114,7 @@ ADMIN_ROLE = Role('administrator', 'Administrator', {
 # read-only role provides read-only permission for all scopes
 READ_ONLY_ROLE = Role('read-only', 'Read-Only', {
     scope_name: [_P.READ] for scope_name in Scope.all_scopes()
-    if scope_name != Scope.DASHBOARD_SETTINGS
+    if scope_name not in (Scope.DASHBOARD_SETTINGS, Scope.CONFIG_OPT)
 })
 
 
@@ -325,24 +334,6 @@ class AccessControlDB(object):
             version = cls.VERSION
         return "{}{}".format(cls.ACDB_CONFIG_KEY, version)
 
-    def check_and_update_db(self):
-        logger.debug("AC: Checking for previews DB versions")
-        if self.VERSION == 1:  # current version
-            # check if there is username/password from previous version
-            username = mgr.get_module_option('username', None)
-            password = mgr.get_module_option('password', None)
-            if username and password:
-                logger.debug("AC: Found single user credentials: user=%s",
-                             username)
-                # found user credentials
-                user = self.create_user(username, "", None, None)
-                # password is already hashed, so setting manually
-                user.password = password
-                user.add_roles([ADMIN_ROLE])
-                self.save()
-        else:
-            raise NotImplementedError()
-
     @classmethod
     def load(cls):
         logger.info("AC: Loading user roles DB version=%s", cls.VERSION)
@@ -351,8 +342,6 @@ class AccessControlDB(object):
         if json_db is None:
             logger.debug("AC: No DB v%s found, creating new...", cls.VERSION)
             db = cls(cls.VERSION, {}, {})
-            # check if we can update from a previous version database
-            db.check_and_update_db()
             return db
 
         db = json.loads(json_db)

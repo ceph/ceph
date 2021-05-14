@@ -234,7 +234,7 @@ class MDSRank {
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
     bool is_cache_trimmable() const {
-      return is_clientreplay() || is_active() || is_stopping();
+      return is_standby_replay() || is_clientreplay() || is_active() || is_stopping();
     }
 
     void handle_write_error(int err);
@@ -580,6 +580,7 @@ class MDSRank {
     void set_mdsmap_multimds_snaps_allowed();
 private:
     mono_time starttime = mono_clock::zero();
+    bool send_status = true;
 
     // "task" string that gets displayed in ceph status
     inline static const std::string SCRUB_STATUS_KEY = "scrub status";

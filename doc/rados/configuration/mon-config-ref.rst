@@ -791,6 +791,14 @@ Trimming requires that the placement groups are ``active + clean``.
 :Default: 500
 
 
+``paxos service trim max multiplier``
+
+:Description: The factor by which paxos service trim max will be multiplied
+              to get a new upper bound when trim sizes are high (0 disables it)
+:Type: Integer
+:Default: ``20``
+
+
 ``mon max log epochs``
 
 :Description: The maximum amount of log epochs to trim during a single proposal
