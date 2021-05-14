@@ -406,6 +406,12 @@ node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracke
 {
   LOG_PREFIX(OTree::Node::load_root);
   return c.nm.get_super(c.t, root_tracker
+  ).handle_error(
+    eagain_ertr::pass_further{},
+    crimson::ct_error::input_output_error::handle([FNAME, c] {
+      ERRORT("EIO during get_super()", c.t);
+      ceph_abort("fatal error");
+    })
   ).safe_then([c, &root_tracker, FNAME](auto&& _super) {
     auto root_addr = _super->get_root_laddr();
     assert(root_addr != L_ADDR_NULL);
@@ -631,11 +637,38 @@ template node_future<> Node::fix_parent_index<false>(context_t, Ref<Node>&&, boo
 node_future<Ref<Node>> Node::load(
     context_t c, laddr_t addr, bool expect_is_level_tail)
 {
+  LOG_PREFIX(OTree::Node::load);
   // NOTE:
   // *option1: all types of node have the same length;
   // option2: length is defined by node/field types;
   // option3: length is totally flexible;
   return c.nm.read_extent(c.t, addr, NODE_BLOCK_SIZE
+  ).handle_error(
+    eagain_ertr::pass_further{},
+    crimson::ct_error::input_output_error::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("EIO -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    }),
+    crimson::ct_error::invarg::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("EINVAL -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    }),
+    crimson::ct_error::enoent::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("ENOENT -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    }),
+    crimson::ct_error::erange::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("ERANGE -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    })
   ).safe_then([expect_is_level_tail](auto extent) {
     auto [node_type, field_type] = extent->get_types();
     if (node_type == node_type_t::LEAF) {
@@ -1291,6 +1324,9 @@ node_future<> InternalNode::test_clone_root(
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
     return c_other.nm.get_super(c_other.t, tracker_other
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).safe_then([c_other, cloned_root](auto&& super_other) {
       cloned_root->make_root_new(c_other, std::move(super_other));
       return cloned_root;
@@ -1907,6 +1943,9 @@ node_future<> LeafNode::test_clone_root(
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
     return c_other.nm.get_super(c_other.t, tracker_other
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).safe_then([c_other, cloned_root](auto&& super_other) {
       cloned_root->make_root_new(c_other, std::move(super_other));
     });
@@ -1983,10 +2022,17 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
 node_future<Ref<LeafNode>> LeafNode::allocate_root(
     context_t c, RootNodeTracker& root_tracker)
 {
+  LOG_PREFIX(OTree::LeafNode::allocate_root);
   return LeafNode::allocate(c, field_type_t::N0, true
-  ).safe_then([c, &root_tracker](auto fresh_node) {
+  ).safe_then([c, &root_tracker, FNAME](auto fresh_node) {
     auto root = fresh_node.node;
     return c.nm.get_super(c.t, root_tracker
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::input_output_error::handle([FNAME, c] {
+        ERRORT("EIO during get_super()", c.t);
+        ceph_abort("fatal error");
+      })
     ).safe_then([c, root](auto&& super) {
       root->make_root_new(c, std::move(super));
       return root;

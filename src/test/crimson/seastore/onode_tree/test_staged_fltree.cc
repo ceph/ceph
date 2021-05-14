@@ -1017,6 +1017,9 @@ class DummyChildPool {
         DummyChildPool& pool, RootNodeTracker& root_tracker) {
       auto initial = create_new(keys, true, pool);
       return c.nm.get_super(c.t, root_tracker
+      ).handle_error(
+        eagain_ertr::pass_further{},
+        crimson::ct_error::assert_all{"Invalid error during create_initial()"}
       ).safe_then([c, &pool, initial](auto super) {
         initial->make_root_new(c, std::move(super));
         return initial->upgrade_root(c).safe_then([initial] {
