@@ -2314,12 +2314,11 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
   if (from_remote_zone) {
     // don't sync bucket layout changes
     if (!exists) {
-      auto& bci_index = bci.info.layout.current_index.layout;
-      auto index_type = bci_index.type;
-      auto num_shards = bci_index.normal.num_shards;
+      // replace peer's layout with default-constructed, then apply our defaults
+      bci.info.layout = rgw::BucketLayout{};
       init_default_bucket_layout(cct, bci.info.layout,
 				 bihandler->svc.zone->get_zone(),
-				 num_shards, index_type);
+				 std::nullopt, std::nullopt);
     } else {
       bci.info.layout = old_bci->info.layout;
     }
