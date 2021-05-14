@@ -46,7 +46,7 @@ public:
 
     typedef boost::lockfree::queue<
             T*,
-            boost::lockfree::allocator<ceph::allocator<void>>> ContextQueue;
+            boost::lockfree::allocator<ceph::allocator<void*>>> ContextQueue;
 
 private:
     DataCryptor<T>* m_data_cryptor;

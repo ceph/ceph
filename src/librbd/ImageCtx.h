@@ -202,7 +202,7 @@ namespace librbd {
 
     typedef boost::lockfree::queue<
       io::AioCompletion*,
-      boost::lockfree::allocator<ceph::allocator<void>>> Completions;
+      boost::lockfree::allocator<ceph::allocator<void*>>> Completions;
 
     Completions event_socket_completions;
     EventSocket event_socket;
