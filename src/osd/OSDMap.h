@@ -830,6 +830,10 @@ public:
     return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
   }
 
+  bool is_new(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NEW);
+  }
+
   bool is_destroyed(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_DESTROYED);
   }

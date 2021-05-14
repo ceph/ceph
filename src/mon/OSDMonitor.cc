@@ -9594,6 +9594,11 @@ int OSDMonitor::prepare_command_osd_destroy(
 
   pending_inc.new_state[id] = CEPH_OSD_DESTROYED;
   pending_inc.new_uuid[id] = uuid_d();
+  // better to clear the "new" flag or the next new command may
+  // wrongly flip it to non-new.
+  if (osdmap.is_new(id)) {
+    pending_inc.new_state[id] |= CEPH_OSD_NEW;
+  }
 
   // we can only propose_pending() once per service, otherwise we'll be
   // defying PaxosService and all laws of nature. Therefore, as we may
