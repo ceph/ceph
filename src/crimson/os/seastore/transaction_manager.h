@@ -54,6 +54,29 @@ auto repeat_eagain(F &&f) {
     });
 }
 
+// non-errorated version
+template <typename F>
+auto repeat_eagain2(F &&f) {
+  LOG_PREFIX("repeat_eagain");
+  return seastar::do_with(
+    std::forward<F>(f),
+    [FNAME](auto &f) {
+      return seastar::repeat(
+	[FNAME, &f] {
+	  return std::invoke(f
+	  ).safe_then([] {
+	    return seastar::stop_iteration::yes;
+	  }).handle_error(
+	    [FNAME](const crimson::ct_error::eagain &e) {
+	      DEBUG("hit eagain, restarting");
+	      return seastar::make_ready_future<seastar::stop_iteration>(
+	          seastar::stop_iteration::no);
+	    }
+	  );
+	});
+    });
+}
+
 /**
  * TransactionManager
  *

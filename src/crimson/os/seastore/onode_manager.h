@@ -13,17 +13,19 @@
 #include "include/ceph_assert.h"
 #include "common/hobject.h"
 
+#include "crimson/common/errorator.h"
 #include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/osd/exceptions.h"
 
 namespace crimson::os::seastore {
 
 class OnodeManager {
-  using base_ertr = TransactionManager::base_ertr;
+  using base_ertr = crimson::errorator<
+    crimson::ct_error::eagain>;
+
 public:
-  using mkfs_ertr = TransactionManager::mkfs_ertr;
+  using mkfs_ertr = base_ertr;
   using mkfs_ret = mkfs_ertr::future<>;
   virtual mkfs_ret mkfs(Transaction &t) = 0;
 
