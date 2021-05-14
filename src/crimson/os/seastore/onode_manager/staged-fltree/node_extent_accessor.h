@@ -492,14 +492,13 @@ class NodeExtentAccessorT {
     std::memcpy(to.get_write(), extent->get_read(), extent->get_length());
   }
 
-  using ertr = NodeExtentManager::tm_ertr;
-  ertr::future<NodeExtentMutable> rebuild(context_t c) {
+  eagain_future<NodeExtentMutable> rebuild(context_t c) {
     LOG_PREFIX(OTree::Extent::rebuild);
     assert(extent->is_valid());
     if (state == nextent_state_t::FRESH) {
       assert(extent->is_initial_pending());
       // already fresh and no need to record
-      return ertr::make_ready_future<NodeExtentMutable>(*mut);
+      return eagain_ertr::make_ready_future<NodeExtentMutable>(*mut);
     }
     assert(!extent->is_initial_pending());
     return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
@@ -551,7 +550,7 @@ class NodeExtentAccessorT {
     });
   }
 
-  ertr::future<> retire(context_t c) {
+  eagain_future<> retire(context_t c) {
     LOG_PREFIX(OTree::Extent::retire);
     assert(extent->is_valid());
     auto addr = extent->get_laddr();

@@ -61,14 +61,6 @@ class NodeExtentManager {
  public:
   virtual ~NodeExtentManager() = default;
 
-  // TODO: remove the coarse-grained errorator
-  using tm_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange,
-    crimson::ct_error::eagain>;
-
   virtual bool is_read_isolated() const = 0;
 
   using read_ertr = base_ertr::extend<

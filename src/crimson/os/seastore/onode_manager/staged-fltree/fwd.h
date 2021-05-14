@@ -19,6 +19,8 @@ namespace crimson::os::seastore::onode {
 
 using eagain_ertr = crimson::errorator<
   crimson::ct_error::eagain>;
+template <class ValueT=void>
+using eagain_future = eagain_ertr::future<ValueT>;
 
 using crimson::os::seastore::Transaction;
 using crimson::os::seastore::TransactionRef;

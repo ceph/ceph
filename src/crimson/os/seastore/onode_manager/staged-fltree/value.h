@@ -162,15 +162,6 @@ class tree_cursor_t;
  */
 class Value {
  public:
-  using ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange,
-    crimson::ct_error::eagain>;
-  template <class ValueT=void>
-  using future = ertr::future<ValueT>;
-
   virtual ~Value();
   Value(const Value&) = default;
   Value(Value&&) = default;
@@ -193,10 +184,10 @@ class Value {
   Value(NodeExtentManager&, const ValueBuilder&, Ref<tree_cursor_t>&);
 
   /// Extends the payload size.
-  future<> extend(Transaction&, value_size_t extend_size);
+  eagain_future<> extend(Transaction&, value_size_t extend_size);
 
   /// Trim and shrink the payload.
-  future<> trim(Transaction&, value_size_t trim_size);
+  eagain_future<> trim(Transaction&, value_size_t trim_size);
 
   /// Get the permission to mutate the payload with the optional value recorder.
   template <typename PayloadT, typename ValueDeltaRecorderT>
