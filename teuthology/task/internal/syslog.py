@@ -99,7 +99,7 @@ def syslog(ctx, config):
                 [
                     'egrep', '--binary-files=text',
                     '\\bBUG\\b|\\bINFO\\b|\\bDEADLOCK\\b',
-                    run.Raw('{adir}/syslog/*.log'.format(adir=archive_dir)),
+                    run.Raw(f'{archive_dir}/syslog/kern.log'),
                     run.Raw('|'),
                     'grep', '-v', 'task .* blocked for more than .* seconds',
                     run.Raw('|'),
