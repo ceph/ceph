@@ -342,7 +342,7 @@ public:
   void execute() override;
   int parse_range();
   int read_user_manifest_part(
-    rgw_bucket& bucket,
+    RGWBucketInfo& bucket_info,
     const rgw_bucket_dir_entry& ent,
     RGWAccessControlPolicy * const bucket_acl,
     const boost::optional<rgw::IAM::Policy>& bucket_policy,
