@@ -503,6 +503,14 @@ class NodeExtentAccessorT {
     }
     assert(!extent->is_initial_pending());
     return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::input_output_error::handle(
+          [FNAME, c, l_to_discard = extent->get_laddr()] {
+        ERRORT("EIO during allocate -- node_size={}, to_discard={:x}",
+               c.t, node_stage_t::EXTENT_SIZE, l_to_discard);
+        ceph_abort("fatal error");
+      })
     ).safe_then([this, c, FNAME] (auto fresh_extent) {
       DEBUGT("update addr from {:#x} to {:#x} ...",
              c.t, extent->get_laddr(), fresh_extent->get_laddr());
@@ -520,15 +528,47 @@ class NodeExtentAccessorT {
       mut.emplace(fresh_mut);
       recorder = nullptr;
 
-      return c.nm.retire_extent(c.t, to_discard);
+      return c.nm.retire_extent(c.t, to_discard
+      ).handle_error(
+        eagain_ertr::pass_further{},
+        crimson::ct_error::input_output_error::handle(
+            [FNAME, c, l_to_discard = to_discard->get_laddr(),
+             l_fresh = fresh_extent->get_laddr()] {
+          ERRORT("EIO during retire -- to_disgard={:x}, fresh={:x}",
+                 c.t, l_to_discard, l_fresh);
+          ceph_abort("fatal error");
+        }),
+        crimson::ct_error::enoent::handle(
+            [FNAME, c, l_to_discard = to_discard->get_laddr(),
+             l_fresh = fresh_extent->get_laddr()] {
+          ERRORT("ENOENT during retire -- to_disgard={:x}, fresh={:x}",
+                 c.t, l_to_discard, l_fresh);
+          ceph_abort("fatal error");
+        })
+      );
     }).safe_then([this] {
       return *mut;
     });
   }
 
   ertr::future<> retire(context_t c) {
+    LOG_PREFIX(OTree::Extent::retire);
     assert(extent->is_valid());
-    return c.nm.retire_extent(c.t, std::move(extent));
+    auto addr = extent->get_laddr();
+    return c.nm.retire_extent(c.t, std::move(extent)
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::input_output_error::handle(
+          [FNAME, c, addr] {
+        ERRORT("EIO -- addr={:x}", c.t, addr);
+        ceph_abort("fatal error");
+      }),
+      crimson::ct_error::enoent::handle(
+          [FNAME, c, addr] {
+        ERRORT("ENOENT -- addr={:x}", c.t, addr);
+        ceph_abort("fatal error");
+      })
+    );
   }
 
  private:
