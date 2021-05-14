@@ -9,8 +9,7 @@
 Synopsis
 ========
 
-| **mount.ceph** [*mon1_socket*\ ,\ *mon2_socket*\ ,...]:/[*subdir*] *dir* [
-  -o *options* ]
+| **mount.ceph** *name*@*fsid*.*fs_name*=/[*subdir*] *dir* [-o *options* ]
 
 
 Description
@@ -19,31 +18,35 @@ Description
 **mount.ceph** is a helper for mounting the Ceph file system on a Linux host.
 It serves to resolve monitor hostname(s) into IP addresses and read
 authentication keys from disk; the Linux kernel client component does most of
-the real work. In fact, it is possible to mount a non-authenticated Ceph file
-system without mount.ceph by specifying monitor address(es) by IP::
+the real work. To mount a Ceph file system use::
 
-        mount -t ceph 1.2.3.4:/ /mnt/mycephfs
+  mount.ceph name@07fe3187-00d9-42a3-814b-72a4d5e7d5be.fs_name=/ /mnt/mycephfs -o mon_host=1.2.3.4
 
-The first argument is the device part of the mount command. It includes host's
-socket and path within CephFS that will be mounted at the mount point. The
-socket, obviously, takes the form ip_address[:port]. If the port is not
-specified, the Ceph default of 6789 is assumed. Multiple monitor addresses can
-be passed by separating them by commas. Only one monitor is needed to mount
-successfully; the client will learn about all monitors from any responsive
-monitor. However, it is a good idea to specify more than one in case the one
-happens to be down at the time of mount.
+Mount helper can fill in the cluster FSID by reading the ceph configuration file.
+So, the mount command can be used as::
 
-If the host portion of the device is left blank, then **mount.ceph** will
-attempt to determine monitor addresses using local configuration files
-and/or DNS SRV records. In similar way, if authentication is enabled on Ceph
-cluster (which is done using CephX) and options ``secret`` and ``secretfile``
-are not specified in the command, the mount helper will spawn a child process
-that will use the standard Ceph library routines to find a keyring and fetch
-the secret from it.
+  mount.ceph name@fs_name=/ /mnt/mycephfs -o mon_host=1.2.3.4
+
+The first argument is the device part of the mount command. It includes the
+RADOS user for authentication, the file system name and a path within CephFS
+that will be mounted at the mount point. Monitor addresses can be passed using
+``mon_host`` mount option. Multiple monitor addresses can be passed by separating
+addresses with a slash (`/`). Only one monitor is needed to mount successfully;
+the client will learn about all monitors from any responsive monitor.
+However, it is a good idea to specify more than one in case the one happens to be
+down at the time of mount. Monitor addresses takes the form ip_address[:port]. If
+the port is not specified, the Ceph default of 6789 is assumed.
+
+If monitor addresses are not specified, then **mount.ceph** will attempt to determine
+monitor addresses using local configuration files and/or DNS SRV records. In similar
+way, if authentication is enabled on Ceph cluster (which is done using CephX) and
+options ``secret`` and ``secretfile`` are not specified in the command, the mount
+helper will spawn a child process that will use the standard Ceph library routines
+to find a keyring and fetch the secret from it (including the monitor address and
+FSID if those not specified).
 
 A sub-directory of the file system can be mounted by specifying the (absolute)
-path to the sub-directory right after ":" after the socket in the device part
-of the mount command.
+path to the sub-directory right after "=" in the device part of the mount command.
 
 Mount helper application conventions dictate that the first two options are
 device to be mounted and the mountpoint for that device. Options must be
@@ -60,13 +63,6 @@ Basic
     Path to a ceph.conf file. This is used to initialize the Ceph context
     for autodiscovery of monitor addresses and auth secrets. The default is
     to use the standard search path for ceph.conf files.
-
-:command: `fs=<fs-name>`
-    Specify the non-default file system to be mounted. Not passing this
-    option mounts the default file system.
-
-:command: `mds_namespace=<fs-name>`
-    A synonym of "fs=" and its use is deprecated.
 
 :command:`mount_timeout`
     int (seconds), Default: 60
@@ -85,8 +81,11 @@ Basic
 
     - ``prefer-secure``: secure mode, if denied agree to crc mode
 
-:command:`name`
-    RADOS user to authenticate as when using CephX. Default: guest
+:command:`mon_host`
+    Monitor address of the cluster in the form of ip_address[:port]
+
+:command:`fsid`
+    Cluster FSID
 
 :command:`secret`
     secret key for use with CephX. This option is insecure because it exposes
@@ -192,50 +191,36 @@ Examples
 
 Mount the full file system::
 
-    mount.ceph :/ /mnt/mycephfs
-
-Assuming mount.ceph is installed properly, it should be automatically invoked
-by mount(8)::
-
-    mount -t ceph :/ /mnt/mycephfs
+    mount.ceph fs_user@mycephfs2=/ /mnt/mycephfs
 
 Mount only part of the namespace/file system::
 
-    mount.ceph :/some/directory/in/cephfs /mnt/mycephfs
-
-Mount non-default FS, in case cluster has multiple FSs::
-
-    mount -t ceph :/ /mnt/mycephfs2 -o fs=mycephfs2
-    
-    or
-    
-    mount -t ceph :/ /mnt/mycephfs2 -o mds_namespace=mycephfs2 # This option name is deprecated.
+    mount.ceph fs_user@mycephfs2=/some/directory/in/cephfs /mnt/mycephfs
 
 Pass the monitor host's IP address, optionally::
 
-    mount.ceph 192.168.0.1:/ /mnt/mycephfs
+    mount.ceph fs_user@mycephfs2=/ /mnt/mycephfs -o mon_host=192.168.0.1
 
 Pass the port along with IP address if it's running on a non-standard port::
 
-    mount.ceph 192.168.0.1:7000:/ /mnt/mycephfs
+    mount.ceph fs_user@mycephfs2=/ /mnt/mycephfs -o mon_host=192.168.0.1:7000
 
 If there are multiple monitors, passes addresses separated by a comma::
 
-   mount.ceph 192.168.0.1,192.168.0.2,192.168.0.3:/ /mnt/mycephfs
+   mount.ceph fs_user@mycephfs2=/ /mnt/mycephfs -o mon_host="192.168.0.1 192.168.0.2 192.168.0.3"
 
 If authentication is enabled on Ceph cluster::
 
-    mount.ceph :/ /mnt/mycephfs -o name=fs_username
+    mount.ceph fs_user@mycephfs2=/ /mnt/mycephfs
 
 Pass secret key for CephX user optionally::
 
-    mount.ceph :/ /mnt/mycephfs -o name=fs_username,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
+    mount.ceph fs_user@mycephfs2=/ /mnt/mycephfs -o mon_host="192.168.0.1 192.168.0.2 192.168.0.3",secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
 Pass file containing secret key to avoid leaving secret key in shell's command
 history::
 
-    mount.ceph :/ /mnt/mycephfs -o name=fs_username,secretfile=/etc/ceph/fs_username.secret
-
+    mount.ceph fs_user@mycephfs2=/ /mnt/mycephfs -o mon_host="192.168.0.1 192.168.0.2 192.168.0.3",secretfile=/etc/ceph/fs_username.secret
 
 Availability
 ============
