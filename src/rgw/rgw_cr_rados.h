@@ -929,7 +929,9 @@ class RGWRadosBILogTrimCR : public RGWSimpleCoroutine {
  public:
   RGWRadosBILogTrimCR(const DoutPrefixProvider *dpp,
                       rgw::sal::RadosStore* store, const RGWBucketInfo& bucket_info,
-                      int shard_id, const std::string& start_marker,
+                      int shard_id,
+		      const rgw::bucket_index_layout_generation& generation,
+		      const std::string& start_marker,
                       const std::string& end_marker);
 
   int send_request(const DoutPrefixProvider *dpp) override;

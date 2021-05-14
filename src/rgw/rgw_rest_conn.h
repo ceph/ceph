@@ -16,8 +16,8 @@ namespace rgw { namespace sal {
 
 class RGWSI_Zone;
 
-template <class T>
-static int parse_decode_json(T& t, bufferlist& bl)
+template<class T>
+inline int parse_decode_json(T& t, bufferlist& bl)
 {
   JSONParser p;
   if (!p.parse(bl.c_str(), bl.length())) {
