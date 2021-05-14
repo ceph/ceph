@@ -66,7 +66,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return ret;
   }
 
-  static ertr::future<typename parent_t::fresh_impl_t> allocate(
+  static eagain_future<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
     LOG_PREFIX(OTree::Layout::allocate);
     // NOTE: Currently, all the node types have the same size for simplicity.
@@ -267,7 +267,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return normalize(std::move(left_last_pos));
   }
 
-  ertr::future<NodeExtentMutable>
+  eagain_future<NodeExtentMutable>
   rebuild_extent(context_t c) override {
     return extent.rebuild(c).safe_then([this] (auto mut) {
       // addr may change
@@ -276,7 +276,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     });
   }
 
-  ertr::future<> retire_extent(context_t c) override {
+  eagain_future<> retire_extent(context_t c) override {
     return extent.retire(c);
   }
 

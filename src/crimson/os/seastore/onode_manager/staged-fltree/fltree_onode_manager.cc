@@ -107,7 +107,7 @@ FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
 {
   return crimson::do_for_each(
     onodes,
-    [this, &trans](auto &onode) -> OnodeTree::btree_future<> {
+    [this, &trans](auto &onode) -> eagain_future<> {
       auto &flonode = static_cast<FLTreeOnode&>(*onode);
       switch (flonode.status) {
       case FLTreeOnode::status_t::MUTATED: {
@@ -154,10 +154,9 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
         std::move(cursor),
         list_onodes_bare_ret(),
         [this, &trans, end] (auto& to_list, auto& current_cursor, auto& ret) {
-      using get_next_ertr = typename OnodeTree::btree_ertr;
       return crimson::do_until(
           [this, &trans, end, &to_list, &current_cursor, &ret] () mutable
-          -> get_next_ertr::future<bool> {
+          -> eagain_future<bool> {
         if (current_cursor.is_end() ||
             current_cursor.get_ghobj() >= end) {
           std::get<1>(ret) = end;

@@ -58,13 +58,6 @@ class NodeExtentMutable;
  */
 class NodeImpl {
  public:
-  using ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange,
-    crimson::ct_error::eagain
-   >;
   virtual ~NodeImpl() = default;
 
   virtual node_type_t node_type() const = 0;
@@ -96,8 +89,8 @@ class NodeImpl {
   virtual std::tuple<match_stage_t, search_position_t> erase(const search_position_t&) = 0;
   virtual std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) = 0;
   virtual search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, node_offset_t) = 0;
-  virtual ertr::future<NodeExtentMutable> rebuild_extent(context_t) = 0;
-  virtual ertr::future<> retire_extent(context_t) = 0;
+  virtual eagain_future<NodeExtentMutable> rebuild_extent(context_t) = 0;
+  virtual eagain_future<> retire_extent(context_t) = 0;
   virtual search_position_t make_tail() = 0;
 
   virtual node_stats_t get_stats() const = 0;
@@ -185,7 +178,7 @@ class InternalNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static ertr::future<fresh_impl_t> allocate(context_t, field_type_t, bool, level_t);
+  static eagain_future<fresh_impl_t> allocate(context_t, field_type_t, bool, level_t);
 
   static InternalNodeImplURef load(NodeExtentRef, field_type_t, bool);
 
@@ -265,7 +258,7 @@ class LeafNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static ertr::future<fresh_impl_t> allocate(context_t, field_type_t, bool);
+  static eagain_future<fresh_impl_t> allocate(context_t, field_type_t, bool);
 
   static LeafNodeImplURef load(NodeExtentRef, field_type_t, bool);
 

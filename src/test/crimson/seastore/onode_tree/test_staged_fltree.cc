@@ -835,9 +835,9 @@ class DummyChildPool {
       build_name();
       return search_position_t::end();
     }
-    ertr::future<> retire_extent(context_t) override {
+    eagain_future<> retire_extent(context_t) override {
       _is_extent_valid = false;
-      return ertr::now();
+      return seastar::now();
     }
 
    protected:
@@ -868,7 +868,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, node_offset_t) override {
       ceph_abort("impossible path"); }
-    ertr::future<NodeExtentMutable> rebuild_extent(context_t) override {
+    eagain_future<NodeExtentMutable> rebuild_extent(context_t) override {
       ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
       ceph_abort("impossible path"); }
@@ -910,7 +910,7 @@ class DummyChildPool {
 
     key_view_t get_pivot_key() const { return *impl->get_pivot_index(); }
 
-    node_future<> populate_split(
+    eagain_future<> populate_split(
         context_t c, std::set<Ref<DummyChild>>& splitable_nodes) {
       ceph_assert(can_split());
       ceph_assert(splitable_nodes.find(this) != splitable_nodes.end());
@@ -941,7 +941,7 @@ class DummyChildPool {
           c, std::move(this_ref), std::move(right_child), false);
     }
 
-    node_future<> insert_and_split(
+    eagain_future<> insert_and_split(
         context_t c, const ghobject_t& insert_key,
         std::set<Ref<DummyChild>>& splitable_nodes) {
       const auto& keys = impl->get_keys();
@@ -961,7 +961,7 @@ class DummyChildPool {
       return fut;
     }
 
-    node_future<> merge(context_t c, Ref<DummyChild>&& this_ref) {
+    eagain_future<> merge(context_t c, Ref<DummyChild>&& this_ref) {
       return parent_info().ptr->get_child_peers(c, parent_info().position
       ).safe_then([c, this_ref = std::move(this_ref), this] (auto lr_nodes) mutable {
         auto& [lnode, rnode] = lr_nodes;
@@ -982,7 +982,7 @@ class DummyChildPool {
       });
     }
 
-    node_future<> fix_key(context_t c, const ghobject_t& new_key) {
+    eagain_future<> fix_key(context_t c, const ghobject_t& new_key) {
       const auto& keys = impl->get_keys();
       ceph_assert(keys.size() == 1);
       assert(impl->is_level_tail() == false);
@@ -1012,7 +1012,7 @@ class DummyChildPool {
       return create(keys, is_level_tail, seed++, pool);
     }
 
-    static node_future<Ref<DummyChild>> create_initial(
+    static eagain_future<Ref<DummyChild>> create_initial(
         context_t c, const std::set<ghobject_t>& keys,
         DummyChildPool& pool, RootNodeTracker& root_tracker) {
       auto initial = create_new(keys, true, pool);
@@ -1029,7 +1029,7 @@ class DummyChildPool {
     }
 
    protected:
-    node_future<> test_clone_non_root(
+    eagain_future<> test_clone_non_root(
         context_t, Ref<InternalNode> new_parent) const override {
       ceph_assert(!is_root());
       auto p_pool_clone = pool.pool_clone_in_progress;
@@ -1037,18 +1037,18 @@ class DummyChildPool {
       auto clone = create(
           impl->get_keys(), impl->is_level_tail(), impl->laddr(), *p_pool_clone);
       clone->as_child(parent_info().position, new_parent);
-      return node_ertr::now();
+      return seastar::now();
     }
-    node_future<Ref<tree_cursor_t>> lookup_smallest(context_t) override {
+    eagain_future<Ref<tree_cursor_t>> lookup_smallest(context_t) override {
       ceph_abort("impossible path"); }
-    node_future<Ref<tree_cursor_t>> lookup_largest(context_t) override {
+    eagain_future<Ref<tree_cursor_t>> lookup_largest(context_t) override {
       ceph_abort("impossible path"); }
-    node_future<> test_clone_root(context_t, RootNodeTracker&) const override {
+    eagain_future<> test_clone_root(context_t, RootNodeTracker&) const override {
       ceph_abort("impossible path"); }
-    node_future<search_result_t> lower_bound_tracked(
+    eagain_future<search_result_t> lower_bound_tracked(
         context_t, const key_hobj_t&, MatchHistory&) override {
       ceph_abort("impossible path"); }
-    node_future<> do_get_tree_stats(context_t, tree_stats_t&) override {
+    eagain_future<> do_get_tree_stats(context_t, tree_stats_t&) override {
       ceph_abort("impossible path"); }
     bool is_tracking() const override { return false; }
     void track_merge(Ref<Node>, match_stage_t, search_position_t&) override {
@@ -1062,7 +1062,7 @@ class DummyChildPool {
 
     bool can_split() const { return impl->get_keys().size() > 1; }
 
-    static node_future<> do_merge(
+    static eagain_future<> do_merge(
         context_t c, Ref<DummyChild>&& left, Ref<DummyChild>&& right, bool stole_key) {
       assert(right->use_count() == 1);
       assert(left->impl->get_keys().size() == 1);
@@ -1085,14 +1085,10 @@ class DummyChildPool {
   };
 
  public:
-  using node_ertr = Node::node_ertr;
-  template <class ValueT=void>
-  using node_future = Node::node_future<ValueT>;
-
   DummyChildPool() = default;
   ~DummyChildPool() { reset(); }
 
-  node_future<> build_tree(const std::set<ghobject_t>& keys) {
+  eagain_future<> build_tree(const std::set<ghobject_t>& keys) {
     reset();
 
     // create tree
@@ -1103,9 +1099,9 @@ class DummyChildPool {
     ).safe_then([this](auto initial_child) {
       // split
       splitable_nodes.insert(initial_child);
-      return crimson::do_until([this] {
+      return crimson::do_until([this] () -> eagain_future<bool> {
         if (splitable_nodes.empty()) {
-          return node_ertr::make_ready_future<bool>(true);
+          return seastar::make_ready_future<bool>(true);
         }
         auto index = rd() % splitable_nodes.size();
         auto iter = splitable_nodes.begin();
@@ -1113,7 +1109,7 @@ class DummyChildPool {
         Ref<DummyChild> child = *iter;
         return child->populate_split(get_context(), splitable_nodes
         ).safe_then([] {
-          return node_ertr::make_ready_future<bool>(false);
+          return seastar::make_ready_future<bool>(false);
         });
       });
     }).safe_then([this] {
