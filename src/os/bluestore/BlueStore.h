@@ -2475,6 +2475,7 @@ private:
 #ifdef HAVE_LIBZBD
   void _zoned_cleaner_start();
   void _zoned_cleaner_stop();
+  void _zoned_reset_zones(const std::set<uint64_t> *zones_to_clean);
   void _zoned_cleaner_thread();
   void _zoned_clean_zone(uint64_t zone_num);
 #endif
