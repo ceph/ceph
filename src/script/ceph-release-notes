@@ -207,7 +207,7 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
             match = re.match(title_re, title)
             if not match:
                 print ("ERROR: https://github.com/ceph/ceph/pull/" +
-                       str(number) + " title " + title.encode("utf-8") +
+                       str(number) + " title " + title +
                        " does not match " + title_re)
             else:
                 title = match.group(1) + match.group(2)
@@ -258,9 +258,9 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
             issues = ''
         if plaintext:
             print ("* {title} ({issues}{author})".format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8")
+                    author=author
                 )
             )
         elif html:
@@ -270,9 +270,9 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
                     "https://github.com/ceph/ceph/pull/{pr}\""
                     ">pr#{pr}</a>, {author})</p></li>"
                 ).format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8"), pr=pr
+                    author=author, pr=pr
                 )
             )
         else:
@@ -282,9 +282,9 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
                     "https://github.com/ceph/ceph/pull/{pr}"
                     ">`_, {author})"
                 ).format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8"), pr=pr
+                    author=author, pr=pr
                 )
             )
         if message:
