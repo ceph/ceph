@@ -1340,7 +1340,6 @@ def task(ctx, config):
     # set up cluster context
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
-        ctx.managers = {}
     if 'cluster' not in config:
         config['cluster'] = 'ceph'
     cluster_name = config['cluster']
@@ -1412,6 +1411,8 @@ def task(ctx, config):
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
     ):
+        if not hasattr(ctx, 'managers'):
+            ctx.managers = {}
         ctx.managers[cluster_name] = CephManager(
             ctx.ceph[cluster_name].bootstrap_remote,
             ctx=ctx,
