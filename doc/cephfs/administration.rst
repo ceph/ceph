@@ -216,30 +216,15 @@ does not change a MDS; it manipulates the file system rank which has been
 marked damaged.
 
 
-Minimum Client Version
-----------------------
+Required Client Features
+------------------------
 
-It is sometimes desirable to set the minimum version of Ceph that a client must be
-running to connect to a CephFS cluster. Older clients may sometimes still be
-running with bugs that can cause locking issues between clients (due to
-capability release). CephFS provides a mechanism to set the minimum
-client version:
+It is sometimes desirable to set features that clients must support to talk to
+CephFS. Clients without those features may disrupt other clients or behave in
+surprising ways. Or, you may want to require newer features to prevent older
+and possibly buggy clients from connecting.
 
-::
-
-    fs set <fs name> min_compat_client <release>
-
-For example, to only allow Nautilus clients, use:
-
-::
-
-    fs set cephfs min_compat_client nautilus
-
-Clients running an older version will be automatically evicted.
-
-Enforcing minimum version of CephFS client is achieved by setting required
-client features. Commands to manipulate required client features of a file
-system:
+Commands to manipulate required client features of a file system:
 
 ::
 
@@ -252,8 +237,9 @@ To list all CephFS features
 
     fs feature ls
 
+Clients that are missing newly added features will be evicted automatically.
 
-CephFS features and first release they came out.
+Here are the current CephFS features and first release they came out:
 
 +------------------+--------------+-----------------+
 | Feature          | Ceph release | Upstream Kernel |
