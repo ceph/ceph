@@ -88,6 +88,36 @@ def setup_cdn_repo(ctx, config):
         set_cdn_repo(ctx, config)
     yield
 
+@contextlib.contextmanager
+def setup_container_registry(ctx, config):
+    """
+     setup container registry if setup_container_registry in config
+
+     redhat:
+      setup_container_registry: <registry.io>   # registry-name
+    """
+    if ctx.config.get('redhat').get('setup_container_registry', None):
+        registry = ctx.config['redhat']['setup_container_registry']
+
+        # fetch credentials from teuth_config
+        creds = teuthconfig.get('registries', dict()).get(registry)
+        if not creds:
+            raise ConfigError("Registry not found....")
+
+        # container-tool login
+        for remote in ctx.cluster.remotes.keys():
+            container_tool = "podman"
+            if remote.os.version.startswith('7'):
+                container_tool = "docker"
+
+            remote.run(args=[
+                'sudo', container_tool,
+                'login', registry,
+                '--username', creds['username'],
+                '--password', creds['password'],
+                ]
+            )
+    yield
 
 @contextlib.contextmanager
 def setup_additional_repo(ctx, config):
