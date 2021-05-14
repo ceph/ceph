@@ -99,13 +99,7 @@ public:
            tm, laddr_t{})) {}
 
   mkfs_ret mkfs(Transaction &t) {
-    return tree.mkfs(t
-    ).handle_error(
-      mkfs_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-        "Invalid error in FLTreeOnodeManager::mkfs"
-      }
-    );
+    return tree.mkfs(t);
   }
 
   contains_onode_ret contains_onode(

@@ -12,14 +12,7 @@ FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(
   Transaction &trans,
   const ghobject_t &hoid)
 {
-  return tree.contains(
-    trans, hoid
-  ).handle_error(
-    contains_onode_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in FLTreeOnodeManager::contains_onode"
-    }
-  );
+  return tree.contains(trans, hoid);
 }
 
 FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
@@ -39,12 +32,7 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
     return seastar::make_ready_future<OnodeRef>(
       val
     );
-  }).handle_error(
-    get_onode_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in FLTreeOnodeManager::get_onode"
-    }
-  );
+  });
 }
 
 FLTreeOnodeManager::get_or_create_onode_ret
@@ -71,12 +59,7 @@ FLTreeOnodeManager::get_or_create_onode(
     return seastar::make_ready_future<OnodeRef>(
       val
     );
-  }).handle_error(
-    get_or_create_onode_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in FLTreeOnodeManager::get_or_create_onode"
-    }
-  );
+  });
 }
 
 FLTreeOnodeManager::get_or_create_onodes_ret
@@ -123,12 +106,7 @@ FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
       default:
         __builtin_unreachable();
       }
-    }).handle_error(
-      write_dirty_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-        "Invalid error in FLTreeOnodeManager::write_dirty"
-      }
-    );
+    });
 }
 
 FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
@@ -180,12 +158,7 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
             std::move(ret));
       });
     });
-  }).handle_error(
-    list_onodes_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in FLTreeOnodeManager::list_onodes"
-    }
-  );
+  });
 }
 
 FLTreeOnodeManager::~FLTreeOnodeManager() {}
