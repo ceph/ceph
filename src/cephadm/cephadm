@@ -2945,6 +2945,7 @@ def install_base_units(ctx, fsid):
     with open(ctx.unit_dir + '/ceph.target.new', 'w') as f:
         f.write('[Unit]\n'
                 'Description=All Ceph clusters and services\n'
+                'BindsTo=docker.service\n'
                 '\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target\n')
