@@ -11,7 +11,7 @@ endif()
 option(WITH_PROFILER "build extra profiler binaries" OFF)
 
 if(WITH_PROFILER)
-  find_package(gperftools REQUIRED profiler)
+  find_package(gperftools 2.6.2 REQUIRED profiler)
   add_library(cpu_profiler STATIC
     cpu_profiler.cc)
   target_link_libraries(cpu_profiler
