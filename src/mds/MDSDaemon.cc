@@ -190,6 +190,7 @@ void MDSDaemon::asok_command(
     vector<string> argvec;
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ss);
+    r = 0;
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
