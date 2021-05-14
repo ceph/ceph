@@ -628,7 +628,7 @@ if(PROMTOOL_EXECUTABLE)
 else()
   if(LINUX)
     add_ceph_test(run-promtool-unittests
-      {CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
+      ${CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
   endif()
 endif()
 
