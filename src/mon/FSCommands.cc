@@ -642,6 +642,10 @@ public:
 	ss << "version " << val << " is not recognized";
 	return -EINVAL;
       }
+      ss << "WARNING: setting min_compat_client is deprecated"
+            " and may not do what you want.\n"
+            "The oldest release to set is octopus.\n"
+            "Please migrate to `ceph fs required_client_features ...`.";
       auto f = [vno](auto&& fs) {
         fs->mds_map.set_min_compat_client(vno);
       };
