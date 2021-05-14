@@ -3118,12 +3118,6 @@ std::vector<Option> get_global_options() {
     .set_long_description("This option specifies the cost per byte to consider in microseconds per OSD for solid state device type. This is considered by the mclock_scheduler to set an additional cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler")
     .set_flag(Option::FLAG_RUNTIME),
 
-    Option("osd_mclock_max_capacity_iops", Option::TYPE_FLOAT, Option::LEVEL_BASIC)
-    .set_default(0.0)
-    .set_description("Max IOPs capacity (at 4KiB block size) to consider per OSD (overrides _ssd and _hdd if non-zero)")
-    .set_long_description("This option specifies the max osd capacity in iops per OSD. Helps in QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue = mclock_scheduler")
-    .set_flag(Option::FLAG_RUNTIME),
-
     Option("osd_mclock_max_capacity_iops_hdd", Option::TYPE_FLOAT, Option::LEVEL_BASIC)
     .set_default(315.0)
     .set_description("Max IOPs capacity (at 4KiB block size) to consider per OSD (for rotational media)")
