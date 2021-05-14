@@ -106,8 +106,12 @@ public:
       return pool;
     }
 
-    librados::IoCtx& ioctx() {
+    librados::IoCtx& ioctx() & {
       return state.ioctx;
+    }
+
+    librados::IoCtx&& ioctx() && {
+      return std::move(state.ioctx);
     }
 
     struct List {
