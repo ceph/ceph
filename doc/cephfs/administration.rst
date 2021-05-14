@@ -284,6 +284,8 @@ CephFS features and first release they came out.
 +------------------+--------------+-----------------+
 | metric_collect   | pacific      | N/A             |
 +------------------+--------------+-----------------+
+| alternate_name   | pacific      | PLANNED         |
++------------------+--------------+-----------------+
 
 CephFS Feature Descriptions
 
@@ -333,6 +335,13 @@ delegated inode numbers is a prerequisite for client to do async file creation.
     metric_collect
 
 Clients can send performance metric to MDS if MDS support this feature.
+
+::
+
+    alternate_name
+
+Clients can set and understand "alternate names" for directory entries. This is
+to be used for encrypted file name support.
 
 
 Global settings
