@@ -99,17 +99,12 @@ const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_info(
 
 void mClockScheduler::set_max_osd_capacity()
 {
-  if (cct->_conf.get_val<double>("osd_mclock_max_capacity_iops")) {
+  if (is_rotational) {
     max_osd_capacity =
-      cct->_conf.get_val<double>("osd_mclock_max_capacity_iops");
+      cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_hdd");
   } else {
-    if (is_rotational) {
-      max_osd_capacity =
-        cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_hdd");
-    } else {
-      max_osd_capacity =
-        cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_ssd");
-    }
+    max_osd_capacity =
+      cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_ssd");
   }
   // Set per op-shard iops limit
   max_osd_capacity /= num_shards;
@@ -447,7 +442,6 @@ const char** mClockScheduler::get_tracked_conf_keys() const
     "osd_mclock_cost_per_byte_usec",
     "osd_mclock_cost_per_byte_usec_hdd",
     "osd_mclock_cost_per_byte_usec_ssd",
-    "osd_mclock_max_capacity_iops",
     "osd_mclock_max_capacity_iops_hdd",
     "osd_mclock_max_capacity_iops_ssd",
     "osd_mclock_profile",
@@ -470,8 +464,7 @@ void mClockScheduler::handle_conf_change(
       changed.count("osd_mclock_cost_per_byte_usec_ssd")) {
     set_osd_mclock_cost_per_byte();
   }
-  if (changed.count("osd_mclock_max_capacity_iops") ||
-      changed.count("osd_mclock_max_capacity_iops_hdd") ||
+  if (changed.count("osd_mclock_max_capacity_iops_hdd") ||
       changed.count("osd_mclock_max_capacity_iops_ssd")) {
     set_max_osd_capacity();
     if (mclock_profile != "custom") {
