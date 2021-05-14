@@ -392,8 +392,7 @@ class Bucket {
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp) = 0;
     virtual int chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) = 0;
     virtual int put_instance_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) = 0;
-    virtual int remove_entrypoint(const DoutPrefixProvider* dpp, RGWObjVersionTracker* objv, optional_yield y) = 0;
-    virtual int remove_instance_info(const DoutPrefixProvider* dpp, RGWObjVersionTracker* objv, optional_yield y) = 0;
+    virtual int remove_metadata(const DoutPrefixProvider* dpp, RGWObjVersionTracker* objv, optional_yield y) = 0;
     virtual bool is_owner(User* user) = 0;
     virtual User* get_owner(void) { return owner; };
     virtual ACLOwner get_acl_owner(void) { return ACLOwner(info.owner); };
