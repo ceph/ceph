@@ -7,7 +7,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import CephadmUpgrade
 from cephadm.serve import CephadmServe
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription
 from .fixtures import _run_cephadm, wait, with_host, with_service
 
 
@@ -142,3 +142,23 @@ def test_enough_mons_for_ok_to_stop(check_mon_command, cephadm_module: CephadmOr
     check_mon_command.return_value = (
         0, '{"monmap": {"mons": [{"name": "mon.1"}, {"name": "mon.2"}, {"name": "mon.3"}]}}', '')
     assert cephadm_module.upgrade._enough_mons_for_ok_to_stop()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_enough_mds_for_ok_to_stop(get, get_daemons_by_service, cephadm_module: CephadmOrchestrator):
+    get.side_effect = [{'filesystems': [{'mdsmap': {'fs_name': 'test', 'max_mds': 1}}]}]
+    get_daemons_by_service.side_effect = [[DaemonDescription()]]
+    assert not cephadm_module.upgrade._enough_mds_for_ok_to_stop(
+        DaemonDescription(daemon_type='mds', daemon_id='test.host1.gfknd', service_name='mds.test'))
+
+    get.side_effect = [{'filesystems': [{'mdsmap': {'fs_name': 'myfs.test', 'max_mds': 2}}]}]
+    get_daemons_by_service.side_effect = [[DaemonDescription(), DaemonDescription()]]
+    assert not cephadm_module.upgrade._enough_mds_for_ok_to_stop(
+        DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
+
+    get.side_effect = [{'filesystems': [{'mdsmap': {'fs_name': 'myfs.test', 'max_mds': 1}}]}]
+    get_daemons_by_service.side_effect = [[DaemonDescription(), DaemonDescription()]]
+    assert cephadm_module.upgrade._enough_mds_for_ok_to_stop(
+        DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
