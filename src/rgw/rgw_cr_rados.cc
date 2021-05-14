@@ -657,6 +657,7 @@ int RGWAsyncGetBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+<<<<<<< HEAD
 int RGWAsyncPutBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
 {
   auto r = store->getRados()->put_bucket_instance_info(bucket_info, exclusive,
