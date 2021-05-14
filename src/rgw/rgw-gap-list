@@ -1,0 +1,379 @@
+#!/usr/bin/env bash
+
+# version 7
+
+# NOTE: This script based based on rgw-orphan-list but doing the
+# reverse calculation.
+
+# NOTE: The awk included in this script replaces the 'ceph-diff-sorted'
+# utility but duplicates its functionality.  This was done to minimize
+# the number of times the massive data set must be iterated to complete
+# the task.
+
+# IMPORTANT: Affects order produced by 'sort'.
+export LC_ALL=C
+
+trap "exit 1" TERM
+TOP_PID=$$
+
+out_dir="$PWD"
+temp_file=/tmp/gap-tmp.$$
+timestamp=$(date -u +%Y%m%d%H%M)
+lspools_err="${out_dir}/lspools-${timestamp}.error"
+rados_out="${out_dir}/rados-${timestamp}.intermediate"
+rados_err="${out_dir}/rados-${timestamp}.error"
+rados_temp=/tmp/rados-tmp.$$
+rados_flag=/tmp/rados-flag.$$
+rgwadmin_out="${out_dir}/radosgw-admin-${timestamp}.intermediate"
+rgwadmin_err="${out_dir}/radosgw-admin-${timestamp}.error"
+rgwadmin_temp=/tmp/radosgw-admin-tmp.$$
+rgwadmin_flag=/tmp/radosgw-admin-flag.$$
+gap_out="${out_dir}/gap-list-${timestamp}.gap"
+incremental_grep_awk="/tmp/ig-${$}.awk"
+
+# field separator -- contains ascii 0xFE, designed to be a character
+# that won't appear in normal output, can only be a single character
+# due to use in in the sort command
+fs="þ"
+
+log_out() {
+  echo $(date +%F\ %T) $1
+}
+
+error_out() {
+  mydate=$(date +%F\ %T)
+  >&2 echo
+  >&2 echo
+  >&2 echo
+  >&2 echo $mydate "An error was encountered while running '$1'. Aborting!"
+  if [ $# -gt 1 ] ;then
+    >&2 echo $mydate "Review file '$2' for details."
+  fi
+  >&2 echo
+  >&2 echo '***'
+  >&2 echo '*** WARNING: The results are incomplete. Do not use! ***'
+  >&2 echo '***'
+  kill -s TERM $TOP_PID
+}
+
+prompt_pool() {
+  # note: all prompts go to stderr so stdout contains just the result
+  rados lspools >"$temp_file" 2>"$lspools_err"
+  if [ "$?" -ne 0 ] ;then
+    error_out "rados lspools" "$lspools_err"
+  else
+    >&2 echo "Available pools:"
+    >&2 sed 's/^/    /' "$temp_file" # list pools and indent
+    >&2 echo ""
+    >&2 echo "Which Rados Gateway Data pool do you want to search for gaps? "
+    >&2 echo ""
+    >&2 echo "NOTE: If your installation has multiple bucket data pools using "
+    >&2 echo "      bucket placement policies, please enter a space separated "
+    >&2 echo "      list of bucket data pools to enumerate."
+    >&2 echo ""
+    local mypool
+    read mypool
+    echo $mypool
+  fi
+}
+
+radosgw_radoslist() {
+  log_out "Running 'radosgw-admin bucket radoslist'."
+  rm -f "$rgwadmin_flag" &> /dev/null
+  radosgw-admin bucket radoslist --rgw-obj-fs="$fs" >"$rgwadmin_out" 2>"$rgwadmin_err"
+  if [ "$?" -ne 0 ] ;then
+    touch "$rgwadmin_flag"
+    error_out "radosgw-admin radoslist" "$rgwadmin_err"
+  else
+    sort --field-separator="$fs" -k1,1 -u "$rgwadmin_out" > "$rgwadmin_temp"
+    mv -f "$rgwadmin_temp" "$rgwadmin_out"
+    log_out "Completed 'radosgw-admin bucket radoslist'."
+  fi
+}
+
+rados_ls() {
+  log_out "Starting 'rados ls' function."
+  rm -f "$rados_flag" &> /dev/null
+  rm -f "$rados_out" &> /dev/null
+  local mypool
+  for mypool in $pool; do
+    log_out "Running 'rados ls' on pool ${mypool}."
+    rados ls --pool="$mypool" >>"$rados_out" 2>"$rados_err"
+    if [ "$?" -ne 0 ] ;then
+      touch "$rados_flag"
+      error_out "rados ls ${mypool}" "$rados_err"
+    fi
+    log_out "Completed 'rados ls' on pool ${mypool}."
+  done
+  if [ ! -e "$rados_flag" ]; then
+    log_out "Sorting 'rados ls' output(s)."
+    sort -u "$rados_out" >"$rados_temp"
+    mv -f "$rados_temp" "$rados_out"
+    log_out "Sorting 'rados ls' output(s) complete."
+  fi
+}
+
+usage() {
+  >&2 cat << EOF
+
+
+Usage: $0 [<pool> [parallel]]
+
+Where:
+  pool = The RGW data pool name, if omitted, pool name will be
+         prompted for during execution.
+
+  parallel = Optionally, run the two listings in parallel - requires
+             pool name be specified as option 1.
+
+NOTE: This tool is currently considered to be EXPERIMENTAL.
+
+NOTE: False positives are possible. False positives would likely
+      appear as objects that were never deleted and are fully
+      intact. All results should therefore be verified.
+
+NOTE: Parallel listing may increase performance but may also increase
+      the risk of false positives when the cluster is undergong
+      modifications during the listing processes. In addition to the
+      above, false positives might also include objects that were
+      intentionally deleted.
+
+EOF
+  exit 1
+}
+
+# Create an awk script in a file for parsing the two command outoputs.
+
+cat <<"EOF" >$incremental_grep_awk
+# This awk script is used by rgw-gap-list and will sequence through
+# each line in $rados_out and $rgwadmin_out exactly once.
+#
+# During this iteration:
+#  * The 1st column of $rgwadmin_out is compared to the line of
+#    $rados_out.
+#  * If they are equal, the next line of $rados_out is read in and the
+#    next line of $rgwadmin_out is provided via normal awk iteration.
+#  * If a value appears in $rgwadmin_out, but not $rados_out, this 
+#    indicates a possible deleted tail object and the accompanying
+#    bucket / user object name is output, assuming it had not been
+#    previously identified.
+#    - A map of outputed bucket / user object is maintained in memory
+#  * If a value appears in $rados_out, but not in $rgwadmin_out, the
+#    $rados_out file is iterated until the $rados_out line is equal
+#    or > (alphabetically) the value from the $rgwadmin_out file.
+
+function usage() {
+  print "Example Usage:">>"/dev/stderr"
+  print "   # limit $fs to single char that will not appear in either output">>"/dev/stderr"
+  print "   # The below is Octal 376, or Hex 0xFE">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print "   $ fs=$(echo -e \"\\0376\")  ">>"/dev/stderr"
+  print "   $ rados ls -p default.rgw.buckets.data > rados_out.txt">>"/dev/stderr"
+  print "   $ radosgw-admin bucket radoslist --rgw-obj-fs=\"$fs\" \\">>"/dev/stderr"
+  print "       | sort --field-separator=\"$fs\" -k 1,1 > rgwadmin_out.txt">>"/dev/stderr"
+  print " ">>"/dev/stderr"
+  print "   $ awk -F \"$fs\" \\">>"/dev/stderr"
+  print "         -v filetwo=rados_out.txt \\">>"/dev/stderr"
+  print "         -v map_out=MappedOutput.txt \\">>"/dev/stderr"
+  print "         -f ig_awk \\">>"/dev/stderr"
+  print "         rgwadmin_out.txt">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print "   Result will be provided in the 'MappedOutput.txt' file in this">>"/dev/stderr"
+  print "   example.  If you'd prefer the output to be sorted, you can run">>"/dev/stderr"
+  print "   $ sort MappedOutput.txt > SortedMappedOutput.txt">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  print "">>"/dev/stderr"
+  exit 1
+}
+
+function get_date_time() {
+  dtstr="date +%F\\ %T"
+  dtstr | getline mydt
+  close(dtstr)
+  return mydt
+}
+
+function status_out() {
+  printf("%s % 17d\t% 17d\t% 12d\n",get_date_time(),f1_count,f2_count,lineoutCount)>>"/dev/stderr"
+}
+
+function advance_f2() {
+  if ((getline f2line<filetwo) <= 0) {
+    f2_eof=1
+  } else {
+    f2_count++
+    bcount=split(f2line,b,FS)
+  }
+}
+
+function test_lines() {
+  if ($1==b[1]) {
+    advance_f2()
+    return 0
+  } else if ($1<b[1]) {
+    line_out()
+    return 1
+  } else {
+    return 2
+  }
+}
+
+function findnul(myfield) {
+  for(i=1;i<=split(myfield,a,"");i++) {
+    if(ord[a[i]]==0) {
+      return 1
+    }
+  }
+  return 0
+}
+
+function line_out() {
+  if(findnul($1)) {
+    # If the RADOS object name has a NUL character, skip output
+    return
+  }
+  # Note: Intentionally using $2 and $NF below
+  # Use of $NF eliminates risk of exhausting input field count
+  if ($2" "$NF!=lastline) {
+    # Only output a given bucket/Obj combination once
+    printf("Bucket: \"%s\"  Object: \"%s\"\n", $2, $NF)>>map_out
+    lastline=$2" "$NF
+    lineoutCount++
+  }
+}
+
+BEGIN {
+  if(filetwo==""||map_out=="") {
+     print "">>"/dev/stderr"
+     print "">>"/dev/stderr"
+     print "Missing parameter."
+     print "">>"/dev/stderr"
+     print "">>"/dev/stderr"
+     usage()
+  }
+  status_delta=100000
+  f1_count=0
+  f2_count=0
+  advance_f2()
+  printf("%s File 1 Line Count\tFile 2 Line Count\tPotentially Impacted Objects\n",get_date_time())>>"/dev/stderr"
+  for(n=0;n<256;n++) {
+    ord[sprintf("%c",n)]=n
+  }
+}
+
+{
+  f1_count++
+  if(f2_eof==0) {
+    if(test_lines()==2) {
+      while ($1>b[1]) {
+        advance_f2()
+      }
+      test_lines()
+    }
+  } else {
+    # If EOF hit, dump all remaining lines since they're missing
+    # from filetwo
+    line_out()
+  }
+  if((f1_count % status_delta)==0) {
+    status_out()
+  }
+}
+
+END {
+  if(f1_count>0) {
+    status_out()
+  }
+}
+
+EOF
+
+parallel=0
+if [ $# -eq 0 ] ;then
+  pool="$(prompt_pool)"
+elif [ $# -eq 1 ] ;then
+  pool="$1"
+elif [ $# -eq 2 ] ; then
+  pool="$1"
+  if [ "$2" == "parallel" ]; then
+    parallel=1
+  else
+    echo
+    log_out "WARNING: Invalid 2nd parameter"
+    usage
+  fi
+else
+  usage
+fi
+
+log_out "Pool is \"$pool\"."
+
+log_out "Note: output files produced will be tagged with the current timestamp -- ${timestamp}."
+
+if [ $parallel -eq 1 ] ;then
+  startsecs=$(date +%s)
+  log_out "Starting parallel tasks..."
+  rados_ls &
+  radosgw_radoslist &
+  jobs &> /dev/null  # without this, the myjobs count always equals 1 (confused)
+  myjobs=$(jobs | wc -l)
+  while [ $myjobs -gt 0 ]; do
+    # provide minutely status update
+    if [ $(( ($(date +%s)-$startsecs) % 60 )) -eq 0 ]; then
+      echo
+      deltasecs=$(( $(date +%s)-$startsecs ))
+      log_out "Waiting for listing tasks to complete. Running ${myjobs} tasks for ${deltasecs} seconds."
+    fi
+    sleep 1
+    echo -n .
+    if [ -e "$rgw_admin_flag" ]; then
+      exit 1
+    fi
+    if [ -e "$rados_flag" ]; then
+      exit 2
+    fi
+    jobs &> /dev/null  # without this, the myjobs count always equals 1 (confused)
+    myjobs=$(jobs | wc -l)
+  done
+  echo
+else
+  rados_ls
+  radosgw_radoslist
+fi
+
+if [ -e "$rgw_admin_flag" ]; then
+  exit 1
+fi
+
+if [ -e "$rados_flag" ]; then
+  exit 2
+fi
+
+log_out "Begin identifying potentially impacted user object names."
+
+echo -n > "$temp_file" # Ensure the file is empty
+awk -F "$fs" -v filetwo=$rados_out -v map_out=$temp_file -f $incremental_grep_awk $rgwadmin_out
+
+log_out "Begin sorting results."
+sort "$temp_file" > "$gap_out"
+rm -f "$temp_file"
+
+found=$(wc -l < "$gap_out")
+mydate=$(date +%F\ %T)
+
+log_out "Done."
+
+cat << EOF
+
+Found $found *possible* gaps.
+The results can be found in "${gap_out}".
+
+Intermediate files: "${rados_out}" and "${rgwadmin_out}".
+
+***
+*** WARNING: This is EXPERIMENTAL code and the results should be used
+***          with CAUTION and VERIFIED. Not everything listed is an
+***          actual gap. EXPECT false positives. Every result
+***          produced should be verified.
+***
+EOF

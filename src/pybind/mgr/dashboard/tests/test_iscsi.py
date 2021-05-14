@@ -12,7 +12,8 @@ except ImportError:
 
 from mgr_module import ERROR_MSG_NO_INPUT_FILE
 
-from . import CmdException, ControllerTestCase, CLICommandTestMixin, KVStoreMockMixin
+from . import CmdException, ControllerTestCase, CLICommandTestMixin, \
+    KVStoreMockMixin  # pylint: disable=no-name-in-module
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient

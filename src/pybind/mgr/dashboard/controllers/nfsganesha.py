@@ -258,7 +258,7 @@ class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/cephx/clients')
     @ReadPermission
     def cephx_clients(self):
-        return [client for client in CephX.list_clients()]
+        return list(CephX.list_clients())
 
     @Endpoint('GET', '/fsals')
     @ReadPermission

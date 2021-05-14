@@ -297,7 +297,7 @@ export class PrometheusHelper {
         severity: 'someSeverity'
       },
       annotations: {
-        summary: `${name} is ${state}`
+        description: `${name} is ${state}`
       },
       generatorURL: `http://${name}`,
       startsAt: new Date(new Date('2022-02-22').getTime() * timeMultiplier).toString()
@@ -311,7 +311,7 @@ export class PrometheusHelper {
         alertname: name
       },
       annotations: {
-        summary: `${name} is ${status}`
+        description: `${name} is ${status}`
       },
       generatorURL: `http://${name}`
     } as AlertmanagerNotificationAlert;

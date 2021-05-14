@@ -53,6 +53,8 @@ protected:
 
   param_vec_t headers;
 
+  long  req_timeout{0L};
+
   RGWHTTPManager *get_manager();
 
   int init_request(rgw_http_req_data *req_data);
@@ -134,6 +136,12 @@ public:
 
   void set_verify_ssl(bool flag) {
     verify_ssl = flag;
+  }
+
+  // set request timeout in seconds
+  // zero (default) mean that request will never timeout
+  void set_req_timeout(long timeout) {
+    req_timeout = timeout;
   }
 
   int process(optional_yield y);

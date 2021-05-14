@@ -10,4 +10,5 @@ Routes
 six
 -e ../../../python-common
 prettytable
+pytest
 pyyaml

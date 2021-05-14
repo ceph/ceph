@@ -865,6 +865,10 @@ def test_ps_s3_topic_on_master():
     assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
     assert_equal(endpoint_address, result['GetTopicResponse']['GetTopicResult']['Topic']['EndPoint']['EndpointAddress'])
     # Note that endpoint args may be ordered differently in the result
+    result = topic_conf3.get_attributes()
+    assert_equal(topic_arn, result['Attributes']['TopicArn'])
+    json_endpoint = json.loads(result['Attributes']['EndPoint'])
+    assert_equal(endpoint_address, json_endpoint['EndpointAddress'])
 
     # delete topic 1
     result = topic_conf1.del_config()
@@ -873,6 +877,12 @@ def test_ps_s3_topic_on_master():
     # try to get a deleted topic
     _, status = topic_conf1.get_config()
     assert_equal(status, 404)
+    try:
+        topic_conf1.get_attributes()
+    except:
+        print('topic already deleted - this is expected')
+    else:
+        assert False, 'topic 1 should be deleted at this point'
 
     # get the remaining 2 topics
     result, status = topic_conf1.get_list()
@@ -1763,10 +1773,9 @@ def test_ps_s3_notification_multi_delete_on_master():
     client_threads = []
     objects_size = {}
     for i in range(number_of_objects):
-        object_size = randint(1, 1024)
-        content = str(os.urandom(object_size))
+        content = str(os.urandom(randint(1, 1024)))
         key = bucket.new_key(str(i))
-        objects_size[key.name] = object_size
+        objects_size[key.name] = len(content)
         thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
         thr.start()
         client_threads.append(thr)
@@ -1834,10 +1843,9 @@ def test_ps_s3_notification_push_http_on_master():
     objects_size = {}
     start_time = time.time()
     for i in range(number_of_objects):
-        object_size = randint(1, 1024)
-        content = str(os.urandom(object_size))
+        content = str(os.urandom(randint(1, 1024)))
         key = bucket.new_key(str(i))
-        objects_size[key.name] = object_size
+        objects_size[key.name] = len(content)
         thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
         thr.start()
         client_threads.append(thr)
@@ -2912,16 +2920,20 @@ def test_ps_s3_metadata_on_master():
     
     # create objects in the bucket using COPY
     bucket.copy_key('copy_of_foo', bucket.name, key.name)
+
     # create objects in the bucket using multi-part upload
-    fp = tempfile.NamedTemporaryFile(mode='w')
-    fp.write('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
-    fp.close()
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
+    object_size = 1024
+    content = bytearray(os.urandom(object_size))
+    fp.write(content)
+    fp.flush()
+    fp.seek(0)
     uploader = bucket.initiate_multipart_upload('multipart_foo', 
             metadata={meta_key: meta_value})
-    fp = tempfile.TemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
+
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver

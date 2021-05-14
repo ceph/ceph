@@ -6,7 +6,7 @@ except ImportError:
 
 from orchestrator import InventoryHost
 
-from . import ControllerTestCase
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 from .. import mgr
 from ..controllers.orchestrator import get_device_osd_map
 from ..controllers.orchestrator import Orchestrator

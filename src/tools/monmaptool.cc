@@ -230,7 +230,8 @@ int main(int argc, const char **argv)
       if (i == args.end())
 	helpful_exit();
       entity_addr_t addr;
-      if (!addr.parse(*i)) {
+      if (!addr.parse(string_view{*i})) {
+        // Either we couldn't parse the address or we didn't consume the entire token
 	cerr << me << ": invalid ip:port '" << *i << "'" << std::endl;
 	return -1;
       }

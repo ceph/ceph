@@ -67,7 +67,7 @@ private:
    *    v (skip if not needed)    *
    * ENABLE_NON_PRIMARY_FEATURE   *
    *    |                         *
-   *    v                         *
+   *    v (skip if not needed)    *
    * IMAGE_STATE_UPDATE * * * * * *
    *    |                         *
    *    v                         *

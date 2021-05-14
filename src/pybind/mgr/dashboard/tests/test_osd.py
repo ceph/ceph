@@ -11,11 +11,11 @@ except ImportError:
 from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec
 from ceph.deployment.service_spec import PlacementSpec
 
-from . import ControllerTestCase
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 from ..controllers.osd import Osd
 from ..tools import NotificationQueue, TaskManager
 from .. import mgr
-from .helper import update_dict
+from .helper import update_dict  # pylint: disable=import-error
 
 try:
     from typing import List, Dict, Any  # pylint: disable=unused-import

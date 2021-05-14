@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import CLICommandTestMixin, ControllerTestCase
+from . import CLICommandTestMixin, ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class TestPluginDebug(ControllerTestCase, CLICommandTestMixin):

@@ -10,12 +10,11 @@ try:
 except ImportError:
     from unittest.mock import patch
 
-from . import ControllerTestCase
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tools import dict_contains_path, dict_get, json_str_to_object, partial_dict
 from ..services.exception import handle_rados_error
 from ..controllers import RESTController, ApiController, Controller, \
                           BaseController, Proxy
-from ..tools import dict_contains_path, json_str_to_object, partial_dict,\
-                    dict_get, RequestLoggingTool
 
 
 # pylint: disable=W0613
@@ -151,10 +150,7 @@ class RESTControllerTest(ControllerTestCase):
 
 class RequestLoggingToolTest(ControllerTestCase):
 
-    def __init__(self, *args, **kwargs):
-        cherrypy.tools.request_logging = RequestLoggingTool()
-        cherrypy.config.update({'tools.request_logging.on': True})
-        super(RequestLoggingToolTest, self).__init__(*args, **kwargs)
+    _request_logging = True
 
     @classmethod
     def setup_server(cls):

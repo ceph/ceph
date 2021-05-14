@@ -15,7 +15,7 @@ ignore-patterns=
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
-#init-hook=
+init-hook='import sys; sys.path.append("./")'
 
 # Use multiple processes to speed up Pylint.
 jobs=1
@@ -118,7 +118,11 @@ disable=import-star-module-level,
         too-many-arguments,
         too-many-locals,
         too-many-statements,
-        useless-object-inheritance
+        useless-object-inheritance,
+        relative-beyond-top-level,
+        raise-missing-from,
+        super-with-arguments,
+        import-outside-toplevel
 
 
 # Enable the message, report, category or checker with the given id(s). You can

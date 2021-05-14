@@ -2135,7 +2135,7 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, Filesystem& fs)
     }
   }
 
-  if (!fs.mds_map.is_degraded() && fs.mds_map.allows_standby_replay()) {
+  if (fs.mds_map.is_resizeable() && fs.mds_map.allows_standby_replay()) {
     // There were no failures to replace, so try using any available standbys
     // as standby-replay daemons. Don't do this when the cluster is degraded
     // as a standby-replay daemon may try to read a journal being migrated.

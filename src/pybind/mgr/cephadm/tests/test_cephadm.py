@@ -375,6 +375,86 @@ class TestCephadm(object):
         out = cephadm_module.osd_service.find_destroyed_osds()
         assert out == {'host1': ['0']}
 
+    @ pytest.mark.parametrize(
+        "ceph_services, cephadm_daemons, strays_expected",
+        # [ ([(daemon_type, daemon_id), ... ], [...], [...]), ... ]
+        [
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [],
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+            ),
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [],
+            ),
+            (
+                [('mds', 'a'), ('osd', '0'), ('mgr', 'x')],
+                [('mds', 'a'), ('osd', '0')],
+                [('mgr', 'x')],
+            ),
+            # https://tracker.ceph.com/issues/49573
+            (
+                [('rgw-nfs', 'nfs.foo.host1-rgw')],
+                [],
+                [('nfs', 'foo.host1')],
+            ),
+            (
+                [('rgw-nfs', 'nfs.foo.host1-rgw')],
+                [('nfs', 'foo.host1')],
+                [],
+            ),
+            (
+                [],
+                [('nfs', 'foo.host1')],
+                [],
+            ),
+        ]
+    )
+    def test_check_for_stray_daemons(
+            self,
+            cephadm_module,
+            ceph_services,
+            cephadm_daemons,
+            strays_expected
+    ):
+        # mock ceph service-map
+        services = []
+        for service in ceph_services:
+            s = {'type': service[0], 'id': service[1]}
+            services.append(s)
+        ls = [{'hostname': 'host1', 'services': services}]
+
+        with mock.patch.object(cephadm_module, 'list_servers', mock.MagicMock()) as list_servers:
+            list_servers.return_value = ls
+            list_servers.__iter__.side_effect = ls.__iter__
+
+            # populate cephadm daemon cache
+            dm = {}
+            for daemon_type, daemon_id in cephadm_daemons:
+                dd = DaemonDescription(daemon_type=daemon_type, daemon_id=daemon_id)
+                dm[dd.name()] = dd
+            cephadm_module.cache.update_host_daemons('host1', dm)
+
+            # test
+            CephadmServe(cephadm_module)._check_for_strays()
+
+            # verify
+            strays = cephadm_module.health_checks.get('CEPHADM_STRAY_DAEMON')
+            if not strays:
+                assert len(strays_expected) == 0
+            else:
+                for dt, di in strays_expected:
+                    name = '%s.%s' % (dt, di)
+                    for detail in strays['detail']:
+                        if name in detail:
+                            strays['detail'].remove(detail)
+                            break
+                    assert name in detail
+                assert len(strays['detail']) == 0
+                assert strays['count'] == len(strays_expected)
+
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
     def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
         _mon_cmd.return_value = (1, "", "fail_msg")
@@ -420,6 +500,46 @@ class TestCephadm(object):
             _run_cephadm.assert_called_with(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_apply_osd_save_non_collocated(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+
+            spec = DriveGroupSpec(
+                service_id='noncollocated',
+                placement=PlacementSpec(
+                    hosts=['test']
+                ),
+                data_devices=DeviceSelection(paths=['/dev/sdb']),
+                db_devices=DeviceSelection(paths=['/dev/sdc']),
+                wal_devices=DeviceSelection(paths=['/dev/sdd'])
+            )
+
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd.noncollocated update...']
+
+            inventory = Devices([
+                Device('/dev/sdb', available=True),
+                Device('/dev/sdc', available=True),
+                Device('/dev/sdd', available=True)
+            ])
+
+            cephadm_module.cache.update_host_devices_networks('test', inventory.devices, {})
+
+            _run_cephadm.return_value = (['{}'], '', 0)
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume',
+                ['--config-json', '-', '--', 'lvm', 'batch',
+                    '--no-auto', '/dev/sdb', '--db-devices', '/dev/sdc',
+                    '--wal-devices', '/dev/sdd', '--yes', '--no-systemd'],
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
+                error_ok=True, stdin='{"config": "", "keyring": ""}')
+            _run_cephadm.assert_called_with(
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
+
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
     def test_apply_osd_save_placement(self, _save_spec, cephadm_module):
@@ -434,6 +554,15 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(paths=['']))
+            c = cephadm_module.create_osds(dg)
+            out = wait(cephadm_module, c)
+            assert out == "Created no osd(s) on host test; already created?"
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_create_noncollocated_osd(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
                                 data_devices=DeviceSelection(paths=['']))

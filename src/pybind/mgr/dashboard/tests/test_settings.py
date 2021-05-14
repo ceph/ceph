@@ -6,7 +6,7 @@ import unittest
 
 from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
 
-from . import KVStoreMockMixin, ControllerTestCase
+from . import KVStoreMockMixin, ControllerTestCase  # pylint: disable=no-name-in-module
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
 from ..settings import Settings, handle_option_command
@@ -135,7 +135,19 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
         SettingsController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([SettingsController])
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # pylint: disable=protected-access
+        settings.Options.GRAFANA_API_HOST = ('localhost', str)
+        settings.Options.GRAFANA_ENABLED = (False, bool)
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+
     def setUp(self):
+        super().setUp()
         self.mock_kv_store()
 
     def test_settings_list(self):

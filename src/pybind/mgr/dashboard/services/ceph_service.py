@@ -12,7 +12,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 
 try:
-    from typing import Dict, Any, Union  # pylint: disable=unused-import
+    from typing import Dict, Any, Optional, Union  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -158,8 +158,9 @@ class CephService(object):
             return {}
         return mgr.get("pg_summary")['by_pool'][pool['pool'].__str__()]
 
-    @classmethod
-    def send_command(cls, srv_type, prefix, srv_spec='', **kwargs):
+    @staticmethod
+    def send_command(srv_type, prefix, srv_spec='', **kwargs):
+        # type: (str, str, Optional[str], Any) -> Any
         """
         :type prefix: str
         :param srv_type: mon |
@@ -224,12 +225,20 @@ class CephService(object):
 
             for daemon in daemons:
                 svc_type, svc_id = daemon.split('.')
-                try:
-                    dev_smart_data = CephService.send_command(
-                        svc_type, 'smart', svc_id, devid=device['devid'])
-                except SendCommandError:
-                    # Try to retrieve SMART data from another daemon.
-                    continue
+                if 'osd' in svc_type:
+                    try:
+                        dev_smart_data = CephService.send_command(
+                            svc_type, 'smart', svc_id, devid=device['devid'])
+                    except SendCommandError:
+                        # Try to retrieve SMART data from another daemon.
+                        continue
+                else:
+                    try:
+                        dev_smart_data = CephService.send_command(
+                            svc_type, 'device get-health-metrics', svc_id, devid=device['devid'])
+                    except SendCommandError:
+                        # Try to retrieve SMART data from another daemon.
+                        continue
                 for dev_id, dev_data in dev_smart_data.items():
                     if 'error' in dev_data:
                         logger.warning(
@@ -247,14 +256,14 @@ class CephService(object):
 
     @staticmethod
     def get_devices_by_host(hostname):
-        # (str) -> dict
+        # type: (str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-host',
                                         host=hostname)
 
     @staticmethod
     def get_devices_by_daemon(daemon_type, daemon_id):
-        # (str, str) -> dict
+        # type: (str, str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-daemon',
                                         who='{}.{}'.format(
@@ -278,6 +287,8 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            logger.debug('[SMART] could not retrieve device list from host %s', hostname)
         return smart_data
 
     @staticmethod
@@ -298,6 +309,10 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            msg = '[SMART] could not retrieve device list from daemon with type %s and ' +\
+                'with ID %s'
+            logger.debug(msg, daemon_type, daemon_id)
         return smart_data
 
     @classmethod

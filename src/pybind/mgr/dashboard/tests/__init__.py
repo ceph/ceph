@@ -19,9 +19,10 @@ from .. import mgr
 from ..controllers import json_error_page, generate_controller_routes
 from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
+from ..tools import RequestLoggingTool
 
 from ..plugins import PLUGIN_MANAGER
-from ..plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+from ..plugins import feature_toggles, debug  # noqa
 
 
 PLUGIN_MANAGER.hook.init()
@@ -133,7 +134,11 @@ class ControllerTestCase(helper.CPWebCase):
         cherrypy.tree.mount(None, config={
             base_url: {'request.dispatch': mapper}})
 
-    def __init__(self, *args, **kwargs):
+    _request_logging = False
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         cherrypy.tools.authenticate = AuthManagerTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -143,7 +148,15 @@ class ControllerTestCase(helper.CPWebCase):
             'tools.json_in.force': False
         })
         PLUGIN_MANAGER.hook.configure_cherrypy(config=cherrypy.config)
-        super(ControllerTestCase, self).__init__(*args, **kwargs)
+
+        if cls._request_logging:
+            cherrypy.tools.request_logging = RequestLoggingTool()
+            cherrypy.config.update({'tools.request_logging.on': True})
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._request_logging:
+            cherrypy.config.update({'tools.request_logging.on': False})
 
     def _request(self, url, method, data=None, headers=None):
         if not data:

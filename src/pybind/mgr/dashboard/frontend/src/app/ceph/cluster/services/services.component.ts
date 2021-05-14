@@ -98,7 +98,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       {
         name: this.i18n('Container image ID'),
         prop: 'status.container_image_id',
-        flexGrow: 3,
+        flexGrow: 1.5,
         cellTransformation: CellTemplate.truncate,
         customTemplateConfig: {
           length: 12
@@ -108,7 +108,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         name: this.i18n('Placement'),
         prop: '',
         pipe: new PlacementPipe(this.i18n),
-        flexGrow: 1
+        flexGrow: 2
       },
       {
         name: this.i18n('Running'),

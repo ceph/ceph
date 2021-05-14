@@ -6,7 +6,7 @@ except ImportError:
     from unittest.mock import Mock
 
 from .. import mgr
-from . import ControllerTestCase
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 from ..controllers.cephfs import CephFS
 
 
