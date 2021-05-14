@@ -69,7 +69,6 @@ void decode(bucket_index_layout& l, bufferlist::const_iterator& bl);
 void encode_json_impl(const char *name, const bucket_index_layout& l, ceph::Formatter *f);
 void decode_json_obj(bucket_index_layout& l, JSONObj *obj);
 
-
 struct bucket_index_layout_generation {
   uint64_t gen = 0;
   bucket_index_layout layout;
@@ -104,6 +103,13 @@ inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type
 struct bucket_index_log_layout {
   uint64_t gen = 0;
   bucket_index_normal_layout layout;
+  operator bucket_index_layout_generation() const {
+    bucket_index_layout_generation bilg;
+    bilg.gen = gen;
+    bilg.layout.type = BucketIndexType::Normal;
+    bilg.layout.normal = layout;
+    return bilg;
+  }
 };
 
 void encode(const bucket_index_log_layout& l, bufferlist& bl, uint64_t f=0);
@@ -121,7 +127,6 @@ void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_log_layout& l, bufferlist::const_iterator& bl);
 void encode_json_impl(const char *name, const bucket_log_layout& l, ceph::Formatter *f);
 void decode_json_obj(bucket_log_layout& l, JSONObj *obj);
-
 
 struct bucket_log_layout_generation {
   uint64_t gen = 0;
