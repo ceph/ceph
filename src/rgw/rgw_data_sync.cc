@@ -3018,7 +3018,7 @@ class CheckAllBucketShardStatusIsIncremental : public RGWShardCollectCR {
 // and a loop to retry on racing writes
 class InitBucketShardStatusCR : public RGWCoroutine {
   RGWDataSyncCtx* sc;
-  const rgw_bucket_sync_pair_info& pair;
+  rgw_bucket_sync_pair_info pair;
   rgw_bucket_shard_sync_info status;
   RGWObjVersionTracker objv;
   rgw_bucket_index_marker_info& info;
@@ -3099,7 +3099,7 @@ class InitBucketShardStatusCollectCR : public RGWShardCollectCR {
     if (shard >= num_shards || status < 0) { // stop spawning on any errors
       return false;
     }
-    sync_pair.dest_bs.shard_id = shard++;
+    sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id = shard++;
     spawn(new InitBucketShardStatusCR(sc, sync_pair, info, marker_mgr), false);
     return true;
   }
