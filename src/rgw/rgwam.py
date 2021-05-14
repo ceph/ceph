@@ -6,6 +6,7 @@ import argparse
 import sys
 import socket
 import base64
+import logging
 
 from urllib.parse import urlparse
 
@@ -407,7 +408,7 @@ class RGWAM:
 
         realm_name = realm_info['name']
         realm_id = realm_info['id']
-        print('Created realm %s (%s)' % (realm_name, realm_id))
+        logging.info('Created realm %s (%s)' % (realm_name, realm_id))
 
         zg_info = ZonegroupOp().create(realm_name, zonegroup, endpoints, True, True)
         if not zg_info:
@@ -415,7 +416,7 @@ class RGWAM:
 
         zg_name = zg_info['name']
         zg_id = zg_info['id']
-        print('Created zonegroup %s (%s)' % (zg_name, zg_id))
+        logging.info('Created zonegroup %s (%s)' % (zg_name, zg_id))
 
         zone_info = ZoneOp().create(realm_name, zg_name, zone, endpoints, True, True)
         if not zone_info:
@@ -423,7 +424,7 @@ class RGWAM:
 
         zone_name = zone_info['name']
         zone_id = zone_info['id']
-        print('Created zone %s (%s)' % (zone_name, zone_id))
+        logging.info('Created zone %s (%s)' % (zone_name, zone_id))
 
         period_info = PeriodOp().update(realm_name, True)
         if not period_info:
@@ -431,7 +432,7 @@ class RGWAM:
 
         period = RGWPeriod(period_info)
 
-        print('Period: ' + period.id)
+        logging.info('Period: ' + period.id)
 
         sys_user_info = UserOp().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
         if not sys_user_info:
@@ -439,7 +440,7 @@ class RGWAM:
 
         sys_user = RGWUser(sys_user_info)
 
-        print('Created system user: %s' % sys_user.uid)
+        logging.info('Created system user: %s' % sys_user.uid)
 
         sys_access_key = ''
         sys_secret = ''
@@ -458,7 +459,7 @@ class RGWAM:
 
         user = RGWUser(user_info)
 
-        print('Created regular user: %s' % user.uid)
+        logging.info('Created regular user: %s' % user.uid)
 
         eps = endpoints.split(',')
         ep = ''
@@ -469,7 +470,7 @@ class RGWAM:
 
         realm_token = RealmToken(ep, sys_user.uid, sys_access_key, sys_secret)
 
-        print(realm_token.to_json())
+        logging.info(realm_token.to_json())
 
         realm_token_b = realm_token.to_json().encode('utf-8')
         print('Realm Token: %s' % base64.b64encode(realm_token_b).decode('utf-8'))
@@ -490,9 +491,9 @@ class RGWAM:
         zone_name = zone_info['name']
         zone_id = zone_info['id']
 
-        print('Period: ' + period.id)
-        print('Master zone: ' + period.master_zone)
-        print('Current zone: ' + zone_id)
+        logging.info('Period: ' + period.id)
+        logging.info('Master zone: ' + period.master_zone)
+        logging.info('Current zone: ' + zone_id)
 
         if period.master_zone != zone_id:
             print('command needs to run on master zone')
@@ -513,7 +514,7 @@ class RGWAM:
 
         sys_user = RGWUser(sys_user_info)
 
-        print('Created system user: %s' % sys_user.uid)
+        logging.info('Created system user: %s' % sys_user.uid)
 
         sys_access_key = ''
         sys_secret = ''
@@ -524,10 +525,10 @@ class RGWAM:
 
         realm_token = RealmToken(ep, sys_user.uid, sys_access_key, sys_secret)
 
-        print(realm_token.to_json())
+        logging.info(realm_token.to_json())
 
         realm_token_b = realm_token.to_json().encode('utf-8')
-        print('Realm Token (b64): %s' % base64.b64encode(realm_token_b).decode('utf-8'))
+        print('Realm Token: %s' % base64.b64encode(realm_token_b).decode('utf-8'))
 
         return True
 
@@ -550,13 +551,13 @@ class RGWAM:
 
         realm_name = realm_info['name']
         realm_id = realm_info['id']
-        print('Pulled realm %s (%s)' % (realm_name, realm_id))
+        logging.info('Pulled realm %s (%s)' % (realm_name, realm_id))
 
         period_info = PeriodOp().get()
 
         period = RGWPeriod(period_info)
 
-        print('Period: ' + period.id)
+        logging.info('Period: ' + period.id)
         endpoints = get_endpoints(endpoints, period)
 
         zg = period.find_zonegroup_by_name(zonegroup)
@@ -570,7 +571,7 @@ class RGWAM:
 
         zone_name = zone_info['name']
         zone_id = zone_info['id']
-        print('Created zone %s (%s)' % (zone_name, zone_id))
+        logging.info('Created zone %s (%s)' % (zone_name, zone_id))
 
         period_info = PeriodOp().update(realm_name, True)
         if not period_info:
@@ -578,7 +579,7 @@ class RGWAM:
 
         period = RGWPeriod(period_info)
 
-        print(period.to_json())
+        logging.debug(period.to_json())
 
         eps = endpoints.split(',')
         ep = ''
@@ -587,7 +588,7 @@ class RGWAM:
             o = urlparse(ep)
             ret = self.run_radosgw(port = o.port)
             if not ret:
-                print('WARNING: failed to start radosgw')
+                logging.warning('failed to start radosgw')
 
         return True
 
@@ -754,6 +755,8 @@ The commands are:
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+
     cmd = TopLevelCommand()._parse()
     try:
         ret = cmd()
