@@ -135,12 +135,11 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPGStateHistory>(con
 //dump the contents of perfcounters in osd and store
 class DumpPerfCountersHook final: public AdminSocketHook {
 public:
-  explicit DumpPerfCountersHook(const crimson::osd::OSD &osd) :
+  explicit DumpPerfCountersHook() :
     AdminSocketHook{"perfcounters_dump",
                     "name=logger,type=CephString,req=false "
                     "name=counter,type=CephString,req=false",
-                    "dump perfcounters in osd and store"},
-    osd{osd}
+                    "dump perfcounters in osd and store"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
                                       std::string_view format,
@@ -157,10 +156,8 @@ public:
     crimson::common::local_perf_coll().dump_formatted(f.get(), false, logger, counter);
     return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
-private:
-  const crimson::osd::OSD& osd;
 };
-template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>(const crimson::osd::OSD& osd);
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>();
 
 
 
