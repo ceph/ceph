@@ -22,4 +22,12 @@ install(DIRECTORY
   REGEX "rook/rook-client-python.*" EXCLUDE
   REGEX "osd_perf_query/.*" EXCLUDE
   REGEX "tox.ini" EXCLUDE
-  REGEX "requirements.txt" EXCLUDE)
+  REGEX "requirements.*\.txt" EXCLUDE
+  REGEX "constraints.*\.txt" EXCLUDE
+  REGEX "node_modules" EXCLUDE
+  REGEX "cypress.*" EXCLUDE
+  REGEX "\.coveragerc" EXCLUDE
+  REGEX "\.editorconfig" EXCLUDE
+  REGEX "\..*lintrc" EXCLUDE
+  REGEX "\.browserslistrc" EXCLUDE
+  REGEX "\.prettier*" EXCLUDE)
