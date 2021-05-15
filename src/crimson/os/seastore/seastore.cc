@@ -33,7 +33,8 @@ SeaStore::~SeaStore() {
   perf_service->remove_from_collection();
 }
 
-struct SeastoreCollection final : public FuturizedCollection {
+class SeastoreCollection final : public FuturizedCollection {
+public:
   template <typename... T>
   SeastoreCollection(T&&... args) :
     FuturizedCollection(std::forward<T>(args)...) {}
