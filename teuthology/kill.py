@@ -47,8 +47,13 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None,
         run_archive_dir = os.path.join(archive_base, run_name)
         if os.path.isdir(run_archive_dir):
             run_info = find_run_info(serializer, run_name)
-            machine_type = run_info['machine_type']
-            owner = run_info['owner']
+            if 'machine_type' in run_info:
+                machine_type = run_info['machine_type']
+                owner = run_info['owner']
+            else:
+                log.warn("The run info does not have machine type: %s" % run_info)
+                log.warn("Run archive used: %s" % run_archive_dir)
+                log.info("Using machine type '%s' and owner '%s'" % (machine_type, owner))
         elif machine_type is None:
             raise RuntimeError("The run is still entirely enqueued; " +
                                "you must also pass --machine-type")
