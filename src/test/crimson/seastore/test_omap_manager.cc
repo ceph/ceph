@@ -179,6 +179,14 @@ struct omap_manager_test_t :
     check_mappings(omap_root, *t);
   }
 
+  std::vector<std::string> get_mapped_keys() {
+    std::vector<std::string> mkeys;
+    mkeys.reserve(test_omap_mappings.size());
+    for (auto &k: test_omap_mappings) {
+      mkeys.push_back(k.first);
+    }
+    return mkeys;
+  }
   void replay() {
     logger().debug("{}: begin", __func__);
     restart();
@@ -279,11 +287,11 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
         check_mappings(omap_root);
       }
     }
+    auto mkeys = get_mapped_keys();
     auto t = tm->create_transaction();
-    int i = 0;
-    for (auto &e: test_omap_mappings) {
+    for (unsigned i = 0; i < mkeys.size(); i++) {
       if (i % 3 != 0) {
-        rm_key(omap_root, *t, e.first);
+        rm_key(omap_root, *t, mkeys[i]);
       }
 
       if (i % 10 == 0) {
@@ -296,7 +304,6 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
         check_mappings(omap_root, *t);
         check_mappings(omap_root);
       }
-      i++;
     }
     logger().debug("finally submitting transaction ");
     submit_transaction(std::move(t));
@@ -328,27 +335,25 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
         check_mappings(omap_root);
       }
     }
+    auto mkeys = get_mapped_keys();
     auto t = tm->create_transaction();
-    int i = 0;
-    for (auto &e: test_omap_mappings) {
+    for (unsigned i = 0; i < mkeys.size(); i++) {
       if (30 < i && i < 100) {
-        auto val = e;
-        rm_key(omap_root, *t, e.first);
+        rm_key(omap_root, *t, mkeys[i]);
       }
 
       if (i % 10 == 0) {
-      logger().debug("submitting transaction i= {}", i);
+        logger().debug("submitting transaction i= {}", i);
         submit_transaction(std::move(t));
         t = tm->create_transaction();
       }
       if (i % 50 == 0) {
-      logger().debug("check_mappings  i= {}", i);
+        logger().debug("check_mappings  i= {}", i);
         check_mappings(omap_root, *t);
         check_mappings(omap_root);
       }
-      i++;
       if (i == 100)
- break;
+        break;
     }
     logger().debug("finally submitting transaction ");
     submit_transaction(std::move(t));
@@ -449,23 +454,21 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
       logger().debug("submitting transaction");
       submit_transaction(std::move(t));
     }
+    auto mkeys = get_mapped_keys();
     auto t = tm->create_transaction();
-    int i = 0;
-    for (auto &e: test_omap_mappings) {
-        auto val = e;
-        rm_key(omap_root, *t, e.first);
+    for (unsigned i = 0; i < mkeys.size(); i++) {
+      rm_key(omap_root, *t, mkeys[i]);
 
       if (i % 10 == 0) {
-      logger().debug("submitting transaction i= {}", i);
+        logger().debug("submitting transaction i= {}", i);
         submit_transaction(std::move(t));
         t = tm->create_transaction();
       }
       if (i % 50 == 0) {
-      logger().debug("check_mappings  i= {}", i);
+        logger().debug("check_mappings  i= {}", i);
         check_mappings(omap_root, *t);
         check_mappings(omap_root);
       }
-      i++;
     }
     logger().debug("finally submitting transaction ");
     submit_transaction(std::move(t));
@@ -500,20 +503,19 @@ TEST_F(omap_manager_test_t, replay)
     replay();
     check_mappings(omap_root);
 
+    auto mkeys = get_mapped_keys();
     auto t = tm->create_transaction();
-    int i = 0;
-    for (auto &e: test_omap_mappings) {
-        auto val = e;
-        rm_key(omap_root, *t, e.first);
+    for (unsigned i = 0; i < mkeys.size(); i++) {
+      rm_key(omap_root, *t, mkeys[i]);
 
       if (i % 10 == 0) {
-      logger().debug("submitting transaction i= {}", i);
+        logger().debug("submitting transaction i= {}", i);
         submit_transaction(std::move(t));
         replay();
         t = tm->create_transaction();
       }
       if (i % 50 == 0) {
-      logger().debug("check_mappings  i= {}", i);
+        logger().debug("check_mappings  i= {}", i);
         check_mappings(omap_root, *t);
         check_mappings(omap_root);
       }
