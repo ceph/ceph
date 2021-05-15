@@ -205,11 +205,11 @@ public:
  {
    std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
    f->open_object_section("perf_dump_seastar");
-   for (const auto& mf : seastar::scollectd::get_value_map()) {
-     for (const auto& m : mf.second) {
-       if (m.second && m.second->is_enabled()) {
-         auto& metric_function = m.second->get_function();
-         f->dump_float(m.second->get_id().full_name(), metric_function().d());
+   for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
+     for (const auto& [labels, metric] : metric_family) {
+       if (metric && metric->is_enabled()) {
+         auto& metric_function = metric->get_function();
+         f->dump_float(metric->get_id().full_name(), metric_function().d());
        }
      }
    }
