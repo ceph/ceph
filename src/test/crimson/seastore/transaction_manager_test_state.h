@@ -86,8 +86,7 @@ auto get_transaction_manager(
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
-    std::move(lba_manager),
-    perf);
+    std::move(lba_manager));
   return ret;
 }
 
