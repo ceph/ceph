@@ -192,32 +192,32 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<AssertAlwaysHook>();
 */
 class SeastarMetricsHook : public AdminSocketHook {
 public:
- SeastarMetricsHook()  :
-   AdminSocketHook("perf dump_seastar",
-      "name=group,type=CephString,req=false",
-      "dump current configured seastar metrics and their values")
- {}
- seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
-             std::string_view format,
-             ceph::bufferlist&& input) const final
- {
-   std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-   std::string prefix;
-   cmd_getval(cmdmap, "group", prefix);
-   f->open_object_section("perf_dump_seastar");
-   for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
-     if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
+  SeastarMetricsHook() :
+    AdminSocketHook("perf dump_seastar",
+                    "name=group,type=CephString,req=false",
+                    "dump current configured seastar metrics and their values")
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    std::string prefix;
+    cmd_getval(cmdmap, "group", prefix);
+    f->open_object_section("perf_dump_seastar");
+    for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
+      if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
        continue;
-     }
-     for (const auto& [labels, metric] : metric_family) {
-       if (metric && metric->is_enabled()) {
-	 dump_metric_value(f.get(), full_name, *metric);
-       }
-     }
-   }
-   f->close_section();
-   return seastar::make_ready_future<tell_result_t>(std::move(f));
- }
+      }
+      for (const auto& [labels, metric] : metric_family) {
+        if (metric && metric->is_enabled()) {
+          dump_metric_value(f.get(), full_name, *metric);
+        }
+      }
+    }
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
 private:
   using registered_metric = seastar::metrics::impl::registered_metric;
   using data_type = seastar::metrics::impl::data_type;
