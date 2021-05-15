@@ -69,8 +69,7 @@ public:
     SegmentCleanerRef segment_cleaner,
     JournalRef journal,
     CacheRef cache,
-    LBAManagerRef lba_manager,
-    PerfCounters &perf);
+    LBAManagerRef lba_manager);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = crimson::errorator<
@@ -190,8 +189,8 @@ public:
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    tm_perf.inc(ss_tm_extents_mutated_total);
-    tm_perf.inc(ss_tm_extents_mutated_bytes, ret->get_length());
+    stats.extents_mutated_total++;
+    stats.extents_mutated_bytes += ret->get_length();
     if (!ret->has_pin()) {
       DEBUGT(
 	"duplicating {} for write: {}",
@@ -264,8 +263,8 @@ public:
       ext->get_paddr()
     ).safe_then([ext=std::move(ext), len, this](auto &&ref) mutable {
       ext->set_pin(std::move(ref));
-      tm_perf.inc(ss_tm_extents_allocated_total);
-      tm_perf.inc(ss_tm_extents_allocated_bytes, len);
+      stats.extents_allocated_total++;
+      stats.extents_allocated_bytes += len;
       return alloc_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
@@ -495,9 +494,19 @@ private:
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
-  PerfCounters &tm_perf;
 
   WritePipeline write_pipeline;
+
+  struct {
+    uint64_t extents_retired_total = 0;
+    uint64_t extents_retired_bytes = 0;
+    uint64_t extents_mutated_total = 0;
+    uint64_t extents_mutated_bytes = 0;
+    uint64_t extents_allocated_total = 0;
+    uint64_t extents_allocated_bytes = 0;
+  } stats;
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 
 public:
   // Testing interfaces
