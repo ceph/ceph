@@ -137,7 +137,8 @@ class DumpPerfCountersHook final: public AdminSocketHook {
 public:
   explicit DumpPerfCountersHook(const crimson::osd::OSD &osd) :
     AdminSocketHook{"perfcounters_dump",
-                    "",
+                    "name=logger,type=CephString,req=false "
+                    "name=counter,type=CephString,req=false",
                     "dump perfcounters in osd and store"},
     osd{osd}
   {}
