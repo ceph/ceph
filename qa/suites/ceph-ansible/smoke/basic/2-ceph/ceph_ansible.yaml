@@ -3,7 +3,7 @@ meta:
 
 overrides:
    ceph_ansible:
-     ansible-version: '2.9'
+     ansible-version: '2.10'
      vars:
         ceph_conf_overrides:
           global:
@@ -13,7 +13,7 @@ overrides:
             osd pool default pgp num: 64
             mon_max_pg_per_osd: 1024
         ceph_test: true
-        ceph_stable_release: nautilus
+        ceph_stable_release: octopus
         osd_scenario: lvm
         journal_size: 1024
         osd_auto_discovery: false
