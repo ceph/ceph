@@ -208,14 +208,57 @@ public:
    for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
      for (const auto& [labels, metric] : metric_family) {
        if (metric && metric->is_enabled()) {
-         auto& metric_function = metric->get_function();
-         f->dump_float(metric->get_id().full_name(), metric_function().d());
+	 dump_metric_value(f.get(), full_name, *metric);
        }
      }
    }
    f->close_section();
    return seastar::make_ready_future<tell_result_t>(std::move(f));
  }
+private:
+  using registered_metric = seastar::metrics::impl::registered_metric;
+  using data_type = seastar::metrics::impl::data_type;
+
+  static void dump_metric_value(Formatter* f,
+                                string_view full_name,
+                                const registered_metric& metric)
+  {
+    switch (auto v = metric(); v.type()) {
+    case data_type::GAUGE:
+      f->dump_float(full_name, v.d());
+      break;
+    case data_type::COUNTER:
+      [[fallthrough]];
+    case data_type::DERIVE:
+      f->dump_unsigned(full_name, v.ui());
+      break;
+    case data_type::HISTOGRAM: {
+      f->open_object_section(full_name);
+      auto&& h = v.get_histogram();
+      f->dump_float("sum", h.sample_sum);
+      f->dump_unsigned("count", h.sample_count);
+      f->open_array_section("buckets");
+      for (auto i : h.buckets) {
+        f->open_object_section("bucket");
+        f->dump_float("le", i.upper_bound);
+        f->dump_unsigned("count", i.count);
+        f->close_section(); // "bucket"
+      }
+      {
+        f->open_object_section("bucket");
+        f->dump_string("le", "+Inf");
+        f->dump_unsigned("count", h.sample_count);
+        f->close_section();
+      }
+      f->close_section(); // "buckets"
+      f->close_section(); // full_name
+    }
+      break;
+    default:
+      std::abort();
+      break;
+    }
+  }
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<SeastarMetricsHook>();
 
