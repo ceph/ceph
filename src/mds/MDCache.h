@@ -1147,7 +1147,6 @@ class MDCache {
   std::unique_ptr<PerfCounters> logger;
 
   Filer filer;
-  bool exceeded_size_limit = false;
   std::array<xlist<ClientLease*>, client_lease_pools> client_leases{};
 
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
@@ -1307,6 +1306,8 @@ class MDCache {
 				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
+
+  void upkeep_main(void);
 
   uint64_t cache_memory_limit;
   double cache_reservation;
