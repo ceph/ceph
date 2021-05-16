@@ -37,6 +37,6 @@ scrape_configs:
 {% for haproxy in haproxy_targets %}
       - targets: [{{ haproxy.url }}]
         labels:
-	  instance: '{{ haproxy.service }}'
+          instance: '{{ haproxy.service }}'
 {% endfor %}
 {% endif %}
