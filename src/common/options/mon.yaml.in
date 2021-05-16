@@ -1,0 +1,311 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: osd_crush_update_weight_set
+  type: bool
+  level: advanced
+  desc: update CRUSH weight-set weights when updating weights
+  long_desc: If this setting is true, we will update the weight-set weights when adjusting
+    an item's weight, effectively making changes take effect immediately, and discarding
+    any previous optimization in the weight-set value.  Setting this value to false
+    will leave it to the balancer to (slowly, presumably) adjust weights to approach
+    the new target value.
+  default: true
+  with_legacy: true
+- name: osd_pool_erasure_code_stripe_unit
+  type: size
+  level: advanced
+  desc: the amount of data (in bytes) in a data chunk, per stripe
+  fmt_desc: Sets the default size, in bytes, of a chunk of an object
+    stripe for erasure coded pools. Every object of size S
+    will be stored as N stripes, with each data chunk
+    receiving ``stripe unit`` bytes. Each stripe of ``N *
+    stripe unit`` bytes will be encoded/decoded
+    individually. This option can is overridden by the
+    ``stripe_unit`` setting in an erasure code profile.
+  default: 4_K
+  services:
+  - mon
+- name: mon_mgr_digest_period
+  type: int
+  level: dev
+  desc: Period in seconds between monitor-to-manager health/status updates
+  default: 5
+  services:
+  - mon
+- name: mon_mgr_beacon_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds from last beacon to monitor marking a manager daemon as
+    failed
+  default: 30
+  services:
+  - mon
+- name: mon_mgr_inactive_grace
+  type: int
+  level: advanced
+  desc: Period in seconds after cluster creation during which cluster may have no
+    active manager
+  long_desc: This grace period enables the cluster to come up cleanly without raising
+    spurious health check failures about managers that aren't online yet
+  default: 1_min
+  services:
+  - mon
+- name: mon_mgr_mkfs_grace
+  type: int
+  level: advanced
+  desc: Period in seconds that the cluster may have no active manager before this
+    is reported as an ERR rather than a WARN
+  default: 2_min
+  services:
+  - mon
+- name: mon_mgr_proxy_client_bytes_ratio
+  type: float
+  level: dev
+  desc: ratio of mon_client_bytes that can be consumed by proxied mgr commands before
+    we error out to client
+  default: 0.3
+  services:
+  - mon
+- name: mon_cluster_log_to_stderr
+  type: bool
+  level: advanced
+  desc: Make monitor send cluster log messages to stderr (prefixed by channel)
+  default: false
+  services:
+  - mon
+  see_also:
+  - log_stderr_prefix
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_syslog
+  type: str
+  level: advanced
+  desc: Make monitor send cluster log messages to syslog
+  default: default=false
+  services:
+  - mon
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_syslog_level
+  type: str
+  level: advanced
+  desc: Syslog level for cluster log messages
+  default: info
+  services:
+  - mon
+  see_also:
+  - mon_cluster_log_to_syslog
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_syslog_facility
+  type: str
+  level: advanced
+  desc: Syslog facility for cluster log messages
+  default: daemon
+  services:
+  - mon
+  see_also:
+  - mon_cluster_log_to_syslog
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_file
+  type: bool
+  level: advanced
+  desc: Make monitor send cluster log messages to file
+  default: true
+  services:
+  - mon
+  see_also:
+  - mon_cluster_log_file
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_file
+  type: str
+  level: advanced
+  desc: File(s) to write cluster log to
+  long_desc: This can either be a simple file name to receive all messages, or a list
+    of key/value pairs where the key is the log channel and the value is the filename,
+    which may include $cluster and $channel metavariables
+  default: default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log
+  services:
+  - mon
+  see_also:
+  - mon_cluster_log_to_file
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_file_level
+  type: str
+  level: advanced
+  desc: Lowest level to include is cluster log file
+  default: debug
+  services:
+  - mon
+  see_also:
+  - mon_cluster_log_file
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_graylog
+  type: str
+  level: advanced
+  desc: Make monitor send cluster log to graylog
+  default: 'false'
+  services:
+  - mon
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_graylog_host
+  type: str
+  level: advanced
+  desc: Graylog host for cluster log messages
+  default: 127.0.0.1
+  services:
+  - mon
+  see_also:
+  - mon_cluster_log_to_graylog
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_graylog_port
+  type: str
+  level: advanced
+  desc: Graylog port for cluster log messages
+  default: '12201'
+  services:
+  - mon
+  see_also:
+  - mon_cluster_log_to_graylog
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_cluster_log_to_journald
+  type: str
+  level: advanced
+  desc: Make monitor send cluster log to journald
+  default: 'false'
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_log_max_summary
+  type: uint
+  level: advanced
+  desc: number of recent cluster log messages to retain
+  default: 50
+  services:
+  - mon
+  with_legacy: true
+- name: mon_max_log_entries_per_event
+  type: int
+  level: advanced
+  desc: max cluster log entries per paxos event
+  fmt_desc: The maximum number of log entries per event.
+  default: 4096
+  services:
+  - mon
+  with_legacy: true
+- name: mon_health_to_clog
+  type: bool
+  level: advanced
+  desc: log monitor health to cluster log
+  fmt_desc: Enable sending a health summary to the cluster log periodically.
+  default: true
+  services:
+  - mon
+  with_legacy: true
+- name: mon_health_to_clog_interval
+  type: int
+  level: advanced
+  desc: frequency to log monitor health to cluster log
+  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
+    log (a non-positive number disables). Monitors will always
+    send a summary to the cluster log whether or not it differs from
+    the previous summary.
+  default: 10_min
+  services:
+  - mon
+  see_also:
+  - mon_health_to_clog
+  with_legacy: true
+- name: mon_health_to_clog_tick_interval
+  type: float
+  level: dev
+  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
+    log (a non-positive number disables). If current health summary
+    is empty or identical to the last time, monitor will not send it
+    to cluster log.
+  default: 1_min
+  services:
+  - mon
+  with_legacy: true
+- name: mon_health_detail_to_clog
+  type: bool
+  level: dev
+  desc: log health detail to cluster log
+  default: true
+  with_legacy: true
+- name: mon_health_max_detail
+  type: uint
+  level: advanced
+  desc: max detailed pgs to report in health detail
+  default: 50
+  services:
+  - mon
+- name: mon_health_log_update_period
+  type: int
+  level: dev
+  desc: minimum time in seconds between log messages about each health check
+  default: 5
+  services:
+  - mon
+  min: 0
+- name: mon_data_avail_crit
+  type: int
+  level: advanced
+  desc: issue MON_DISK_CRIT health error when mon available space below this percentage
+  fmt_desc: Raise ``HEALTH_ERR`` status when the filesystem that houses a
+    monitor's data store reports that its available capacity is
+    less than or equal to this percentage.
+  default: 5
+  services:
+  - mon
+  with_legacy: true
+- name: mon_data_avail_warn
+  type: int
+  level: advanced
+  desc: issue MON_DISK_LOW health warning when mon available space below this percentage
+  fmt_desc: Raise ``HEALTH_WARN`` status when the filesystem that houses a
+    monitor's data store reports that its available capacity is
+    less than or equal to this percentage .
+  default: 30
+  services:
+  - mon
+  with_legacy: true
+- name: mon_data_size_warn
+  type: size
+  level: advanced
+  desc: issue MON_DISK_BIG health warning when mon database is above this size
+  fmt_desc: Raise ``HEALTH_WARN`` status when a monitor's data
+    store grows to be larger than this size, 15GB by default.
+  default: 15_G
+  services:
+  - mon
+  with_legacy: true
+- name: mon_daemon_bytes
+  type: size
+  level: advanced
+  desc: max bytes of outstanding mon messages mon will read off the network
+  fmt_desc: The message memory cap for metadata server and OSD messages (in bytes).
+  default: 400_M
+  services:
+  - mon
+  with_legacy: true
