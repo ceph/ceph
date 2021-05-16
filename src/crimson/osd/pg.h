@@ -588,7 +588,7 @@ private:
   struct do_osd_ops_params_t;
   do_osd_ops_iertr::future<pg_rep_op_fut_t<>> do_osd_ops(
     ObjectContextRef obc,
-    std::vector<OSDOp> ops,
+    std::vector<OSDOp>& ops,
     const OpInfo &op_info,
     const do_osd_ops_params_t& params,
     do_osd_ops_success_func_t success_func,
@@ -596,7 +596,7 @@ private:
   template <class Ret, class SuccessFunc, class FailureFunc>
   do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     OpsExecuter&& ox,
-    std::vector<OSDOp> ops,
+    std::vector<OSDOp>& ops,
     const OpInfo &op_info,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);

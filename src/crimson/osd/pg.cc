@@ -705,7 +705,7 @@ template <class Ret, class SuccessFunc, class FailureFunc>
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ret>>
 PG::do_osd_ops_execute(
   OpsExecuter&& ox,
-  std::vector<OSDOp> ops,
+  std::vector<OSDOp>& ops,
   const OpInfo &op_info,
   SuccessFunc&& success_func,
   FailureFunc&& failure_func)
@@ -830,7 +830,7 @@ PG::do_osd_ops(
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<>>
 PG::do_osd_ops(
   ObjectContextRef obc,
-  std::vector<OSDOp> ops,
+  std::vector<OSDOp>& ops,
   const OpInfo &op_info,
   const do_osd_ops_params_t& msg_params,
   do_osd_ops_success_func_t success_func,
@@ -840,7 +840,7 @@ PG::do_osd_ops(
     std::move(obc), op_info, get_pool().info, get_backend(), msg_params);
   return do_osd_ops_execute<void>(
     std::move(*ox),
-    std::move(ops),
+    ops,
     std::as_const(op_info),
     std::move(success_func),
     std::move(failure_func)
