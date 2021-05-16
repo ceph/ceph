@@ -827,226 +827,44 @@ Logging Settings
 Keystone Settings
 =================
 
-
-``rgw_keystone_url``
-
-:Description: The URL for the Keystone server.
-:Type: String
-:Default: None
-
-
-``rgw_keystone_api_version``
-
-:Description: The version (2 or 3) of OpenStack Identity API that should be
-              used for communication with the Keystone server.
-:Type: Integer
-:Default: ``2``
-
-
-``rgw_keystone_admin_domain``
-
-:Description: The name of OpenStack domain with admin privilege when using
-              OpenStack Identity API v3.
-:Type: String
-:Default: None
-
-
-``rgw_keystone_admin_project``
-
-:Description: The name of OpenStack project with admin privilege when using
-              OpenStack Identity API v3. If left unspecified, value of
-              ``rgw keystone admin tenant`` will be used instead.
-:Type: String
-:Default: None
-
-
-``rgw_keystone_admin_token``
-
-:Description: The Keystone admin token (shared secret). In Ceph RGW
-              authentication with the admin token has priority over
-              authentication with the admin credentials
-              (``rgw_keystone_admin_user``, ``rgw_keystone_admin_password``,
-              ``rgw_keystone_admin_tenant``, ``rgw_keystone_admin_project``,
-              ``rgw_keystone_admin_domain``). The Keystone admin token
-              has been deprecated, but can be used to integrate with
-              older environments.  It is preferred to instead configure
-              ``rgw_keystone_admin_token_path`` to avoid exposing the token.
-:Type: String
-:Default: None
-
-``rgw_keystone_admin_token_path``
-
-:Description: Path to a file containing the Keystone admin token
-	      (shared secret).  In Ceph RadosGW authentication with
-	      the admin token has priority over authentication with
-	      the admin credentials
-              (``rgw_keystone_admin_user``, ``rgw_keystone_admin_password``,
-              ``rgw_keystone_admin_tenant``, ``rgw_keystone_admin_project``,
-              ``rgw_keystone_admin_domain``).
-              The Keystone admin token has been deprecated, but can be
-              used to integrate with older environments.
-:Type: String
-:Default: None
-
-``rgw_keystone_admin_tenant``
-
-:Description: The name of OpenStack tenant with admin privilege (Service Tenant) when
-              using OpenStack Identity API v2
-:Type: String
-:Default: None
-
-
-``rgw_keystone_admin_user``
-
-:Description: The name of OpenStack user with admin privilege for Keystone
-              authentication (Service User) when using OpenStack Identity API v2
-:Type: String
-:Default: None
-
-
-``rgw_keystone_admin_password``
-
-:Description: The password for OpenStack admin user when using OpenStack
-              Identity API v2.  It is preferred to instead configure
-              ``rgw_keystone_admin_password_path`` to avoid exposing the token.
-:Type: String
-:Default: None
-
-``rgw_keystone_admin_password_path``
-
-:Description: Path to a file containing the password for OpenStack
-              admin user when using OpenStack Identity API v2.
-:Type: String
-:Default: None
-
-
-``rgw_keystone_accepted_roles``
-
-:Description: The roles required to serve requests.
-:Type: String
-:Default: ``Member, admin``
-
-
-``rgw_keystone_token_cache_size``
-
-:Description: The maximum number of entries in each Keystone token cache.
-:Type: Integer
-:Default: ``10000``
-
-
-``rgw_keystone_revocation_interval``
-
-:Description: The number of seconds between token revocation checks.
-:Type: Integer
-:Default: ``15 * 60``
-
-
-``rgw_keystone_verify_ssl``
-
-:Description: Verify SSL certificates while making token requests to keystone.
-:Type: Boolean
-:Default: ``true``
-
+.. confval:: rgw_keystone_url
+.. confval:: rgw_keystone_api_version
+.. confval:: rgw_keystone_admin_domain
+.. confval:: rgw_keystone_admin_project
+.. confval:: rgw_keystone_admin_token
+.. confval:: rgw_keystone_admin_token_path
+.. confval:: rgw_keystone_admin_tenant
+.. confval:: rgw_keystone_admin_user
+.. confval:: rgw_keystone_admin_password
+.. confval:: rgw_keystone_admin_password_path
+.. confval:: rgw_keystone_accepted_roles
+.. confval:: rgw_keystone_token_cache_size
+.. confval:: rgw_keystone_verify_ssl
 
 Server-side encryption Settings
 ===============================
 
-``rgw_crypt_s3_kms_backend``
-
-:Description: Where the SSE-KMS encryption keys are stored. Supported KMS
-              systems are OpenStack Barbican (``barbican``, the default) and
-              HashiCorp Vault (``vault``).
-:Type: String
-:Default: None
-
+.. confval:: rgw_crypt_s3_kms_backend
 
 Barbican Settings
 =================
 
-``rgw_barbican_url``
-
-:Description: The URL for the Barbican server.
-:Type: String
-:Default: None
-
-``rgw_keystone_barbican_user``
-
-:Description: The name of the OpenStack user with access to the `Barbican`_
-              secrets used for `Encryption`_.
-:Type: String
-:Default: None
-
-``rgw_keystone_barbican_password``
-
-:Description: The password associated with the `Barbican`_ user.
-:Type: String
-:Default: None
-
-``rgw_keystone_barbican_tenant``
-
-:Description: The name of the OpenStack tenant associated with the `Barbican`_
-              user when using OpenStack Identity API v2.
-:Type: String
-:Default: None
-
-``rgw_keystone_barbican_project``
-
-:Description: The name of the OpenStack project associated with the `Barbican`_
-              user when using OpenStack Identity API v3.
-:Type: String
-:Default: None
-
-``rgw_keystone_barbican_domain``
-
-:Description: The name of the OpenStack domain associated with the `Barbican`_
-              user when using OpenStack Identity API v3.
-:Type: String
-:Default: None
-
+.. confval:: rgw_barbican_url
+.. confval:: rgw_keystone_barbican_user
+.. confval:: rgw_keystone_barbican_password
+.. confval:: rgw_keystone_barbican_tenant
+.. confval:: rgw_keystone_barbican_project
+.. confval:: rgw_keystone_barbican_domain
 
 HashiCorp Vault Settings
 ========================
 
-``rgw_crypt_vault_auth``
-
-:Description: Type of authentication method to be used. The only method
-              currently supported is ``token``.
-:Type: String
-:Default: ``token``
-
-``rgw_crypt_vault_token_file``
-
-:Description: If authentication method is ``token``, provide a path to the token
-              file, which should be readable only by Rados Gateway.
-:Type: String
-:Default: None
-
-``rgw_crypt_vault_addr``
-
-:Description: Vault server base address, e.g. ``http://vaultserver:8200``.
-:Type: String
-:Default: None
-
-``rgw_crypt_vault_prefix``
-
-:Description: The Vault secret URL prefix, which can be used to restrict access
-              to a particular subset of the secret space, e.g. ``/v1/secret/data``.
-:Type: String
-:Default: None
-
-``rgw_crypt_vault_secret_engine``
-
-:Description: Vault Secret Engine to be used to retrieve encryption keys: choose
-              between kv-v2, transit.
-:Type: String
-:Default: None
-
-``rgw_crypt_vault_namespace``
-
-:Description: If set, Vault Namespace provides tenant isolation for teams and individuals
-              on the same Vault Enterprise instance, e.g. ``acme/tenant1``
-:Type: String
-:Default: None
+.. confval:: rgw_crypt_vault_auth
+.. confval:: rgw_crypt_vault_token_file
+.. confval:: rgw_crypt_vault_addr
+.. confval:: rgw_crypt_vault_prefix
+.. confval:: rgw_crypt_vault_secret_engine
+.. confval:: rgw_crypt_vault_namespace
 
 
 QoS settings
@@ -1068,47 +886,20 @@ implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
 (swift auth, sts) metadata & data requests.
 
 
-``rgw_max_concurrent_requests``
-
-:Description: Maximum number of concurrent HTTP requests that the Beast front end
-              will process. Tuning this can help to limit memory usage under
-              heavy load.
-:Type: Integer
-:Default: 1024
-
-
-``rgw_scheduler_type``
-
-:Description: The RGW scheduler to use. Valid values are ``throttler` and
-              ``dmclock``. Currently defaults to ``throttler`` which throttles Beast
-              frontend requests. ``dmclock` is *experimental* and requires the
-              ``dmclock`` to be included in the ``experimental_feature_enabled``
-              configuration option.
-
-
-The options below tune the experimental dmclock scheduler. For
-additional reading on dmclock, see :ref:`dmclock-qos`. `op_class` for the flags below is
-one of ``admin``, ``auth``, ``metadata``, or ``data``.
-
-``rgw_dmclock_<op_class>_res``
-
-:Description: The mclock reservation for `op_class` requests
-:Type: float
-:Default: 100.0
-
-``rgw_dmclock_<op_class>_wgt``
-
-:Description: The mclock weight for `op_class` requests
-:Type: float
-:Default: 1.0
-
-``rgw_dmclock_<op_class>_lim``
-
-:Description: The mclock limit for `op_class` requests
-:Type: float
-:Default: 0.0
-
-
+.. confval:: rgw_max_concurrent_requests
+.. confval:: rgw_scheduler_type
+.. confval:: rgw_dmclock_auth_res
+.. confval:: rgw_dmclock_auth_wgt
+.. confval:: rgw_dmclock_auth_lim
+.. confval:: rgw_dmclock_admin_res
+.. confval:: rgw_dmclock_admin_wgt
+.. confval:: rgw_dmclock_admin_lim
+.. confval:: rgw_dmclock_data_res
+.. confval:: rgw_dmclock_data_wgt
+.. confval:: rgw_dmclock_data_lim
+.. confval:: rgw_dmclock_metadata_res
+.. confval:: rgw_dmclock_metadata_wgt
+.. confval:: rgw_dmclock_metadata_lim
 
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
