@@ -46,6 +46,7 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
         **kwargs
     )
 
+
 def build_initial_config(ctx, config):
     cluster_name = config['cluster']
 
@@ -65,6 +66,7 @@ def build_initial_config(ctx, config):
 
     return conf
 
+
 def update_archive_setting(ctx, key, value):
     """
     Add logs directory to job's info log file
@@ -79,6 +81,7 @@ def update_archive_setting(ctx, key, value):
         else:
             info_yaml['archive'] = {key: value}
         yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
 
 @contextlib.contextmanager
 def normalize_hostnames(ctx):
@@ -97,6 +100,7 @@ def normalize_hostnames(ctx):
         yield
     finally:
         pass
+
 
 @contextlib.contextmanager
 def download_cephadm(ctx, config, ref):
@@ -167,6 +171,7 @@ def download_cephadm(ctx, config, ref):
                     ctx.cephadm,
                 ],
             )
+
 
 @contextlib.contextmanager
 def ceph_log(ctx, config):
@@ -276,6 +281,7 @@ def ceph_log(ctx, config):
                 except ReadError:
                     pass
 
+
 @contextlib.contextmanager
 def ceph_crash(ctx, config):
     """
@@ -309,6 +315,7 @@ def ceph_crash(ctx, config):
                                               os.path.join(sub, 'crash'))
                 except ReadError:
                     pass
+
 
 @contextlib.contextmanager
 def ceph_bootstrap(ctx, config):
@@ -516,6 +523,7 @@ def ceph_bootstrap(ctx, config):
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
         ])
 
+
 @contextlib.contextmanager
 def ceph_mons(ctx, config):
     """
@@ -631,6 +639,7 @@ def ceph_mons(ctx, config):
     finally:
         pass
 
+
 @contextlib.contextmanager
 def ceph_mgrs(ctx, config):
     """
@@ -671,6 +680,7 @@ def ceph_mgrs(ctx, config):
 
     finally:
         pass
+
 
 @contextlib.contextmanager
 def ceph_osds(ctx, config):
@@ -727,6 +737,7 @@ def ceph_osds(ctx, config):
     finally:
         pass
 
+
 @contextlib.contextmanager
 def ceph_mdss(ctx, config):
     """
@@ -763,6 +774,7 @@ def ceph_mdss(ctx, config):
 
     yield
 
+
 @contextlib.contextmanager
 def ceph_monitoring(daemon_type, ctx, config):
     """
@@ -797,6 +809,7 @@ def ceph_monitoring(daemon_type, ctx, config):
         )
 
     yield
+
 
 @contextlib.contextmanager
 def ceph_rgw(ctx, config):
@@ -888,6 +901,7 @@ def ceph_iscsi(ctx, config):
 
     yield
 
+
 @contextlib.contextmanager
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
@@ -918,12 +932,14 @@ def ceph_clients(ctx, config):
             remote.sudo_write_file(client_keyring, keyring, mode='0644')
     yield
 
+
 @contextlib.contextmanager
 def ceph_initial():
     try:
         yield
     finally:
         log.info('Teardown complete')
+
 
 ## public methods
 @contextlib.contextmanager
@@ -962,6 +978,7 @@ def stop(ctx, config):
 #        ctx.ceph[cluster].watchdog.join()
 
     yield
+
 
 def shell(ctx, config):
     """
@@ -1106,6 +1123,7 @@ def tweaked_option(ctx, config):
     for option, value in saved_options.items():
         manager.inject_args(type_, id_, option, value)
 
+
 @contextlib.contextmanager
 def restart(ctx, config):
     """
@@ -1159,6 +1177,7 @@ def restart(ctx, config):
             ctx.managers[cluster].wait_for_all_osds_up()
     yield
 
+
 @contextlib.contextmanager
 def distribute_config_and_admin_keyring(ctx, config):
     """
@@ -1184,6 +1203,7 @@ def distribute_config_and_admin_keyring(ctx, config):
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
         ])
 
+
 @contextlib.contextmanager
 def crush_setup(ctx, config):
     cluster_name = config['cluster']
@@ -1193,6 +1213,7 @@ def crush_setup(ctx, config):
     _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
         args=['ceph', 'osd', 'crush', 'tunables', profile])
     yield
+
 
 @contextlib.contextmanager
 def create_rbd_pool(ctx, config):
@@ -1216,9 +1237,11 @@ def create_rbd_pool(ctx, config):
           ])
     yield
 
+
 @contextlib.contextmanager
 def _bypass():
     yield
+
 
 @contextlib.contextmanager
 def initialize_config(ctx, config):
@@ -1302,6 +1325,7 @@ def initialize_config(ctx, config):
         log.info('First mgr is %s' % (first_mgr))
         ctx.ceph[cluster_name].first_mgr = first_mgr
     yield
+
 
 @contextlib.contextmanager
 def task(ctx, config):
