@@ -76,10 +76,26 @@ protected:
   static const int DIRTY_UNDEF	= -2;
 
   unsigned num_pending_commit = 0;
+  void _encode_header(bufferlist &bl, version_t& _omap_version,
+                      unsigned _omap_num_objs, int j_state);
   void _encode_header(bufferlist& bl, int j_state);
   void _commit_finish(int r, uint64_t log_seq, MDSContext *fin);
-  void _journal_finish(int r, uint64_t log_seq, MDSContext *fin,
-		       std::map<unsigned, std::vector<ObjectOperation> >& ops);
+
+  struct omap_update_ctrl_meta {
+    std::map<string, bufferlist> to_update;
+    std::set<string> to_remove;
+  };
+  struct omap_update_ctl {
+    unsigned write_size = 0;
+    bool clear = false;
+    int meta_idx = -1;
+
+    std::vector<struct omap_update_ctrl_meta> metas;
+  };
+  void _journal_commit(int r, uint64_t log_seq, MDSContext *c, int op_prio,
+                       version_t& _omap_version, unsigned _old_num_objs,
+                       unsigned _omap_num_objs,
+                       std::vector<struct omap_update_ctl>& omap_updates);
 
   void get_ref(CInode *in, frag_t fg=-1U);
   void put_ref(CInode *in, frag_t fg=-1U);
