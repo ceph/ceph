@@ -550,13 +550,6 @@ public:
     }
   }
 
-  template <typename T>
-  void remove(T &l) {
-    for (auto &ext : l) {
-      extent_index.erase(l);
-    }
-  }
-
   ~ExtentIndex() { assert(extent_index.empty()); }
 };
 
