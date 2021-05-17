@@ -380,25 +380,32 @@ which are as follows:
   List metadata info.
 
 :command:`mdlog list`
-  List metadata log.
+  List metadata log which is needed for multi-site deployments.
 
 :command:`mdlog trim`
-  Trim metadata log.
+  Trim metadata log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`mdlog status`
   Read metadata log status.
 
 :command:`bilog list`
-  List bucket index log.
+  List bucket index log which is needed for multi-site deployments.
 
 :command:`bilog trim`
-  Trim bucket index log (use start-marker, end-marker).
+  Trim bucket index log (use start-marker, end-marker) manually instead
+  of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog list`
-  List data log.
+  List data log which is needed for multi-site deployments.
 
 :command:`datalog trim`
-  Trim data log.
+  Trim data log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog status`
   Read data log status.
