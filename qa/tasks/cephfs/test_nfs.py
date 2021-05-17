@@ -583,3 +583,29 @@ class TestNFS(MgrTestCase):
         update_with_invalid_values('user_id', 'testing_export', True)
         update_with_invalid_values('fs_name', 'b', True)
         self._test_delete_cluster()
+
+    def test_cmds_without_reqd_args(self):
+        '''
+        Test that cmd fails on not passing required arguments
+        '''
+        def exec_cmd_invalid(*cmd):
+            try:
+                self._nfs_cmd(*cmd)
+                self.fail(f"nfs {cmd} command executed successfully without required arguments")
+            except CommandFailedError as e:
+                # Command should fail for test to pass
+                if e.exitstatus != errno.EINVAL:
+                    raise
+
+        exec_cmd_invalid('cluster', 'create')
+        exec_cmd_invalid('cluster', 'delete')
+        exec_cmd_invalid('cluster', 'config', 'set')
+        exec_cmd_invalid('cluster', 'config', 'reset')
+        exec_cmd_invalid('export', 'create', 'cephfs')
+        exec_cmd_invalid('export', 'create', 'cephfs', 'a_fs')
+        exec_cmd_invalid('export', 'create', 'cephfs', 'a_fs', 'clusterid')
+        exec_cmd_invalid('export', 'ls')
+        exec_cmd_invalid('export', 'delete')
+        exec_cmd_invalid('export', 'delete', 'clusterid')
+        exec_cmd_invalid('export', 'get')
+        exec_cmd_invalid('export', 'get', 'clusterid')
