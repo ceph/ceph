@@ -971,6 +971,8 @@ int MonClient::wait_auth_rotating(double timeout)
 {
   std::lock_guard l(monc_lock);
   utime_t now = ceph_clock_now();
+  utime_t cutoff = now;
+  cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
   utime_t until = now;
   until += timeout;
 
@@ -984,7 +986,7 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
 
   while (auth_principal_needs_rotating_keys(entity_name) &&
-	 rotating_secrets->need_new_secrets(now)) {
+	 rotating_secrets->need_new_secrets(cutoff)) {
     if (now >= until) {
       ldout(cct, 0) << __func__ << " timed out after " << timeout << dendl;
       return -ETIMEDOUT;
@@ -992,6 +994,8 @@ int MonClient::wait_auth_rotating(double timeout)
     ldout(cct, 10) << __func__ << " waiting (until " << until << ")" << dendl;
     auth_cond.WaitUntil(monc_lock, until);
     now = ceph_clock_now();
+    cutoff = now;
+    cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
   }
   ldout(cct, 10) << __func__ << " done" << dendl;
   return 0;
