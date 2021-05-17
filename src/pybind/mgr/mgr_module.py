@@ -417,7 +417,7 @@ def CLICheckNonemptyFileInput(func: HandlerFuncType) -> HandlerFuncType:
         if isinstance(kwargs['inbuf'], str):
             # Delete new line separator at EOF (it may have been added by a text editor).
             kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
-        if not kwargs['inbuf']:
+        if not kwargs['inbuf'] or not kwargs['inbuf'].strip():
             return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
         return func(*args, **kwargs)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
