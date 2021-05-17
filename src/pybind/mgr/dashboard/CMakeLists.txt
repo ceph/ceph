@@ -85,23 +85,11 @@ add_npm_command(
   ${nodeenv}
 )
 
-# Glob some frontend files. With CMake 3.6, this can be simplified
-# to *.ts *.html. Just add:
-# list(FILTER frontend_src INCLUDE REGEX "frontend/src")
+# Glob some frontend files.
 file(
   GLOB_RECURSE frontend_src
   frontend/src/*.ts
-  frontend/src/*.html
-  frontend/src/*/*.ts
-  frontend/src/*/*.html
-  frontend/src/*/*/*.ts
-  frontend/src/*/*/*.html
-  frontend/src/*/*/*/*.ts
-  frontend/src/*/*/*/*.html
-  frontend/src/*/*/*/*/*.ts
-  frontend/src/*/*/*/*/*.html
-  frontend/src/*/*/*/*/*/*.ts
-  frontend/src/*/*/*/*/*/*.html)
+  frontend/src/*.html)
 
 # these files are generated during build
 list(REMOVE_ITEM frontend_src
