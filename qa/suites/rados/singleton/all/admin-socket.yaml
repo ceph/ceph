@@ -21,6 +21,6 @@ tasks:
       config set bluestore_csum_type xxhash64:
       perf dump:
       perf schema:
-      get_heap_property tcmalloc.max_total_thread_cache_byte:
-      set_heap_property tcmalloc.max_total_thread_cache_bytes 67108864:
-      set_heap_property tcmalloc.max_total_thread_cache_bytes 33554432:
+      get_heap_property tcmalloc.max_total_thread_cache_byte || dump_metrics memory:
+      set_heap_property tcmalloc.max_total_thread_cache_bytes 67108864 || dump_metrics memory:
+      set_heap_property tcmalloc.max_total_thread_cache_bytes 33554432 || dump_metrics memory:
