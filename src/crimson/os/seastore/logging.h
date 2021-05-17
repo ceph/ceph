@@ -12,23 +12,23 @@
 
 #ifdef NDEBUG
 
-#define LOG(LEVEL, MSG, ...) LOGGER . LEVEL("{}: " MSG, FNAME __VA_OPT__(,) __VA_ARGS__)
-#define LOGT(LEVEL, MSG, t, ...) LOGGER . LEVEL("{}({}): " MSG, FNAME, (void*)&t __VA_OPT__(,) __VA_ARGS__)
+#define LOG(level_, MSG, ...) LOGGER.log(level_, "{}: " MSG, FNAME __VA_OPT__(,) __VA_ARGS__))
+#define LOGT(level_, MSG, t, ...) LOGGER.log(level_, "{}({}): " MSG, FNAME, (void*)&t __VA_OPT__(,) __VA_ARGS__))
 
-#define TRACE(...) LOG(trace, __VA_ARGS__)
-#define TRACET(...) LOGT(trace, __VA_ARGS__)
+#define TRACE(...) LOG(seastar::log_level::trace, __VA_ARGS__)
+#define TRACET(...) LOGT(seastar::log_level::trace, __VA_ARGS__)
 
-#define DEBUG(...) LOG(debug, __VA_ARGS__)
-#define DEBUGT(...) LOGT(debug, __VA_ARGS__)
+#define DEBUG(...) LOG(seastar::log_level::debug, __VA_ARGS__)
+#define DEBUGT(...) LOGT(seastar::log_level::debug, __VA_ARGS__)
 
-#define INFO(...) LOG(info, __VA_ARGS__)
-#define INFOT(...) LOGT(info, __VA_ARGS__)
+#define INFO(...) LOG(seastar::log_level::info, __VA_ARGS__)
+#define INFOT(...) LOGT(seastar::log_level::info, __VA_ARGS__)
 
-#define WARN(...) LOG(warn, __VA_ARGS__)
-#define WARNT(...) LOGT(warn, __VA_ARGS__)
+#define WARN(...) LOG(seastar::log_level::warn, __VA_ARGS__)
+#define WARNT(...) LOGT(seastar::log_level::warn, __VA_ARGS__)
 
-#define ERROR(...) LOG(error, __VA_ARGS__)
-#define ERRORT(...) LOGT(error, __VA_ARGS__)
+#define ERROR(...) LOG(seastar::log_level::error, __VA_ARGS__)
+#define ERRORT(...) LOGT(seastar::log_level::error, __VA_ARGS__)
 
 #else
 // do compile-time format string validation
