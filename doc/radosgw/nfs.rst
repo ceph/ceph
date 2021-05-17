@@ -101,7 +101,7 @@ following characteristics:
 Configuring an NFS-Ganesha Instance
 ===================================
 
-Each NFS RGW instance is an NFS-Ganesha server instance *embeddding*
+Each NFS RGW instance is an NFS-Ganesha server instance *embedding*
 a full Ceph RGW instance.
 
 Therefore, the RGW NFS configuration includes Ceph and Ceph Object
