@@ -901,6 +901,7 @@ seastar::future<> Client::stop()
   logger().info("{}", __func__);
   auto fut = gate.close();
   timer.cancel();
+  ready_to_send = false;
   for (auto& pending_con : pending_conns) {
     pending_con->close();
   }
@@ -929,6 +930,7 @@ static entity_addr_t choose_client_addr(
 seastar::future<bool> Client::reopen_session(int rank)
 {
   logger().info("{} to mon.{}", __func__, rank);
+  ready_to_send = false;
   if (active_con) {
     active_con->close();
     active_con = nullptr;
@@ -1001,6 +1003,9 @@ void Client::_finish_auth(const entity_addr_t& peer)
   }
 
   ceph_assert(!active_con && !pending_conns.empty());
+  // It's too early to toggle the `ready_to_send` flag. It will
+  // be set atfer finishing the MAuth exchange and draining out
+  // the `pending_messages` queue.
   active_con = std::move(*found);
   *found = nullptr;
   for (auto& conn : pending_conns) {
@@ -1028,7 +1033,7 @@ Client::run_command(std::string&& cmd,
 
 seastar::future<> Client::send_message(MessageRef m)
 {
-  if (active_con) {
+  if (active_con && ready_to_send) {
     assert(pending_messages.empty());
     return active_con->get_conn()->send(m);
   } else {
@@ -1047,6 +1052,7 @@ seastar::future<> Client::on_session_opened()
       m.pr.set_value();
     }
     pending_messages.clear();
+    ready_to_send = true;
     return seastar::now();
   }).then([this] {
     return seastar::parallel_for_each(mon_commands,
