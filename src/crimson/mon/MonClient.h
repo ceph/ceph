@@ -55,6 +55,7 @@ class Client : public crimson::net::Dispatcher,
   const uint32_t want_keys;
 
   MonMap monmap;
+  bool ready_to_send = false;
   seastar::shared_ptr<Connection> active_con;
   std::vector<seastar::shared_ptr<Connection>> pending_conns;
   seastar::timer<seastar::lowres_clock> timer;
