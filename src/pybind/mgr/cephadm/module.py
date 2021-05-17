@@ -96,6 +96,7 @@ DEFAULT_PROMETHEUS_IMAGE = 'docker.io/prom/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'docker.io/prom/node-exporter:v0.18.1'
 DEFAULT_GRAFANA_IMAGE = 'docker.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_ALERT_MANAGER_IMAGE = 'docker.io/prom/alertmanager:v0.20.0'
+DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
 # ------------------------------------------------------------------------------
 
 
@@ -208,7 +209,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'container_image_haproxy',
-            default='haproxy',
+            default=DEFAULT_HAPROXY_IMAGE,
             desc='HAproxy container image',
         ),
         Option(
