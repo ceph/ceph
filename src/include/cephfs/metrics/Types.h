@@ -53,7 +53,7 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     os << "OPENED_INODES";
     break;
   default:
-    ceph_abort();
+    os << "Unknown metric type: " << type;
   }
 
   return os;
