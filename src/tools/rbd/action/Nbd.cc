@@ -21,7 +21,7 @@ namespace po = boost::program_options;
 static int call_nbd_cmd(const po::variables_map &vm,
                         const std::vector<std::string> &args,
                         const std::vector<std::string> &ceph_global_init_args) {
-  #ifdef _WIN32
+  #if defined(__FreeBSD__) || defined(_WIN32)
   std::cerr << "rbd: nbd device is not supported" << std::endl;
   return -EOPNOTSUPP;
   #else
@@ -60,6 +60,7 @@ static int call_nbd_cmd(const po::variables_map &vm,
   #endif
 }
 
+#if !defined(__FreeBSD__) && !defined(_WIN32)
 int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
   size_t arg_index = 0;
   std::string pool_name;
@@ -112,13 +113,14 @@ int parse_options(const std::vector<std::string> &options,
 
   return 0;
 }
+#endif
 
 int execute_list(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
 #if defined(__FreeBSD__) || defined(_WIN32)
   std::cerr << "rbd: nbd device is not supported" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::vector<std::string> args;
 
   args.push_back("list-mapped");
@@ -132,6 +134,7 @@ int execute_list(const po::variables_map &vm,
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_attach(const po::variables_map &vm,
@@ -139,7 +142,7 @@ int execute_attach(const po::variables_map &vm,
 #if defined(__FreeBSD__) || defined(_WIN32)
   std::cerr << "rbd: nbd device is not supported" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::vector<std::string> args;
   std::string device_path;
 
@@ -192,6 +195,7 @@ int execute_attach(const po::variables_map &vm,
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_detach(const po::variables_map &vm,
@@ -199,7 +203,7 @@ int execute_detach(const po::variables_map &vm,
 #if defined(__FreeBSD__) || defined(_WIN32)
   std::cerr << "rbd: nbd device is not supported" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();
@@ -232,6 +236,7 @@ int execute_detach(const po::variables_map &vm,
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_map(const po::variables_map &vm,
@@ -239,7 +244,7 @@ int execute_map(const po::variables_map &vm,
 #if defined(__FreeBSD__) || defined(_WIN32)
   std::cerr << "rbd: nbd device is not supported" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::vector<std::string> args;
 
   args.push_back("map");
@@ -275,6 +280,7 @@ int execute_map(const po::variables_map &vm,
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_unmap(const po::variables_map &vm,
@@ -282,7 +288,7 @@ int execute_unmap(const po::variables_map &vm,
 #if defined(__FreeBSD__) || defined(_WIN32)
   std::cerr << "rbd: nbd device is not supported" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();
@@ -315,6 +321,7 @@ int execute_unmap(const po::variables_map &vm,
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 void get_list_arguments_deprecated(po::options_description *positional,

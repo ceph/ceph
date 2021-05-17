@@ -635,11 +635,21 @@ int execute_unmap(const po::variables_map &vm,
 
 int execute_attach(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
+#if defined(WITH_KRBD)
+  std::cerr << "rbd: krbd does not support attach" << std::endl;
+#else
+  std::cerr << "rbd: kernel device is not supported" << std::endl;
+#endif
   return -EOPNOTSUPP;
 }
 
 int execute_detach(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
+#if defined(WITH_KRBD)
+  std::cerr << "rbd: krbd does not support detach" << std::endl;
+#else
+  std::cerr << "rbd: kernel device is not supported" << std::endl;
+#endif
   return -EOPNOTSUPP;
 }
 
