@@ -201,6 +201,27 @@ following option to the ``[global]`` section of your Ceph configuration file.
 We prefer that the cluster network is **NOT** reachable from the public network
 or the Internet for added security.
 
+IPv4/IPv6 Dual Stack Mode
+-------------------------
+
+If you want to run in an IPv4/IPv6 dual stack mode and want to define your public and/or
+cluster networks, then you need to specify both your IPv4 and IPv6 networks for each:
+
+.. code-block:: ini
+
+	[global]
+		# ... elided configuration
+		public network = {IPv4 public-network/netmask}, {IPv6 public-network/netmask}
+
+This is so ceph can find a valid IP address for both address families.
+
+If you want just an IPv4 or an IPv6 stack environment, then make sure you set the `ms bind`
+options correctly.
+
+.. note::
+   Binding to IPv4 is enabled by default, so if you just add the option to bind to IPv6
+   you'll actually put yourself into dual stack mode. If you want just IPv6, then disable IPv4 and
+   enable IPv6. See `Bind`_ below.
 
 Ceph Daemons
 ============
@@ -336,11 +357,16 @@ addresses.
 :Default: ``7300``
 :Required: No. 
 
+``ms bind ipv4``
+
+:Description: Enables Ceph daemons to bind to IPv4 addresses.
+:Type: Boolean
+:Default: ``true``
+:Required: No
 
 ``ms bind ipv6``
 
-:Description: Enables Ceph daemons to bind to IPv6 addresses. Currently the
-              messenger *either* uses IPv4 or IPv6, but it cannot do both.
+:Description: Enables Ceph daemons to bind to IPv6 addresses.
 :Type: Boolean
 :Default: ``false``
 :Required: No
