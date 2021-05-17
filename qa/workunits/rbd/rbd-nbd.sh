@@ -343,22 +343,39 @@ cat ${LOG_FILE}
 expect_false grep 'quiesce failed' ${LOG_FILE}
 
 # test detach/attach
-DEV=`_sudo rbd device --device-type nbd --options try-netlink map ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map ${POOL}/${IMAGE}`
+read DEV COOKIE <<< "${OUT}"
 get_pid ${POOL}
 _sudo mount ${DEV} ${TEMPDIR}/mnt
 _sudo rbd device detach ${POOL}/${IMAGE} --device-type nbd
 expect_false get_pid ${POOL}
 expect_false _sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd
-_sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
+if [ -n "${COOKIE}" ]; then
+    _sudo rbd device attach --device ${DEV} --cookie ${COOKIE} ${POOL}/${IMAGE} --device-type nbd
+else
+    _sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
+fi
 get_pid ${POOL}
 _sudo rbd device detach ${DEV} --device-type nbd
 expect_false get_pid ${POOL}
-_sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
+if [ -n "${COOKIE}" ]; then
+    _sudo rbd device attach --device ${DEV} --cookie ${COOKIE} ${POOL}/${IMAGE} --device-type nbd
+else
+    _sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
+fi
 get_pid ${POOL}
 ls ${TEMPDIR}/mnt/
 dd if=${TEMPDIR}/mnt/test of=/dev/null bs=1M count=1
 _sudo dd if=${DATA} of=${TEMPDIR}/mnt/test1 bs=1M count=1 oflag=direct
 _sudo umount ${TEMPDIR}/mnt
 unmap_device ${DEV} ${PID}
+# if kernel supports cookies
+if [ -n "${COOKIE}" ]; then
+    OUT=`_sudo rbd device --device-type nbd --show-cookie --cookie "abc de" --options try-netlink map ${POOL}/${IMAGE}`
+    read DEV ANOTHER_COOKIE <<< "${OUT}"
+    get_pid ${POOL}
+    test "${ANOTHER_COOKIE}" = "abc de"
+    unmap_device ${DEV} ${PID}
+fi
 
 echo OK
