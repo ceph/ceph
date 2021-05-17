@@ -88,13 +88,14 @@ add_npm_command(
 # Glob some frontend files.
 file(
   GLOB_RECURSE frontend_src
+  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
   frontend/src/*.ts
   frontend/src/*.html)
 
 # these files are generated during build
 list(REMOVE_ITEM frontend_src
-  ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/src/environments/environment.prod.ts
-  ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/src/environments/environment.ts)
+  frontend/src/environments/environment.prod.ts
+  frontend/src/environments/environment.ts)
 
 execute_process(
     COMMAND bash -c "jq -r .config.locale ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/package.json"
