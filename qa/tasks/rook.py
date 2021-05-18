@@ -10,6 +10,7 @@ import os
 import yaml
 from io import BytesIO
 
+from tarfile import ReadError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
@@ -17,6 +18,7 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
 from teuthology import contextutil
 from tasks.ceph import healthy
+from tasks.cephadm import update_archive_setting
 
 log = logging.getLogger(__name__)
 
@@ -168,6 +170,112 @@ def rook_operator(ctx, config):
                 ]
             )
         )
+
+
+@contextlib.contextmanager
+def ceph_log(ctx, config):
+    cluster_name = config['cluster']
+
+    log_dir = '/var/lib/rook/rook-ceph/log'
+    update_archive_setting(ctx, 'log', log_dir)
+
+    try:
+        yield
+
+    except Exception:
+        # we need to know this below
+        ctx.summary['success'] = False
+        raise
+
+    finally:
+        log.info('Checking cluster log for badness...')
+        def first_in_ceph_log(pattern, excludes):
+            """
+            Find the first occurrence of the pattern specified in the Ceph log,
+            Returns None if none found.
+
+            :param pattern: Pattern scanned for.
+            :param excludes: Patterns to ignore.
+            :return: First line of text (or None if not found)
+            """
+            args = [
+                'sudo',
+                'egrep', pattern,
+                f'{log_dir}/ceph.log',
+            ]
+            if excludes:
+                for exclude in excludes:
+                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+            args.extend([
+                run.Raw('|'), 'head', '-n', '1',
+            ])
+            r = ctx.rook[cluster_name].remote.run(
+                stdout=BytesIO(),
+                args=args,
+            )
+            stdout = r.stdout.getvalue().decode()
+            if stdout:
+                return stdout
+            return None
+
+        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
+                             config.get('log-ignorelist')) is not None:
+            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+            ctx.summary['success'] = False
+            # use the most severe problem as the failure reason
+            if 'failure_reason' not in ctx.summary:
+                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
+                    match = first_in_ceph_log(pattern, config['log-ignorelist'])
+                    if match is not None:
+                        ctx.summary['failure_reason'] = \
+                            '"{match}" in cluster log'.format(
+                                match=match.rstrip('\n'),
+                            )
+                        break
+
+        if ctx.archive is not None and \
+                not (ctx.config.get('archive-on-error') and ctx.summary['success']):
+            # and logs
+            log.info('Compressing logs...')
+            run.wait(
+                ctx.cluster.run(
+                    args=[
+                        'sudo',
+                        'find',
+                        log_dir,
+                        '-name',
+                        '*.log',
+                        '-print0',
+                        run.Raw('|'),
+                        'sudo',
+                        'xargs',
+                        '-0',
+                        '--no-run-if-empty',
+                        '--',
+                        'gzip',
+                        '--',
+                    ],
+                    wait=False,
+                ),
+            )
+
+            log.info('Archiving logs...')
+            path = os.path.join(ctx.archive, 'remote')
+            try:
+                os.makedirs(path)
+            except OSError:
+                pass
+            for remote in ctx.cluster.remotes.keys():
+                sub = os.path.join(path, remote.name)
+                try:
+                    os.makedirs(sub)
+                except OSError:
+                    pass
+                try:
+                    teuthology.pull_directory(remote, log_dir,
+                                              os.path.join(sub, 'log'))
+                except ReadError:
+                    pass
 
 
 def build_initial_config(ctx, config):
@@ -493,6 +601,7 @@ def task(ctx, config):
     
     with contextutil.nested(
             lambda: rook_operator(ctx, config),
+            lambda: ceph_log(ctx, config),
             lambda: rook_cluster(ctx, config),
             lambda: rook_toolbox(ctx, config),
             lambda: wait_for_osds(ctx, config),
