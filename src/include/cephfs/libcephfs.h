@@ -456,6 +456,15 @@ int ceph_conf_parse_env(struct ceph_mount_info *cmount, const char *var);
  */
 int ceph_conf_set(struct ceph_mount_info *cmount, const char *option, const char *value);
 
+/** Set mount timeout.
+ *
+ * @param cmount mount handle to set the configuration value on
+ * @param timeout mount timeout interval
+ *
+ * @returns 0 on success, negative error code otherwise.
+ */
+int ceph_set_mount_timeout(struct ceph_mount_info *cmount, uint32_t timeout);
+
 /**
  * Gets the configuration value as a string.
  *

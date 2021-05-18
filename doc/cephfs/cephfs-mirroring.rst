@@ -307,6 +307,19 @@ synchronization.
 When mirroring is disabled, the respective `fs mirror status` command for the file system
 will not show up in command help.
 
+Configuration Options
+---------------------
+
+.. confval:: cephfs_mirror_max_concurrent_directory_syncs
+.. confval:: cephfs_mirror_action_update_interval
+.. confval:: cephfs_mirror_restart_mirror_on_blocklist_interval
+.. confval:: cephfs_mirror_max_snapshot_sync_per_cycle
+.. confval:: cephfs_mirror_directory_scan_interval
+.. confval:: cephfs_mirror_max_consecutive_failures_per_directory
+.. confval:: cephfs_mirror_retry_failed_directories_interval
+.. confval:: cephfs_mirror_restart_mirror_on_failure_interval
+.. confval:: cephfs_mirror_mount_timeout
+
 Re-adding Peers
 ---------------
 

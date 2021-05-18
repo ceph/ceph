@@ -63,6 +63,8 @@ cdef nogil:
         pass
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value):
         pass
+    int ceph_set_mount_timeout(ceph_mount_info *cmount, uint32_t timeout):
+        pass
 
     int ceph_mount(ceph_mount_info *cmount, const char *root):
         pass
