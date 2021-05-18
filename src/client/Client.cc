@@ -4788,37 +4788,6 @@ void Client::early_kick_flushing_caps(MetaSession *session)
   }
 }
 
-void SnapRealm::build_snap_context()
-{
-  set<snapid_t> snaps;
-  snapid_t max_seq = seq;
-  
-  // start with prior_parents?
-  for (unsigned i=0; i<prior_parent_snaps.size(); i++)
-    snaps.insert(prior_parent_snaps[i]);
-
-  // current parent's snaps
-  if (pparent) {
-    const SnapContext& psnapc = pparent->get_snap_context();
-    for (unsigned i=0; i<psnapc.snaps.size(); i++)
-      if (psnapc.snaps[i] >= parent_since)
-	snaps.insert(psnapc.snaps[i]);
-    if (psnapc.seq > max_seq)
-      max_seq = psnapc.seq;
-  }
-
-  // my snaps
-  for (unsigned i=0; i<my_snaps.size(); i++)
-    snaps.insert(my_snaps[i]);
-
-  // ok!
-  cached_snap_context.seq = max_seq;
-  cached_snap_context.snaps.resize(0);
-  cached_snap_context.snaps.reserve(snaps.size());
-  for (set<snapid_t>::reverse_iterator p = snaps.rbegin(); p != snaps.rend(); ++p)
-    cached_snap_context.snaps.push_back(*p);
-}
-
 void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 {
   list<SnapRealm*> q;
@@ -11235,11 +11204,11 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
   return statfs(0, stbuf, perms);
 }
 
-void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
+void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
 {
   if (!args)
     return;
-  std::scoped_lock l(client_lock);
+
   ldout(cct, 10) << __func__ << " cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
@@ -11269,6 +11238,23 @@ void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
   }
   if (args->umask_cb)
     umask_cb = args->umask_cb;
+}
+
+// This is deprecated, use ll_register_callbacks2() instead.
+void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
+{
+  ceph_assert(!is_mounting() && !is_mounted() && !is_unmounting());
+
+  _ll_register_callbacks(args);
+}
+
+int Client::ll_register_callbacks2(struct ceph_client_callback_args *args)
+{
+  if (is_mounting() || is_mounted() || is_unmounting())
+    return -CEPHFS_EBUSY;
+
+  _ll_register_callbacks(args);
+  return 0;
 }
 
 int Client::test_dentry_handling(bool can_invalidate)

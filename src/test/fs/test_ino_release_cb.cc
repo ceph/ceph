@@ -57,7 +57,8 @@ int main(int argc, char *argv[])
 
 	struct ceph_client_callback_args args = { 0 };
 	args.ino_release_cb = cb;
-	ceph_ll_register_callbacks(cmount, &args);
+	ret = ceph_ll_register_callbacks2(cmount, &args);
+	assert(ret == 0);
 
 	ret = ceph_mount(cmount, NULL);
 	assert(ret >= 0);
