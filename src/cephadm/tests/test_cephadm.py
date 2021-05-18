@@ -524,6 +524,26 @@ docker.io/ceph/daemon-base:octopus
         image = cd._filter_last_local_ceph_image(out)
         assert image == 'docker.io/ceph/ceph:v15.2.5'
 
+    def test_should_log_to_journald(self):
+        ctx = mock.Mock()
+        # explicit
+        ctx.log_to_journald = True
+        assert cd.should_log_to_journald(ctx)
+
+        ctx.log_to_journald = None
+        # enable if podman support --cgroup=split
+        ctx.container_engine = self.mock_podman()
+        ctx.container_engine.version = (2, 1, 0)
+        assert cd.should_log_to_journald(ctx)
+
+        # disable on old podman
+        ctx.container_engine.version = (2, 0, 0)
+        assert not cd.should_log_to_journald(ctx)
+
+        # disable on docker
+        ctx.container_engine = self.mock_docker()
+        assert not cd.should_log_to_journald(ctx)
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
