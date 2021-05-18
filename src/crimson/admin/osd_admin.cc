@@ -135,11 +135,11 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPGStateHistory>(con
 //dump the contents of perfcounters in osd and store
 class DumpPerfCountersHook final: public AdminSocketHook {
 public:
-  explicit DumpPerfCountersHook(const crimson::osd::OSD &osd) :
+  explicit DumpPerfCountersHook() :
     AdminSocketHook{"perfcounters_dump",
-                    "",
-                    "dump perfcounters in osd and store"},
-    osd{osd}
+                    "name=logger,type=CephString,req=false "
+                    "name=counter,type=CephString,req=false",
+                    "dump perfcounters in osd and store"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
                                       std::string_view format,
@@ -156,10 +156,8 @@ public:
     crimson::common::local_perf_coll().dump_formatted(f.get(), false, logger, counter);
     return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
-private:
-  const crimson::osd::OSD& osd;
 };
-template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>(const crimson::osd::OSD& osd);
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>();
 
 
 
@@ -194,28 +192,76 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<AssertAlwaysHook>();
 */
 class SeastarMetricsHook : public AdminSocketHook {
 public:
- SeastarMetricsHook()  :
-   AdminSocketHook("perf dump_seastar",
-      "",
-      "dump current configured seastar metrics and their values")
- {}
- seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
-             std::string_view format,
-             ceph::bufferlist&& input) const final
- {
-   std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-   f->open_object_section("perf_dump_seastar");
-   for (const auto& mf : seastar::scollectd::get_value_map()) {
-     for (const auto& m : mf.second) {
-       if (m.second && m.second->is_enabled()) {
-         auto& metric_function = m.second->get_function();
-         f->dump_float(m.second->get_id().full_name(), metric_function().d());
-       }
-     }
-   }
-   f->close_section();
-   return seastar::make_ready_future<tell_result_t>(std::move(f));
- }
+  SeastarMetricsHook() :
+    AdminSocketHook("perf dump_seastar",
+                    "name=group,type=CephString,req=false",
+                    "dump current configured seastar metrics and their values")
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    std::string prefix;
+    cmd_getval(cmdmap, "group", prefix);
+    f->open_object_section("perf_dump_seastar");
+    for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
+      if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
+       continue;
+      }
+      for (const auto& [labels, metric] : metric_family) {
+        if (metric && metric->is_enabled()) {
+          dump_metric_value(f.get(), full_name, *metric);
+        }
+      }
+    }
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+private:
+  using registered_metric = seastar::metrics::impl::registered_metric;
+  using data_type = seastar::metrics::impl::data_type;
+
+  static void dump_metric_value(Formatter* f,
+                                string_view full_name,
+                                const registered_metric& metric)
+  {
+    switch (auto v = metric(); v.type()) {
+    case data_type::GAUGE:
+      f->dump_float(full_name, v.d());
+      break;
+    case data_type::COUNTER:
+      [[fallthrough]];
+    case data_type::DERIVE:
+      f->dump_unsigned(full_name, v.ui());
+      break;
+    case data_type::HISTOGRAM: {
+      f->open_object_section(full_name);
+      auto&& h = v.get_histogram();
+      f->dump_float("sum", h.sample_sum);
+      f->dump_unsigned("count", h.sample_count);
+      f->open_array_section("buckets");
+      for (auto i : h.buckets) {
+        f->open_object_section("bucket");
+        f->dump_float("le", i.upper_bound);
+        f->dump_unsigned("count", i.count);
+        f->close_section(); // "bucket"
+      }
+      {
+        f->open_object_section("bucket");
+        f->dump_string("le", "+Inf");
+        f->dump_unsigned("count", h.sample_count);
+        f->close_section();
+      }
+      f->close_section(); // "buckets"
+      f->close_section(); // full_name
+    }
+      break;
+    default:
+      std::abort();
+      break;
+    }
+  }
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<SeastarMetricsHook>();
 

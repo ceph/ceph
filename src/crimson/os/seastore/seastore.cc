@@ -33,7 +33,8 @@ SeaStore::~SeaStore() {
   perf_service->remove_from_collection();
 }
 
-struct SeastoreCollection final : public FuturizedCollection {
+class SeastoreCollection final : public FuturizedCollection {
+public:
   template <typename... T>
   SeastoreCollection(T&&... args) :
     FuturizedCollection(std::forward<T>(args)...) {}
@@ -1104,8 +1105,7 @@ std::unique_ptr<SeaStore> make_seastore(
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
-    std::move(lba_manager),
-    perf_service->get_counters());
+    std::move(lba_manager));
 
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
