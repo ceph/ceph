@@ -623,7 +623,6 @@ class RealmCommand:
 
     def parse(self):
         parser = argparse.ArgumentParser(
-            description='S3 control tool',
             usage='''rgwam realm <subcommand>
 
 The subcommands are:
@@ -681,7 +680,6 @@ class ZoneCommand:
 
     def parse(self):
         parser = argparse.ArgumentParser(
-            description='S3 control tool',
             usage='''rgwam zone <subcommand>
 
 The subcommands are:
@@ -732,40 +730,53 @@ class TopLevelCommand:
     def _parse(self):
         parser = argparse.ArgumentParser(
             description='RGW assist for multisite tool',
-            usage='''rgwam <command> [<args>]
-
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog='''
 The commands are:
    realm bootstrap               Bootstrap new realm
    realm new-zone-creds          Create credentials to connect new zone to realm
    zone create                   Create new zone and connect it to existing realm
    zone run                      Run radosgw in current zone
 ''')
-        parser.add_argument('command', help='Subcommand to run')
-        # parse_args defaults to [1:] for args, but you need to
-        # exclude the rest of the args too, or validation will fail
-        args = parser.parse_args(sys.argv[1:2])
-        if not hasattr(self, args.command) or args.command[0] == '_':
-            print('Unrecognized command:', args.command)
+
+        parser.add_argument('command', help='command to run', default=None)
+        parser.add_argument('-n', help='ceph user name', dest='ceph_name')
+
+        removed_args = []
+
+        args = sys.argv[1:]
+        if len(args) > 0:
+            if hasattr(self, args[0]):
+                # remove -h/--help if top command is not empty so that top level help
+                # doesn't override subcommand, we'll add it later
+                help_args = [ '-h', '--help' ]
+                removed_args = [arg for arg in args if arg in help_args]
+                args = [arg for arg in args if arg not in help_args]
+
+        (ns, args) = parser.parse_known_args(args)
+        if not hasattr(self, ns.command) or ns.command[0] == '_':
+            print('Unrecognized command:', ns.command)
             parser.print_help()
             exit(1)
         # use dispatch pattern to invoke method with same name
-        return getattr(self, args.command)
+        args += removed_args
+        return (getattr(self, ns.command), args)
 
-    def realm(self):
-        cmd = RealmCommand(sys.argv[2:]).parse()
+    def realm(self, args):
+        cmd = RealmCommand(args).parse()
         return cmd()
 
-    def zone(self):
-        cmd = ZoneCommand(sys.argv[2:]).parse()
+    def zone(self, args):
+        cmd = ZoneCommand(args).parse()
         return cmd()
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    cmd = TopLevelCommand()._parse()
+    (cmd, args)= TopLevelCommand()._parse()
     try:
-        ret = cmd()
+        ret = cmd(args)
         if not ret:
             sys.exit(1)
     except RGWAMException as e:
