@@ -306,6 +306,7 @@ private:
   void send_log(bool flush = false);
 
   bool ms_dispatch(Message *m) override;
+  void ms_handle_connect(Connection *con) final;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override { return false; }

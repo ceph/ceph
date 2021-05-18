@@ -810,6 +810,26 @@ void MonClient::_add_conns()
   }
 }
 
+void MonClient::ms_handle_connect(Connection *con)
+{
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+    return;
+  }
+  std::lock_guard lock(monc_lock);
+  if (!active_con || active_con->get_con() != con) {
+    ldout(cct, 1) << __func__ << " connected to mon."
+		  << monmap.get_name(con->get_peer_addrs())
+		  << " with non-active conn" << dendl;
+    return;
+  }
+  while (!waiting_for_session.empty()) {
+    _send_mon_message(std::move(waiting_for_session.front()));
+    waiting_for_session.pop_front();
+  }
+  _resend_mon_commands();
+  send_log(true);
+}
+
 bool MonClient::ms_handle_reset(Connection *con)
 {
   std::lock_guard lock(monc_lock);
@@ -898,12 +918,6 @@ void MonClient::_finish_hunting(int auth_err)
 
   if (!auth_err) {
     last_rotating_renew_sent = utime_t();
-    while (!waiting_for_session.empty()) {
-      _send_mon_message(std::move(waiting_for_session.front()));
-      waiting_for_session.pop_front();
-    }
-    _resend_mon_commands();
-    send_log(true);
     if (active_con) {
       auth = std::move(active_con->get_auth());
       if (global_id && global_id != active_con->get_global_id()) {
