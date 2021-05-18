@@ -25,7 +25,7 @@ using namespace crimson::os::seastore::lba_manager;
 using namespace crimson::os::seastore::lba_manager::btree;
 
 struct btree_lba_manager_test :
-  public seastar_test_suite_t, JournalSegmentProvider {
+  public seastar_test_suite_t, SegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   Journal journal;
   Cache cache;

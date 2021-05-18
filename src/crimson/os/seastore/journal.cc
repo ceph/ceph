@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/journal.h"
 
 #include "include/intarith.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
 
 namespace {
