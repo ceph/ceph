@@ -164,7 +164,6 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-	std::string fs_name_,
         ceph::mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -178,7 +177,6 @@ class MDSRank {
 	boost::asio::io_context& ioc);
 
     mds_rank_t get_nodeid() const { return whoami; }
-    std::string_view get_fs_name() const { return fs_name; }
     int64_t get_metadata_pool() const
     {
         return metadata_pool;
@@ -443,7 +441,6 @@ class MDSRank {
     friend class C_MDS_MonCommand;
 
     const mds_rank_t whoami;
-    std::string fs_name;
 
     ~MDSRank();
 
@@ -660,7 +657,6 @@ class MDSRankDispatcher : public MDSRank, public md_config_obs_t
 public:
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      std::string fs_name,
       ceph::mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,
