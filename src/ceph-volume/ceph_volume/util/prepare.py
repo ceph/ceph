@@ -176,7 +176,7 @@ def create_id(fsid, json_secrets, osd_id=None):
 
 def osd_id_available(osd_id):
     """
-    Checks to see if an osd ID exists and if it's available for
+    Checks to see if an osd ID exists or if it's available for
     reuse. Returns True if it is, False if it isn't.
 
     :param osd_id: The osd ID to check
@@ -202,6 +202,8 @@ def osd_id_available(osd_id):
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
     osd = [osd for osd in osds if str(osd['id']) == str(osd_id)]
+    if osd is None:
+        return True
     if osd and osd[0].get('status') == "destroyed":
         return True
     return False
