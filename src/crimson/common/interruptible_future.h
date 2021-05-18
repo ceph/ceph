@@ -669,6 +669,22 @@ public:
     return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
   }
 
+  template <typename ValFuncT, typename ErrorFuncT>
+  [[gnu::always_inline]]
+  auto safe_then_unpack_interruptible(ValFuncT&& func, ErrorFuncT&& errfunc) {
+    return safe_then_interruptible([func=std::forward<ValFuncT>(func)](T&& tuple) mutable {
+      return std::apply(std::forward<ValFuncT>(func), std::move(tuple));
+    }, std::forward<ErrorFuncT>(errfunc));
+  }
+
+  template <typename ValFuncT>
+  [[gnu::always_inline]]
+  auto safe_then_unpack_interruptible(ValFuncT&& func) {
+    return safe_then_interruptible([func=std::forward<ValFuncT>(func)](T&& tuple) mutable {
+      return std::apply(std::forward<ValFuncT>(func), std::move(tuple));
+    });
+  }
+
   template <bool interruptible = true, typename ValueInterruptCondT,
 	    typename U = T, std::enable_if_t<!std::is_void_v<T> && interruptible, int> = 0>
   [[gnu::always_inline]]
@@ -705,6 +721,22 @@ public:
 	std::forward<ValueInterruptCondT>(valfunc),
 	::crimson::composer(std::forward<ErrorVisitorHeadT>(err_func_head),
 			    std::forward<ErrorVisitorTailT>(err_func_tail)...));
+  }
+
+  template <typename ValFuncT,
+	    typename ErrorVisitorHeadT,
+	    typename... ErrorVisitorTailT>
+  [[gnu::always_inline]]
+  auto safe_then_unpack_interruptible_tuple(
+      ValFuncT&& valfunc,
+      ErrorVisitorHeadT&& err_func_head,
+      ErrorVisitorTailT&&... err_func_tail) {
+    return safe_then_interruptible_tuple(
+      [valfunc=std::forward<ValFuncT>(valfunc)](T&& tuple) mutable {
+      return std::apply(std::forward<ValFuncT>(valfunc), std::move(tuple));
+    },
+    ::crimson::composer(std::forward<ErrorVisitorHeadT>(err_func_head),
+			std::forward<ErrorVisitorTailT>(err_func_tail)...));
   }
 
   template <bool interruptible = true, typename ErrorFunc>
@@ -828,6 +860,14 @@ public:
     return interruptible_future_detail<
 	      InterruptCond,
 	      seastar::future<>>(seastar::now());
+  }
+
+  template <typename ValueT = void, typename... A>
+  [[gnu::always_inline]]
+  static interruptible_future_detail<InterruptCond, seastar::future<ValueT>>
+  make_ready_future(A&&... value) {
+    return interruptible_future_detail<InterruptCond, seastar::future<ValueT>>(
+	seastar::make_ready_future<ValueT>(std::forward<A>(value)...));
   }
 
   template <typename T>

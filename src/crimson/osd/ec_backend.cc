@@ -22,7 +22,7 @@ ECBackend::_read(const hobject_t& hoid,
   return seastar::make_ready_future<bufferlist>();
 }
 
-ECBackend::interruptible_future<crimson::osd::acked_peers_t>
+ECBackend::rep_op_fut_t
 ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                const hobject_t& hoid,
                                ceph::os::Transaction&& txn,
@@ -31,5 +31,6 @@ ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 			       std::vector<pg_log_entry_t>&& log_entries)
 {
   // todo
-  return seastar::make_ready_future<crimson::osd::acked_peers_t>();
+  return {seastar::now(),
+	  seastar::make_ready_future<crimson::osd::acked_peers_t>()};
 }

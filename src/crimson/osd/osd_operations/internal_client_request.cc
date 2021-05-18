@@ -58,36 +58,41 @@ seastar::future<> InternalClientRequest::start()
               handle.enter(pp().get_obc)
             ).then_interruptible([this] () -> PG::load_obc_iertr::future<> {
               logger().debug("{}: getting obc lock", *this);
-              auto osd_ops = create_osd_ops();
-              logger().debug("InternalClientRequest: got {} OSDOps to execute",
-                             std::size(osd_ops));
-              [[maybe_unused]] const int ret = op_info.set_from_op(
-                std::as_const(osd_ops), pg->get_pgid().pgid, *pg->get_osdmap());
-              assert(ret == 0);
-              return pg->with_locked_obc(get_target_oid(), op_info,
-                [osd_ops=std::move(osd_ops), this](auto obc) {
-                return with_blocking_future_interruptible<IOInterruptCondition>(
-                  handle.enter(pp().process)
-                ).then_interruptible(
-                  [obc=std::move(obc), osd_ops=std::move(osd_ops), this] {
-                  return pg->do_osd_ops(
-                    std::move(obc),
-                    std::move(osd_ops),
-                    std::as_const(op_info),
-                    get_do_osd_ops_params(),
-                    [] {
-                      return PG::do_osd_ops_iertr::now();
-                    },
-                    [] (const std::error_code& e) {
-                      return PG::do_osd_ops_iertr::now();
-                    }
-                  ).safe_then_interruptible(
-                    [] {
-                      return interruptor::now();
-                    }, crimson::ct_error::eagain::handle([] {
-                      return interruptor::now();
-                    })
-                  );
+              return seastar::do_with(create_osd_ops(),
+                [this](auto& osd_ops) mutable {
+                logger().debug("InternalClientRequest: got {} OSDOps to execute",
+                               std::size(osd_ops));
+                [[maybe_unused]] const int ret = op_info.set_from_op(
+                  std::as_const(osd_ops), pg->get_pgid().pgid, *pg->get_osdmap());
+                assert(ret == 0);
+                return pg->with_locked_obc(get_target_oid(), op_info,
+                  [&osd_ops, this](auto obc) {
+                  return with_blocking_future_interruptible<IOInterruptCondition>(
+                    handle.enter(pp().process)
+                  ).then_interruptible(
+                    [obc=std::move(obc), &osd_ops, this] {
+                    return pg->do_osd_ops(
+                      std::move(obc),
+                      osd_ops,
+                      std::as_const(op_info),
+                      get_do_osd_ops_params(),
+                      [] {
+                        return PG::do_osd_ops_iertr::now();
+                      },
+                      [] (const std::error_code& e) {
+                        return PG::do_osd_ops_iertr::now();
+                      }
+                    ).safe_then_unpack_interruptible(
+                      [](auto submitted, auto all_completed) {
+                        return all_completed.handle_error_interruptible(
+                          crimson::ct_error::eagain::handle([] {
+                            return seastar::now();
+                          }));
+                      }, crimson::ct_error::eagain::handle([] {
+                        return interruptor::now();
+                      })
+                    );
+                  });
                 });
               });
             }).handle_error_interruptible(PG::load_obc_ertr::all_same_way([] {
