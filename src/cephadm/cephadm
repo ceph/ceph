@@ -363,7 +363,7 @@ def populate_files(config_dir, config_files, uid, gid):
         config_file = os.path.join(config_dir, fname)
         config_content = dict_get_join(config_files, fname)
         logger.info('Write file: %s' % (config_file))
-        with open(config_file, 'w') as f:
+        with open(config_file, 'w', encoding='utf-8') as f:
             os.fchown(f.fileno(), uid, gid)
             os.fchmod(f.fileno(), 0o600)
             f.write(config_content)
@@ -2219,7 +2219,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
                     fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
                 else:
                     fpath = os.path.join(data_dir_root, config_dir, fname)
-                with open(fpath, 'w') as f:
+                with open(fpath, 'w', encoding='utf-8') as f:
                     os.fchown(f.fileno(), uid, gid)
                     os.fchmod(f.fileno(), 0o600)
                     f.write(content)

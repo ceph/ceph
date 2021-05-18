@@ -1004,8 +1004,10 @@ class TestMonitoring(object):
             daemon_id=daemon_id
         )
         assert _open.call_args_list == [
-            call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w'),
-            call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w'),
+            call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
+                 encoding='utf-8'),
+            call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
+                 encoding='utf-8'),
         ]
         assert call().__enter__().write('foo') in _open.mock_calls
         assert call().__enter__().write('bar') in _open.mock_calls
