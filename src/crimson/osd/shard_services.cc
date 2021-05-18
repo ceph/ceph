@@ -206,7 +206,7 @@ seastar::future<> ShardServices::send_pg_temp()
   for (auto& [pgid, pg_temp] : pg_temp_wanted) {
     auto& m = ms[pg_temp.forced];
     if (!m) {
-      m = crimson::net::make_message<MOSDPGTemp>(osdmap->get_epoch());
+      m = crimson::make_message<MOSDPGTemp>(osdmap->get_epoch());
       m->forced = pg_temp.forced;
     }
     m->pg_temp.emplace(pgid, pg_temp.acting);
@@ -239,7 +239,7 @@ seastar::future<> ShardServices::send_pg_created(pg_t pgid)
   auto o = get_osdmap();
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   pg_created.insert(pgid);
-  return monc.send_message(crimson::net::make_message<MOSDPGCreated>(pgid));
+  return monc.send_message(crimson::make_message<MOSDPGCreated>(pgid));
 }
 
 seastar::future<> ShardServices::send_pg_created()
@@ -249,7 +249,7 @@ seastar::future<> ShardServices::send_pg_created()
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   return seastar::parallel_for_each(pg_created,
     [this](auto &pgid) {
-      return monc.send_message(crimson::net::make_message<MOSDPGCreated>(pgid));
+      return monc.send_message(crimson::make_message<MOSDPGCreated>(pgid));
     });
 }
 
@@ -312,7 +312,7 @@ seastar::future<> ShardServices::send_alive(const epoch_t want)
         up_thru_wanted > up_thru) {
     logger().debug("{} up_thru_wanted={} up_thru={}", __func__, want, up_thru);
     return monc.send_message(
-      crimson::net::make_message<MOSDAlive>(osdmap->get_epoch(), want));
+      crimson::make_message<MOSDAlive>(osdmap->get_epoch(), want));
   } else {
     logger().debug("{} {} <= {}", __func__, want, osdmap->get_up_thru(whoami));
     return seastar::now();

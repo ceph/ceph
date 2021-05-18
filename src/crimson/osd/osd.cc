@@ -366,7 +366,7 @@ seastar::future<> OSD::_send_boot()
   logger().info("hb_back_msgr: {}", heartbeat->get_back_addrs());
   logger().info("hb_front_msgr: {}", heartbeat->get_front_addrs());
   logger().info("cluster_msgr: {}", cluster_msgr->get_myaddr());
-  auto m = crimson::net::make_message<MOSDBoot>(superblock,
+  auto m = crimson::make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
                                   osdmap->get_epoch(),
                                   heartbeat->get_back_addrs(),
@@ -738,7 +738,7 @@ MessageRef OSD::get_stats() const
 {
   // todo: m-to-n: collect stats using map-reduce
   // MPGStats::had_map_for is not used since PGMonitor was removed
-  auto m = make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
+  auto m = ceph::make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
   m->osd_stat = osd_stat;
   for (auto [pgid, pg] : pg_map.get_pgs()) {
     if (pg->is_primary()) {
@@ -1105,7 +1105,7 @@ seastar::future<> OSD::send_incremental_map(crimson::net::ConnectionRef conn,
   if (first >= superblock.oldest_map) {
     return load_map_bls(first, superblock.newest_map)
     .then([this, conn, first](auto&& bls) {
-      auto m = crimson::net::make_message<MOSDMap>(monc->get_fsid(),
+      auto m = crimson::make_message<MOSDMap>(monc->get_fsid(),
 	  osdmap->get_encoding_features());
       m->oldest_map = first;
       m->newest_map = superblock.newest_map;
@@ -1115,7 +1115,7 @@ seastar::future<> OSD::send_incremental_map(crimson::net::ConnectionRef conn,
   } else {
     return load_map_bl(osdmap->get_epoch())
     .then([this, conn](auto&& bl) mutable {
-      auto m = crimson::net::make_message<MOSDMap>(monc->get_fsid(),
+      auto m = crimson::make_message<MOSDMap>(monc->get_fsid(),
 	  osdmap->get_encoding_features());
       m->oldest_map = superblock.oldest_map;
       m->newest_map = superblock.newest_map;
@@ -1240,7 +1240,7 @@ seastar::future<> OSD::send_beacon()
   // FIXME: min lec should be calculated from pg_stat
   //        and should set m->pgs
   epoch_t min_last_epoch_clean = osdmap->get_epoch();
-  auto m = crimson::net::make_message<MOSDBeacon>(osdmap->get_epoch(),
+  auto m = crimson::make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean,
                                     superblock.last_purged_snaps_scrub,
                                     local_conf()->osd_beacon_report_interval);
@@ -1346,7 +1346,7 @@ seastar::future<> OSD::prepare_to_stop()
     return seastar::with_timeout(
       seastar::timer<>::clock::now() + timeout,
       monc->send_message(
-	  crimson::net::make_message<MOSDMarkMeDown>(
+	  crimson::make_message<MOSDMarkMeDown>(
 	    monc->get_fsid(),
 	    whoami,
 	    osdmap->get_addrs(whoami),

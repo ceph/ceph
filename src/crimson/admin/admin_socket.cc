@@ -131,7 +131,7 @@ seastar::future<> AdminSocket::handle_command(crimson::net::ConnectionRef conn,
   return execute_command(m->cmd, std::move(m->get_data())).then(
     [conn, tid=m->get_tid()](auto result) {
     auto [ret, err, out] = std::move(result);
-    auto reply = crimson::net::make_message<MCommandReply>(ret, err);
+    auto reply = crimson::make_message<MCommandReply>(ret, err);
     reply->set_tid(tid);
     reply->set_data(out);
     return conn->send(std::move(reply));
