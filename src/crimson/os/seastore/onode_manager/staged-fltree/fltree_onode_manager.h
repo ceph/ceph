@@ -4,7 +4,6 @@
 #pragma once
 
 #include "crimson/os/seastore/onode_manager.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
 
@@ -95,8 +94,7 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
 
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
-    tree(std::make_unique<SeastoreNodeExtentManager>(
-           tm, laddr_t{})) {}
+    tree(NodeExtentManager::create_seastore(tm)) {}
 
   mkfs_ret mkfs(Transaction &t) {
     return tree.mkfs(t);
