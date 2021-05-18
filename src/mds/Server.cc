@@ -2459,7 +2459,7 @@ void Server::handle_osd_map()
    * using osdmap_full_flag(), because we want to know "is the flag set"
    * rather than "does the flag apply to us?" */
   mds->objecter->with_osdmap([this](const OSDMap& o) {
-      auto pi = o.get_pg_pool(mds->mdsmap->get_metadata_pool());
+      auto pi = o.get_pg_pool(mds->get_metadata_pool());
       is_full = pi && pi->has_flag(pg_pool_t::FLAG_FULL);
       dout(7) << __func__ << ": full = " << is_full << " epoch = "
 	      << o.get_epoch() << dendl;
@@ -4035,7 +4035,7 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
   if (parent_ino) {
     diri = mdcache->get_inode(parent_ino);
     if (!diri) {
-      mdcache->open_ino(parent_ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr));
+      mdcache->open_ino(parent_ino, mds->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr));
       return;
     }
 
@@ -4067,7 +4067,7 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
 
     respond_to_request(mdr, -CEPHFS_ESTALE);
   } else {
-    mdcache->open_ino(vino.ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr), false);
+    mdcache->open_ino(vino.ino, mds->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr), false);
   }
 }
 
