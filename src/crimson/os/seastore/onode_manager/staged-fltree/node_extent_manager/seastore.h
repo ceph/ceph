@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <random>
+
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
@@ -66,18 +68,43 @@ class SeastoreNodeExtent final: public NodeExtent {
   DeltaRecorderURef recorder;
 };
 
-class SeastoreNodeExtentManager final: public NodeExtentManager {
+class TransactionManagerHandle : public NodeExtentManager {
  public:
-  SeastoreNodeExtentManager(TransactionManager& tm, laddr_t min)
-    : tm{tm}, addr_min{min} {};
+  TransactionManagerHandle(TransactionManager& tm) : tm{tm} {}
+  TransactionManager& tm;
+};
+
+template <bool INJECT_EAGAIN=false>
+class SeastoreNodeExtentManager final: public TransactionManagerHandle {
+ public:
+  SeastoreNodeExtentManager(
+      TransactionManager& tm, laddr_t min, double p_eagain)
+      : TransactionManagerHandle(tm), addr_min{min}, p_eagain{p_eagain} {
+    if constexpr (INJECT_EAGAIN) {
+      assert(p_eagain > 0.0 && p_eagain < 1.0);
+    } else {
+      assert(p_eagain == 0.0);
+    }
+  }
+
   ~SeastoreNodeExtentManager() override = default;
-  TransactionManager& get_tm() { return tm; }
+
+  void set_generate_eagain(bool enable) {
+    generate_eagain = enable;
+  }
+
  protected:
   bool is_read_isolated() const override { return true; }
 
   read_ertr::future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) override {
     TRACET("reading {}B at {:#x} ...", t, len, addr);
+    if constexpr (INJECT_EAGAIN) {
+      if (trigger_eagain()) {
+        DEBUGT("reading {}B at {:#x}: trigger eagain", t, len, addr);
+        return crimson::ct_error::eagain::make();
+      }
+    }
     return tm.read_extent<SeastoreNodeExtent>(t, addr, len
     ).safe_then([addr, len, &t](auto&& e) {
       TRACET("read {}B at {:#x}", t, e->get_length(), e->get_laddr());
@@ -92,6 +119,12 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   alloc_ertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) override {
     TRACET("allocating {}B ...", t, len);
+    if constexpr (INJECT_EAGAIN) {
+      if (trigger_eagain()) {
+        DEBUGT("allocating {}B: trigger eagain", t, len);
+        return crimson::ct_error::eagain::make();
+      }
+    }
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
     ).safe_then([len, &t](auto extent) {
       DEBUGT("allocated {}B at {:#x}",
@@ -108,6 +141,12 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
     auto addr = extent->get_laddr();
     auto len = extent->get_length();
     DEBUGT("retiring {}B at {:#x} ...", t, len, addr);
+    if constexpr (INJECT_EAGAIN) {
+      if (trigger_eagain()) {
+        DEBUGT("retiring {}B at {:#x}: trigger eagain", t, len, addr);
+        return crimson::ct_error::eagain::make();
+      }
+    }
     return tm.dec_ref(t, extent).safe_then([addr, len, &t] (unsigned cnt) {
       assert(cnt == 0);
       TRACET("retired {}B at {:#x} ...", t, len, addr);
@@ -117,6 +156,12 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   getsuper_ertr::future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     TRACET("get root ...", t);
+    if constexpr (INJECT_EAGAIN) {
+      if (trigger_eagain()) {
+        DEBUGT("get root: trigger eagain", t);
+        return crimson::ct_error::eagain::make();
+      }
+    }
     return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
       TRACET("got root {:#x}", t, root_addr);
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
@@ -124,14 +169,32 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   }
 
   std::ostream& print(std::ostream& os) const override {
-    return os << "SeastoreNodeExtentManager";
+    os << "SeastoreNodeExtentManager";
+    if constexpr (INJECT_EAGAIN) {
+      os << "(p_eagain=" << p_eagain << ")";
+    }
+    return os;
   }
 
  private:
   static LOG_PREFIX(OTree::Seastore);
 
-  TransactionManager& tm;
   const laddr_t addr_min;
+
+  // XXX: conditional members by INJECT_EAGAIN
+  bool trigger_eagain() {
+    if (generate_eagain) {
+      double dice = rd();
+      assert(rd.min() == 0);
+      dice /= rd.max();
+      return dice <= p_eagain;
+    } else {
+      return false;
+    }
+  }
+  bool generate_eagain = true;
+  std::random_device rd;
+  double p_eagain;
 };
 
 }
