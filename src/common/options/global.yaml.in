@@ -3779,9 +3779,14 @@ options:
   desc: number of PGs for new pools
   fmt_desc: The default number of placement groups for a pool. The default
     value is the same as ``pg_num`` with ``mkpool``.
+  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being 
+    `on` the number of PGs for new pools will start out with 1 pg, unless the 
+    user specifies the pg_num.
   default: 32
   services:
   - mon
+  see_also: 
+  - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
 - name: osd_pool_default_pgp_num
@@ -3924,6 +3929,8 @@ options:
   type: str
   level: advanced
   desc: Default PG autoscaling behavior for new pools
+  long_desc: With default value `on`, the autoscaler starts a new pool with 1
+    pg, unless the user specifies the pg_num.
   default: 'on'
   enum_values:
   - 'off'
