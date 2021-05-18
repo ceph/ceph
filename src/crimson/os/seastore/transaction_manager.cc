@@ -16,14 +16,12 @@ TransactionManager::TransactionManager(
   SegmentCleanerRef _segment_cleaner,
   JournalRef _journal,
   CacheRef _cache,
-  LBAManagerRef _lba_manager,
-  PerfCounters &perf)
+  LBAManagerRef _lba_manager)
   : segment_manager(_segment_manager),
     segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
-    journal(std::move(_journal)),
-    tm_perf(perf)
+    journal(std::move(_journal))
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -158,8 +156,8 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
 	t,
 	*ref);
       cache->retire_extent(t, ref);
-      tm_perf.inc(ss_tm_extents_retired_total);
-      tm_perf.inc(ss_tm_extents_retired_bytes, ref->get_length());
+      stats.extents_retired_total++;
+      stats.extents_retired_bytes += ref->get_length();
     }
     return ret.refcount;
   });
@@ -177,8 +175,8 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
       return cache->retire_extent(
 	t, result.addr, result.length
       ).safe_then([result, this] {
-        tm_perf.inc(ss_tm_extents_retired_total);
-        tm_perf.inc(ss_tm_extents_retired_bytes, result.length);
+	stats.extents_retired_total++;
+	stats.extents_retired_bytes += result.length;
 	return ref_ret(
 	  ref_ertr::ready_future_marker{},
 	  0);
@@ -379,5 +377,24 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 }
 
 TransactionManager::~TransactionManager() {}
+
+void TransactionManager::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group("tm", {
+    sm::make_counter("extents_retired_total", stats.extents_retired_total,
+		     sm::description("total number of retired extents in TransactionManager")),
+    sm::make_counter("extents_retired_bytes", stats.extents_retired_bytes,
+		     sm::description("total size of retired extents in TransactionManager")),
+    sm::make_counter("extents_mutated_total", stats.extents_mutated_total,
+		     sm::description("total number of mutated extents in TransactionManager")),
+    sm::make_counter("extents_mutated_bytes", stats.extents_mutated_bytes,
+		     sm::description("total size of mutated extents in TransactionManager")),
+    sm::make_counter("extents_allocated_total", stats.extents_allocated_total,
+		     sm::description("total number of allocated extents in TransactionManager")),
+    sm::make_counter("extents_allocated_bytes", stats.extents_allocated_bytes,
+		     sm::description("total size of allocated extents in TransactionManager")),
+  });
+}
 
 }
