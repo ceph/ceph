@@ -224,4 +224,4 @@ Lines
 
 - A double-lined shape indicates the rank is "in".
 
-.. image:: mds-state-diagram.svg
+.. graphviz:: mds-state-diagram.dot
