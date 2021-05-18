@@ -791,6 +791,10 @@ int AsioFrontend::init_ssl()
   if (cert) {
     // only initialize the ssl context if it's going to be used
     ssl_context = boost::in_place(ssl::context::tls);
+
+    // disable deprecated protocols
+    ssl_context->set_options(ssl::context::no_tlsv1);
+    ssl_context->set_options(ssl::context::no_tlsv1_1);
   }
 
   std::optional<string> key = conf->get_val("ssl_private_key");
