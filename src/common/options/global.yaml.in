@@ -1520,6 +1520,8 @@ options:
   - mgr
   - mon
   min: 1
+  flags:
+  - runtime
 - name: mon_osd_full_ratio
   type: float
   level: advanced

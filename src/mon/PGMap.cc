@@ -2716,7 +2716,9 @@ void PGMap::get_health_checks(
   }
 
   // TOO_MANY_PGS
-  auto max_pg_per_osd = cct->_conf.get_val<uint64_t>("mon_max_pg_per_osd");
+  auto max_pg_per_osd =
+      (g_conf().get_val<uint64_t>("mon_max_pg_per_osd") *
+       g_conf().get_val<double>("osd_max_pg_per_osd_hard_ratio"));
   if (num_in && max_pg_per_osd > 0) {
     auto per = sum_pg_up / num_in;
     if (per > max_pg_per_osd) {
