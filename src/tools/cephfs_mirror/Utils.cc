@@ -18,7 +18,8 @@ namespace cephfs {
 namespace mirror {
 
 int connect(std::string_view client_name, std::string_view cluster_name,
-            RadosRef *cluster, std::string_view mon_host, std::string_view cephx_key) {
+            RadosRef *cluster, std::string_view mon_host, std::string_view cephx_key,
+            std::vector<const char *> args) {
   dout(20) << ": connecting to cluster=" << cluster_name << ", client=" << client_name
            << ", mon_host=" << mon_host << dendl;
 
@@ -40,12 +41,13 @@ int connect(std::string_view client_name, std::string_view cluster_name,
 
   cct->_conf.parse_env(cct->get_module_type());
 
-  std::vector<const char*> args;
-  r = cct->_conf.parse_argv(args);
-  if (r < 0) {
-    derr << ": could not parse environment: " << cpp_strerror(r) << dendl;
-    cct->put();
-    return r;
+  if (!args.empty()) {
+    r = cct->_conf.parse_argv(args);
+    if (r < 0) {
+      derr << ": could not parse command line args: " << cpp_strerror(r) << dendl;
+      cct->put();
+      return r;
+    }
   }
   cct->_conf.parse_env(cct->get_module_type());
 
@@ -65,6 +67,8 @@ int connect(std::string_view client_name, std::string_view cluster_name,
       return r;
     }
   }
+
+  dout(10) << ": using mon addr=" << cct->_conf.get_val<std::string>("mon_host") << dendl;
 
   cluster->reset(new librados::Rados());
 
