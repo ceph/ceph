@@ -12772,7 +12772,7 @@ size_t Client::_vxattrcb_cluster_fsid(Inode *in, char *val, size_t size)
 size_t Client::_vxattrcb_client_id(Inode *in, char *val, size_t size)
 {
   auto name = messenger->get_myname();
-  return snprintf(val, size, "%s%ld", name.type_str(), name.num());
+  return snprintf(val, size, "%s%" PRId64, name.type_str(), name.num());
 }
 
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
