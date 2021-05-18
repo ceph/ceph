@@ -1,6 +1,6 @@
 import { Component, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { Router, Routes } from '@angular/router';
+import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -11,6 +11,8 @@ describe('ChangePasswordGuardService', () => {
   let service: ChangePasswordGuardService;
   let authStorageService: AuthStorageService;
   let ngZone: NgZone;
+  let route: ActivatedRouteSnapshot;
+  let state: RouterStateSnapshot;
 
   @Component({ selector: 'cd-login-password-form', template: '' })
   class LoginPasswordFormComponent {}
@@ -35,30 +37,32 @@ describe('ChangePasswordGuardService', () => {
 
   it('should do nothing (not logged in)', () => {
     spyOn(authStorageService, 'isLoggedIn').and.returnValue(false);
-    expect(service.canActivate()).toBeTruthy();
+    expect(service.canActivate(route, state)).toBeTruthy();
   });
 
   it('should do nothing (SSO enabled)', () => {
     spyOn(authStorageService, 'isLoggedIn').and.returnValue(true);
     spyOn(authStorageService, 'isSSO').and.returnValue(true);
-    expect(service.canActivate()).toBeTruthy();
+    expect(service.canActivate(route, state)).toBeTruthy();
   });
 
   it('should do nothing (no update pwd required)', () => {
     spyOn(authStorageService, 'isLoggedIn').and.returnValue(true);
     spyOn(authStorageService, 'getPwdUpdateRequired').and.returnValue(false);
-    expect(service.canActivate()).toBeTruthy();
+    expect(service.canActivate(route, state)).toBeTruthy();
   });
 
-  it('should redirect to change password page', fakeAsync(() => {
+  it('should redirect to change password page by preserving the query params', fakeAsync(() => {
+    route = null;
+    state = { url: '/host', root: null };
     spyOn(authStorageService, 'isLoggedIn').and.returnValue(true);
     spyOn(authStorageService, 'isSSO').and.returnValue(false);
     spyOn(authStorageService, 'getPwdUpdateRequired').and.returnValue(true);
     const router = TestBed.inject(Router);
     ngZone.run(() => {
-      expect(service.canActivate()).toBeFalsy();
+      expect(service.canActivate(route, state)).toBeFalsy();
     });
     tick();
-    expect(router.url).toBe('/login-change-password');
+    expect(router.url).toBe('/login-change-password?returnUrl=%2Fhost');
   }));
 });
