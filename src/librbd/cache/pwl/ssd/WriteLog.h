@@ -101,7 +101,6 @@ private:
 
   std::atomic<int> m_async_update_superblock = {0};
   BlockDevice *bdev = nullptr;
-  uint64_t pool_size;
   pwl::WriteLogPoolRoot pool_root;
   Builder<This> *m_builderobj;
 
@@ -136,8 +135,8 @@ private:
                                           AioTransContext *aio);
   void aio_read_data_block(WriteLogCacheEntry *log_entry, bufferlist *bl,
                            Context *ctx);
-  void aio_read_data_block(std::vector<WriteLogCacheEntry*> &log_entries,
-                           std::vector<bufferlist *> &bls, Context *ctx);
+  void aio_read_data_blocks(std::vector<WriteLogCacheEntry*> &log_entries,
+                            std::vector<bufferlist *> &bls, Context *ctx);
   static void aio_cache_cb(void *priv, void *priv2) {
     AioTransContext *c = static_cast<AioTransContext*>(priv2);
     c->aio_finish();
