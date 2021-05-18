@@ -724,6 +724,29 @@ public:
   int request_complete() override;
 };
 
+class RGWRadosRemoveOidCR : public RGWSimpleCoroutine {
+  librados::IoCtx ioctx;
+  const std::string oid;
+  RGWObjVersionTracker* objv_tracker;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+
+public:
+  RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
+		      librados::IoCtx&& ioctx, std::string_view oid,
+		      RGWObjVersionTracker* objv_tracker = nullptr);
+
+  RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
+		      RGWSI_RADOS::Obj& obj,
+		      RGWObjVersionTracker* objv_tracker = nullptr);
+
+  RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
+		      RGWSI_RADOS::Obj&& obj,
+		      RGWObjVersionTracker* objv_tracker = nullptr);
+
+  int send_request(const DoutPrefixProvider *dpp) override;
+  int request_complete() override;
+};
+
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RadosStore* store;
