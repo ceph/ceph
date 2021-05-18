@@ -69,10 +69,7 @@ def start_rgw(ctx, config, clients):
         if endpoint.cert:
             # add the ssl certificate path
             frontends += ' ssl_certificate={}'.format(endpoint.cert.certificate)
-            if ctx.rgw.frontend == 'civetweb':
-                frontends += ' port={}s'.format(endpoint.port)
-            else:
-                frontends += ' ssl_port={}'.format(endpoint.port)
+            frontends += ' ssl_port={}'.format(endpoint.port)
         else:
             frontends += ' port={}'.format(endpoint.port)
 
@@ -370,7 +367,7 @@ def task(ctx, config):
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
-    ctx.rgw.frontend = config.pop('frontend', 'civetweb')
+    ctx.rgw.frontend = config.pop('frontend', 'beast')
     ctx.rgw.compression_type = config.pop('compression type', None)
     ctx.rgw.storage_classes = config.pop('storage classes', None)
     default_cert = config.pop('ssl certificate', None)
