@@ -39,7 +39,7 @@ extern "C" {
 
 #define LIBCEPHFS_VER_MAJOR 10
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 2
+#define LIBCEPHFS_VER_EXTRA 3
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -2084,6 +2084,9 @@ void ceph_finish_reclaim(struct ceph_mount_info *cmount);
 
 /**
  * Register a set of callbacks to be used with this cmount
+ *
+ * This is deprecated, use ceph_ll_register_callbacks2() instead.
+ *
  * @param cmount the ceph mount handle on which the cb's should be registerd
  * @param args   callback arguments to register with the cmount
  *
@@ -2091,6 +2094,19 @@ void ceph_finish_reclaim(struct ceph_mount_info *cmount);
  * unregister these callbacks, so this is a one-way change.
  */
 void ceph_ll_register_callbacks(struct ceph_mount_info *cmount,
+				struct ceph_client_callback_args *args);
+
+/**
+ * Register a set of callbacks to be used with this cmount
+ * @param cmount the ceph mount handle on which the cb's should be registerd
+ * @param args   callback arguments to register with the cmount
+ *
+ * Any fields set to NULL will be ignored. There currently is no way to
+ * unregister these callbacks, so this is a one-way change.
+ *
+ * Returns 0 on success or -EBUSY if the cmount is mounting or already mounted.
+ */
+int ceph_ll_register_callbacks2(struct ceph_mount_info *cmount,
 				struct ceph_client_callback_args *args);
 
 /**
