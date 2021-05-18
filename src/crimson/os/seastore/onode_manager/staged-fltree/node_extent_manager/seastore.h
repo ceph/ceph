@@ -26,7 +26,12 @@ class SeastoreSuper final: public Super {
   laddr_t get_root_laddr() const override {
     return root_addr;
   }
-  void write_root_laddr(context_t c, laddr_t addr) override;
+  void write_root_laddr(context_t c, laddr_t addr) override {
+    LOG_PREFIX(OTree::Seastore);
+    DEBUGT("update root {:#x} ...", c.t, addr);
+    root_addr = addr;
+    tm.write_onode_root(c.t, addr);
+  }
  private:
   laddr_t root_addr;
   TransactionManager& tm;
