@@ -24,7 +24,7 @@ from ..security import Permission, Scope
 from ..settings import Settings
 
 logger = logging.getLogger('access_control')
-
+DEFAULT_FILE_DESC = 'password/secret'
 
 # password hashing algorithm
 def password_hash(password, salt_password=None):
@@ -549,7 +549,7 @@ def load_access_control_db():
 # CLI dashboard access control scope commands
 
 @CLIWriteCommand('dashboard set-login-credentials')
-@CLICheckNonemptyFileInput
+@CLICheckNonemptyFileInput(desc=DEFAULT_FILE_DESC)
 def set_login_credentials_cmd(_, username: str, inbuf: str):
     '''
     Set the login credentials. Password read from -i <file>
@@ -688,7 +688,7 @@ def ac_user_show_cmd(_, username: Optional[str] = None):
 
 
 @CLIWriteCommand('dashboard ac-user-create')
-@CLICheckNonemptyFileInput
+@CLICheckNonemptyFileInput(desc=DEFAULT_FILE_DESC)
 def ac_user_create_cmd(_, username: str, inbuf: str,
                        rolename: Optional[str] = None,
                        name: Optional[str] = None,
@@ -842,7 +842,7 @@ def ac_user_del_roles_cmd(_, username: str, roles: Sequence[str]):
 
 
 @CLIWriteCommand('dashboard ac-user-set-password')
-@CLICheckNonemptyFileInput
+@CLICheckNonemptyFileInput(desc=DEFAULT_FILE_DESC)
 def ac_user_set_password(_, username: str, inbuf: str,
                          force_password: bool = False):
     '''
@@ -864,7 +864,7 @@ def ac_user_set_password(_, username: str, inbuf: str,
 
 
 @CLIWriteCommand('dashboard ac-user-set-password-hash')
-@CLICheckNonemptyFileInput
+@CLICheckNonemptyFileInput(desc=DEFAULT_FILE_DESC)
 def ac_user_set_password_hash(_, username: str, inbuf: str):
     '''
     Set user password bcrypt hash from -i <file>
