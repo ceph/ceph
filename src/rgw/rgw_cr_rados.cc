@@ -449,6 +449,59 @@ int RGWRadosRemoveCR::request_complete()
   return r;
 }
 
+RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
+					 librados::IoCtx&& ioctx,
+					 std::string_view oid,
+					 RGWObjVersionTracker* objv_tracker)
+  : RGWSimpleCoroutine(store->ctx()), ioctx(std::move(ioctx)),
+    oid(std::string(oid)), objv_tracker(objv_tracker)
+{
+  set_description() << "remove dest=" << oid;
+}
+
+RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
+					 RGWSI_RADOS::Obj& obj,
+					 RGWObjVersionTracker* objv_tracker)
+  : RGWSimpleCoroutine(store->ctx()),
+    ioctx(librados::IoCtx(obj.get_ref().pool.ioctx())),
+    oid(obj.get_ref().obj.oid),
+    objv_tracker(objv_tracker)
+{
+  set_description() << "remove dest=" << oid;
+}
+
+RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
+					 RGWSI_RADOS::Obj&& obj,
+					 RGWObjVersionTracker* objv_tracker)
+  : RGWSimpleCoroutine(store->ctx()),
+    ioctx(std::move(obj.get_ref().pool.ioctx())),
+    oid(std::move(obj.get_ref().obj.oid)),
+    objv_tracker(objv_tracker)
+{
+  set_description() << "remove dest=" << oid;
+}
+
+int RGWRadosRemoveOidCR::send_request(const DoutPrefixProvider *dpp)
+{
+  librados::ObjectWriteOperation op;
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
+  op.remove();
+
+  cn = stack->create_completion_notifier();
+  return ioctx.aio_operate(oid, cn->completion(), &op);
+}
+
+int RGWRadosRemoveOidCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
 RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
                       const rgw_raw_obj& _obj,
                       const string& _lock_name,
