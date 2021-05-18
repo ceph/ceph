@@ -116,6 +116,14 @@ def rook_operator(ctx, config):
             '-f', 'operator.yaml',
         ])
 
+        # on centos:
+        if teuthology.get_distro(ctx) == 'centos':
+            _kubectl(ctx, config, [
+                '-n', 'rook-ceph',
+                'set', 'env', 'deploy/rook-ceph-operator',
+                'ROOK_HOSTPATH_REQUIRES_PRIVILEGED=true'
+            ])
+
         # wait for operator
         op_name = None
         with safe_while(sleep=10, tries=90, action="wait for operator") as proceed:
