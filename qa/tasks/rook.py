@@ -277,8 +277,34 @@ def rook_cluster(ctx, config):
 
     finally:
         _kubectl(ctx, config, ['delete', '-f', 'cluster.yaml'], check_status=False)
-        _kubectl(ctx, config, ['delete', 'configmap', 'rook-config-override'],
-                 check_status=False)
+
+        # wait for cluster to shut down
+        log.info('Waiting for cluster to stop')
+        running = True
+        with safe_while(sleep=5, tries=100, action="wait for teardown") as proceed:
+            while running and proceed():
+                p = _kubectl(
+                    ctx, config,
+                    ['-n', 'rook-ceph', 'get', 'pods'],
+                    stdout=BytesIO(),
+                )
+                running = False
+                for line in p.stdout.getvalue().decode('utf-8').strip().splitlines():
+                    name, ready, status, _ = line.split(None, 3)
+                    if (
+                            name != 'NAME'
+                            and not name.startswith('csi-')
+                            and not name.startswith('rook-ceph-operator-')
+                            and not name.startswith('rook-ceph-tools-')
+                    ):
+                        running = True
+                        break
+
+        _kubectl(
+            ctx, config,
+            ['-n', 'rook-ceph', 'delete', 'configmap', 'rook-config-override'],
+            check_status=False,
+        )
         ctx.rook[cluster_name].remote.run(args=['rm', '-f', 'cluster.yaml'])
 
 
