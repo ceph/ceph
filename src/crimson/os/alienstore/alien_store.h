@@ -90,6 +90,10 @@ public:
   seastar::future<> do_transaction(CollectionRef c,
                                    ceph::os::Transaction&& txn) final;
 
+  // error injection
+  seastar::future<> inject_data_error(const ghobject_t& o) final;
+  seastar::future<> inject_mdata_error(const ghobject_t& o) final;
+
   seastar::future<> write_meta(const std::string& key,
                   const std::string& value) final;
   seastar::future<std::tuple<int, std::string>> read_meta(
