@@ -262,35 +262,6 @@ options:
   see_also:
   - rgw_cache_enabled
   with_legacy: true
-- name: rgw_socket_path
-  type: str
-  level: advanced
-  desc: RGW FastCGI socket path (for FastCGI over Unix domain sockets).
-  services:
-  - rgw
-  see_also:
-  - rgw_fcgi_socket_backlog
-  with_legacy: true
-- name: rgw_host
-  type: str
-  level: advanced
-  desc: RGW FastCGI host name (for FastCGI over TCP)
-  services:
-  - rgw
-  see_also:
-  - rgw_port
-  - rgw_fcgi_socket_backlog
-  with_legacy: true
-- name: rgw_port
-  type: str
-  level: basic
-  desc: RGW FastCGI port number (for FastCGI over TCP)
-  services:
-  - rgw
-  see_also:
-  - rgw_host
-  - rgw_fcgi_socket_backlog
-  with_legacy: true
 - name: rgw_dns_name
   type: str
   level: advanced
@@ -1331,20 +1302,6 @@ options:
   see_also:
   - rgw_enable_ops_log
   - rgw_ops_log_socket_path
-  with_legacy: true
-# socket  backlog for fcgi
-- name: rgw_fcgi_socket_backlog
-  type: int
-  level: advanced
-  desc: FastCGI socket connection backlog
-  long_desc: 'Size of FastCGI connection backlog. This reflects the maximum number
-    of new connection requests that RGW can handle concurrently without dropping any. '
-  default: 1024
-  services:
-  - rgw
-  see_also:
-  - rgw_host
-  - rgw_socket_path
   with_legacy: true
 - name: rgw_usage_log_flush_threshold
   type: int
