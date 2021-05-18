@@ -399,7 +399,7 @@ class RGWAM:
     def __init__(self):
         pass
 
-    def realm_bootstrap(self, realm, zonegroup, zone, endpoints, sys_uid, uid):
+    def realm_bootstrap(self, realm, zonegroup, zone, endpoints, sys_uid, uid, start_radosgw):
         endpoints = get_endpoints(endpoints)
 
         realm_info = RealmOp().create(realm)
@@ -465,8 +465,9 @@ class RGWAM:
         ep = ''
         if len(eps) > 0:
             ep = eps[0]
-            o = urlparse(ep)
-            self.run_radosgw(port = o.port)
+            if start_radosgw:
+                o = urlparse(ep)
+                self.run_radosgw(port = o.port)
 
         realm_token = RealmToken(ep, sys_user.uid, sys_access_key, sys_secret)
 
@@ -532,7 +533,7 @@ class RGWAM:
 
         return True
 
-    def zone_create(self, realm_token_b64, zonegroup = None, zone = None, endpoints = None):
+    def zone_create(self, realm_token_b64, zonegroup = None, zone = None, endpoints = None, start_radosgw = True):
         if not realm_token_b64:
             print('missing realm access config')
             return False
@@ -581,14 +582,15 @@ class RGWAM:
 
         logging.debug(period.to_json())
 
-        eps = endpoints.split(',')
-        ep = ''
-        if len(eps) > 0:
-            ep = eps[0]
-            o = urlparse(ep)
-            ret = self.run_radosgw(port = o.port)
-            if not ret:
-                logging.warning('failed to start radosgw')
+        if start_radosgw:
+            eps = endpoints.split(',')
+            ep = ''
+            if len(eps) > 0:
+                ep = eps[0]
+                o = urlparse(ep)
+                ret = self.run_radosgw(port = o.port)
+                if not ret:
+                    logging.warning('failed to start radosgw')
 
         return True
 
@@ -653,11 +655,13 @@ The subcommands are:
         parser.add_argument('--endpoints')
         parser.add_argument('--sys-uid')
         parser.add_argument('--uid')
+        parser.add_argument('--start-radosgw', action='store_true', dest='start_radosgw', default=True)
+        parser.add_argument('--no-start-radosgw', action='store_false', dest='start_radosgw')
 
         args = parser.parse_args(self.args[1:])
 
         return RGWAM().realm_bootstrap(args.realm, args.zonegroup, args.zone, args.endpoints,
-                args.sys_uid, args.uid)
+                args.sys_uid, args.uid, args.start_radosgw)
 
     def new_zone_creds(self):
         parser = argparse.ArgumentParser(
@@ -715,10 +719,12 @@ The subcommands are:
         parser.add_argument('--zone')
         parser.add_argument('--zonegroup')
         parser.add_argument('--endpoints')
+        parser.add_argument('--start-radosgw', action='store_true', dest='start_radosgw', default=True)
+        parser.add_argument('--no-start-radosgw', action='store_false', dest='start_radosgw')
 
         args = parser.parse_args(self.args[1:])
 
-        return RGWAM().zone_create(args.realm_token, args.zonegroup, args.zone, args.endpoints)
+        return RGWAM().zone_create(args.realm_token, args.zonegroup, args.zone, args.endpoints, args.start_radosgw)
 
 
 class TopLevelCommand:
