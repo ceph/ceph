@@ -1474,6 +1474,16 @@ def call_timeout(ctx, command, timeout):
 ##################################
 
 
+def json_loads_retry(cli_func):
+    for sleep_secs in [1, 4, 4]:
+        try:
+            return json.loads(cli_func())
+        except json.JSONDecodeError:
+            logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
+            time.sleep(sleep_secs)
+    return json.loads(cli_func())
+
+
 def is_available(ctx, what, func):
     # type: (CephadmContext, str, Callable[[], bool]) -> None
     """
@@ -4117,15 +4127,6 @@ def command_bootstrap(ctx):
             cli(['config', 'assimilate-conf',
                  '-i', '/var/lib/ceph/user.conf'],
                 {tmp.name: '/var/lib/ceph/user.conf:z'})
-
-    def json_loads_retry(cli_func):
-        for sleep_secs in [1, 4, 4]:
-            try:
-                return json.loads(cli_func())
-            except json.JSONDecodeError:
-                logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
-                time.sleep(sleep_secs)
-        return json.loads(cli_func())
 
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart():
