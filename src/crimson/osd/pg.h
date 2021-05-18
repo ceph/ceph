@@ -573,7 +573,11 @@ private:
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
       ::crimson::errorator<crimson::ct_error::eagain>>;
-  do_osd_ops_iertr::future<Ref<MOSDOpReply>> do_osd_ops(
+  template <typename Ret = void>
+  using pg_rep_op_fut_t =
+    std::tuple<interruptible_future<>,
+               do_osd_ops_iertr::future<Ret>>;
+  do_osd_ops_iertr::future<pg_rep_op_fut_t<Ref<MOSDOpReply>>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,
     const OpInfo &op_info);
@@ -582,22 +586,23 @@ private:
   using do_osd_ops_failure_func_t =
     std::function<do_osd_ops_iertr::future<>(const std::error_code&)>;
   struct do_osd_ops_params_t;
-  do_osd_ops_iertr::future<> do_osd_ops(
+  do_osd_ops_iertr::future<pg_rep_op_fut_t<>> do_osd_ops(
     ObjectContextRef obc,
-    std::vector<OSDOp> ops,
+    std::vector<OSDOp>& ops,
     const OpInfo &op_info,
     const do_osd_ops_params_t& params,
     do_osd_ops_success_func_t success_func,
     do_osd_ops_failure_func_t failure_func);
   template <class Ret, class SuccessFunc, class FailureFunc>
-  do_osd_ops_iertr::future<Ret> do_osd_ops_execute(
+  do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     OpsExecuter&& ox,
-    std::vector<OSDOp> ops,
+    std::vector<OSDOp>& ops,
     const OpInfo &op_info,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
   interruptible_future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
-  interruptible_future<> submit_transaction(
+  std::tuple<interruptible_future<>, interruptible_future<>>
+  submit_transaction(
     const OpInfo& op_info,
     const std::vector<OSDOp>& ops,
     ObjectContextRef&& obc,

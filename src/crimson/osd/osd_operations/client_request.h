@@ -38,6 +38,12 @@ public:
     OrderedExclusivePhase await_map = {
       "ClientRequest::PGPipeline::await_map"
     };
+    OrderedConcurrentPhase wait_repop = {
+      "ClientRequest::PGPipeline::wait_repop"
+    };
+    OrderedExclusivePhase send_reply = {
+      "ClientRequest::PGPipeline::send_reply"
+    };
     friend class ClientRequest;
   };
 

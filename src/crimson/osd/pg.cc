@@ -566,7 +566,9 @@ seastar::future<> PG::WaitForActiveBlocker::stop()
   return seastar::now();
 }
 
-PG::interruptible_future<> PG::submit_transaction(
+std::tuple<PG::interruptible_future<>,
+           PG::interruptible_future<>>
+PG::submit_transaction(
   const OpInfo& op_info,
   const std::vector<OSDOp>& ops,
   ObjectContextRef&& obc,
@@ -574,8 +576,9 @@ PG::interruptible_future<> PG::submit_transaction(
   osd_op_params_t&& osd_op_p)
 {
   if (__builtin_expect(stopping, false)) {
-    return seastar::make_exception_future<>(
-	crimson::common::system_shutdown_exception());
+    return {seastar::make_exception_future<>(
+              crimson::common::system_shutdown_exception()),
+            seastar::now()};
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
@@ -603,13 +606,15 @@ PG::interruptible_future<> PG::submit_transaction(
   peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
 						txn, true, false);
 
-  return backend->mutate_object(peering_state.get_acting_recovery_backfill(),
-				std::move(obc),
-				std::move(txn),
-				std::move(osd_op_p),
-				peering_state.get_last_peering_reset(),
-				map_epoch,
-				std::move(log_entries)).then_interruptible(
+  auto [submitted, all_completed] = backend->mutate_object(
+      peering_state.get_acting_recovery_backfill(),
+      std::move(obc),
+      std::move(txn),
+      std::move(osd_op_p),
+      peering_state.get_last_peering_reset(),
+      map_epoch,
+      std::move(log_entries));
+  return std::make_tuple(std::move(submitted), all_completed.then_interruptible(
     [this, last_complete=peering_state.get_info().last_complete,
       at_version=osd_op_p.at_version](auto acked) {
     for (const auto& peer : acked) {
@@ -618,7 +623,7 @@ PG::interruptible_future<> PG::submit_transaction(
     }
     peering_state.complete_write(at_version, last_complete);
     return seastar::now();
-  });
+  }));
 }
 
 void PG::fill_op_params_bump_pg_version(
@@ -697,9 +702,10 @@ PG::interruptible_future<> PG::repair_object(
 }
 
 template <class Ret, class SuccessFunc, class FailureFunc>
-PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
+PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ret>>
+PG::do_osd_ops_execute(
   OpsExecuter&& ox,
-  std::vector<OSDOp> ops,
+  std::vector<OSDOp>& ops,
   const OpInfo &op_info,
   SuccessFunc&& success_func,
   FailureFunc&& failure_func)
@@ -708,6 +714,7 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
     return reload_obc(obc).handle_error_interruptible(
       load_obc_ertr::assert_all{"can't live with object state messed up"});
   });
+  auto failure_func_ptr = seastar::make_lw_shared(std::move(failure_func));
   return interruptor::do_for_each(ops, [&ox](OSDOp& osd_op) {
     logger().debug(
       "do_osd_ops_execute: object {} - handling op {}",
@@ -735,31 +742,48 @@ PG::do_osd_ops_iertr::future<Ret> PG::do_osd_ops_execute(
           std::move(txn),
           std::move(osd_op_p));
     });
-  }).safe_then_interruptible_tuple([success_func=std::move(success_func)] {
-    return std::move(success_func)();
-  }, crimson::ct_error::object_corrupted::handle(
-    [rollbacker, this] (const std::error_code& e) mutable {
-    // this is a path for EIO. it's special because we want to fix the obejct
-    // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
-    // restart the execution.
-    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [obc=rollbacker.get_obc(), this] {
-      return repair_object(obc->obs.oi.soid,
-                           obc->obs.oi.version).then_interruptible([] {
-        return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
-      });
-    });
-  }), OpsExecuter::osd_op_errorator::all_same_way(
-    [rollbacker, failure_func=std::move(failure_func)]
+  }).safe_then_unpack_interruptible(
+    [success_func=std::move(success_func), rollbacker, this, failure_func_ptr]
+    (auto submitted_fut, auto all_completed_fut) mutable {
+    return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
+        std::move(submitted_fut),
+        all_completed_fut.safe_then_interruptible_tuple(
+          std::move(success_func),
+          crimson::ct_error::object_corrupted::handle(
+            [rollbacker, this] (const std::error_code& e) mutable {
+            // this is a path for EIO. it's special because we want to fix the obejct
+            // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
+            // restart the execution.
+            return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+              [obc=rollbacker.get_obc(), this] {
+              return repair_object(obc->obs.oi.soid,
+                                   obc->obs.oi.version).then_interruptible([] {
+                return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
+              });
+            });
+          }), OpsExecuter::osd_op_errorator::all_same_way(
+            [rollbacker, failure_func_ptr]
+            (const std::error_code& e) mutable {
+            return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+              [&e, failure_func_ptr] {
+              return (*failure_func_ptr)(e);
+            });
+          })
+        )
+      );
+  }, OpsExecuter::osd_op_errorator::all_same_way(
+    [rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
-    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [&e, failure_func=std::move(failure_func)] {
-      return std::move(failure_func)(e);
-    });
+    return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
+        seastar::now(),
+        rollbacker.rollback_obc_if_modified(e).then_interruptible(
+          [&e, failure_func_ptr] {
+          return (*failure_func_ptr)(e);
+        }));
   }));
 }
 
-PG::do_osd_ops_iertr::future<Ref<MOSDOpReply>>
+PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ref<MOSDOpReply>>>
 PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
@@ -803,10 +827,10 @@ PG::do_osd_ops(
   ).finally([ox_deleter=std::move(ox)] {});
 }
 
-PG::do_osd_ops_iertr::future<>
+PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<>>
 PG::do_osd_ops(
   ObjectContextRef obc,
-  std::vector<OSDOp> ops,
+  std::vector<OSDOp>& ops,
   const OpInfo &op_info,
   const do_osd_ops_params_t& msg_params,
   do_osd_ops_success_func_t success_func,
@@ -816,7 +840,7 @@ PG::do_osd_ops(
     std::move(obc), op_info, get_pool().info, get_backend(), msg_params);
   return do_osd_ops_execute<void>(
     std::move(*ox),
-    std::move(ops),
+    ops,
     std::as_const(op_info),
     std::move(success_func),
     std::move(failure_func)
