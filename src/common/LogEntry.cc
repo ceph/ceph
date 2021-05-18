@@ -203,7 +203,7 @@ void LogEntry::log_to_syslog(string level, string facility)
 
 void LogEntry::encode(bufferlist& bl, uint64_t features) const
 {
-  assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
+  assert((features == 0) || HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(5, 5, bl);
   __u16 t = prio;
   encode(name, bl);

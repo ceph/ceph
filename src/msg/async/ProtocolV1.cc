@@ -214,9 +214,7 @@ void ProtocolV1::send_message(Message *m) {
   ceph::buffer::list bl;
   uint64_t f = connection->get_features();
 
-  // TODO: Currently not all messages supports reencode like MOSDMap, so here
-  // only let fast dispatch support messages prepare message
-  bool can_fast_prepare = messenger->ms_can_fast_dispatch(m);
+  bool can_fast_prepare = m->support_reencode();
   if (can_fast_prepare) {
     prepare_send_message(f, m, bl);
   }

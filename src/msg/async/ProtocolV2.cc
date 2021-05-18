@@ -422,9 +422,7 @@ void ProtocolV2::prepare_send_message(uint64_t features,
 void ProtocolV2::send_message(Message *m) {
   uint64_t f = connection->get_features();
 
-  // TODO: Currently not all messages supports reencode like MOSDMap, so here
-  // only let fast dispatch support messages prepare message
-  const bool can_fast_prepare = messenger->ms_can_fast_dispatch(m);
+  const bool can_fast_prepare = m->support_reencode();
   if (can_fast_prepare) {
     prepare_send_message(f, m);
   }
