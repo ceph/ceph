@@ -147,19 +147,22 @@ def rook_operator(ctx, config):
         raise
 
     finally:
-        log.info('Cleaning up rook')
+        log.info('Cleaning up rook operator')
         _kubectl(ctx, config, [
             'delete',
             '-f', 'operator.yaml',
         ])
-        _kubectl(ctx, config, [
-            'delete',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
-        ])
-        _kubectl(ctx, config, [
-            'delete',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
-        ])
+        if False:
+            # don't bother since we'll tear down k8s anyway (and this mysteriously
+            # fails sometimes when deleting some of the CRDs... not sure why!)
+            _kubectl(ctx, config, [
+                'delete',
+                '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
+            ])
+            _kubectl(ctx, config, [
+                'delete',
+                '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
+            ])
         ctx.rook[cluster_name].remote.run(args=['rm', '-rf', 'rook', 'operator.yaml'])
         if op_job:
             op_job.wait()
