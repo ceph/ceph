@@ -279,7 +279,7 @@ seastar::future<> Heartbeat::handle_ping(crimson::net::ConnectionRef conn,
   auto min_message = static_cast<uint32_t>(
     local_conf()->osd_heartbeat_min_size);
   auto reply =
-    crimson::net::make_message<MOSDPing>(
+    crimson::make_message<MOSDPing>(
       m->fsid,
       service.get_osdmap_service().get_map()->get_epoch(),
       MOSDPing::PING_REPLY,
@@ -613,7 +613,7 @@ void Heartbeat::Peer::do_send_heartbeat(
   for_each_conn([&, this] (auto& conn) {
     auto min_message = static_cast<uint32_t>(
       local_conf()->osd_heartbeat_min_size);
-    auto ping = crimson::net::make_message<MOSDPing>(
+    auto ping = crimson::make_message<MOSDPing>(
       heartbeat.monc.get_fsid(),
       heartbeat.service.get_osdmap_service().get_map()->get_epoch(),
       MOSDPing::PING,
@@ -641,7 +641,7 @@ bool Heartbeat::FailingPeers::add_pending(
       now - failed_since).count();
   auto osdmap = heartbeat.service.get_osdmap_service().get_map();
   auto failure_report =
-      crimson::net::make_message<MOSDFailure>(heartbeat.monc.get_fsid(),
+      crimson::make_message<MOSDFailure>(heartbeat.monc.get_fsid(),
                                 peer,
                                 osdmap->get_addrs(peer),
                                 static_cast<int>(failed_for),
@@ -668,7 +668,7 @@ seastar::future<>
 Heartbeat::FailingPeers::send_still_alive(
     osd_id_t osd, const entity_addrvec_t& addrs)
 {
-  auto still_alive = crimson::net::make_message<MOSDFailure>(
+  auto still_alive = crimson::make_message<MOSDFailure>(
     heartbeat.monc.get_fsid(),
     osd,
     addrs,
