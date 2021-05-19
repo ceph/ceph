@@ -77,6 +77,15 @@ enum {
   l_c_wrlat,
   l_c_read,
   l_c_fsync,
+  l_c_md_avg,
+  l_c_md_sqsum,
+  l_c_md_ops,
+  l_c_rd_avg,
+  l_c_rd_sqsum,
+  l_c_rd_ops,
+  l_c_wr_avg,
+  l_c_wr_sqsum,
+  l_c_wr_ops,
   l_c_last,
 };
 
@@ -1457,6 +1466,10 @@ private:
   void collect_and_send_metrics();
   void collect_and_send_global_metrics();
 
+  void update_io_stat_metadata(utime_t latency);
+  void update_io_stat_read(utime_t latency);
+  void update_io_stat_write(utime_t latency);
+
   uint32_t deleg_timeout = 0;
 
   client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
@@ -1574,6 +1587,10 @@ private:
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
+
+  uint64_t nr_metadata_request = 0;
+  uint64_t nr_read_request = 0;
+  uint64_t nr_write_request = 0;
 };
 
 /**
