@@ -85,28 +85,17 @@ add_npm_command(
   ${nodeenv}
 )
 
-# Glob some frontend files. With CMake 3.6, this can be simplified
-# to *.ts *.html. Just add:
-# list(FILTER frontend_src INCLUDE REGEX "frontend/src")
+# Glob some frontend files.
 file(
   GLOB_RECURSE frontend_src
+  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
   frontend/src/*.ts
-  frontend/src/*.html
-  frontend/src/*/*.ts
-  frontend/src/*/*.html
-  frontend/src/*/*/*.ts
-  frontend/src/*/*/*.html
-  frontend/src/*/*/*/*.ts
-  frontend/src/*/*/*/*.html
-  frontend/src/*/*/*/*/*.ts
-  frontend/src/*/*/*/*/*.html
-  frontend/src/*/*/*/*/*/*.ts
-  frontend/src/*/*/*/*/*/*.html)
+  frontend/src/*.html)
 
 # these files are generated during build
 list(REMOVE_ITEM frontend_src
-  ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/src/environments/environment.prod.ts
-  ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/src/environments/environment.ts)
+  frontend/src/environments/environment.prod.ts
+  frontend/src/environments/environment.ts)
 
 execute_process(
     COMMAND bash -c "jq -r .config.locale ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/package.json"
