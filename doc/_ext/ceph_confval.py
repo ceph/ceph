@@ -62,6 +62,9 @@ TEMPLATE = '''
 {%- if opt.policies %}
    :policies: {{ opt.policies }}
 {% endif %}
+{%- if opt.example %}
+   :example: {{ opt.example }}
+{%- endif %}
 {%- if opt.see_also %}
    :see also: {{ opt.see_also | map('ref_confval') | join(', ') }}
 {%- endif %}
