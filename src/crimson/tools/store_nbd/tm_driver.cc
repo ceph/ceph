@@ -162,7 +162,6 @@ size_t TMDriver::get_size() const
 seastar::future<> TMDriver::mkfs()
 {
   assert(config.path);
-  perf_service->add_to_collection();
   segment_manager = std::make_unique<
     segment_manager::block::BlockSegmentManager
     >(*config.path);
@@ -185,7 +184,6 @@ seastar::future<> TMDriver::mkfs()
     logger().debug("sm close");
     return segment_manager->close();
   }).safe_then([this] {
-    perf_service->remove_from_collection();
     clear();
     logger().debug("mkfs complete");
     return TransactionManager::mkfs_ertr::now();
