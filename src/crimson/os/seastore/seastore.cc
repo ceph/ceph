@@ -29,6 +29,20 @@ using crimson::common::local_conf;
 
 namespace crimson::os::seastore {
 
+SeaStore::SeaStore(
+  SegmentManagerRef sm,
+  TransactionManagerRef tm,
+  CollectionManagerRef cm,
+  OnodeManagerRef om)
+  : segment_manager(std::move(sm)),
+    transaction_manager(std::move(tm)),
+    collection_manager(std::move(cm)),
+    onode_manager(std::move(om)),
+    perf_service(std::move(p_service))
+{
+  perf_service->add_to_collection();
+}
+
 SeaStore::~SeaStore() {
   perf_service->remove_from_collection();
 }
