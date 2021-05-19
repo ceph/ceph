@@ -70,11 +70,10 @@ protected:
 };
 
 auto get_transaction_manager(
-  SegmentManager &segment_manager, PerfCounters &perf
-) {
+  SegmentManager &segment_manager) {
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
-    perf, true);
+    true);
   auto journal = std::make_unique<Journal>(segment_manager);
   auto cache = std::make_unique<Cache>(segment_manager);
   auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
@@ -94,7 +93,7 @@ auto get_seastore(
   SegmentManagerRef sm
 ) {
   PerfServiceRef perf_service = PerfServiceRef(new PerfService());
-  auto tm = get_transaction_manager(*sm, perf_service->get_counters());
+  auto tm = get_transaction_manager(*sm);
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     std::move(sm),
@@ -116,7 +115,7 @@ protected:
 
   virtual void _init() {
     perf_service->add_to_collection();
-    tm = get_transaction_manager(*segment_manager, perf_service->get_counters());
+    tm = get_transaction_manager(*segment_manager);
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
   }

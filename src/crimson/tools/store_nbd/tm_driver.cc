@@ -133,7 +133,7 @@ void TMDriver::init()
 {
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
-    perf_service->get_counters(), false /* detailed */);
+    false /* detailed */);
   segment_cleaner->mount(*segment_manager);
   auto journal = std::make_unique<Journal>(*segment_manager);
   auto cache = std::make_unique<Cache>(*segment_manager);

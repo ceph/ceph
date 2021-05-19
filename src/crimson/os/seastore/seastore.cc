@@ -1092,7 +1092,7 @@ std::unique_ptr<SeaStore> make_seastore(
 
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
-    perf_service->get_counters(), false /* detailed */);
+    false /* detailed */);
 
   auto journal = std::make_unique<Journal>(*sm);
   auto cache = std::make_unique<Cache>(*sm);

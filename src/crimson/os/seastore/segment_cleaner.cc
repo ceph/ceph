@@ -147,7 +147,18 @@ SegmentCleaner::SegmentCleaner(config_t config, bool detailed)
   : detailed(detailed),
     config(config),
     gc_process(*this)
-{}
+{
+  register_metrics();
+}
+
+void SegmentCleaner::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group("segment_cleaner", {
+    sm::make_counter("segments_released", stats.segments_released,
+		     sm::description("total number of extents released by SegmentCleaner")),
+  });
+}
 
 SegmentCleaner::get_segment_ret SegmentCleaner::get_segment()
 {
