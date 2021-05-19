@@ -2,9 +2,9 @@ Vulnerability Management Process
 ================================
 
 #. The report will be acknowledged within three business days.
-#. The team will investigate and update the email thread with relevant
-   information and may ask for additional information or guidance
-   surrounding the reported issue.
+#. The team will investigate the reported issue and will update the email
+   thread with relevant information. The team may ask for additional
+   information regarding the reported issue.
 #. If the team does not confirm the report, no further action will be
    taken and the issue will be closed.
 #. If the team confirms the report, a unique CVE identifier will be
