@@ -301,6 +301,7 @@ class NodeExtentAccessorT {
              extent->get_recorder()->is_empty());
       recorder = nullptr;
     } else {
+      // extent is invalid or retired
       ceph_abort("impossible path");
     }
 #ifndef NDEBUG
@@ -319,25 +320,26 @@ class NodeExtentAccessorT {
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }
   nextent_state_t get_state() const {
-    assert(extent->is_valid());
+    assert(!is_retired());
     // we cannot rely on the underlying extent state because
     // FRESH/MUTATION_PENDING can become DIRTY after transaction submission.
     return state;
   }
 
-  bool is_valid() const {
+  bool is_retired() const {
     if (extent) {
-      assert(extent->is_valid());
-      return true;
-    } else {
+      // XXX SeaStore extent cannot distinguish between invalid and retired.
+      // assert(extent->is_valid());
       return false;
+    } else {
+      return true;
     }
   }
 
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
-    assert(extent->is_valid());
+    assert(!is_retired());
     if (state == nextent_state_t::READ_ONLY) {
       assert(!extent->is_pending());
       auto ref_recorder = recorder_t::create_for_encode(c.vb);
@@ -494,7 +496,7 @@ class NodeExtentAccessorT {
 
   eagain_future<NodeExtentMutable> rebuild(context_t c) {
     LOG_PREFIX(OTree::Extent::rebuild);
-    assert(extent->is_valid());
+    assert(!is_retired());
     if (state == nextent_state_t::FRESH) {
       assert(extent->is_initial_pending());
       // already fresh and no need to record
@@ -552,7 +554,7 @@ class NodeExtentAccessorT {
 
   eagain_future<> retire(context_t c) {
     LOG_PREFIX(OTree::Extent::retire);
-    assert(extent->is_valid());
+    assert(!is_retired());
     auto addr = extent->get_laddr();
     return c.nm.retire_extent(c.t, std::move(extent)
     ).handle_error(

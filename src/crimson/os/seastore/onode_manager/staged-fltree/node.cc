@@ -284,13 +284,13 @@ Node::~Node()
     // 2. unlink parent/super --ptr-> me
     // 3. unlink me --ref-> parent/super
     // 4. extent is retired
-    assert(!impl->is_extent_valid());
+    assert(impl->is_extent_retired());
 
     // TODO: maybe its possible when eagain happens internally, we should
     // revisit to make sure tree operations can be aborted normally,
     // without resource leak or hitting unexpected asserts.
   } else {
-    assert(impl->is_extent_valid());
+    assert(!impl->is_extent_retired());
     if (is_root()) {
       super->do_untrack_root(*this);
     } else {
@@ -2058,6 +2058,7 @@ void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
 #ifndef NDEBUG
   assert(this == cursor.get_leaf_node().get());
   assert(cursor.is_tracked());
+  assert(!impl->is_extent_retired());
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
   assert(key.compare_to(cursor.get_key_view(magic)) == MatchKindCMP::EQ);
