@@ -39,15 +39,7 @@ public:
     TransactionManagerRef tm,
     CollectionManagerRef cm,
     OnodeManagerRef om,
-    PerfServiceRef p_service
-  ) : segment_manager(std::move(sm)),
-      transaction_manager(std::move(tm)),
-      collection_manager(std::move(cm)),
-      onode_manager(std::move(om)),
-      perf_service(std::move(p_service)) {
-    perf_service->add_to_collection();
-  }
-
+    PerfServiceRef p_service);
   ~SeaStore();
     
   seastar::future<> stop() final;
