@@ -39,66 +39,102 @@ struct CapHitMetric {
 
 struct ReadLatencyMetric {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;
+  uint64_t count;
   bool updated = false;
 
   DENC(ReadLatencyMetric, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc(v.lat, p);
     if (struct_v >= 2)
       denc(v.updated, p);
+    if (struct_v >= 3) {
+      denc(v.mean, p);
+      denc(v.sq_sum, p);
+      denc(v.count, p);
+    }
     DENC_FINISH(p);
   }
 
   void dump(Formatter *f) const {
     f->dump_object("read_latency", lat);
+    f->dump_object("avg_read_alatency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const ReadLatencyMetric &metric) {
-    os << "{latency=" << metric.lat << "}";
+    os << "{latency=" << metric.lat << ", avg_latency=" << metric.mean
+       << ", sq_sum=" << metric.sq_sum << ", count=" << metric.count << "}";
     return os;
   }
 };
 
 struct WriteLatencyMetric {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;
+  uint64_t count;
   bool updated = false;
 
   DENC(WriteLatencyMetric, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc(v.lat, p);
     if (struct_v >= 2)
       denc(v.updated, p);
+    if (struct_v >= 3) {
+      denc(v.mean, p);
+      denc(v.sq_sum, p);
+      denc(v.count, p);
+    }
     DENC_FINISH(p);
   }
 
   void dump(Formatter *f) const {
     f->dump_object("write_latency", lat);
+    f->dump_object("avg_write_alatency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const WriteLatencyMetric &metric) {
-    os << "{latency=" << metric.lat << "}";
+    os << "{latency=" << metric.lat << ", avg_latency=" << metric.mean
+       << ", sq_sum=" << metric.sq_sum << ", count=" << metric.count  << "}";
     return os;
   }
 };
 
 struct MetadataLatencyMetric {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;
+  uint64_t count;
   bool updated = false;
 
   DENC(MetadataLatencyMetric, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc(v.lat, p);
     if (struct_v >= 2)
       denc(v.updated, p);
+    if (struct_v >= 3) {
+      denc(v.mean, p);
+      denc(v.sq_sum, p);
+      denc(v.count, p);
+    }
     DENC_FINISH(p);
   }
 
   void dump(Formatter *f) const {
     f->dump_object("metadata_latency", lat);
+    f->dump_object("avg_metadata_alatency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const MetadataLatencyMetric &metric) {
-    os << "{latency=" << metric.lat << "}";
+    os << "{latency=" << metric.lat << ", avg_latency=" << metric.mean
+       << ", sq_sum=" << metric.sq_sum << ", count=" << metric.count << "}";
     return os;
   }
 };
