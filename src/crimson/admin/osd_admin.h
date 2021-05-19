@@ -16,6 +16,7 @@ class DumpPGStateHistory;
 class SeastarMetricsHook;
 class DumpPerfCountersHook;
 class InjectDataErrorHook;
+class InjectMDataErrorHook;
 
 template<class Hook, class... Args>
 std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args);

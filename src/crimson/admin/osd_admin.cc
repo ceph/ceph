@@ -373,4 +373,46 @@ private:
 template std::unique_ptr<AdminSocketHook> make_asok_hook<InjectDataErrorHook>(
   crimson::osd::ShardServices&);
 
+
+// Usage:
+//   injectmdataerr <pool> [namespace/]<obj-name> [shardid]
+class InjectMDataErrorHook : public AdminSocketHook {
+public:
+  InjectMDataErrorHook(crimson::osd::ShardServices& shard_services)  :
+   AdminSocketHook("injectmdataerr",
+    "name=pool,type=CephString " \
+    "name=objname,type=CephObjectname " \
+    "name=shardid,type=CephInt,req=false,range=0|255",
+    "inject data error to an object"),
+   shard_services(shard_services) {
+  }
+
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    ghobject_t obj;
+    try {
+      obj = test_ops_get_object_name(*shard_services.get_osdmap(), cmdmap);
+    } catch (const std::invalid_argument& e) {
+      logger().info("error during metadata error injection: {}", e.what());
+      return seastar::make_ready_future<tell_result_t>(-EINVAL,
+	                                               e.what());
+    }
+    return shard_services.get_store().inject_mdata_error(obj).then([=] {
+      logger().info("successfully injected metadata error for obj={}", obj);
+      ceph::bufferlist bl;
+      bl.append("ok"sv);
+      return seastar::make_ready_future<tell_result_t>(0,
+						       std::string{}, // no err
+						       std::move(bl));
+    });
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<InjectMDataErrorHook>(
+  crimson::osd::ShardServices&);
+
 } // namespace crimson::admin
