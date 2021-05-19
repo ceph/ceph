@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <stdexcept>
+#include <optional>
 #include <ostream>
 #include <boost/variant.hpp>
 #include "include/ceph_assert.h"	// boost clobbers this
@@ -74,6 +75,18 @@ bool cmd_getval(const cmdmap_t& cmdmap,
     return true;
   } catch (boost::bad_get&) {
     throw bad_cmd_get(k, cmdmap);
+  }
+}
+
+template <typename T>
+std::optional<T> cmd_getval(const cmdmap_t& cmdmap,
+			    std::string_view k)
+{
+  T ret;
+  if (const bool found = cmd_getval(cmdmap, k, ret); found) {
+    return std::make_optional(std::move(ret));
+  } else {
+    return std::nullopt;
   }
 }
 
