@@ -41,21 +41,26 @@ class TestSessionMap(CephFSTestCase):
         the conn count goes back to where it started (i.e. we aren't
         leaving connections open)
         """
+        self.config_set('mds', 'ms_async_reap_threshold', '1')
+
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
         status = self.fs.status()
         s = self._get_connection_count(status=status)
         self.fs.rank_tell(["session", "ls"], status=status)
-        e = self._get_connection_count(status=status)
-
-        self.assertEqual(s, e)
+        self.wait_until_true(
+            lambda: self._get_connection_count(status=status) == s,
+            timeout=30
+        )
 
     def test_mount_conn_close(self):
         """
         That when a client unmounts, the thread count on the MDS goes back
         to what it was before the client mounted
         """
+        self.config_set('mds', 'ms_async_reap_threshold', '1')
+
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
@@ -64,9 +69,10 @@ class TestSessionMap(CephFSTestCase):
         self.mount_a.mount_wait()
         self.assertGreater(self._get_connection_count(status=status), s)
         self.mount_a.umount_wait()
-        e = self._get_connection_count(status=status)
-
-        self.assertEqual(s, e)
+        self.wait_until_true(
+            lambda: self._get_connection_count(status=status) == s,
+            timeout=30
+        )
 
     def test_version_splitting(self):
         """
