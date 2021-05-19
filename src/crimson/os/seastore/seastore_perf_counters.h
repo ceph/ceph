@@ -15,9 +15,6 @@ enum {
   ss_tm_extents_retired_bytes,
   ss_tm_extents_allocated_total,
   ss_tm_extents_allocated_bytes,
-  ss_sm_bytes_written,
-  ss_sm_segments_released,
-  ss_sm_bytes_released,
   seastore_perfcounters_last,
 };
 
@@ -44,15 +41,6 @@ class PerfService {
     ss_plb.add_u64_counter(
       ss_tm_extents_allocated_bytes, "extents_allocated_bytes",
       "the total bytes of extents which have been allocated");
-    ss_plb.add_u64_counter(
-      ss_sm_bytes_written, "sm_bytes_written",
-      "the number of bytes written by segmentmanager");
-    ss_plb.add_u64_counter(
-      ss_sm_segments_released, "sm_segments_released",
-      "the number of segments released by segmentmanager");
-    ss_plb.add_u64_counter(
-      ss_sm_bytes_released, "sm_bytes_released",
-      "the number of bytes released by segmentmanager");
     return PerfCountersRef(ss_plb.create_perf_counters());
   }
 
