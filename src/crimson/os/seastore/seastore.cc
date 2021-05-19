@@ -605,6 +605,10 @@ seastar::future<> SeaStore::do_transaction(
       }).safe_then([this, &ctx] {
 	return onode_manager->write_dirty(*ctx.transaction, ctx.onodes);
       }).safe_then([this, &ctx] {
+        // There are some validations in onode tree during onode value
+        // destruction in debug mode, which need to be done before calling
+        // submit_transaction().
+        ctx.onodes.clear();
 	return transaction_manager->submit_transaction(std::move(ctx.transaction));
       }).safe_then([&ctx]() {
 	for (auto i : {

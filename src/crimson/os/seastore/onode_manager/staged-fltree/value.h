@@ -171,6 +171,9 @@ class Value {
   /// Returns whether the Value is still tracked in tree.
   bool is_tracked() const;
 
+  /// Invalidate the Value before submitting transaction.
+  void invalidate();
+
   /// Returns the value payload size.
   value_size_t get_payload_size() const {
     assert(is_tracked());

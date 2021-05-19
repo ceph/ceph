@@ -2062,6 +2062,10 @@ void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
   assert(this == cursor.get_leaf_node().get());
   assert(cursor.is_tracked());
   assert(!impl->is_extent_retired());
+
+  // We need to make sure user has freed all the cursors before submitting the
+  // according transaction. Otherwise the below checks will have undefined
+  // behaviors.
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
   assert(key.compare_to(cursor.get_key_view(magic)) == MatchKindCMP::EQ);

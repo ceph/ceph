@@ -23,6 +23,9 @@
  * - Runs above seastore block and transaction layer;
  * - Specially optimized for onode key structures and seastore
  *   delta/transaction semantics;
+ *
+ * Note: User should not hold any Cursor/Value when call
+ * submit_transaction() because of validations implemented in ~tree_cursor_t().
  */
 
 namespace crimson::os::seastore::onode {
@@ -66,6 +69,11 @@ class Btree {
         assert(p_cursor->is_end());
         ceph_abort("impossible");
       }
+    }
+
+    /// Invalidate the Cursor before submitting transaction.
+    void invalidate() {
+      p_cursor.reset();
     }
 
     // XXX: return key_view_t to avoid unecessary ghobject_t constructions
