@@ -5454,6 +5454,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   }
   else if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
     mds->mdcache->queue_file_recover(in);
+    mds->mdcache->do_file_recover();
   }
 }
 
