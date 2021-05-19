@@ -174,7 +174,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
         })
       }),
       path: new FormControl(''),
-      protocolNfsv3: new FormControl(true, {
+      protocolNfsv3: new FormControl(false, {
         validators: [
           CdValidators.requiredIf({ protocolNfsv4: false }, (value: boolean) => {
             return !value;
