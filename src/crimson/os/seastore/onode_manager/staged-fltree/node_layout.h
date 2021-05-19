@@ -120,7 +120,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   level_t level() const override { return extent.read().level(); }
   node_offset_t free_size() const override { return extent.read().free_size(); }
   node_offset_t total_size() const override { return extent.read().total_size(); }
-  bool is_extent_valid() const override { return extent.is_valid(); }
+  bool is_extent_retired() const override { return extent.is_retired(); }
 
   std::optional<key_view_t> get_pivot_index() const override {
     if (is_level_tail()) {

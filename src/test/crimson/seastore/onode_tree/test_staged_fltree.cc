@@ -828,7 +828,7 @@ class DummyChildPool {
     laddr_t laddr() const override { return _laddr; }
     bool is_level_tail() const override { return _is_level_tail; }
     std::optional<key_view_t> get_pivot_index() const override { return {key_view}; }
-    bool is_extent_valid() const override { return _is_extent_valid; }
+    bool is_extent_retired() const override { return _is_extent_retired; }
     const std::string& get_name() const override { return name; }
     search_position_t make_tail() override {
       _is_level_tail = true;
@@ -836,7 +836,8 @@ class DummyChildPool {
       return search_position_t::end();
     }
     eagain_future<> retire_extent(context_t) override {
-      _is_extent_valid = false;
+      assert(!_is_extent_retired);
+      _is_extent_retired = true;
       return seastar::now();
     }
 
@@ -898,7 +899,7 @@ class DummyChildPool {
     bool _is_level_tail;
     laddr_t _laddr;
     std::string name;
-    bool _is_extent_valid = true;
+    bool _is_extent_retired = false;
 
     key_view_t key_view;
     void* p_mem_key_view;
