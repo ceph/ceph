@@ -79,13 +79,12 @@ auto get_transaction_manager(
 
   journal->set_segment_provider(&*segment_cleaner);
 
-  auto ret = std::make_unique<TransactionManager>(
+  return std::make_unique<TransactionManager>(
     segment_manager,
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
     std::move(lba_manager));
-  return ret;
 }
 
 auto get_seastore(SegmentManagerRef sm) {
