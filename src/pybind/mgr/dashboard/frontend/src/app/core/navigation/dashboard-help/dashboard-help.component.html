@@ -1,7 +1,3 @@
-<form #docsForm action="/docs" target="_blank" method="post">
-  <input type="hidden" name="token"/>
-</form>
-
 <div dropdown>
   <a dropdownToggle
      class="dropdown-toggle"
@@ -25,7 +21,8 @@
     <li>
       <a i18n
          class="dropdown-item"
-         (click)="goToApiDocs()">API</a>
+         href="/docs"
+         target="_blank">API</a>
     </li>
     <li>
       <a i18n
