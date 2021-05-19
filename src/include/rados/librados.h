@@ -167,8 +167,8 @@ typedef enum {
 /*
  * snap id contants
  */
-#define LIBRADOS_SNAP_HEAD  ((uint64_t)(-2))
-#define LIBRADOS_SNAP_DIR   ((uint64_t)(-1))
+#define LIBRADOS_SNAP_HEAD  UINT64_C(-2)
+#define LIBRADOS_SNAP_DIR   UINT64_C(-1)
 
 /**
  * @typedef rados_t
