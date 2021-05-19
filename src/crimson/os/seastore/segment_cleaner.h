@@ -366,11 +366,7 @@ private:
   std::optional<seastar::promise<>> blocked_io_wake;
 
 public:
-  SegmentCleaner(config_t config, PerfCounters &perf, bool detailed = false)
-    : detailed(detailed),
-      config(config),
-      sc_perf(perf),
-      gc_process(*this) {}
+  SegmentCleaner(config_t config, bool detailed = false);
 
   void mount(SegmentManager &sm) {
     init_complete = false;

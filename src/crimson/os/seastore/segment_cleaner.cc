@@ -143,6 +143,12 @@ void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
   segment_usage[id].dump_usage(block_size);
 }
 
+SegmentCleaner::SegmentCleaner(config_t config, bool detailed)
+  : detailed(detailed),
+    config(config),
+    gc_process(*this)
+{}
+
 SegmentCleaner::get_segment_ret SegmentCleaner::get_segment()
 {
   for (size_t i = 0; i < segments.size(); ++i) {
