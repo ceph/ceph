@@ -146,8 +146,7 @@ void TMDriver::init()
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
-    std::move(lba_manager),
-    perf_service->get_counters());
+    std::move(lba_manager));
 }
 
 void TMDriver::clear()
