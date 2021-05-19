@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { catchError, mapTo } from 'rxjs/operators';
 
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
@@ -24,16 +24,6 @@ export class RgwBucketService {
   list() {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.append('stats', 'true');
-      return this.http.get(this.url, { params: params });
-    });
-  }
-
-  /**
-   * Get the list of bucket names.
-   * @return Observable<string[]>
-   */
-  enumerate() {
-    return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.get(this.url, { params: params });
     });
   }
@@ -112,10 +102,13 @@ export class RgwBucketService {
    * @return Observable<boolean>
    */
   exists(bucket: string) {
-    return this.enumerate().pipe(
-      mergeMap((resp: string[]) => {
-        const index = _.indexOf(resp, bucket);
-        return observableOf(-1 !== index);
+    return this.get(bucket).pipe(
+      mapTo(true),
+      catchError((error: Event) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableOf(false);
       })
     );
   }
