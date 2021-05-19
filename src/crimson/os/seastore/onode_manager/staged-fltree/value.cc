@@ -36,6 +36,11 @@ bool Value::is_tracked() const
   return p_cursor->is_tracked();
 }
 
+void Value::invalidate()
+{
+  p_cursor.reset();
+}
+
 eagain_future<> Value::extend(Transaction& t, value_size_t extend_size)
 {
   assert(is_tracked());
