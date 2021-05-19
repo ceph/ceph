@@ -25,6 +25,7 @@ TransactionManager::TransactionManager(
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
+  register_metrics();
 }
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
