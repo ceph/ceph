@@ -13,10 +13,10 @@ import * as Chart from 'chart.js';
 import _ from 'lodash';
 import { PluginServiceGlobalRegistrationAndOptions } from 'ng2-charts';
 
+import { CssHelper } from '~/app/shared/classes/css-helper';
 import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
-import styles from '~/styles.scss';
 
 @Component({
   selector: 'cd-health-pie',
@@ -53,11 +53,11 @@ export class HealthPieComponent implements OnChanges, OnInit {
     colors: [
       {
         backgroundColor: [
-          styles.chartHealthColorGreen,
-          styles.chartHealthColorYellow,
-          styles.chartHealthColorOrange,
-          styles.chartHealthColorRed,
-          styles.chartHealthColorBlue
+          this.cssHelper.propertyValue('chart-color-green'),
+          this.cssHelper.propertyValue('chart-color-yellow'),
+          this.cssHelper.propertyValue('chart-color-orange'),
+          this.cssHelper.propertyValue('chart-color-red'),
+          this.cssHelper.propertyValue('chart-color-blue')
         ]
       }
     ],
@@ -78,7 +78,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
       tooltips: {
         enabled: true,
         displayColors: false,
-        backgroundColor: styles.chartHealthTootlipBgColor,
+        backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
         cornerRadius: 0,
         bodyFontSize: 14,
         bodyFontStyle: '600',
@@ -105,6 +105,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
     {
       id: 'center_text',
       beforeDraw(chart: Chart) {
+        const cssHelper = new CssHelper();
         const defaultFontFamily = 'Helvetica Neue, Helvetica, Arial, sans-serif';
         Chart.defaults.global.defaultFontFamily = defaultFontFamily;
         const ctx = chart.ctx;
@@ -121,12 +122,12 @@ export class HealthPieComponent implements OnChanges, OnInit {
         ctx.textBaseline = 'middle';
 
         ctx.font = `24px ${defaultFontFamily}`;
-        ctx.fillStyle = styles.chartHealthCenterTextColor;
+        ctx.fillStyle = cssHelper.propertyValue('chart-color-center-text');
         ctx.fillText(label[0], centerX, centerY - 10);
 
         if (label.length > 1) {
           ctx.font = `14px ${defaultFontFamily}`;
-          ctx.fillStyle = styles.chartHealthCenterTextDescriptionColor;
+          ctx.fillStyle = cssHelper.propertyValue('chart-color-center-text-description');
           ctx.fillText(label[1], centerX, centerY + 10);
         }
         ctx.restore();
@@ -134,7 +135,11 @@ export class HealthPieComponent implements OnChanges, OnInit {
     }
   ];
 
-  constructor(private dimlessBinary: DimlessBinaryPipe, private dimless: DimlessPipe) {}
+  constructor(
+    private dimlessBinary: DimlessBinaryPipe,
+    private dimless: DimlessPipe,
+    private cssHelper: CssHelper
+  ) {}
 
   ngOnInit() {
     const getStyleTop = (tooltip: any, positionY: number) => {
