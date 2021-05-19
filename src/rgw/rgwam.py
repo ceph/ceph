@@ -148,8 +148,10 @@ class RGWAMException(BaseException):
 
 
 class RGWAdminCmd:
-    def __init__(self):
+    def __init__(self, common_args):
         self.cmd_prefix = [ 'radosgw-admin' ]
+        if common_args.ceph_name:
+            self.cmd_prefix += [ '-n', common_args.ceph_name ]
 
     def run(self, cmd):
         run_cmd = self.cmd_prefix + cmd
@@ -157,8 +159,11 @@ class RGWAdminCmd:
         return (result.returncode, result.stdout)
 
 class RGWCmd:
-    def __init__(self):
+    def __init__(self, common_args):
         self.cmd_prefix = [ 'radosgw' ]
+        if common_args.ceph_name:
+            self.cmd_prefix += [ '-n', common_args.ceph_name ]
+
 
     def run(self, cmd):
         run_cmd = self.cmd_prefix + cmd
@@ -166,8 +171,8 @@ class RGWCmd:
         return (result.returncode, result.stdout)
 
 class RealmOp(RGWAdminCmd):
-    def __init__(self):
-        RGWAdminCmd.__init__(self)
+    def __init__(self, common_args):
+        super().__init__(common_args)
         
     def get(self):
         params = [ 'realm',
@@ -222,8 +227,8 @@ class RealmOp(RGWAdminCmd):
         return self.info
 
 class ZonegroupOp(RGWAdminCmd):
-    def __init__(self):
-        RGWAdminCmd.__init__(self)
+    def __init__(self, common_args):
+        super().__init__(common_args)
         
     def create(self, realm, name = None, endpoints = None, is_master = True, is_default = True):
         self.name = name
@@ -251,8 +256,8 @@ class ZonegroupOp(RGWAdminCmd):
         return self.info
 
 class ZoneOp(RGWAdminCmd):
-    def __init__(self):
-        RGWAdminCmd.__init__(self)
+    def __init__(self, common_args):
+        super().__init__(common_args)
         
     def get(self):
         params = [ 'zone',
@@ -327,8 +332,8 @@ class ZoneOp(RGWAdminCmd):
         return self.info
 
 class PeriodOp(RGWAdminCmd):
-    def __init__(self):
-        RGWAdminCmd.__init__(self)
+    def __init__(self, common_args):
+        super().__init__(common_args)
         
     def update(self, realm, commit = True):
 
@@ -363,8 +368,8 @@ class PeriodOp(RGWAdminCmd):
         return self.info
 
 class UserOp(RGWAdminCmd):
-    def __init__(self):
-        RGWAdminCmd.__init__(self)
+    def __init__(self, common_args):
+        super().__init__(common_args)
         
     def create(self, uid = None, uid_prefix = None, display_name = None, email = None, is_system = False):
         self.uid = uid
@@ -396,13 +401,28 @@ class UserOp(RGWAdminCmd):
         return self.info
 
 class RGWAM:
-    def __init__(self):
-        pass
+    def __init__(self, common_args):
+        self.common_args = common_args
+
+    def realm_op(self):
+        return RealmOp(self.common_args)
+
+    def period_op(self):
+        return PeriodOp(self.common_args)
+
+    def zonegroup_op(self):
+        return ZonegroupOp(self.common_args)
+
+    def zone_op(self):
+        return ZoneOp(self.common_args)
+
+    def user_op(self):
+        return UserOp(self.common_args)
 
     def realm_bootstrap(self, realm, zonegroup, zone, endpoints, sys_uid, uid, start_radosgw):
         endpoints = get_endpoints(endpoints)
 
-        realm_info = RealmOp().create(realm)
+        realm_info = self.realm_op().create(realm)
         if not realm_info:
             raise RGWAMException('failed to create realm')
 
@@ -410,7 +430,7 @@ class RGWAM:
         realm_id = realm_info['id']
         logging.info('Created realm %s (%s)' % (realm_name, realm_id))
 
-        zg_info = ZonegroupOp().create(realm_name, zonegroup, endpoints, True, True)
+        zg_info = self.zonegroup_op().create(realm_name, zonegroup, endpoints, True, True)
         if not zg_info:
             raise RGWAMException('failed to create zonegroup')
 
@@ -418,7 +438,7 @@ class RGWAM:
         zg_id = zg_info['id']
         logging.info('Created zonegroup %s (%s)' % (zg_name, zg_id))
 
-        zone_info = ZoneOp().create(realm_name, zg_name, zone, endpoints, True, True)
+        zone_info = self.zone_op().create(realm_name, zg_name, zone, endpoints, True, True)
         if not zone_info:
             raise RGWAMException('failed to create zone')
 
@@ -426,7 +446,7 @@ class RGWAM:
         zone_id = zone_info['id']
         logging.info('Created zone %s (%s)' % (zone_name, zone_id))
 
-        period_info = PeriodOp().update(realm_name, True)
+        period_info = self.period_op().update(realm_name, True)
         if not period_info:
             raise RGWAMException('failed to update period')
 
@@ -434,7 +454,7 @@ class RGWAM:
 
         logging.info('Period: ' + period.id)
 
-        sys_user_info = UserOp().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
+        sys_user_info = self.user_op().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
         if not sys_user_info:
             raise RGWAMException('failed to create system user')
 
@@ -449,11 +469,11 @@ class RGWAM:
             sys_access_key = sys_user.keys[0].access_key
             sys_secret = sys_user.keys[0].secret_key
 
-        zone_info = ZoneOp().modify(endpoints, None, None, sys_access_key, sys_secret)
+        zone_info = self.zone_op().modify(endpoints, None, None, sys_access_key, sys_secret)
         if not zone_info:
             raise RGWAMException('failed to modify zone info')
 
-        user_info = UserOp().create(uid = uid, is_system = False)
+        user_info = self.user_op().create(uid = uid, is_system = False)
         if not user_info:
             raise RGWAMException('failed to create user')
 
@@ -479,13 +499,13 @@ class RGWAM:
         return True
 
     def realm_new_zone_creds(self, endpoints, sys_uid):
-        period_info = PeriodOp().get()
+        period_info = self.period_op().get()
         if not period_info:
             return
 
         period = RGWPeriod(period_info)
 
-        zone_info = ZoneOp().get()
+        zone_info = self.zone_op().get()
         if not zone_info:
             raise RGWAMException('failed to create zone')
 
@@ -509,7 +529,7 @@ class RGWAM:
         if len(eps) > 0:
             ep = eps[0]
 
-        sys_user_info = UserOp().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
+        sys_user_info = self.user_op().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
         if not sys_user_info:
             raise RGWAMException('failed to create system user')
 
@@ -546,7 +566,7 @@ class RGWAM:
         access_key = realm_token['access_key']
         secret = realm_token['secret']
 
-        realm_info = RealmOp().pull(realm_token['endpoint'], access_key, secret, set_default = True)
+        realm_info = self.realm_op().pull(realm_token['endpoint'], access_key, secret, set_default = True)
         if not realm_info:
             raise RGWAMException('failed to pull realm')
 
@@ -554,7 +574,7 @@ class RGWAM:
         realm_id = realm_info['id']
         logging.info('Pulled realm %s (%s)' % (realm_name, realm_id))
 
-        period_info = PeriodOp().get()
+        period_info = self.period_op().get()
 
         period = RGWPeriod(period_info)
 
@@ -565,7 +585,7 @@ class RGWAM:
         if not zg:
             raise RGWAMException('zonegroup %s not found' % (zonegroup or '<none>'))
 
-        zone_info = ZoneOp().create(realm_name, zg.name, zone, endpoints, False, True,
+        zone_info = self.zone_op().create(realm_name, zg.name, zone, endpoints, False, True,
                 access_key, secret)
         if not zone_info:
             raise RGWAMException('failed to create zone')
@@ -574,7 +594,7 @@ class RGWAM:
         zone_id = zone_info['id']
         logging.info('Created zone %s (%s)' % (zone_name, zone_id))
 
-        period_info = PeriodOp().update(realm_name, True)
+        period_info = self.period_op().update(realm_name, True)
         if not period_info:
             raise RGWAMException('failed to update period')
 
@@ -612,13 +632,14 @@ class RGWAM:
         if debug_rgw:
             params += [ '--debug-rgw', debug_rgw ]
 
-        (retcode, _) = RGWCmd().run(params)
+        (retcode, _) = RGWCmd(self.common_args).run(params)
 
         return (retcode == 0)
 
 
 class RealmCommand:
-    def __init__(self, args):
+    def __init__(self, common_args, args):
+        self.common_args = common_args
         self.args = args
 
     def parse(self):
@@ -659,7 +680,7 @@ The subcommands are:
 
         args = parser.parse_args(self.args[1:])
 
-        return RGWAM().realm_bootstrap(args.realm, args.zonegroup, args.zone, args.endpoints,
+        return RGWAM(self.common_args).realm_bootstrap(args.realm, args.zonegroup, args.zone, args.endpoints,
                 args.sys_uid, args.uid, args.start_radosgw)
 
     def new_zone_creds(self):
@@ -671,11 +692,12 @@ The subcommands are:
 
         args = parser.parse_args(self.args[1:])
 
-        return RGWAM().realm_new_zone_creds(args.endpoints, args.sys_uid)
+        return RGWAM(self.common_args).realm_new_zone_creds(args.endpoints, args.sys_uid)
 
 
 class ZoneCommand:
-    def __init__(self, args):
+    def __init__(self, common_args, args):
+        self.common_args = common_args
         self.args = args
 
     def parse(self):
@@ -707,7 +729,7 @@ The subcommands are:
 
         args = parser.parse_args(self.args[1:])
 
-        return RGWAM().run_radosgw(port = args.port)
+        return RGWAM(self.common_args).run_radosgw(port = args.port)
 
     def create(self):
         parser = argparse.ArgumentParser(
@@ -722,8 +744,11 @@ The subcommands are:
 
         args = parser.parse_args(self.args[1:])
 
-        return RGWAM().zone_create(args.realm_token, args.zonegroup, args.zone, args.endpoints, args.start_radosgw)
+        return RGWAM(self.common_args).zone_create(args.realm_token, args.zonegroup, args.zone, args.endpoints, args.start_radosgw)
 
+class CommonArgs:
+    def __init__(self, ns):
+        self.ceph_name = ns.ceph_name
 
 class TopLevelCommand:
 
@@ -760,23 +785,23 @@ The commands are:
             exit(1)
         # use dispatch pattern to invoke method with same name
         args += removed_args
-        return (getattr(self, ns.command), args)
+        return (getattr(self, ns.command), CommonArgs(ns), args)
 
-    def realm(self, args):
-        cmd = RealmCommand(args).parse()
+    def realm(self, common_args, args):
+        cmd = RealmCommand(common_args, args).parse()
         return cmd()
 
     def zone(self, args):
-        cmd = ZoneCommand(args).parse()
+        cmd = ZoneCommand(common_args, args).parse()
         return cmd()
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    (cmd, args)= TopLevelCommand()._parse()
+    (cmd, common_args, args)= TopLevelCommand()._parse()
     try:
-        ret = cmd(args)
+        ret = cmd(common_args, args)
         if not ret:
             sys.exit(1)
     except RGWAMException as e:
