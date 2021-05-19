@@ -10,12 +10,10 @@ export class ServicesPageHelper extends PageHelper {
 
   columnIndex = {
     service_name: 2,
-    container_image_name: 3,
-    container_image_id: 4,
-    placement: 5,
-    running: 6,
-    size: 7,
-    last_refresh: 8
+    placement: 3,
+    running: 4,
+    size: 5,
+    last_refresh: 6
   };
 
   check_for_service() {
