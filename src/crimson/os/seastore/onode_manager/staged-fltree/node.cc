@@ -277,18 +277,11 @@ Node::Node(NodeImplURef&& impl) : impl{std::move(impl)} {}
 
 Node::~Node()
 {
-  // XXX: tolerate failure between allocate() and as_child()
   if (!super && !_parent_info.has_value()) {
-    // To erase a node:
-    // 1. I'm not tracking any children or cursors
-    // 2. unlink parent/super --ptr-> me
-    // 3. unlink me --ref-> parent/super
-    // 4. extent is retired
-    assert(impl->is_extent_retired());
-
-    // TODO: maybe its possible when eagain happens internally, we should
-    // revisit to make sure tree operations can be aborted normally,
-    // without resource leak or hitting unexpected asserts.
+    // possible scenarios:
+    //   a. I'm erased;
+    //   b. Eagain happened after the node extent is allocated/loaded
+    //      and before the node is initialized correctly;
   } else {
     assert(!impl->is_extent_retired());
     if (is_root()) {
@@ -606,6 +599,12 @@ template eagain_future<> Node::try_merge_adjacent<false>(context_t, bool, Ref<No
 
 eagain_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
 {
+  // To erase a node:
+  // 1. I'm supposed to have already untracked any children or cursors
+  // 2. unlink parent/super --ptr-> me
+  // 3. unlink me --ref-> parent/super
+  // 4. retire extent
+  // 5. destruct node
   assert(this_ref.get() == this);
   assert(!is_tracking());
   assert(!is_root());
@@ -767,6 +766,10 @@ eagain_future<> InternalNode::apply_child_split(
     assert(right_child->impl->is_level_tail());
     assert(!update_right_index);
   }
+
+  // right_child has not assigned parent yet
+  assert(!right_child->super);
+  assert(!right_child->_parent_info.has_value());
 #endif
 
   impl->prepare_mutate(c);
