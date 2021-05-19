@@ -22,7 +22,6 @@
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
-#include "crimson/os/seastore/seastore_perf_counters.h"
 
 namespace crimson::os::seastore {
 
@@ -38,8 +37,7 @@ public:
     SegmentManagerRef sm,
     TransactionManagerRef tm,
     CollectionManagerRef cm,
-    OnodeManagerRef om,
-    PerfServiceRef p_service);
+    OnodeManagerRef om);
   ~SeaStore();
     
   seastar::future<> stop() final;
@@ -243,7 +241,6 @@ private:
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
-  PerfServiceRef perf_service;
 
   using tm_ertr = TransactionManager::base_ertr;
   using tm_ret = tm_ertr::future<>;
