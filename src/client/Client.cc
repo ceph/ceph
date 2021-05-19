@@ -6754,15 +6754,24 @@ void Client::collect_and_send_global_metrics() {
   std::vector<ClientMetricMessage> message;
 
   // read latency
-  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
+  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read),
+                                                  logger->tget(l_c_rd_avg),
+                                                  logger->get(l_c_rd_sqsum),
+                                                  nr_read_request));
   message.push_back(metric);
 
   // write latency
-  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
+  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat),
+                                                   logger->tget(l_c_wr_avg),
+                                                   logger->get(l_c_wr_sqsum),
+                                                   nr_write_request));
   message.push_back(metric);
 
   // metadata latency
-  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
+  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat),
+                                                      logger->tget(l_c_md_avg),
+                                                      logger->get(l_c_md_sqsum),
+                                                      nr_metadata_request));
   message.push_back(metric);
 
   // cap hit ratio -- nr_caps is unused right now
