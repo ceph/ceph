@@ -37,7 +37,13 @@ MDS_PERF_QUERY_COUNTERS_MAP = OrderedDict({'cap_hit': 0,
                                            'pinned_icaps': 6,
                                            'opened_inodes': 7,
                                            'read_io_sizes': 8,
-                                           'write_io_sizes': 9})
+                                           'write_io_sizes': 9,
+                                           'avg_read_latency': 10,
+                                           'stdev_read_latency': 11,
+                                           'avg_write_latency': 12,
+                                           'stdev_write_latency': 13,
+                                           'avg_metadata_latency': 14,
+                                           'stdev_metadata_latency': 15})
 MDS_PERF_QUERY_COUNTERS = [] # type: List[str]
 MDS_GLOBAL_PERF_QUERY_COUNTERS = list(MDS_PERF_QUERY_COUNTERS_MAP.keys())
 
