@@ -6798,21 +6798,30 @@ void Client::collect_and_send_global_metrics() {
   // read latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_READ_LATENCY)) {
-    metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
+    metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read),
+                                                    logger->tget(l_c_rd_avg),
+                                                    logger->get(l_c_rd_sqsum),
+                                                    nr_read_request));
     message.push_back(metric);
   }
 
   // write latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_WRITE_LATENCY)) {
-    metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
+    metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat),
+                                                    logger->tget(l_c_wr_avg),
+                                                    logger->get(l_c_wr_sqsum),
+                                                    nr_write_request));
     message.push_back(metric);
   }
 
   // metadata latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
-    metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
+    metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat),
+                                                        logger->tget(l_c_md_avg),
+                                                        logger->get(l_c_md_sqsum),
+                                                        nr_metadata_request));
     message.push_back(metric);
   }
 
