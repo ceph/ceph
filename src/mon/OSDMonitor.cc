@@ -5381,7 +5381,7 @@ namespace {
     COMPRESSION_MODE, COMPRESSION_ALGORITHM, COMPRESSION_REQUIRED_RATIO,
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
-    PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
+    PG_AUTOSCALE_MODE, PG_NUM_MIN, PG_NUM_MAX, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE };
 
@@ -6115,6 +6115,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"fingerprint_algorithm", FINGERPRINT_ALGORITHM},
       {"pg_autoscale_mode", PG_AUTOSCALE_MODE},
       {"pg_num_min", PG_NUM_MIN},
+      {"pg_num_max", PG_NUM_MAX},
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
@@ -6334,6 +6335,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
 	  case PG_NUM_MIN:
+	  case PG_NUM_MAX:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
@@ -6494,6 +6496,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
 	  case PG_NUM_MIN:
+	  case PG_NUM_MAX:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
@@ -7276,7 +7279,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string rule_name;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0, 0, 0.0,
+			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {},
 			 &ss);
@@ -7817,6 +7820,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 unsigned pg_num_min,
+				 unsigned pg_num_max,
                                  const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
@@ -7996,6 +8000,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
       pg_num_min) {
     pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
+  }
+  if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
+      pg_num_max) {
+    pi->opts.set(pool_opts_t::PG_NUM_MAX, static_cast<int64_t>(pg_num_max));
   }
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
 	pg_autoscale_mode); m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
@@ -8653,6 +8661,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (n > (int)p.get_pg_num_target()) {
 	ss << "specified pg_num_min " << n
 	   << " > pg_num " << p.get_pg_num_target();
+	return -EINVAL;
+      }
+    } else if (var == "pg_num_max") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n < (int)p.get_pg_num_target()) {
+	ss << "specified pg_num_max " << n
+	   << " < pg_num " << p.get_pg_num_target();
 	return -EINVAL;
       }
     } else if (var == "recovery_priority") {
@@ -12643,12 +12661,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t pg_num, pg_num_min;
+    int64_t pg_num, pg_num_min, pg_num_max;
     int64_t pgp_num;
     cmd_getval(cmdmap, "pg_num", pg_num, int64_t(0));
     cmd_getval(cmdmap, "pgp_num", pgp_num, pg_num);
     cmd_getval(cmdmap, "pg_num_min", pg_num_min, int64_t(0));
-
+    cmd_getval(cmdmap, "pg_num_max", pg_num_max, int64_t(0));
     string pool_type_str;
     cmd_getval(cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
@@ -12814,7 +12832,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
-			   pg_num, pgp_num, pg_num_min,
+			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,

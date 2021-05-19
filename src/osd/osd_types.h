@@ -1093,6 +1093,7 @@ public:
     CSUM_MIN_BLOCK,
     FINGERPRINT_ALGORITHM,
     PG_NUM_MIN,         // min pg_num
+    PG_NUM_MAX,         // max pg_num
     TARGET_SIZE_BYTES,  // total bytes in pool
     TARGET_SIZE_RATIO,  // fraction of total cluster
     PG_AUTOSCALE_BIAS,

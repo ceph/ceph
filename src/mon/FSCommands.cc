@@ -274,6 +274,9 @@ class FsNewHandler : public FileSystemCommandHandler
 				   pool_opts_t::PG_NUM_MIN,
 				   static_cast<int64_t>(16));
     mon->osdmon()->do_set_pool_opt(metadata,
+				   pool_opts_t::PG_NUM_MAX,
+				   static_cast<int64_t>(16));
+    mon->osdmon()->do_set_pool_opt(metadata,
 				   pool_opts_t::PG_AUTOSCALE_BIAS,
 				   static_cast<double>(4.0));
     mon->osdmon()->propose_pending();
