@@ -1,3 +1,4 @@
+from io import StringIO
 import json
 import logging
 import os
@@ -1553,7 +1554,7 @@ vc.disconnect()
         obj_name = 'test_vc_ob_2'
         pool_name = self.fs.get_data_pool_names()[0]
 
-        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin=StringIO(obj_data))
 
         self._volume_client_python(vc_mount, dedent("""
             data_read = vc.get_object("{pool_name}", "{obj_name}")
@@ -1572,7 +1573,7 @@ vc.disconnect()
         obj_data = 'test_data'
         obj_name = 'test_vc_obj'
         pool_name = self.fs.get_data_pool_names()[0]
-        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin=StringIO(obj_data))
 
         self._volume_client_python(vc_mount, dedent("""
             data, version_before = vc.get_object_and_version("{pool_name}", "{obj_name}")
@@ -1595,7 +1596,7 @@ vc.disconnect()
         obj_data = 'test_data'
         obj_name = 'test_vc_ob_2'
         pool_name = self.fs.get_data_pool_names()[0]
-        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin=StringIO(obj_data))
 
         # Test if put_object_versioned() crosschecks the version of the
         # given object. Being a negative test, an exception is expected.
@@ -1633,7 +1634,7 @@ vc.disconnect()
         obj_name = 'test_vc_obj_3'
         pool_name = self.fs.get_data_pool_names()[0]
 
-        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin=StringIO(obj_data))
 
         self._volume_client_python(vc_mount, dedent("""
             data_read = vc.delete_object("{pool_name}", "{obj_name}")
