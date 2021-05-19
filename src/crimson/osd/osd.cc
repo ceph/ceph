@@ -444,6 +444,7 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SeastarMetricsHook>()),
       asok->register_command(make_asok_hook<DumpPerfCountersHook>()),
       asok->register_command(make_asok_hook<InjectDataErrorHook>(get_shard_services())),
+      asok->register_command(make_asok_hook<InjectMDataErrorHook>(get_shard_services())),
       // PG commands
       asok->register_command(make_asok_hook<pg::QueryCommand>(*this)),
       asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)));
