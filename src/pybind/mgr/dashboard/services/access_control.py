@@ -26,6 +26,7 @@ from ..settings import Settings
 logger = logging.getLogger('access_control')
 DEFAULT_FILE_DESC = 'password/secret'
 
+
 # password hashing algorithm
 def password_hash(password, salt_password=None):
     if not password:
