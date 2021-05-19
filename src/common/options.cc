@@ -1153,6 +1153,11 @@ std::vector<Option> get_global_options() {
     .set_description("Maximum threadpool size of AsyncMessenger")
     .add_see_also("ms_async_op_threads"),
 
+    Option("ms_async_reap_threshold", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(5)
+    .set_min(1)
+    .set_description("number of deleted connections before we reap"),
+
     Option("ms_async_rdma_device_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description(""),
