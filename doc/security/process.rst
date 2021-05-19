@@ -1,7 +1,7 @@
 Vulnerability Management Process
 ================================
 
-#. The report will be acknowledged within three business days or less.
+#. The report will be acknowledged within three business days.
 #. The team will investigate and update the email thread with relevant
    information and may ask for additional information or guidance
    surrounding the reported issue.
