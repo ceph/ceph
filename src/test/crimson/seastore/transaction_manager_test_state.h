@@ -120,8 +120,10 @@ protected:
   }
 
   virtual seastar::future<> _teardown() {
-    return tm->close(
-    ).handle_error(
+    return tm->close().safe_then([this] {
+      _destroy();
+      return seastar::now();
+    }).handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
     );
   }
@@ -199,7 +201,9 @@ protected:
   }
 
   virtual seastar::future<> _teardown() {
-    return seastore->umount();
+    return seastore->umount().then([this] {
+      seastore.reset();
+    });
   }
 
   virtual seastar::future<> _mount() {
