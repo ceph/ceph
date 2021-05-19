@@ -23,7 +23,6 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/seastore_perf_counters.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/lba_manager.h"
