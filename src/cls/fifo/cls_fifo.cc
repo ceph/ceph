@@ -217,7 +217,8 @@ int create_meta(cls_method_context_t hctx,
     auto iter = in->cbegin();
     decode(op, iter);
   } catch (const ceph::buffer::error& err) {
-    CLS_ERR("ERROR: %s: failed to decode request", __PRETTY_FUNCTION__);
+    CLS_ERR("ERROR: %s: failed to decode request: %s", __PRETTY_FUNCTION__,
+	    err.what());
     return -EINVAL;
   }
 
@@ -237,19 +238,24 @@ int create_meta(cls_method_context_t hctx,
 
   int r = cls_cxx_stat2(hctx, &size, nullptr);
   if (r < 0 && r != -ENOENT) {
-    CLS_ERR("ERROR: %s: cls_cxx_stat2() on obj returned %d", __PRETTY_FUNCTION__, r);
+    CLS_ERR("ERROR: %s: cls_cxx_stat2() on obj returned %d",
+	    __PRETTY_FUNCTION__, r);
     return r;
   }
   if (op.exclusive && r == 0) {
-    CLS_ERR("%s: exclusive create but queue already exists", __PRETTY_FUNCTION__);
+    CLS_ERR("%s: exclusive create but queue already exists",
+	    __PRETTY_FUNCTION__);
     return -EEXIST;
   }
 
   if (r == 0) {
+    CLS_LOG(5, "%s: FIFO already exists, reading from disk and comparing.",
+	    __PRETTY_FUNCTION__);
     ceph::buffer::list bl;
     r = cls_cxx_read2(hctx, 0, size, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
-      CLS_ERR("ERROR: %s: cls_cxx_read2() on obj returned %d", __PRETTY_FUNCTION__, r);
+      CLS_ERR("ERROR: %s: cls_cxx_read2() on obj returned %d",
+	      __PRETTY_FUNCTION__, r);
       return r;
     }
 
@@ -258,7 +264,8 @@ int create_meta(cls_method_context_t hctx,
       auto iter = bl.cbegin();
       decode(header, iter);
     } catch (const ceph::buffer::error& err) {
-      CLS_ERR("ERROR: %s: failed decoding header", __PRETTY_FUNCTION__);
+      CLS_ERR("ERROR: %s: failed decoding header: %s",
+	      __PRETTY_FUNCTION__, err.what());
       return -EIO;
     }
 
