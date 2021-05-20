@@ -58,7 +58,9 @@ describe('NfsFormComponent', () => {
     httpTesting.expectOne('ui-api/nfs-ganesha/fsals').flush(['CEPH', 'RGW']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephx/clients').flush(['admin', 'fs', 'rgw']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`).flush(['test', 'dev']);
+    httpTesting
+      .expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`)
+      .flush(['test', 'dev', 'tenant$user']);
     const user_dev = {
       suspended: 0,
       user_id: 'dev',
@@ -71,6 +73,15 @@ describe('NfsFormComponent', () => {
       keys: ['a']
     };
     httpTesting.expectOne(`api/rgw/user/test?${RgwHelper.DAEMON_QUERY_PARAM}`).flush(user_test);
+    const tenantUser = {
+      suspended: 0,
+      tenant: 'tenant',
+      user_id: 'user',
+      keys: ['a']
+    };
+    httpTesting
+      .expectOne(`api/rgw/user/tenant%24user?${RgwHelper.DAEMON_QUERY_PARAM}`)
+      .flush(tenantUser);
     httpTesting.verify();
   });
 
@@ -87,7 +98,7 @@ describe('NfsFormComponent', () => {
     ]);
     expect(component.allCephxClients).toEqual(['admin', 'fs', 'rgw']);
     expect(component.allFsNames).toEqual([{ id: 1, name: 'a' }]);
-    expect(component.allRgwUsers).toEqual(['dev']);
+    expect(component.allRgwUsers).toEqual(['dev', 'tenant$user']);
   });
 
   it('should create the form', () => {
