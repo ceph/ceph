@@ -35,7 +35,7 @@
 using namespace fmt::literals;
 template<seastar::log_level lv>
 void LOG(std::string_view info) {
-  crimson::get_logger(ceph_subsys_seastore).log(lv, info);
+  crimson::get_logger(ceph_subsys_seastore).log(lv, info.data());
 }
 #define TRACE(MSG_, ...) LOG<seastar::log_level::trace>("{}: " MSG_ ## _format(FNAME __VA_OPT__(,) __VA_ARGS__))
 #define TRACET(MSG_, t_, ...) LOG<seastar::log_level::trace>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ __VA_OPT__(,) __VA_ARGS__))
