@@ -4567,6 +4567,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_cache_autotune_interval",
     "bluestore_warn_on_legacy_statfs",
     "bluestore_warn_on_no_per_pool_omap",
+    "bluestore_warn_on_no_per_pg_omap",
     "bluestore_max_defer_interval",
     NULL
   };
