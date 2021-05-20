@@ -16,17 +16,17 @@ Vulnerability Management Process
    will be shared with the reporter.
 #. The vulnerability disclosure / release date is set excluding Friday and
    holiday periods.
-#. Embargoes are preferred for "Critical" and "High impact" issues. Embargoes
-   should not be in effect for more than 90 days from the date of the
-   confirmation of the vulnerability, except under unusual circumstances. For
-   "Low" and "Moderate" issues with limited impact and an easy workaround (or
-   in cases where an issue is already public), a unique CVE identifier will be
-   assigned and then a standard patch release process will be followed to fix
-   the vulnerability.
-#. Medium and Low severity issues will be released as part of the next
-   standard release cycle, with at least a 7 days advanced
-   notification to the list members prior to the release date. The CVE
-   fix details will be included in the release notes, which will be
+#. Embargoes are preferred for Critical and High impact
+   issues. Embargo should not be held for more than 90 days from the
+   date of vulnerability confirmation, except under unusual
+   circumstances. For Low and Moderate issues with limited impact and
+   an easy workaround or where an issue that is already public, a
+   standard patch release process will be followed to fix the
+   vulnerability once CVE is assigned.
+#. Fixes for issues of "Medium" and "Low" severity will be released as part of
+   the next standard release cycle. List members will receive seven days of
+   advance notice prior to the release date of these fixes. The details of the
+   CVE fix will be included in the release notes, and the release notes will be
    linked in the public announcement.
 #. Commits will be handled in a private repository for review and
    testing and a new patch version will be released from this private
