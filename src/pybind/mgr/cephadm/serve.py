@@ -1289,7 +1289,10 @@ To add the cephadm SSH key to the host:
 > ceph cephadm get-pub-key > ~/ceph.pub
 > ssh-copy-id -f -i ~/ceph.pub {user}@{addr}
 
-To check that the host is reachable open a new shell with the --no-hosts flag:
+To check that the host is reachable:
+> cephadm shell
+
+To check that the host is reachable *without* /etc/hosts (which may vary):
 > cephadm shell --no-hosts
 
 Then run the following:
