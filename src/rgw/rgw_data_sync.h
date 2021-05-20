@@ -698,6 +698,7 @@ class BucketIndexShardsManager;
 int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,
                                RGWRESTConn* conn,
                                const rgw_bucket& bucket,
+                               rgw_bucket_index_marker_info& info,
                                BucketIndexShardsManager& markers,
                                optional_yield y);
 
