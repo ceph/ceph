@@ -1389,7 +1389,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   return true;
 }
 
-int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
+int RGWGetObj::read_user_manifest_part(RGWBucketInfo& bucket_info,
                                        const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy * const bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
@@ -1406,6 +1406,8 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   int64_t cur_ofs = start_ofs;
   int64_t cur_end = end_ofs;
 
+  rgw_bucket& bucket = bucket_info.bucket;
+
   rgw_obj part(bucket, ent.key);
 
   map<string, bufferlist> attrs;
@@ -1420,7 +1422,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   obj_ctx.set_atomic(part);
   store->set_prefetch_data(&obj_ctx, part);
 
-  RGWRados::Object op_target(store, s->bucket_info, obj_ctx, part);
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, part);
   RGWRados::Object::Read read_op(&op_target);
 
   if (!swift_slo) {
@@ -1501,7 +1503,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        uint64_t * const ptotal_len,
                                        uint64_t * const pobj_size,
                                        string * const pobj_sum,
-                                       int (*cb)(rgw_bucket& bucket,
+                                       int (*cb)(RGWBucketInfo& bucket_info,
                                                  const rgw_bucket_dir_entry& ent,
                                                  RGWAccessControlPolicy * const bucket_acl,
                                                  const boost::optional<Policy>& bucket_policy,
@@ -1562,7 +1564,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
         len_count += end_ofs - start_ofs;
 
         if (cb) {
-          r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
+          r = cb(*pbucket_info, ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
 		 cb_param, false /* swift_slo */);
           if (r < 0) {
             return r;
@@ -1591,7 +1593,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 struct rgw_slo_part {
   RGWAccessControlPolicy *bucket_acl = nullptr;
   Policy* bucket_policy = nullptr;
-  rgw_bucket bucket;
+  RGWBucketInfo *pbucket_info = nullptr;
   string obj_name;
   uint64_t size = 0;
   string etag;
@@ -1602,7 +1604,7 @@ static int iterate_slo_parts(CephContext *cct,
                              off_t ofs,
                              off_t end,
                              map<uint64_t, rgw_slo_part>& slo_parts,
-                             int (*cb)(rgw_bucket& bucket,
+                             int (*cb)(RGWBucketInfo& bucket_info,
                                        const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy *bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
@@ -1662,7 +1664,7 @@ static int iterate_slo_parts(CephContext *cct,
                           << dendl;
 
 	// SLO is a Swift thing, and Swift has no knowledge of S3 Policies.
-        int r = cb(part.bucket, ent, part.bucket_acl,
+        int r = cb(*(part.pbucket_info), ent, part.bucket_acl,
 		   (part.bucket_policy ?
 		    boost::optional<Policy>(*part.bucket_policy) : none),
 		   start_ofs, end_ofs, cb_param, true /* swift_slo */);
@@ -1677,7 +1679,7 @@ static int iterate_slo_parts(CephContext *cct,
   return 0;
 }
 
-static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
+static int get_obj_user_manifest_iterate_cb(RGWBucketInfo& bucket_info,
                                             const rgw_bucket_dir_entry& ent,
                                             RGWAccessControlPolicy * const bucket_acl,
                                             const boost::optional<Policy>& bucket_policy,
@@ -1688,7 +1690,7 @@ static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
 {
   RGWGetObj *op = static_cast<RGWGetObj *>(param);
   return op->read_user_manifest_part(
-    bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, swift_slo);
+    bucket_info, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, swift_slo);
 }
 
 int RGWGetObj::handle_user_manifest(const char *prefix)
@@ -1804,7 +1806,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
   vector<RGWAccessControlPolicy> allocated_acls;
   map<string, pair<RGWAccessControlPolicy *, boost::optional<Policy>>> policies;
-  map<string, rgw_bucket> buckets;
+  map<string, RGWBucketInfo> bucket_infos;
 
   map<uint64_t, rgw_slo_part> slo_parts;
 
@@ -1835,6 +1837,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     string obj_name = path.substr(pos_sep + 1);
 
     rgw_bucket bucket;
+    RGWBucketInfo *pbucket_info;
     RGWAccessControlPolicy *bucket_acl;
     Policy* bucket_policy;
 
@@ -1843,7 +1846,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
       if (piter != policies.end()) {
         bucket_acl = piter->second.first;
         bucket_policy = piter->second.second.get_ptr();
-	bucket = buckets[bucket_name];
+        pbucket_info = &bucket_infos[bucket_name];
       } else {
 	allocated_acls.push_back(RGWAccessControlPolicy(s->cct));
 	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
@@ -1871,11 +1874,12 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 	auto _bucket_policy = get_iam_policy_from_attr(
 	  s->cct, store, bucket_attrs, bucket_info.bucket.tenant);
         bucket_policy = _bucket_policy.get_ptr();
-	buckets[bucket_name] = bucket;
+        bucket_infos.emplace(bucket_name, std::move(bucket_info));
+        pbucket_info = &bucket_infos[bucket_name];
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
       }
     } else {
-      bucket = s->bucket;
+      pbucket_info = &s->bucket_info;
       bucket_acl = s->bucket_acl.get();
       bucket_policy = s->iam_policy.get_ptr();
     }
@@ -1883,11 +1887,11 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     rgw_slo_part part;
     part.bucket_acl = bucket_acl;
     part.bucket_policy = bucket_policy;
-    part.bucket = bucket;
+    part.pbucket_info = pbucket_info;
     part.obj_name = obj_name;
     part.size = entry.size_bytes;
     part.etag = entry.etag;
-    ldpp_dout(this, 20) << "slo_part: bucket=" << part.bucket
+    ldpp_dout(this, 20) << "slo_part: bucket=" << part.pbucket_info->bucket
                       << " obj=" << part.obj_name
                       << " size=" << part.size
                       << " etag=" << part.etag
