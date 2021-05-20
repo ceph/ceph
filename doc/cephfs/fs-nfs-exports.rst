@@ -15,6 +15,53 @@ Requirements
 
 .. note:: From Pacific, the nfs mgr module must be enabled prior to use.
 
+Ganesha Configuration Hierarchy
+===============================
+
+Cephadm and rook starts nfs-ganesha daemon with `bootstrap configuration`
+containing minimal ganesha configuration, creates empty rados `common config`
+object in `nfs-ganesha` pool and watches this config object. The `mgr/nfs`
+module adds rados export object urls to the common config object. If cluster
+config is set, it creates `user config` object containing custom ganesha
+configuration and adds it url to common config object.
+
+.. ditaa::
+
+
+                             rados://$pool/$namespace/export-$i        rados://$pool/$namespace/userconf-nfs.$cluster_id
+                                      (export config)                          (user config)
+
+                        +----------+    +----------+    +----------+      +---------------------------+
+                        |          |    |          |    |          |      |                           |
+                        | export-1 |    | export-2 |    | export-3 |      | userconf-nfs.$cluster_id  |
+                        |          |    |          |    |          |      |                           |
+                        +----+-----+    +----+-----+    +-----+----+      +-------------+-------------+
+                             ^               ^                ^                         ^
+                             |               |                |                         |
+                             +--------------------------------+-------------------------+
+                                        %url |
+                                             |
+                                    +--------+--------+
+                                    |                 |  rados://$pool/$namespace/conf-nfs.$svc
+                                    |  conf+nfs.$svc  |  (common config)
+                                    |                 |
+                                    +--------+--------+
+                                             ^
+                                             |
+                                   watch_url |
+                     +----------------------------------------------+
+                     |                       |                      |
+                     |                       |                      |            RADOS
+             +----------------------------------------------------------------------------------+
+                     |                       |                      |            CONTAINER
+           watch_url |             watch_url |            watch_url |
+                     |                       |                      |
+            +--------+-------+      +--------+-------+      +-------+--------+
+            |                |      |                |      |                |  /etc/ganesha/ganesha.conf
+            |   nfs.$svc.a   |      |   nfs.$svc.b   |      |   nfs.$svc.c   |  (bootstrap config)
+            |                |      |                |      |                |
+            +----------------+      +----------------+      +----------------+
+
 Create NFS Ganesha Cluster
 ==========================
 
