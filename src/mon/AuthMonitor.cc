@@ -79,16 +79,43 @@ ostream& operator<<(ostream &out, const AuthMonitor &pm)
   return out << "auth";
 }
 
-bool AuthMonitor::check_rotate()
+bool AuthMonitor::check_rotate(int check)
 {
   KeyServerData::Incremental rot_inc;
   rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
-  if (!mon.key_server.updated_rotating(rot_inc.rotating_bl, last_rotating_ver))
-    return false;
-  dout(10) << __func__ << " updated rotating" << dendl;
-  push_cephx_inc(rot_inc);
-  return true;
+  bool ret = false;
+  int  auth = get_auth_done();
+  if (check != CHECK_AUTH_DONE) {
+    auth = NO_AUTH_PROPOSE;
+  }
+  if (auth == AUTH_PROPOSE_START) {
+    auth_propose_retry++;
+    dout(10) << __func__ << " updated rotating retry: " << auth_propose_retry << dendl;
+    if (auth_propose_retry > MAX_AUTH_RETRY) {
+      dout(10) << __func__ << " updated rotating failed: " << auth_propose_retry << dendl;
+      auth_propose_retry = 0;
+      auth = NO_AUTH_PROPOSE;
+      set_auth_done(NO_AUTH_PROPOSE);
+    }
+  }else if (auth == AUTH_PROPOSE_DONE) {
+    dout(10) << __func__ << " updated rotating succeed" << dendl;
+    auth_propose_retry = 0;
+    auth = NO_AUTH_PROPOSE;
+    set_auth_done(NO_AUTH_PROPOSE);
+  }
+  if (!mon.key_server.updated_rotating(rot_inc.rotating_bl, last_rotating_ver, auth)) {
+    ret = false;
+  }else {
+    dout(10) << __func__ << "start updated rotating" << dendl;
+    if (check == CHECK_AUTH_DONE && auth != AUTH_PROPOSE_START) {
+	set_auth_done(AUTH_PROPOSE_START);
+    }
+    push_cephx_inc(rot_inc);
+    ret = true;
+  }
+  return ret;
 }
+
 
 /*
  Tick function to update the map based on performance every N seconds
@@ -124,12 +151,12 @@ void AuthMonitor::tick()
     return;
   }
 
-  if (check_rotate()) {
+  if (check_rotate(CHECK_AUTH_DONE)) {
     propose = true;
   }
 
   if (propose) {
-    propose_pending();
+    propose_pending(AUTH_PROPOSE_START);
   }
 }
 

@@ -151,16 +151,16 @@ int KeyServer::start_server()
   return 0;
 }
 
-bool KeyServer::_check_rotating_secrets()
+bool KeyServer::_check_rotating_secrets(int auth_done)
 {
   ldout(cct, 10) << "_check_rotating_secrets" << dendl;
 
   int added = 0;
-  added += _rotate_secret(CEPH_ENTITY_TYPE_AUTH);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_MON);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_OSD);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_MDS);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_MGR);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_AUTH, auth_done);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MON, auth_done);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_OSD, auth_done);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MDS, auth_done);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MGR, auth_done);
 
   if (added) {
     ldout(cct, 10) << __func__ << " added " << added << dendl;
@@ -189,14 +189,14 @@ void KeyServer::_dump_rotating_secrets()
   }
 }
 
-int KeyServer::_rotate_secret(uint32_t service_id)
+int KeyServer::_rotate_secret(uint32_t service_id, int auth_done)
 {
   RotatingSecrets& r = data.rotating_secrets[service_id];
   int added = 0;
   utime_t now = ceph_clock_now();
   double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
-
-  while (r.need_new_secrets(now)) {
+  int auth = auth_done;
+  while (r.need_new_secrets(now) || auth) {
     ExpiringCryptoKey ek;
     generate_secret(ek.key);
     if (r.empty()) {
@@ -213,6 +213,9 @@ int KeyServer::_rotate_secret(uint32_t service_id)
 	           << " id " << secret_id << " " << ek
 	           << dendl;
     added++;
+    if (auth) {
+        auth = 0;
+    }
   }
   return added;
 }
@@ -356,11 +359,11 @@ void KeyServer::encode_plaintext(bufferlist &bl)
   bl.append(os.str());
 }
 
-bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver)
+bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver, int auth_done)
 {
   std::scoped_lock l{lock};
 
-  _check_rotating_secrets(); 
+  _check_rotating_secrets(auth_done); 
 
   if (data.rotating_ver <= rotating_ver)
     return false;

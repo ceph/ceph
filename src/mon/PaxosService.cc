@@ -187,14 +187,14 @@ bool PaxosService::should_propose(double& delay)
 }
 
 
-void PaxosService::propose_pending()
+void PaxosService::propose_pending(int auth)
 {
   dout(10) << __func__ << dendl;
   ceph_assert(have_pending);
   ceph_assert(!proposing);
   ceph_assert(mon.is_leader());
   ceph_assert(is_active());
-
+  bool ret = false;
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
     mon.timer.cancel_event(proposal_timer);
@@ -249,7 +249,10 @@ void PaxosService::propose_pending()
     }
   };
   paxos.queue_pending_finisher(new C_Committed(this));
-  paxos.trigger_propose();
+  ret = paxos.trigger_propose();
+  if (ret == true && auth == AUTH_PROPOSE_START) {
+    set_auth_done(AUTH_PROPOSE_DONE);
+  }
 }
 
 bool PaxosService::should_stash_full()

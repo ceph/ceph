@@ -32,6 +32,14 @@ class PaxosService {
    */
  public:
   /**
+  *rotate_secret update state
+  */
+  enum propose_auth {
+    NO_AUTH_PROPOSE,
+    AUTH_PROPOSE_START,
+    AUTH_PROPOSE_DONE,
+  };
+  /**
    * The Monitor to which this class is associated with
    */
   Monitor &mon;
@@ -63,6 +71,7 @@ protected:
   version_t service_version;
 
  private:
+  int auth_propose_done = 0;//1:start trigger_propose  2:propose succeed
   /**
    * Event callback responsible for proposing our pending value once a timer 
    * runs out and fires.
@@ -171,7 +180,12 @@ public:
   virtual void get_store_prefixes(std::set<std::string>& s) const {
     s.insert(service_name);
   }
-  
+  virtual void set_auth_done(int num) {
+    auth_propose_done = num;
+  }
+  virtual int get_auth_done() {
+    return auth_propose_done;
+  }
   // i implement and you ignore
   /**
    * Informs this instance that it should consider itself restarted.
@@ -230,7 +244,7 @@ public:
    * @note This function depends on the implementation of encode_pending on
    *	   the class that is implementing PaxosService
    */
-  void propose_pending();
+  void propose_pending(int auth = 0);
 
   /**
    * Let others request us to propose.

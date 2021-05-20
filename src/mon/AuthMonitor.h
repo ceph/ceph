@@ -29,9 +29,12 @@ class KeyRing;
 class Monitor;
 
 #define MIN_GLOBAL_ID 0x1000
+#define MAX_AUTH_RETRY 3
+#define CHECK_AUTH_DONE 1
 
 class AuthMonitor : public PaxosService {
 public:
+  int auth_propose_retry = 0;
   enum IncType {
     GLOBAL_ID,
     AUTH_DATA,
@@ -165,7 +168,7 @@ private:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  bool check_rotate();
+  bool check_rotate(int check = 0);
 
   bool entity_is_pending(EntityName& entity);
   int exists_and_matches_entity(
