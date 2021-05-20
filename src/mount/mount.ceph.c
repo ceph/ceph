@@ -133,7 +133,7 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 	struct ceph_config_info *cci;
 
 	/* Don't do anything if we already have requisite info */
-	if (cmi->cmi_secret[0] && cmi->cmi_mons)
+	if (cmi->cmi_secret[0] && cmi->cmi_mons && cmi->cmi_fsid)
 		return 0;
 
 	cci = mmap((void *)0, sizeof(*cci), PROT_READ | PROT_WRITE,
@@ -191,6 +191,11 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 			len = strnlen(cci->cci_mons, MON_LIST_BUFSIZE);
 			if (len < MON_LIST_BUFSIZE)
 				cmi->cmi_mons = strndup(cci->cci_mons, len + 1);
+		}
+		if (!cmi->cmi_fsid) {
+			len = strnlen(cci->cci_fsid, CLUSTER_FSID_LEN);
+			if (len < CLUSTER_FSID_LEN)
+				cmi->cmi_fsid = strndup(cci->cci_fsid, len + 1);
 		}
 	}
 out:
