@@ -31,6 +31,17 @@ struct errorator_test_t : public seastar_test_suite_t {
       return ertr::now();
     });
   }
+  ertr::future<int> test_futurization() {
+    // we don't want to be enforced to always do `make_ready_future(...)`.
+    // as in seastar::future, the futurization should take care about
+    // turning non-future types (e.g. int) into futurized ones (e.g.
+    // ertr::future<int>).
+    return ertr::now().safe_then([] {
+      return 42;
+    }).safe_then([](int life) {
+      return ertr::make_ready_future<int>(life);
+    });
+  }
 private:
   ertr::future<noncopyable_t> create_noncopyable() {
     return ertr::make_ready_future<noncopyable_t>();
@@ -48,5 +59,12 @@ TEST_F(errorator_test_t, non_copy_then)
 {
   run_async([this] {
     test_non_copy_then().unsafe_get0();
+  });
+}
+
+TEST_F(errorator_test_t, test_futurization)
+{
+  run_async([this] {
+    test_futurization().unsafe_get0();
   });
 }
