@@ -12,8 +12,8 @@
 
 #ifdef NDEBUG
 
-#define LOG(level_, MSG, ...) LOGGER.log(level_, "{}: " MSG, FNAME __VA_OPT__(,) __VA_ARGS__))
-#define LOGT(level_, MSG, t, ...) LOGGER.log(level_, "{}({}): " MSG, FNAME, (void*)&t __VA_OPT__(,) __VA_ARGS__))
+#define LOG(level_, MSG, ...) LOGGER.log(level_, "{}: " MSG, FNAME __VA_OPT__(,) __VA_ARGS__)
+#define LOGT(level_, MSG, t, ...) LOGGER.log(level_, "{}({}): " MSG, FNAME, (void*)&t __VA_OPT__(,) __VA_ARGS__)
 
 #define TRACE(...) LOG(seastar::log_level::trace, __VA_ARGS__)
 #define TRACET(...) LOGT(seastar::log_level::trace, __VA_ARGS__)
