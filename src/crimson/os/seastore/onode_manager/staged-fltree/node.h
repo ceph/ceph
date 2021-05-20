@@ -383,9 +383,14 @@ class Node
 
  protected:
   Node(NodeImplURef&&);
+
+  bool is_tracked() const {
+    assert(!(super && _parent_info.has_value()));
+    return (super || _parent_info.has_value());
+  }
+
   bool is_root() const {
-    assert((super && !_parent_info.has_value()) ||
-           (!super && _parent_info.has_value()));
+    assert(is_tracked());
     return !_parent_info.has_value();
   }
 
@@ -402,6 +407,8 @@ class Node
   void as_root(Super::URef&& _super);
   eagain_future<> upgrade_root(context_t);
 
+  Super::URef deref_super();
+
   // as child/non-root
   template <bool VALIDATE = true>
   void as_child(const search_position_t&, Ref<InternalNode>);
@@ -411,6 +418,8 @@ class Node
     Ref<InternalNode> ptr;
   };
   const parent_info_t& parent_info() const { return *_parent_info; }
+
+  Ref<InternalNode> deref_parent();
 
   eagain_future<> apply_split_to_parent(context_t, Ref<Node>&&, Ref<Node>&&, bool);
   eagain_future<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);

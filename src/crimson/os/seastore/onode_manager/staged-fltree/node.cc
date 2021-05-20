@@ -277,7 +277,7 @@ Node::Node(NodeImplURef&& impl) : impl{std::move(impl)} {}
 
 Node::~Node()
 {
-  if (!super && !_parent_info.has_value()) {
+  if (!is_tracked()) {
     // possible scenarios:
     //   a. I'm erased;
     //   b. Eagain happened after the node extent is allocated/loaded
@@ -425,21 +425,32 @@ void Node::make_root(context_t c, Super::URef&& _super)
 
 void Node::as_root(Super::URef&& _super)
 {
-  assert(!super && !_parent_info);
+  assert(!is_tracked());
   assert(_super->get_root_laddr() == impl->laddr());
   assert(impl->is_level_tail());
   super = std::move(_super);
   super->do_track_root(*this);
+  assert(is_root());
+}
+
+Super::URef Node::deref_super()
+{
+  assert(is_root());
+  assert(super->get_root_laddr() == impl->laddr());
+  assert(impl->is_level_tail());
+  super->do_untrack_root(*this);
+  auto ret = std::move(super);
+  assert(!is_tracked());
+  return ret;
 }
 
 eagain_future<> Node::upgrade_root(context_t c)
 {
   LOG_PREFIX(OTree::Node::upgrade_root);
-  assert(is_root());
-  assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
-  super->do_untrack_root(*this);
-  return InternalNode::allocate_root(c, impl->level(), impl->laddr(), std::move(super)
+  auto super_to_move = deref_super();
+  return InternalNode::allocate_root(
+      c, impl->level(), impl->laddr(), std::move(super_to_move)
   ).safe_then([this, c, FNAME](auto new_root) {
     as_child(search_position_t::end(), new_root);
     INFOT("upgraded from {} to {}",
@@ -450,18 +461,30 @@ eagain_future<> Node::upgrade_root(context_t c)
 template <bool VALIDATE>
 void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
 {
-  // I must be already untracked.
-  assert(!super);
+  assert(!is_tracked() || !is_root());
 #ifndef NDEBUG
+  // Although I might have an outdated _parent_info during fixing,
+  // I must be already untracked.
   if (_parent_info.has_value()) {
     assert(!_parent_info->ptr->check_is_tracking(*this));
   }
 #endif
   _parent_info = parent_info_t{pos, parent_node};
   parent_info().ptr->do_track_child<VALIDATE>(*this);
+  assert(!is_root());
 }
 template void Node::as_child<true>(const search_position_t&, Ref<InternalNode>);
 template void Node::as_child<false>(const search_position_t&, Ref<InternalNode>);
+
+Ref<InternalNode> Node::deref_parent()
+{
+  assert(!is_root());
+  auto parent_ref = std::move(parent_info().ptr);
+  parent_ref->do_untrack_child(*this);
+  _parent_info.reset();
+  assert(!is_tracked());
+  return parent_ref;
+}
 
 eagain_future<> Node::apply_split_to_parent(
     context_t c,
@@ -695,9 +718,7 @@ eagain_future<> Node::retire(context_t c, Ref<Node>&& this_ref)
   DEBUGT("{} ...", c.t, get_name());
   assert(this_ref.get() == this);
   assert(!is_tracking());
-  assert(!super);
-  // make sure the parent also has untracked this node
-  assert(!_parent_info.has_value());
+  assert(!is_tracked());
   assert(this_ref->use_count() == 1);
 
   return impl->retire_extent(c
@@ -768,8 +789,7 @@ eagain_future<> InternalNode::apply_child_split(
   }
 
   // right_child has not assigned parent yet
-  assert(!right_child->super);
-  assert(!right_child->_parent_info.has_value());
+  assert(!right_child->is_tracked());
 #endif
 
   impl->prepare_mutate(c);
@@ -858,9 +878,8 @@ eagain_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
             c.t, get_name(), child_ref->get_name(), child_pos);
     }
 
-    do_untrack_child(*child_ref);
-    Ref<Node> this_ref = this;
-    child_ref->_parent_info.reset();
+    Ref<Node> this_ref = child_ref->deref_parent();
+    assert(this_ref == this);
     return child_ref->retire(c, std::move(child_ref)
     ).safe_then([c, this, child_pos, FNAME,
                  this_ref = std::move(this_ref)] () mutable {
@@ -1046,7 +1065,7 @@ eagain_future<> InternalNode::apply_children_merge(
   impl->replace_child_addr(right_pos, left_addr, right_addr);
 
   // update track from right_pos => right_child to left_child
-  do_untrack_child(*left_child);
+  left_child->deref_parent();
   replace_track(left_child, right_child, update_index);
 
   // erase left_pos from layout
@@ -1370,11 +1389,10 @@ eagain_future<> InternalNode::try_downgrade_root(
       ceph_assert(!child->impl->is_keys_empty());
     }
 
-    this->super->do_untrack_root(*this);
     assert(tracked_child_nodes.size() == 1);
-    do_untrack_child(*child);
-    child->_parent_info.reset();
-    child->make_root_from(c, std::move(this->super), impl->laddr());
+    child->deref_parent();
+    auto super_to_move = deref_super();
+    child->make_root_from(c, std::move(super_to_move), impl->laddr());
     return retire(c, std::move(this_ref));
   });
 }
@@ -1541,9 +1559,10 @@ template void InternalNode::track_insert<false>(const search_position_t&, match_
 void InternalNode::replace_track(
     Ref<Node> new_child, Ref<Node> old_child, bool is_new_child_outdated)
 {
-  assert(old_child->parent_info().ptr == this);
+  assert(!new_child->is_tracked());
   auto& pos = old_child->parent_info().position;
-  do_untrack_child(*old_child);
+  auto this_ref = old_child->deref_parent();
+  assert(this_ref == this);
   if (is_new_child_outdated) {
     // we need to keep track of the outdated child through
     // insert and split.
@@ -1551,8 +1570,6 @@ void InternalNode::replace_track(
   } else {
     new_child->as_child(pos, this);
   }
-  // ok, safe to release ref
-  old_child->_parent_info.reset();
 
 #ifndef NDEBUG
   if (is_new_child_outdated) {
