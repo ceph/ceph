@@ -9,9 +9,11 @@
 #if __has_include(<filesystem>)
 #include <filesystem>
 namespace fs = std::filesystem;
+using sys_error_code = std::error_code;
 #else
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
+using sys_error_code = boost::system::error_code;
 #endif
 #include <iostream>
 #include <fstream>
@@ -763,11 +765,9 @@ int main(int argc, char **argv)
 
     bool has_wal = false;
     bool has_db = false;
-    char target_path[PATH_MAX] = "";
 
     parse_devices(cct.get(), devs, &cur_devs_map, &has_db, &has_wal);
 
-    const char* rlpath = nullptr;
     if (has_db && has_wal) {
       cerr << "can't allocate new device, both WAL and DB exist"
 	    << std::endl;
@@ -780,48 +780,52 @@ int main(int argc, char **argv)
       cerr << "can't allocate new WAL device, already exists"
 	    << std::endl;
       exit(EXIT_FAILURE);
-    } else if(!dev_target.empty() &&
-	      (rlpath = realpath(dev_target.c_str(), target_path)) == nullptr) {
-      cerr << "failed to retrieve absolute path for " << dev_target
-           << ": " << cpp_strerror(errno)
-           << std::endl;
-      exit(EXIT_FAILURE);
     }
 
+    auto [target_path, has_size_spec] =
+      [&dev_target]() -> std::pair<string, bool> {
+      if (dev_target.empty()) {
+	return {"", false};
+      }
+      sys_error_code ec;
+      fs::path target_path = fs::weakly_canonical(fs::path{dev_target}, ec);
+      if (ec) {
+	cerr << "failed to retrieve absolute path for " << dev_target
+	     << ": " << ec.message()
+	     << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      return {target_path.native(),
+              (fs::exists(target_path) &&
+	       fs::is_regular_file(target_path) &&
+	       fs::file_size(target_path) > 0)};
+    }();
     // Attach either DB or WAL volume, create if needed
-    struct stat st;
-    int r = -1;
-    if (rlpath != nullptr) {
-      r = ::stat(rlpath, &st);
-    }
     // check if we need additional size specification
-    if (r == -1 || (r == 0 && S_ISREG(st.st_mode) && st.st_size == 0)) {
-      r = 0;
+    if (!has_size_spec) {
       if (need_db && cct->_conf->bluestore_block_db_size == 0) {
 	cerr << "Might need DB size specification, "
 		"please set Ceph bluestore-block-db-size config parameter "
 	     << std::endl;
-	r = EXIT_FAILURE;
+	return EXIT_FAILURE;
       } else if (!need_db && cct->_conf->bluestore_block_wal_size == 0) {
 	cerr << "Might need WAL size specification, "
 		"please set Ceph bluestore-block-wal-size config parameter "
 	     << std::endl;
-	r = EXIT_FAILURE;
+	return EXIT_FAILURE;
       }
     }
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.add_new_bluefs_device(
+      need_db ? BlueFS::BDEV_NEWDB : BlueFS::BDEV_NEWWAL,
+      target_path);
     if (r == 0) {
-      BlueStore bluestore(cct.get(), path);
-      r = bluestore.add_new_bluefs_device(
-        need_db ? BlueFS::BDEV_NEWDB : BlueFS::BDEV_NEWWAL,
-        target_path);
-      if (r == 0) {
-        cout << (need_db ? "DB" : "WAL") << " device added " << target_path
-             << std::endl;
-      } else {
-        cerr << "failed to add " << (need_db ? "DB" : "WAL") << " device:"
-             << cpp_strerror(r)
-             << std::endl;
-      }
+      cout << (need_db ? "DB" : "WAL") << " device added " << target_path
+	   << std::endl;
+    } else {
+      cerr << "failed to add " << (need_db ? "DB" : "WAL") << " device:"
+	   << cpp_strerror(r)
+	   << std::endl;
     }
     return r;
   } else if (action == "bluefs-bdev-migrate") {
