@@ -10,8 +10,8 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/dummy.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_layout.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
@@ -1606,6 +1606,116 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       auto p_dummy = static_cast<DummyManager*>(p_nm);
       EXPECT_EQ(p_dummy->size(), 1);
     }
+    tree.reset();
+  });
+}
+
+TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
+{
+  run_async([this] {
+    constexpr double EAGAIN_PROBABILITY = 0.1;
+    constexpr bool TRACK_CURSORS = false;
+    auto kvs = KVPool<test_item_t>::create_raw_range(
+        {8, 11, 64, 256, 301, 320},
+        {8, 16, 128, 512, 576, 640},
+        {0, 8}, {0, 10}, {0, 4});
+    auto moved_nm = NodeExtentManager::create_seastore(
+        *tm, L_ADDR_MIN, EAGAIN_PROBABILITY);
+    auto p_nm = static_cast<SeastoreNodeExtentManager<true>*>(moved_nm.get());
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, test_item_t>>(
+        kvs, std::move(moved_nm));
+    unsigned num_ops = 0;
+    unsigned num_ops_eagain = 0;
+
+    // bootstrap
+    ++num_ops;
+    repeat_eagain([this, &tree, &num_ops_eagain] {
+      ++num_ops_eagain;
+      auto t = tm->create_transaction();
+      return tree->bootstrap(*t
+      ).safe_then([this, t = std::move(t)] () mutable {
+        return tm->submit_transaction(std::move(t));
+      });
+    }).unsafe_get0();
+    segment_cleaner->run_until_halt().get0();
+
+    // insert
+    logger().warn("start inserting {} kvs ...", kvs.size());
+    {
+      auto iter = kvs.random_begin();
+      while (iter != kvs.random_end()) {
+        ++num_ops;
+        repeat_eagain([this, &tree, &num_ops_eagain, &iter] {
+          ++num_ops_eagain;
+          auto t = tm->create_transaction();
+          return tree->insert_one(*t, iter
+          ).safe_then([this, t = std::move(t)] (auto cursor) mutable {
+            cursor.invalidate();
+            return tm->submit_transaction(std::move(t));
+          });
+        }).unsafe_get0();
+        segment_cleaner->run_until_halt().get0();
+        ++iter;
+      }
+    }
+
+    {
+      p_nm->set_generate_eagain(false);
+      auto t = tm->create_transaction();
+      tree->get_stats(*t).unsafe_get0();
+      p_nm->set_generate_eagain(true);
+    }
+
+    // lookup
+    logger().warn("start lookup {} kvs ...", kvs.size());
+    {
+      auto iter = kvs.begin();
+      while (iter != kvs.end()) {
+        ++num_ops;
+        repeat_eagain2([this, &tree, &num_ops_eagain, &iter] {
+          ++num_ops_eagain;
+          auto t = tm->create_transaction();
+          return tree->validate_one(*t, iter
+          ).safe_then([t=std::move(t)]{});
+        }).get0();
+        ++iter;
+      }
+    }
+
+    // erase
+    logger().warn("start erase {} kvs ...", kvs.size());
+    {
+      kvs.shuffle();
+      auto iter = kvs.random_begin();
+      while (iter != kvs.random_end()) {
+        ++num_ops;
+        repeat_eagain([this, &tree, &num_ops_eagain, &iter] {
+          ++num_ops_eagain;
+          auto t = tm->create_transaction();
+          return tree->erase_one(*t, iter
+          ).safe_then([this, t = std::move(t)] () mutable {
+            return tm->submit_transaction(std::move(t));
+          });
+        }).unsafe_get0();
+        segment_cleaner->run_until_halt().get0();
+        ++iter;
+      }
+      kvs.erase_from_random(kvs.random_begin(), kvs.random_end());
+    }
+
+    {
+      p_nm->set_generate_eagain(false);
+      auto t = tm->create_transaction();
+      tree->get_stats(*t).unsafe_get0();
+      tree->validate(*t).unsafe_get0();
+      EXPECT_EQ(tree->height(*t).unsafe_get0(), 1);
+    }
+
+    // we can adjust EAGAIN_PROBABILITY to get a proper eagain_rate
+    double eagain_rate = num_ops_eagain;
+    eagain_rate /= num_ops;
+    logger().info("eagain rate: {}", eagain_rate);
+
     tree.reset();
   });
 }
