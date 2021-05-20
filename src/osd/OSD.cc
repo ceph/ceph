@@ -4953,7 +4953,6 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     acting_primary,
     info->history,
     info->past_intervals,
-    false,
     rctx.transaction);
 
   pg->init_collection_pool_opts();
