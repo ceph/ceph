@@ -1521,7 +1521,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     auto kvs = KVPool<test_item_t>::create_raw_range(
         {8, 11, 64, 256, 301, 320},
         {8, 16, 128, 512, 576, 640},
-        {0, 32}, {0, 10}, {0, 4});
+        {0, 16}, {0, 10}, {0, 4});
     auto moved_nm = (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
                                    : NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
     auto p_nm = moved_nm.get();
