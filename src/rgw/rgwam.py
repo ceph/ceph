@@ -106,6 +106,8 @@ class RGWPeriod(JSONObj):
         return False
     
     def find_zonegroup_by_name(self, zonegroup):
+        if not zonegroup:
+            return self.find_zonegroup_by_id(self.master_zonegroup)
         return self.zonegroups_by_name.get(zonegroup)
 
     def find_zonegroup_by_id(self, zonegroup):
@@ -147,28 +149,26 @@ class RGWAMException(BaseException):
         self.message = message
 
 
-class RGWAdminCmd:
-    def __init__(self, common_args):
-        self.cmd_prefix = [ 'radosgw-admin' ]
+class RGWCmdBase:
+    def __init__(self, prog, common_args):
+        self.cmd_prefix = [ prog ]
         if common_args.ceph_name:
             self.cmd_prefix += [ '-n', common_args.ceph_name ]
+        if common_args.ceph_keyring:
+            self.cmd_prefix += [ '-k', common_args.ceph_keyring ]
 
     def run(self, cmd):
         run_cmd = self.cmd_prefix + cmd
         result = subprocess.run(run_cmd, stdout=subprocess.PIPE)
         return (result.returncode, result.stdout)
 
-class RGWCmd:
+class RGWAdminCmd(RGWCmdBase):
     def __init__(self, common_args):
-        self.cmd_prefix = [ 'radosgw' ]
-        if common_args.ceph_name:
-            self.cmd_prefix += [ '-n', common_args.ceph_name ]
+        super().__init__('radosgw-admin', common_args)
 
-
-    def run(self, cmd):
-        run_cmd = self.cmd_prefix + cmd
-        result = subprocess.run(run_cmd, stdout=subprocess.PIPE)
-        return (result.returncode, result.stdout)
+class RGWCmd(RGWCmdBase):
+    def __init__(self, common_args):
+        super().__init__('radosgw', common_args)
 
 class RealmOp(RGWAdminCmd):
     def __init__(self, common_args):
@@ -749,6 +749,7 @@ The subcommands are:
 class CommonArgs:
     def __init__(self, ns):
         self.ceph_name = ns.ceph_name
+        self.ceph_keyring = ns.ceph_keyring
 
 class TopLevelCommand:
 
@@ -766,6 +767,7 @@ The commands are:
 
         parser.add_argument('command', help='command to run', default=None)
         parser.add_argument('-n', help='ceph user name', dest='ceph_name')
+        parser.add_argument('-k', help='ceph keyring', dest='ceph_keyring')
 
         removed_args = []
 
@@ -791,7 +793,7 @@ The commands are:
         cmd = RealmCommand(common_args, args).parse()
         return cmd()
 
-    def zone(self, args):
+    def zone(self, common_args, args):
         cmd = ZoneCommand(common_args, args).parse()
         return cmd()
 
