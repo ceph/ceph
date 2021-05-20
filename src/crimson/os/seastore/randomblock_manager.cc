@@ -9,6 +9,7 @@
 #include "include/buffer.h"
 #include "randomblock_manager.h"
 #include "crimson/os/seastore/nvmedevice/nvmedevice.h"
+#include "include/interval_set.h"
 
 namespace {
   seastar::logger& logger() {
@@ -160,71 +161,64 @@ RandomBlockManager::find_block_ret
 RandomBlockManager::find_free_block(Transaction &t, size_t size)
 {
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-  return seastar::do_with(uint64_t(0), uint64_t(super.start_alloc_area),
-	  [&, this] (auto &allocated, auto addr) mutable {
+  return seastar::do_with(uint64_t(0), uint64_t(super.start_alloc_area), interval_set<blk_id_t>(), bp,
+	  [&, this] (auto &allocated, auto &addr, auto &alloc_extent, auto &bp) mutable {
     return crimson::do_until(
 	[&, this] () mutable {
 	return device->read(
 	    addr,
 	    bp
-	    ).safe_then([bp, addr, size, &allocated, &t, this]() mutable {
+	    ).safe_then([&bp, &addr, size, &allocated, &t, &alloc_extent, this]() mutable {
 	      logger().debug("find_free_list: allocate {}, addr {}", allocated, addr);
 	      rbm_bitmap_block_t b_block(super.block_size);
 	      bufferlist bl_bitmap_block;
 	      bl_bitmap_block.append(bp);
 	      decode(b_block, bl_bitmap_block);
 	      auto max = max_block_by_bitmap_block();
-	      auto prev_alloc_blocks = allocated;
 	      auto allocated_blocks = t.get_rbm_allocated_blocks();
-	      std::vector<blk_id_t> ids;
-	      for (uint64_t i = 0; i < max; i++) {
-		bool alloc = false;
+	      for (uint64_t i = 0; i < max && (uint64_t)size/super.block_size > allocated; i++) {
+		auto block_id = convert_bitmap_block_no_to_block_id(i, addr);
 		for (auto b : allocated_blocks) {
-		  if (std::find(b.blk_ids.begin(), b.blk_ids.end(), convert_bitmap_block_no_to_block_id(i, addr))
-		      != b.blk_ids.end()) {
-		    alloc = true;
-		    break;
+		  if (b.alloc_blk_ids.intersects(block_id, 1)) {
+		    continue;
 		  }
 		}
-		if (b_block.is_allocated(i) || alloc) {
+		if (b_block.is_allocated(i)) {
 		  continue;
 		}
-		b_block.set_bit(i);
 		logger().debug("find_free_list: allocated block no {} i {}",
 			       convert_bitmap_block_no_to_block_id(i, addr), i);
-		ids.push_back(convert_bitmap_block_no_to_block_id(i, addr));
-		allocated += 1;
-		if (((uint64_t)size)/super.block_size <= allocated ||
-		    addr > super.end) {
-		  break;
+		if (allocated != 0 && alloc_extent.range_end() != block_id) {
+		  /*
+		   * if not continous block, just restart to find continuous blocks at the next block.
+		   * in-memory allocator can handle this efficiently.
+		   */
+		  allocated = 0;
+		  alloc_extent.clear(); // a range of block allocation
+		  logger().debug("find_free_list: rety to find continuous blocks");
+		  continue;
 		}
+		allocated += 1;
+		alloc_extent.insert(block_id);
 	      }
-
-	      if (allocated - prev_alloc_blocks > 0) {
-		bufferlist bl;
-		encode(b_block, bl);
-		rbm_extent_t extent{
-		  extent_types_t::RBM_ALLOC_INFO,
-		  ids,
-		  addr,
-		  bl
-		};
-		t.add_rbm_allocated_blocks(extent);
-	      }
-	      if (((uint64_t)size)/super.block_size <= allocated ||
-		  addr > super.end) {
-		logger().debug(" allocated: {} ", allocated);
+	      addr += super.block_size;
+	      logger().debug("find_free_list: allocated: {} alloc_extent {}", allocated, alloc_extent);
+	      if (((uint64_t)size)/super.block_size == allocated) {
+		return find_block_ertr::make_ready_future<bool>(true);
+	      } else if (addr >= super.start_data_area) {
+		alloc_extent.clear();
 		return find_block_ertr::make_ready_future<bool>(true);
 	      }
-
-	      addr += super.block_size;
 	      return find_block_ertr::make_ready_future<bool>(false);
 	      });
-	}).safe_then([&allocated, &t] () {
-	  logger().debug(" allocated: {} size {} ", allocated, t.get_rbm_allocated_blocks().size());
+	}).safe_then([&allocated, &alloc_extent, &t, size, this] () {
+	  logger().debug(" allocated: {} size {} ", allocated * super.block_size, size);
+	  if (allocated * super.block_size < size) {
+	    alloc_extent.clear();
+	  }
 	  return find_block_ret(
 	      find_block_ertr::ready_future_marker{},
-	      allocated);
+	      alloc_extent);
 	  }).handle_error(
 	      find_block_ertr::pass_further{},
 	      crimson::ct_error::assert_all{
@@ -248,10 +242,17 @@ RandomBlockManager::alloc_extent(Transaction &t, size_t size)
    *
    */
   return find_free_block(t, size
-      ).safe_then([this, &t, size] (auto allocated) mutable -> allocate_ertr::future<> {
-	logger().debug("after find_free_block: allocated {}", allocated);
-	if (allocated * super.block_size < size) {
-	  t.clear_rbm_allocated_blocks();
+      ).safe_then([this, &t, size] (auto alloc_extent) mutable -> allocate_ertr::future<> {
+	logger().debug("after find_free_block: allocated {}", alloc_extent);
+	if (!alloc_extent.empty()) {
+	  // add alloc info to delta
+	  rbm_alloc_delta_t alloc_info {
+	    extent_types_t::RBM_ALLOC_INFO,
+	    alloc_extent,
+	    rbm_alloc_delta_t::op_types_t::SET
+	  };
+	  t.add_rbm_allocated_blocks(alloc_info);
+	} else {
 	  return crimson::ct_error::enospc::make();
 	}
 	return allocate_ertr::now();
