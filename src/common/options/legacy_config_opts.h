@@ -3,6 +3,7 @@
 #include "mds_legacy_options.h"
 #include "mds-client_legacy_options.h"
 #include "mgr_legacy_options.h"
+#include "mon_legacy_options.h"
 #include "osd_legacy_options.h"
 #include "rbd_legacy_options.h"
 #include "rbd-mirror_legacy_options.h"

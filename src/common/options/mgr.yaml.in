@@ -140,3 +140,51 @@ options:
   default: /usr/sbin/cephadm
   services:
   - mgr
+# min pgs per osd for reweight-by-pg command
+- name: mon_reweight_min_pgs_per_osd
+  type: uint
+  level: advanced
+  default: 10
+  services:
+  - mgr
+  with_legacy: true
+# min bytes per osd for reweight-by-utilization command
+- name: mon_reweight_min_bytes_per_osd
+  type: size
+  level: advanced
+  default: 100_M
+  services:
+  - mgr
+  with_legacy: true
+# max osds to change per reweight-by-* command
+- name: mon_reweight_max_osds
+  type: int
+  level: advanced
+  default: 4
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_reweight_max_change
+  type: float
+  level: advanced
+  default: 0.05
+  services:
+  - mgr
+  with_legacy: true
+- name: mgr_stats_threshold
+  type: int
+  level: advanced
+  desc: Lowest perfcounter priority collected by mgr
+  long_desc: Daemons only set perf counter data to the manager daemon if the counter
+    has a priority higher than this.
+  default: 5
+  min: 0
+  max: 11
+- name: mgr_tick_period
+  type: secs
+  level: advanced
+  desc: Period in seconds of beacon messages to monitor
+  default: 2
+  services:
+  - mgr
+  - mon
