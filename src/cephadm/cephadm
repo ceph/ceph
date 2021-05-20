@@ -61,6 +61,7 @@ DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
 LOGROTATE_DIR = '/etc/logrotate.d'
+SYSCTL_DIR = '/usr/lib/sysctl.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
@@ -109,6 +110,7 @@ class BaseConfig:
         self.data_dir: str = DATA_DIR
         self.log_dir: str = LOG_DIR
         self.logrotate_dir: str = LOGROTATE_DIR
+        self.sysctl_dir: str = SYSCTL_DIR
         self.unit_dir: str = UNIT_DIR
         self.verbose: bool = False
         self.timeout: Optional[int] = DEFAULT_TIMEOUT
@@ -246,6 +248,18 @@ class TimeoutExpired(Error):
 class Ceph(object):
     daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror')
+
+##################################
+
+
+class OSD(object):
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# allow a large number of OSDs',
+            'fs.aio-max-nr = 1048576',
+            'kernel.pid_max = 4194304',
+        ]
 
 ##################################
 
@@ -733,6 +747,13 @@ class HAproxy(object):
         mounts[os.path.join(data_dir, 'haproxy')] = '/var/lib/haproxy'
         return mounts
 
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# IP forwarding',
+            'net.ipv4.ip_forward = 1',
+        ]
+
 ##################################
 
 
@@ -812,12 +833,12 @@ class Keepalived(object):
         return envs
 
     @staticmethod
-    def get_prestart():
-        return (
-            '# keepalived needs IP forwarding and non-local bind\n'
-            'sysctl net.ipv4.ip_forward=1\n'
-            'sysctl net.ipv4.ip_nonlocal_bind=1\n'
-        )
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# IP forwarding and non-local bind',
+            'net.ipv4.ip_forward = 1',
+            'net.ipv4.ip_nonlocal_bind = 1',
+        ]
 
     def extract_uid_gid_keepalived(self):
         # better directory for this?
@@ -2757,8 +2778,6 @@ def deploy_daemon_units(
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
             _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
-        elif daemon_type == Keepalived.daemon_type:
-            f.write(Keepalived.get_prestart())
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
@@ -2821,6 +2840,9 @@ def deploy_daemon_units(
             os.fchmod(f.fileno(), 0o600)
             os.rename(data_dir + '/unit.image.new',
                       data_dir + '/unit.image')
+
+    # sysctl
+    install_sysctl(ctx, fsid, daemon_type)
 
     # systemd
     install_base_units(ctx, fsid)
@@ -2962,6 +2984,36 @@ def update_firewalld(ctx, daemon_type):
 
     firewall.open_ports(fw_ports)
     firewall.apply_rules()
+
+
+def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
+    """
+    Set up sysctl settings
+    """
+    def _write(conf: Path, lines: List[str]) -> None:
+        lines = [
+            '# created by cephadm',
+            '',
+            *lines,
+            '',
+        ]
+        with open(conf, 'w') as f:
+            f.write('\n'.join(lines))
+
+    conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
+    lines: Optional[List] = None
+
+    if daemon_type == 'osd':
+        lines = OSD.get_sysctl_settings()
+    elif daemon_type == 'haproxy':
+        lines = HAproxy.get_sysctl_settings()
+    elif daemon_type == 'keepalived':
+        lines = Keepalived.get_sysctl_settings()
+
+    # apply the sysctl settings
+    if lines:
+        _write(conf, lines)
+        call_throws(ctx, ['sysctl', '--system'])
 
 
 def install_base_units(ctx, fsid):
@@ -5554,6 +5606,11 @@ def command_rm_cluster(ctx):
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
+    # rm sysctl settings
+    sysctl_dir = Path(ctx.sysctl_dir)
+    for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
+        p.unlink()
+
     # clean up config, keyring, and pub key files
     files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
 
@@ -6741,16 +6798,6 @@ def command_gather_facts(ctx: CephadmContext):
     host = HostFacts(ctx)
     print(host.dump())
 
-##################################
-
-
-def command_verify_prereqs(ctx: CephadmContext):
-    if ctx.service_type == 'haproxy' or ctx.service_type == 'keepalived':
-        out, err, code = call(
-            ctx, ['sysctl', '-n', 'net.ipv4.ip_nonlocal_bind']
-        )
-        if out.strip() != '1':
-            raise Error('net.ipv4.ip_nonlocal_bind not set to 1')
 
 ##################################
 
@@ -7515,6 +7562,10 @@ def _get_parser():
         default=LOGROTATE_DIR,
         help='location of logrotate configuration files')
     parser.add_argument(
+        '--sysctl-dir',
+        default=SYSCTL_DIR,
+        help='location of sysctl configuration files')
+    parser.add_argument(
         '--unit-dir',
         default=UNIT_DIR,
         help='base directory for systemd units')
@@ -8113,15 +8164,6 @@ def _get_parser():
         choices=['enter', 'exit'],
         help='Maintenance action - enter maintenance, or exit maintenance')
     parser_maintenance.set_defaults(func=command_maintenance)
-
-    parser_verify_prereqs = subparsers.add_parser(
-        'verify-prereqs',
-        help='verify system prerequisites for a given service are met on this host')
-    parser_verify_prereqs.set_defaults(func=command_verify_prereqs)
-    parser_verify_prereqs.add_argument(
-        '--daemon-type',
-        required=True,
-        help='service type of service to whose prereqs will be checked')
 
     return parser
 
