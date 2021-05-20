@@ -638,7 +638,7 @@ bool validate_cmd(CephContext* cct,
 }
 
 bool cmd_getval(const cmdmap_t& cmdmap,
-		const std::string& k, bool& val)
+		std::string_view k, bool& val)
 {
   /*
    * Specialized getval for booleans.  CephBool didn't exist before Nautilus,
@@ -651,7 +651,8 @@ bool cmd_getval(const cmdmap_t& cmdmap,
       return true;
     } catch (boost::bad_get&) {
       try {
-        std::string expected = "--" + k;
+        std::string expected{"--"};
+	expected += k;
         std::replace(expected.begin(), expected.end(), '_', '-');
 
         std::string v_str = boost::get<std::string>(cmdmap.find(k)->second);
