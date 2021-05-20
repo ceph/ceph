@@ -2525,8 +2525,10 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
 
   out << indented{width} << "incremental sync on " << total_shards << " shards\n";
 
+  rgw_bucket_index_marker_info remote_info;
   BucketIndexShardsManager remote_markers;
-  r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(), remote_markers, null_yield);
+  r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(),
+                                 remote_info, remote_markers, null_yield);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
