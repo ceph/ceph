@@ -5502,6 +5502,7 @@ string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_bucket_sync_pipe
 int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,
                                RGWRESTConn* conn,
                                const rgw_bucket& bucket,
+                               rgw_bucket_index_marker_info& info,
                                BucketIndexShardsManager& markers,
                                optional_yield y)
 {
@@ -5512,15 +5513,15 @@ int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,
     { "info" , nullptr },
     { nullptr, nullptr }
   };
-  rgw_bucket_index_marker_info result;
-  int r = conn->get_json_resource(dpp, "/admin/log/", params, y, result);
+  int r = conn->get_json_resource(dpp, "/admin/log/", params, y, info);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to fetch remote log markers: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = markers.from_string(result.max_marker, -1);
+  // parse shard markers
+  r = markers.from_string(info.max_marker, -1);
   if (r < 0) {
-    lderr(conn->get_ctx()) << "failed to decode remote log markers" << dendl;
+    ldpp_dout(dpp, -1) << "failed to decode remote log markers" << dendl;
     return r;
   }
   return 0;
