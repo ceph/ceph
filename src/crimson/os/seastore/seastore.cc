@@ -29,9 +29,18 @@ using crimson::common::local_conf;
 
 namespace crimson::os::seastore {
 
-SeaStore::~SeaStore() {
-  perf_service->remove_from_collection();
-}
+SeaStore::SeaStore(
+  SegmentManagerRef sm,
+  TransactionManagerRef tm,
+  CollectionManagerRef cm,
+  OnodeManagerRef om)
+  : segment_manager(std::move(sm)),
+    transaction_manager(std::move(tm)),
+    collection_manager(std::move(cm)),
+    onode_manager(std::move(om))
+{}
+
+SeaStore::~SeaStore() = default;
 
 class SeastoreCollection final : public FuturizedCollection {
 public:
@@ -1088,11 +1097,9 @@ std::unique_ptr<SeaStore> make_seastore(
     segment_manager::block::BlockSegmentManager
     >(device + "/block");
 
-  PerfServiceRef perf_service = PerfServiceRef(new PerfService());
-
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
-    perf_service->get_counters(), false /* detailed */);
+    false /* detailed */);
 
   auto journal = std::make_unique<Journal>(*sm);
   auto cache = std::make_unique<Cache>(*sm);
@@ -1112,8 +1119,7 @@ std::unique_ptr<SeaStore> make_seastore(
     std::move(sm),
     std::move(tm),
     std::move(cm),
-    std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(*tm),
-    std::move(perf_service));
+    std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(*tm));
 }
 
 }
