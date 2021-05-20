@@ -83,6 +83,7 @@ def test_apply():
 def test_yaml():
     y = """daemon_type: crash
 daemon_id: ubuntu
+daemon_name: crash.ubuntu
 hostname: ubuntu
 status: 1
 status_desc: starting
