@@ -249,7 +249,6 @@ TEST_F(LogBacking, GenerationSingle)
   auto ec = lg->empty_to(&dp, 0, null_yield);
   ASSERT_TRUE(ec);
 
-
   lg.reset();
 
   lg = *logback_generations::init<generations>(
@@ -305,18 +304,6 @@ TEST_F(LogBacking, GenerationSingle)
   ASSERT_EQ(1, lg->got_entries[1].gen_id);
   ASSERT_EQ(log_type::omap, lg->got_entries[1].type);
   ASSERT_FALSE(lg->got_entries[1].pruned);
-
-  ec = lg->remove_empty(&dp, null_yield);
-  ASSERT_FALSE(ec);
-
-  auto entries = lg->entries();
-  ASSERT_EQ(1, entries.size());
-
-  ASSERT_EQ(1, entries[1].gen_id);
-  ASSERT_EQ(log_type::omap, entries[1].type);
-  ASSERT_FALSE(entries[1].pruned);
-
-  lg.reset();
 }
 
 TEST_F(LogBacking, GenerationWN)
