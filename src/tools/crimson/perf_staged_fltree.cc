@@ -6,7 +6,9 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/thread.hh>
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
+#include "crimson/common/perf_counters_collection.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 
@@ -97,6 +99,18 @@ seastar::future<> run(const bpo::variables_map& config) {
     auto erase_ratio = config["erase-ratio"].as<double>();
     ceph_assert(erase_ratio >= 0);
     ceph_assert(erase_ratio <= 1);
+
+    using crimson::common::sharded_conf;
+    sharded_conf().start(EntityName{}, string_view{"ceph"}).get();
+    seastar::engine().at_exit([] {
+      return sharded_conf().stop();
+    });
+
+    using crimson::common::sharded_perf_coll;
+    sharded_perf_coll().start().get();
+    seastar::engine().at_exit([] {
+      return sharded_perf_coll().stop();
+    });
 
     auto kvs = KVPool<test_item_t>::create_raw_range(
         str_sizes, onode_sizes,
