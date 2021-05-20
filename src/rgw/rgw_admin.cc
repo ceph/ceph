@@ -60,6 +60,7 @@ extern "C" {
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
+#include "rgw_admin_remote.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -3001,6 +3002,14 @@ public:
   }
 };
 
+static inline std::optional<string> if_not_empty(const string& s)
+{
+  if (!s.empty()) {
+    return s;
+  }
+  return std::nullopt;
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -3112,6 +3121,7 @@ int main(int argc, const char **argv)
   string object_version;
   string placement_id;
   std::optional<string> opt_storage_class;
+  std::optional<string> opt_tags;
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
@@ -3224,10 +3234,14 @@ int main(int argc, const char **argv)
   ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
+  std::optional<bool> opt_suspend;
+
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
 
   std::optional<std::string> rgw_obj_fs; // radoslist field separator
+
+  int int_val;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -3442,6 +3456,8 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
+    } else if (ceph_argparse_binary_flag(args, i, &int_val, NULL, "--suspend", (char*)NULL)) {
+      opt_suspend = (bool)int_val;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
       infile = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
@@ -3505,6 +3521,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       opt_storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
+      opt_tags = val;
       get_str_list(val, ",", tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
       get_str_list(val, ",", tags_add);
@@ -5449,7 +5466,58 @@ int main(int argc, const char **argv)
   resolve_zone_ids_opt(opt_source_zone_names, opt_source_zone_ids);
   resolve_zone_ids_opt(opt_dest_zone_names, opt_dest_zone_ids);
 
-  bool non_master_cmd = (!store->is_meta_master() && !yes_i_really_mean_it);
+  std::set<OPT> remote_ops_list = { OPT::USER_CREATE };
+
+  bool non_master_cmd = !store->is_meta_master();
+
+  if (non_master_cmd &&
+      remote_ops_list.find(opt_cmd) != remote_ops_list.end()) {
+
+    RGWRemoteAdminOp remote_admin_op(static_cast<rgw::sal::RadosStore*>(store)->svc()->zone);
+
+    switch (opt_cmd) {
+      case OPT::USER_CREATE:
+        {
+          RGWRemoteAdminOp::CreateUserParams params;
+          params.user = user->get_id();
+          params.display_name = display_name;
+          params.email = if_not_empty(user_email);
+          params.access_key = if_not_empty(access_key);
+          params.secret_key = if_not_empty(secret_key);
+          params.key_type = if_not_empty(key_type_str);
+          params.user_caps = if_not_empty(caps);
+          if (gen_access_key) {
+            params.generate_key = true;
+          }
+          params.suspended = opt_suspend;
+          if (max_buckets_specified) {
+            params.max_buckets = max_buckets;
+          }
+          if (system_specified) {
+            params.system = system;
+          }
+          params.op_mask = if_not_empty(op_mask_str);
+          
+          if (!placement_id.empty() ||
+              (opt_storage_class && !opt_storage_class->empty())) {
+            rgw_placement_rule target_rule;
+            target_rule.name = placement_id;
+            target_rule.storage_class = *opt_storage_class;
+            params.default_placement = target_rule.to_str();
+          }
+          params.placement_tags = opt_tags;
+
+          int r = remote_admin_op.create_user(params, null_yield);
+          if (r < 0) {
+            cerr << "ERROR: failed to create user: " << cpp_strerror(-r) << std::endl;
+          }
+          return -r;
+        }
+      default:
+        break;
+    }
+  }
+
   std::set<OPT> non_master_ops_list = {OPT::USER_CREATE, OPT::USER_RM, 
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
@@ -5463,7 +5531,8 @@ int main(int argc, const char **argv)
                                         OPT::CAPS_ADD, OPT::CAPS_RM};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
-                                non_master_cmd);
+                                non_master_cmd &&
+                                !yes_i_really_mean_it);
 
   if (print_warning_message) {
       cerr << "Please run the command on master zone. Performing this operation on non-master zone leads to inconsistent metadata between zones" << std::endl;
