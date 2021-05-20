@@ -8930,7 +8930,14 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   int r = get_obj_state(dpp, &rctx, bucket_info, obj, &astate, false, y);
   if (r < 0)
     return r;
-
+  ceph::real_time latest_pending_timestamp = ceph::real_time{};
+  ceph::real_time current_timestamp = ceph::real_clock::now();
+  for (map<string, rgw_bucket_pending_info>::iterator iter = list_state.pending_map.begin();
+         iter != list_state.pending_map.end(); iter++) {
+    if (iter->second.timestamp > latest_pending_timestamp) {
+       latest_pending_timestamp = iter->second.timestamp;
+    }
+  }
   list_state.pending_map.clear(); // we don't need this and it inflates size
   if (!list_state.is_delete_marker() && !astate->exists) {
       /* object doesn't exist right now -- hopefully because it's
@@ -8940,10 +8947,12 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
        * non-bad ways this could happen (there probably are, but annoying
        * to handle!) */
     }
-    // encode a suggested removal of that key
-    list_state.ver.epoch = io_ctx.get_last_version();
-    list_state.ver.pool = io_ctx.get_id();
-    cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
+    if (current_timestamp > (latest_pending_timestamp + make_timespan(cct->_conf.get_val<int64_t>("rgw_suggested_removal_wait_time")))) {
+      // encode a suggested removal of that key
+      list_state.ver.epoch = io_ctx.get_last_version();
+      list_state.ver.pool = io_ctx.get_id();
+      cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
+    }
     return -ENOENT;
   }
 

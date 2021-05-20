@@ -2928,3 +2928,10 @@ options:
   - rgw
   flags:
   - startup
+- name: rgw_suggested_removal_wait_time
+  type: int
+  level: basic
+  desc: The waiting time for removing bucket_dir_key when doing pending-state object
+  default: 5
+  services:
+  - rgw
