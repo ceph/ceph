@@ -364,7 +364,7 @@ class Host(RESTController):
     def daemons(self, hostname: str) -> List[dict]:
         orch = OrchClient.instance()
         daemons = orch.services.list_daemons(hostname=hostname)
-        return [d.to_json() for d in daemons]
+        return [d.to_dict() for d in daemons]
 
     @handle_orchestrator_error('host')
     def get(self, hostname: str) -> Dict:
