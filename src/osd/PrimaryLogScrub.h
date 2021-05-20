@@ -62,14 +62,12 @@ class PrimaryLogScrub : public PgScrubber {
 		   LogChannelRef clog,
 		   const spg_t& pgid,
 		   const char* func,
-		   const char* mode,
 		   bool allow_incomplete_clones);
 
   int process_clones_to(const std::optional<hobject_t>& head,
 			const std::optional<SnapSet>& snapset,
 			LogChannelRef clog,
 			const spg_t& pgid,
-			const char* mode,
 			bool allow_incomplete_clones,
 			std::optional<snapid_t> target,
 			std::vector<snapid_t>::reverse_iterator* curclone,
