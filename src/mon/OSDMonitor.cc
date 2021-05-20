@@ -5423,8 +5423,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
@@ -5447,11 +5446,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd ls-tree" ||
 	   prefix == "osd info") {
 
-    epoch_t epoch = 0;
-    int64_t epochnum;
-    cmd_getval(cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
-    epoch = epochnum;
-    
+    epoch_t epoch = cmd_getval_or<int64_t>(cmdmap, "epoch", osdmap.get_epoch());
     bufferlist osdmap_bl;
     int err = get_version_full(epoch, osdmap_bl);
     if (err == -ENOENT) {
@@ -9691,8 +9686,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   bufferlist rdata;
   int err = 0;
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
@@ -12519,9 +12513,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       if (blocklistop == "add") {
 	utime_t expires = ceph_clock_now();
-	double d;
 	// default one hour
-	cmd_getval(cmdmap, "expire", d,
+	double d = cmd_getval_or<double>(cmdmap, "expire",
           g_conf()->mon_osd_blocklist_default_expire);
 	expires += d;
 
@@ -12643,12 +12636,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t pg_num, pg_num_min;
-    int64_t pgp_num;
-    cmd_getval(cmdmap, "pg_num", pg_num, int64_t(0));
-    cmd_getval(cmdmap, "pgp_num", pgp_num, pg_num);
-    cmd_getval(cmdmap, "pg_num_min", pg_num_min, int64_t(0));
-
+    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
+    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
+    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
     string pool_type_str;
     cmd_getval(cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
@@ -12719,8 +12709,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  rule_name = poolstr;
 	}
       }
-      cmd_getval(cmdmap, "expected_num_objects",
-                 expected_num_objects, int64_t(0));
+      expected_num_objects =
+	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
     } else {
       //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
       //     and put expected_num_objects to rule field
@@ -12736,8 +12726,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
         rule_name = erasure_code_profile;
       } else { // cmd is well-formed
-        cmd_getval(cmdmap, "expected_num_objects",
-                   expected_num_objects, int64_t(0));
+        expected_num_objects =
+	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
       }
     }
 
@@ -12793,8 +12783,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    int64_t fast_read_param;
-    cmd_getval(cmdmap, "fast_read", fast_read_param, int64_t(-1));
+    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", -1);
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;

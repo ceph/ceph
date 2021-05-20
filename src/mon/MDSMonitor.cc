@@ -951,8 +951,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   std::unique_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = op->get_session();

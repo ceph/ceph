@@ -104,6 +104,7 @@ using ceph::encode_destructively;
 
 using namespace ceph::osd::scheduler;
 using TOPNSPC::common::cmd_getval;
+using TOPNSPC::common::cmd_getval_or;
 
 template <typename T>
 static ostream& _prefix(std::ostream *_dout, T *pg) {
@@ -1145,8 +1146,7 @@ void PrimaryLogPG::do_command(
   else if (prefix == "scrub" ||
 	   prefix == "deep_scrub") {
     bool deep = (prefix == "deep_scrub");
-    int64_t time;
-    cmd_getval(cmdmap, "time", time, (int64_t)0);
+    int64_t time = cmd_getval_or<int64_t>(cmdmap, "time", 0);
 
     if (is_primary()) {
       const pg_pool_t *p = &pool.info;

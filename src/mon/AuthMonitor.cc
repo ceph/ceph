@@ -829,8 +829,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "auth export") {
@@ -1345,8 +1344,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
   cmd_getval(cmdmap, "prefix", prefix);
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = op->get_session();

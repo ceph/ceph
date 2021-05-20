@@ -579,8 +579,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "log last") {
@@ -736,7 +735,6 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
   if (prefix == "log") {
     vector<string> logtext;
-    string level_str;
     cmd_getval(cmdmap, "logtext", logtext);
     LogEntry le;
     le.rank = m->get_orig_source();
@@ -744,7 +742,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.name = session->entity_name;
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
-    cmd_getval(cmdmap, "level", level_str, string("info"));
+    string level_str = cmd_getval_or<string>(cmdmap, "level", "info");
     le.prio = LogEntry::str_to_level(level_str);
     le.channel = CLOG_CHANNEL_DEFAULT;
     le.msg = str_join(logtext, " ");
