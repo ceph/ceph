@@ -288,7 +288,7 @@ public:
   using find_block_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::enoent>;
-  using find_block_ret = find_block_ertr::future<uint32_t>;
+  using find_block_ret = find_block_ertr::future<interval_set<blk_id_t>>;
   /*
    * find_free_block
    *
