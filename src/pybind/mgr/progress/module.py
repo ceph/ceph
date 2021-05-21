@@ -325,8 +325,14 @@ class PgRecoveryEvent(Event):
 
         self._pgs = list(set(self._pgs) ^ complete)
         completed_pgs = self._original_pg_count - len(self._pgs)
-        self._progress = (completed_pgs + complete_accumulate)\
-            / self._original_pg_count
+        completed_pgs = max(completed_pgs, 0)
+        try:
+            prog = (completed_pgs + complete_accumulate)\
+                / self._original_pg_count
+        except ZeroDivisionError:
+            prog = 0.0
+
+        self._progress = min(max(prog, 0.0), 1.0)
 
         self._refresh()
         log.info("Updated progress to %s", self.summary())
