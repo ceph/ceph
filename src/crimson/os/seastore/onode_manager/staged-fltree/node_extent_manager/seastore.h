@@ -107,7 +107,12 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr, len
     ).safe_then([addr, len, &t](auto&& e) {
-      TRACET("read {}B at {:#x}", t, e->get_length(), e->get_laddr());
+      TRACET("read {}B at {:#x} -- {}",
+             t, e->get_length(), e->get_laddr(), *e);
+      if (!e->is_valid()) {
+        ERRORT("read invalid extent: {}", t, *e);
+        ceph_abort("fatal error");
+      }
       assert(e->get_laddr() == addr);
       assert(e->get_length() == len);
       std::ignore = addr;
@@ -127,8 +132,13 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     }
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
     ).safe_then([len, &t](auto extent) {
-      DEBUGT("allocated {}B at {:#x}",
-             t, extent->get_length(), extent->get_laddr());
+      DEBUGT("allocated {}B at {:#x} -- {}",
+             t, extent->get_length(), extent->get_laddr(), *extent);
+      if (!extent->is_initial_pending()) {
+        ERRORT("allocated {}B but got invalid extent: {}",
+               t, len, *extent);
+        ceph_abort("fatal error");
+      }
       assert(extent->get_length() == len);
       std::ignore = len;
       return NodeExtentRef(extent);
@@ -140,10 +150,12 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     LogicalCachedExtentRef extent = _extent;
     auto addr = extent->get_laddr();
     auto len = extent->get_length();
-    DEBUGT("retiring {}B at {:#x} ...", t, len, addr);
+    DEBUGT("retiring {}B at {:#x} -- {} ...",
+           t, len, addr, *extent);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
-        DEBUGT("retiring {}B at {:#x}: trigger eagain", t, len, addr);
+        DEBUGT("retiring {}B at {:#x} -- {} : trigger eagain",
+               t, len, addr, *extent);
         return crimson::ct_error::eagain::make();
       }
     }
