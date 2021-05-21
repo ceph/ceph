@@ -203,6 +203,18 @@ void CreatePrimaryRequest<I>::unlink_peer() {
         unlink_snap_id = 0;
         continue;
       }
+      // call UnlinkPeerRequest only if the snapshot is linked with this peer
+      // or if it's not linked with any peer (happens if mirroring is enabled
+      // on a pool with no peers configured or if UnlinkPeerRequest gets
+      // interrupted)
+      if (info->mirror_peer_uuids.size() == 0) {
+        peer_uuid = peer;
+        snap_id = snap_it.first;
+        break;
+      }
+      if (info->mirror_peer_uuids.count(peer) == 0) {
+        continue;
+      }
       count++;
       if (count == 3) {
         unlink_snap_id = snap_it.first;

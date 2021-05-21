@@ -1135,12 +1135,16 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
                                           RBD_MIRROR_PEER_DIRECTION_RX_TX,
                                           "cluster", "client"));
+  // The mirroring was enabled when no peer was configured. Therefore, the
+  // initial snapshot has no peers linked and will be removed after the
+  // creation of a new mirror snapshot.
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   vector<librbd::snap_info_t> snaps;
   ASSERT_EQ(0, image.snap_list(snaps));
-  ASSERT_EQ(2U, snaps.size());
-  ASSERT_EQ(snaps[1].id, snap_id);
+  ASSERT_EQ(1U, snaps.size());
+  ASSERT_EQ(snaps[0].id, snap_id);
 
+  ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   snaps.clear();
