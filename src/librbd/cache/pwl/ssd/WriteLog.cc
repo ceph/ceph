@@ -35,6 +35,16 @@ using namespace librbd::cache::pwl;
 // SSD: this number can be updated later
 const unsigned long int ops_appended_together = MAX_WRITES_PER_SYNC_POINT;
 
+static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
+  return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+         root.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
+         root.first_valid_entry < root.pool_size &&
+         root.first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+         root.first_free_entry >= DATA_RING_BUFFER_OFFSET &&
+         root.first_free_entry < root.pool_size &&
+         root.first_free_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0;
+}
+
 template <typename I>
 Builder<AbstractWriteLog<I>>* WriteLog<I>::create_builder() {
   m_builderobj = new Builder<This>();
@@ -230,9 +240,15 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
 
   auto p = bl.cbegin();
   decode(superblock, p);
-  ldout(cct,5) << "Decoded superblock" << dendl;
 
   pool_root = superblock.root;
+  ldout(cct, 1) << "Decoded root: pool_size=" << pool_root.pool_size
+                << " first_valid_entry=" << pool_root.first_valid_entry
+                << " first_free_entry=" << pool_root.first_free_entry
+                << " flushed_sync_gen=" << pool_root.flushed_sync_gen
+                << dendl;
+  ceph_assert(is_valid_pool_root(pool_root));
+
   this->m_log_pool_size = pool_root.pool_size;
   this->m_flushed_sync_gen = pool_root.flushed_sync_gen;
   this->m_first_valid_entry = pool_root.first_valid_entry;
@@ -847,6 +863,14 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
 template <typename I>
 void WriteLog<I>::schedule_update_root(
     std::shared_ptr<WriteLogPoolRoot> root, Context *ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 15) << "New root: pool_size=" << root->pool_size
+                 << " first_valid_entry=" << root->first_valid_entry
+                 << " first_free_entry=" << root->first_free_entry
+                 << " flushed_sync_gen=" << root->flushed_sync_gen
+                 << dendl;
+  ceph_assert(is_valid_pool_root(*root));
+
   bool need_finisher;
   {
     ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
