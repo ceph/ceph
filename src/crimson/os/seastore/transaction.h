@@ -116,8 +116,8 @@ public:
     return weak;
   }
 
-  void add_rbm_allocated_blocks(rbm_extent_t &extent) {
-    allocated_blocks.push_back(extent);
+  void add_rbm_allocated_blocks(rbm_alloc_delta_t &d) {
+    allocated_blocks.push_back(d);
   }
   void clear_rbm_allocated_blocks() {
     if (!allocated_blocks.empty()) {
@@ -159,7 +159,7 @@ private:
 
   retired_extent_gate_t::token_t retired_gate_token;
 
-  std::vector<rbm_extent_t> allocated_blocks;
+  std::vector<rbm_alloc_delta_t> allocated_blocks;
 
 public:
   Transaction(

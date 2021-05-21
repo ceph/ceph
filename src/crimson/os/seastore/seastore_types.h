@@ -11,6 +11,7 @@
 #include "include/buffer.h"
 #include "include/cmp.h"
 #include "include/uuid.h"
+#include "include/interval_set.h"
 
 namespace crimson::os::seastore {
 
@@ -676,11 +677,14 @@ constexpr blk_id_t NULL_BLK_ID =
 
 // use absolute address
 using blk_paddr_t = uint64_t;
-struct rbm_extent_t {
+struct rbm_alloc_delta_t {
+  enum class op_types_t : uint8_t {
+    SET = 1,
+    CLEAR = 2
+  };
   extent_types_t type;
-  std::vector<blk_id_t> blk_ids;
-  blk_paddr_t addr;
-  ceph::bufferlist bl;
+  interval_set<blk_id_t> alloc_blk_ids;
+  op_types_t op;
 };
 
 }
