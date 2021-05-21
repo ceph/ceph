@@ -168,32 +168,34 @@ class CephArgtype(object):
         return []
 
     @staticmethod
-    def _compound_type_to_argdesc(tp, attrs):
+    def _compound_type_to_argdesc(tp, attrs, positional):
         # generate argdesc from Sequence[T], Tuple[T,..] and Optional[T]
         orig_type = get_origin(tp)
         type_args = get_args(tp)
         if orig_type in (abc.Sequence, Sequence, List, list):
             assert len(type_args) == 1
             attrs['n'] = 'N'
-            return CephArgtype.to_argdesc(type_args[0], attrs)
+            return CephArgtype.to_argdesc(type_args[0], attrs, positional=positional)
         elif orig_type is Tuple:
             assert len(type_args) >= 1
             inner_tp = type_args[0]
             assert type_args.count(inner_tp) == len(type_args), \
                 f'all elements in {tp} should be identical'
             attrs['n'] = str(len(type_args))
-            return CephArgtype.to_argdesc(inner_tp, attrs)
+            return CephArgtype.to_argdesc(inner_tp, attrs, positional=positional)
         elif get_origin(tp) is Union:
             # should be Union[t, NoneType]
             assert len(type_args) == 2 and isinstance(None, type_args[1])
-            return CephArgtype.to_argdesc(type_args[0], attrs, True)
+            return CephArgtype.to_argdesc(type_args[0], attrs, True, positional)
         else:
             raise ValueError(f"unknown type '{tp}': '{attrs}'")
 
     @staticmethod
-    def to_argdesc(tp, attrs, has_default=False):
+    def to_argdesc(tp, attrs, has_default=False, positional=True):
         if has_default:
             attrs['req'] = 'false'
+        if not positional:
+            attrs['positional'] = 'false'
         CEPH_ARG_TYPES = {
             str: CephString,
             int: CephInt,
@@ -208,7 +210,7 @@ class CephArgtype(object):
             elif isinstance(tp, type) and issubclass(tp, enum.Enum):
                 return CephChoices(tp=tp).argdesc(attrs)
             else:
-                return CephArgtype._compound_type_to_argdesc(tp, attrs)
+                return CephArgtype._compound_type_to_argdesc(tp, attrs, positional)
 
     def argdesc(self, attrs):
         attrs['type'] = type(self).__name__
@@ -758,7 +760,8 @@ class CephPrefix(CephArgtype):
 class argdesc(object):
     """
     argdesc(typename, name='name', n=numallowed|N,
-            req=False, helptext=helptext, **kwargs (type-specific))
+            req=False, positional=True,
+            helptext=helptext, **kwargs (type-specific))
 
     validation rules:
     typename: type(**kwargs) will be constructed
@@ -767,6 +770,7 @@ class argdesc(object):
     name is used for parse errors and for constructing JSON output
     n is a numeric literal or 'n|N', meaning "at least one, but maybe more"
     req=False means the argument need not be present in the list
+    positional=False means the argument name must be specified, e.g. "--myoption value"
     helptext is the associated help for the command
     anything else are arguments to pass to the type constructor.
 
@@ -775,15 +779,19 @@ class argdesc(object):
     valid() will later be called with input to validate against it,
     and will store the validated value in self.instance.val for extraction.
     """
-    def __init__(self, t, name=None, n=1, req=True, **kwargs):
+    def __init__(self, t, name=None, n=1, req=True, positional=True, **kwargs):
         if isinstance(t, basestring):
             self.t = CephPrefix
             self.typeargs = {'prefix': t}
             self.req = True
+            self.positional = True
         else:
             self.t = t
             self.typeargs = kwargs
             self.req = req in (True, 'True', 'true')
+            self.positional = positional in (True, 'True', 'true')
+            if not positional:
+                assert not req
 
         self.name = name
         self.N = (n in ['n', 'N'])
@@ -917,12 +925,13 @@ def parse_funcsig(sig: Sequence[Union[str, Dict[str, str]]]) -> List[argdesc]:
 
         kwargs = dict()
         for key, val in desc.items():
-            if key not in ['type', 'name', 'n', 'req']:
+            if key not in ['type', 'name', 'n', 'req', 'positional']:
                 kwargs[key] = val
         newsig.append(argdesc(t,
                               name=desc.get('name', None),
                               n=desc.get('n', 1),
                               req=desc.get('req', True),
+                              positional=desc.get('positional', True),
                               **kwargs))
     return newsig
 
