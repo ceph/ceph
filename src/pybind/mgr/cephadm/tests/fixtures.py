@@ -20,7 +20,9 @@ def get_ceph_option(_, key):
 
 
 def _run_cephadm(ret):
-    def foo(*args, **kwargs):
+    def foo(s, host, entity, cmd, e, **kwargs):
+        if cmd == 'gather-facts':
+            return '{}', '', 0
         return [ret], '', 0
     return foo
 

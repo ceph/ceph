@@ -4078,8 +4078,14 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_cache_autotune")
     .add_see_also("osd_memory_cache_min")
     .add_see_also("osd_memory_base")
+    .add_see_also("osd_memory_target_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, try to keep this many bytes mapped in memory.")
     .set_long_description("The minimum value must be at least equal to osd_memory_base + osd_memory_cache_min."),
+
+    Option("osd_memory_target_autotune", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .add_see_also("osd_memory_target")
+    .set_description("If enabled, allow orchestrator to automatically tune osd_memory_target"),
 
     Option("osd_memory_target_cgroup_limit_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.8)

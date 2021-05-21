@@ -61,6 +61,7 @@ DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
 LOGROTATE_DIR = '/etc/logrotate.d'
+SYSCTL_DIR = '/usr/lib/sysctl.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
@@ -109,6 +110,7 @@ class BaseConfig:
         self.data_dir: str = DATA_DIR
         self.log_dir: str = LOG_DIR
         self.logrotate_dir: str = LOGROTATE_DIR
+        self.sysctl_dir: str = SYSCTL_DIR
         self.unit_dir: str = UNIT_DIR
         self.verbose: bool = False
         self.timeout: Optional[int] = DEFAULT_TIMEOUT
@@ -249,6 +251,18 @@ class Ceph(object):
 ##################################
 
 
+class OSD(object):
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# allow a large number of OSDs',
+            'fs.aio-max-nr = 1048576',
+            'kernel.pid_max = 4194304',
+        ]
+
+##################################
+
+
 class Monitoring(object):
     """Define the configs for the monitoring containers"""
 
@@ -349,7 +363,7 @@ def populate_files(config_dir, config_files, uid, gid):
         config_file = os.path.join(config_dir, fname)
         config_content = dict_get_join(config_files, fname)
         logger.info('Write file: %s' % (config_file))
-        with open(config_file, 'w') as f:
+        with open(config_file, 'w', encoding='utf-8') as f:
             os.fchown(f.fileno(), uid, gid)
             os.fchmod(f.fileno(), 0o600)
             f.write(config_content)
@@ -732,6 +746,13 @@ class HAproxy(object):
         mounts[os.path.join(data_dir, 'haproxy')] = '/var/lib/haproxy'
         return mounts
 
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# IP forwarding',
+            'net.ipv4.ip_forward = 1',
+        ]
+
 ##################################
 
 
@@ -811,12 +832,12 @@ class Keepalived(object):
         return envs
 
     @staticmethod
-    def get_prestart():
-        return (
-            '# keepalived needs IP forwarding and non-local bind\n'
-            'sysctl net.ipv4.ip_forward=1\n'
-            'sysctl net.ipv4.ip_nonlocal_bind=1\n'
-        )
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# IP forwarding and non-local bind',
+            'net.ipv4.ip_forward = 1',
+            'net.ipv4.ip_nonlocal_bind = 1',
+        ]
 
     def extract_uid_gid_keepalived(self):
         # better directory for this?
@@ -1190,7 +1211,7 @@ class FileLock(object):
                         lock_id, lock_filename, poll_intervall
                     )
                     time.sleep(poll_intervall)
-        except:  # noqa
+        except Exception:
             # Something did go wrong, so decrement the counter.
             self._lock_counter = max(0, self._lock_counter - 1)
 
@@ -2163,7 +2184,6 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
 
     if daemon_type in Monitoring.components.keys():
         config_json: Dict[str, Any] = get_parm(ctx.config_json)
-        required_files = Monitoring.components[daemon_type].get('config-json-files', list())
 
         # Set up directories specific to the monitoring component
         config_dir = ''
@@ -2192,10 +2212,14 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
 
         # populate the config directory for the component from the config-json
-        for fname in required_files:
-            if 'files' in config_json:  # type: ignore
+        if 'files' in config_json:
+            for fname in config_json['files']:
                 content = dict_get_join(config_json['files'], fname)
-                with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
+                if os.path.isabs(fname):
+                    fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
+                else:
+                    fpath = os.path.join(data_dir_root, config_dir, fname)
+                with open(fpath, 'w', encoding='utf-8') as f:
                     os.fchown(f.fileno(), uid, gid)
                     os.fchmod(f.fileno(), 0o600)
                     f.write(content)
@@ -2682,7 +2706,7 @@ def deploy_daemon_units(
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f, \
-         open(data_dir + '/unit.meta.new', 'w') as metaf:
+            open(data_dir + '/unit.meta.new', 'w') as metaf:
         f.write('set -e\n')
 
         if daemon_type in Ceph.daemons:
@@ -2728,8 +2752,6 @@ def deploy_daemon_units(
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
             _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
-        elif daemon_type == Keepalived.daemon_type:
-            f.write(Keepalived.get_prestart())
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
@@ -2792,6 +2814,9 @@ def deploy_daemon_units(
             os.fchmod(f.fileno(), 0o600)
             os.rename(data_dir + '/unit.image.new',
                       data_dir + '/unit.image')
+
+    # sysctl
+    install_sysctl(ctx, fsid, daemon_type)
 
     # systemd
     install_base_units(ctx, fsid)
@@ -2933,6 +2958,36 @@ def update_firewalld(ctx, daemon_type):
 
     firewall.open_ports(fw_ports)
     firewall.apply_rules()
+
+
+def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
+    """
+    Set up sysctl settings
+    """
+    def _write(conf: Path, lines: List[str]) -> None:
+        lines = [
+            '# created by cephadm',
+            '',
+            *lines,
+            '',
+        ]
+        with open(conf, 'w') as f:
+            f.write('\n'.join(lines))
+
+    conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
+    lines: Optional[List] = None
+
+    if daemon_type == 'osd':
+        lines = OSD.get_sysctl_settings()
+    elif daemon_type == 'haproxy':
+        lines = HAproxy.get_sysctl_settings()
+    elif daemon_type == 'keepalived':
+        lines = Keepalived.get_sysctl_settings()
+
+    # apply the sysctl settings
+    if lines:
+        _write(conf, lines)
+        call_throws(ctx, ['sysctl', '--system'])
 
 
 def install_base_units(ctx, fsid):
@@ -5507,10 +5562,10 @@ def command_rm_cluster(ctx):
         _zap_osds(ctx)
 
     # rm units
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
-                      '/ceph-%s@.service' % ctx.fsid])
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
-                      '/ceph-%s.target' % ctx.fsid])
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir
+                      + '/ceph-%s@.service' % ctx.fsid])
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir
+                      + '/ceph-%s.target' % ctx.fsid])
     call_throws(ctx, ['rm', '-rf',
                       ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
     # rm data
@@ -5519,11 +5574,16 @@ def command_rm_cluster(ctx):
     if not ctx.keep_logs:
         # rm logs
         call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
-        call_throws(ctx, ['rm', '-rf', ctx.log_dir +  # noqa: W504
-                          '/*.wants/ceph-%s@*' % ctx.fsid])
+        call_throws(ctx, ['rm', '-rf', ctx.log_dir
+                          + '/*.wants/ceph-%s@*' % ctx.fsid])
 
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
+
+    # rm sysctl settings
+    sysctl_dir = Path(ctx.sysctl_dir)
+    for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
+        p.unlink()
 
     # clean up config, keyring, and pub key files
     files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
@@ -6712,16 +6772,6 @@ def command_gather_facts(ctx: CephadmContext):
     host = HostFacts(ctx)
     print(host.dump())
 
-##################################
-
-
-def command_verify_prereqs(ctx: CephadmContext):
-    if ctx.service_type == 'haproxy' or ctx.service_type == 'keepalived':
-        out, err, code = call(
-            ctx, ['sysctl', '-n', 'net.ipv4.ip_nonlocal_bind']
-        )
-        if out.strip() != '1':
-            raise Error('net.ipv4.ip_nonlocal_bind not set to 1')
 
 ##################################
 
@@ -6803,12 +6853,14 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
             The token is installed at deployment time and must be provided to
             ensure we only respond to callers who know our token i.e. mgr
             """
+
             def wrapper(self, *args, **kwargs):
                 auth = self.headers.get('Authorization', None)
                 if auth != 'Bearer ' + self.server.token:
                     self.send_error(401)
                     return
                 f(self, *args, **kwargs)
+
             return wrapper
 
     def _help_page(self):
@@ -7484,6 +7536,10 @@ def _get_parser():
         default=LOGROTATE_DIR,
         help='location of logrotate configuration files')
     parser.add_argument(
+        '--sysctl-dir',
+        default=SYSCTL_DIR,
+        help='location of sysctl configuration files')
+    parser.add_argument(
         '--unit-dir',
         default=UNIT_DIR,
         help='base directory for systemd units')
@@ -8082,15 +8138,6 @@ def _get_parser():
         choices=['enter', 'exit'],
         help='Maintenance action - enter maintenance, or exit maintenance')
     parser_maintenance.set_defaults(func=command_maintenance)
-
-    parser_verify_prereqs = subparsers.add_parser(
-        'verify-prereqs',
-        help='verify system prerequisites for a given service are met on this host')
-    parser_verify_prereqs.set_defaults(func=command_verify_prereqs)
-    parser_verify_prereqs.add_argument(
-        '--daemon-type',
-        required=True,
-        help='service type of service to whose prereqs will be checked')
 
     return parser
 
