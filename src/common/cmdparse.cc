@@ -138,13 +138,20 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
 
   stringstream ss(cmd);
   std::string word;
+  bool positional = true;
 
   while (std::getline(ss, word, ' ')) {
+    if (word == "--") {
+      positional = false;
+      continue;
+    }
+
     // if no , or =, must be a plain word to put out
     if (word.find_first_of(",=") == string::npos) {
       f->dump_string("arg", word);
       continue;
     }
+
     // accumulate descriptor keywords in desckv
     auto desckv = cmddesc_get_args(word);
     // name the individual desc object based on the name key
@@ -168,7 +175,13 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
     }
 
     // dump all the keys including name into the array
+    if (!positional) {
+      desckv["positional"] = "false";
+    }
     for (auto [key, value] : desckv) {
+      if (key == "positional" && !HAVE_FEATURE(features, SERVER_QUINCY)) {
+	continue;
+      }
       f->dump_string(key, value);
     }
     f->close_section(); // attribute object for individual desc
