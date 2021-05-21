@@ -641,12 +641,8 @@ eagain_future<> Node::fix_parent_index(
 {
   assert(!is_root());
   assert(this == this_ref.get());
-  auto& parent = parent_info().ptr;
-  // one-way unlink
-  parent->do_untrack_child(*this);
-  // the rest of parent tracks should be correct
-  parent->validate_tracked_children();
-  return parent->fix_index<FORCE_MERGE>(c, std::move(this_ref), check_downgrade);
+  return parent_info().ptr->fix_index<FORCE_MERGE>(
+      c, std::move(this_ref), check_downgrade);
 }
 template eagain_future<> Node::fix_parent_index<true>(context_t, Ref<Node>&&, bool);
 template eagain_future<> Node::fix_parent_index<false>(context_t, Ref<Node>&&, bool);
@@ -825,9 +821,8 @@ eagain_future<> InternalNode::apply_child_split(
   }).safe_then([c, update_right_index,
                 right_child = std::move(right_child)] () mutable {
     if (update_right_index) {
-      // right_child must be already untracked by insert_or_split()
-      return right_child->parent_info().ptr->fix_index(
-          c, std::move(right_child), false);
+      // XXX: might not need to call validate_tracked_children() in fix_index()
+      return right_child->fix_parent_index(c, std::move(right_child), false);
     } else {
       // there is no need to call try_merge_adjacent() because
       // the filled size of the inserted node or the split right node
@@ -964,10 +959,11 @@ eagain_future<> InternalNode::fix_index(
   LOG_PREFIX(OTree::InternalNode::fix_index);
   impl->validate_non_empty();
 
-  auto& child_pos = child->parent_info().position;
-  // child must already be untracked before calling fix_index()
-  assert(tracked_child_nodes.find(child_pos) == tracked_child_nodes.end());
   validate_child_inconsistent(*child);
+  auto& child_pos = child->parent_info().position;
+  Ref<Node> this_ref = child->deref_parent();
+  assert(this_ref == this);
+  validate_tracked_children();
 
   impl->prepare_mutate(c);
 
@@ -989,7 +985,6 @@ eagain_future<> InternalNode::fix_index(
                       : update_parent_index = false;
   }
 
-  Ref<Node> this_ref = this;
   return insert_or_split(c, next_pos, new_key, child
   ).safe_then([this, c, update_parent_index, check_downgrade,
                this_ref = std::move(this_ref)] (auto split_right) mutable {
@@ -1429,16 +1424,17 @@ eagain_future<Ref<InternalNode>> InternalNode::insert_or_split(
 
     if (outdated_child) {
       track_insert<false>(insert_pos, insert_stage, insert_child);
-      // untrack the inaccurate child after updated its position
-      // before validate, and before fix_index()
       validate_child_inconsistent(*outdated_child);
-      // we will need its parent_info valid for the following fix_index()
+#ifndef NDEBUG
       do_untrack_child(*outdated_child);
+      validate_tracked_children();
+      do_track_child<false>(*outdated_child);
+#endif
     } else {
       track_insert(insert_pos, insert_stage, insert_child);
+      validate_tracked_children();
     }
 
-    validate_tracked_children();
     return eagain_ertr::make_ready_future<Ref<InternalNode>>(nullptr);
   }
 
@@ -1471,22 +1467,23 @@ eagain_future<Ref<InternalNode>> InternalNode::insert_or_split(
       } else {
         right_node->template track_insert<false>(insert_pos, insert_stage, insert_child);
       }
-      // untrack the inaccurate child after updated its position
-      // before validate, and before fix_index()
+#ifndef NDEBUG
       auto& _parent = outdated_child->parent_info().ptr;
       _parent->validate_child_inconsistent(*outdated_child);
-      // we will need its parent_info valid for the following fix_index()
       _parent->do_untrack_child(*outdated_child);
+      validate_tracked_children();
+      right_node->validate_tracked_children();
+      _parent->do_track_child<false>(*outdated_child);
+#endif
     } else {
       if (is_insert_left) {
         track_insert(insert_pos, insert_stage, insert_child);
       } else {
         right_node->track_insert(insert_pos, insert_stage, insert_child);
       }
+      validate_tracked_children();
+      right_node->validate_tracked_children();
     }
-
-    validate_tracked_children();
-    right_node->validate_tracked_children();
     return right_node;
   });
 }
@@ -1664,7 +1661,7 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
 {
 #ifndef NDEBUG
   assert(impl->level() - 1 == child.impl->level());
-  assert(this == child.parent_info().ptr);
+  assert(check_is_tracking(child));
   auto& child_pos = child.parent_info().position;
   // the tail value has no key to fix
   assert(!child_pos.is_end());
