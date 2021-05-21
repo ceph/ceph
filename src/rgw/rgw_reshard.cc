@@ -495,6 +495,17 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     return ret;
   }
 
+  if (store->svc()->zone->need_to_log_data()) {
+    for (uint32_t shard_id = 0; shard_id < prev.current_index.layout.normal.num_shards; ++shard_id) {
+      ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << "WARNING: failed writing data log (bucket_info.bucket="
+        << bucket_info.bucket << ", shard_id=" << shard_id << "of generation="
+        << prev.logs.back().gen << ")" << dendl;
+        }
+      }
+  }
+
   // on success, delete index shard objects from the old layout (ignore errors)
   if (remove_index) {
     store->svc()->bi->clean_index(dpp, bucket_info, prev.current_index);
