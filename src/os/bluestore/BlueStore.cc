@@ -9024,6 +9024,20 @@ void BlueStore::inject_legacy_omap(coll_t cid, ghobject_t oid)
   db->submit_transaction_sync(txn);
 }
 
+void BlueStore::inject_stray_omap(uint64_t head, const string& name)
+{
+  dout(1) << __func__ << dendl;
+  KeyValueDB::Transaction txn = db->get_transaction();
+
+  string key;
+  bufferlist bl;
+  _key_encode_u64(head, &key);
+  key.append(name);
+  txn->set(PREFIX_OMAP, key, bl);
+
+  db->submit_transaction_sync(txn);
+}
+
 void BlueStore::inject_statfs(const string& key, const store_statfs_t& new_statfs)
 {
   BlueStoreRepairer repairer;
